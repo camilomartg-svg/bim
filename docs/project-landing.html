@@ -1,0 +1,680 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Proyecto | Portal BIM Alcabama</title>
+  <meta name="theme-color" content="#2b2b2b" />
+  <meta name="x-app-version" data-app="project-landing" content="20260527-01" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+  <script src="https://cdn.tailwindcss.com?plugins=forms,typography"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            primary: '#D8005E',
+            'background-light': '#FFFFFF',
+            'background-dark': '#343434',
+            'text-light': '#111827',
+            'text-dark': '#F3F4F6',
+          },
+          fontFamily: {
+            sans: ['Inter', 'sans-serif'],
+            display: ['"Source Sans Pro"', 'sans-serif'],
+          },
+        },
+      },
+    };
+  </script>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Source+Sans+Pro:wght@700;900&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <link rel="manifest" href="portal.webmanifest" />
+  <link rel="icon" href="assets/icons/portal-bim-favicon.png" type="image/png" />
+  <link rel="apple-touch-icon" href="assets/icons/portal-bim-apple-touch.png" />
+  <style>
+    body {
+      font-family: 'Inter', sans-serif;
+    }
+    .material-symbols-outlined {
+      font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+    }
+    .glass {
+      background: rgba(255, 255, 255, 0.72);
+      border: 1px solid rgba(17, 24, 39, 0.08);
+      backdrop-filter: blur(14px);
+      -webkit-backdrop-filter: blur(14px);
+    }
+    #project-map {
+      height: 100%;
+      width: 100%;
+    }
+    .leaflet-tile {
+      filter: grayscale(1) contrast(1.08);
+    }
+  </style>
+</head>
+<body class="bg-background-light text-text-light dark:bg-background-dark dark:text-text-dark">
+  <div id="page-shell" class="min-h-screen bg-[radial-gradient(circle_at_20%_0%,rgba(216,0,94,0.12),transparent_42%),radial-gradient(circle_at_80%_20%,rgba(37,42,32,0.10),transparent_48%),linear-gradient(180deg,#eef3f6,#f6f8fa)] dark:bg-[radial-gradient(circle_at_20%_0%,rgba(216,0,94,0.20),transparent_42%),radial-gradient(circle_at_80%_20%,rgba(255,255,255,0.08),transparent_48%),linear-gradient(180deg,#0b1220,#0b1220)]">
+    <div id="update-banner" class="fixed left-0 right-0 top-0 z-50 hidden">
+      <div class="mx-auto flex max-w-4xl items-center justify-between gap-4 bg-[#111827] px-4 py-3 text-sm font-semibold text-white shadow">
+        <div>Hay una nueva versión disponible.</div>
+        <button id="update-reload" class="rounded-md bg-white px-4 py-2 text-xs font-black uppercase tracking-widest text-[#111827]">Actualizar</button>
+      </div>
+    </div>
+
+    <div class="flex min-h-screen">
+      <aside class="sticky top-0 hidden h-screen w-[86px] flex-col items-center gap-4 px-3 py-6 md:flex">
+        <div class="glass flex w-full items-center justify-center rounded-2xl px-2 py-3">
+          <img id="sidebar-project-logo" alt="Proyecto" class="h-8 w-8 object-contain" src="assets/icons/portal-bim-favicon.png" />
+        </div>
+        <nav class="glass flex w-full flex-1 flex-col items-center gap-2 rounded-2xl p-2">
+          <a href="#intro" class="flex h-11 w-full items-center justify-center rounded-xl text-[#252a20] transition hover:bg-white/70 dark:text-white dark:hover:bg-white/10" aria-label="Dashboard">
+            <span class="material-symbols-outlined">dashboard</span>
+          </a>
+          <a href="#mapa" class="flex h-11 w-full items-center justify-center rounded-xl text-[#252a20] transition hover:bg-white/70 dark:text-white dark:hover:bg-white/10" aria-label="Mapa">
+            <span class="material-symbols-outlined">map</span>
+          </a>
+          <a href="#modulos" class="flex h-11 w-full items-center justify-center rounded-xl text-[#252a20] transition hover:bg-white/70 dark:text-white dark:hover:bg-white/10" aria-label="Modelos">
+            <span class="material-symbols-outlined">grid_view</span>
+          </a>
+          <a href="#planimetria" class="flex h-11 w-full items-center justify-center rounded-xl text-[#252a20] transition hover:bg-white/70 dark:text-white dark:hover:bg-white/10" aria-label="Planimetría">
+            <span class="material-symbols-outlined">description</span>
+          </a>
+          <a href="#accesos" class="flex h-11 w-full items-center justify-center rounded-xl text-[#252a20] transition hover:bg-white/70 dark:text-white dark:hover:bg-white/10" aria-label="Accesos">
+            <span class="material-symbols-outlined">bolt</span>
+          </a>
+          <a href="home.html" class="mt-auto flex h-11 w-full items-center justify-center rounded-xl text-[#252a20] transition hover:bg-white/70 dark:text-white dark:hover:bg-white/10" aria-label="Portal BIM">
+            <span class="material-symbols-outlined">home</span>
+          </a>
+        </nav>
+      </aside>
+
+      <div class="flex min-w-0 flex-1 flex-col">
+        <header class="sticky top-0 z-20 px-4 pt-4 md:px-8">
+          <div class="glass mx-auto flex max-w-7xl items-center justify-between gap-3 rounded-2xl px-4 py-3">
+            <div class="flex min-w-0 items-center gap-3">
+              <button id="back-btn" aria-label="Volver" class="flex h-11 w-11 items-center justify-center rounded-xl bg-white/70 text-[#111827] transition hover:bg-white dark:bg-white/10 dark:text-white dark:hover:bg-white/15">
+                <span class="material-symbols-outlined">arrow_back</span>
+              </button>
+              <a href="home.html" class="hidden items-center sm:flex" title="Ir al Home">
+                <img id="header-project-logo" alt="Proyecto" class="h-9 w-auto object-contain" src="assets/icons/portal-bim-favicon.png" />
+              </a>
+              <div class="min-w-0">
+                <div id="project-eyebrow-top" class="truncate text-xs font-semibold uppercase tracking-[0.22em] text-[#6f6f69] dark:text-white/60">Portal BIM</div>
+                <div id="project-name-top" class="truncate text-lg font-semibold text-[#111827] dark:text-white">Proyecto</div>
+              </div>
+            </div>
+
+            <div class="flex items-center gap-3">
+              <div class="hidden rounded-2xl bg-white/60 px-4 py-3 text-right dark:bg-white/10 md:block">
+                <div class="text-xs font-semibold uppercase tracking-[0.24em] text-[#6f6f69] dark:text-white/60">Hoy</div>
+                <div class="mt-1 text-2xl font-semibold text-[#111827] dark:text-white" id="project-now">--</div>
+              </div>
+              <button id="theme-toggle" aria-label="Cambiar tema" class="flex h-11 w-11 items-center justify-center rounded-xl bg-white/70 text-[#111827] transition hover:bg-white dark:bg-white/10 dark:text-white dark:hover:bg-white/15">
+                <span class="material-symbols-outlined">dark_mode</span>
+              </button>
+              <div id="auth-container" class="hidden items-center gap-4 sm:flex">
+                <a href="https://alcabama-commits.github.io/bim/inse.html" class="text-sm font-semibold text-[#111827] hover:text-primary dark:text-white">Iniciar sesión</a>
+              </div>
+            </div>
+          </div>
+        </header>
+
+        <main class="w-full flex-1 pb-16 pt-6 md:pt-8">
+          <div class="mx-auto w-full max-w-7xl px-4 md:px-8">
+            <section id="intro" class="grid gap-6 lg:grid-cols-[1.05fr_0.95fr]">
+              <div class="glass rounded-3xl p-6 md:p-8">
+                <div class="flex items-start justify-between gap-4">
+                  <div class="min-w-0">
+                    <div id="project-eyebrow-main" class="text-xs font-semibold uppercase tracking-[0.26em] text-[#6f6f69] dark:text-white/60">Dashboard</div>
+                    <h1 id="project-title" class="mt-3 truncate font-display text-4xl font-black tracking-[0.06em] text-[#111827] dark:text-white md:text-5xl">PROYECTO</h1>
+                    <p id="project-subtitle" class="mt-4 max-w-xl text-sm leading-7 text-[#5b5f56] dark:text-white/70">
+                      Accesos rápidos, seguimiento y contexto del proyecto.
+                    </p>
+                  </div>
+                  <div class="hidden md:block">
+                    <img id="project-portal-logo-light" alt="BIM" class="h-12 w-auto object-contain dark:hidden" src="https://i.postimg.cc/jdyQ3Mr2/LOGO-BIM-NEGRO-ICO.png" />
+                    <img id="project-portal-logo-dark" alt="BIM" class="hidden h-12 w-auto object-contain dark:block" src="https://i.postimg.cc/yY0XpLzW/LOGO-BIM-BLANCO-ICO.png" />
+                  </div>
+                </div>
+
+                <div class="mt-10 grid gap-8 md:grid-cols-2">
+                  <div id="modulos">
+                    <div class="text-xs font-semibold uppercase tracking-[0.26em] text-[#6f6f69] dark:text-white/60">Modelos</div>
+                    <div id="project-model-modules" class="mt-4 grid gap-3"></div>
+                  </div>
+
+                  <div id="planimetria">
+                    <div class="text-xs font-semibold uppercase tracking-[0.26em] text-[#6f6f69] dark:text-white/60">Planimetría</div>
+                    <div id="project-plan-modules" class="mt-4 grid gap-3 sm:grid-cols-2"></div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="glass rounded-3xl p-6 md:p-8">
+                <div id="project-action-eyebrow" class="text-xs font-semibold uppercase tracking-[0.26em] text-[#6f6f69] dark:text-white/60">Panel</div>
+                <h2 id="project-action-title" class="mt-3 text-2xl font-semibold text-[#111827] dark:text-white">Acciones</h2>
+                <p id="project-action-description" class="mt-3 text-sm leading-7 text-[#5b5f56] dark:text-white/70">Atajos para publicaciones, solicitudes y equipo.</p>
+
+                <div id="project-action-links" class="mt-8 grid gap-4"></div>
+              </div>
+            </section>
+          </div>
+
+          <section id="mapa" class="mt-10 border-y border-[rgba(37,42,32,0.1)] bg-[#f7f7f5] md:mt-14">
+            <div class="px-0 py-20">
+              <div class="container mx-auto px-6 pb-10 text-center md:px-10">
+                <p id="project-map-eyebrow" class="text-[11px] uppercase tracking-[0.34em] text-[#8a8a84]">City Guide</p>
+                <h2 id="project-city" class="mt-5 font-display text-4xl font-black tracking-[0.08em] text-[#252a20] md:text-5xl">BOGOTÁ</h2>
+                <p id="project-map-description" class="mx-auto mt-6 max-w-2xl text-sm leading-8 text-[#6f6f69]">
+                  Portal de acceso al CDE del proyecto.
+                </p>
+                <p id="project-address" class="mx-auto mt-2 max-w-2xl text-sm leading-8 text-[#6f6f69]"></p>
+              </div>
+              <div class="border-y border-[rgba(37,42,32,0.1)] bg-white">
+                <div id="map-wrapper" class="relative h-[560px] w-full overflow-hidden bg-[#ececea] md:h-[680px]">
+                  <div id="project-map" class="h-full w-full"></div>
+                  <div id="map-ctrl-hint" class="pointer-events-none absolute left-1/2 top-6 -translate-x-1/2 rounded-md border border-[rgba(37,42,32,0.2)] bg-white/95 px-4 py-2 text-xs font-semibold uppercase tracking-[0.18em] text-[#252a20] shadow-sm">
+                    Mantén CTRL para navegar el mapa
+                  </div>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <div class="mx-auto w-full max-w-7xl px-4 md:px-8">
+            <section id="accesos" class="mt-6">
+              <div class="glass rounded-3xl p-6 md:p-8">
+                <div class="text-xs font-semibold uppercase tracking-[0.26em] text-[#6f6f69] dark:text-white/60">Atajos</div>
+                <h2 class="mt-3 text-2xl font-semibold text-[#111827] dark:text-white">Accesos del proyecto</h2>
+                <div id="project-quick-links" class="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4"></div>
+              </div>
+            </section>
+          </div>
+        </main>
+
+        <footer class="px-4 pb-10 pt-6 md:px-8">
+          <div class="mx-auto max-w-7xl text-center text-gray-600 dark:text-gray-300">
+            <div class="mb-4 flex items-center justify-center gap-4">
+              <img id="footer-logo-secondary-light" alt="Artis Urbano logo" class="h-8 dark:hidden" src="https://i.postimg.cc/RVp8pZwc/artis-urbano.png" />
+              <img id="footer-logo-secondary-dark" alt="Artis Urbano logo" class="hidden h-8 dark:block" src="https://i.postimg.cc/RVp8pZwc/artis-urbano.png" />
+              <div class="h-8 w-px bg-black/50 dark:bg-white/40"></div>
+              <img id="footer-logo-light" alt="Portal BIM logo" class="h-8 dark:hidden" src="https://i.postimg.cc/jdyQ3Mr2/LOGO-BIM-NEGRO-ICO.png" />
+              <img id="footer-logo-dark" alt="Portal BIM logo" class="hidden h-8 dark:block" src="https://i.postimg.cc/yY0XpLzW/LOGO-BIM-BLANCO-ICO.png" />
+            </div>
+            <p id="project-footer" class="text-sm">© 2026 Portal BIM Alcabama - Todos los derechos reservados.</p>
+          </div>
+        </footer>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script>
+    document.addEventListener('DOMContentLoaded', async () => {
+      const DEFAULT_PORTAL_CONFIG = {
+        portal: {
+          name: 'Portal BIM Alcabama',
+          shortName: 'Portal BIM',
+          footerText: '© 2026 Portal BIM Alcabama - Todos los derechos reservados.',
+        },
+      };
+
+      const DEFAULT_PROJECT = {
+        name: 'Proyecto',
+        slug: 'proyecto',
+        city: 'Bogotá',
+        type: 'Proyecto',
+        status: 'Activo',
+        enabled: true,
+        homeUrl: '',
+        modules: {},
+        actions: {},
+        dataSources: {
+          driveFolderName: '',
+          driveFolderId: '',
+          driveScriptUrl: '',
+          statusSheetId: '',
+          statusScriptUrl: '',
+          cantidadesSheetId: '',
+          cantidadesScriptUrl: '',
+        },
+        landing: {
+          enabled: true,
+          eyebrow: 'Portal BIM',
+          title: 'PROYECTO',
+          subtitle: 'Accesos rápidos, seguimiento y contexto del proyecto.',
+          actionEyebrow: 'Panel',
+          actionTitle: 'Acciones',
+          actionDescription: 'Atajos para publicaciones, solicitudes y equipo.',
+          mapEyebrow: 'City Guide',
+          cityLabel: 'BOGOTÁ',
+          mapDescription: 'Portal de acceso al CDE del proyecto.',
+          address: '',
+          logoUrl: 'assets/icons/portal-bim-favicon.png',
+          portalLogoLight: 'https://i.postimg.cc/jdyQ3Mr2/LOGO-BIM-NEGRO-ICO.png',
+          portalLogoDark: 'https://i.postimg.cc/yY0XpLzW/LOGO-BIM-BLANCO-ICO.png',
+          map: {
+            lat: 4.711,
+            lng: -74.0721,
+            zoom: 13,
+          },
+        },
+      };
+
+      const MODULE_META = [
+        { key: 'ifc', label: 'Visor IFC', subtitle: 'Modelos', icon: 'view_in_ar', group: 'modelos' },
+        { key: 'status', label: 'Estado', subtitle: 'Seguimiento', icon: 'query_stats', group: 'modelos' },
+        { key: 'cantidades', label: 'Cantidades', subtitle: 'Compras', icon: 'inventory_2', group: 'modelos' },
+        { key: 'pdf', label: 'Visor PDF', subtitle: 'Planos', icon: 'picture_as_pdf', group: 'planimetria' },
+        { key: 'dwg', label: 'Visor DWG', subtitle: 'Planimetría', icon: 'architecture', group: 'planimetria' },
+      ];
+
+      const ACTION_META = [
+        { key: 'publicaciones', label: 'Publicaciones', subtitle: 'Entregables', icon: 'campaign', defaultHref: 'Publicaciones.html' },
+        { key: 'solicitudes', label: 'Solicitudes', subtitle: 'Accesos', icon: 'task_alt', defaultHref: 'index.html' },
+        { key: 'equipo', label: 'Equipo', subtitle: 'Usuarios', icon: 'group', defaultHref: 'lista_usuarios.html' },
+      ];
+
+      const escapeHtml = (value) => String(value ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+
+      const slugify = (value) => String(value ?? '')
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-+|-+$/g, '') || 'proyecto';
+
+      const query = new URLSearchParams(window.location.search);
+      const requestedProject = slugify(query.get('project') || '');
+      const authContainer = document.getElementById('auth-container');
+
+      const userAccount = JSON.parse(sessionStorage.getItem('userAccount') || localStorage.getItem('userAccount') || 'null');
+      if (userAccount) {
+        authContainer.innerHTML = `
+          <span class="text-sm font-medium text-text-light dark:text-white">Hola, ${escapeHtml(userAccount.name.split(' ')[0])}</span>
+          <button id="logout-button" class="text-sm font-medium text-text-light dark:text-white hover:text-primary">Cerrar sesión</button>
+        `;
+        document.getElementById('logout-button').addEventListener('click', () => {
+          sessionStorage.removeItem('userAccount');
+          localStorage.removeItem('userAccount');
+          window.location.reload();
+        });
+      }
+
+      const themeToggle = document.getElementById('theme-toggle');
+      const htmlEl = document.documentElement;
+      const applyTheme = (theme) => {
+        if (theme === 'dark') {
+          htmlEl.classList.add('dark');
+          themeToggle.querySelector('.material-symbols-outlined').textContent = 'light_mode';
+        } else {
+          htmlEl.classList.remove('dark');
+          themeToggle.querySelector('.material-symbols-outlined').textContent = 'dark_mode';
+        }
+      };
+      const savedTheme = localStorage.getItem('theme') || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+      applyTheme(savedTheme);
+      themeToggle.addEventListener('click', () => {
+        const newTheme = htmlEl.classList.contains('dark') ? 'light' : 'dark';
+        localStorage.setItem('theme', newTheme);
+        applyTheme(newTheme);
+      });
+
+      const normalizeProject = (project) => {
+        const landing = project?.landing && typeof project.landing === 'object' ? project.landing : {};
+        const map = landing.map && typeof landing.map === 'object' ? landing.map : {};
+        const modules = project?.modules && typeof project.modules === 'object' ? project.modules : {};
+        const actions = project?.actions && typeof project.actions === 'object' ? project.actions : {};
+        const dataSources = project?.dataSources && typeof project.dataSources === 'object' ? project.dataSources : {};
+        return {
+          ...DEFAULT_PROJECT,
+          ...project,
+          slug: String(project?.slug || slugify(project?.name || '')).trim(),
+          modules: {
+            ifc: String(modules.ifc || '').trim(),
+            status: String(modules.status || '').trim(),
+            cantidades: String(modules.cantidades || '').trim(),
+            pdf: String(modules.pdf || '').trim(),
+            dwg: String(modules.dwg || '').trim(),
+          },
+          actions: {
+            publicaciones: String(actions.publicaciones || '').trim(),
+            solicitudes: String(actions.solicitudes || '').trim(),
+            equipo: String(actions.equipo || '').trim(),
+          },
+          dataSources: {
+            driveFolderName: String(dataSources.driveFolderName || String(project?.name || '')).trim(),
+            driveFolderId: String(dataSources.driveFolderId || '').trim(),
+            driveScriptUrl: String(dataSources.driveScriptUrl || '').trim(),
+            statusSheetId: String(dataSources.statusSheetId || '').trim(),
+            statusScriptUrl: String(dataSources.statusScriptUrl || '').trim(),
+            cantidadesSheetId: String(dataSources.cantidadesSheetId || '').trim(),
+            cantidadesScriptUrl: String(dataSources.cantidadesScriptUrl || '').trim(),
+          },
+          landing: {
+            ...DEFAULT_PROJECT.landing,
+            ...landing,
+            map: {
+              lat: Number.isFinite(Number(map.lat)) ? Number(map.lat) : DEFAULT_PROJECT.landing.map.lat,
+              lng: Number.isFinite(Number(map.lng)) ? Number(map.lng) : DEFAULT_PROJECT.landing.map.lng,
+              zoom: Number.isFinite(Number(map.zoom)) ? Number(map.zoom) : DEFAULT_PROJECT.landing.map.zoom,
+            },
+          },
+        };
+      };
+
+      const buildProjectAwareHref = (href, target) => {
+        const rawHref = String(href || '').trim();
+        if (!rawHref || rawHref === '#') return rawHref || '#';
+        try {
+          const url = new URL(rawHref, window.location.href);
+          if (url.origin !== window.location.origin) return rawHref;
+          url.searchParams.set('project', project.slug);
+          if (project.dataSources.driveFolderName) url.searchParams.set('driveFolderName', project.dataSources.driveFolderName);
+          if (project.dataSources.driveFolderId) url.searchParams.set('driveFolderId', project.dataSources.driveFolderId);
+          if (project.dataSources.driveScriptUrl) url.searchParams.set('driveScriptUrl', project.dataSources.driveScriptUrl);
+          if (target === 'status') {
+            if (project.dataSources.statusSheetId) url.searchParams.set('statusSheetId', project.dataSources.statusSheetId);
+            if (project.dataSources.statusScriptUrl) url.searchParams.set('statusScriptUrl', project.dataSources.statusScriptUrl);
+          }
+          if (target === 'cantidades') {
+            if (project.dataSources.cantidadesSheetId) url.searchParams.set('cantidadesSheetId', project.dataSources.cantidadesSheetId);
+            if (project.dataSources.cantidadesScriptUrl) url.searchParams.set('cantidadesScriptUrl', project.dataSources.cantidadesScriptUrl);
+          }
+          return url.toString();
+        } catch {
+          return rawHref;
+        }
+      };
+
+      const renderModuleCard = (item, compact) => {
+        const cardClass = compact
+          ? 'rounded-2xl bg-white/70 px-5 py-5 text-center transition hover:bg-white dark:bg-white/10 dark:hover:bg-white/15'
+          : 'rounded-2xl bg-white/70 p-4 transition hover:bg-white dark:bg-white/10 dark:hover:bg-white/15';
+        if (compact) {
+          return `
+            <a href="${escapeHtml(item.href)}" class="${cardClass}">
+              <div class="mx-auto flex h-11 w-11 items-center justify-center rounded-xl bg-white/70 text-[#111827] dark:bg-white/10 dark:text-white">
+                <span class="material-symbols-outlined">${item.icon}</span>
+              </div>
+              <div class="mt-4 text-sm font-semibold text-[#111827] dark:text-white">${escapeHtml(item.label)}</div>
+              <div class="mt-1 text-xs uppercase tracking-[0.22em] text-[#6f6f69] dark:text-white/60">${escapeHtml(item.subtitle)}</div>
+            </a>
+          `;
+        }
+        return `
+          <a href="${escapeHtml(item.href)}" class="${cardClass}">
+            <div class="flex items-center gap-3">
+              <span class="material-symbols-outlined text-[#111827] dark:text-white">${item.icon}</span>
+              <div class="min-w-0">
+                <div class="truncate text-sm font-semibold text-[#111827] dark:text-white">${escapeHtml(item.label)}</div>
+                <div class="truncate text-xs uppercase tracking-[0.22em] text-[#6f6f69] dark:text-white/60">${escapeHtml(item.subtitle)}</div>
+              </div>
+            </div>
+          </a>
+        `;
+      };
+
+      const renderActionCard = (item) => `
+        <a href="${escapeHtml(item.href)}" class="rounded-2xl bg-white/70 px-5 py-4 transition hover:bg-white dark:bg-white/10 dark:hover:bg-white/15">
+          <div class="flex items-center justify-between gap-4">
+            <div class="flex items-center gap-3">
+              <span class="material-symbols-outlined text-[#111827] dark:text-white">${item.icon}</span>
+              <div class="min-w-0">
+                <div class="truncate text-sm font-semibold text-[#111827] dark:text-white">${escapeHtml(item.label)}</div>
+                <div class="truncate text-xs uppercase tracking-[0.22em] text-[#6f6f69] dark:text-white/60">${escapeHtml(item.subtitle)}</div>
+              </div>
+            </div>
+            <span class="material-symbols-outlined text-[#6f6f69] dark:text-white/60">chevron_right</span>
+          </div>
+        </a>
+      `;
+
+      const loadConfig = async () => {
+        try {
+          // 1. Intentar cargar de la red primero (mostrar la última versión si hay conexión)
+          const metaVersion = document.querySelector('meta[name="x-app-version"]');
+          const currentVersion = metaVersion?.getAttribute('content') || Date.now().toString();
+          const response = await fetch(`portal-config.json?v=${encodeURIComponent(currentVersion)}`, { cache: 'no-store' });
+          if (!response.ok) throw new Error('No se pudo cargar la configuración del portal');
+          return await response.json();
+        } catch (error) {
+          console.warn('Error al cargar configuración central de red. Intentando borrador local...', error);
+          // 2. Si no hay conexión o falla, intentar cargar el borrador local (buffer)
+          try {
+            const draft = localStorage.getItem('portal:pba-config-draft:v2');
+            if (draft) {
+              console.log('Cargando borrador local de configuración (buffer)');
+              return JSON.parse(draft);
+            }
+          } catch (e) {
+            console.warn('Error al cargar el borrador local:', e);
+          }
+          // 3. Fallback final por defecto
+          return DEFAULT_PORTAL_CONFIG;
+        }
+      };
+
+      let config = DEFAULT_PORTAL_CONFIG;
+      try {
+        config = await loadConfig();
+      } catch (error) {
+        console.warn(error);
+      }
+
+      const projects = Array.isArray(config.projects) ? config.projects.map(normalizeProject) : [];
+      const activeProject = projects.find((project) => project.slug === requestedProject) || projects.find((project) => project.slug === 'trevoly') || projects[0] || DEFAULT_PROJECT;
+
+      const project = normalizeProject(activeProject);
+      const footerText = String(config.portal?.footerText || DEFAULT_PORTAL_CONFIG.portal.footerText);
+
+      document.title = `${project.name} | ${config.portal?.name || 'Portal BIM Alcabama'}`;
+      document.getElementById('project-eyebrow-top').textContent = project.landing.eyebrow || 'Portal BIM';
+      document.getElementById('project-name-top').textContent = project.name;
+      document.getElementById('project-eyebrow-main').textContent = project.landing.eyebrow || 'Dashboard';
+      document.getElementById('project-title').textContent = project.landing.title || project.name.toUpperCase();
+      document.getElementById('project-subtitle').textContent = project.landing.subtitle || DEFAULT_PROJECT.landing.subtitle;
+      document.getElementById('project-action-eyebrow').textContent = project.landing.actionEyebrow || 'Panel';
+      document.getElementById('project-action-title').textContent = project.landing.actionTitle || 'Acciones';
+      document.getElementById('project-action-description').textContent = project.landing.actionDescription || DEFAULT_PROJECT.landing.actionDescription;
+      document.getElementById('project-map-eyebrow').textContent = project.landing.mapEyebrow || 'City Guide';
+      document.getElementById('project-city').textContent = project.landing.cityLabel || project.city || 'BOGOTÁ';
+      document.getElementById('project-map-description').textContent = project.landing.mapDescription || DEFAULT_PROJECT.landing.mapDescription;
+      document.getElementById('project-address').textContent = project.landing.address || '';
+      document.getElementById('project-footer').textContent = footerText;
+
+      const projectLogo = project.landing.logoUrl || DEFAULT_PROJECT.landing.logoUrl;
+      ['sidebar-project-logo', 'header-project-logo'].forEach((id) => {
+        const img = document.getElementById(id);
+        img.src = projectLogo;
+        img.alt = project.name;
+      });
+
+      const portalLogoLight = project.landing.portalLogoLight || DEFAULT_PROJECT.landing.portalLogoLight;
+      const portalLogoDark = project.landing.portalLogoDark || DEFAULT_PROJECT.landing.portalLogoDark;
+      ['project-portal-logo-light', 'footer-logo-light'].forEach((id) => {
+        document.getElementById(id).src = portalLogoLight;
+      });
+      ['project-portal-logo-dark', 'footer-logo-dark'].forEach((id) => {
+        document.getElementById(id).src = portalLogoDark;
+      });
+
+      const footerLogoSecondaryLight = config.portal?.footerLogoSecondaryLight || 'https://i.postimg.cc/RVp8pZwc/artis-urbano.png';
+      const footerLogoSecondaryDark = config.portal?.footerLogoSecondaryDark || 'https://i.postimg.cc/RVp8pZwc/artis-urbano.png';
+      const imgFooterSecLight = document.getElementById('footer-logo-secondary-light');
+      if (imgFooterSecLight) imgFooterSecLight.src = footerLogoSecondaryLight;
+      const imgFooterSecDark = document.getElementById('footer-logo-secondary-dark');
+      if (imgFooterSecDark) imgFooterSecDark.src = footerLogoSecondaryDark;
+
+      const modelModules = MODULE_META
+        .filter((item) => item.group === 'modelos' && project.modules[item.key])
+        .map((item) => ({ ...item, href: buildProjectAwareHref(project.modules[item.key], item.key) }));
+      const planModules = MODULE_META
+        .filter((item) => item.group === 'planimetria' && project.modules[item.key])
+        .map((item) => ({ ...item, href: buildProjectAwareHref(project.modules[item.key], item.key) }));
+
+      document.getElementById('project-model-modules').innerHTML = modelModules.length
+        ? modelModules.map((item) => renderModuleCard(item, false)).join('')
+        : '<div class="rounded-2xl border border-dashed border-slate-300 p-4 text-sm text-slate-500 dark:border-white/15 dark:text-white/60">Sin módulos configurados.</div>';
+      document.getElementById('project-plan-modules').innerHTML = planModules.length
+        ? planModules.map((item) => renderModuleCard(item, false)).join('')
+        : '<div class="rounded-2xl border border-dashed border-slate-300 p-4 text-sm text-slate-500 dark:border-white/15 dark:text-white/60">Sin planimetría configurada.</div>';
+
+      const actions = ACTION_META
+        .map((item) => ({ ...item, href: buildProjectAwareHref(project.actions[item.key] || item.defaultHref, item.key) }))
+        .filter((item) => item.href);
+      document.getElementById('project-action-links').innerHTML = actions.map(renderActionCard).join('');
+
+      const quickLinks = [...modelModules, ...planModules]
+        .slice(0, 4)
+        .map((item) => ({ ...item, subtitle: item.group === 'modelos' ? 'Abrir' : 'Revisar' }));
+      document.getElementById('project-quick-links').innerHTML = quickLinks.length
+        ? quickLinks.map((item) => renderModuleCard(item, true)).join('')
+        : '<div class="rounded-2xl border border-dashed border-slate-300 p-4 text-sm text-slate-500 dark:border-white/15 dark:text-white/60">Sin accesos rápidos configurados.</div>';
+
+      const mapEl = document.getElementById('project-map');
+      const mapHint = document.getElementById('map-ctrl-hint');
+      let projectMap = null;
+      const setMapInteraction = (enabled) => {
+        if (!projectMap) return;
+        if (enabled) {
+          projectMap.dragging.enable();
+          projectMap.scrollWheelZoom.enable();
+          projectMap.touchZoom.enable();
+          projectMap.doubleClickZoom.enable();
+        } else {
+          projectMap.dragging.disable();
+          projectMap.scrollWheelZoom.disable();
+          projectMap.touchZoom.disable();
+          projectMap.doubleClickZoom.disable();
+        }
+        if (mapHint) mapHint.style.display = enabled ? 'none' : 'block';
+      };
+
+      if (mapEl && window.L) {
+        const lat = project.landing.map.lat;
+        const lng = project.landing.map.lng;
+        const zoom = project.landing.map.zoom;
+
+        projectMap = window.L.map(mapEl, {
+          zoomControl: false,
+          attributionControl: true,
+          dragging: false,
+          scrollWheelZoom: false,
+          touchZoom: false,
+          doubleClickZoom: false,
+          boxZoom: false,
+          keyboard: false,
+        });
+
+        window.L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+          maxZoom: 20,
+          attribution: '&copy; OpenStreetMap contributors',
+        }).addTo(projectMap);
+
+        const projectLogo = project.landing.logoUrl || DEFAULT_PROJECT.landing.logoUrl;
+        const trevolyIcon = window.L.divIcon({
+          html: `<img src="${escapeHtml(projectLogo)}" class="w-12 h-12 object-contain drop-shadow-lg pointer-events-none" />`,
+          className: 'flex items-center justify-center bg-transparent border-none',
+          iconSize: [48, 48],
+          iconAnchor: [24, 24]
+        });
+        window.L.marker([lat, lng], { icon: trevolyIcon }).addTo(projectMap).bindPopup(escapeHtml(project.name));
+
+        window.L.circle([lat, lng], {
+          radius: 140,
+          color: '#f5b700',
+          weight: 4,
+          opacity: 1,
+          fillColor: '#f5b700',
+          fillOpacity: 0.12,
+        }).addTo(projectMap);
+
+        projectMap.setView([lat, lng], zoom, { animate: false });
+        setMapInteraction(false);
+        window.addEventListener('keydown', (e) => setMapInteraction(Boolean(e.ctrlKey)));
+        window.addEventListener('keyup', (e) => setMapInteraction(Boolean(e.ctrlKey)));
+        window.addEventListener('blur', () => setMapInteraction(false));
+      } else if (mapHint) {
+        mapHint.style.display = 'none';
+      }
+
+      if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+          const meta = document.querySelector('meta[name="x-app-version"]');
+          const appVersion = meta?.getAttribute('content') || '';
+          const swUrl = appVersion ? `sw.js?v=${encodeURIComponent(appVersion)}` : 'sw.js';
+          navigator.serviceWorker.register(swUrl)
+            .then((registration) => {
+              if (!navigator.onLine) return;
+              void registration.update();
+            })
+            .catch((error) => {
+              console.log('Fallo en el registro de ServiceWorker:', error);
+            });
+        });
+      }
+
+      const backBtn = document.getElementById('back-btn');
+      backBtn?.addEventListener('click', () => {
+        if (window.history.length > 1) window.history.back();
+        else window.location.href = 'home.html';
+      });
+
+      const nowEl = document.getElementById('project-now');
+      const updateNow = () => {
+        const d = new Date();
+        const hh = String(d.getHours()).padStart(2, '0');
+        const mm = String(d.getMinutes()).padStart(2, '0');
+        nowEl.textContent = `${hh}:${mm}`;
+      };
+      updateNow();
+      window.setInterval(updateNow, 15000);
+
+      const metaVersion = document.querySelector('meta[name="x-app-version"]');
+      const appId = metaVersion?.getAttribute('data-app') || 'project-landing';
+      const currentVersion = metaVersion?.getAttribute('content') || '';
+      const versionKey = `${appId}:appVersion`;
+      const storedVersion = localStorage.getItem(versionKey) || '';
+      const banner = document.getElementById('update-banner');
+      const reloadBtn = document.getElementById('update-reload');
+      const showBanner = () => {
+        if (!banner) return;
+        banner.classList.remove('hidden');
+      };
+      if (currentVersion) {
+        if (!storedVersion) {
+          localStorage.setItem(versionKey, currentVersion);
+        } else if (storedVersion !== currentVersion) {
+          showBanner();
+        }
+      }
+      reloadBtn?.addEventListener('click', async () => {
+        try {
+          localStorage.setItem(versionKey, currentVersion);
+          if ('serviceWorker' in navigator) {
+            const reg = await navigator.serviceWorker.getRegistration();
+            if (reg) await reg.unregister();
+          }
+        } catch {
+        }
+        const u = new URL(window.location.href);
+        if (currentVersion) u.searchParams.set('v', currentVersion);
+        window.location.replace(u.toString());
+      });
+    });
+  </script>
+</body>
+</html>

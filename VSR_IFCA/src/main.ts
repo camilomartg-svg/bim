@@ -1,0 +1,10416 @@
+import * as THREE from 'three';
+import { LineMaterial } from 'three/examples/jsm/lines/LineMaterial.js';
+import * as OBC from '@thatopen/components';
+import * as OBF from '@thatopen/components-front';
+import * as BUI from '@thatopen/ui';
+import * as CUI from '@thatopen/ui-obc';
+import * as FRAGS from '@thatopen/fragments';
+import { ViewpointsManager, ViewpointStateProvider } from './viewpoints-manager';
+import {
+    DRIVE_MODELS_API_URL as DEFAULT_DRIVE_MODELS_API_URL,
+    DRIVE_MODELS_FOLDER_ID as DEFAULT_DRIVE_MODELS_FOLDER_ID,
+} from './config';
+import './style.css';
+
+const currentUrl = typeof window !== 'undefined' ? new URL(window.location.href) : null;
+const currentParams = currentUrl?.searchParams ?? new URLSearchParams();
+const normalizeProjectRuntimeKey = (value: string | null | undefined) =>
+    String(value || '')
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-+|-+$/g, '') || 'default';
+const extractDriveFolderId = (val: string): string => {
+    const trimmed = String(val || '').trim();
+    const foldersMatch = trimmed.match(/\/folders\/([a-zA-Z0-9-_]+)/);
+    if (foldersMatch) return foldersMatch[1];
+    const idMatch = trimmed.match(/[?&]id=([a-zA-Z0-9-_]+)/);
+    if (idMatch) return idMatch[1];
+    return trimmed;
+};
+
+const DRIVE_MODELS_API_URL = String(
+    currentParams.get('driveScriptUrl') || DEFAULT_DRIVE_MODELS_API_URL || '',
+).trim();
+const DRIVE_MODELS_FOLDER_ID = extractDriveFolderId(
+    currentParams.get('driveFolderId') || DEFAULT_DRIVE_MODELS_FOLDER_ID || '',
+);
+const PROJECT_RUNTIME_KEY = normalizeProjectRuntimeKey(
+    currentParams.get('project') || currentParams.get('driveFolderName') || DRIVE_MODELS_FOLDER_ID || 'default',
+);
+
+
+// --- Viewpoints State ---
+interface MeasurementData {
+    type: 'point' | 'length' | 'area' | 'angle' | 'slope';
+    points: { x: number, y: number, z: number }[];
+    label: string;
+    labelPosition: { x: number, y: number, z: number };
+    color?: number;
+}
+let completedMeasurements: MeasurementData[] = [];
+let viewpointsManager: ViewpointsManager | null = null;
+
+
+// --- EDGE & VERTEX SNAP PATCH (v26) ---
+// Intercepts raycasts to snap to Vertices (Corners) and Edges (Surface boundaries).
+const originalIntersectObjects = THREE.Raycaster.prototype.intersectObjects;
+const originalIntersectObject = THREE.Raycaster.prototype.intersectObject;
+
+const pushUniqueSnapPoint = (points: THREE.Vector3[], candidate: THREE.Vector3, epsilon = 1e-6) => {
+    for (const existing of points) {
+        if (existing.distanceToSquared(candidate) <= epsilon) return;
+    }
+    points.push(candidate);
+};
+
+const getActiveSnapClippingPlanes = (): THREE.Plane[] => {
+    const result: THREE.Plane[] = [];
+    try {
+        const rendererPlanes = (world?.renderer?.three as any)?.clippingPlanes;
+        if (Array.isArray(rendererPlanes)) {
+            for (const plane of rendererPlanes) {
+                if (plane?.normal) result.push(plane);
+            }
+        }
+    } catch {}
+    return result;
+};
+
+const getSectionSnapCandidates = (vertices: THREE.Vector3[], hitPoint?: THREE.Vector3): THREE.Vector3[] => {
+    if (!vertices || vertices.length < 3) return [];
+    const planes = getActiveSnapClippingPlanes();
+    if (planes.length === 0) return [];
+    const triangleEdges: Array<[THREE.Vector3, THREE.Vector3]> = [
+        [vertices[0], vertices[1]],
+        [vertices[1], vertices[2]],
+        [vertices[2], vertices[0]]
+    ];
+    const candidates: THREE.Vector3[] = [];
+    const planeTolerance = 0.02;
+
+    for (const plane of planes) {
+        if (hitPoint && Math.abs(plane.distanceToPoint(hitPoint)) > 0.2) continue;
+        const intersections: THREE.Vector3[] = [];
+
+        for (const [start, end] of triangleEdges) {
+            const d1 = plane.distanceToPoint(start);
+            const d2 = plane.distanceToPoint(end);
+
+            if (Math.abs(d1) <= planeTolerance) pushUniqueSnapPoint(intersections, start.clone());
+            if (Math.abs(d2) <= planeTolerance) pushUniqueSnapPoint(intersections, end.clone());
+
+            if (d1 * d2 < 0) {
+                const t = d1 / (d1 - d2);
+                const point = start.clone().lerp(end, t);
+                pushUniqueSnapPoint(intersections, point);
+            }
+        }
+
+        for (const point of intersections) {
+            pushUniqueSnapPoint(candidates, point);
+        }
+    }
+
+    return candidates;
+};
+
+type SnapTriangleCache = {
+    triangles: Array<{ indices: [number, number, number]; normal: THREE.Vector3; constant: number }>;
+    vertexToTriangles: Map<number, number[]>;
+};
+
+const getSnapTriangleCache = (geom: THREE.BufferGeometry): SnapTriangleCache | null => {
+    const pos = geom.attributes.position;
+    if (!pos) return null;
+    const cached = (geom.userData.__snapTriangleCache || null) as SnapTriangleCache | null;
+    if (cached) return cached;
+
+    const triangles: SnapTriangleCache['triangles'] = [];
+    const vertexToTriangles = new Map<number, number[]>();
+    const readVertex = (idx: number) => new THREE.Vector3().fromBufferAttribute(pos, idx);
+    const registerTriangle = (a: number, b: number, c: number) => {
+        const va = readVertex(a);
+        const vb = readVertex(b);
+        const vc = readVertex(c);
+        const normal = new THREE.Vector3().subVectors(vb, va).cross(new THREE.Vector3().subVectors(vc, va));
+        if (normal.lengthSq() < 1e-12) return;
+        normal.normalize();
+        const constant = normal.dot(va);
+        const triangleIndex = triangles.length;
+        triangles.push({ indices: [a, b, c], normal, constant });
+        for (const idx of [a, b, c]) {
+            const list = vertexToTriangles.get(idx) || [];
+            list.push(triangleIndex);
+            vertexToTriangles.set(idx, list);
+        }
+    };
+
+    if (geom.index) {
+        const index = geom.index;
+        for (let i = 0; i < index.count; i += 3) {
+            registerTriangle(index.getX(i), index.getX(i + 1), index.getX(i + 2));
+        }
+    } else {
+        for (let i = 0; i < pos.count; i += 3) {
+            registerTriangle(i, i + 1, i + 2);
+        }
+    }
+
+    const cache = { triangles, vertexToTriangles };
+    geom.userData.__snapTriangleCache = cache;
+    return cache;
+};
+
+const getConnectedCoplanarVertices = (intersection: THREE.Intersection): THREE.Vector3[] => {
+    if (!intersection.face) return [];
+    const geom = (intersection.object as any)?.geometry as THREE.BufferGeometry | undefined;
+    const pos = geom?.attributes?.position;
+    if (!geom || !pos) return [];
+
+    const cache = getSnapTriangleCache(geom);
+    if (!cache) return [];
+
+    const seedIndices = [intersection.face.a, intersection.face.b, intersection.face.c];
+    const seedTriangle = cache.triangles.find((triangle) =>
+        triangle.indices[0] === seedIndices[0] &&
+        triangle.indices[1] === seedIndices[1] &&
+        triangle.indices[2] === seedIndices[2]
+    ) || cache.triangles.find((triangle) => {
+        const triSet = new Set(triangle.indices);
+        return seedIndices.every((idx) => triSet.has(idx));
+    });
+    if (!seedTriangle) return [];
+
+    const pending: number[] = [];
+    const visited = new Set<number>();
+    for (const idx of seedTriangle.indices) {
+        const triangles = cache.vertexToTriangles.get(idx) || [];
+        pending.push(...triangles);
+    }
+
+    const normalTolerance = 0.999;
+    const planeTolerance = 1e-4;
+    const collectedIndices = new Set<number>();
+
+    while (pending.length > 0) {
+        const triIndex = pending.pop()!;
+        if (visited.has(triIndex)) continue;
+        visited.add(triIndex);
+
+        const triangle = cache.triangles[triIndex];
+        if (!triangle) continue;
+        if (Math.abs(triangle.normal.dot(seedTriangle.normal)) < normalTolerance) continue;
+        if (Math.abs(triangle.constant - seedTriangle.constant) > planeTolerance) continue;
+
+        for (const idx of triangle.indices) {
+            collectedIndices.add(idx);
+            const neighbors = cache.vertexToTriangles.get(idx) || [];
+            for (const neighbor of neighbors) {
+                if (!visited.has(neighbor)) pending.push(neighbor);
+            }
+        }
+    }
+
+    const worldVertices: THREE.Vector3[] = [];
+    const transformVertex = (idx: number) => {
+        const v = new THREE.Vector3().fromBufferAttribute(pos, idx);
+        if (intersection.object instanceof THREE.InstancedMesh && intersection.instanceId !== undefined) {
+            const instanceMatrix = new THREE.Matrix4();
+            intersection.object.getMatrixAt(intersection.instanceId, instanceMatrix);
+            v.applyMatrix4(instanceMatrix);
+        }
+        intersection.object.updateMatrixWorld();
+        v.applyMatrix4(intersection.object.matrixWorld);
+        return v;
+    };
+
+    for (const idx of collectedIndices) {
+        pushUniqueSnapPoint(worldVertices, transformVertex(idx));
+    }
+    return worldVertices;
+};
+
+const applyGlobalSnap = (intersects: THREE.Intersection[]) => {
+    if (!intersects || intersects.length === 0) return intersects;
+    
+    const closest = intersects.find(i => i.object instanceof THREE.Mesh || i.object instanceof THREE.InstancedMesh);
+    if (!closest) return intersects;
+
+    try {
+        const VERTEX_THRESHOLD = 0.18;
+        const EDGE_THRESHOLD = 0.08;
+        
+        if (closest.face && (closest.object as any).geometry) {
+            const geom = (closest.object as any).geometry;
+            const pos = geom.attributes.position;
+            
+            if (pos) {
+                const a = closest.face.a;
+                const b = closest.face.b;
+                const c = closest.face.c;
+                
+                const getV = (idx: number) => {
+                    const v = new THREE.Vector3();
+                    v.fromBufferAttribute(pos, idx);
+                    if (closest.object instanceof THREE.InstancedMesh && closest.instanceId !== undefined) {
+                        const m = new THREE.Matrix4();
+                        closest.object.getMatrixAt(closest.instanceId, m);
+                        v.applyMatrix4(m);
+                    }
+                    closest.object.updateMatrixWorld();
+                    v.applyMatrix4(closest.object.matrixWorld);
+                    return v;
+                };
+                
+                const va = getV(a);
+                const vb = getV(b);
+                const vc = getV(c);
+                const coplanarVertices = getConnectedCoplanarVertices(closest);
+                
+                let bestPoint: THREE.Vector3 | null = null;
+                let minD = Infinity;
+                let type = '';
+
+                // 1. Check Vertices
+                const vertexPool = coplanarVertices.length > 0 ? coplanarVertices : [va, vb, vc];
+                vertexPool.forEach(v => {
+                    const d = v.distanceTo(closest.point);
+                    if (d < minD) {
+                        minD = d;
+                        bestPoint = v;
+                        type = 'VERTEX';
+                    }
+                });
+
+                // Only stick to vertex if within threshold
+                if (minD > VERTEX_THRESHOLD) {
+                    // 2. Check Edges if vertex is too far
+                    // Edges: va-vb, vb-vc, vc-va
+                    const edges = [
+                        new THREE.Line3(va, vb),
+                        new THREE.Line3(vb, vc),
+                        new THREE.Line3(vc, va)
+                    ];
+                    
+                    let bestEdgeDist = Infinity;
+                    let bestEdgePoint: THREE.Vector3 | null = null;
+                    
+                    edges.forEach(edge => {
+                        const target = new THREE.Vector3();
+                        edge.closestPointToPoint(closest.point, true, target);
+                        const d = target.distanceTo(closest.point);
+                        if (d < bestEdgeDist) {
+                            bestEdgeDist = d;
+                            bestEdgePoint = target;
+                        }
+                    });
+                    
+                    if (bestEdgeDist < EDGE_THRESHOLD) {
+                        bestPoint = bestEdgePoint;
+                        minD = bestEdgeDist;
+                        type = 'EDGE';
+                    } else {
+                        // Reset if neither match
+                        bestPoint = null;
+                    }
+                }
+
+                if (bestPoint) {
+                    closest.point.copy(bestPoint);
+                    
+                    // Visual Update
+                    if ((window as any).debugSphere) {
+                        (window as any).debugSphere.position.copy(bestPoint);
+                        (window as any).debugSphere.visible = true;
+                        
+                        // Color Code: Green = Vertex, Yellow = Edge
+                        if (type === 'VERTEX') {
+                            ((window as any).debugSphere.material as THREE.MeshBasicMaterial).color.setHex(0x00ff00);
+                             (window as any).debugSphere.scale.set(1, 1, 1);
+                        } else {
+                            ((window as any).debugSphere.material as THREE.MeshBasicMaterial).color.setHex(0xffff00);
+                             (window as any).debugSphere.scale.set(0.5, 0.5, 0.5);
+                        }
+                    }
+                    
+                    if ((window as any).debugLog && Math.random() < 0.05) {
+                        (window as any).debugLog(`Snap: ${type} (${minD.toFixed(3)})`);
+                    }
+                } else {
+                     if ((window as any).debugSphere) (window as any).debugSphere.visible = false;
+                }
+            }
+        }
+    } catch (e) {
+        console.error("Snap Error", e);
+    }
+    
+    return intersects;
+};
+
+THREE.Raycaster.prototype.intersectObjects = function(objects, recursive, optionalTarget) {
+    const res = originalIntersectObjects.call(this, objects, recursive, optionalTarget);
+    return applyGlobalSnap(res);
+};
+
+THREE.Raycaster.prototype.intersectObject = function(object, recursive, optionalTarget) {
+    const res = originalIntersectObject.call(this, object, recursive, optionalTarget);
+    return applyGlobalSnap(res);
+};
+// ------------------------------------------------
+
+
+
+
+
+
+
+
+
+
+// --- GLOBAL DEBUG SPHERE ---
+let debugSphere: THREE.Mesh | null = null;
+let debugLog: ((msg: string) => void) | null = null;
+
+
+const setupDebugSphere = (scene: THREE.Scene) => {
+    if (debugSphere) return; // Already setup
+    const geom = new THREE.SphereGeometry(0.3, 16, 16);
+    const mat = new THREE.MeshBasicMaterial({ color: 0x00ff00, depthTest: false, transparent: true, opacity: 0.8 });
+    debugSphere = new THREE.Mesh(geom, mat); (window as any).debugSphere = debugSphere;
+    debugSphere.renderOrder = 9999;
+    debugSphere.visible = false;
+    scene.add(debugSphere);
+    
+    // Also setup log
+    const debugConsole = document.getElementById('debug-console');
+    if (debugConsole) {
+        debugConsole.style.display = 'block';
+        debugLog = (msg: string) => {
+             const line = document.createElement('div');
+             line.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
+             debugConsole.appendChild(line);
+             debugConsole.scrollTop = debugConsole.scrollHeight;
+             if (debugConsole.children.length > 50) debugConsole.removeChild(debugConsole.firstChild);
+        };
+        (window as any).debugLog = debugLog;
+    }
+};
+
+
+// --- Measurement State (Hoisted to top to avoid ReferenceError) ---
+let measurementMode: 'length' | 'point' | 'area' | 'angle' | 'slope' | 'volume' | null = null;
+let areaTool: any = null; // Area Measurement Tool
+let volumeTool: any = null; // Volume Measurement Tool
+let measurementPoints: THREE.Vector3[] = [];
+let tempMeasurementLine: THREE.Line | null = null;
+const measurementLabels: HTMLElement[] = [];
+const measurementMarkers: THREE.Mesh[] = [];
+let snappingCursor: THREE.Mesh | null = null;
+
+
+// --- EMERGENCY PATCH: Vector3.fromBufferAttribute ---
+// This is the specific call site failing in the stack trace.
+const originalFromBufferAttribute = THREE.Vector3.prototype.fromBufferAttribute;
+THREE.Vector3.prototype.fromBufferAttribute = function(attribute, index) {
+    try {
+        // Double check attribute validity before calling
+        if (!attribute || (attribute.isBufferAttribute && !attribute.array)) {
+             return this.set(0, 0, 0);
+        }
+        return originalFromBufferAttribute.call(this, attribute, index);
+    } catch (e) {
+        // console.warn("Prevented Vector3.fromBufferAttribute crash", e);
+        return this.set(0, 0, 0);
+    }
+};
+
+// --- EMERGENCY PATCH: InstancedMesh.raycast ---
+const originalInstancedRaycast = THREE.InstancedMesh.prototype.raycast;
+THREE.InstancedMesh.prototype.raycast = function(raycaster, intersects) {
+    try {
+        if (!this.geometry) return;
+        originalInstancedRaycast.call(this, raycaster, intersects);
+    } catch (e) {
+        // console.warn("Prevented InstancedMesh.raycast crash", e);
+    }
+};
+
+// --- CRITICAL FIX: Monkey-patch THREE.BufferAttribute.prototype.getX to prevent crashes ---
+// The measurement tool's raycaster crashes when hitting geometry with undefined attributes.
+// We intercept the low-level call to prevent the entire app from freezing.
+const originalGetX = THREE.BufferAttribute.prototype.getX;
+THREE.BufferAttribute.prototype.getX = function(index) {
+    // Safety check: if array is missing or index is out of bounds
+    if (!this.array || this.array.length === 0) return 0;
+    try {
+        return originalGetX.call(this, index);
+    } catch (e) {
+        return 0;
+    }
+};
+
+const originalGetY = THREE.BufferAttribute.prototype.getY;
+THREE.BufferAttribute.prototype.getY = function(index) {
+    if (!this.array || this.array.length === 0) return 0;
+    try {
+        return originalGetY.call(this, index);
+    } catch (e) {
+        return 0;
+    }
+};
+
+const originalGetZ = THREE.BufferAttribute.prototype.getZ;
+THREE.BufferAttribute.prototype.getZ = function(index) {
+    if (!this.array || this.array.length === 0) return 0;
+    try {
+        return originalGetZ.call(this, index);
+    } catch (e) {
+        return 0;
+    }
+};
+
+// Patch InterleavedBufferAttribute as well (Crucial for IFC models)
+const originalInterleavedGetX = THREE.InterleavedBufferAttribute.prototype.getX;
+THREE.InterleavedBufferAttribute.prototype.getX = function(index) {
+    try {
+        if (!this.data || !this.data.array) return 0;
+        return originalInterleavedGetX.call(this, index);
+    } catch (e) {
+        return 0;
+    }
+};
+
+const originalInterleavedGetY = THREE.InterleavedBufferAttribute.prototype.getY;
+THREE.InterleavedBufferAttribute.prototype.getY = function(index) {
+    try {
+        if (!this.data || !this.data.array) return 0;
+        return originalInterleavedGetY.call(this, index);
+    } catch (e) {
+        return 0;
+    }
+};
+
+const originalInterleavedGetZ = THREE.InterleavedBufferAttribute.prototype.getZ;
+THREE.InterleavedBufferAttribute.prototype.getZ = function(index) {
+    try {
+        if (!this.data || !this.data.array) return 0;
+        return originalInterleavedGetZ.call(this, index);
+    } catch (e) {
+        return 0;
+    }
+};
+
+// Also patch Mesh.raycast to be safe
+const originalRaycast = THREE.Mesh.prototype.raycast;
+THREE.Mesh.prototype.raycast = function(raycaster, intersects) {
+    try {
+        // Skip if geometry is missing or invalid
+        if (!this.geometry) return;
+        originalRaycast.call(this, raycaster, intersects);
+    } catch (e) {
+        // console.warn('Prevented Mesh.raycast crash', e);
+    }
+};
+
+// Patch Line and LineSegments raycast as well
+const originalLineRaycast = THREE.Line.prototype.raycast;
+THREE.Line.prototype.raycast = function(raycaster, intersects) {
+    try {
+        if (!this.geometry) return;
+        originalLineRaycast.call(this, raycaster, intersects);
+    } catch (e) {
+        // console.warn('Prevented Line.raycast crash', e);
+    }
+};
+
+const originalLineSegmentsRaycast = THREE.LineSegments.prototype.raycast;
+THREE.LineSegments.prototype.raycast = function(raycaster, intersects) {
+    try {
+        if (!this.geometry) return;
+        originalLineSegmentsRaycast.call(this, raycaster, intersects);
+    } catch (e) {
+        // console.warn('Prevented LineSegments.raycast crash', e);
+    }
+};
+
+// Patch acceleratedRaycast if it exists (three-mesh-bvh)
+// We wrap it in a getter/setter or just check periodically, 
+// but since it's likely already loaded by imports, we check now.
+const patchAcceleratedRaycast = () => {
+    const proto = THREE.Mesh.prototype as any;
+    if (proto.acceleratedRaycast && !proto._patchedAcceleratedRaycast) {
+        const originalAccelerated = proto.acceleratedRaycast;
+        proto.acceleratedRaycast = function(raycaster: any, intersects: any) {
+            try {
+                if (!this.geometry || !this.geometry.attributes.position) return;
+                
+                // Ensure bounding sphere exists to prevent culling issues
+                if (!this.geometry.boundingSphere) {
+                    this.geometry.computeBoundingSphere();
+                }
+                
+                originalAccelerated.call(this, raycaster, intersects);
+            } catch (e) {
+                // console.warn('Prevented acceleratedRaycast crash', e);
+            }
+        };
+        proto._patchedAcceleratedRaycast = true;
+        console.log('[Fix] Patched acceleratedRaycast successfully');
+    }
+};
+// Try patching immediately and also after a small delay in case it loads async
+patchAcceleratedRaycast();
+setTimeout(patchAcceleratedRaycast, 1000);
+
+// ------------------------------------------------------------------------------------------------------------------
+// --- Polyfills / Monkey-patching if needed (Snapper / Edges)
+// ------------------------------------------------------------------------------------------------------------------
+// It seems OBC.Edges and OBC.Snapper are not exported in the current version of @thatopen/components.
+// We'll stub them or check if they exist on the instance to avoid build errors,
+// or use alternative logic if they were removed/renamed.
+
+// NOTE: Based on inspection of index.d.ts:
+// - OBC.Edges is NOT exported.
+// - OBC.Snapper is NOT exported.
+// - OBF.Snap exists in types, but likely not what we want for "Snapper".
+
+// We will comment out the failing lines or wrap them in try-catch with `any` casting to bypass TS check for now
+// while preserving the intent if they are available at runtime (which is unlikely if not in d.ts).
+// But for "Edges", we can try to find if there is an alternative.
+// Since we are fixing the build, we will remove the calls to missing components for now.
+
+// --- Global Error Handler ---
+window.addEventListener('error', (event) => {
+    const message = String(event.message || '');
+    const filename = String(event.filename || '');
+
+    // Cross-origin JSONP/script errors are often opaque and should not look like a fatal viewer crash.
+    if (message === 'Script error.' || filename.includes('script.google.com')) {
+        console.warn('Non-fatal external script error:', message, filename);
+        return;
+    }
+
+    if (document.getElementById('global-error-box')) return;
+
+    const box = document.createElement('div');
+    box.id = 'global-error-box';
+    box.style.position = 'fixed';
+    box.style.top = '10px';
+    box.style.left = '10px';
+    box.style.background = 'rgba(255, 0, 0, 0.9)';
+    box.style.color = 'white';
+    box.style.padding = '15px';
+    box.style.zIndex = '10000';
+    box.style.borderRadius = '5px';
+    box.style.fontFamily = 'monospace';
+    box.style.maxWidth = '80%';
+    box.style.wordBreak = 'break-all';
+    box.innerHTML = `<strong>Error Critico:</strong><br>${message}<br><small>${filename}:${event.lineno}</small>`;
+    document.body.appendChild(box);
+    console.error("Global Error Caught:", event.error);
+});
+
+// --- Initialization of That Open Engine ---
+
+const components = new OBC.Components();
+// Ensure components.meshes exists for Raycasters that might rely on it
+if (!(components as any).meshes) (components as any).meshes = [];
+
+const worlds = components.get(OBC.Worlds);
+
+const world = worlds.create<
+  OBC.SimpleScene,
+  OBC.OrthoPerspectiveCamera,
+  OBC.SimpleRenderer
+>();
+
+world.scene = new OBC.SimpleScene(components);
+world.scene.setup();
+world.scene.three.background = new THREE.Color(0x202020); // Dark gray
+
+const container = document.getElementById('viewer-container') as HTMLElement;
+world.renderer = new OBC.SimpleRenderer(components, container);
+world.camera = new OBC.OrthoPerspectiveCamera(components);
+world.camera.threePersp.near = 0.05;
+world.camera.threePersp.updateProjectionMatrix();
+world.camera.threeOrtho.near = 0.05;
+world.camera.threeOrtho.updateProjectionMatrix();
+
+components.init();
+BUI.Manager.init();
+
+// Grids
+const grids = components.get(OBC.Grids);
+grids.create(world);
+
+// --- IFC & Fragments Setup ---
+
+const baseUrl = import.meta.env.BASE_URL || './';
+
+
+// --- DEBUG VISUALIZATION ---
+const debugSphereGeom = new THREE.SphereGeometry(0.5, 32, 32); // Increased size for v21
+const debugSphereMat = new THREE.MeshBasicMaterial({ color: 0xff0000, depthTest: false, transparent: true, opacity: 0.8 });
+debugSphere = new THREE.Mesh(debugSphereGeom, debugSphereMat);
+(window as any).debugSphere = debugSphere; // CRITICAL FIX: Expose to global scope for applyGlobalSnap
+debugSphere.renderOrder = 999;
+debugSphere.visible = false;
+// Correctly add to the scene using the world object
+world.scene.three.add(debugSphere);
+
+// --- v29-SmartSnap: GLOBAL INDEPENDENT SNAPPING LOOP ---
+container.addEventListener('mousemove', (event) => {
+    if (!world || !world.camera || !world.scene) return;
+    const rect = container.getBoundingClientRect();
+    const x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+    const y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+    
+    const tempRaycaster = new THREE.Raycaster();
+    tempRaycaster.setFromCamera(new THREE.Vector2(x, y), world.camera.three);
+    
+    // NUCLEAR DEBUG: Raycast against EVERYTHING in scene
+    const candidates: THREE.Object3D[] = [];
+    world.scene.three.traverse((child) => {
+        if (child instanceof THREE.Mesh || child instanceof THREE.InstancedMesh) {
+            candidates.push(child);
+        }
+    });
+
+    if (candidates.length === 0) return;
+    
+    const intersects = tempRaycaster.intersectObjects(candidates, true);
+    
+    if (intersects.length > 0) {
+        applyGlobalSnap([intersects[0]]);
+    } else {
+        if (debugSphere) debugSphere.visible = false;
+    }
+});
+
+const debugConsole = document.getElementById('debug-console');
+if (debugConsole) {
+    debugConsole.style.display = 'none';
+    window.debugLog = () => {};
+} else {
+    window.debugLog = () => {};
+}
+
+const fragments = components.get(OBC.FragmentsManager);
+
+// Initialize fragments with the worker BEFORE getting other components
+// that might depend on it (like Classifier or Hider)
+try {
+    await fragments.init(`${baseUrl}fragments/fragments.mjs`);
+} catch (error) {
+    console.error("Critical Error: Fragments init failed", error);
+    throw new Error(`Fragments init failed: ${error}`);
+}
+
+const classifier = components.get(OBC.Classifier);
+const hider = components.get(OBC.Hider);
+
+// --- App Init ---
+    const versionStr = '2026-02-27-LocalPersistence-Fix';
+    console.warn(`VSR_IFCA Version: ${versionStr}`);
+    
+    // UI Update for version (optional, but good for user confirmation)
+    const versionEl = document.getElementById('version-display');
+    if (versionEl) versionEl.innerText = `v${versionStr}`;
+
+    // --- GLOBAL RAYCASTER PATCH FOR SNAPPING (Official Tools Support) ---
+// This ensures that ALL tools using OBC.Raycasters (like Length, Area) benefit from snapping logic
+// even if they don't explicitly use a VertexPicker or if Snapper is missing.
+const raycasters = components.get(OBC.Raycasters);
+const simpleRaycaster = raycasters.get(world);
+
+const originalCastRayToObjects = simpleRaycaster.castRayToObjects.bind(simpleRaycaster);
+
+// Helper to perform Vertex/Edge snapping on a raw intersection
+const applySnappingToIntersection = (valid: THREE.Intersection | null) => {
+    // Debug logging for raycast attempts (throttle to avoid spam if needed, but we need to see if it fires)
+    // if (window.debugLog && Math.random() < 0.1) window.debugLog("Raycast hit checking...");
+
+    if (!valid || !valid.point) {
+        if (debugSphere) debugSphere.visible = false;
+        return valid;
+    }
+
+    try {
+        // Section/vertex-first snapping: prefer section corners on active cuts,
+        // then exact mesh corners, then edges as fallback.
+        // NOTE: Threshold is in world units (meters in typical IFC scenes).
+        const SNAP_SECTION_THRESHOLD = 0.08;
+        const SNAP_VERTEX_THRESHOLD = 0.12;
+        const SNAP_EDGE_THRESHOLD = 0.025;
+
+        if (valid.face && (valid.object instanceof THREE.Mesh || valid.object instanceof THREE.InstancedMesh)) {
+             const geom = (valid.object as any).geometry;
+             if (!geom || !geom.attributes.position) return valid;
+             
+             const pos = geom.attributes.position;
+             const indices = [valid.face.a, valid.face.b, valid.face.c];
+             
+             // Helper to get world coordinates
+             const getVertexWorld = (idx: number) => {
+                 const tempV = new THREE.Vector3();
+                 if (idx >= 0 && idx < pos.count) {
+                     tempV.fromBufferAttribute(pos, idx);
+                     if (valid.object instanceof THREE.InstancedMesh && valid.instanceId !== undefined) {
+                          const instanceMatrix = new THREE.Matrix4();
+                          valid.object.getMatrixAt(valid.instanceId, instanceMatrix);
+                          tempV.applyMatrix4(instanceMatrix);
+                     }
+                     // Ensure World Matrix is up to date
+                     valid.object.updateMatrixWorld();
+                     tempV.applyMatrix4(valid.object.matrixWorld);
+                 }
+                 return tempV;
+             };
+
+             const va = getVertexWorld(indices[0]);
+             const vb = getVertexWorld(indices[1]);
+             const vc = getVertexWorld(indices[2]);
+             const coplanarVertices = getConnectedCoplanarVertices(valid);
+             const vertexPool = coplanarVertices.length > 0 ? coplanarVertices : [va, vb, vc];
+             const sectionCandidates = getSectionSnapCandidates(vertexPool.slice(0, 3), valid.point);
+             let closestSection: THREE.Vector3 | null = null;
+             let minSectionDist = SNAP_SECTION_THRESHOLD;
+             for (const candidate of sectionCandidates) {
+                 const dist = candidate.distanceTo(valid.point);
+                 if (dist < minSectionDist) {
+                     minSectionDist = dist;
+                     closestSection = candidate;
+                 }
+             }
+
+             let closestVertex: THREE.Vector3 | null = null;
+             let minDist = SNAP_VERTEX_THRESHOLD;
+
+             // Check only the 3 vertices of the hit triangle
+             for (const vertex of vertexPool) {
+                 const dist = vertex.distanceTo(valid.point); // 3D Distance
+                 
+                 // Debug distance
+                 // if (window.debugLog) window.debugLog(`Dist to v${idx}: ${dist.toFixed(3)}`);
+
+                 if (dist < minDist) {
+                     minDist = dist;
+                     closestVertex = vertex;
+                 }
+             }
+             
+             if (closestSection && minSectionDist <= SNAP_SECTION_THRESHOLD) {
+                 valid.point.copy(closestSection);
+                 return valid;
+             }
+
+             if (closestVertex && minDist <= SNAP_VERTEX_THRESHOLD) {
+                 valid.point.copy(closestVertex);
+                 
+                 // Visual Debug
+                 if (typeof debugSphere !== 'undefined') {
+                     debugSphere.position.copy(closestVertex);
+                     debugSphere.visible = true;
+                     debugSphere.material.color.setHex(0x00ff00); // Green for Snap
+                     debugSphere.scale.set(0.8, 0.8, 0.8); // Big sphere
+                 }
+                 
+                 if (window.debugLog) window.debugLog(`SNAP! Vertex (Dist: ${minDist.toFixed(3)})`);
+             } else {
+                 // Edge fallback if neither section corner nor vertex is within threshold.
+                 const edges = [
+                     new THREE.Line3(va, vb),
+                     new THREE.Line3(vb, vc),
+                     new THREE.Line3(vc, va)
+                 ];
+                 let bestEdgeDist = Infinity;
+                 let bestEdgePoint: THREE.Vector3 | null = null;
+                 for (const edge of edges) {
+                     const target = new THREE.Vector3();
+                     edge.closestPointToPoint(valid.point, true, target);
+                     const d = target.distanceTo(valid.point);
+                     if (d < bestEdgeDist) {
+                         bestEdgeDist = d;
+                         bestEdgePoint = target;
+                     }
+                 }
+                 if (bestEdgePoint && bestEdgeDist <= SNAP_EDGE_THRESHOLD) {
+                     valid.point.copy(bestEdgePoint);
+                 }
+                 if (typeof debugSphere !== 'undefined') debugSphere.visible = false;
+             }
+        }
+    } catch (e) {
+        console.warn("Snapping failed:", e);
+        if (window.debugLog) window.debugLog(`Snap Error: ${e}`);
+    }
+    return valid;
+};
+
+// Override castRayToObjects
+simpleRaycaster.castRayToObjects = (items?: THREE.Object3D[], position?: THREE.Vector2) => {
+    // if (window.debugLog && Math.random() < 0.01) window.debugLog("Tool Raycast Triggered");
+    // If items is undefined, it uses components.meshes (which we populated)
+    const result = originalCastRayToObjects(items, position);
+    return applySnappingToIntersection(result);
+};
+
+// Also override castRay if it exists and is different
+// @ts-ignore
+if (simpleRaycaster.castRay) {
+    // @ts-ignore
+    const originalCastRay = simpleRaycaster.castRay.bind(simpleRaycaster);
+    // @ts-ignore
+    simpleRaycaster.castRay = (items) => { // args vary
+         // @ts-ignore
+         const result = originalCastRay(items);
+         // If result is promise?
+         if (result && typeof result.then === 'function') {
+             return result.then((res: any) => applySnappingToIntersection(res));
+         }
+         return applySnappingToIntersection(result);
+    };
+}
+
+// @ts-ignore
+if (simpleRaycaster.castRayFromVector) {
+    // @ts-ignore
+    const originalCastRayFromVector = simpleRaycaster.castRayFromVector.bind(simpleRaycaster);
+    // @ts-ignore
+    simpleRaycaster.castRayFromVector = (origin, direction, items) => {
+        const result = originalCastRayFromVector(origin, direction, items);
+        return applySnappingToIntersection(result);
+    };
+}
+
+
+// Monkey-patch Hider to sync hiddenItems globally
+const originalSet = hider.set.bind(hider);
+hider.set = async (visible: boolean, items?: any) => {
+    await originalSet(visible, items);
+    
+    if (items && Object.keys(items).length > 0) {
+        updateHiddenItems(items, visible);
+    } else if (visible) {
+        // Show All case
+        for (const key in hiddenItems) {
+            delete hiddenItems[key];
+        }
+    }
+};
+
+const originalIsolate = hider.isolate.bind(hider);
+hider.isolate = async (selection: any) => {
+    await originalIsolate(selection);
+    
+    // Sync hiddenItems for Isolate
+    try {
+         console.warn("[DEBUG] Global Isolate Triggered. Syncing hiddenItems...");
+         console.log("[DEBUG] Selection keys:", Object.keys(selection));
+
+         for (const [uuid, model] of fragments.list) {
+             const allIds = await model.getItemsIdsWithGeometry();
+             
+             // Collect visible IDs for this model
+             const visibleIDsForThisModel = new Set<number>();
+             
+             // Selection is Record<FragmentID, Iterable<ExpressID>>
+             for (const [fragID, idSet] of Object.entries(selection)) {
+                 // Check if this fragment belongs to the current model
+                 // 1. Check if fragID IS the model UUID
+                 let belongs = (fragID === uuid);
+                 
+                 // 2. Check if fragID is one of the fragments in the model
+                 if (!belongs) {
+                     if (model.items && model.items.length > 0) {
+                         belongs = model.items.some((f: any) => f.id === fragID);
+                     } else if (model.children && model.children.length > 0) {
+                         // Fallback: check Three.js children (Meshes/Fragments)
+                         // Fragment objects usually have 'id' matching the fragment ID
+                         belongs = model.children.some((child: any) => child.uuid === fragID);
+                     }
+                 }
+                 
+                 if (belongs) {
+                     console.log(`[DEBUG] Fragment ${fragID} belongs to model ${uuid}`);
+                     const items = idSet instanceof Set ? idSet : (Array.isArray(idSet) ? idSet : []);
+                     for(const id of (items as any)) visibleIDsForThisModel.add(id);
+                 }
+             }
+             
+             if (!hiddenItems[uuid]) hiddenItems[uuid] = new Set();
+             const hiddenSet = hiddenItems[uuid];
+             hiddenSet.clear(); // Reset before repopulating based on Isolate logic
+             
+             let hiddenCount = 0;
+             for (const id of allIds) {
+                 if (visibleIDsForThisModel.has(id)) {
+                     // It's visible
+                 } else {
+                     hiddenSet.add(id);
+                     hiddenCount++;
+                 }
+             }
+             console.log(`[DEBUG] Model ${uuid}: Total ${allIds.size}, Visible ${visibleIDsForThisModel.size}, Hidden ${hiddenCount}`);
+         }
+    } catch (e) {
+         console.error("Error updating hidden items during global isolate:", e);
+    }
+};
+
+const clipper = components.get(OBC.Clipper);
+clipper.material = new THREE.MeshBasicMaterial({
+    color: 0xCFD8DC, // Light gray-blue typical of BIM software
+    side: THREE.DoubleSide,
+    shadowSide: THREE.DoubleSide,
+    opacity: 0.2,
+    transparent: true
+});
+
+// --- ClipStyler Setup ---
+const clipStyler = components.get(OBF.ClipStyler);
+clipStyler.enabled = true;
+clipStyler.world = world; // Ensure ClipStyler knows about the world
+
+const fillMaterial = new THREE.MeshBasicMaterial({
+    color: 0xCFD8DC,
+    side: THREE.DoubleSide
+});
+
+const lineMaterial = new LineMaterial({
+    color: 0x333333,
+    linewidth: 2, // Width in pixels
+    resolution: new THREE.Vector2(window.innerWidth, window.innerHeight)
+});
+
+// Update resolution on resize to keep line thickness consistent
+window.addEventListener('resize', () => {
+    const width = window.innerWidth;
+    const height = window.innerHeight;
+    lineMaterial.resolution.set(width, height);
+});
+
+clipStyler.styles.set('filled', {
+    fillsMaterial: fillMaterial,
+    linesMaterial: lineMaterial
+});
+
+clipper.onAfterCreate.add((plane) => {
+    console.log('[DEBUG] Clipper Plane Created:', plane);
+    let planeId = '';
+    for(const [id, p] of clipper.list) {
+        if(p === plane) {
+            planeId = id;
+            break;
+        }
+    }
+    
+    console.log('[DEBUG] Found Plane ID:', planeId);
+
+    if (planeId) {
+         // Apply style to all meshes
+         // We can refine this later to apply different styles per category if needed
+         try {
+             console.log('[DEBUG] Applying ClipStyle "filled" to all items...');
+             clipStyler.createFromClipping(planeId, {
+                 world: world, // Explicitly pass world
+                 items: {
+                     all: { style: 'filled' }
+                 }
+             });
+             console.log('[DEBUG] ClipStyle applied successfully.');
+         } catch (e) {
+             console.error('[DEBUG] Failed to apply ClipStyle:', e);
+         }
+    } else {
+        console.warn('[DEBUG] Could not find Plane ID in clipper.list');
+    }
+});
+
+clipper.onAfterDelete.add((plane) => {
+    // ClipStyler should handle disposal if linked, but we can double check or just let it be.
+    // The 'link' property in createFromClipping defaults to true.
+});
+
+// Initialize Highlighter
+    const highlighter = components.get(OBF.Highlighter);
+    highlighter.setup({
+        world, // Pass the world instance to enable raycasting
+        select: {
+            name: 'select',
+            material: new THREE.MeshBasicMaterial({ color: 0x024959, depthTest: false, opacity: 0.8, transparent: true })
+        },
+        hover: {
+            name: 'hover',
+            material: new THREE.MeshBasicMaterial({ color: 0xe0e0e0, depthTest: false, opacity: 0.4, transparent: true })
+        }
+    });
+    highlighter.enabled = true; // Ensure it's enabled explicitly
+
+    // Register Status Styles on Highlighter for procurement status-based coloring
+    try {
+        highlighter.styles.set("select", {
+            color: new THREE.Color(0xd3045c),
+            opacity: 1,
+            transparent: false,
+            depthTest: true,
+            depthWrite: true,
+            renderedFaces: FRAGS.RenderedFaces.ONE
+        });
+        highlighter.styles.set("status_PENDIENTE", {
+            color: new THREE.Color(0x9ca3af),
+            opacity: 1,
+            transparent: false,
+            depthTest: true,
+            depthWrite: true,
+            renderedFaces: FRAGS.RenderedFaces.ONE
+        });
+        highlighter.styles.set("status_PEDIDO", {
+            color: new THREE.Color(0x3b82f6),
+            opacity: 1,
+            transparent: false,
+            depthTest: true,
+            depthWrite: true,
+            renderedFaces: FRAGS.RenderedFaces.ONE
+        });
+        highlighter.styles.set("status_COMPRADO", {
+            color: new THREE.Color(0xffa400),
+            opacity: 1,
+            transparent: false,
+            depthTest: true,
+            depthWrite: true,
+            renderedFaces: FRAGS.RenderedFaces.ONE
+        });
+        highlighter.styles.set("status_ALMACEN", {
+            color: new THREE.Color(0xa78bfa),
+            opacity: 1,
+            transparent: false,
+            depthTest: true,
+            depthWrite: true,
+            renderedFaces: FRAGS.RenderedFaces.ONE
+        });
+        highlighter.styles.set("status_INSTALADO", {
+            color: new THREE.Color(0x22c55e),
+            opacity: 1,
+            transparent: false,
+            depthTest: true,
+            depthWrite: true,
+            renderedFaces: FRAGS.RenderedFaces.ONE
+        });
+        highlighter.styles.set("status_const_NINGUNO", {
+            color: new THREE.Color(0x9ca3af),
+            opacity: 1,
+            transparent: false,
+            depthTest: true,
+            depthWrite: true,
+            renderedFaces: FRAGS.RenderedFaces.ONE
+        });
+        highlighter.styles.set("status_const_EN_PROGRESO", {
+            color: new THREE.Color(0xf59e0b),
+            opacity: 1,
+            transparent: false,
+            depthTest: true,
+            depthWrite: true,
+            renderedFaces: FRAGS.RenderedFaces.ONE
+        });
+        highlighter.styles.set("status_const_PARA_INSPECCION", {
+            color: new THREE.Color(0x3b82f6),
+            opacity: 1,
+            transparent: false,
+            depthTest: true,
+            depthWrite: true,
+            renderedFaces: FRAGS.RenderedFaces.ONE
+        });
+        highlighter.styles.set("status_const_APROBADO", {
+            color: new THREE.Color(0x86efac),
+            opacity: 1,
+            transparent: false,
+            depthTest: true,
+            depthWrite: true,
+            renderedFaces: FRAGS.RenderedFaces.ONE
+        });
+        highlighter.styles.set("status_const_CERRADO", {
+            color: new THREE.Color(0x166534),
+            opacity: 1,
+            transparent: false,
+            depthTest: true,
+            depthWrite: true,
+            renderedFaces: FRAGS.RenderedFaces.ONE
+        });
+        highlighter.styles.set("status_const_RECHAZADO", {
+            color: new THREE.Color(0xef4444),
+            opacity: 1,
+            transparent: false,
+            depthTest: true,
+            depthWrite: true,
+            renderedFaces: FRAGS.RenderedFaces.ONE
+        });
+    } catch (e) {
+        console.error("Error registering status styles on highlighter:", e);
+    }
+    
+    try {
+        setupVisibilityToolbar();
+    } catch (e) {
+        console.error("Error setting up visibility toolbar:", e);
+    }
+    
+    try {
+        setupMeasurementTools();
+    } catch (e) {
+        console.error("Error setting up measurement tools:", e);
+        // Alert user non-intrusively
+        console.warn("Measurement tools failed to initialize");
+    }
+
+// Add 3D Click Event for Selection
+// Listener removed to prevent conflict logs with measurement tools
+/*
+if (container) {
+    container.addEventListener('click', () => {
+        // Just verify highlighter is active, though it handles its own events.
+        // If selection happened, properties table updates via event listener below.
+        // console.log('[DEBUG] 3D View clicked. Checking selection...');
+    });
+}
+*/
+
+// Initialize IfcLoader once
+const ifcLoader = components.get(OBC.IfcLoader);
+
+// Construct absolute path dynamically based on current page URL
+// This handles both local dev (base=/) and GitHub Pages (base=/bim/VSR_IFC/)
+const url = new URL(window.location.href);
+// Remove index.html or anything after last slash to get directory
+const pathDir = url.pathname.substring(0, url.pathname.lastIndexOf('/') + 1);
+const wasmPath = `${url.origin}${pathDir}wasm/`;
+
+/*
+// USE UNPKG to avoid local path/serving issues with GitHub Pages
+const wasmPath = "https://unpkg.com/web-ifc@0.0.72/";
+*/
+
+console.log('[DEBUG] Computed WASM Path:', wasmPath);
+console.log('[DEBUG] Cross-Origin Isolated:', window.crossOriginIsolated ? 'Yes' : 'No (SharedArrayBuffer restricted)');
+
+ifcLoader.setup({
+    wasm: {
+        path: wasmPath,
+        absolute: true,
+        logLevel: 2 // Debug level
+    },
+    autoSetWasm: false,
+    webIfc: {
+        COORDINATE_TO_ORIGIN: true,
+        USE_FAST_BOOLS: false
+    }
+});
+
+// Expose IFC conversion test for debugging
+(window as any).testIFC = async () => {
+    try {
+        logToScreen('Starting IFC conversion test...');
+        const ifcLoader = components.get(OBC.IfcLoader);
+        // Setup is done globally, but ensure it's ready
+        
+        logToScreen('Fetching temp.ifc...');
+        const file = await fetch(`${baseUrl}temp.ifc`);
+        if (!file.ok) throw new Error('Failed to fetch temp.ifc');
+        const buffer = await file.arrayBuffer();
+        const data = new Uint8Array(buffer);
+        
+        logToScreen(`IFC loaded (Size: ${(data.length / 1024 / 1024).toFixed(2)} MB). Processing...`);
+        const model = await ifcLoader.load(data, true, 'temp_model');
+        
+        logToScreen('IFC conversion complete!');
+        let meshCount = 0;
+        model.object.traverse((child: any) => {
+            if (child.isMesh) meshCount++;
+        });
+        logToScreen(`Converted Model meshes: ${meshCount}`);
+        
+        world.scene.three.add(model.object);
+        logToScreen('Added converted model to scene');
+        
+        // Center camera on it
+        const bbox = new THREE.Box3().setFromObject(model.object);
+        const sphere = new THREE.Sphere();
+        bbox.getBoundingSphere(sphere);
+        world.camera.controls.fitToSphere(sphere, true);
+        
+    } catch (e) {
+        logToScreen(`IFC Test Failed: ${e}`, true);
+        console.error(e);
+    }
+};
+
+// Keep Fragments engine in sync with camera for culling/LOD
+world.camera.controls.addEventListener('rest', () => {
+    fragments.core.update(true);
+});
+
+// --- Helper Functions ---
+function getSpecialtyFromIfcPath(path: string): string {
+    const filename = path.split('/').pop() ?? path;
+    const cleanFilename = filename.split('?')[0];
+    const baseName = cleanFilename.replace(/\.(ifc|frag)$/i, '');
+    const parts = baseName.split('_');
+    const raw = (parts[3] ?? '').trim();
+
+    if (!raw) return 'General';
+
+    const normalized = raw
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .toLowerCase();
+
+    if (normalized === 'desagues') return 'Desagües';
+    return raw;
+}
+
+// Configure Fragments Manager (Culling, etc.)
+// Offload heavy tasks to worker if possible (FragmentsManager has internal workers for geometry)
+// Note: We are not setting up a separate Fragments worker URL here as we are loading IFCs directly mostly,
+// but if we were loading .frag files we would need it. 
+// However, the tutorial mentions initializing FragmentsManager with a worker.
+// Since we are primarily loading IFCs which *become* fragments, the IfcLoader handles the conversion.
+
+// Enable culling for performance
+// const culler = components.get(OBC.Cullers).create(world);
+// culler.threshold = 10; // Threshold for culling
+
+// world.camera.controls.addEventListener('sleep', () => {
+//    culler.needsUpdate = true;
+// });
+
+// Track loaded models
+// Key: path, Value: FragmentsGroup (the model)
+const loadedModels = new Map<string, any>();
+const projectLinksBar = document.getElementById('project-links-bar') as HTMLElement | null;
+
+function updateProjectLinksBarVisibility() {
+    if (!projectLinksBar) return;
+    let hasVisible = false;
+    for (const model of loadedModels.values()) {
+        if (model?.object?.visible !== false) {
+            hasVisible = true;
+            break;
+        }
+    }
+    if (hasVisible) {
+        const currentSearch = window.location.search;
+        if (currentSearch) {
+            const links = projectLinksBar.querySelectorAll('a');
+            links.forEach(link => {
+                try {
+                    const hrefAttr = link.getAttribute('href') || '';
+                    if (hrefAttr) {
+                        const url = new URL(hrefAttr, window.location.origin);
+                        const searchParams = new URLSearchParams(currentSearch);
+                        searchParams.forEach((value, key) => {
+                            url.searchParams.set(key, value);
+                        });
+                        link.setAttribute('href', url.toString());
+                    }
+                } catch (e) {
+                    console.error('[LinksBar] Error updating link URL:', e);
+                }
+            });
+        }
+        projectLinksBar.style.display = 'flex';
+    } else {
+        projectLinksBar.style.display = 'none';
+    }
+}
+
+let propertiesTableElement: HTMLElement | null = null;
+
+// Helper to log to screen
+function logToScreen(msg: string, isError = false) {
+    if (isError) console.error(msg);
+    else console.log(msg);
+}
+
+/**
+ * Genera geometría de bordes en memoria para permitir Snapping si el archivo original no los tiene.
+ * Cumple con los requisitos:
+ * - No sobrescribe el archivo original (todo es en memoria).
+ * - Mantiene la integridad de los datos (vincula al fragmento original).
+ */
+export function ensureModelEdges(model: any) {
+    if (!model || !model.items) return;
+    // DISABLE EDGES GENERATION - It was creating invalid InstancedMesh with EdgesGeometry (Lines)
+    // which causes rendering issues and potentially blocks the raycaster.
+    // Snapping is now handled dynamically in getIntersection via Triangle Analysis.
+    console.log(`[DEBUG] Skipped static edge generation for ${model.uuid} (using dynamic snapping)`);
+}
+
+// --- IndexedDB Helper for Local Models Persistence ---
+const DB_NAME = `VSR_IFCA_Storage_${PROJECT_RUNTIME_KEY}`;
+const STORE_NAME = 'models';
+let _dbPromise: Promise<IDBDatabase> | null = null;
+
+function getDB(): Promise<IDBDatabase> {
+    if (!_dbPromise) {
+        _dbPromise = new Promise((resolve, reject) => {
+            const request = indexedDB.open(DB_NAME, 1);
+            request.onupgradeneeded = (event) => {
+                const db = (event.target as IDBOpenDBRequest).result;
+                if (!db.objectStoreNames.contains(STORE_NAME)) {
+                    db.createObjectStore(STORE_NAME);
+                }
+            };
+            request.onsuccess = () => resolve(request.result);
+            request.onerror = () => reject(request.error);
+        });
+    }
+    return _dbPromise;
+}
+
+async function saveToIndexedDB(key: string, data: ArrayBuffer) {
+    try {
+        const db = await getDB();
+        return new Promise<void>((resolve, reject) => {
+            const tx = db.transaction(STORE_NAME, 'readwrite');
+            const store = tx.objectStore(STORE_NAME);
+            const req = store.put(data, key);
+            req.onsuccess = () => resolve();
+            req.onerror = () => reject(req.error);
+        });
+    } catch (e) {
+        console.warn('IndexedDB save failed:', e);
+    }
+}
+
+async function loadFromIndexedDB(key: string): Promise<ArrayBuffer | undefined> {
+    try {
+        const db = await getDB();
+        return new Promise((resolve, reject) => {
+            const tx = db.transaction(STORE_NAME, 'readonly');
+            const store = tx.objectStore(STORE_NAME);
+            const req = store.get(key);
+            req.onsuccess = () => resolve(req.result);
+            req.onerror = () => reject(req.error);
+        });
+    } catch (e) {
+        console.warn('IndexedDB load failed:', e);
+        return undefined;
+    }
+}
+
+
+type RemoteModelItem = {
+    name: string;
+    path: string;
+    url?: string;
+    driveFragId?: string;
+    driveJsonId?: string | null;
+};
+
+let loadModelListInFlight: Promise<void> | null = null;
+let modelListRefreshTimer: number | null = null;
+
+const loadPublishedModelList = async (): Promise<RemoteModelItem[]> => {
+    const response = await fetch(`${baseUrl}models.json`, { cache: 'no-store' });
+    if (!response.ok) throw new Error(`models.json error: ${response.status}`);
+    const data = await response.json();
+    if (!Array.isArray(data)) throw new Error('Invalid models.json response');
+    return data
+        .filter((item: any) => item && String(item.path || '').toLowerCase().endsWith('.frag'))
+        .map((item: any) => ({
+            name: String(item.name || item.path || '').trim(),
+            path: String(item.path || '').trim(),
+            url: item.url ? String(item.url) : undefined,
+        }));
+};
+
+const base64ToBytes = (b64: string): Uint8Array => {
+    const normalized = String(b64 || '').replace(/[\r\n\s]/g, '').replace(/-/g, '+').replace(/_/g, '/');
+    const bin = atob(normalized);
+    const out = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+    return out;
+};
+
+const concatBytes = (parts: Uint8Array[], totalLen: number) => {
+    const out = new Uint8Array(totalLen);
+    let off = 0;
+    for (const p of parts) {
+        out.set(p, off);
+        off += p.byteLength;
+    }
+    return out;
+};
+
+const jsonpRequest = async <T,>(url: URL, timeoutMs = 30000): Promise<T> => {
+    return await new Promise<T>((resolve, reject) => {
+        const cb = `__jsonp_${Date.now()}_${Math.floor(Math.random() * 1e9)}`;
+        url.searchParams.set('callback', cb);
+        const script = document.createElement('script');
+        let done = false;
+
+        const cleanup = () => {
+            if (done) return;
+            done = true;
+            try {
+                delete (window as any)[cb];
+            } catch {
+                (window as any)[cb] = undefined;
+            }
+            if (script.parentNode) script.parentNode.removeChild(script);
+        };
+
+        const timer = window.setTimeout(() => {
+            cleanup();
+            reject(new Error('Tiempo de espera agotado (JSONP)'));
+        }, timeoutMs);
+
+        (window as any)[cb] = (data: T) => {
+            window.clearTimeout(timer);
+            cleanup();
+            resolve(data);
+        };
+
+        script.onerror = () => {
+            window.clearTimeout(timer);
+            cleanup();
+            reject(new Error('No se pudo cargar el script JSONP'));
+        };
+
+        script.src = url.toString();
+        document.head.appendChild(script);
+    });
+};
+
+const jsonpRequestWithRetry = async <T,>(
+    url: URL,
+    options: { timeoutMs?: number; retries?: number } = {}
+): Promise<T> => {
+    const timeoutMs = options.timeoutMs ?? 30000;
+    const retries = options.retries ?? 3;
+    let lastError: any = null;
+    for (let attempt = 0; attempt < retries; attempt++) {
+        try {
+            return await jsonpRequest<T>(url, timeoutMs);
+        } catch (err) {
+            lastError = err;
+            console.warn(`JSONP request attempt ${attempt + 1} failed:`, err);
+            if (attempt < retries - 1) {
+                await new Promise((resolve) => setTimeout(resolve, 1000 * Math.pow(2, attempt)));
+            }
+        }
+    }
+    throw lastError || new Error('JSONP request failed after retries');
+};
+
+const shouldUseDriveModels = () => {
+    const url = String(DRIVE_MODELS_API_URL || '').trim();
+    return !!url && url.startsWith('https://') && url.includes('script.google.com');
+};
+
+const driveApiUrl = () => new URL(String(DRIVE_MODELS_API_URL || '').trim());
+
+const listDriveModels = async (): Promise<Array<{ name: string; fragId: string; jsonId?: string | null }>> => {
+    const url = driveApiUrl();
+    url.searchParams.set('action', 'list');
+    url.searchParams.set('folderId', DRIVE_MODELS_FOLDER_ID);
+    const data = await jsonpRequest<{ models?: Array<{ name: string; fragId: string; jsonId?: string | null }> }>(url, 45000);
+    const models = Array.isArray(data?.models) ? data.models : [];
+    return models.filter((m) => m && m.name && m.fragId);
+};
+
+const fetchDriveBytes = async (id: string): Promise<Uint8Array> => {
+    let limit = 2 * 1024 * 1024;
+    let offset = 0;
+    let total: number | null = null;
+    const parts: Uint8Array[] = [];
+
+    for (;;) {
+        const url = driveApiUrl();
+        url.searchParams.set('action', 'chunk');
+        url.searchParams.set('id', id);
+        url.searchParams.set('offset', String(offset));
+        url.searchParams.set('limit', String(limit));
+
+        let payload: { data?: string; total?: number; nextOffset?: number; done?: boolean } | null = null;
+        let lastErr: unknown = null;
+        for (let attempt = 0; attempt < 3; attempt++) {
+            try {
+                payload = await jsonpRequest(url, 45000);
+                lastErr = null;
+                break;
+            } catch (e) {
+                lastErr = e;
+                const msg = String((e as any)?.message ?? '');
+                const isTimeout = msg.includes('Tiempo de espera agotado (JSONP)');
+                if (isTimeout && limit > 256 * 1024) {
+                    limit = Math.max(256 * 1024, Math.floor(limit / 2));
+                }
+                await new Promise((r) => setTimeout(r, 600 * (attempt + 1)));
+            }
+        }
+        if (!payload) throw (lastErr instanceof Error ? lastErr : new Error('No se pudo descargar chunk (JSONP).'));
+
+        const chunk = payload.data ? base64ToBytes(String(payload.data)) : new Uint8Array(0);
+        parts.push(chunk);
+        if (typeof payload.total === 'number' && Number.isFinite(payload.total)) total = payload.total;
+        offset = typeof payload.nextOffset === 'number' && Number.isFinite(payload.nextOffset) ? payload.nextOffset : offset + chunk.byteLength;
+        if (payload.done) break;
+        if (chunk.byteLength === 0) break;
+        if (total !== null && offset >= total) break;
+    }
+
+    const finalTotal = total ?? parts.reduce((a, b) => a + b.byteLength, 0);
+    return concatBytes(parts, finalTotal);
+};
+
+const fetchDriveText = async (id: string): Promise<string> => {
+    const url = driveApiUrl();
+    url.searchParams.set('action', 'text');
+    url.searchParams.set('id', id);
+    const data = await jsonpRequest<{ text?: string }>(url, 45000);
+    return String(data?.text ?? '');
+};
+
+const loadDriveFragBuffer = async (fragId: string): Promise<ArrayBuffer> => {
+    const dbKey = `drive:frag:${fragId}`;
+    const cached = await loadFromIndexedDB(dbKey);
+    if (cached && cached.byteLength > 0) return cached;
+    const bytes = await fetchDriveBytes(fragId);
+    const buffer = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
+    await saveToIndexedDB(dbKey, buffer);
+    return buffer;
+};
+
+const loadDriveJsonProps = async (jsonId: string): Promise<any | null> => {
+    const dbKey = `drive:json:${jsonId}`;
+    const cached = await loadFromIndexedDB(dbKey);
+    if (cached && cached.byteLength > 0) {
+        try {
+            const text = new TextDecoder().decode(new Uint8Array(cached));
+            return JSON.parse(text);
+        } catch {
+            return null;
+        }
+    }
+    const text = await fetchDriveText(jsonId);
+    if (!text) return null;
+    try {
+        const json = JSON.parse(text);
+        const encoded = new TextEncoder().encode(text);
+        const buffer = encoded.buffer.slice(encoded.byteOffset, encoded.byteOffset + encoded.byteLength);
+        await saveToIndexedDB(dbKey, buffer);
+        return json;
+    } catch {
+        return null;
+    }
+};
+
+
+// --- Model Loading Logic ---
+
+async function loadModel(url: string, path: string, options?: { propertiesUrl?: string; propertiesJson?: any | null; sourceUrl?: string }) {
+    resetFilters();
+    try {
+        logToScreen(`Fetching Fragment: ${url}`);
+        const file = await fetch(url);
+        if (!file.ok) throw new Error(`Failed to fetch ${url}`);
+
+        let buffer = await file.arrayBuffer();
+        let data = new Uint8Array(buffer);
+
+        logToScreen(`Fetched ${(buffer.byteLength / 1024 / 1024).toFixed(2)} MB`);
+
+        // Check for GZIP signature
+        const isGzip = data[0] === 0x1f && data[1] === 0x8b;
+        logToScreen(`Compression: ${isGzip ? 'GZIP' : 'Uncompressed'}`);
+
+        let model;
+        try {
+            // First attempt: Load directly
+            model = await fragments.core.load(data, { modelId: path });
+        } catch (loadErr) {
+            console.warn('Direct load failed, attempting manual decompression/handling...', loadErr);
+            
+            // If it was GZIP and failed, maybe the internal decompressor failed. Try manual decompression.
+            if (isGzip && 'DecompressionStream' in window) {
+                try {
+                    logToScreen('Attempting manual decompression...');
+                    const ds = new DecompressionStream('gzip');
+                    const writer = ds.writable.getWriter();
+                    writer.write(new Uint8Array(buffer)); // Ensure Uint8Array
+                    writer.close();
+                    const response = new Response(ds.readable);
+                    const decompressedBuffer = await response.arrayBuffer();
+                    const decompressedData = new Uint8Array(decompressedBuffer);
+                    logToScreen(`Decompressed size: ${(decompressedBuffer.byteLength / 1024 / 1024).toFixed(2)} MB`);
+                    
+                    // Try loading decompressed data
+                    model = await fragments.core.load(decompressedData, { modelId: path });
+                } catch (decompressErr) {
+                    throw new Error(`Manual decompression failed: ${decompressErr}`);
+                }
+            } else {
+                throw loadErr; // Re-throw if we can't handle it
+            }
+        }
+
+        if (!model) throw new Error('Model failed to load (undefined result)');
+
+        // EXPLICIT REGISTRATION: Ensure model is in fragments.groups
+        // Some versions of FragmentsManager might not auto-add if loaded via core.load
+        if (fragments.groups instanceof Map) {
+             fragments.groups.set(model.uuid, model);
+        } else if (fragments.groups) {
+             (fragments.groups as any)[model.uuid] = model;
+        }
+
+        (model as any).name = path.split('/').pop() || 'Model';
+        // Store URL for state persistence
+        if (!model.userData) model.userData = {};
+        model.userData.url = (options && options.sourceUrl) ? options.sourceUrl : url;
+        console.log(`[Viewpoints] Registered model URL for persistence: ${model.uuid} -> ${model.userData.url}`);
+
+        // FORCE UUID to match the path (which is the key in fragments.list)
+        // This ensures the highlighter and classifier can find the model
+        if (model.uuid !== path) {
+             model.uuid = path;
+             console.log(`[DEBUG] Forced model UUID to match path: ${model.uuid}`);
+        }
+
+        model.useCamera(world.camera.three);
+
+        world.scene.three.add(model.object);
+
+        // CRITICAL: Register meshes for OBC.Raycasters (Official Tool Support)
+        // The official tools (Length, Area) query world.meshes (SimpleRaycaster).
+        // We populate BOTH world.meshes and components.meshes to be safe.
+        model.object.traverse((child: any) => {
+            if (child.isMesh) {
+                world.meshes.add(child);
+                if (components.meshes && Array.isArray(components.meshes)) {
+                    components.meshes.push(child);
+                }
+            }
+        });
+
+        await fragments.core.update(true);
+
+        // --- MODEL VERIFICATION (User Request) ---
+        let hasNormals = false;
+        let hasPosition = false;
+        let checkedMeshes = 0;
+        
+        model.object.traverse((child: any) => {
+            if (child.isMesh && child.geometry) {
+                checkedMeshes++;
+                if (child.geometry.attributes.normal) hasNormals = true;
+                if (child.geometry.attributes.position) hasPosition = true;
+            }
+        });
+
+        console.log(`%c[VERIFICATION] Model Analysis for ${path}`, 'color: cyan; font-weight: bold; font-size: 14px;');
+        console.log(`[VERIFICATION] Meshes checked: ${checkedMeshes}`);
+        console.log(`[VERIFICATION] Position (Geometry): ${hasPosition ? 'YES' : 'NO'}`);
+        console.log(`[VERIFICATION] Normals: ${hasNormals ? 'YES' : 'NO'}`);
+        
+        if (hasNormals) {
+             console.log('%c[VERIFICATION] Contours/Edges capability: YES (Normals found)', 'color: lime;');
+             logToScreen('Model verification: Normals found. Snapping fully enabled.');
+        } else {
+             console.warn('[VERIFICATION] Normals MISSING. Snapping may be limited.');
+             logToScreen('Model verification: Normals MISSING. Snapping limited.', true);
+        }
+
+        // Generate Edges (Snaps) for the model
+        // This requires normals which are now present in the new .frag files
+        /*
+        try {
+            // @ts-ignore
+            if (OBC.Edges) {
+                 // @ts-ignore
+                const edges = components.get(OBC.Edges);
+                edges.generate(model);
+                logToScreen('Edges generated for snapping.');
+            }
+        } catch (err) {
+            console.warn('Could not generate edges:', err);
+        }
+        */
+        
+        loadedModels.set(path, model);
+        updateProjectLinksBarVisibility();
+        
+        // Generar bordes para snapping
+        ensureModelEdges(model);
+
+        // Debug: Check properties structure deeply
+        const modelAny = model as any;
+        let hasProps = modelAny.properties && Object.keys(modelAny.properties).length > 0;
+        
+        // Check data safely (Map or Object)
+        let hasData = false;
+        if (modelAny.data) {
+            if (modelAny.data instanceof Map) hasData = modelAny.data.size > 0;
+            else hasData = Object.keys(modelAny.data).length > 0;
+        }
+        
+        logToScreen(`Model loaded. Properties: ${hasProps}, Data: ${hasData}`);
+        console.log('[DEBUG] Model Keys:', Object.keys(modelAny));
+        
+        if (options && options.propertiesJson && typeof options.propertiesJson === 'object') {
+            try {
+                const keys = Object.keys(options.propertiesJson);
+                if (keys.length > 0) {
+                    modelAny.properties = options.propertiesJson;
+                    hasProps = true;
+                    logToScreen(`Loaded external properties from JSON (${keys.length} items).`);
+                    // --- DIAGNOSTIC: log first entry structure ---
+                    const firstKey = keys[0];
+                    const firstEntry = options.propertiesJson[firstKey];
+                    console.log(`[JSON DIAG] First key: "${firstKey}", type: ${typeof firstEntry}`);
+                    if (firstEntry && typeof firstEntry === 'object') {
+                        const entryKeys = Object.keys(firstEntry);
+                        console.log(`[JSON DIAG] Keys of first entry:`, entryKeys);
+                        console.log(`[JSON DIAG] Sample:`, JSON.stringify(firstEntry).substring(0, 300));
+                        logToScreen(`[JSON] Key 1: "${firstKey}" → attrs: ${entryKeys.slice(0,5).join(', ')}`);
+                    } else {
+                        console.log(`[JSON DIAG] First entry value:`, firstEntry);
+                        logToScreen(`[JSON] Key 1: "${firstKey}" → value: ${firstEntry}`);
+                    }
+                }
+            } catch {
+            }
+        } else {
+            const jsonPath = (options && options.propertiesUrl) ? options.propertiesUrl : url.replace(/\.frag$/i, '.json');
+            try {
+                logToScreen(`Checking for external properties at ${jsonPath}...`);
+                const response = await fetch(jsonPath);
+                if (response.ok) {
+                    const jsonProps = await response.json();
+                    if (jsonProps && Object.keys(jsonProps).length > 0) {
+                        modelAny.properties = jsonProps;
+                        hasProps = true;
+                        logToScreen(`Loaded external properties from JSON (${Object.keys(jsonProps).length} items). Overriding embedded properties.`);
+                    }
+                } else {
+                    if (!hasProps) logToScreen(`Properties file not found at ${jsonPath} (Status: ${response.status}).`);
+                }
+            } catch (err) {
+                console.error('Error fetching properties JSON:', err);
+                if (!hasProps) logToScreen(`Error loading external properties.`, true);
+            }
+        }
+
+        // Ensure model.types is populated from properties if missing
+        if ((!modelAny.types || Object.keys(modelAny.types).length === 0) && hasProps) {
+             logToScreen('Reconstructing model.types from properties...');
+             modelAny.types = {};
+             let typeCount = 0;
+             for (const id in modelAny.properties) {
+                 const prop = modelAny.properties[id];
+                 if (prop && prop.type) {
+                     const typeId = prop.type;
+                     if (!modelAny.types[typeId]) modelAny.types[typeId] = [];
+                     modelAny.types[typeId].push(Number(id));
+                     typeCount++;
+                 }
+             }
+             logToScreen(`Reconstructed ${Object.keys(modelAny.types).length} types covering ${typeCount} items.`);
+        }
+
+        if (!hasProps) {
+             console.warn('[DEBUG] Model has no properties attached! attempting to check data...');
+
+             // FALLBACK PROPERTIES GENERATION
+              if (!modelAny.properties || Object.keys(modelAny.properties).length === 0) {
+                 try {
+                     logToScreen('Generating dummy properties for missing metadata...');
+                     const ids = await model.getItemsIdsWithGeometry();
+                     const dummyProperties: Record<string, any> = {};
+                     
+                     for (const id of ids) {
+                         dummyProperties[id] = {
+                             expressID: id,
+                             type: 4065, // IFCBUILDINGELEMENTPROXY (Unknown)
+                             GlobalId: { type: 1, value: `generated-${id}` },
+                             Name: { type: 1, value: `Element ${id}` },
+                         };
+                     }
+                     modelAny.properties = dummyProperties;
+                     hasProps = true;
+                     logToScreen(`Generated fallback properties for ${ids.length} items.`);
+                 } catch (fallbackErr) {
+                     logToScreen(`Failed to generate fallback properties: ${fallbackErr}`, true);
+                 }
+              }
+         }
+
+        // CRITICAL FIX: Reconstruct model.data if missing
+        // This links the ExpressIDs (in properties) to the Geometry (fragments)
+        // Without this, the Classifier knows the category exists but can't find the items (Count 0)
+        if (!modelAny.data || (modelAny.data instanceof Map && modelAny.data.size === 0)) {
+             logToScreen('Reconstructing missing model.data from geometry items...');
+             if (!modelAny.data) modelAny.data = new Map();
+             
+             // Try to use keyFragments map if available (most reliable for FragmentsGroup)
+             let dataReconstructed = false;
+             if (modelAny.keyFragments && modelAny.keyFragments instanceof Map && modelAny.keyFragments.size > 0) {
+                 logToScreen(`Found keyFragments map with ${modelAny.keyFragments.size} entries.`);
+                 for (const [expressID, fragID] of modelAny.keyFragments.entries()) {
+                     modelAny.data.set(Number(expressID), [fragID, Number(expressID)]);
+                 }
+                 dataReconstructed = true;
+                 logToScreen(`Reconstructed model.data from keyFragments.`);
+             }
+
+             // Try to find fragments in model.items (Fragments) or model.object (Meshes)
+             let fragmentsList: any[] = [];
+             
+             if (!dataReconstructed) {
+                 // Check if model has direct reference to fragments
+                 // @ts-ignore
+                 if (model.items && Array.isArray(model.items) && model.items.length > 0) {
+                     // @ts-ignore
+                     console.log(`[DEBUG] Found ${model.items.length} fragments in model.items`);
+                     // @ts-ignore
+                     fragmentsList = model.items;
+                 } else {
+                     // Fallback to mesh traversal
+                     console.log('[DEBUG] model.items empty or missing, traversing model.object for meshes...');
+                     if (model.object) {
+                         model.object.traverse((child: any) => {
+                             if (child.isMesh) {
+                                 // Check if this mesh IS a fragment (has ids) or points to one
+                                 fragmentsList.push(child);
+                             }
+                         });
+                     }
+                     
+                     // Try looking in _itemsManager if available
+                     if (fragmentsList.length === 0 && modelAny._itemsManager && modelAny._itemsManager.list) {
+                         console.log('[DEBUG] Trying to recover from _itemsManager...');
+                         modelAny._itemsManager.list.forEach((frag: any) => fragmentsList.push(frag));
+                     }
+                 }
+                 
+                 if (fragmentsList.length > 0) {
+                     logToScreen(`Found ${fragmentsList.length} fragments/meshes. Scanning for items...`);
+                     
+                     let totalMapped = 0;
+                     
+                     for (const frag of fragmentsList) {
+                         // Check for items/ids in the fragment
+                         let items = frag.items || frag.ids;
+                         
+                         if (!items && frag.fragment) {
+                             items = frag.fragment.items || frag.fragment.ids;
+                         }
+                         
+                         // Deep check: look in userData
+                         if (!items && frag.userData && frag.userData.ids) {
+                             items = frag.userData.ids;
+                         }
+                         
+                         if (items) {
+                             const idList = Array.isArray(items) ? items : Array.from(items);
+                             const fragUUID = frag.uuid || (frag.fragment ? frag.fragment.uuid : null);
+                             
+                             if (idList.length > 0 && fragUUID) {
+                                 for (const id of idList) {
+                                     modelAny.data.set(Number(id), [fragUUID, Number(id)]);
+                                     totalMapped++;
+                                 }
+                             }
+                         } else {
+                             // Fallback: Check geometry attributes if items are missing
+                             const geom = frag.geometry;
+                             if (geom && geom.attributes && geom.attributes.expressID) {
+                                 const attr = geom.attributes.expressID;
+                                 const count = attr.count;
+                                 const foundIds = new Set<number>();
+                                 for(let i=0; i<count; i++) {
+                                     foundIds.add(attr.getX(i));
+                                 }
+                                 
+                                 const fragUUID = frag.uuid || (frag.fragment ? frag.fragment.uuid : null);
+                                 if (fragUUID) {
+                                     for (const id of foundIds) {
+                                         modelAny.data.set(Number(id), [fragUUID, Number(id)]);
+                                         totalMapped++;
+                                     }
+                                 }
+                             }
+                         }
+                     }
+                     
+                     logToScreen(`Reconstructed model.data with ${totalMapped} entries from ${fragmentsList.length} fragments.`);
+                     
+                     // Fallback if scanning failed
+                     if (totalMapped === 0) {
+                         logToScreen('WARNING: Could not find items on fragments directly. Using fallback mapping to first fragment.', true);
+                         const mainFragment = fragmentsList[0];
+                         const fragmentId = mainFragment.uuid;
+                         
+                         if (!mainFragment.ids) mainFragment.ids = new Set();
+                         if (!mainFragment.items) mainFragment.items = mainFragment.ids;
+            
+                         try {
+                             const ids = await model.getItemsIdsWithGeometry();
+                             for (const id of ids) {
+                                 const numId = Number(id);
+                                 if (!modelAny.data.has(numId)) {
+                                    modelAny.data.set(numId, [fragmentId, numId]);
+                                    mainFragment.ids.add(numId);
+                                    if (Array.isArray(mainFragment.items)) mainFragment.items.push(numId);
+                                    totalMapped++;
+                                }
+                            }
+                            logToScreen(`Fallback applied: Mapped ${totalMapped} items to main fragment.`);
+                        } catch (e) {
+                             logToScreen(`Fallback failed: ${e}`, true);
+                         }
+                     }
+                
+                // Debug first entry
+                if (modelAny.data.size > 0) {
+                    const firstKey = modelAny.data.keys().next().value;
+                    // Console only, too verbose for screen
+                    console.log(`[DEBUG] Sample model.data entry: Key=${firstKey} Val=`, modelAny.data.get(firstKey));
+                }
+                
+                // CRITICAL FIX: Ensure model.types matches the data if we have dummy properties
+                if (modelAny.types && Object.keys(modelAny.types).length > 0) {
+                    console.log(`[DEBUG] model.types found with ${Object.keys(modelAny.types).length} types.`);
+                    
+                    // Check for ID mismatch between types and geometry
+                    const typeIds = new Set<number>();
+                    for (const key in modelAny.types) {
+                        const ids = modelAny.types[key];
+                        if (Array.isArray(ids)) ids.forEach((id: number) => typeIds.add(id));
+                    }
+                    
+                    // Get current geometry IDs from model.data
+                    const geometryIds = new Set(modelAny.data.keys());
+                    
+                    // Intersect
+                    let matchCount = 0;
+                    for (const id of typeIds) {
+                        if (geometryIds.has(id)) matchCount++;
+                    }
+                    
+                    console.log(`[DEBUG] Type IDs: ${typeIds.size}, Geometry IDs: ${geometryIds.size}, Match: ${matchCount}`);
+                    
+                    // If match is low (< 50%), force sync to ensure classification works
+                    if ((matchCount === 0 || matchCount < typeIds.size * 0.5) && typeIds.size > 0) {
+                        logToScreen(`Syncing ${typeIds.size - matchCount} missing items for classification...`);
+                        
+                        // Force map all Type IDs to the first fragment so they show up in Classifier
+                        const mainFragment = fragmentsList[0];
+                        const fragmentId = mainFragment.uuid;
+                        
+                        if (!mainFragment.ids) mainFragment.ids = new Set();
+                        if (!mainFragment.items) mainFragment.items = mainFragment.ids;
+
+                        let forcedCount = 0;
+                        for (const id of typeIds) {
+                            if (!modelAny.data.has(id)) {
+                                modelAny.data.set(id, [fragmentId, id]);
+                                mainFragment.ids.add(id);
+                                if (Array.isArray(mainFragment.items)) mainFragment.items.push(id);
+                                forcedCount++;
+                            }
+                        }
+                        logToScreen(`Sync complete: ${forcedCount} items added.`);
+                    }
+                }
+                 
+             } else {
+                 logToScreen('Cannot reconstruct model.data: No meshes found in model.object!', true);
+                 
+                 // Debug internal managers if possible
+                 if (modelAny._itemsManager) {
+                     console.log('[DEBUG] _itemsManager:', modelAny._itemsManager);
+                 }
+             }
+             }
+        }
+
+        // Check if model is in fragments list
+        console.log('[DEBUG] Fragments List Keys:', Array.from(fragments.list.keys()));
+        const isRegistered = fragments.list.has(model.uuid);
+        console.log(`[DEBUG] Model registered in fragments.list: ${isRegistered} (UUID: ${model.uuid})`);
+
+        if (!isRegistered) {
+             console.log('[DEBUG] Manually registering model in fragments manager...');
+             try {
+                 fragments.list.set(model.uuid, model);
+                 console.log('[DEBUG] Manual registration successful');
+             } catch (regError) {
+                 console.error('[DEBUG] Manual registration failed:', regError);
+                 logToScreen(`Warning: Failed to register model: ${regError}`, true);
+             }
+        }
+
+        // Classify the model
+        if (hasProps) {
+            try {
+                console.log(`[DEBUG] Running classifyByFamily() for model ${model.uuid}`);
+                await classifyModel(model);
+                await updateClassificationUI();
+                logToScreen('Classification updated');
+                
+                // AUTO-SWITCH to Classification Tab to show the user the categories
+                const classTabBtn = document.querySelector('.tab-btn[data-tab="classification"]') as HTMLElement;
+                if (classTabBtn) {
+                    classTabBtn.click();
+                    logToScreen('Switched to Classification tab.');
+                }
+
+            } catch (e) {
+                logToScreen(`Classification error: ${e}`, true);
+            }
+        } else {
+             logToScreen('Skipping classification (no properties)', true);
+             const container = document.getElementById('classification-list');
+             if (container) container.innerHTML = '<div style="padding: 20px; text-align: center; color: #888;">Sin propiedades para clasificar</div>';
+        }
+        
+        logToScreen('Model loaded successfully as Fragments');
+
+        let meshCount = 0;
+        model.object.traverse((child: any) => {
+            if (child.isMesh) meshCount++;
+        });
+        logToScreen(`Model meshes: ${meshCount}`);
+
+        setTimeout(async () => {
+            try {
+                const ids = await model.getItemsIdsWithGeometry();
+                logToScreen(`Deferred check - items with geometry: ${ids.length}`);
+                let delayedMeshes = 0;
+                model.object.traverse((child: any) => {
+                    if (child.isMesh) delayedMeshes++;
+                });
+                logToScreen(`Deferred check - meshes in scene: ${delayedMeshes}`);
+            } catch (e) {
+                logToScreen(`Deferred geometry check failed: ${e}`, true);
+            }
+        }, 5000);
+
+        // Auto-center camera if it's the first model
+        if (loadedModels.size === 1) {
+             const bbox = new THREE.Box3().setFromObject(model.object);
+             const sphere = new THREE.Sphere();
+             bbox.getBoundingSphere(sphere);
+             
+             logToScreen(`BBox: min(${bbox.min.x.toFixed(2)}, ${bbox.min.y.toFixed(2)}, ${bbox.min.z.toFixed(2)}) max(${bbox.max.x.toFixed(2)}, ${bbox.max.y.toFixed(2)}, ${bbox.max.z.toFixed(2)}) Radius: ${sphere.radius.toFixed(2)}`);
+
+             if (sphere.radius > 0.1) {
+                 world.camera.controls.fitToSphere(sphere, true);
+                 logToScreen('Camera centered on model');
+             } else {
+                 logToScreen('Model bounds too small or empty - Camera not moved', true);
+             }
+        }
+        
+        return model;
+    } catch (error) {
+        logToScreen(`Error loading model: ${error}`, true);
+        console.error(error);
+        throw error;
+    }
+}
+
+// --- Sidebar Logic (Kept mostly same, updated for new loading) ---
+
+function initSidebarTabs() {
+    const tabs = document.querySelectorAll('.tab-btn');
+    const contents = document.querySelectorAll('.tab-content');
+
+    if (tabs.length === 0) {
+        console.warn('No sidebar tabs found during initialization');
+    } else {
+        console.log(`Initialized ${tabs.length} sidebar tabs`);
+    }
+
+    tabs.forEach(tab => {
+        tab.addEventListener('click', () => {
+            tabs.forEach(t => t.classList.remove('active'));
+            contents.forEach(c => {
+                c.classList.remove('active');
+                (c as HTMLElement).style.display = 'none';
+            });
+
+            tab.classList.add('active');
+            const tabId = tab.getAttribute('data-tab');
+            const content = document.getElementById(`tab-${tabId}`);
+            if (content) {
+                content.classList.add('active');
+                content.style.display = 'flex';
+            }
+        });
+    });
+}
+
+// Global tracking for hidden items (Fragments/Items hidden via Hider)
+const hiddenItems: Record<string, Set<number>> = {};
+
+type IntegratedClassificationField = 'NIVEL INTEGRADO' | 'CLASIFICACIÓN' | 'MATERIAL INTEGRADO' | 'NOMBRE INTEGRADO' | 'SUBPROYECTOS INTEGRADO';
+type IntegratedClassificationMode = 'filtrar' | 'ordenar';
+type IntegratedClassificationOrder = 'cantidad' | 'az';
+
+let integratedClassificationField: IntegratedClassificationField = 'CLASIFICACIÓN';
+let integratedClassificationMode: IntegratedClassificationMode = 'filtrar';
+let integratedClassificationOrder: IntegratedClassificationOrder = 'cantidad';
+const activeIntegratedFilters = new Set<string>();
+
+const integratedIndex: Record<IntegratedClassificationField, Map<string, Record<string, Set<number>>>> = {
+    'NIVEL INTEGRADO': new Map(),
+    'CLASIFICACIÓN': new Map(),
+    'MATERIAL INTEGRADO': new Map(),
+    'NOMBRE INTEGRADO': new Map(),
+    'SUBPROYECTOS INTEGRADO': new Map()
+};
+
+const normalizeKey = (v: unknown) => String(v ?? '').trim();
+const normalizeValue = (v: unknown) => {
+    const s = String(v ?? '').trim();
+    return s ? s : '(En blanco)';
+};
+const normalizePropKey = (v: unknown) => {
+    const s = String(v ?? '');
+    return s
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '');
+};
+const entityValue = (entity: any, key: string) => {
+    if (!entity) return undefined;
+    const raw = entity[key] ?? entity[key.toLowerCase()] ?? entity[key.toUpperCase()];
+    if (raw && typeof raw === 'object' && 'value' in raw) return (raw as any).value;
+    if (raw !== undefined) return raw;
+
+    const target = normalizePropKey(key);
+    if (!target) return undefined;
+    for (const k of Object.keys(entity)) {
+        if (normalizePropKey(k) === target) {
+            const v = entity[k];
+            if (v && typeof v === 'object' && 'value' in v) return (v as any).value;
+            return v;
+        }
+    }
+    return undefined;
+};
+const clearModelFromIndex = (modelUUID: string) => {
+    for (const field of Object.keys(integratedIndex) as IntegratedClassificationField[]) {
+        const map = integratedIndex[field];
+        for (const [val, perModel] of map) {
+            if (perModel[modelUUID]) {
+                delete perModel[modelUUID];
+            }
+            if (Object.keys(perModel).length === 0) map.delete(val);
+        }
+    }
+};
+const addToIndex = (field: IntegratedClassificationField, modelUUID: string, value: string, id: number) => {
+    const map = integratedIndex[field];
+    if (!map.has(value)) map.set(value, {});
+    const perModel = map.get(value)!;
+    if (!perModel[modelUUID]) perModel[modelUUID] = new Set();
+    perModel[modelUUID].add(id);
+};
+
+// --- Integrated Filter States for CANTIDADES ---
+const selectedClassifications = new Set<string>();
+const selectedCategories = new Set<string>();
+const selectedLevels = new Set<string>();
+let selectedDiameter = 'Todos';
+
+const collapsedClassifications = new Set<string>();
+const collapsedSections = new Set<string>();
+
+function resetFilters() {
+    selectedClassifications.clear();
+    selectedCategories.clear();
+    selectedLevels.clear();
+    selectedDiameter = 'Todos';
+    
+    collapsedClassifications.clear();
+    collapsedSections.clear();
+}
+
+const getValGlobal = (obj: any, ...keys: string[]): string | null => {
+    if (!obj || typeof obj !== 'object') return null;
+    for (const k of keys) {
+        const raw = obj[k];
+        if (raw !== undefined && raw !== null) {
+            const v = (raw && typeof raw === 'object' && 'value' in raw) ? raw.value : raw;
+            if (v !== null && v !== undefined && String(v).trim() !== '') return String(v).trim();
+        }
+    }
+    const queue = [obj];
+    const seen = new Set<any>();
+    let steps = 0;
+    const maxSteps = 1000;
+    while (queue.length > 0 && steps < maxSteps) {
+        const current = queue.shift();
+        if (!current || typeof current !== 'object') continue;
+        if (seen.has(current)) continue;
+        seen.add(current);
+        steps++;
+        for (const k of keys) {
+            const raw = current[k];
+            if (raw !== undefined && raw !== null) {
+                const v = (raw && typeof raw === 'object' && 'value' in raw) ? raw.value : raw;
+                if (v !== null && v !== undefined && String(v).trim() !== '') return String(v).trim();
+            }
+        }
+        for (const key in current) {
+            if (key === 'ObjectPlacement' || key === 'Representation' || key === 'OwnerHistory') continue;
+            const val = current[key];
+            if (val && typeof val === 'object') {
+                queue.push(val);
+            }
+        }
+    }
+    return null;
+};
+
+const parseNumGlobal = (value: unknown): number => {
+    if (value === undefined || value === null) return 0;
+    if (typeof value === 'number') return Number.isFinite(value) ? value : 0;
+    const s = String(value).trim();
+    if (!s || s === '-') return 0;
+    const cleaned = s.replace(/\s/g, '').replace(',', '.').replace(/[^\d.\-]/g, '');
+    const n = parseFloat(cleaned);
+    return Number.isFinite(n) ? n : 0;
+};
+
+function extractAllElementsGlobal() {
+    const allElements: any[] = [];
+    for (const [modelUUID, model] of loadedModels.entries()) {
+        const modelAny = model as any;
+        if (!modelAny.properties) continue;
+
+        for (const idStr of Object.keys(modelAny.properties)) {
+            const expressID = parseInt(idStr, 10);
+            if (isNaN(expressID)) continue;
+
+            const attrs = modelAny.properties[idStr];
+            if (!attrs || typeof attrs !== 'object') continue;
+
+            const category = getValGlobal(attrs, 'type', 'ifcType', 'Category', 'ObjectType', 'CLASIFICACIÓN', 'Clasificación', 'CLASIFICACION', 'clasificacion', 'CATEGORÍA', 'CATEGORIA', 'Categoría', 'categoria', 'TIPO', 'Tipo', 'tipo', 'DETALLE', 'Detalle', 'detalle') || 'Elemento';
+            const name = getValGlobal(attrs, 'NOMBRE INTEGRADO', 'Nombre Integrado', 'nombre integrado', 'Name', 'name') || `${category} - ${expressID}`;
+            const classification = getValGlobal(attrs, 'CLASIFICACIÓN', 'Clasificación', 'CLASIFICACION', 'clasificacion') || 'SIN CLASIFICAR';
+            const level = getValGlobal(attrs, 'NIVEL INTEGRADO', 'Nivel Integrado', 'nivel integrado', 'Nivel', 'nivel') || 'SIN NIVEL';
+            const material = getValGlobal(attrs, 'MATERIAL INTEGRADO', 'Material Integrado', 'material integrado') || 'SIN MATERIAL';
+
+            const volume = parseNumGlobal(getValGlobal(attrs, 'VOLUMEN INTEGRADO', 'Volumen', 'Volume', 'Volume integrado', 'Volumen integrado'));
+            const area = parseNumGlobal(getValGlobal(attrs, 'ÁREA INTEGRADO', 'Area', 'Area integrado', 'Área', 'Área integrado', 'AREA INTEGRADO'));
+            const length = parseNumGlobal(getValGlobal(attrs, 'LONGITUD INTEGRADO', 'Longitud', 'Length', 'Longitud integrado', 'Longitud integrado'));
+            const diameter = getValGlobal(attrs, 'Tamaño', 'TAMAÑO', 'TAMANO', 'Diametro', 'diametro', 'Tamao') || '';
+
+            const searchStr = [
+                category,
+                name,
+                classification,
+                level,
+                material,
+                diameter
+            ].join(' ').toLowerCase();
+
+            const isUnion = searchStr.includes('fitting') || searchStr.includes('conduitfitting') || searchStr.includes('cablecarrierfitting') || searchStr.includes('union') || searchStr.includes('codo') || searchStr.includes('tee') || searchStr.includes('reducc') || searchStr.includes('caja') || searchStr.includes('accesorio') || searchStr.includes('adaptador') || searchStr.includes('copla');
+            const isPipe = (searchStr.includes('pipe') || searchStr.includes('conduit') || searchStr.includes('cablecarrier') || searchStr.includes('tuber') || searchStr.includes('tubo') || searchStr.includes('conduit') || searchStr.includes('canalizacion') || searchStr.includes('canalización') || searchStr.includes('coraza') || searchStr.includes('ducto') || searchStr.includes('bandeja')) && !isUnion;
+
+            allElements.push({
+                modelUUID,
+                expressID,
+                id: String(expressID),
+                name,
+                category,
+                classification,
+                level,
+                material,
+                volume,
+                area,
+                length,
+                diameter,
+                isPipe,
+                isUnion
+            });
+        }
+    }
+    return allElements;
+}
+
+function isSanitaryModelGlobal(): boolean {
+    const allElements = extractAllElementsGlobal();
+    return allElements.some(el => {
+        const text = [
+            el.classification,
+            el.category,
+            el.name,
+            el.diameter
+        ].join(' ').toLowerCase();
+
+        return (
+            text.includes('tuber') ||
+            text.includes('tubo') ||
+            text.includes('union de tuberia') ||
+            text.includes('uniones de tuberia') ||
+            text.includes('ifcpipesegment') ||
+            text.includes('ifcflowsegment') ||
+            text.includes('ifcpipefitting') ||
+            text.includes('ifcflowfitting') ||
+            text.includes('pipesegment') ||
+            text.includes('pipefitting') ||
+            text.includes('conduit') ||
+            text.includes('ifcconduit') ||
+            text.includes('canalizacion') ||
+            text.includes('canalización') ||
+            text.includes('coraza') ||
+            text.includes('ducto') ||
+            text.includes('bandeja') ||
+            text.includes('canaleta') ||
+            text.includes('ifccablecarrier') ||
+            text.includes('cablecarrier')
+        );
+    });
+}
+
+function getFilterDataGlobal() {
+    const allElements = extractAllElementsGlobal();
+    
+    const classMap = new Map<string, Set<string>>();
+    const levelsSet = new Set<string>();
+    const diametersSet = new Set<string>();
+
+    for (const el of allElements) {
+        const classification = el.classification || 'SIN CLASIFICAR';
+        const categoryName = el.name || 'Sin Categoría';
+        
+        if (!classMap.has(classification)) {
+            classMap.set(classification, new Set());
+        }
+        classMap.get(classification)!.add(categoryName);
+
+        if (el.level && el.level !== 'SIN NIVEL') {
+            levelsSet.add(el.level);
+        }
+
+        if (el.diameter && el.diameter.trim() !== '') {
+            diametersSet.add(el.diameter);
+        }
+    }
+
+    const tree: { name: string; categories: string[] }[] = [];
+    for (const [className, catSet] of classMap.entries()) {
+        tree.push({
+            name: className,
+            categories: Array.from(catSet).sort((a, b) => a.localeCompare(b, 'es'))
+        });
+    }
+    tree.sort((a, b) => a.name.localeCompare(b.name, 'es'));
+
+    const levels = Array.from(levelsSet).sort((a, b) => {
+        const getNum = (s: string) => {
+            const m = s.match(/\d+/);
+            return m ? parseInt(m[0], 10) : Infinity;
+        };
+        const na = getNum(a);
+        const nb = getNum(b);
+        if (na !== nb) return na - nb;
+        return a.localeCompare(b, 'es');
+    });
+
+    const asNumber = (v: string) => {
+      const n = Number(String(v).replace(',', '.').replace(/[^\d.\-]/g, ''));
+      return Number.isFinite(n) ? n : null;
+    };
+    const diameters = Array.from(diametersSet).sort((a, b) => {
+      const na = asNumber(a);
+      const nb = asNumber(b);
+      if (na !== null && nb !== null) return na - nb;
+      if (na !== null) return -1;
+      if (nb !== null) return 1;
+      return a.localeCompare(b, 'es');
+    });
+
+    return { tree, levels, diameters };
+}
+
+async function applyFiltersToViewerGlobal() {
+    const allElements = extractAllElementsGlobal();
+    if (allElements.length === 0) return;
+    
+    const isSanitary = isSanitaryModelGlobal();
+    const visibleElements = allElements.filter(el => {
+        const classificationMatch = selectedClassifications.size === 0 || selectedClassifications.has(el.classification);
+        const categoryMatch = selectedCategories.size === 0 || selectedCategories.has(el.name);
+        const levelMatch = selectedLevels.size === 0 || selectedLevels.has(el.level);
+        const diameterMatch = !isSanitary || selectedDiameter === 'Todos' || el.diameter === selectedDiameter;
+
+        return classificationMatch && categoryMatch && levelMatch && diameterMatch;
+    });
+
+    const visibleSet = new Set(visibleElements.map(e => e.id));
+    
+    const visibleMap: Record<string, Set<number>> = {};
+    const hiddenMap: Record<string, Set<number>> = {};
+    let hasVisible = false;
+    let hasHidden = false;
+
+    for (const el of allElements) {
+        const modelUUID = el.modelUUID;
+        const expressID = el.expressID;
+        
+        if (visibleSet.has(el.id)) {
+            if (!visibleMap[modelUUID]) visibleMap[modelUUID] = new Set();
+            visibleMap[modelUUID].add(expressID);
+            hasVisible = true;
+        } else {
+            if (!hiddenMap[modelUUID]) hiddenMap[modelUUID] = new Set();
+            hiddenMap[modelUUID].add(expressID);
+            hasHidden = true;
+        }
+    }
+
+    if (hasVisible) {
+        await hider.set(true, visibleMap);
+    }
+    if (hasHidden) {
+        await hider.set(false, hiddenMap);
+    }
+}
+
+function renderIntegratedClassificationUI(container: HTMLElement) {
+    const { tree, levels, diameters } = getFilterDataGlobal();
+    const isSanitary = isSanitaryModelGlobal();
+
+    container.innerHTML = '';
+
+    const wrapper = document.createElement('div');
+    wrapper.style.display = 'flex';
+    wrapper.style.flexDirection = 'column';
+    wrapper.style.gap = '15px';
+    wrapper.style.padding = '10px';
+
+    const resetBtn = document.createElement('button');
+    resetBtn.className = 'filter-reset-btn';
+    resetBtn.innerHTML = '<i class="fa-solid fa-filter-circle-xmark"></i> Limpiar Filtros';
+    resetBtn.addEventListener('click', async () => {
+        resetFilters();
+        renderIntegratedClassificationUI(container);
+        await applyFiltersToViewerGlobal();
+    });
+    wrapper.appendChild(resetBtn);
+
+    const classSection = document.createElement('div');
+    classSection.className = 'filter-section';
+    
+    const classHeader = document.createElement('div');
+    classHeader.className = 'filter-section-header';
+    const isClassCollapsed = collapsedSections.has('classification');
+    if (isClassCollapsed) classHeader.classList.add('collapsed');
+    classHeader.innerHTML = `
+        <span>Clasificación / Categoría</span>
+        <i class="fa-solid fa-chevron-down"></i>
+    `;
+    classHeader.addEventListener('click', () => {
+        if (isClassCollapsed) collapsedSections.delete('classification');
+        else collapsedSections.add('classification');
+        renderIntegratedClassificationUI(container);
+    });
+    classSection.appendChild(classHeader);
+
+    const classContent = document.createElement('div');
+    classContent.className = 'filter-section-content';
+    if (isClassCollapsed) classContent.classList.add('collapsed');
+
+    for (const node of tree) {
+        const treeNode = document.createElement('div');
+        treeNode.className = 'filter-tree-node';
+
+        const allCatsSelected = node.categories.every(cat => selectedCategories.has(cat));
+        const someCatsSelected = node.categories.some(cat => selectedCategories.has(cat));
+        const isClassSelected = selectedClassifications.has(node.name) || allCatsSelected;
+
+        const isCollapsed = collapsedClassifications.has(node.name);
+
+        const nodeHeader = document.createElement('div');
+        nodeHeader.className = 'filter-tree-header';
+        
+        const chevron = document.createElement('i');
+        chevron.className = isCollapsed ? 'fa-solid fa-chevron-right' : 'fa-solid fa-chevron-down';
+        chevron.style.cursor = 'pointer';
+        chevron.addEventListener('click', (e) => {
+            e.stopPropagation();
+            if (isCollapsed) collapsedClassifications.delete(node.name);
+            else collapsedClassifications.add(node.name);
+            renderIntegratedClassificationUI(container);
+        });
+        nodeHeader.appendChild(chevron);
+
+        const checkbox = document.createElement('input');
+        checkbox.type = 'checkbox';
+        checkbox.checked = isClassSelected;
+        checkbox.style.margin = '0 5px';
+        // @ts-ignore
+        checkbox.indeterminate = someCatsSelected && !allCatsSelected;
+        checkbox.addEventListener('change', async (e) => {
+            const checked = (e.target as HTMLInputElement).checked;
+            if (checked) {
+                selectedClassifications.add(node.name);
+                for (const cat of node.categories) {
+                    selectedCategories.add(cat);
+                }
+            } else {
+                selectedClassifications.delete(node.name);
+                for (const cat of node.categories) {
+                    selectedCategories.delete(cat);
+                }
+            }
+            renderIntegratedClassificationUI(container);
+            await applyFiltersToViewerGlobal();
+        });
+        nodeHeader.appendChild(checkbox);
+
+        const labelText = document.createElement('span');
+        labelText.textContent = node.name;
+        labelText.style.flex = '1';
+        labelText.addEventListener('click', () => {
+            if (isCollapsed) collapsedClassifications.delete(node.name);
+            else collapsedClassifications.add(node.name);
+            renderIntegratedClassificationUI(container);
+        });
+        nodeHeader.appendChild(labelText);
+
+        treeNode.appendChild(nodeHeader);
+
+        const childrenDiv = document.createElement('div');
+        childrenDiv.className = 'filter-tree-children';
+        if (isCollapsed) childrenDiv.classList.add('collapsed');
+
+        for (const category of node.categories) {
+            const childItem = document.createElement('label');
+            childItem.className = 'filter-checkbox-item';
+
+            const childCheckbox = document.createElement('input');
+            childCheckbox.type = 'checkbox';
+            childCheckbox.checked = selectedCategories.has(category);
+            childCheckbox.addEventListener('change', async (e) => {
+                const checked = (e.target as HTMLInputElement).checked;
+                if (checked) {
+                    selectedCategories.add(category);
+                    if (node.categories.every(cat => selectedCategories.has(cat))) {
+                        selectedClassifications.add(node.name);
+                    }
+                } else {
+                    selectedCategories.delete(category);
+                    selectedClassifications.delete(node.name);
+                }
+                renderIntegratedClassificationUI(container);
+                await applyFiltersToViewerGlobal();
+            });
+
+            childItem.appendChild(childCheckbox);
+            
+            const childSpan = document.createElement('span');
+            childSpan.textContent = category;
+            childItem.appendChild(childSpan);
+
+            childrenDiv.appendChild(childItem);
+        }
+
+        treeNode.appendChild(childrenDiv);
+        classContent.appendChild(treeNode);
+    }
+    classSection.appendChild(classContent);
+    wrapper.appendChild(classSection);
+
+    if (levels.length > 0) {
+        const levelsSection = document.createElement('div');
+        levelsSection.className = 'filter-section';
+
+        const levelsHeader = document.createElement('div');
+        levelsHeader.className = 'filter-section-header';
+        const isLevelsCollapsed = collapsedSections.has('levels');
+        if (isLevelsCollapsed) levelsHeader.classList.add('collapsed');
+        levelsHeader.innerHTML = `
+            <span>Niveles</span>
+            <i class="fa-solid fa-chevron-down"></i>
+        `;
+        levelsHeader.addEventListener('click', () => {
+            if (isLevelsCollapsed) collapsedSections.delete('levels');
+            else collapsedSections.add('levels');
+            renderIntegratedClassificationUI(container);
+        });
+        levelsSection.appendChild(levelsHeader);
+
+        const levelsContent = document.createElement('div');
+        levelsContent.className = 'filter-section-content';
+        if (isLevelsCollapsed) levelsContent.classList.add('collapsed');
+
+        const levelsGrid = document.createElement('div');
+        levelsGrid.className = 'levels-grid';
+
+        for (const level of levels) {
+            const levelBtn = document.createElement('button');
+            levelBtn.className = 'level-filter-btn';
+            if (selectedLevels.has(level)) levelBtn.classList.add('active');
+            levelBtn.textContent = level;
+            levelBtn.title = level;
+            levelBtn.addEventListener('click', async () => {
+                if (selectedLevels.has(level)) {
+                    selectedLevels.delete(level);
+                } else {
+                    selectedLevels.add(level);
+                }
+                renderIntegratedClassificationUI(container);
+                await applyFiltersToViewerGlobal();
+            });
+            levelsGrid.appendChild(levelBtn);
+        }
+
+        levelsContent.appendChild(levelsGrid);
+        levelsSection.appendChild(levelsContent);
+        wrapper.appendChild(levelsSection);
+    }
+
+    if (isSanitary && diameters.length > 0) {
+        const diameterSection = document.createElement('div');
+        diameterSection.className = 'filter-section';
+
+        const diameterHeader = document.createElement('div');
+        diameterHeader.className = 'filter-section-header';
+        const isDiameterCollapsed = collapsedSections.has('diameter');
+        if (isDiameterCollapsed) diameterHeader.classList.add('collapsed');
+        diameterHeader.innerHTML = `
+            <span>Diámetros</span>
+            <i class="fa-solid fa-chevron-down"></i>
+        `;
+        diameterHeader.addEventListener('click', () => {
+            if (isDiameterCollapsed) collapsedSections.delete('diameter');
+            else collapsedSections.add('diameter');
+            renderIntegratedClassificationUI(container);
+        });
+        diameterSection.appendChild(diameterHeader);
+
+        const diameterContent = document.createElement('div');
+        diameterContent.className = 'filter-section-content';
+        if (isDiameterCollapsed) diameterContent.classList.add('collapsed');
+
+        const select = document.createElement('select');
+        select.className = 'diameter-select';
+
+        const allOption = document.createElement('option');
+        allOption.value = 'Todos';
+        allOption.textContent = 'Todos';
+        allOption.selected = (selectedDiameter === 'Todos');
+        select.appendChild(allOption);
+
+        for (const d of diameters) {
+            const opt = document.createElement('option');
+            opt.value = d;
+            opt.textContent = d;
+            opt.selected = (selectedDiameter === d);
+            select.appendChild(opt);
+        }
+
+        select.addEventListener('change', async (e) => {
+            selectedDiameter = (e.target as HTMLSelectElement).value;
+            await applyFiltersToViewerGlobal();
+        });
+
+        diameterContent.appendChild(select);
+        diameterSection.appendChild(diameterContent);
+        wrapper.appendChild(diameterSection);
+    }
+
+    container.appendChild(wrapper);
+}
+
+const buildClassifierMap = (field: IntegratedClassificationField, order: IntegratedClassificationOrder) => {
+    const raw = integratedIndex[field];
+    const entries = Array.from(raw.entries()).map(([k, v]) => {
+        let count = 0;
+        for (const id in v) {
+            const s = v[id];
+            if (s instanceof Set) count += s.size;
+        }
+        return { key: k, map: v, count };
+    });
+    if (order === 'az') {
+        entries.sort((a, b) => a.key.localeCompare(b.key, 'es'));
+    } else {
+        entries.sort((a, b) => b.count - a.count || a.key.localeCompare(b.key, 'es'));
+    }
+    const out = new Map<string, Record<string, Set<number>>>();
+    for (const e of entries) out.set(e.key, e.map);
+    return out;
+};
+
+async function applyIntegratedFilterFromClassification(classification: Map<string, any>) {
+    if (activeIntegratedFilters.size === 0) {
+        await hider.set(true);
+        for (const k of Object.keys(hiddenItems)) hiddenItems[k].clear();
+        return;
+    }
+
+    const unionMap: Record<string, Set<number>> = {};
+    const allByModel: Record<string, Set<number>> = {};
+
+    for (const [value, groupData] of classification) {
+        if (!activeIntegratedFilters.has(value)) continue;
+        const fragmentIdMap = (groupData as any).map || groupData;
+        if (!fragmentIdMap) continue;
+        for (const modelUUID in fragmentIdMap) {
+            const items = fragmentIdMap[modelUUID];
+            const iterable = items instanceof Set ? items : (Array.isArray(items) ? items : []);
+            if (!unionMap[modelUUID]) unionMap[modelUUID] = new Set();
+            if (!allByModel[modelUUID]) allByModel[modelUUID] = new Set();
+            for (const id of iterable) {
+                unionMap[modelUUID].add(id);
+                allByModel[modelUUID].add(id);
+            }
+        }
+    }
+
+    for (const [value, groupData] of classification) {
+        const fragmentIdMap = (groupData as any).map || groupData;
+        if (!fragmentIdMap) continue;
+        for (const modelUUID in fragmentIdMap) {
+            const items = fragmentIdMap[modelUUID];
+            const iterable = items instanceof Set ? items : (Array.isArray(items) ? items : []);
+            if (!allByModel[modelUUID]) allByModel[modelUUID] = new Set();
+            for (const id of iterable) allByModel[modelUUID].add(id);
+        }
+    }
+
+    await hider.isolate(unionMap);
+
+    for (const modelUUID of Object.keys(allByModel)) {
+        const all = allByModel[modelUUID];
+        const visible = unionMap[modelUUID] || new Set<number>();
+        const hidden = new Set<number>();
+        for (const id of all) {
+            if (!visible.has(id)) hidden.add(id);
+        }
+        hiddenItems[modelUUID] = hidden;
+    }
+}
+
+function updateHiddenItems(map: Record<string, any>, visible: boolean) {
+    for (const id in map) {
+        // Resolve Model UUID (id could be FragmentID or ModelUUID)
+        let modelUUID = id;
+        
+        // If id is NOT a direct Model UUID, try to find which model it belongs to
+        if (!fragments.list.has(id)) {
+             for (const [uuid, model] of fragments.list) {
+                 if (model.items.some(f => f.id === id)) {
+                     modelUUID = uuid;
+                     break;
+                 }
+             }
+        }
+        
+        if (!hiddenItems[modelUUID]) hiddenItems[modelUUID] = new Set();
+        const currentSet = hiddenItems[modelUUID];
+        const targetSet = map[id];
+        
+        // Iterate over Set or Array
+        const items = targetSet instanceof Set ? targetSet : (Array.isArray(targetSet) ? targetSet : []);
+        
+        if (!visible) {
+            for (const item of items) currentSet.add(item);
+        } else {
+            for (const item of items) currentSet.delete(item);
+        }
+    }
+}
+
+async function updateClassificationUI() {
+    const container = document.getElementById('classification-list');
+    if (!container) return;
+
+    container.innerHTML = '';
+
+    let hasIntegrated = false;
+    for (const field of Object.keys(integratedIndex) as IntegratedClassificationField[]) {
+        if ((integratedIndex[field]?.size ?? 0) > 0) {
+            hasIntegrated = true;
+            break;
+        }
+    }
+
+    const controls = document.getElementById('classification-controls');
+    if (controls) {
+        controls.style.display = hasIntegrated ? 'none' : 'block';
+    }
+
+    if (hasIntegrated) {
+        renderIntegratedClassificationUI(container);
+        return;
+    }
+    
+    // Safety check for classifier list
+    if (!classifier || !classifier.list) {
+         console.warn('Classifier not ready');
+         return;
+    }
+
+    // DEBUG LOGS
+    console.log('[DEBUG] Classifier List Keys:', Array.from(classifier.list.keys()));
+    
+    // Iterate over ALL systems in the classifier
+    let hasItems = false;
+    for (const [systemName, classification] of classifier.list) {
+        if (classification.size > 0) hasItems = true;
+        console.log(`[DEBUG] Rendering system: ${systemName} with ${classification.size} groups`);
+    }
+
+    if (!hasItems) {
+        container.innerHTML = '<div style="padding: 20px; text-align: center; color: #888;">No hay clasificación disponible</div>';
+        return;
+    }
+
+    // Second pass to render
+    for (const [systemName, classification] of classifier.list) {
+        // Add Header
+        const header = document.createElement('div');
+        header.className = 'classification-header';
+        header.style.padding = '10px 10px 5px 10px';
+        header.style.fontWeight = 'bold';
+        header.style.color = 'var(--primary-color)';
+        header.style.borderBottom = '1px solid #eee';
+        header.style.marginTop = '10px';
+        header.innerHTML = `<i class="fa-solid fa-tags"></i> ${systemName}`;
+        container.appendChild(header);
+
+        const list = document.createElement('ul');
+        list.className = 'folder-items';
+        list.style.padding = '10px';
+
+        for (const [type, groupData] of classification) {
+            // FIX: Check if groupData has .map property, otherwise use groupData itself as the map
+            // This handles different versions/structures of the classifier output
+            const fragmentIdMap = (groupData as any).map || groupData;
+            
+            // Detailed Debug for map structure
+            if (classification.size > 0 && !fragmentIdMap) {
+                console.error(`[DEBUG] Missing map for ${type}`, groupData);
+            }
+            
+            const li = document.createElement('li');
+            li.className = 'model-item';
+            li.style.display = 'flex';
+            li.style.justifyContent = 'space-between';
+            (li as any).dataset.group = String(type);
+            
+            let count = 0;
+            if (fragmentIdMap) {
+                for (const id in fragmentIdMap) {
+                    const value = fragmentIdMap[id];
+                    if (value instanceof Set) {
+                        count += value.size;
+                    } else if (Array.isArray(value)) {
+                        count += value.length;
+                    }
+                }
+            }
+            
+            // Log debug info for the first item found to see structure
+            if (count === 0) {
+                 // console.warn(`[DEBUG] Category ${type} has count 0. Map keys: ${fragmentIdMap ? Object.keys(fragmentIdMap) : 'null'}`);
+            }
+
+            // Optional: Hide items with 0 count to clean up UI?
+            // For now, let's keep them but gray them out
+            const opacity = count > 0 ? '1' : '0.5'; // Increased opacity for visibility
+            const pointer = 'pointer'; // Always allow pointer events to debug
+
+            const isFilterMode = integratedClassificationMode === 'filtrar';
+            const isChecked = isFilterMode ? activeIntegratedFilters.has(String(type)) : false;
+
+            li.innerHTML = `
+                <div style="display: flex; align-items: center; padding-right: 8px;">
+                    <input type="checkbox" class="category-checkbox" style="cursor: pointer;" ${isChecked ? 'checked' : ''}>
+                </div>
+                <div class="model-name" style="cursor: ${pointer}; flex-grow: 1; opacity: ${opacity};"><i class="fa-solid fa-layer-group"></i> ${type} <span style="font-size: 0.8em; color: #888;">(${count})</span></div>
+                <div class="visibility-toggle" style="cursor: ${pointer}; padding: 0 10px; opacity: ${opacity};" title="Toggle Visibility">
+                    <i class="fa-regular fa-eye"></i>
+                </div>
+            `;
+
+            const nameDiv = li.querySelector('.model-name');
+            const toggleDiv = li.querySelector('.visibility-toggle');
+            const toggleIcon = toggleDiv?.querySelector('i');
+            const checkbox = li.querySelector('.category-checkbox') as HTMLInputElement;
+            let isVisible = true;
+
+            const handleSelection = async (allowMulti: boolean) => {
+                console.log(`[DEBUG] Selecting category: ${type} (Count: ${count})`);
+
+                if (integratedClassificationMode === 'filtrar') {
+                    if (!allowMulti) {
+                        if (activeIntegratedFilters.size === 1 && activeIntegratedFilters.has(String(type))) {
+                            activeIntegratedFilters.clear();
+                        } else {
+                            activeIntegratedFilters.clear();
+                            activeIntegratedFilters.add(String(type));
+                        }
+                    } else {
+                        if (activeIntegratedFilters.has(String(type))) activeIntegratedFilters.delete(String(type));
+                        else activeIntegratedFilters.add(String(type));
+                    }
+
+                    list.querySelectorAll('li.model-item').forEach((el) => {
+                        const key = (el as any).dataset.group || '';
+                        const isActive = activeIntegratedFilters.has(key);
+                        el.classList.toggle('filter-active', isActive);
+                        const cb = el.querySelector('.category-checkbox') as HTMLInputElement;
+                        if (cb) cb.checked = isActive;
+                    });
+
+                    await applyIntegratedFilterFromClassification(classification);
+                    return;
+                }
+                
+                // Debug the map content
+                console.log(`[DEBUG] FragmentIdMap for ${type}:`, fragmentIdMap);
+
+                const highlighter = components.get(OBF.Highlighter);
+                // ALLOW SELECTION even if count is 0 (to catch potential ghost items or map issues)
+                if (fragmentIdMap && Object.keys(fragmentIdMap).length > 0) {
+                     // Check keys in map
+                     const mapKeys = Object.keys(fragmentIdMap || {});
+                     console.log(`[DEBUG] Map keys: ${mapKeys.join(', ')}`);
+                     
+                     try {
+                        const removePrevious = !allowMulti;
+                        
+                        // FILTER HIDDEN ITEMS
+                        const filteredMap: Record<string, Set<number>> = {};
+                        let hasVisibleItems = false;
+                        
+                        console.log(`[DEBUG] Filtering selection for ${type}. Checking hidden items...`);
+
+                        for (const id in fragmentIdMap) {
+                            // Check Model Visibility first (id is modelUUID in this context)
+                            const model = fragments.list.get(id);
+                            if (model && !model.object.visible) {
+                                console.log(`[DEBUG] Skipping hidden model: ${id}`);
+                                continue; 
+                            }
+                            
+                            const items = fragmentIdMap[id];
+                            const visibleSet = new Set<number>();
+                            const hiddenSet = hiddenItems[id]; // The set of hidden items for this model
+                            
+                            if (hiddenSet) {
+                                console.log(`[DEBUG] Model ${id} has ${hiddenSet.size} hidden items tracked.`);
+                            } else {
+                                console.warn(`[DEBUG] Model ${id} has NO hidden items tracked in hiddenItems map.`);
+                                console.log(`[DEBUG] hiddenItems keys:`, Object.keys(hiddenItems));
+                            }
+
+                            const iterable = items instanceof Set ? items : (Array.isArray(items) ? items : []);
+
+                            for (const item of iterable) {
+                                if (!hiddenSet || !hiddenSet.has(item)) {
+                                    visibleSet.add(item);
+                                }
+                            }
+
+                            if (visibleSet.size > 0) {
+                                filteredMap[id] = visibleSet;
+                                hasVisibleItems = true;
+                            }
+                        }
+
+                        if (hasVisibleItems) {
+                            highlighter.highlightByID('select', filteredMap, removePrevious, true);
+                            logToScreen(`Seleccionado ${type} (${count} total, selección filtrada por visibilidad)`);
+                        } else {
+                            logToScreen(`No hay elementos visibles para seleccionar en ${type}`);
+                        }
+
+                     } catch (err) {
+                        logToScreen(`Error seleccionando ${type}: ${err}`, true);
+                        console.error(err);
+                     }
+                } else {
+                     logToScreen(`Cannot select ${type}: No items found (Map is empty)`, true);
+                     console.warn(`[DEBUG] Map is empty for ${type}. GroupData:`, groupData);
+                }
+            };
+
+            // SELECTION Handler (Clicking text)
+            nameDiv?.addEventListener('click', (e) => {
+                e.stopPropagation();
+                handleSelection(e.ctrlKey || e.metaKey);
+            });
+            
+            checkbox?.addEventListener('change', (e) => {
+                e.stopPropagation();
+                handleSelection(true);
+            });
+
+            // VISIBILITY Handler (Clicking eye)
+            toggleDiv?.addEventListener('click', (e) => {
+                e.stopPropagation();
+                activeIntegratedFilters.clear();
+                list.querySelectorAll('li.model-item').forEach((el) => el.classList.remove('filter-active'));
+                isVisible = !isVisible;
+                console.log(`[DEBUG] Toggling visibility for ${type}: ${isVisible}`);
+                
+                if (fragmentIdMap && Object.keys(fragmentIdMap).length > 0) {
+                    hider.set(isVisible, fragmentIdMap);
+                    // Update manual tracking
+                    updateHiddenItems(fragmentIdMap, isVisible);
+                } else {
+                    console.warn(`[DEBUG] Skipping visibility toggle for ${type} - map is empty`);
+                    // Try to toggle anyway if logic permits, but hider needs a map
+                }
+                
+                if (isVisible) {
+                    li.classList.add('visible');
+                    toggleIcon?.classList.replace('fa-eye-slash', 'fa-eye');
+                    li.style.opacity = '1';
+                } else {
+                    li.classList.remove('visible');
+                    toggleIcon?.classList.replace('fa-eye', 'fa-eye-slash');
+                    li.style.opacity = '0.5';
+                }
+            });
+
+            list.appendChild(li);
+        }
+        container.appendChild(list);
+    }
+}
+
+function initNavigationControls() {
+    const backBtn = document.getElementById('back-btn');
+    if (backBtn) {
+        backBtn.addEventListener('click', () => {
+            if (window.history.length > 1) window.history.back();
+            else window.location.href = '../home.html';
+        });
+    }
+}
+
+function initClassificationControls() {
+    const fieldSel = document.getElementById('classification-field') as HTMLSelectElement | null;
+    const modeSel = document.getElementById('classification-mode') as HTMLSelectElement | null;
+    const orderSel = document.getElementById('classification-order') as HTMLSelectElement | null;
+    const clearBtn = document.getElementById('classification-clear') as HTMLButtonElement | null;
+
+    const sync = () => {
+        if (fieldSel && fieldSel.value) integratedClassificationField = fieldSel.value as IntegratedClassificationField;
+        if (modeSel && modeSel.value) integratedClassificationMode = modeSel.value as IntegratedClassificationMode;
+        if (orderSel && orderSel.value) integratedClassificationOrder = orderSel.value as IntegratedClassificationOrder;
+        if (orderSel) orderSel.style.display = integratedClassificationMode === 'ordenar' ? 'block' : 'none';
+        if (clearBtn) clearBtn.style.display = integratedClassificationMode === 'filtrar' ? 'block' : 'none';
+    };
+
+    const rebuild = async () => {
+        if (!classifier || !classifier.list) return;
+        classifier.list.clear();
+        const built = buildClassifierMap(integratedClassificationField, integratedClassificationOrder);
+        classifier.list.set(integratedClassificationField, built);
+        await updateClassificationUI();
+    };
+
+    fieldSel?.addEventListener('change', async () => {
+        sync();
+        activeIntegratedFilters.clear();
+        await hider.set(true);
+        for (const k of Object.keys(hiddenItems)) hiddenItems[k].clear();
+        await rebuild();
+    });
+    modeSel?.addEventListener('change', async () => {
+        sync();
+        activeIntegratedFilters.clear();
+        await hider.set(true);
+        for (const k of Object.keys(hiddenItems)) hiddenItems[k].clear();
+        await rebuild();
+    });
+    orderSel?.addEventListener('change', async () => {
+        sync();
+        await rebuild();
+    });
+    clearBtn?.addEventListener('click', async () => {
+        activeIntegratedFilters.clear();
+        await hider.set(true);
+        for (const k of Object.keys(hiddenItems)) hiddenItems[k].clear();
+        await rebuild();
+    });
+
+    sync();
+}
+
+function initSidebar() {
+    const sidebar = document.getElementById('sidebar');
+    const toggleBtn = document.getElementById('sidebar-toggle');
+    const resizer = document.getElementById('sidebar-resizer');
+
+    // Toggle Logic usando solo el botón de hamburguesa
+    if (toggleBtn && sidebar) {
+        toggleBtn.addEventListener('click', () => {
+            const isClosed = sidebar.classList.toggle('closed');
+            document.body.classList.toggle('sidebar-closed', isClosed);
+        });
+    }
+
+    // Resize Logic
+    if (resizer && sidebar) {
+        let isResizing = false;
+        
+        resizer.addEventListener('mousedown', (e) => {
+            isResizing = true;
+            resizer.classList.add('resizing');
+            document.body.style.cursor = 'ew-resize';
+            e.preventDefault();
+        });
+        
+        document.addEventListener('mousemove', (e) => {
+            if (!isResizing) return;
+
+            const newWidth = e.clientX;
+
+            if (newWidth > 200 && newWidth < 800) {
+                sidebar.style.width = `${newWidth}px`;
+            }
+        });
+        
+        document.addEventListener('mouseup', () => {
+            if (isResizing) {
+                isResizing = false;
+                resizer.classList.remove('resizing');
+                document.body.style.cursor = 'default';
+            }
+        });
+    }
+
+    if (sidebar && window.innerWidth < 768) {
+        sidebar.classList.add('closed');
+        document.body.classList.add('sidebar-closed');
+    }
+    
+    // Setup file upload
+    const fileInput = document.getElementById('file-input') as HTMLInputElement;
+    if (fileInput) {
+        fileInput.addEventListener('change', async (event) => {
+            const target = event.target as HTMLInputElement;
+            if (target.files && target.files.length > 0) {
+                const overlay = document.getElementById('loading-overlay');
+                if (overlay) {
+                    overlay.style.display = 'flex';
+                    const progressDiv = document.getElementById('loading-progress');
+                    if (progressDiv) progressDiv.textContent = 'Procesando archivo...';
+                }
+
+                const file = target.files[0];
+                
+                try {
+                    if (file.name.toLowerCase().endsWith('.frag')) {
+                        logToScreen(`Loading fragments: ${file.name}...`);
+                        
+                        // Create a persistent URL for this session
+                        const blobUrl = URL.createObjectURL(file);
+                        
+                        // Save to IndexedDB for cross-session persistence
+                        logToScreen(`Saving ${file.name} to local storage...`);
+                        try {
+                             // Clone buffer because core.load or others might detach/transfer it
+                             const buffer = await file.arrayBuffer();
+                             await saveToIndexedDB(file.name, buffer);
+                             logToScreen(`Saved to local storage.`);
+                        } catch (dbErr) {
+                             console.warn('Failed to save to IDB:', dbErr);
+                        }
+
+                        // Use the centralized loadModel function to ensure registration and userData setup
+                        // This handles fetch, decompression, and basic registration
+                        await loadModel(blobUrl, file.name);
+                        
+                        // Retrieve the model to perform post-load operations (dummy props, zoom)
+                        const model = fragments.groups.get(file.name) || 
+                                     (fragments.groups as any)[file.name] || 
+                                     Array.from(fragments.groups.values()).find((m: any) => m.uuid === file.name);
+
+                        if (model) {
+                            // Ensure model has a valid UUID matching the filename for consistency
+                            if (model.uuid !== file.name) {
+                                model.uuid = file.name;
+                            }
+
+                            // Mark as local so we know to look in IDB later
+                            if (!model.userData) model.userData = {};
+                            
+                            // MODIFIED: Treat manual loads as deployed models if possible
+                            // This allows Viewpoints to restore them from the server path
+                            model.userData.isLocal = false; 
+                            model.userData.url = `models/${file.name}`;
+                            
+                            console.log(`[Viewpoints] Manual load: Assigned URL ${model.userData.url} to ${model.uuid}`);
+                            logToScreen(`Assigned persistence URL: ${model.userData.url}`);
+                            
+                            model.useCamera(world.camera.three);
+                            world.scene.three.add(model.object);
+                            await fragments.core.update(true);
+                            
+                            const bbox = new THREE.Box3().setFromObject(model.object);
+                            const sphere = new THREE.Sphere();
+                            bbox.getBoundingSphere(sphere);
+                            world.camera.controls.fitToSphere(sphere, true);
+    
+                            // VERIFY PROPERTIES
+                            const modelAny = model as any;
+                            const hasProps = modelAny.properties && Object.keys(modelAny.properties).length > 0;
+                            logToScreen(`Fragment loaded. Properties found: ${hasProps ? Object.keys(modelAny.properties).length : 0}`);
+                            
+                            if (!hasProps) {
+                                logToScreen('WARNING: No properties found in .frag file. Generating dummy properties...', true);
+                                
+                                try {
+                                    const ids = await model.getItemsIdsWithGeometry();
+                                    const dummyProperties: Record<string, any> = {};
+                                    
+                                    for (const id of ids) {
+                                        dummyProperties[id] = {
+                                            expressID: id,
+                                            type: 0, // Unknown type
+                                            GlobalId: { type: 1, value: `generated-${id}` },
+                                            Name: { type: 1, value: `Element ${id}` },
+                                            Description: { type: 1, value: 'Generated Property' }
+                                        };
+                                    }
+                                    
+                                    modelAny.properties = dummyProperties;
+                                    logToScreen(`Generated dummy properties for ${ids.length} elements.`);
+                                    
+                                    // Re-attempt classification with new properties
+                                    logToScreen(`Attempting classification on dummy properties...`);
+                                    await classifyModel(model);
+                                    await updateClassificationUI();
+                                    logToScreen(`Classification complete (fallback).`);
+                                    
+                                } catch (genErr) {
+                                    logToScreen(`Error generating dummy properties: ${genErr}`, true);
+                                }
+                            } else {
+                                // Classify only if properties exist
+                                logToScreen(`Classifying fragments: ${file.name}...`);
+                                try {
+                                    await classifyModel(model);
+                                    await updateClassificationUI();
+                                    logToScreen(`Classification complete for ${file.name}`);
+                                } catch (err) {
+                                    logToScreen(`Classification failed: ${err}`, true);
+                                }
+                            }
+                            
+                            // Add to loadedModels map for sidebar consistency if not already there
+                            if (!loadedModels.has(file.name)) {
+                                loadedModels.set(file.name, model);
+                            }
+
+                        } else {
+                            throw new Error('Model loaded but not found in groups.');
+                        }
+
+                        logToScreen(`Loaded .frag: ${file.name}`);
+                        logToScreen('Ready for Measurement.');
+                    } else {
+                        logToScreen(`Loading IFC: ${file.name}...`);
+                        const data = new Uint8Array(buffer);
+                        const model = await ifcLoader.load(data, true, file.name);
+                        
+                        // CRITICAL: Register model in fragments list for tools to work
+                        if (!fragments.list.has(model.uuid)) {
+                             fragments.list.set(model.uuid, model);
+                        }
+                        
+                        // Ensure it's in the scene
+                        if (!model.object.parent) {
+                            world.scene.three.add(model.object);
+                        }
+                        
+                        // Classify and update UI
+                        logToScreen(`IFC Loaded: ${file.name}. Classifying...`);
+                        try {
+                            // Ensure properties are available (IfcLoader usually loads them)
+                            await classifyModel(model);
+                            await updateClassificationUI();
+                        } catch (e) {
+                            logToScreen(`Classification warning: ${e}`, true);
+                        }
+
+                        // Fit camera
+                        const bbox = new THREE.Box3().setFromObject(model.object);
+                        const sphere = new THREE.Sphere();
+                        bbox.getBoundingSphere(sphere);
+                        world.camera.controls.fitToSphere(sphere, true);
+                        
+                        logToScreen('Ready for Measurement.');
+                    }
+                } catch (e) {
+                    logToScreen(`Error loading file: ${e}`, true);
+                    alert(`Error loading file: ${e}`);
+                } finally {
+                    if (overlay) overlay.style.display = 'none';
+                }
+                
+                // Reset input
+                target.value = '';
+            }
+        });
+    }
+}
+
+function initTheme() {
+    const themeBtn = document.getElementById('theme-toggle');
+    const icon = themeBtn?.querySelector('i');
+    const logoImg = document.getElementById('logo-img') as HTMLImageElement;
+    
+    // Default to Light (false)
+    const savedTheme = localStorage.getItem('theme');
+    const isDark = savedTheme === 'dark';
+    
+    const updateThemeUI = (dark: boolean) => {
+        if (dark) {
+            document.body.classList.add('dark-mode');
+            if(icon) icon.className = 'fa-solid fa-sun';
+            if(logoImg) logoImg.src = 'https://i.postimg.cc/3xdLSg9g/artis-urbano2-(1).png';
+            if (world && world.scene && world.scene.three) {
+                 world.scene.three.background = new THREE.Color(0x1e1e1e); 
+            }
+        } else {
+            document.body.classList.remove('dark-mode');
+            if(icon) icon.className = 'fa-solid fa-moon';
+            if(logoImg) logoImg.src = 'https://i.postimg.cc/vmKVZndP/artis-urbano2.png';
+            if (world && world.scene && world.scene.three) {
+                 world.scene.three.background = new THREE.Color(0xf5f5f5); 
+            }
+        }
+    };
+
+    // Initial set
+    updateThemeUI(isDark);
+
+    themeBtn?.addEventListener('click', () => {
+        document.body.classList.toggle('dark-mode');
+        // Force re-check of class because toggle returns boolean
+        // But we want to be explicit
+        const currentDark = document.body.classList.contains('dark-mode');
+        localStorage.setItem('theme', currentDark ? 'dark' : 'light');
+        updateThemeUI(currentDark);
+    });
+}
+
+function initProjectionToggle() {
+    const btn = document.getElementById('projection-toggle');
+    if (!btn) return;
+
+    const labelSpan = btn.querySelector('span');
+
+    const updateUI = () => {
+        const current = (world.camera as any).projection?.current as string | undefined;
+        const isOrtho = current === 'Orthographic';
+        btn.classList.toggle('active', isOrtho);
+        if (labelSpan) {
+            labelSpan.textContent = isOrtho ? 'Orto' : 'Persp';
+        }
+    };
+
+    updateUI();
+
+    btn.addEventListener('click', () => {
+        const projectionApi = (world.camera as any).projection;
+        if (!projectionApi || typeof projectionApi.set !== 'function') return;
+
+        const current = projectionApi.current as string;
+        const next = current === 'Orthographic' ? 'Perspective' : 'Orthographic';
+
+        projectionApi.set(next);
+
+        const rendererAny: any = world.renderer as any;
+        if (rendererAny?.postproduction?.updateCamera) {
+            rendererAny.postproduction.updateCamera();
+        }
+
+        updateUI();
+    });
+}
+
+function initClipperTool() {
+    const btn = document.getElementById('clipper-toggle');
+    const controls = document.getElementById('clipper-controls');
+    const viewer = document.getElementById('viewer-container');
+    if (!btn || !viewer) return;
+
+    const updateUI = () => {
+        const active = clipper.enabled;
+        btn.classList.toggle('active', active);
+        if (controls) controls.style.display = active ? 'flex' : 'none';
+    };
+
+    updateUI();
+
+    btn.addEventListener('click', () => {
+        clipper.enabled = !clipper.enabled;
+        updateUI();
+    });
+
+    viewer.addEventListener('dblclick', () => {
+        if (clipper.enabled) {
+            clipper.create(world);
+        }
+    });
+
+    window.addEventListener('keydown', (event) => {
+        if (event.code === 'Delete' || event.code === 'Backspace') {
+            clipper.delete(world);
+        }
+    });
+
+    // Clipper Controls
+    const deleteAllBtn = document.getElementById('clipper-delete-all');
+    if (deleteAllBtn) {
+        deleteAllBtn.addEventListener('click', () => {
+            clipper.deleteAll();
+        });
+    }
+
+    const planeBtns = document.querySelectorAll('.clipper-plane-btn');
+    planeBtns.forEach(pBtn => {
+        pBtn.addEventListener('click', () => {
+            if (!clipper.enabled) return;
+            
+            const axis = pBtn.getAttribute('data-axis');
+            const center = getModelCenter();
+            const normal = new THREE.Vector3();
+            
+            if (axis === 'x') normal.set(-1, 0, 0);
+            else if (axis === 'y') normal.set(0, -1, 0);
+            else if (axis === 'z') normal.set(0, 0, -1);
+            
+            clipper.createFromNormalAndCoplanarPoint(world, normal, center);
+        });
+    });
+}
+
+function initGridToggle() {
+    const btn = document.getElementById('grid-toggle');
+    if (!btn) return;
+
+    btn.addEventListener('click', () => {
+        const grid = grids.list.get(world.uuid);
+        if (grid) {
+            grid.visible = !grid.visible;
+            btn.classList.toggle('active', grid.visible);
+        }
+    });
+}
+
+
+
+
+// Add global state for folder open/close
+const folderStates: Record<string, boolean> = {};
+
+// Load models from JSON and populate sidebar
+async function loadModelList() {
+    if (loadModelListInFlight) {
+        return await loadModelListInFlight;
+    }
+
+    loadModelListInFlight = (async () => {
+    const listContainer = document.getElementById('model-list');
+    if (!listContainer) {
+        return;
+    }
+
+    try {
+        let models: RemoteModelItem[] = [];
+        if (shouldUseDriveModels()) {
+            logToScreen('Loading models from Google Drive (Apps Script)...');
+            try {
+                const driveModels = await listDriveModels();
+                models = driveModels
+                    .filter((m) => String(m.name || '').toLowerCase().endsWith('.frag'))
+                    .map((m) => ({
+                        name: m.name,
+                        path: `models/${m.name}`,
+                        driveFragId: m.fragId,
+                        driveJsonId: m.jsonId ?? null
+                    }));
+                logToScreen(`Drive Scan: ${models.length} .frag models found`);
+            } catch (driveError) {
+                logToScreen(`Drive Scan failed, using published list: ${driveError}`, true);
+                models = await loadPublishedModelList();
+                logToScreen(`Published list: ${models.length} .frag models found`);
+            }
+        } else {
+            const GITHUB_API_URL = 'https://api.github.com/repos/alcabama-commits/bim/contents/docs/VSR_IFCA/models';
+            logToScreen('Scanning GitHub for models...');
+
+            const response = await fetch(GITHUB_API_URL);
+            if (!response.ok) throw new Error(`GitHub API Error: ${response.status}`);
+
+            const data = await response.json();
+            if (!Array.isArray(data)) throw new Error('Invalid GitHub response');
+
+            models = data
+                .filter((item: any) => item.name.toLowerCase().endsWith('.frag'))
+                .map((item: any) => ({
+                    name: item.name,
+                    path: `models/${item.name}`,
+                    url: item.download_url
+                }));
+
+            logToScreen(`GitHub Scan: ${models.length} .frag models found`);
+        }
+
+        // Group models by specialty
+        const groups: Record<string, any[]> = {};
+        models.forEach((m: { name: string; path: string; url: string }) => {
+            const specialty = getSpecialtyFromIfcPath(m.path);
+            if (!groups[specialty]) groups[specialty] = [];
+            groups[specialty].push(m);
+        });
+
+        // Auto-update setup
+        if (!(window as any)._autoUpdateStarted) {
+            (window as any)._autoUpdateStarted = true;
+            modelListRefreshTimer = window.setInterval(() => {
+                void loadModelList();
+            }, 60000);
+            logToScreen('Auto-update enabled (60s).');
+        }
+
+        // Clear container
+        listContainer.innerHTML = '';
+
+        for (const [folder, items] of Object.entries(groups)) {
+            const groupDiv = document.createElement('div');
+            groupDiv.className = 'folder-group';
+
+            const header = document.createElement('div');
+            header.className = 'folder-header';
+            header.innerHTML = `<span><i class="fa-regular fa-folder-open"></i> ${folder}</span> <i class="fa-solid fa-chevron-down"></i>`;
+            
+            const itemsList = document.createElement('ul');
+            itemsList.className = 'folder-items'; // Open by default
+            
+            // Toggle logic
+            header.addEventListener('click', () => {
+                const isCollapsed = itemsList.classList.contains('collapsed');
+                if (isCollapsed) {
+                    itemsList.classList.remove('collapsed');
+                    header.querySelector('.fa-chevron-right')?.classList.replace('fa-chevron-right', 'fa-chevron-down');
+                    header.querySelector('.fa-folder')?.classList.replace('fa-folder', 'fa-folder-open');
+                    folderStates[folder] = false;
+                } else {
+                    itemsList.classList.add('collapsed');
+                    header.querySelector('.fa-chevron-down')?.classList.replace('fa-chevron-down', 'fa-chevron-right');
+                    header.querySelector('.fa-folder-open')?.classList.replace('fa-folder-open', 'fa-folder');
+                    folderStates[folder] = true;
+                }
+            });
+
+            // Restore state
+            if (folderStates[folder]) {
+                 itemsList.classList.add('collapsed');
+                 header.querySelector('.fa-chevron-down')?.classList.replace('fa-chevron-down', 'fa-chevron-right');
+                 header.querySelector('.fa-folder-open')?.classList.replace('fa-folder-open', 'fa-folder');
+            }
+
+            items.forEach((m) => {
+                const li = document.createElement('li');
+                li.className = 'model-item';
+                li.dataset.path = m.path;
+
+                if (loadedModels.has(m.path)) {
+                    li.classList.add('visible');
+                }
+
+                // Structure: Name + Visibility Toggle
+                li.innerHTML = `
+                    <div class="model-name"><i class="fa-solid fa-cube"></i> ${m.name}</div>
+                    <div class="visibility-toggle" title="Toggle Visibility">
+                        <i class="fa-regular ${li.classList.contains('visible') ? 'fa-eye' : 'fa-eye-slash'}"></i>
+                    </div>
+                `;
+
+                // Handle click on the whole item or specific toggle
+                li.addEventListener('click', async (e) => {
+                    // Prevent propagation if clicking nested elements
+                    e.stopPropagation();
+                    
+                    const target = e.target as HTMLElement;
+                    // If clicked explicitly on the visibility toggle icon/div
+                    if (target.closest('.visibility-toggle')) {
+                        await toggleModel(m, baseUrl, li);
+                    } else {
+                        // Clicked on the name/body -> Select the model
+                        await selectModel(m.path);
+                    }
+                });
+
+                itemsList.appendChild(li);
+            });
+
+            groupDiv.appendChild(header);
+            groupDiv.appendChild(itemsList);
+            listContainer.appendChild(groupDiv);
+        }
+
+    } catch (err) {
+        logToScreen(`Error loading model list: ${err}`, true);
+    }
+    })();
+
+    try {
+        await loadModelListInFlight;
+    } finally {
+        loadModelListInFlight = null;
+    }
+}
+
+async function selectModel(path: string) {
+    if (!loadedModels.has(path)) {
+        logToScreen(`Model ${path} not loaded. Click the eye icon to load it first.`, true);
+        return;
+    }
+
+    const model = loadedModels.get(path);
+    if (!model) return;
+
+    // Highlight the whole model
+    // We create a selection map where the key is the model UUID (which is the path)
+    // and the value is all expressIDs in the model
+    try {
+        const ids = await model.getItemsIdsWithGeometry();
+        const selectionMap: Record<string, number[]> = {};
+        selectionMap[path] = ids; // Use path as UUID since we forced it
+
+        logToScreen(`Selecting model: ${model.name} (${ids.length} items)`);
+        highlighter.highlightByID('select', selectionMap, true, true);
+        
+        // Also fit camera to model
+        const bbox = new THREE.Box3().setFromObject(model.object);
+        const sphere = new THREE.Sphere();
+        bbox.getBoundingSphere(sphere);
+        world.camera.controls.fitToSphere(sphere, true);
+        
+    } catch (e) {
+        logToScreen(`Error selecting model: ${e}`, true);
+    }
+}
+
+async function loadDriveModel(m: RemoteModelItem) {
+    if (!m.driveFragId) throw new Error('Modelo Drive sin driveFragId');
+
+    console.log(`[Drive] Cargando modelo: ${m.name}`);
+    console.log(`[Drive] driveFragId: ${m.driveFragId}`);
+    console.log(`[Drive] driveJsonId: ${m.driveJsonId ?? 'NULL — no hay JSON asociado'}`);
+    logToScreen(`[Drive] FRAG: ${m.name} | JSON ID: ${m.driveJsonId ?? 'NINGUNO'}`);
+
+    const buffer = await loadDriveFragBuffer(m.driveFragId);
+    const blobUrl = URL.createObjectURL(new Blob([buffer], { type: 'application/octet-stream' }));
+
+    let props: any | null = null;
+    if (m.driveJsonId) {
+        try {
+            logToScreen(`[Drive] Descargando JSON (${m.driveJsonId})...`);
+            props = await loadDriveJsonProps(String(m.driveJsonId));
+            if (props) {
+                const jsonKeys = Object.keys(props);
+                const firstKey = jsonKeys[0];
+                const firstEntry = props[firstKey];
+                console.log(`[Drive JSON] Claves totales: ${jsonKeys.length}`);
+                console.log(`[Drive JSON] Primera clave: "${firstKey}" (tipo: ${typeof firstEntry})`);
+                if (firstEntry && typeof firstEntry === 'object') {
+                    const attrs = Object.keys(firstEntry);
+                    console.log(`[Drive JSON] Atributos del primer elemento:`, attrs);
+                    console.log(`[Drive JSON] Muestra:`, JSON.stringify(firstEntry).substring(0, 400));
+                    logToScreen(`[Drive JSON] ${jsonKeys.length} entradas. Clave1: "${firstKey}" → attrs: ${attrs.slice(0,6).join(' | ')}`);
+                } else {
+                    console.log(`[Drive JSON] Primer valor (no objeto):`, firstEntry);
+                    logToScreen(`[Drive JSON] Estructura plana. Clave1: "${firstKey}" = ${firstEntry}`);
+                }
+            } else {
+                logToScreen(`[Drive] JSON cargado pero vacío o nulo`, true);
+            }
+        } catch (e) {
+            console.error('[Drive] Error cargando JSON:', e);
+            logToScreen(`[Drive] Error JSON: ${e}`, true);
+            props = null;
+        }
+    } else {
+        logToScreen(`[Drive] ⚠️ Sin driveJsonId — la clasificación no tendrá datos`, true);
+    }
+
+    const sourceUrl = `drive://${encodeURIComponent(m.driveFragId)}${m.driveJsonId ? `?jsonId=${encodeURIComponent(String(m.driveJsonId))}` : ''}`;
+    await loadModel(blobUrl, m.path, { propertiesJson: props, sourceUrl });
+}
+
+async function toggleModel(m: RemoteModelItem, baseUrl: string, liElement: HTMLElement) {
+    const toggleIcon = liElement.querySelector('.visibility-toggle i');
+    const path = m.path;
+    
+    // Check if already loaded
+    if (loadedModels.has(path)) {
+        const model = loadedModels.get(path);
+        
+        // Toggle visibility
+        const newVisible = !model.object.visible;
+        model.object.visible = newVisible;
+        
+        // Also update culler
+        if(newVisible) {
+             // culler.add(model.mesh);
+        } else {
+            // There isn't a direct remove from culler in simple API sometimes, 
+            // but hiding the mesh handles it visually. 
+            // Culler updates based on scene visibility usually.
+        }
+        // culler.needsUpdate = true;
+        
+        // Update UI
+        if (newVisible) {
+            liElement.classList.add('visible');
+            toggleIcon?.classList.replace('fa-eye-slash', 'fa-eye');
+        } else {
+            liElement.classList.remove('visible');
+            toggleIcon?.classList.replace('fa-eye', 'fa-eye-slash');
+        }
+        updateProjectLinksBarVisibility();
+        
+        logToScreen(`Toggled model visibility: ${path} -> ${newVisible}`);
+        return;
+    }
+
+    // Not loaded, load it
+    const overlay = document.getElementById('loading-overlay');
+    if (overlay) overlay.style.display = 'flex';
+    
+    try {
+        if (m.driveFragId) {
+            await loadDriveModel(m);
+        } else {
+            let fullPath = path;
+            if (m.url) {
+                fullPath = m.url;
+            } else if (!path.startsWith('http')) {
+                const encodedPath = path.split('/').map(part => encodeURIComponent(part)).join('/');
+                fullPath = `${baseUrl}${encodedPath}`;
+            }
+            const propertiesUrl = fullPath.replace(/\.frag(\?.*)?$/i, '.json$1');
+            await loadModel(fullPath, path, { propertiesUrl, sourceUrl: fullPath });
+        }
+        
+        // Update UI to loaded/visible state
+        liElement.classList.add('visible');
+        toggleIcon?.classList.replace('fa-eye-slash', 'fa-eye');
+        updateProjectLinksBarVisibility();
+        
+    } catch (error) {
+        const msg = (error instanceof Error) ? error.message : String(error);
+        alert('Error downloading model: ' + msg);
+        logToScreen(`Error downloading model: ${msg}`, true);
+    } finally {
+        if (overlay) overlay.style.display = 'none';
+    }
+}
+
+logToScreen('Initializing That Open Engine...');
+initSidebar();
+initSidebarTabs();
+initNavigationControls();
+initClassificationControls();
+initTheme();
+initProjectionToggle();
+initGridToggle();
+initClipperTool();
+initFitModelTool();
+loadModelList();
+initPropertiesPanel();
+initQuantitiesPanel();
+initStatusPanel();
+
+// --- View Controls & Console Toggle ---
+
+const consoleToggle = document.getElementById('console-toggle');
+if (consoleToggle) {
+    (consoleToggle as HTMLElement).style.display = 'none';
+    consoleToggle.addEventListener('click', () => {
+        const consoleEl = document.getElementById('debug-console');
+        if (consoleEl) {
+            const isVisible = consoleEl.style.display !== 'none';
+            consoleEl.style.display = isVisible ? 'none' : 'block';
+            consoleToggle.classList.toggle('active', !isVisible);
+        }
+    });
+}
+
+// Helper to get current model center using BoundingBoxer with fallback
+function getModelBox() {
+    const boxer = components.get(OBC.BoundingBoxer);
+    boxer.list.clear();
+    
+    // Use addFromModels to automatically include all fragments registered in FragmentsManager
+    boxer.addFromModels();
+
+    let box = boxer.get();
+    boxer.list.clear();
+
+    // Fallback if BoundingBoxer returns empty (e.g. if models are not fragments)
+    if (box.isEmpty()) {
+        console.warn('BoundingBoxer empty, falling back to scene traversal');
+        box = new THREE.Box3();
+        let hasMeshes = false;
+        world.scene.three.traverse((child: any) => {
+             // Check if it's a mesh and part of a model (not grid/helper)
+             // Simple check: isMesh and visible
+             if (child.isMesh && child.visible) {
+                 box.expandByObject(child);
+                 hasMeshes = true;
+             }
+        });
+    }
+
+    return box;
+}
+
+function getModelCenter(): THREE.Vector3 {
+    const box = getModelBox();
+    if (box.isEmpty()) return new THREE.Vector3(0,0,0);
+    
+    const center = new THREE.Vector3();
+    box.getCenter(center);
+    return center;
+}
+
+// Helper to get model size (radius)
+function getModelRadius(): number {
+    const box = getModelBox();
+    if (box.isEmpty()) return 10;
+    
+    const sphere = new THREE.Sphere();
+    box.getBoundingSphere(sphere);
+    return sphere.radius || 10;
+}
+
+function initFitModelTool() {
+    const btn = document.getElementById('fit-model-btn');
+    if (!btn) return;
+
+    btn.addEventListener('click', () => {
+        logToScreen('Fit Model clicked');
+        // alert('Fit Model Clicked'); // Uncomment for forceful debug
+        const box = getModelBox();
+        const sphere = new THREE.Sphere();
+        box.getBoundingSphere(sphere);
+        
+        logToScreen(`Fit Radius: ${sphere.radius.toFixed(2)} Center: ${sphere.center.x.toFixed(1)},${sphere.center.y.toFixed(1)},${sphere.center.z.toFixed(1)}`);
+
+        if (sphere.radius > 0.1) {
+             world.camera.controls.fitToSphere(sphere, true);
+        } else {
+             logToScreen('Model bounds too small/empty', true);
+             alert('No se pudo encontrar el modelo para ajustar. Intenta recargar.');
+        }
+    });
+}
+
+const viewDropdownBtn = document.getElementById('view-dropdown-btn');
+const viewDropdownMenu = document.getElementById('view-dropdown-menu');
+
+if (viewDropdownBtn && viewDropdownMenu) {
+    // Toggle menu
+    viewDropdownBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        viewDropdownMenu.classList.toggle('show');
+    });
+
+    // Close menu when clicking outside
+    document.addEventListener('click', () => {
+        viewDropdownMenu.classList.remove('show');
+    });
+}
+
+const viewButtons = document.querySelectorAll('.view-btn');
+viewButtons.forEach(btn => {
+    btn.addEventListener('click', async () => {
+        const view = btn.getAttribute('data-view');
+        
+        // Update Main Button Text to show selected view
+        if (viewDropdownBtn) {
+             const icon = btn.querySelector('i')?.cloneNode(true);
+             const text = btn.textContent?.trim();
+             const span = viewDropdownBtn.querySelector('span');
+             if (span && icon && text) {
+                 span.innerHTML = '';
+                 span.appendChild(icon);
+                 span.appendChild(document.createTextNode(' ' + text));
+             }
+        }
+
+        const center = getModelCenter();
+        const radius = getModelRadius();
+        const dist = radius * 2; // Distance factor
+        
+        // Ensure controls are enabled
+        world.camera.controls.enabled = true;
+
+        switch (view) {
+            case 'top':
+                await world.camera.controls.setLookAt(center.x, center.y + dist, center.z, center.x, center.y, center.z, true);
+                break;
+            case 'bottom':
+                await world.camera.controls.setLookAt(center.x, center.y - dist, center.z, center.x, center.y, center.z, true);
+                break;
+            case 'front':
+                await world.camera.controls.setLookAt(center.x, center.y, center.z + dist, center.x, center.y, center.z, true);
+                break;
+            case 'back':
+                await world.camera.controls.setLookAt(center.x, center.y, center.z - dist, center.x, center.y, center.z, true);
+                break;
+            case 'left':
+                await world.camera.controls.setLookAt(center.x - dist, center.y, center.z, center.x, center.y, center.z, true);
+                break;
+            case 'right':
+                await world.camera.controls.setLookAt(center.x + dist, center.y, center.z, center.x, center.y, center.z, true);
+                break;
+            case 'iso':
+                await world.camera.controls.setLookAt(center.x + dist, center.y + dist, center.z + dist, center.x, center.y, center.z, true);
+                break;
+        }
+    });
+});
+
+
+
+
+// Listener moved to initSidebar to handle both IFC and Frag files centrally
+
+// --- Highlighter & Properties Setup ---
+
+const [propsTable] = CUI.tables.itemsData({
+    components,
+    modelIdMap: {},
+});
+
+propsTable.preserveStructureOnFilter = true;
+
+const propertiesContent = document.getElementById('properties-content');
+if (propertiesContent) {
+    propertiesContent.innerHTML = '';
+    propertiesContent.appendChild(propsTable);
+}
+
+highlighter.events.select.onHighlight.add(async (modelIdMap) => {
+    console.log('[DEBUG] Highlight event:', modelIdMap);
+    await renderPropertiesTable(modelIdMap as any);
+});
+
+highlighter.events.select.onClear.add(async () => {
+    await renderPropertiesTable({} as any);
+});
+
+if (container) {
+    container.addEventListener('click', () => {
+        const selection = (highlighter as any).selection?.select as Record<string, Set<number>> | undefined;
+        renderPropertiesTable(selection || ({} as any));
+    });
+}
+
+// Helper for deep property resolution
+function resolveRemote(ref: any, model: any) {
+    if (!ref || !model || !model.properties) return ref;
+    if (typeof ref === 'number') return model.properties[ref];
+    if (ref && typeof ref.value === 'number') return model.properties[ref.value];
+    return ref;
+}
+
+async function renderPropertiesTable(modelIdMap: Record<string, Set<number>>) {
+    console.log('[DEBUG] renderPropertiesTable called with:', modelIdMap);
+    const content = document.getElementById('properties-content');
+    if (!content) return;
+    content.innerHTML = '';
+
+    const entries = modelIdMap instanceof Map
+        ? Array.from(modelIdMap.entries())
+        : Object.entries(modelIdMap);
+
+    if (entries.length === 0) {
+        content.innerHTML = '<div style="padding: 15px; color: #666; text-align: center;">Selecciona un elemento para ver sus propiedades</div>';
+        return;
+    }
+
+    const normalized: Record<string, number[]> = {};
+    for (const [modelID, idsSet] of entries) {
+        const ids = idsSet instanceof Set ? Array.from(idsSet) : (idsSet as any[]);
+        if (!ids || ids.length === 0) continue;
+        normalized[modelID] = ids as number[];
+    }
+
+    const modelIds = Object.keys(normalized);
+    if (modelIds.length === 0) {
+        content.innerHTML = '<div style="padding: 15px; color: #666; text-align: center;">Selecciona un elemento para ver sus propiedades</div>';
+        return;
+    }
+
+    const dataByModel = await fragments.getData(normalized as any, {
+        attributesDefault: true,
+        relations: {
+            ContainedInStructure: { attributes: true, relations: true },
+            IsDefinedBy: { attributes: true, relations: true }
+        }
+    } as any);
+
+    // --- SECOND PASS: Fetch Relations Entities (specifically IfcRelContainedInSpatialStructure) ---
+    // Identify which relation IDs we need to fetch
+    const relationsToFetch: Record<string, number[]> = {};
+    
+    for (const modelID of modelIds) {
+        const items = (dataByModel as any)[modelID] || [];
+        const modelRelations = new Set<number>();
+        
+        items.forEach((item: any) => {
+             const raw = item as any;
+             const attrs = raw.data || raw.attributes || raw;
+             const relations = raw.relations || raw.Relations || attrs.relations || attrs.Relations || {};
+             const spatial = relations.ContainedInStructure || relations.containedInStructure || relations.containedInSpatialStructure || relations.ContainedInSpatialStructure;
+             if (Array.isArray(spatial)) {
+                 spatial.forEach((id: number) => modelRelations.add(id));
+             }
+        });
+        
+        if (modelRelations.size > 0) {
+            relationsToFetch[modelID] = Array.from(modelRelations);
+        }
+    }
+
+    let relationsData: any = {};
+    if (Object.keys(relationsToFetch).length > 0) {
+         try {
+             relationsData = await fragments.getData(relationsToFetch as any, {
+                 attributesDefault: true,
+                 relationsDefault: { attributes: true } // We just need the RelatingStructure ID
+             } as any);
+         } catch (e) {
+             console.error('Failed to fetch relations data:', e);
+         }
+    }
+
+    // --- THIRD PASS: Fetch Structure Entities (The Levels themselves) ---
+    const structuresToFetch: Record<string, number[]> = {};
+    const relIdToStructureId: Record<string, number> = {}; // Key: "modelID-relID" -> structureID
+
+    for (const modelID of Object.keys(relationsData)) {
+        const rels = relationsData[modelID];
+        const modelStructures = new Set<number>();
+
+        rels.forEach((rel: any) => {
+             const raw = rel as any;
+             const attrs = raw.data || raw.attributes || raw;
+             // IfcRelContainedInSpatialStructure has RelatingStructure
+             const structRef = attrs.RelatingStructure || attrs.relatingStructure;
+             const structID = (structRef && typeof structRef === 'object' && 'value' in structRef) ? structRef.value : structRef;
+             
+             if (typeof structID === 'number') {
+                 modelStructures.add(structID);
+                 // Map relation to structure for lookup later
+                 // Note: relationsData returns array of objects, we need to match by Express ID if possible
+                 // But fragments.getData returns objects which usually contain expressID. 
+                 // If not, we rely on the order or check if expressID is in attrs.
+                 const expressID = raw.expressID || attrs.expressID;
+                 if (expressID) {
+                     relIdToStructureId[`${modelID}-${expressID}`] = structID;
+                 }
+             }
+        });
+
+        if (modelStructures.size > 0) {
+            structuresToFetch[modelID] = Array.from(modelStructures);
+        }
+    }
+
+    let structuresData: any = {};
+    if (Object.keys(structuresToFetch).length > 0) {
+        try {
+            structuresData = await fragments.getData(structuresToFetch as any, {
+                attributesDefault: true
+            } as any);
+        } catch (e) {
+            console.error('Failed to fetch structure data:', e);
+        }
+    }
+    
+    // Helper to find structure name
+    const getStructureName = (modelID: string, structureID: number) => {
+        const structs = structuresData[modelID];
+        if (!structs) return null;
+        const s = structs.find((x: any) => (x.expressID || x.attributes?.expressID || x.data?.expressID) === structureID);
+        if (!s) return null;
+        const attrs = s.data || s.attributes || s;
+        const n = attrs.Name || attrs.name;
+        return (n?.value ?? n);
+    };
+
+    for (const modelID of modelIds) {
+        const localIds = normalized[modelID] || [];
+        const items = (dataByModel as any)[modelID] || [];
+        
+        // Try to get the full model to access raw properties
+        const model = loadedModels.get(modelID) || fragments.list.get(modelID);
+
+        items.forEach((item: any, index: number) => {
+            const localId = localIds[index];
+            const raw = item as any;
+            const attrs = raw.data || raw.attributes || raw;
+            let levelName: string | null = null;
+
+            // --- Base Info (Name, ID, Category, GUID) ---
+            const nameAttr = attrs.Name || attrs.name || attrs.IFCNAME || attrs.IfcName;
+            const nameValue = typeof nameAttr === 'object' && nameAttr !== null && 'value' in nameAttr
+                ? (nameAttr as any).value
+                : nameAttr || `Elemento ${localId ?? ''}`;
+
+            const category = raw.category || attrs.Category || attrs.category;
+            const guidAttr = raw.guid || attrs.GlobalId || attrs.globalId || attrs.GUID || attrs.guid;
+            const guidValue = typeof guidAttr === 'object' && guidAttr !== null && 'value' in guidAttr
+                ? (guidAttr as any).value
+                : guidAttr || '';
+
+            const container = document.createElement('div');
+            container.className = 'prop-item';
+
+            let html = `
+                <div class="prop-header-info">
+                    <strong>${nameValue}</strong>
+                    <div style="font-size: 11px; color: #666;">
+                        ID: ${localId ?? '-'} <span style="margin: 0 5px;">|</span> Modelo: ${modelID}
+                        ${category ? `<span style="margin: 0 5px;">|</span> Tipo: ${category}</span>` : ''}
+                        ${guidValue ? `<br/>GUID: ${guidValue}` : ''}
+                    </div>
+                </div>
+            `;
+
+            html += `<div class="prop-set-title">Atributos Base</div>`;
+            html += `<table class="prop-table"><tbody>`;
+
+            // Filter out internal/relation keys from base attributes
+            const ignoredKeys = new Set(['localId', 'category', 'guid', 'IsDefinedBy', 'isDefinedBy', 'relations', 'Relations', 'expressID', 'type']);
+            
+            for (const [key, attr] of Object.entries(attrs)) {
+                if (!key || ignoredKeys.has(key)) continue;
+
+                const val = (attr as any)?.value ?? attr;
+                if (val === null || val === undefined) continue;
+                if (Array.isArray(val)) continue;
+                if (typeof val === 'object') continue;
+
+                html += `<tr><th>${key}</th><td>${val}</td></tr>`;
+            }
+
+            if (levelName) {
+                html += `<tr><th>Nivel</th><td>${levelName}</td></tr>`;
+            }
+
+            html += `</tbody></table>`;
+
+            // --- Relations (Property Sets & Cantidades) ---
+            
+            let foundDeepProps = false;
+            
+            // GENERIC DUMP of all other properties
+            // This ensures we show everything in the JSON even if it's not a standard Pset
+            const standardKeys = new Set([
+                'expressID', 'type', 'GlobalId', 'Name', 'Description', 'Tag', 'ObjectType',
+                'ContainedInStructure', 'containedInStructure', 
+                'IsDefinedBy', 'isDefinedBy', 
+                'relations', 'Relations', 
+                'localId', 'category', 'guid'
+            ]);
+
+            // First, check standard relations (Psets)
+            if (model && model.properties && model.properties[localId]) {
+                const entity = model.properties[localId];
+                
+                // Show any top-level properties that aren't standard keys
+                let hasCustomTopLevel = false;
+                let customTopLevelHtml = `<div class="prop-set-title">Propiedades del Elemento (Completo)</div><table class="prop-table"><tbody>`;
+                
+                // Helper to format values recursively
+                const formatValue = (v: any, depth: number): string => {
+                    if (depth > 2) return '...'; // Avoid infinite recursion
+                    if (v === null || v === undefined) return '';
+
+                    let valueToProcess = v;
+                    
+                    // Handle Value Wrapper { type: 1, value: "foo" }
+                    if (typeof v === 'object' && v !== null && v.value !== undefined) {
+                        valueToProcess = v.value;
+                    }
+
+                    // Handle Array
+                    if (Array.isArray(valueToProcess)) {
+                        if (valueToProcess.length === 0) return '[]';
+                        return `[${valueToProcess.map((item: any) => formatValue(item, depth + 1)).join(', ')}]`;
+                    }
+
+                    // Handle Reference (Number) - Try to resolve it
+                    if (typeof valueToProcess === 'number' && Number.isInteger(valueToProcess)) {
+                        // Check if it's a reference to another entity in the model
+                        if (model.properties[valueToProcess]) {
+                            const ref = model.properties[valueToProcess];
+                            
+                            // Try to get a meaningful name
+                            const name = (ref.Name && (ref.Name.value || ref.Name)) || 
+                                         (ref.NominalValue && (ref.NominalValue.value || ref.NominalValue)) ||
+                                         (ref.Description && (ref.Description.value || ref.Description));
+                                         
+                            // If we are at depth 0 or 1, maybe show some details of the referenced object
+                            let details = '';
+                            if (depth < 1) {
+                                const subProps = [];
+                                for (const [sk, sv] of Object.entries(ref)) {
+                                    if (['expressID', 'type', 'GlobalId', 'OwnerHistory', 'Owner'].includes(sk)) continue;
+                                    if (typeof sv === 'object' || Array.isArray(sv)) continue; // Only simple values in summary
+                                    subProps.push(`${sk}: ${sv}`);
+                                }
+                                if (subProps.length > 0) details = ` <span style="color:#666; font-size:0.85em;">{${subProps.join(', ')}}</span>`;
+                            }
+                            
+                            return `<span title="ExpressID: ${valueToProcess}" style="color: #0056b3; cursor: help;">${name ? name : ref.type || 'Entity'} <i>#${valueToProcess}</i>${details}</span>`;
+                        }
+                        return String(valueToProcess);
+                    }
+
+                    if (typeof valueToProcess === 'object') {
+                        try { return JSON.stringify(valueToProcess); } catch { return '[Object]'; }
+                    }
+
+                    return String(valueToProcess);
+                };
+
+                const renderSection = (sectionName: string, obj: any, depth: number = 0): string => {
+                    if (!obj || typeof obj !== 'object') return '';
+                    if (depth > 2) return '';
+                    let out = `<div class="prop-set-title">${sectionName}</div><table class="prop-table"><tbody>`;
+                    for (const [sk, sv0] of Object.entries(obj)) {
+                        let sv: any = (sv0 as any)?.value ?? sv0;
+                        if (sv === null || sv === undefined) continue;
+                        if (Array.isArray(sv)) {
+                            if (sv.length === 0) continue;
+                            const first = sv[0];
+                            if (first && typeof first === 'object' && !('value' in first)) {
+                                let idx = 0;
+                                for (const item of sv) {
+                                    out += renderSection(`${sk}[${idx}]`, item, depth + 1);
+                                    idx++;
+                                }
+                            } else {
+                                const displayVal = formatValue(sv, depth);
+                                out += `<tr><th>${sk}</th><td>${displayVal}</td></tr>`;
+                            }
+                            continue;
+                        }
+                        if (typeof sv === 'object') {
+                            out += renderSection(sk, sv, depth + 1);
+                            continue;
+                        }
+                        const displayVal = formatValue(sv, depth);
+                        out += `<tr><th>${sk}</th><td>${displayVal}</td></tr>`;
+                    }
+                    out += `</tbody></table>`;
+                    return out;
+                };
+                
+                // --- Robust recursive rendering for ANY object/JSON structure ---
+                // This replaces the specific 'psets' check to handle 'pstes', 'properties', 'data', etc.
+                
+                let sectionsHtml = '';
+
+                for (const [key, val] of Object.entries(entity)) {
+                    if (standardKeys.has(key)) continue;
+                    
+                    // Skip nulls
+                    if (val === null || val === undefined) continue;
+
+                    let processedObject: any = null;
+                    let isComplex = false;
+
+                    // 1. Try to parse if it's a string
+                     if (typeof val === 'string') {
+                        const cleaned = val.trim();
+                        // Heuristic: starts with { or [ looks like JSON
+                        if (cleaned.startsWith('{') || cleaned.startsWith('[')) {
+                            console.log(`[DEBUG] Attempting to parse complex string for key '${key}'`, cleaned.substring(0, 50) + '...');
+                            try {
+                                processedObject = JSON.parse(cleaned);
+                                isComplex = (typeof processedObject === 'object' && processedObject !== null);
+                                console.log(`[DEBUG] Parsing success for '${key}'`, isComplex);
+                            } catch (e) {
+                                console.warn(`[DEBUG] JSON.parse failed for '${key}':`, e);
+                                // Fallback: relaxed parsing
+                                try {
+                                    if (cleaned.startsWith('{')) {
+                                        processedObject = new Function("return " + cleaned)();
+                                        isComplex = (typeof processedObject === 'object' && processedObject !== null);
+                                    }
+                                } catch (e2) {}
+                            }
+                        }
+                    } 
+                    // 2. Already an object
+                    else if (typeof val === 'object') {
+                        // Exclude simple value wrappers { type: 1, value: "foo" } unless they contain nested objects
+                        const isWrapper = (val as any).value !== undefined && Object.keys(val).length <= 2;
+                        
+                        if (!isWrapper && !Array.isArray(val)) {
+                            processedObject = val;
+                            isComplex = true;
+                        } else if (Array.isArray(val)) {
+                            // Check if array contains objects
+                            if (val.length > 0 && typeof val[0] === 'object') {
+                                processedObject = val;
+                                isComplex = true;
+                            }
+                        }
+                    }
+
+                    if (isComplex && processedObject) {
+                        // Render as a separate section
+                        // If it's the 'psets' (or typo 'pstes') style object, keys are Pset names
+                        if (!Array.isArray(processedObject)) {
+                            // Check if the values are themselves objects (Pset style)
+                            // e.g. { "Pset_WallCommon": { "LoadBearing": true }, "Pset_X": ... }
+                            let isPsetCollection = true;
+                            for (const subVal of Object.values(processedObject)) {
+                                if (typeof subVal !== 'object' || subVal === null) {
+                                    isPsetCollection = false;
+                                    break;
+                                }
+                            }
+
+                            if (isPsetCollection) {
+                                // Render each key as a separate table
+                                for (const [psetName, psetProps] of Object.entries(processedObject)) {
+                                    sectionsHtml += renderSection(psetName, psetProps, 0);
+                                }
+                            } else {
+                                // Just a single complex object
+                                sectionsHtml += renderSection(key, processedObject, 0);
+                            }
+                        } else {
+                             // Array of objects
+                             sectionsHtml += renderSection(key, processedObject, 0);
+                        }
+                        continue; 
+                    }
+                    
+                    // Standard Value Rendering
+                    const displayVal = formatValue(val, 0);
+                    customTopLevelHtml += `<tr><th>${key}</th><td>${displayVal}</td></tr>`;
+                    hasCustomTopLevel = true;
+                }
+                customTopLevelHtml += `</tbody></table>`;
+                
+                if (hasCustomTopLevel) {
+                    html += customTopLevelHtml;
+                }
+                html += sectionsHtml;
+
+                // --- INVERSE ATTRIBUTE RECONSTRUCTION (Lazy Build) ---
+                if (!model._inverseMap) {
+                    console.log('Building inverse attribute map for property discovery...');
+                    model._inverseMap = new Map();
+                    const psetMap = model._inverseMap;
+                    
+                    for (const id in model.properties) {
+                        const prop = model.properties[id];
+                        if (!prop) continue;
+                        
+                        // Check for IfcRelDefinesByProperties
+                        // Note: Type can be numeric or string depending on parser
+                        const type = String(prop.type || '').toUpperCase();
+                        
+                        if (type === 'IFCRELDEFINESBYPROPERTIES') {
+                            const related = prop.RelatedObjects || prop.relatedObjects;
+                            const relating = prop.RelatingPropertyDefinition || prop.relatingPropertyDefinition;
+                            
+                            if (related && relating) {
+                                const relatedIds = Array.isArray(related) ? related : [related];
+                                const psetId = (relating.value || relating); // Handle wrapper
+                                
+                                for (const relId of relatedIds) {
+                                    const rId = (relId.value || relId);
+                                    if (!psetMap.has(rId)) psetMap.set(rId, []);
+                                    psetMap.get(rId).push(psetId);
+                                }
+                            }
+                        }
+                    }
+                    console.log(`Inverse map built. Found relations for ${psetMap.size} items.`);
+                }
+
+                // Inject detected Psets into IsDefinedBy if missing
+                let isDefinedBy = entity.IsDefinedBy || entity.isDefinedBy || [];
+                if (!Array.isArray(isDefinedBy)) isDefinedBy = [isDefinedBy];
+                
+                // Add inverse relations
+                if (model._inverseMap && model._inverseMap.has(Number(localId))) {
+                    const extraPsets = model._inverseMap.get(Number(localId));
+                    // Construct synthetic objects to mimic direct reference
+                    // We only have the Pset ID, but that's what resolveRemote needs
+                    extraPsets.forEach((pid: any) => {
+                         // We create a fake "Rel" that points to the Pset
+                         // Because the loop below expects a Rel, then gets RelatingPropertyDefinition
+                         // But wait, the loop below iterates 'isDefinedBy' which are RELATIONS (IfcRelDefinesByProperties)
+                         // NOT Psets directly.
+                         // So we need to find the REL ID that connects them? 
+                         // No, we can just treat the Pset as if it was directly linked if we adjust the loop.
+                         // BUT, to avoid breaking existing logic, let's look at the loop.
+                         
+                         // The loop expects: rel -> RelatingPropertyDefinition -> Pset
+                         // If we just add the Pset ID to a separate list, we can process it.
+                    });
+                }
+                
+                // Better approach: Separate loop for Inverse Psets
+                const inversePsets = model._inverseMap ? (model._inverseMap.get(Number(localId)) || []) : [];
+                
+                // --- Level / Spatial Structure ---
+                const containedIn = entity.ContainedInStructure || entity.containedInStructure;
+                if (containedIn && Array.isArray(containedIn)) {
+                    for (const relRef of containedIn) {
+                        const rel = resolveRemote(relRef, model);
+                        if (!rel) continue;
+
+                        const structureRef = rel.RelatingStructure || rel.relatingStructure;
+                        if (!structureRef) continue;
+
+                        const structure = resolveRemote(structureRef, model);
+                        if (!structure) continue;
+
+                        const levelNameObj = structure.Name || structure.name;
+                        const candidate = (levelNameObj?.value ?? levelNameObj) || 'Sin Nombre';
+                        if (candidate) {
+                            levelName = String(candidate);
+                            break;
+                        }
+                    }
+                }
+
+                const directIsDefinedBy = entity.IsDefinedBy || entity.isDefinedBy;
+                
+                if (directIsDefinedBy && Array.isArray(directIsDefinedBy)) {
+                    for (const relRef of directIsDefinedBy) {
+                        const rel = resolveRemote(relRef, model);
+                        if (!rel) continue;
+
+                        // Check if it is IfcRelDefinesByProperties
+                        const psetRef = rel.RelatingPropertyDefinition || rel.relatingPropertyDefinition;
+                        if (!psetRef) continue;
+
+                        const pset = resolveRemote(psetRef, model);
+                        if (!pset) continue;
+                        
+                        renderPset(pset);
+                    }
+                }
+                
+                // Render Inverse Psets
+                if (inversePsets.length > 0) {
+                     for (const psetId of inversePsets) {
+                         const pset = resolveRemote(psetId, model);
+                         if (pset) renderPset(pset);
+                     }
+                }
+
+                function renderPset(pset: any) {
+                        const psetNameObj = pset.Name || pset.name;
+                        const psetName = (psetNameObj?.value ?? psetNameObj) || 'Sin Nombre';
+
+                        // Case 1: IfcPropertySet -> HasProperties
+                        const props = pset.HasProperties || pset.hasProperties;
+                        if (props && Array.isArray(props)) {
+                            foundDeepProps = true;
+                            html += `<div class="prop-set-title">${psetName}</div><table class="prop-table"><tbody>`;
+                            for (const propRef of props) {
+                                const prop = resolveRemote(propRef, model);
+                                if (!prop) continue;
+
+                                const propNameObj = prop.Name || prop.name;
+                                const propName = propNameObj?.value ?? propNameObj;
+                                
+                                const propValObj = prop.NominalValue || prop.nominalValue;
+                                const propVal = propValObj?.value ?? propValObj;
+
+                                if (propName && propVal !== undefined) {
+                                    const displayVal = formatValue(propVal, 0);
+                                    html += `<tr><th>${propName}</th><td>${displayVal}</td></tr>`;
+                                }
+                            }
+                            html += `</tbody></table>`;
+                        }
+
+                        // Case 2: IfcElementQuantity -> Quantities
+                        const quantities = pset.Quantities || pset.quantities;
+                        if (quantities && Array.isArray(quantities)) {
+                            foundDeepProps = true;
+                            html += `<div class="prop-set-title">${psetName} (Cantidades)</div><table class="prop-table"><tbody>`;
+                            for (const qRef of quantities) {
+                                const q = resolveRemote(qRef, model);
+                                if (!q) continue;
+
+                                const qNameObj = q.Name || q.name;
+                                const qName = qNameObj?.value ?? qNameObj;
+                                
+                                const qVal = (q.LengthValue?.value ?? q.LengthValue) ?? 
+                                             (q.AreaValue?.value ?? q.AreaValue) ?? 
+                                             (q.VolumeValue?.value ?? q.VolumeValue) ?? 
+                                             (q.CountValue?.value ?? q.CountValue) ?? 
+                                             (q.WeightValue?.value ?? q.WeightValue) ?? 
+                                             (q.TimeValue?.value ?? q.TimeValue) ?? 
+                                             (q.nominalValue?.value ?? q.nominalValue);
+                                
+                                if (qName && qVal !== undefined) {
+                                    const displayVal = formatValue(qVal, 0);
+                                    html += `<tr><th>${qName}</th><td>${displayVal}</td></tr>`;
+                                }
+                            }
+                            html += `</tbody></table>`;
+                        }
+                }
+            }
+
+            // --- Robust Level Lookup (Independent of Deep Props) ---
+            if (!levelName) {
+                const relations = raw.relations || raw.Relations || attrs.relations || attrs.Relations || {};
+                const spatial = relations.ContainedInStructure || relations.containedInStructure || relations.containedInSpatialStructure || relations.ContainedInSpatialStructure;
+                
+                if (Array.isArray(spatial) && spatial.length > 0) {
+                     // spatial contains IDs of IFCRELCONTAINEDINSPATIALSTRUCTURE
+                     for (const relID of spatial) {
+                         // New Lookup Logic using pre-fetched data
+                         const structID = relIdToStructureId[`${modelID}-${relID}`];
+                         if (structID) {
+                             const name = getStructureName(modelID, structID);
+                             if (name) {
+                                 levelName = String(name);
+                                 break;
+                             }
+                         }
+                         
+                         // Fallback to old logic (only works if model.properties is loaded)
+                         if (!levelName) {
+                             const rel = resolveRemote(relID, model);
+                             if (rel && typeof rel === 'object') {
+                                 const structureRef = rel.RelatingStructure || rel.relatingStructure;
+                                 const structure = resolveRemote(structureRef, model);
+                                 if (structure && typeof structure === 'object') {
+                                     const levelNameObj = structure.Name || structure.name;
+                                     const candidate = (levelNameObj?.value ?? levelNameObj);
+                                     if (candidate) {
+                                         levelName = String(candidate);
+                                         break; // Found it
+                                     }
+                                 }
+                             }
+                         }
+                     }
+                }
+            }
+
+            if (levelName && !html.includes("<th>Nivel</th>")) {
+                html = html.replace(
+                    "</tbody></table>",
+                    `<tr><th>Nivel</th><td>${levelName}</td></tr></tbody></table>`
+                );
+            }
+
+            const rels = raw.relations || raw.Relations || attrs.relations || attrs.Relations || {};
+            const relKeys = Object.keys(rels);
+            const spatial = rels.ContainedInStructure || rels.containedInStructure || rels.containedInSpatialStructure || rels.ContainedInSpatialStructure;
+            
+            html += `
+                <details style="margin-top: 15px; border-top: 1px solid #ddd; padding-top: 10px;">
+                    <summary style="font-size: 11px; color: #999; cursor: pointer; user-select: none;">
+                        🛠 Diagnóstico de Datos
+                    </summary>
+                    <div style="font-size: 10px; color: #444; background: #f5f5f5; padding: 10px; margin-top: 5px; border-radius: 4px; overflow-x: auto;">
+                        <strong>ID Elemento:</strong> ${localId} (ExpressID)<br/>
+                        <strong>Relaciones Disponibles:</strong> ${relKeys.length > 0 ? relKeys.join(', ') : 'NINGUNA'}<br/>
+                        <strong>Relación Espacial (Nivel):</strong> ${spatial ? '✅ EXISTE' : '❌ FALTA'}<br/>
+                        ${spatial ? `Valores: ${JSON.stringify(spatial)}` : ''}
+                    </div>
+                </details>
+            `;
+
+            container.innerHTML = html;
+            content.appendChild(container);
+        });
+    }
+}
+
+function initPropertiesPanel() {
+    const panel = document.getElementById('properties-panel');
+    const toggleBtn = document.getElementById('properties-toggle');
+    const resizer = document.getElementById('properties-resizer');
+    
+    if (toggleBtn && panel) {
+        toggleBtn.addEventListener('click', () => {
+            panel.classList.toggle('closed');
+        });
+    }
+
+    if (resizer && panel) {
+        let isResizing = false;
+        
+        resizer.addEventListener('mousedown', (e) => {
+            isResizing = true;
+            resizer.classList.add('resizing');
+            document.body.style.cursor = 'ew-resize';
+            e.preventDefault();
+        });
+        
+        document.addEventListener('mousemove', (e) => {
+            if (!isResizing) return;
+            const newWidth = window.innerWidth - e.clientX;
+            if (newWidth > 200 && newWidth < 800) {
+                panel.style.width = `${newWidth}px`;
+            }
+        });
+        
+        document.addEventListener('mouseup', () => {
+            if (isResizing) {
+                isResizing = false;
+                resizer.classList.remove('resizing');
+                document.body.style.cursor = 'default';
+            }
+        });
+    }
+
+    if (panel && window.innerWidth < 768) {
+        panel.classList.add('closed');
+    }
+
+    renderPropertiesTable({} as any);
+}
+
+function initQuantitiesPanel() {
+    const panel = document.getElementById('quantities-panel');
+    const toggleBtn = document.getElementById('quantities-toggle');
+    const resizer = document.getElementById('quantities-resizer');
+    const closeBtn = document.getElementById('btn-q-close');
+    const csvBtn = document.getElementById('btn-q-csv');
+    const contentArea = document.getElementById('quantities-content-area');
+    const tabTuberias = document.getElementById('q-tab-tuberias');
+    const tabUniones = document.getElementById('q-tab-uniones');
+    const tabCortes = document.getElementById('q-tab-cortes');
+
+    if (!panel || !toggleBtn) return;
+    const qPanel = panel;
+
+    // Default configuration and keys
+    const DEFAULT_CANTIDADES_SHEET_ID = '1GSaNTuafarE8l7VFlJNLJcu0GIXaNUS-VDwJ9UB9038';
+    const DEFAULT_CANTIDADES_SHEET_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbz2Lqn_w3JFpcMjW1v7EwG5k7v9gpuQIxh5tdf4S-FXJjA-MZHFrdMeAGMVTQMZ9XQ/exec';
+
+    const CANTIDADES_SHEET_ID = String(currentParams.get('cantidadesSheetId') || DEFAULT_CANTIDADES_SHEET_ID).trim();
+    const CANTIDADES_SHEET_SCRIPT_URL = String(
+        currentParams.get('cantidadesScriptUrl') || currentParams.get('driveScriptUrl') || DEFAULT_CANTIDADES_SHEET_SCRIPT_URL
+    ).trim();
+    const CANTIDADES_PROJECT_KEY = PROJECT_RUNTIME_KEY;
+
+    // Storage Keys
+    const elementStatusesLsKey = `cantidades:${CANTIDADES_PROJECT_KEY}:elementStatuses:v1`;
+    const elementHistoryLsKey = `cantidades:${CANTIDADES_PROJECT_KEY}:elementHistory:v1`;
+    const pipeAdditionsLsKey = `cantidades:${CANTIDADES_PROJECT_KEY}:pipeAdditions:v1`;
+    const unionAdditionsLsKey = `cantidades:${CANTIDADES_PROJECT_KEY}:unionAdditions:v1`;
+    const remoteQueueLsKey = `cantidades:${CANTIDADES_PROJECT_KEY}:remoteQueue:v1`;
+    const extraQueueLsKey = `cantidades:${CANTIDADES_PROJECT_KEY}:extraQueue:v1`;
+
+    // Local Storage Helpers
+    const readStorageJson = <T,>(key: string, defaultValue: T): T => {
+        try {
+            const raw = localStorage.getItem(key);
+            if (raw) return JSON.parse(raw) as T;
+        } catch (e) {
+            console.error(`Error reading key ${key} from localStorage:`, e);
+        }
+        return defaultValue;
+    };
+
+    const writeStorageJson = <T,>(key: string, value: T): void => {
+        try {
+            localStorage.setItem(key, JSON.stringify(value));
+        } catch (e) {
+            console.error(`Error writing key ${key} to localStorage:`, e);
+        }
+    };
+
+    // Types
+    type PurchaseStatus = 'PENDIENTE' | 'PEDIDO' | 'COMPRADO' | 'ALMACEN' | 'INSTALADO';
+    interface HistoryEntry { status: PurchaseStatus; at: string }
+    interface QueuedStatusChange { id: string; status: PurchaseStatus; modelKey: string; at: string }
+    interface QueuedExtraChange { modelKey: string; kind: 'pipeAddition' | 'unionAddition'; groupKey: string; value: number; at: string }
+
+    const STATUS_ORDER: PurchaseStatus[] = ['PENDIENTE', 'PEDIDO', 'COMPRADO', 'ALMACEN', 'INSTALADO'];
+
+    // State
+    let isPanelOpen = false;
+    let activeTab = 'detalle';
+    let searchQuery = '';
+    
+    // Filters state
+    let filterClassification = 'Todos';
+    let filterLevel = 'Todos';
+    let filterStatus = 'Todos';
+    let filterDiameter = 'Todos';
+
+    // Pipe configuration state
+    let pipeCommercialLength = 6;
+    let pipeGroupingMode = 'POR_NIVEL'; // 'POR_NIVEL' | 'TOTAL'
+    let mergeUnionLengthsIntoPipes = false;
+
+    // View colorization toggles
+    let statusColorsEnabled = true;
+
+    // Selection state
+    let selectedElementIds: number[] = [];
+
+    // Expanded states for Cortes groups
+    const expandedCortesGroups: Record<string, boolean> = {};
+
+    // Loaded caches from Local Storage
+    let elementStatuses = readStorageJson<Record<string, PurchaseStatus>>(elementStatusesLsKey, {}) || {};
+    let elementHistory = readStorageJson<Record<string, HistoryEntry[]>>(elementHistoryLsKey, {}) || {};
+    let pipeAdditionsByGroup = readStorageJson<Record<string, number>>(pipeAdditionsLsKey, {}) || {};
+    let unionAdditionsByGroup = readStorageJson<Record<string, number>>(unionAdditionsLsKey, {}) || {};
+    let remoteQueue = readStorageJson<QueuedStatusChange[]>(remoteQueueLsKey, []) || [];
+    let extraQueue = readStorageJson<QueuedExtraChange[]>(extraQueueLsKey, []) || [];
+
+    let syncState: { status: 'offline' | 'online' | 'syncing'; label: string } = { status: 'offline', label: 'Sin sincronizar' };
+    let firstLoadDone = false;
+
+    // Helper functions for parsing
+    const getVal = (obj: any, ...keys: string[]): string | null => {
+        if (!obj || typeof obj !== 'object') return null;
+
+        // 1. Try top-level keys first
+        for (const k of keys) {
+            const raw = obj[k];
+            if (raw !== undefined && raw !== null) {
+                const v = (raw && typeof raw === 'object' && 'value' in raw) ? raw.value : raw;
+                if (v !== null && v !== undefined && String(v).trim() !== '') return String(v).trim();
+            }
+        }
+
+        // 2. Recursive deep search (BFS)
+        const queue = [obj];
+        const seen = new Set<any>();
+        let steps = 0;
+        const maxSteps = 1000;
+
+        while (queue.length > 0 && steps < maxSteps) {
+            const current = queue.shift();
+            if (!current || typeof current !== 'object') continue;
+            if (seen.has(current)) continue;
+            seen.add(current);
+            steps++;
+
+            for (const k of keys) {
+                const raw = current[k];
+                if (raw !== undefined && raw !== null) {
+                    const v = (raw && typeof raw === 'object' && 'value' in raw) ? raw.value : raw;
+                    if (v !== null && v !== undefined && String(v).trim() !== '') return String(v).trim();
+                }
+            }
+
+            for (const key in current) {
+                if (key === 'ObjectPlacement' || key === 'Representation' || key === 'OwnerHistory') continue;
+                const val = current[key];
+                if (val && typeof val === 'object') {
+                    queue.push(val);
+                }
+            }
+        }
+
+        return null;
+    };
+
+    const parseNum = (value: unknown): number => {
+        if (value === undefined || value === null) return 0;
+        if (typeof value === 'number') return Number.isFinite(value) ? value : 0;
+        const s = String(value).trim();
+        if (!s || s === '-') return 0;
+        const cleaned = s.replace(/\s/g, '').replace(',', '.').replace(/[^\d.\-]/g, '');
+        const n = parseFloat(cleaned);
+        return Number.isFinite(n) ? n : 0;
+    };
+
+    const stripModelExtension = (name: string | null | undefined) => String(name ?? '').replace(/\.(frag|ifc)$/i, '').trim();
+    const normalizeRemoteModelKey = (value: string | null | undefined) => {
+        const base = stripModelExtension(value);
+        const normalized = String(base || '')
+            .normalize('NFD')
+            .replace(/[\u0300-\u036f]/g, '')
+            .replace(/[^A-Za-z0-9]+/g, '_')
+            .replace(/_+/g, '_')
+            .replace(/^_+|_+$/g, '');
+        return normalized ? normalized.slice(0, 70) : 'local';
+    };
+
+    function normalizePurchaseStatus(s: unknown): PurchaseStatus | null {
+        if (!s) return null;
+        const normalized = String(s).trim().toUpperCase();
+        if (normalized === 'EN_BODEGA' || normalized === 'EN BODEGA') return 'ALMACEN';
+        if (STATUS_ORDER.includes(normalized as PurchaseStatus)) return normalized as PurchaseStatus;
+        return null;
+    }
+
+    function normalizeSharedAdditionMap(raw: unknown): Record<string, number> {
+        const next: Record<string, number> = {};
+        if (!raw || typeof raw !== 'object') return next;
+        for (const [k, v] of Object.entries(raw as Record<string, unknown>)) {
+            const val = parseInt(String(v), 10);
+            if (Number.isFinite(val) && val > 0) next[k] = val;
+        }
+        return next;
+    }
+
+    // Toggle button handler
+    toggleBtn.addEventListener('click', () => {
+        const currentlyClosed = qPanel.classList.contains('closed');
+        isPanelOpen = currentlyClosed;
+        
+        if (currentlyClosed) {
+            const sPanel = document.getElementById('status-panel');
+            const sToggle = document.getElementById('status-toggle');
+            if (sPanel && !sPanel.classList.contains('closed')) {
+                sPanel.classList.add('closed');
+                if (sToggle) sToggle.classList.remove('active');
+            }
+
+            qPanel.classList.remove('closed');
+            toggleBtn.classList.add('active');
+            renderQuantitiesContent();
+            if (!firstLoadDone) {
+                firstLoadDone = true;
+                syncWithRemote();
+            }
+        } else {
+            qPanel.classList.add('closed');
+            toggleBtn.classList.remove('active');
+        }
+    });
+
+    if (closeBtn) {
+        closeBtn.addEventListener('click', () => {
+            isPanelOpen = false;
+            qPanel.classList.add('closed');
+            toggleBtn.classList.remove('active');
+            // Clear status highlighting when closed
+            const currentColorsEnabled = statusColorsEnabled;
+            statusColorsEnabled = false;
+            applyStatusColorizationToViewer(extractAllElements());
+            statusColorsEnabled = currentColorsEnabled;
+        });
+    }
+
+    // Resizer logic
+    if (resizer) {
+        let isResizing = false;
+        resizer.addEventListener('mousedown', (e) => {
+            isResizing = true;
+            resizer.classList.add('resizing');
+            document.body.style.cursor = 'ns-resize';
+            e.preventDefault();
+        });
+        document.addEventListener('mousemove', (e) => {
+            if (!isResizing) return;
+            const newHeight = window.innerHeight - e.clientY;
+            if (newHeight > 100 && newHeight < window.innerHeight - 100) {
+                qPanel.style.height = `${newHeight}px`;
+            }
+        });
+        document.addEventListener('mouseup', () => {
+            if (isResizing) {
+                isResizing = false;
+                resizer.classList.remove('resizing');
+                document.body.style.cursor = 'default';
+            }
+        });
+    }
+
+    // Tab buttons
+    const tabBtns = qPanel.querySelectorAll('.q-tab-btn');
+    tabBtns.forEach(btn => {
+        btn.addEventListener('click', () => {
+            tabBtns.forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            activeTab = btn.getAttribute('data-tab') || 'detalle';
+            renderQuantitiesContent();
+        });
+    });
+
+    // Extract elements from model
+    function extractAllElements() {
+        const allElements: any[] = [];
+        for (const [modelUUID, model] of loadedModels.entries()) {
+            const modelAny = model as any;
+            if (!modelAny.properties) continue;
+
+            for (const idStr of Object.keys(modelAny.properties)) {
+                const expressID = parseInt(idStr, 10);
+                if (isNaN(expressID)) continue;
+
+                const attrs = modelAny.properties[idStr];
+                if (!attrs || typeof attrs !== 'object') continue;
+
+                const category = getVal(attrs, 'type', 'ifcType', 'Category', 'ObjectType', 'CLASIFICACIÓN', 'Clasificación', 'CLASIFICACION', 'clasificacion', 'CATEGORÍA', 'CATEGORIA', 'Categoría', 'categoria', 'TIPO', 'Tipo', 'tipo', 'DETALLE', 'Detalle', 'detalle') || 'Elemento';
+                const name = getVal(attrs, 'NOMBRE INTEGRADO', 'Nombre Integrado', 'nombre integrado', 'Name', 'name') || `${category} - ${expressID}`;
+                const classification = getVal(attrs, 'CLASIFICACIÓN', 'Clasificación', 'CLASIFICACION', 'clasificacion') || 'SIN CLASIFICAR';
+                const level = getVal(attrs, 'NIVEL INTEGRADO', 'Nivel Integrado', 'nivel integrado', 'Nivel', 'nivel') || 'SIN NIVEL';
+                const material = getVal(attrs, 'MATERIAL INTEGRADO', 'Material Integrado', 'material integrado') || 'SIN MATERIAL';
+
+                const volume = parseNum(getVal(attrs, 'VOLUMEN INTEGRADO', 'Volumen', 'Volume', 'Volume integrado', 'Volumen integrado'));
+                const area = parseNum(getVal(attrs, 'ÁREA INTEGRADO', 'Area', 'Area integrado', 'Área', 'Área integrado', 'AREA INTEGRADO'));
+                const length = parseNum(getVal(attrs, 'LONGITUD INTEGRADO', 'Longitud', 'Length', 'Longitud integrado', 'Longitud integrado'));
+                const diameter = getVal(attrs, 'Tamaño', 'TAMAÑO', 'TAMANO', 'Diametro', 'diametro', 'Tamao') || '';
+
+                const searchStr = [
+                    category,
+                    name,
+                    classification,
+                    level,
+                    material,
+                    diameter
+                ].join(' ').toLowerCase();
+
+                const isUnion = searchStr.includes('fitting') || searchStr.includes('conduitfitting') || searchStr.includes('cablecarrierfitting') || searchStr.includes('union') || searchStr.includes('codo') || searchStr.includes('tee') || searchStr.includes('reducc') || searchStr.includes('caja') || searchStr.includes('accesorio') || searchStr.includes('adaptador') || searchStr.includes('copla');
+                const isPipe = (searchStr.includes('pipe') || searchStr.includes('conduit') || searchStr.includes('cablecarrier') || searchStr.includes('tuber') || searchStr.includes('tubo') || searchStr.includes('conduit') || searchStr.includes('canalizacion') || searchStr.includes('canalización') || searchStr.includes('coraza') || searchStr.includes('ducto') || searchStr.includes('bandeja')) && !isUnion;
+
+                allElements.push({
+                    modelUUID,
+                    expressID,
+                    id: String(expressID),
+                    name,
+                    category,
+                    classification,
+                    level,
+                    material,
+                    volume,
+                    area,
+                    length,
+                    diameter,
+                    isPipe,
+                    isUnion
+                });
+            }
+        }
+        return allElements;
+    }
+
+    // Synchronization logic
+    let isSyncing = false;
+    async function syncWithRemote() {
+        if (!CANTIDADES_SHEET_SCRIPT_URL || isSyncing) return;
+        isSyncing = true;
+        setSyncState('syncing', 'Sincronizando...');
+        
+        const firstModelName = Array.from(loadedModels.keys())[0] || 'local';
+        
+        try {
+            // 1. Flush local queues first
+            await flushRemoteQueue();
+            await flushExtraQueue();
+
+            // 2. Fetch remote status updates
+            await fetchRemoteStatuses(firstModelName);
+            await fetchRemoteExtras(firstModelName);
+
+            setSyncState('online', 'Sincronizado');
+            renderQuantitiesContent();
+        } catch (err) {
+            console.error("Error during remote sync:", err);
+            setSyncState('offline', 'Error de sincronización');
+        } finally {
+            isSyncing = false;
+        }
+    }
+
+    async function flushRemoteQueue() {
+        if (remoteQueue.length === 0) return;
+        setSyncState('syncing', 'Subiendo cambios...');
+        const batch = remoteQueue.slice(0, 25);
+        
+        try {
+            for (const item of batch) {
+                const url = new URL(CANTIDADES_SHEET_SCRIPT_URL);
+                url.searchParams.set('action', 'status_set');
+                url.searchParams.set('sheetId', CANTIDADES_SHEET_ID);
+                url.searchParams.set('model', item.modelKey);
+                url.searchParams.set('elementId', item.id);
+                url.searchParams.set('status', item.status);
+                url.searchParams.set('at', item.at);
+                await jsonpRequest(url, 30000);
+            }
+            remoteQueue = remoteQueue.slice(batch.length);
+            writeStorageJson(remoteQueueLsKey, remoteQueue);
+        } catch (err) {
+            console.warn("Failed to flush status queue:", err);
+            throw err;
+        }
+    }
+
+    async function flushExtraQueue() {
+        if (extraQueue.length === 0) return;
+        setSyncState('syncing', 'Subiendo adicionales...');
+        const batch = extraQueue.slice(0, 25);
+        
+        try {
+            for (const item of batch) {
+                const url = new URL(CANTIDADES_SHEET_SCRIPT_URL);
+                url.searchParams.set('action', 'extra_set');
+                url.searchParams.set('sheetId', CANTIDADES_SHEET_ID);
+                url.searchParams.set('model', item.modelKey);
+                url.searchParams.set('kind', item.kind);
+                url.searchParams.set('groupKey', item.groupKey);
+                url.searchParams.set('value', String(item.value));
+                url.searchParams.set('at', item.at);
+                await jsonpRequest(url, 30000);
+            }
+            extraQueue = extraQueue.slice(batch.length);
+            writeStorageJson(extraQueueLsKey, extraQueue);
+        } catch (err) {
+            console.warn("Failed to flush extra additions queue:", err);
+            throw err;
+        }
+    }
+
+    async function fetchRemoteStatuses(modelName: string) {
+        const url = new URL(CANTIDADES_SHEET_SCRIPT_URL);
+        url.searchParams.set('action', 'status_get');
+        url.searchParams.set('sheetId', CANTIDADES_SHEET_ID);
+        url.searchParams.set('model', normalizeRemoteModelKey(modelName));
+
+        const data = await jsonpRequestWithRetry<{
+            ok?: boolean;
+            error?: string;
+            statuses?: Record<string, string>;
+            history?: Record<string, Array<{ status: string; at: string }>>;
+        }>(url, { timeoutMs: 30000, retries: 3 });
+
+        if (data && data.ok !== false) {
+            if (data.statuses && typeof data.statuses === 'object') {
+                for (const [id, st] of Object.entries(data.statuses)) {
+                    const statusVal = normalizePurchaseStatus(st);
+                    if (statusVal) {
+                        elementStatuses[id] = statusVal;
+                    }
+                }
+                writeStorageJson(elementStatusesLsKey, elementStatuses);
+            }
+            if (data.history && typeof data.history === 'object') {
+                for (const [id, entries] of Object.entries(data.history)) {
+                    if (Array.isArray(entries)) {
+                        elementHistory[id] = entries.map(e => ({
+                            status: normalizePurchaseStatus(e.status) || 'PENDIENTE',
+                            at: String(e.at || '')
+                        })).filter(h => h.at);
+                    }
+                }
+                writeStorageJson(elementHistoryLsKey, elementHistory);
+            }
+        }
+    }
+
+    async function fetchRemoteExtras(modelName: string) {
+        const url = new URL(CANTIDADES_SHEET_SCRIPT_URL);
+        url.searchParams.set('action', 'extras_get');
+        url.searchParams.set('sheetId', CANTIDADES_SHEET_ID);
+        url.searchParams.set('model', normalizeRemoteModelKey(modelName));
+
+        const data = await jsonpRequestWithRetry<{
+            ok?: boolean;
+            error?: string;
+            pipeAdditionsByGroup?: Record<string, unknown>;
+            unionAdditionsByGroup?: Record<string, unknown>;
+        }>(url, { timeoutMs: 30000, retries: 3 });
+
+        if (data && data.ok !== false) {
+            const remotePipe = normalizeSharedAdditionMap(data.pipeAdditionsByGroup);
+            const remoteUnion = normalizeSharedAdditionMap(data.unionAdditionsByGroup);
+
+            // Apply queued extras overrides
+            const modelKey = normalizeRemoteModelKey(modelName);
+            for (const item of extraQueue) {
+                if (item.modelKey !== modelKey) continue;
+                if (item.kind === 'pipeAddition') remotePipe[item.groupKey] = item.value;
+                if (item.kind === 'unionAddition') remoteUnion[item.groupKey] = item.value;
+            }
+
+            pipeAdditionsByGroup = remotePipe;
+            unionAdditionsByGroup = remoteUnion;
+
+            writeStorageJson(pipeAdditionsLsKey, pipeAdditionsByGroup);
+            writeStorageJson(unionAdditionsLsKey, unionAdditionsByGroup);
+        }
+    }
+
+    function setSyncState(status: 'offline' | 'online' | 'syncing', label: string) {
+        syncState = { status, label };
+        const badge = qPanel?.querySelector('.q-sync-badge');
+        if (badge) {
+            badge.className = `q-sync-badge ${status}`;
+            badge.textContent = label;
+        }
+    }
+
+    // Status change handlers
+    function handleChangeStatus(id: string, newStatus: PurchaseStatus) {
+        const firstModelName = Array.from(loadedModels.keys())[0] || 'local';
+        const modelKey = normalizeRemoteModelKey(firstModelName);
+        const at = new Date().toISOString();
+
+        elementStatuses[id] = newStatus;
+        writeStorageJson(elementStatusesLsKey, elementStatuses);
+
+        if (!elementHistory[id]) elementHistory[id] = [];
+        elementHistory[id].push({ status: newStatus, at });
+        writeStorageJson(elementHistoryLsKey, elementHistory);
+
+        // Queue status upload
+        remoteQueue = remoteQueue.filter((q) => q.id !== id);
+        remoteQueue.push({ id, status: newStatus, modelKey, at });
+        writeStorageJson(remoteQueueLsKey, remoteQueue);
+
+        // Sync updates
+        syncWithRemote().catch(console.error);
+
+        // Visual refresh
+        renderQuantitiesContent();
+    }
+
+    function handleChangeStatusMany(ids: string[], newStatus: PurchaseStatus) {
+        const firstModelName = Array.from(loadedModels.keys())[0] || 'local';
+        const modelKey = normalizeRemoteModelKey(firstModelName);
+        const at = new Date().toISOString();
+
+        ids.forEach(id => {
+            elementStatuses[id] = newStatus;
+            if (!elementHistory[id]) elementHistory[id] = [];
+            elementHistory[id].push({ status: newStatus, at });
+
+            remoteQueue = remoteQueue.filter((q) => q.id !== id);
+            remoteQueue.push({ id, status: newStatus, modelKey, at });
+        });
+
+        writeStorageJson(elementStatusesLsKey, elementStatuses);
+        writeStorageJson(elementHistoryLsKey, elementHistory);
+        writeStorageJson(remoteQueueLsKey, remoteQueue);
+
+        selectedElementIds = [];
+        syncWithRemote().catch(console.error);
+
+        renderQuantitiesContent();
+    }
+
+    function handlePipeAdditionChange(groupKey: string, value: number) {
+        const firstModelName = Array.from(loadedModels.keys())[0] || 'local';
+        const modelKey = normalizeRemoteModelKey(firstModelName);
+        const at = new Date().toISOString();
+
+        pipeAdditionsByGroup[groupKey] = value;
+        writeStorageJson(pipeAdditionsLsKey, pipeAdditionsByGroup);
+
+        extraQueue = extraQueue.filter((q) => q.kind !== 'pipeAddition' || q.groupKey !== groupKey);
+        extraQueue.push({ modelKey, kind: 'pipeAddition', groupKey, value, at });
+        writeStorageJson(extraQueueLsKey, extraQueue);
+
+        syncWithRemote().catch(console.error);
+        renderQuantitiesContent();
+    }
+
+    function handleUnionAdditionChange(groupKey: string, value: number) {
+        const firstModelName = Array.from(loadedModels.keys())[0] || 'local';
+        const modelKey = normalizeRemoteModelKey(firstModelName);
+        const at = new Date().toISOString();
+
+        unionAdditionsByGroup[groupKey] = value;
+        writeStorageJson(unionAdditionsLsKey, unionAdditionsByGroup);
+
+        extraQueue = extraQueue.filter((q) => q.kind !== 'unionAddition' || q.groupKey !== groupKey);
+        extraQueue.push({ modelKey, kind: 'unionAddition', groupKey, value, at });
+        writeStorageJson(extraQueueLsKey, extraQueue);
+
+        syncWithRemote().catch(console.error);
+        renderQuantitiesContent();
+    }
+
+    // 3D Highlighter integration
+    const prevStatusApplied: Record<string, boolean> = {};
+
+    function applyStatusColorizationToViewer(elements: any[]) {
+        const highlighter = components.get(OBF.Highlighter);
+        if (!highlighter) return;
+
+        const statusStyles = [
+            'status_PENDIENTE',
+            'status_PEDIDO',
+            'status_COMPRADO',
+            'status_ALMACEN',
+            'status_INSTALADO'
+        ];
+
+        if (!statusColorsEnabled) {
+            statusStyles.forEach(style => {
+                try {
+                    highlighter.clear(style);
+                } catch {}
+                prevStatusApplied[style] = false;
+            });
+            return;
+        }
+
+        const styleToElements: Record<string, any[]> = {
+            status_PENDIENTE: [],
+            status_PEDIDO: [],
+            status_COMPRADO: [],
+            status_ALMACEN: [],
+            status_INSTALADO: []
+        };
+
+        elements.forEach(el => {
+            const st = elementStatuses[el.id] || 'PENDIENTE';
+            const style = `status_${st}`;
+            if (styleToElements[style]) {
+                styleToElements[style].push(el);
+            } else {
+                styleToElements.status_PENDIENTE.push(el);
+            }
+        });
+
+        statusStyles.forEach(style => {
+            const els = styleToElements[style] || [];
+            if (els.length > 0) {
+                const map: Record<string, number[]> = {};
+                els.forEach(el => {
+                    if (!map[el.modelUUID]) map[el.modelUUID] = [];
+                    map[el.modelUUID].push(el.expressID);
+                });
+                try {
+                    highlighter.highlightByID(style, map as any, true, false);
+                    prevStatusApplied[style] = true;
+                } catch (err) {
+                    console.error("Error highlighting style:", style, err);
+                }
+            } else {
+                if (prevStatusApplied[style]) {
+                    try {
+                        highlighter.clear(style);
+                    } catch {}
+                    prevStatusApplied[style] = false;
+                }
+            }
+        });
+    }
+
+    function highlightSelectionInViewer(elements: any[]) {
+        const highlighter = components.get(OBF.Highlighter);
+        if (!highlighter) return;
+
+        if (selectedElementIds.length === 0) {
+            highlighter.clear('select');
+            return;
+        }
+
+        const map: Record<string, number[]> = {};
+        elements.forEach(el => {
+            if (selectedElementIds.includes(el.expressID)) {
+                if (!map[el.modelUUID]) map[el.modelUUID] = [];
+                map[el.modelUUID].push(el.expressID);
+            }
+        });
+
+        try {
+            highlighter.highlightByID('select', map as any, true, true);
+        } catch (err) {
+            console.error("Error setting viewer selection:", err);
+        }
+    }
+
+    // Two-way selection listeners
+    const onHighlightCallback = (modelIdMap: any) => {
+        const ids: number[] = [];
+        for (const set of Object.values(modelIdMap)) {
+            if (set instanceof Set) {
+                set.forEach((id) => ids.push(id));
+            } else if (Array.isArray(set)) {
+                (set as any[]).forEach((id) => ids.push(Number(id)));
+            }
+        }
+        selectedElementIds = ids;
+        updateSelectedRowsInUI();
+        updateBulkActionBar();
+    };
+
+    const onClearCallback = () => {
+        selectedElementIds = [];
+        updateSelectedRowsInUI();
+        updateBulkActionBar();
+    };
+
+    highlighter.events.select.onHighlight.add(onHighlightCallback);
+    highlighter.events.select.onClear.add(onClearCallback);
+
+    function updateSelectedRowsInUI() {
+        const rows = contentArea?.querySelectorAll('tbody tr[data-id]');
+        if (rows) {
+            rows.forEach((row) => {
+                const idStr = row.getAttribute('data-id');
+                const id = idStr ? parseInt(idStr, 10) : NaN;
+                if (!isNaN(id) && selectedElementIds.includes(id)) {
+                    row.classList.add('q-table-row-selected');
+                } else {
+                    row.classList.remove('q-table-row-selected');
+                }
+            });
+        }
+    }
+
+    function updateBulkActionBar() {
+        let bulkBar = qPanel.querySelector('.q-bulk-bar') as HTMLElement;
+        if (selectedElementIds.length === 0) {
+            if (bulkBar) bulkBar.remove();
+            return;
+        }
+
+        if (!bulkBar) {
+            bulkBar = document.createElement('div');
+            bulkBar.className = 'q-bulk-bar';
+            qPanel.insertBefore(bulkBar, contentArea);
+        }
+
+        bulkBar.innerHTML = `
+            <div class="q-bulk-bar-left">
+                <span>${selectedElementIds.length} seleccionado(s)</span>
+            </div>
+            <div class="q-bulk-bar-right">
+                <button type="button" class="q-btn-xs" data-status="PENDIENTE">Pendiente</button>
+                <button type="button" class="q-btn-xs" data-status="PEDIDO" style="background: #3b82f6; color: white;">Pedido</button>
+                <button type="button" class="q-btn-xs" data-status="COMPRADO" style="background: #ffa400; color: white;">Comprado</button>
+                <button type="button" class="q-btn-xs" data-status="ALMACEN" style="background: #a78bfa; color: white;">Almacén</button>
+                <button type="button" class="q-btn-xs" data-status="INSTALADO" style="background: #22c55e; color: white;">Instalado</button>
+            </div>
+        `;
+
+        bulkBar.querySelectorAll('.q-btn-xs[data-status]').forEach((btn) => {
+            btn.addEventListener('click', () => {
+                const targetStatus = btn.getAttribute('data-status') as PurchaseStatus;
+                if (targetStatus) {
+                    const stringIds = selectedElementIds.map(id => String(id));
+                    handleChangeStatusMany(stringIds, targetStatus);
+                }
+            });
+        });
+    }
+
+    // Cutting plan optimization logic
+    interface PipeCutPiece { id: string; length: number; scaled: number }
+    interface PipeCutTube { tubeNumber: number; pieces: PipeCutPiece[]; usedLength: number; waste: number }
+
+    function buildBestFitPlan(items: PipeCutPiece[], commercialLength: number): PipeCutTube[] {
+        const tubes: PipeCutTube[] = [];
+        const sorted = items.slice().sort((a, b) => b.length - a.length || a.id.localeCompare(b.id, 'es'));
+        for (const item of sorted) {
+            let bestIndex = -1;
+            let bestRemaining = Infinity;
+            for (let i = 0; i < tubes.length; i++) {
+                const tube = tubes[i];
+                const remaining = commercialLength - tube.usedLength;
+                if (item.length <= remaining + 1e-9) {
+                    const nextRemaining = remaining - item.length;
+                    if (nextRemaining < bestRemaining) {
+                        bestRemaining = nextRemaining;
+                        bestIndex = i;
+                    }
+                }
+            }
+            if (bestIndex === -1) {
+                tubes.push({
+                    tubeNumber: tubes.length + 1,
+                    pieces: [item],
+                    usedLength: item.length,
+                    waste: Math.max(0, commercialLength - item.length),
+                });
+                continue;
+            }
+            const target = tubes[bestIndex];
+            target.pieces.push(item);
+            target.usedLength += item.length;
+            target.waste = Math.max(0, commercialLength - target.usedLength);
+        }
+        return tubes.map((tube, index) => ({
+            ...tube,
+            tubeNumber: index + 1,
+            pieces: tube.pieces.slice().sort((a, b) => b.length - a.length || a.id.localeCompare(b.id, 'es')),
+            usedLength: Number(tube.usedLength.toFixed(6)),
+            waste: Number(Math.max(0, commercialLength - tube.usedLength).toFixed(6)),
+        }));
+    }
+
+    function pickBestSubsetIndices(items: PipeCutPiece[], capacityScaled: number): number[] {
+        const reachable = new Uint8Array(capacityScaled + 1);
+        const prevSum = new Int32Array(capacityScaled + 1);
+        const prevIdx = new Int32Array(capacityScaled + 1);
+        prevSum.fill(-1);
+        prevIdx.fill(-1);
+        reachable[0] = 1;
+
+        for (let idx = 0; idx < items.length; idx++) {
+            const weight = items[idx].scaled;
+            for (let sum = capacityScaled; sum >= weight; sum--) {
+                if (!reachable[sum] && reachable[sum - weight]) {
+                    reachable[sum] = 1;
+                    prevSum[sum] = sum - weight;
+                    prevIdx[sum] = idx;
+                }
+            }
+        }
+
+        let best = capacityScaled;
+        while (best > 0 && !reachable[best]) best -= 1;
+        if (best <= 0) return [];
+
+        const picked: number[] = [];
+        let current = best;
+        while (current > 0) {
+            const idx = prevIdx[current];
+            if (idx < 0) break;
+            picked.push(idx);
+            current = prevSum[current];
+        }
+        return picked;
+    }
+
+    function buildKnapsackPlan(items: PipeCutPiece[], commercialLength: number): PipeCutTube[] {
+        const capacityScaled = Math.max(1, Math.round(commercialLength * 100));
+        const remaining = items
+            .slice()
+            .sort((a, b) => b.length - a.length || a.id.localeCompare(b.id, 'es'));
+        const tubes: PipeCutTube[] = [];
+
+        while (remaining.length > 0) {
+            let picked = pickBestSubsetIndices(remaining, capacityScaled);
+            if (!picked.length) picked = [0];
+            picked.sort((a, b) => b - a);
+            const pieces = picked.map((idx) => remaining[idx]).sort((a, b) => b.length - a.length || a.id.localeCompare(b.id, 'es'));
+            let usedLength = 0;
+            for (const piece of pieces) usedLength += piece.length;
+            tubes.push({
+                tubeNumber: tubes.length + 1,
+                pieces,
+                usedLength: Number(usedLength.toFixed(6)),
+                waste: Number(Math.max(0, commercialLength - usedLength).toFixed(6)),
+            });
+            for (const idx of picked) remaining.splice(idx, 1);
+        }
+
+        return tubes;
+    }
+
+    function chooseBetterCutPlan(items: PipeCutPiece[], commercialLength: number): PipeCutTube[] {
+        const knapsack = buildKnapsackPlan(items, commercialLength);
+        const bestFit = buildBestFitPlan(items, commercialLength);
+        const score = (plan: PipeCutTube[]) => {
+            const totalWaste = plan.reduce((sum, tube) => sum + tube.waste, 0);
+            return { units: plan.length, waste: Number(totalWaste.toFixed(6)) };
+        };
+        const a = score(knapsack);
+        const b = score(bestFit);
+        if (a.units !== b.units) return a.units < b.units ? knapsack : bestFit;
+        return a.waste <= b.waste ? knapsack : bestFit;
+    }
+
+    interface PipeCutPlanGroup {
+        groupKey: string;
+        tipo: string;
+        diameter: string;
+        totalLength: number;
+        minimumUnits: number;
+        actualUnits: number;
+        totalWaste: number;
+        pieces: PipeCutPiece[];
+        tubes: PipeCutTube[];
+    }
+
+    function generatePipeCutPlans(elements: any[]): PipeCutPlanGroup[] {
+        const plans: PipeCutPlanGroup[] = [];
+
+        const pipeGroups: Record<string, { tipo: string; diameter: string; elements: any[] }> = {};
+        elements.forEach(el => {
+            const includeAsPipe = el.isPipe || (mergeUnionLengthsIntoPipes && el.isUnion);
+            if (!includeAsPipe) return;
+            if (!(el.length > 0)) return;
+
+            const tipo = el.material && el.material !== 'SIN MATERIAL' && el.material !== '' ? el.material : el.name;
+            const diameter = el.diameter || 'SIN DIÁMETRO';
+            const level = el.level || 'SIN NIVEL';
+
+            const key = pipeGroupingMode === 'TOTAL'
+                ? `${tipo}||${diameter}`
+                : `${tipo}||${diameter}||${level}`;
+
+            if (!pipeGroups[key]) {
+                pipeGroups[key] = { tipo, diameter, elements: [] };
+            }
+            pipeGroups[key].elements.push(el);
+        });
+
+        for (const [groupKey, group] of Object.entries(pipeGroups)) {
+            const pieces: PipeCutPiece[] = group.elements.map(el => ({
+                id: el.id,
+                length: el.length,
+                scaled: Math.max(1, Math.round(el.length * 100))
+            }));
+
+            if (pieces.length === 0) continue;
+
+            const totalLength = pieces.reduce((sum, p) => sum + p.length, 0);
+            const minimumUnits = Math.ceil(totalLength / pipeCommercialLength);
+            const tubes = chooseBetterCutPlan(pieces, pipeCommercialLength);
+            const actualUnits = tubes.length;
+            const totalWaste = tubes.reduce((sum, t) => sum + t.waste, 0);
+
+            plans.push({
+                groupKey,
+                tipo: group.tipo,
+                diameter: group.diameter,
+                totalLength,
+                minimumUnits,
+                actualUnits,
+                totalWaste,
+                pieces,
+                tubes
+            });
+        }
+
+        return plans.sort((a, b) => a.tipo.localeCompare(b.tipo) || a.diameter.localeCompare(b.diameter));
+    }
+
+    // Render logic
+    function renderQuantitiesContent() {
+        if (!contentArea) return;
+        const elements = extractAllElements();
+
+        if (elements.length === 0) {
+            contentArea.innerHTML = '<div class="q-empty-msg">No hay datos de cantidades. Asegúrate de cargar un modelo IFC con propiedades.</div>';
+            if (tabTuberias) tabTuberias.style.display = 'none';
+            if (tabUniones) tabUniones.style.display = 'none';
+            if (tabCortes) tabCortes.style.display = 'none';
+            const totalsEl = document.getElementById('q-header-totals');
+            if (totalsEl) totalsEl.innerHTML = '';
+            return;
+        }
+
+        // Show/hide sanitary tabs
+        const hasSanitary = elements.some(el => el.isPipe || el.isUnion);
+        if (tabTuberias) tabTuberias.style.display = hasSanitary ? 'inline-block' : 'none';
+        if (tabUniones) tabUniones.style.display = hasSanitary ? 'inline-block' : 'none';
+        if (tabCortes) tabCortes.style.display = hasSanitary ? 'inline-block' : 'none';
+
+        // Apply status highlighting in viewer
+        applyStatusColorizationToViewer(elements);
+
+        // Render toolbar first
+        renderToolbar(elements);
+
+        // Render the active tab content
+        renderTableData(elements);
+
+        // Update bulk action status bar
+        updateBulkActionBar();
+    }
+
+    function renderToolbar(elements: any[]) {
+        let toolbar = qPanel.querySelector('.q-toolbar');
+        if (!toolbar) {
+            toolbar = document.createElement('div');
+            toolbar.className = 'q-toolbar';
+            qPanel.insertBefore(toolbar, contentArea);
+        }
+
+        const classifications = Array.from(new Set(elements.map(e => e.classification))).sort();
+        const levels = Array.from(new Set(elements.map(e => e.level))).sort();
+        const diameters = Array.from(new Set(elements.map(e => e.diameter).filter(d => d))).sort();
+
+        toolbar.innerHTML = `
+            <div class="q-toolbar-left">
+                <div class="q-control-group">
+                    Buscar
+                    <input type="text" id="q-search" class="q-input" value="${searchQuery}" placeholder="ID o nombre..." style="width: 140px;" />
+                </div>
+                <div class="q-control-group">
+                    Clasificación
+                    <select id="q-filter-class" class="q-select">
+                        <option value="Todos">Todos</option>
+                        ${classifications.map(c => `<option value="${c}" ${filterClassification === c ? 'selected' : ''}>${c}</option>`).join('')}
+                    </select>
+                </div>
+                <div class="q-control-group">
+                    Nivel
+                    <select id="q-filter-level" class="q-select">
+                        <option value="Todos">Todos</option>
+                        ${levels.map(l => `<option value="${l}" ${filterLevel === l ? 'selected' : ''}>${l}</option>`).join('')}
+                    </select>
+                </div>
+                ${diameters.length > 0 ? `
+                <div class="q-control-group">
+                    Diámetro
+                    <select id="q-filter-diameter" class="q-select">
+                        <option value="Todos">Todos</option>
+                        ${diameters.map(d => `<option value="${d}" ${filterDiameter === d ? 'selected' : ''}>${d}</option>`).join('')}
+                    </select>
+                </div>
+                ` : ''}
+                <div class="q-control-group">
+                    Estado
+                    <select id="q-filter-status" class="q-select">
+                        <option value="Todos">Todos</option>
+                        ${STATUS_ORDER.map(s => `<option value="${s}" ${filterStatus === s ? 'selected' : ''}>${s}</option>`).join('')}
+                    </select>
+                </div>
+                
+                ${activeTab === 'tuberias' || activeTab === 'cortes' ? `
+                <div class="q-control-group" style="border-left: 1px solid var(--border-color); padding-left: 10px;">
+                    Comercial (m)
+                    <input type="number" id="q-pipe-len" class="q-input-number" value="${pipeCommercialLength}" step="1" min="1" max="12" />
+                </div>
+                <div class="q-control-group">
+                    Agrupación
+                    <select id="q-pipe-group" class="q-select">
+                        <option value="POR_NIVEL" ${pipeGroupingMode === 'POR_NIVEL' ? 'selected' : ''}>Por Nivel</option>
+                        <option value="TOTAL" ${pipeGroupingMode === 'TOTAL' ? 'selected' : ''}>Total General</option>
+                    </select>
+                </div>
+                <div class="q-control-group">
+                    <label style="display: flex; align-items: center; gap: 4px; cursor: pointer; text-transform: none;">
+                        <input type="checkbox" id="q-merge-unions" ${mergeUnionLengthsIntoPipes ? 'checked' : ''} />
+                        Sumar accesorios
+                    </label>
+                </div>
+                ` : ''}
+            </div>
+            <div class="q-toolbar-right">
+                <button type="button" id="q-toggle-colors" class="q-btn-xs ${statusColorsEnabled ? 'active' : ''}">Colores 3D</button>
+                <button type="button" id="q-btn-sync" class="q-btn-xs"><i class="fa-solid fa-rotate"></i> Sync</button>
+                <span class="q-sync-badge ${syncState.status}">${syncState.label}</span>
+            </div>
+        `;
+
+        const searchInput = toolbar.querySelector('#q-search') as HTMLInputElement;
+        searchInput?.addEventListener('input', (e) => {
+            searchQuery = (e.target as HTMLInputElement).value;
+            renderTableData(elements);
+        });
+
+        toolbar.querySelector('#q-filter-class')?.addEventListener('change', (e) => {
+            filterClassification = (e.target as HTMLSelectElement).value;
+            renderTableData(elements);
+        });
+
+        toolbar.querySelector('#q-filter-level')?.addEventListener('change', (e) => {
+            filterLevel = (e.target as HTMLSelectElement).value;
+            renderTableData(elements);
+        });
+
+        toolbar.querySelector('#q-filter-diameter')?.addEventListener('change', (e) => {
+            filterDiameter = (e.target as HTMLSelectElement).value;
+            renderTableData(elements);
+        });
+
+        toolbar.querySelector('#q-filter-status')?.addEventListener('change', (e) => {
+            filterStatus = (e.target as HTMLSelectElement).value;
+            renderTableData(elements);
+        });
+
+        toolbar.querySelector('#q-pipe-len')?.addEventListener('change', (e) => {
+            pipeCommercialLength = Math.max(1, parseInt((e.target as HTMLInputElement).value, 10) || 6);
+            renderTableData(elements);
+        });
+
+        toolbar.querySelector('#q-pipe-group')?.addEventListener('change', (e) => {
+            pipeGroupingMode = (e.target as HTMLSelectElement).value;
+            renderTableData(elements);
+        });
+
+        toolbar.querySelector('#q-merge-unions')?.addEventListener('change', (e) => {
+            mergeUnionLengthsIntoPipes = (e.target as HTMLInputElement).checked;
+            renderTableData(elements);
+        });
+
+        toolbar.querySelector('#q-toggle-colors')?.addEventListener('click', (e) => {
+            statusColorsEnabled = !statusColorsEnabled;
+            const btn = e.currentTarget as HTMLElement;
+            if (statusColorsEnabled) btn.classList.add('active');
+            else btn.classList.remove('active');
+            applyStatusColorizationToViewer(elements);
+        });
+
+        toolbar.querySelector('#q-btn-sync')?.addEventListener('click', () => {
+            syncWithRemote().catch(console.error);
+        });
+    }
+
+    function renderTableData(elements: any[]) {
+        if (!contentArea) return;
+
+        let filtered = elements;
+        if (searchQuery.trim() !== '') {
+            const q = searchQuery.toLowerCase();
+            filtered = filtered.filter(e => e.id.includes(q) || e.name.toLowerCase().includes(q));
+        }
+        if (filterClassification !== 'Todos') {
+            filtered = filtered.filter(e => e.classification === filterClassification);
+        }
+        if (filterLevel !== 'Todos') {
+            filtered = filtered.filter(e => e.level === filterLevel);
+        }
+        if (filterStatus !== 'Todos') {
+            filtered = filtered.filter(e => (elementStatuses[e.id] || 'PENDIENTE') === filterStatus);
+        }
+        if (filterDiameter !== 'Todos') {
+            filtered = filtered.filter(e => e.diameter === filterDiameter);
+        }
+
+        // Calculate totals on the filtered subset
+        let totalCount = 0;
+        let totalArea = 0;
+        let totalLength = 0;
+        let totalVolume = 0;
+        filtered.forEach(el => {
+            totalCount++;
+            totalArea += el.area || 0;
+            totalLength += el.length || 0;
+            totalVolume += el.volume || 0;
+        });
+
+        const formatNumber = (n: number) => n.toLocaleString('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        const formatInt = (n: number) => n.toLocaleString('es-CO', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+
+        const totalsEl = document.getElementById('q-header-totals');
+        if (totalsEl) {
+            totalsEl.innerHTML = `
+                <span>Elementos: ${formatInt(totalCount)}</span>
+                <span>Área: ${formatNumber(totalArea)} m²</span>
+                <span>Longitud: ${formatNumber(totalLength)} m</span>
+                <span>Volumen: ${formatNumber(totalVolume)} m³</span>
+            `;
+        }
+
+        if (activeTab === 'detalle') {
+            const maxElements = 150;
+            const shownElements = filtered.slice(0, maxElements);
+
+            let html = `
+                <div style="font-size: 11px; margin-bottom: 6px; font-weight: 600; color: var(--text-med-gray); text-transform: uppercase;">
+                    Mostrando ${shownElements.length} de ${filtered.length} elementos filtrados
+                </div>
+                <table class="q-table">
+                    <thead>
+                        <tr>
+                            <th style="width: 110px;">Estado</th>
+                            <th>ID Express</th>
+                            <th>Nombre</th>
+                            <th>Clasificación</th>
+                            <th>Nivel</th>
+                            <th>Material</th>
+                            <th style="text-align: right;">Medición</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+            `;
+
+            if (shownElements.length === 0) {
+                html += `<tr><td colspan="7" style="text-align: center; color: var(--text-med-gray); padding: 20px; font-style: italic;">No se encontraron elementos.</td></tr>`;
+            } else {
+                shownElements.forEach(el => {
+                    const st = elementStatuses[el.id] || 'PENDIENTE';
+                    const isSelected = selectedElementIds.includes(el.expressID);
+
+                    let measurement = '-';
+                    if (el.length > 0) measurement = `${el.length.toFixed(2)} m`;
+                    else if (el.area > 0) measurement = `${el.area.toFixed(2)} m²`;
+                    else if (el.volume > 0) measurement = `${el.volume.toFixed(3)} m³`;
+
+                    html += `
+                        <tr class="status-row-${st.toLowerCase()} ${isSelected ? 'q-table-row-selected' : ''}" data-id="${el.id}" data-model="${el.modelUUID}">
+                            <td class="px-2 py-1">
+                                <select class="q-select q-row-status-select" data-id="${el.id}" style="width: 100%;">
+                                    <option value="PENDIENTE" ${st === 'PENDIENTE' ? 'selected' : ''}>Pendiente</option>
+                                    <option value="PEDIDO" ${st === 'PEDIDO' ? 'selected' : ''}>Pedido</option>
+                                    <option value="COMPRADO" ${st === 'COMPRADO' ? 'selected' : ''}>Comprado</option>
+                                    <option value="ALMACEN" ${st === 'ALMACEN' ? 'selected' : ''}>Almacén</option>
+                                    <option value="INSTALADO" ${st === 'INSTALADO' ? 'selected' : ''}>Instalado</option>
+                                </select>
+                            </td>
+                            <td><strong>${el.expressID}</strong></td>
+                            <td>${el.name}</td>
+                            <td>${el.classification}</td>
+                            <td>${el.level}</td>
+                            <td>${el.material}</td>
+                            <td style="text-align: right; font-family: monospace;">${measurement}</td>
+                        </tr>
+                    `;
+                });
+            }
+
+            html += `
+                    </tbody>
+                </table>
+            `;
+
+            contentArea.innerHTML = html;
+
+            contentArea.querySelectorAll('tbody tr[data-id]').forEach(row => {
+                row.addEventListener('click', (e: Event) => {
+                    const me = e as MouseEvent;
+                    if ((e.target as HTMLElement).classList.contains('q-row-status-select')) return;
+                    
+                    const idStr = row.getAttribute('data-id') || '';
+                    const id = parseInt(idStr, 10);
+
+                    if (me.ctrlKey) {
+                        if (selectedElementIds.includes(id)) {
+                            selectedElementIds = selectedElementIds.filter(x => x !== id);
+                        } else {
+                            selectedElementIds.push(id);
+                        }
+                    } else {
+                        selectedElementIds = [id];
+                    }
+
+                    updateSelectedRowsInUI();
+                    updateBulkActionBar();
+                    highlightSelectionInViewer(elements);
+                });
+            });
+
+            contentArea.querySelectorAll('.q-row-status-select').forEach((sel) => {
+                sel.addEventListener('change', (e) => {
+                    const id = (e.target as HTMLSelectElement).getAttribute('data-id') || '';
+                    const nextSt = (e.target as HTMLSelectElement).value as PurchaseStatus;
+                    if (id && nextSt) handleChangeStatus(id, nextSt);
+                });
+            });
+
+        } else if (activeTab === 'estados') {
+            const statusTotals: Record<PurchaseStatus, { count: number; length: number; area: number; volume: number }> = {
+                PENDIENTE: { count: 0, length: 0, area: 0, volume: 0 },
+                PEDIDO: { count: 0, length: 0, area: 0, volume: 0 },
+                COMPRADO: { count: 0, length: 0, area: 0, volume: 0 },
+                ALMACEN: { count: 0, length: 0, area: 0, volume: 0 },
+                INSTALADO: { count: 0, length: 0, area: 0, volume: 0 }
+            };
+
+            let grandTotal = { count: 0, length: 0, area: 0, volume: 0 };
+
+            filtered.forEach(el => {
+                const st = elementStatuses[el.id] || 'PENDIENTE';
+                if (statusTotals[st]) {
+                    statusTotals[st].count++;
+                    statusTotals[st].length += el.length;
+                    statusTotals[st].area += el.area;
+                    statusTotals[st].volume += el.volume;
+
+                    grandTotal.count++;
+                    grandTotal.length += el.length;
+                    grandTotal.area += el.area;
+                    grandTotal.volume += el.volume;
+                }
+            });
+
+            let html = `
+                <table class="q-table">
+                    <thead>
+                        <tr>
+                            <th>Estado de Adquisición</th>
+                            <th style="text-align: right;">Cantidad</th>
+                            <th style="text-align: right;">Longitud Total (m)</th>
+                            <th style="text-align: right;">Área Total (m²)</th>
+                            <th style="text-align: right;">Volumen Total (m³)</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+            `;
+
+            STATUS_ORDER.forEach(st => {
+                const vals = statusTotals[st];
+                html += `
+                    <tr class="status-row-${st.toLowerCase()}" data-status-row="${st}">
+                        <td>
+                            <span class="status-pill-${st.toLowerCase()}" style="padding: 2px 8px; border-radius: 4px; font-size: 10px; font-weight: bold; text-transform: uppercase;">
+                                ${st}
+                            </span>
+                        </td>
+                        <td style="text-align: right; font-weight: bold;">${vals.count}</td>
+                        <td style="text-align: right; font-family: monospace;">${vals.length > 0 ? vals.length.toFixed(2) : '-'}</td>
+                        <td style="text-align: right; font-family: monospace;">${vals.area > 0 ? vals.area.toFixed(2) : '-'}</td>
+                        <td style="text-align: right; font-family: monospace;">${vals.volume > 0 ? vals.volume.toFixed(3) : '-'}</td>
+                    </tr>
+                `;
+            });
+
+            html += `
+                <tr style="background: #e2e8f0; font-weight: bold; border-top: 2px solid var(--border-color);">
+                    <td>TOTAL GENERAL</td>
+                    <td style="text-align: right;">${grandTotal.count}</td>
+                    <td style="text-align: right; font-family: monospace;">${grandTotal.length.toFixed(2)}</td>
+                    <td style="text-align: right; font-family: monospace;">${grandTotal.area.toFixed(2)}</td>
+                    <td style="text-align: right; font-family: monospace;">${grandTotal.volume.toFixed(3)}</td>
+                </tr>
+                    </tbody>
+                </table>
+            `;
+
+            contentArea.innerHTML = html;
+
+            contentArea.querySelectorAll('tbody tr[data-status-row]').forEach(row => {
+                row.addEventListener('click', () => {
+                    const st = row.getAttribute('data-status-row') || '';
+                    const matchElements = filtered.filter(el => (elementStatuses[el.id] || 'PENDIENTE') === st);
+
+                    const map: Record<string, number[]> = {};
+                    matchElements.forEach(el => {
+                        if (!map[el.modelUUID]) map[el.modelUUID] = [];
+                        map[el.modelUUID].push(el.expressID);
+                    });
+
+                    const highlighter = components.get(OBF.Highlighter);
+                    if (highlighter) {
+                        highlighter.highlightByID('select', map as any, true, true);
+                    }
+                });
+            });
+
+        } else if (activeTab === 'historial') {
+            let html = `
+                <table class="q-table">
+                    <thead>
+                        <tr>
+                            <th>ID Express</th>
+                            <th>Nombre</th>
+                            <th>Pendiente</th>
+                            <th>Pedido</th>
+                            <th>Comprado</th>
+                            <th>Almacén</th>
+                            <th>Instalado</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+            `;
+
+            if (filtered.length === 0) {
+                html += `<tr><td colspan="7" style="text-align: center; color: var(--text-med-gray); padding: 20px;">No hay datos de historial.</td></tr>`;
+            } else {
+                const maxRows = 200;
+                const pageHist = filtered.slice(0, maxRows);
+
+                pageHist.forEach(el => {
+                    const hist = elementHistory[el.id] || [];
+                    const dates: Record<string, string> = {};
+                    hist.forEach(h => {
+                        if (h.at) {
+                            const d = new Date(h.at);
+                            dates[h.status] = d.toLocaleString('es-CO', { hour12: false }).split(',')[0];
+                        }
+                    });
+
+                    html += `
+                        <tr data-id="${el.id}">
+                            <td><strong>${el.expressID}</strong></td>
+                            <td>${el.name}</td>
+                            <td style="font-family: monospace; font-size: 10px; color: #64748b;">${dates.PENDIENTE || '-'}</td>
+                            <td style="font-family: monospace; font-size: 10px; color: #2563eb;">${dates.PEDIDO || '-'}</td>
+                            <td style="font-family: monospace; font-size: 10px; color: #d97706;">${dates.COMPRADO || '-'}</td>
+                            <td style="font-family: monospace; font-size: 10px; color: #7c3aed;">${dates.ALMACEN || '-'}</td>
+                            <td style="font-family: monospace; font-size: 10px; color: #16a34a;">${dates.INSTALADO || '-'}</td>
+                        </tr>
+                    `;
+                });
+            }
+
+            html += `
+                    </tbody>
+                </table>
+            `;
+
+            contentArea.innerHTML = html;
+
+        } else if (activeTab === 'tuberias') {
+            const pipeSummaryMap = new Map<string, { tipo: string; diameter: string; level: string; totalLength: number; statusLength: Record<PurchaseStatus, number>; elements: any[] }>();
+
+            filtered.forEach(el => {
+                const includeAsPipe = el.isPipe || (mergeUnionLengthsIntoPipes && el.isUnion);
+                if (!includeAsPipe) return;
+                if (!(el.length > 0)) return;
+
+                const st = elementStatuses[el.id] || 'PENDIENTE';
+                const tipo = el.material && el.material !== 'SIN MATERIAL' && el.material !== '' ? el.material : el.name;
+                const diameter = el.diameter || 'SIN DIÁMETRO';
+                const level = el.level || 'SIN NIVEL';
+
+                const key = pipeGroupingMode === 'TOTAL'
+                    ? `${tipo}||${diameter}`
+                    : `${tipo}||${diameter}||${level}`;
+
+                const cur = pipeSummaryMap.get(key) || {
+                    tipo,
+                    diameter,
+                    level,
+                    totalLength: 0,
+                    statusLength: { PENDIENTE: 0, PEDIDO: 0, COMPRADO: 0, ALMACEN: 0, INSTALADO: 0 },
+                    elements: [] as any[]
+                };
+
+                cur.totalLength += el.length;
+                cur.statusLength[st] += el.length;
+                cur.elements.push(el);
+                pipeSummaryMap.set(key, cur);
+            });
+
+            let html = `
+                <table class="q-table">
+                    <thead>
+                        <tr>
+                            <th>Tipo de Tubería</th>
+                            <th>Diámetro</th>
+                            ${pipeGroupingMode === 'POR_NIVEL' ? '<th>Nivel</th>' : ''}
+                            <th style="text-align: right; width: 110px;">Adicional (m)</th>
+                            <th style="text-align: right; width: 90px;">Tramos (6m)</th>
+                            <th style="text-align: right;">Pendiente</th>
+                            <th style="text-align: right;">Pedido</th>
+                            <th style="text-align: right;">Comprado</th>
+                            <th style="text-align: right;">Almacén</th>
+                            <th style="text-align: right;">Instalado</th>
+                            <th style="text-align: right; font-weight: bold;">Long. Total (m)</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+            `;
+
+            if (pipeSummaryMap.size === 0) {
+                html += `<tr><td colspan="${pipeGroupingMode === 'POR_NIVEL' ? 11 : 10}" style="text-align: center; color: var(--text-med-gray); padding: 20px;">No hay tuberías con los filtros actuales.</td></tr>`;
+            } else {
+                Array.from(pipeSummaryMap.entries())
+                .sort((a, b) => a[1].tipo.localeCompare(b[1].tipo) || a[1].diameter.localeCompare(b[1].diameter))
+                .forEach(([groupKey, v]) => {
+                    const addition = pipeAdditionsByGroup[groupKey] || 0;
+                    const totalLengthWithAdd = v.totalLength + addition;
+                    const units = Math.ceil(totalLengthWithAdd / pipeCommercialLength);
+
+                    html += `
+                        <tr class="pipe-summary-row" data-key="${groupKey}">
+                            <td><strong>${v.tipo}</strong></td>
+                            <td>${v.diameter}</td>
+                            ${pipeGroupingMode === 'POR_NIVEL' ? `<td>${v.level}</td>` : ''}
+                            <td style="text-align: right;">
+                                <input type="number" class="q-input-number q-input-addition" data-key="${groupKey}" value="${addition}" min="0" step="1" style="width: 70px;" />
+                            </td>
+                            <td style="text-align: right; font-weight: bold; color: var(--primary-color);">${units}</td>
+                            <td style="text-align: right; color: #64748b; font-family: monospace;">${v.statusLength.PENDIENTE.toFixed(2)}</td>
+                            <td style="text-align: right; color: #2563eb; font-family: monospace;">${v.statusLength.PEDIDO.toFixed(2)}</td>
+                            <td style="text-align: right; color: #d97706; font-family: monospace;">${v.statusLength.COMPRADO.toFixed(2)}</td>
+                            <td style="text-align: right; color: #7c3aed; font-family: monospace;">${v.statusLength.ALMACEN.toFixed(2)}</td>
+                            <td style="text-align: right; color: #16a34a; font-family: monospace;">${v.statusLength.INSTALADO.toFixed(2)}</td>
+                            <td style="text-align: right; font-weight: 800; font-family: monospace;">${totalLengthWithAdd.toFixed(2)}</td>
+                        </tr>
+                    `;
+                });
+            }
+
+            html += `
+                    </tbody>
+                </table>
+            `;
+
+            contentArea.innerHTML = html;
+
+            contentArea.querySelectorAll('.pipe-summary-row').forEach(row => {
+                row.addEventListener('click', (e) => {
+                    if ((e.target as HTMLElement).classList.contains('q-input-addition')) return;
+
+                    const key = row.getAttribute('data-key') || '';
+                    const group = pipeSummaryMap.get(key);
+                    if (group) {
+                        const map: Record<string, number[]> = {};
+                        group.elements.forEach(el => {
+                            if (!map[el.modelUUID]) map[el.modelUUID] = [];
+                            map[el.modelUUID].push(el.expressID);
+                        });
+
+                        const highlighter = components.get(OBF.Highlighter);
+                        if (highlighter) {
+                            highlighter.highlightByID('select', map as any, true, true);
+                        }
+                    }
+                });
+            });
+
+            contentArea.querySelectorAll('.q-input-addition').forEach(inp => {
+                inp.addEventListener('change', (e) => {
+                    const key = (e.target as HTMLInputElement).getAttribute('data-key') || '';
+                    const val = Math.max(0, parseFloat((e.target as HTMLInputElement).value) || 0);
+                    if (key) handlePipeAdditionChange(key, val);
+                });
+            });
+
+        } else if (activeTab === 'uniones') {
+            const unionSummaryMap = new Map<string, { tipo: string; diameter: string; level: string; count: number; statusCount: Record<PurchaseStatus, number>; elements: any[] }>();
+
+            filtered.forEach(el => {
+                if (!el.isUnion) return;
+
+                const st = elementStatuses[el.id] || 'PENDIENTE';
+                const tipo = el.material && el.material !== 'SIN MATERIAL' && el.material !== '' ? el.material : el.name;
+                const diameter = el.diameter || 'SIN DIÁMETRO';
+                const level = el.level || 'SIN NIVEL';
+
+                const key = pipeGroupingMode === 'TOTAL'
+                    ? `${tipo}||${diameter}`
+                    : `${tipo}||${diameter}||${level}`;
+
+                const cur = unionSummaryMap.get(key) || {
+                    tipo,
+                    diameter,
+                    level,
+                    count: 0,
+                    statusCount: { PENDIENTE: 0, PEDIDO: 0, COMPRADO: 0, ALMACEN: 0, INSTALADO: 0 },
+                    elements: [] as any[]
+                };
+
+                cur.count++;
+                cur.statusCount[st]++;
+                cur.elements.push(el);
+                unionSummaryMap.set(key, cur);
+            });
+
+            let html = `
+                <table class="q-table">
+                    <thead>
+                        <tr>
+                            <th>Unión / Accesorio</th>
+                            <th>Diámetro</th>
+                            ${pipeGroupingMode === 'POR_NIVEL' ? '<th>Nivel</th>' : ''}
+                            <th style="text-align: right; width: 110px;">Adicional (u)</th>
+                            <th style="text-align: right;">Pendiente</th>
+                            <th style="text-align: right;">Pedido</th>
+                            <th style="text-align: right;">Comprado</th>
+                            <th style="text-align: right;">Almacén</th>
+                            <th style="text-align: right;">Instalado</th>
+                            <th style="text-align: right; font-weight: bold;">Cantidad Total</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+            `;
+
+            if (unionSummaryMap.size === 0) {
+                html += `<tr><td colspan="${pipeGroupingMode === 'POR_NIVEL' ? 10 : 9}" style="text-align: center; color: var(--text-med-gray); padding: 20px;">No hay uniones con los filtros actuales.</td></tr>`;
+            } else {
+                Array.from(unionSummaryMap.entries())
+                .sort((a, b) => a[1].tipo.localeCompare(b[1].tipo) || a[1].diameter.localeCompare(b[1].diameter))
+                .forEach(([groupKey, v]) => {
+                    const addition = unionAdditionsByGroup[groupKey] || 0;
+                    const totalCountWithAdd = v.count + addition;
+
+                    html += `
+                        <tr class="union-summary-row" data-key="${groupKey}">
+                            <td><strong>${v.tipo}</strong></td>
+                            <td>${v.diameter}</td>
+                            ${pipeGroupingMode === 'POR_NIVEL' ? `<td>${v.level}</td>` : ''}
+                            <td style="text-align: right;">
+                                <input type="number" class="q-input-number q-input-union-addition" data-key="${groupKey}" value="${addition}" min="0" step="1" style="width: 70px;" />
+                            </td>
+                            <td style="text-align: right; color: #64748b;">${v.statusCount.PENDIENTE}</td>
+                            <td style="text-align: right; color: #2563eb;">${v.statusCount.PEDIDO}</td>
+                            <td style="text-align: right; color: #d97706;">${v.statusCount.COMPRADO}</td>
+                            <td style="text-align: right; color: #7c3aed;">${v.statusCount.ALMACEN}</td>
+                            <td style="text-align: right; color: #16a34a;">${v.statusCount.INSTALADO}</td>
+                            <td style="text-align: right; font-weight: 800;">${totalCountWithAdd}</td>
+                        </tr>
+                    `;
+                });
+            }
+
+            html += `
+                    </tbody>
+                </table>
+            `;
+
+            contentArea.innerHTML = html;
+
+            contentArea.querySelectorAll('.union-summary-row').forEach(row => {
+                row.addEventListener('click', (e) => {
+                    if ((e.target as HTMLElement).classList.contains('q-input-union-addition')) return;
+
+                    const key = row.getAttribute('data-key') || '';
+                    const group = unionSummaryMap.get(key);
+                    if (group) {
+                        const map: Record<string, number[]> = {};
+                        group.elements.forEach(el => {
+                            if (!map[el.modelUUID]) map[el.modelUUID] = [];
+                            map[el.modelUUID].push(el.expressID);
+                        });
+
+                        const highlighter = components.get(OBF.Highlighter);
+                        if (highlighter) {
+                            highlighter.highlightByID('select', map as any, true, true);
+                        }
+                    }
+                });
+            });
+
+            contentArea.querySelectorAll('.q-input-union-addition').forEach(inp => {
+                inp.addEventListener('change', (e) => {
+                    const key = (e.target as HTMLInputElement).getAttribute('data-key') || '';
+                    const val = Math.max(0, parseInt((e.target as HTMLInputElement).value, 10) || 0);
+                    if (key) handleUnionAdditionChange(key, val);
+                });
+            });
+
+        } else if (activeTab === 'cortes') {
+            const pipeCutPlans = generatePipeCutPlans(filtered);
+            const totalPiecesCount = pipeCutPlans.reduce((sum, p) => sum + p.pieces.length, 0);
+            const totalTubesCount = pipeCutPlans.reduce((sum, p) => sum + p.actualUnits, 0);
+            const totalLengthSum = pipeCutPlans.reduce((sum, p) => sum + p.totalLength, 0);
+            const totalWasteSum = pipeCutPlans.reduce((sum, p) => sum + p.totalWaste, 0);
+
+            let html = '';
+
+            if (pipeCutPlans.length > 0) {
+                const allExpanded = pipeCutPlans.every(p => expandedCortesGroups[p.groupKey] !== false);
+                html += `
+                    <div class="q-cortes-summary-header">
+                        <div class="q-cortes-title">
+                            Total General de Cortes
+                            <button type="button" id="q-btn-expand-all" class="q-btn-xs" style="margin-left: 12px;">
+                                ${allExpanded ? 'Recoger Todos' : 'Expandir Todos'}
+                            </button>
+                        </div>
+                        <div class="q-cortes-stats">
+                            <span class="q-stat-col">
+                                <span class="q-stat-label">Tramos Totales</span>
+                                <span class="q-stat-val">${totalPiecesCount}</span>
+                            </span>
+                            <span class="q-stat-col">
+                                <span class="q-stat-label">Tubos Totales</span>
+                                <span class="q-stat-val">${totalTubesCount}</span>
+                            </span>
+                            <span class="q-stat-col">
+                                <span class="q-stat-label">Longitud Total</span>
+                                <span class="q-stat-val">${totalLengthSum.toFixed(2)} m</span>
+                            </span>
+                            <span class="q-stat-col">
+                                <span class="q-stat-label">Sobrante Total</span>
+                                <span class="q-stat-val">${totalWasteSum.toFixed(2)} m</span>
+                            </span>
+                        </div>
+                    </div>
+                    <div class="q-cortes-cards-container">
+                `;
+
+                pipeCutPlans.forEach(plan => {
+                    const isExpanded = expandedCortesGroups[plan.groupKey] !== false;
+                    html += `
+                        <div class="q-cortes-card" data-key="${plan.groupKey}">
+                            <div class="q-cortes-card-header" data-key="${plan.groupKey}">
+                                <div class="q-cortes-card-header-left">
+                                    <span class="q-expand-arrow ${isExpanded ? 'expanded' : ''}">
+                                        <i class="fa-solid fa-chevron-right"></i>
+                                    </span>
+                                    <div>
+                                        <div class="q-cortes-card-title">${plan.tipo}</div>
+                                        <div class="q-cortes-card-subtitle">Diámetro: ${plan.diameter}</div>
+                                    </div>
+                                </div>
+                                <div class="q-cortes-card-header-right">
+                                    <span>Tramos: ${plan.pieces.length}</span>
+                                    <span>Tubos: ${plan.actualUnits}</span>
+                                    <span>Longitud: ${plan.totalLength.toFixed(2)} m</span>
+                                    <span style="color: var(--primary-color);">Sobrante: ${plan.totalWaste.toFixed(2)} m</span>
+                                </div>
+                            </div>
+                            ${isExpanded ? `
+                                <div class="q-cortes-card-details">
+                                    <div class="q-cortes-details-meta">
+                                        <span>Mínimo teórico: ${plan.minimumUnits} tubos</span>
+                                        <span>Plan actual: ${plan.actualUnits} tubos</span>
+                                    </div>
+                                    <div class="q-cortes-table-wrapper">
+                                        <table class="q-table q-cortes-table">
+                                            <thead>
+                                                <tr>
+                                                    <th>Tubo</th>
+                                                    <th style="text-align: right;">Tramos</th>
+                                                    <th>Cortes</th>
+                                                    <th style="text-align: right;">Usado (m)</th>
+                                                    <th style="text-align: right;">Sobrante (m)</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                ${plan.tubes.map(tube => `
+                                                    <tr>
+                                                        <td><strong>Tubo ${tube.tubeNumber}</strong></td>
+                                                        <td style="text-align: right; font-family: monospace;">${tube.pieces.length}</td>
+                                                        <td style="font-family: monospace;">${tube.pieces.map(piece => piece.length.toFixed(2)).join(' + ')}</td>
+                                                        <td style="text-align: right; font-family: monospace;">${tube.usedLength.toFixed(2)} m</td>
+                                                        <td style="text-align: right; font-weight: bold; font-family: monospace;">${tube.waste.toFixed(2)} m</td>
+                                                    </tr>
+                                                `).join('')}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            ` : ''}
+                        </div>
+                    `;
+                });
+
+                html += `</div>`;
+            } else {
+                html += `
+                    <div style="text-align: center; color: var(--text-med-gray); padding: 40px; font-style: italic; background: white; border: 1px solid var(--border-color); border-radius: 8px;">
+                        No hay tramos de tubería aptos para generar un plan de cortes con los filtros actuales.
+                    </div>
+                `;
+            }
+
+            contentArea.innerHTML = html;
+
+            const expandAllBtn = contentArea.querySelector('#q-btn-expand-all');
+            expandAllBtn?.addEventListener('click', () => {
+                const allExpanded = pipeCutPlans.every(p => expandedCortesGroups[p.groupKey] !== false);
+                pipeCutPlans.forEach(p => {
+                    expandedCortesGroups[p.groupKey] = !allExpanded;
+                });
+                renderTableData(elements);
+            });
+
+            contentArea.querySelectorAll('.q-cortes-card-header').forEach(header => {
+                header.addEventListener('click', () => {
+                    const key = header.getAttribute('data-key') || '';
+                    expandedCortesGroups[key] = expandedCortesGroups[key] === false;
+                    renderTableData(elements);
+                });
+            });
+        }
+    }
+
+    function exportCurrentTabToCsv() {
+        const elements = extractAllElements();
+        let csvContent = '';
+        let filename = `cantidades_${activeTab}.csv`;
+
+        let filtered = elements;
+        if (searchQuery.trim() !== '') {
+            const q = searchQuery.toLowerCase();
+            filtered = filtered.filter(e => e.id.includes(q) || e.name.toLowerCase().includes(q));
+        }
+        if (filterClassification !== 'Todos') {
+            filtered = filtered.filter(e => e.classification === filterClassification);
+        }
+        if (filterLevel !== 'Todos') {
+            filtered = filtered.filter(e => e.level === filterLevel);
+        }
+        if (filterStatus !== 'Todos') {
+            filtered = filtered.filter(e => (elementStatuses[e.id] || 'PENDIENTE') === filterStatus);
+        }
+        if (filterDiameter !== 'Todos') {
+            filtered = filtered.filter(e => e.diameter === filterDiameter);
+        }
+
+        const escapeCsvValue = (val: any) => {
+            const str = val === undefined || val === null ? '' : String(val);
+            if (str.includes(',') || str.includes('"') || str.includes('\n') || str.includes('\r')) {
+                return `"${str.replace(/"/g, '""')}"`;
+            }
+            return str;
+        };
+
+        if (activeTab === 'detalle') {
+            const headers = ['Estado', 'ID Express', 'Nombre', 'Clasificacion', 'Nivel', 'Material', 'Medicion'];
+            csvContent += headers.join(',') + '\r\n';
+            filtered.forEach(el => {
+                const st = elementStatuses[el.id] || 'PENDIENTE';
+                let measurement = '-';
+                if (el.length > 0) measurement = `${el.length.toFixed(2)} m`;
+                else if (el.area > 0) measurement = `${el.area.toFixed(2)} m²`;
+                else if (el.volume > 0) measurement = `${el.volume.toFixed(3)} m³`;
+
+                const row = [st, el.expressID, el.name, el.classification, el.level, el.material, measurement];
+                csvContent += row.map(escapeCsvValue).join(',') + '\r\n';
+            });
+        } else if (activeTab === 'estados') {
+            const headers = ['Estado de Adquisicion', 'Cantidad', 'Longitud Total (m)', 'Area Total (m2)', 'Volumen Total (m3)'];
+            csvContent += headers.join(',') + '\r\n';
+
+            const statusTotals: Record<PurchaseStatus, { count: number; length: number; area: number; volume: number }> = {
+                PENDIENTE: { count: 0, length: 0, area: 0, volume: 0 },
+                PEDIDO: { count: 0, length: 0, area: 0, volume: 0 },
+                COMPRADO: { count: 0, length: 0, area: 0, volume: 0 },
+                ALMACEN: { count: 0, length: 0, area: 0, volume: 0 },
+                INSTALADO: { count: 0, length: 0, area: 0, volume: 0 }
+            };
+            let grandTotal = { count: 0, length: 0, area: 0, volume: 0 };
+
+            filtered.forEach(el => {
+                const st = elementStatuses[el.id] || 'PENDIENTE';
+                if (statusTotals[st]) {
+                    statusTotals[st].count++;
+                    statusTotals[st].length += el.length;
+                    statusTotals[st].area += el.area;
+                    statusTotals[st].volume += el.volume;
+
+                    grandTotal.count++;
+                    grandTotal.length += el.length;
+                    grandTotal.area += el.area;
+                    grandTotal.volume += el.volume;
+                }
+            });
+
+            STATUS_ORDER.forEach(st => {
+                const vals = statusTotals[st];
+                const row = [
+                    st,
+                    vals.count,
+                    vals.length > 0 ? vals.length.toFixed(2) : '0.00',
+                    vals.area > 0 ? vals.area.toFixed(2) : '0.00',
+                    vals.volume > 0 ? vals.volume.toFixed(3) : '0.000'
+                ];
+                csvContent += row.map(escapeCsvValue).join(',') + '\r\n';
+            });
+            const totalRow = [
+                'TOTAL GENERAL',
+                grandTotal.count,
+                grandTotal.length.toFixed(2),
+                grandTotal.area.toFixed(2),
+                grandTotal.volume.toFixed(3)
+            ];
+            csvContent += totalRow.map(escapeCsvValue).join(',') + '\r\n';
+
+        } else if (activeTab === 'historial') {
+            const headers = ['ID Express', 'Nombre', 'Pendiente', 'Pedido', 'Comprado', 'Almacen', 'Instalado'];
+            csvContent += headers.join(',') + '\r\n';
+
+            filtered.forEach(el => {
+                const hist = elementHistory[el.id] || [];
+                const dates: Record<string, string> = {};
+                hist.forEach(h => {
+                    if (h.at) {
+                        const d = new Date(h.at);
+                        dates[h.status] = d.toLocaleString('es-CO', { hour12: false });
+                    }
+                });
+                const row = [
+                    el.expressID,
+                    el.name,
+                    dates.PENDIENTE || '',
+                    dates.PEDIDO || '',
+                    dates.COMPRADO || '',
+                    dates.ALMACEN || '',
+                    dates.INSTALADO || ''
+                ];
+                csvContent += row.map(escapeCsvValue).join(',') + '\r\n';
+            });
+        } else if (activeTab === 'tuberias') {
+            const headers = [
+                'Tipo de Tuberia',
+                'Diametro',
+                ...(pipeGroupingMode === 'POR_NIVEL' ? ['Nivel'] : []),
+                'Adicional (m)',
+                'Tramos (6m)',
+                'Pendiente (m)',
+                'Pedido (m)',
+                'Comprado (m)',
+                'Almacen (m)',
+                'Instalado (m)',
+                'Long. Total (m)'
+            ];
+            csvContent += headers.join(',') + '\r\n';
+
+            const pipeSummaryMap = new Map<string, { tipo: string; diameter: string; level: string; totalLength: number; statusLength: Record<PurchaseStatus, number> }>();
+            filtered.forEach(el => {
+                const includeAsPipe = el.isPipe || (mergeUnionLengthsIntoPipes && el.isUnion);
+                if (!includeAsPipe) return;
+                if (!(el.length > 0)) return;
+
+                const st = elementStatuses[el.id] || 'PENDIENTE';
+                const tipo = el.material && el.material !== 'SIN MATERIAL' && el.material !== '' ? el.material : el.name;
+                const diameter = el.diameter || 'SIN DIÁMETRO';
+                const level = el.level || 'SIN NIVEL';
+
+                const key = pipeGroupingMode === 'TOTAL'
+                    ? `${tipo}||${diameter}`
+                    : `${tipo}||${diameter}||${level}`;
+
+                const cur = pipeSummaryMap.get(key) || {
+                    tipo,
+                    diameter,
+                    level,
+                    totalLength: 0,
+                    statusLength: { PENDIENTE: 0, PEDIDO: 0, COMPRADO: 0, ALMACEN: 0, INSTALADO: 0 }
+                };
+                cur.totalLength += el.length;
+                cur.statusLength[st] += el.length;
+                pipeSummaryMap.set(key, cur);
+            });
+
+            Array.from(pipeSummaryMap.entries())
+            .sort((a, b) => a[1].tipo.localeCompare(b[1].tipo) || a[1].diameter.localeCompare(b[1].diameter))
+            .forEach(([groupKey, v]) => {
+                const addition = pipeAdditionsByGroup[groupKey] || 0;
+                const totalLengthWithAdd = v.totalLength + addition;
+                const units = Math.ceil(totalLengthWithAdd / pipeCommercialLength);
+
+                const row = [
+                    v.tipo,
+                    v.diameter,
+                    ...(pipeGroupingMode === 'POR_NIVEL' ? [v.level] : []),
+                    addition,
+                    units,
+                    v.statusLength.PENDIENTE.toFixed(2),
+                    v.statusLength.PEDIDO.toFixed(2),
+                    v.statusLength.COMPRADO.toFixed(2),
+                    v.statusLength.ALMACEN.toFixed(2),
+                    v.statusLength.INSTALADO.toFixed(2),
+                    totalLengthWithAdd.toFixed(2)
+                ];
+                csvContent += row.map(escapeCsvValue).join(',') + '\r\n';
+            });
+        } else if (activeTab === 'uniones') {
+            const headers = [
+                'Union / Accesorio',
+                'Diametro',
+                ...(pipeGroupingMode === 'POR_NIVEL' ? ['Nivel'] : []),
+                'Adicional (u)',
+                'Pendiente',
+                'Pedido',
+                'Comprado',
+                'Almacen',
+                'Instalado',
+                'Cantidad Total'
+            ];
+            csvContent += headers.join(',') + '\r\n';
+
+            const unionSummaryMap = new Map<string, { tipo: string; diameter: string; level: string; count: number; statusCount: Record<PurchaseStatus, number> }>();
+            filtered.forEach(el => {
+                if (!el.isUnion) return;
+
+                const st = elementStatuses[el.id] || 'PENDIENTE';
+                const tipo = el.material && el.material !== 'SIN MATERIAL' && el.material !== '' ? el.material : el.name;
+                const diameter = el.diameter || 'SIN DIÁMETRO';
+                const level = el.level || 'SIN NIVEL';
+
+                const key = pipeGroupingMode === 'TOTAL'
+                    ? `${tipo}||${diameter}`
+                    : `${tipo}||${diameter}||${level}`;
+
+                const cur = unionSummaryMap.get(key) || {
+                    tipo,
+                    diameter,
+                    level,
+                    count: 0,
+                    statusCount: { PENDIENTE: 0, PEDIDO: 0, COMPRADO: 0, ALMACEN: 0, INSTALADO: 0 }
+                };
+                cur.count++;
+                cur.statusCount[st]++;
+                unionSummaryMap.set(key, cur);
+            });
+
+            Array.from(unionSummaryMap.entries())
+            .sort((a, b) => a[1].tipo.localeCompare(b[1].tipo) || a[1].diameter.localeCompare(b[1].diameter))
+            .forEach(([groupKey, v]) => {
+                const addition = unionAdditionsByGroup[groupKey] || 0;
+                const totalCountWithAdd = v.count + addition;
+
+                const row = [
+                    v.tipo,
+                    v.diameter,
+                    ...(pipeGroupingMode === 'POR_NIVEL' ? [v.level] : []),
+                    addition,
+                    v.statusCount.PENDIENTE,
+                    v.statusCount.PEDIDO,
+                    v.statusCount.COMPRADO,
+                    v.statusCount.ALMACEN,
+                    v.statusCount.INSTALADO,
+                    totalCountWithAdd
+                ];
+                csvContent += row.map(escapeCsvValue).join(',') + '\r\n';
+            });
+        } else if (activeTab === 'cortes') {
+            filename = `cantidades_plan_de_cortes.csv`;
+            const headers = ['Tipo de Tuberia', 'Diametro', 'Nivel/Grupo', 'Tubo Nro', 'Tramos', 'Cortes', 'Usado (m)', 'Sobrante (m)'];
+            csvContent += headers.join(',') + '\r\n';
+
+            const pipeCutPlans = generatePipeCutPlans(filtered);
+            pipeCutPlans.forEach(plan => {
+                const parts = plan.groupKey.split('||');
+                const level = parts.length > 2 ? parts[2] : 'General';
+                plan.tubes.forEach(tube => {
+                    const row = [
+                        plan.tipo,
+                        plan.diameter,
+                        level,
+                        `Tubo ${tube.tubeNumber}`,
+                        tube.pieces.length,
+                        tube.pieces.map(piece => piece.length.toFixed(2)).join(' + '),
+                        tube.usedLength.toFixed(2),
+                        tube.waste.toFixed(2)
+                    ];
+                    csvContent += row.map(escapeCsvValue).join(',') + '\r\n';
+                });
+            });
+        }
+
+        const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' });
+        const link = document.createElement('a');
+        if (link.download !== undefined) {
+            const url = URL.createObjectURL(blob);
+            link.setAttribute('href', url);
+            link.setAttribute('download', filename);
+            link.style.visibility = 'hidden';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        }
+    }
+
+    if (csvBtn) {
+        csvBtn.addEventListener('click', () => {
+            exportCurrentTabToCsv();
+        });
+    }
+
+    (window as any).refreshQuantitiesUI = renderQuantitiesContent;
+}
+
+function initStatusPanel() {
+    const panel = document.getElementById('status-panel');
+    const toggleBtn = document.getElementById('status-toggle');
+    const resizer = document.getElementById('status-resizer');
+    const closeBtn = document.getElementById('btn-s-close');
+    const csvBtn = document.getElementById('btn-s-csv');
+    const contentArea = document.getElementById('status-content-area');
+
+    if (!panel || !toggleBtn) return;
+    const sPanel = panel;
+
+    // Default configuration and keys
+    const DEFAULT_STATUS_SHEET_ID = '1GSaNTuafarE8l7VFlJNLJcu0GIXaNUS-VDwJ9UB9038';
+    const DEFAULT_STATUS_SHEET_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwz1XYlqzxUCLLsTeXsxW7uNzRiqRhT82OC_Y1dSt4iOvaWNFpAPWAZc74UE28iiwI/exec';
+
+    const STATUS_SHEET_ID = String(currentParams.get('statusSheetId') || DEFAULT_STATUS_SHEET_ID).trim();
+    const STATUS_SHEET_SCRIPT_URL = String(
+        currentParams.get('statusScriptUrl') || currentParams.get('driveScriptUrl') || DEFAULT_STATUS_SHEET_SCRIPT_URL
+    ).trim();
+
+    const STATUS_PROJECT_KEY = PROJECT_RUNTIME_KEY;
+    
+    // Status states
+    type ConstructionStatus = 'NINGUNO' | 'EN PROGRESO' | 'PARA INSPECCIÓN' | 'APROBADO' | 'CERRADO' | 'RECHAZADO';
+    const STATUS_ORDER: ConstructionStatus[] = [
+        'NINGUNO',
+        'EN PROGRESO',
+        'PARA INSPECCIÓN',
+        'APROBADO',
+        'CERRADO',
+        'RECHAZADO'
+    ];
+
+    const firstModelName = Array.from(loadedModels.keys())[0] || 'local';
+    const modelNameLower = firstModelName.toLowerCase();
+    
+    const elementStatusesLsKey = `status:${STATUS_PROJECT_KEY}:statuses:${modelNameLower}`;
+    const elementHistoryLsKey = `status:${STATUS_PROJECT_KEY}:history:${modelNameLower}`;
+    const remoteQueueLsKey = `status:${STATUS_PROJECT_KEY}:queue:${modelNameLower}`;
+
+    // Helper functions for reading/writing storage
+    const readStorageJson = <T,>(key: string, defaultValue: T): T => {
+        try {
+            const raw = localStorage.getItem(key);
+            if (raw) return JSON.parse(raw) as T;
+        } catch (e) {
+            console.error(`Error reading key ${key} from localStorage:`, e);
+        }
+        return defaultValue;
+    };
+
+    const writeStorageJson = <T,>(key: string, value: T): void => {
+        try {
+            localStorage.setItem(key, JSON.stringify(value));
+        } catch (e) {
+            console.error(`Error writing key ${key} to localStorage:`, e);
+        }
+    };
+
+    let elementStatuses = readStorageJson<Record<string, ConstructionStatus>>(elementStatusesLsKey, {}) || {};
+    let elementHistory = readStorageJson<Record<string, Array<{ status: ConstructionStatus; at: string }>>>(elementHistoryLsKey, {}) || {};
+    let remoteQueue = readStorageJson<Array<{ id: string; status: ConstructionStatus; modelKey: string; at: string }>>(remoteQueueLsKey, []) || [];
+
+    let isPanelOpen = false;
+    let activeTab: 'detalle' | 'estados' | 'historial' = 'detalle';
+    let searchQuery = '';
+    
+    // Filters state
+    let filterClassification = 'Todos';
+    let filterLevel = 'Todos';
+    let filterStatus = 'Todos';
+
+    // View colorization toggles
+    let statusColorsEnabled = true;
+
+    // Selection state
+    let selectedElementIds: number[] = [];
+    let syncState: { status: 'offline' | 'online' | 'syncing'; label: string } = { status: 'offline', label: 'Sin sincronizar' };
+    let firstLoadDone = false;
+
+    // Helper functions for parsing
+    const getVal = (obj: any, ...keys: string[]): string | null => {
+        if (!obj || typeof obj !== 'object') return null;
+
+        for (const k of keys) {
+            const raw = obj[k];
+            if (raw !== undefined && raw !== null) {
+                const v = (raw && typeof raw === 'object' && 'value' in raw) ? raw.value : raw;
+                if (v !== null && v !== undefined && String(v).trim() !== '') return String(v).trim();
+            }
+        }
+
+        const queue = [obj];
+        const seen = new Set<any>();
+        let steps = 0;
+        const maxSteps = 1000;
+
+        while (queue.length > 0 && steps < maxSteps) {
+            const current = queue.shift();
+            if (!current || typeof current !== 'object') continue;
+            if (seen.has(current)) continue;
+            seen.add(current);
+            steps++;
+
+            for (const k of keys) {
+                const raw = current[k];
+                if (raw !== undefined && raw !== null) {
+                    const v = (raw && typeof raw === 'object' && 'value' in raw) ? raw.value : raw;
+                    if (v !== null && v !== undefined && String(v).trim() !== '') return String(v).trim();
+                }
+            }
+
+            for (const key in current) {
+                if (key === 'ObjectPlacement' || key === 'Representation' || key === 'OwnerHistory') continue;
+                const val = current[key];
+                if (val && typeof val === 'object') {
+                    queue.push(val);
+                }
+            }
+        }
+
+        return null;
+    };
+
+    const parseNum = (value: unknown): number => {
+        if (value === undefined || value === null) return 0;
+        if (typeof value === 'number') return Number.isFinite(value) ? value : 0;
+        const s = String(value).trim();
+        if (!s || s === '-') return 0;
+        const cleaned = s.replace(/\s/g, '').replace(',', '.').replace(/[^\d.\-]/g, '');
+        const n = parseFloat(cleaned);
+        return Number.isFinite(n) ? n : 0;
+    };
+
+    const stripModelExtension = (name: string | null | undefined) => String(name ?? '').replace(/\.(frag|ifc)$/i, '').trim();
+    const normalizeRemoteModelKey = (value: string | null | undefined) => {
+        const base = stripModelExtension(value);
+        const normalized = String(base || '')
+            .normalize('NFD')
+            .replace(/[\u0300-\u036f]/g, '')
+            .replace(/[^A-Za-z0-9]+/g, '_')
+            .replace(/_+/g, '_')
+            .replace(/^_+|_+$/g, '');
+        return normalized ? normalized.slice(0, 70) : 'local';
+    };
+
+    function normalizeConstructionStatus(val: string | null | undefined): ConstructionStatus {
+        if (!val) return 'NINGUNO';
+        const norm = val.trim().toUpperCase()
+            .normalize("NFD").replace(/[\u0300-\u036f]/g, ""); // strip accents
+        if (norm === 'NINGUNO' || norm === 'NONE' || norm === 'PENDIENTE') return 'NINGUNO';
+        if (norm === 'EN PROGRESO' || norm === 'PROGRESO' || norm === 'IN PROGRESS') return 'EN PROGRESO';
+        if (norm === 'PARA INSPECCION' || norm === 'INSPECCION' || norm === 'INSPECCIÓN' || norm === 'PARA INSPECCIÓN') return 'PARA INSPECCIÓN';
+        if (norm === 'APROBADO' || norm === 'APROBADA' || norm === 'APPROVED') return 'APROBADO';
+        if (norm === 'CERRADO' || norm === 'CERRADA' || norm === 'CLOSED') return 'CERRADO';
+        if (norm === 'RECHAZADO' || norm === 'RECHAZADA' || norm === 'REJECTED') return 'RECHAZADO';
+        return 'NINGUNO';
+    }
+
+    function nextStatus(st: ConstructionStatus): ConstructionStatus {
+        const idx = STATUS_ORDER.indexOf(st);
+        if (idx === -1 || idx === STATUS_ORDER.length - 1) return STATUS_ORDER[0];
+        return STATUS_ORDER[idx + 1];
+    }
+
+    let timelineDays: string[] = [];
+    let timelineIndex: number | null = null;
+    let selectedTimelineDate: string | null = null;
+    let timelinePlayInterval: any = null;
+
+    function getElementStatusAtDate(id: string, dateStr: string | null): ConstructionStatus {
+        if (!dateStr) return elementStatuses[id] || 'NINGUNO';
+        
+        const target = new Date(dateStr + 'T23:59:59.999Z').getTime();
+        const hist = elementHistory[id];
+        if (!hist || hist.length === 0) return 'NINGUNO';
+        
+        let chosen: ConstructionStatus = 'NINGUNO';
+        for (const entry of hist) {
+            const t = new Date(entry.at).getTime();
+            if (!isNaN(t) && t <= target) {
+                chosen = entry.status;
+            }
+        }
+        return chosen;
+    }
+
+    function updateTimelineData() {
+        const set = new Set<string>();
+        for (const arr of Object.values(elementHistory)) {
+            if (!Array.isArray(arr)) continue;
+            for (const it of arr) {
+                if (it && it.at) {
+                    const d = new Date(it.at);
+                    if (!isNaN(d.getTime())) {
+                        const key = d.toISOString().slice(0, 10);
+                        set.add(key);
+                    }
+                }
+            }
+        }
+        const timelinePoints = Array.from(set).sort((a, b) => a.localeCompare(b));
+        
+        if (timelinePoints.length === 0) {
+            timelineDays = [];
+            timelineIndex = null;
+            selectedTimelineDate = null;
+            return;
+        }
+
+        const minKey = timelinePoints[0];
+        const maxKey = timelinePoints[timelinePoints.length - 1];
+        const minT = Date.parse(minKey + 'T00:00:00Z');
+        const maxTHistory = Date.parse(maxKey + 'T00:00:00Z');
+        const todayKey = new Date().toISOString().slice(0, 10);
+        const maxTToday = Date.parse(todayKey + 'T00:00:00Z');
+        const maxT = Math.max(maxTHistory, maxTToday);
+
+        if (!Number.isFinite(minT) || !Number.isFinite(maxT) || maxT < minT) {
+            timelineDays = [];
+            timelineIndex = null;
+            selectedTimelineDate = null;
+            return;
+        }
+
+        const days: string[] = [];
+        for (let t = minT; t <= maxT; t += 86400000) {
+            days.push(new Date(t).toISOString().slice(0, 10));
+        }
+        timelineDays = days;
+    }
+
+    function stopTimelinePlayback() {
+        if (timelinePlayInterval !== null) {
+            clearInterval(timelinePlayInterval);
+            timelinePlayInterval = null;
+        }
+    }
+
+    function toggleTimelinePlayback(elements: any[]) {
+        if (timelinePlayInterval !== null) {
+            stopTimelinePlayback();
+            renderStatusContent();
+            return;
+        }
+
+        updateTimelineData();
+        if (timelineDays.length === 0) return;
+
+        let currentIdx = timelineIndex !== null ? timelineIndex : timelineDays.length - 1;
+        if (currentIdx >= timelineDays.length - 1) {
+            currentIdx = 0;
+        }
+
+        timelineIndex = currentIdx;
+        selectedTimelineDate = timelineDays[currentIdx];
+        renderStatusContent();
+
+        timelinePlayInterval = setInterval(() => {
+            currentIdx++;
+            if (currentIdx >= timelineDays.length) {
+                stopTimelinePlayback();
+                selectedTimelineDate = null;
+                timelineIndex = null;
+                renderStatusContent();
+            } else {
+                timelineIndex = currentIdx;
+                selectedTimelineDate = timelineDays[currentIdx];
+                renderStatusContent();
+            }
+        }, 1000);
+    }
+
+    function renderTimelineBar(elements: any[]) {
+        let timelineBar = sPanel.querySelector('.q-timeline-bar') as HTMLElement;
+        if (!timelineBar) {
+            timelineBar = document.createElement('div');
+            timelineBar.className = 'q-timeline-bar';
+            
+            const toolbar = sPanel.querySelector('.q-toolbar');
+            if (toolbar) {
+                sPanel.insertBefore(timelineBar, toolbar.nextSibling);
+            } else {
+                sPanel.insertBefore(timelineBar, contentArea);
+            }
+        }
+
+        updateTimelineData();
+
+        if (timelineDays.length === 0) {
+            timelineBar.innerHTML = `
+                <div class="q-timeline-empty" style="padding: 10px; text-align: center; color: var(--text-med-gray); font-size: 11px; font-style: italic; background: #f8fafc; border: 1px dashed var(--border-color); border-radius: 6px; margin: 0 10px 10px 10px;">
+                    <i class="fa-solid fa-clock-rotate-left"></i> No hay historial registrado para mostrar la línea de tiempo de avance de obra.
+                </div>
+            `;
+            return;
+        }
+
+        const activeIndex = timelineIndex !== null ? timelineIndex : timelineDays.length - 1;
+        const activeDateStr = timelineDays[activeIndex];
+        const formattedDate = new Date(activeDateStr + 'T00:00:00Z').toLocaleDateString('es-CO', {
+            weekday: 'long',
+            day: 'numeric',
+            month: 'long',
+            year: 'numeric',
+            timeZone: 'UTC'
+        });
+
+        const isPlaying = timelinePlayInterval !== null;
+
+        timelineBar.innerHTML = `
+            <div class="q-timeline-row" style="display: flex; align-items: center; justify-content: space-between; gap: 15px; background: var(--bg-hover); padding: 8px 15px; border-bottom: 1px solid var(--border-color); margin-bottom: 10px;">
+                <div class="q-timeline-left" style="display: flex; align-items: center; gap: 8px;">
+                    <button type="button" id="s-timeline-play-btn" class="q-btn-xs ${isPlaying ? 'active' : ''}" style="display: flex; align-items: center; gap: 4px; padding: 4px 10px; border-radius: 4px; border: 1px solid var(--border-color); background: var(--card-bg); font-weight: bold; cursor: pointer;">
+                        <i class="fa-solid ${isPlaying ? 'fa-pause' : 'fa-play'}"></i> ${isPlaying ? 'Pausar' : 'Simular'}
+                    </button>
+                    <button type="button" id="s-timeline-today-btn" class="q-btn-xs" style="padding: 4px 10px; border-radius: 4px; border: 1px solid var(--border-color); background: ${selectedTimelineDate === null ? 'var(--primary-color)' : 'var(--card-bg)'}; color: ${selectedTimelineDate === null ? '#fff' : 'inherit'}; font-weight: bold; cursor: pointer;">
+                        Hoy
+                    </button>
+                </div>
+                <div class="q-timeline-center" style="flex: 1; display: flex; align-items: center;">
+                    <input type="range" id="s-timeline-range-input" min="0" max="${timelineDays.length - 1}" value="${activeIndex}" style="width: 100%; cursor: pointer;" />
+                </div>
+                <div class="q-timeline-right">
+                    <span class="q-timeline-date-text" style="font-size: 11px; font-weight: bold; color: var(--text-dark-gray); display: flex; align-items: center; gap: 6px;">
+                        <i class="fa-solid fa-calendar-alt" style="color: var(--primary-color);"></i> ${selectedTimelineDate ? formattedDate : 'Hoy (Actual)'}
+                    </span>
+                </div>
+            </div>
+        `;
+
+        const playBtn = timelineBar.querySelector('#s-timeline-play-btn');
+        playBtn?.addEventListener('click', () => {
+            toggleTimelinePlayback(elements);
+        });
+
+        const todayBtn = timelineBar.querySelector('#s-timeline-today-btn');
+        todayBtn?.addEventListener('click', () => {
+            stopTimelinePlayback();
+            selectedTimelineDate = null;
+            timelineIndex = null;
+            renderStatusContent();
+        });
+
+        const slider = timelineBar.querySelector('#s-timeline-range-input') as HTMLInputElement;
+        slider?.addEventListener('input', (e) => {
+            stopTimelinePlayback();
+            const val = parseInt((e.target as HTMLInputElement).value, 10);
+            timelineIndex = val;
+            if (val === timelineDays.length - 1) {
+                selectedTimelineDate = null;
+            } else {
+                selectedTimelineDate = timelineDays[val];
+            }
+            renderStatusContent();
+        });
+    }
+
+    function extractAllElements() {
+        const allElements: any[] = [];
+        for (const [modelUUID, model] of loadedModels.entries()) {
+            const modelAny = model as any;
+            if (!modelAny.properties) continue;
+            for (const idStr of Object.keys(modelAny.properties)) {
+                const expressID = parseInt(idStr, 10);
+                if (isNaN(expressID)) continue;
+                const attrs = modelAny.properties[idStr];
+                if (!attrs || typeof attrs !== 'object') continue;
+
+                const category = getVal(attrs, 'type', 'ifcType', 'Category', 'ObjectType', 'CLASIFICACIÓN', 'Clasificación', 'CLASIFICACION', 'clasificacion', 'CATEGORÍA', 'CATEGORIA', 'Categoría', 'categoria', 'TIPO', 'Tipo', 'tipo', 'DETALLE', 'Detalle', 'detalle') || 'Elemento';
+                const name = getVal(attrs, 'NOMBRE INTEGRADO', 'Nombre Integrado', 'nombre integrado', 'Name', 'name') || `${category} - ${expressID}`;
+                const classification = getVal(attrs, 'CLASIFICACIÓN', 'Clasificación', 'CLASIFICACION', 'clasificacion') || 'SIN CLASIFICAR';
+                const level = getVal(attrs, 'NIVEL INTEGRADO', 'Nivel Integrado', 'nivel integrado', 'Nivel', 'nivel') || 'SIN NIVEL';
+                const material = getVal(attrs, 'MATERIAL INTEGRADO', 'Material Integrado', 'material integrado') || 'SIN MATERIAL';
+                const detail = getVal(attrs, 'DETALLE', 'Detalle', 'detalle') || '-';
+
+                const volume = parseNum(getVal(attrs, 'VOLUMEN INTEGRADO', 'Volumen', 'Volume', 'Volume integrado', 'Volumen integrado'));
+                const area = parseNum(getVal(attrs, 'ÁREA INTEGRADO', 'Area', 'Area integrado', 'Área', 'Área integrado', 'AREA INTEGRADO'));
+                const length = parseNum(getVal(attrs, 'LONGITUD INTEGRADO', 'Longitud', 'Length', 'Longitud integrado', 'Longitud integrado'));
+                const diameter = getVal(attrs, 'Tamaño', 'TAMAÑO', 'TAMANO', 'Diametro', 'diametro', 'Tamao') || '';
+
+                const searchStr = [
+                    category,
+                    name,
+                    classification,
+                    level,
+                    material,
+                    diameter
+                ].join(' ').toLowerCase();
+
+                const isUnion = searchStr.includes('fitting') || searchStr.includes('conduitfitting') || searchStr.includes('cablecarrierfitting') || searchStr.includes('union') || searchStr.includes('codo') || searchStr.includes('tee') || searchStr.includes('reducc') || searchStr.includes('caja') || searchStr.includes('accesorio') || searchStr.includes('adaptador') || searchStr.includes('copla');
+                const isPipe = (searchStr.includes('pipe') || searchStr.includes('conduit') || searchStr.includes('cablecarrier') || searchStr.includes('tuber') || searchStr.includes('tubo') || searchStr.includes('conduit') || searchStr.includes('canalizacion') || searchStr.includes('canalización') || searchStr.includes('coraza') || searchStr.includes('ducto') || searchStr.includes('bandeja')) && !isUnion;
+
+                allElements.push({
+                    modelUUID,
+                    expressID,
+                    id: String(expressID),
+                    name,
+                    category,
+                    classification,
+                    level,
+                    material,
+                    detail,
+                    volume,
+                    area,
+                    length,
+                    diameter,
+                    isPipe,
+                    isUnion
+                });
+            }
+        }
+        return allElements;
+    }
+
+    // Synchronization logic
+    let isSyncing = false;
+    async function syncWithRemote() {
+        if (!STATUS_SHEET_SCRIPT_URL || isSyncing) return;
+        isSyncing = true;
+        setSyncState('syncing', 'Sincronizando...');
+        
+        const firstModelName = Array.from(loadedModels.keys())[0] || 'local';
+        
+        try {
+            // 1. Flush local queues first
+            await flushRemoteQueue();
+
+            // 2. Fetch remote status updates
+            await fetchRemoteStatuses(firstModelName);
+
+            setSyncState('online', 'Sincronizado');
+            renderStatusContent();
+        } catch (err) {
+            console.error("Error during remote sync:", err);
+            setSyncState('offline', 'Error de sincronización');
+        } finally {
+            isSyncing = false;
+        }
+    }
+
+    async function flushRemoteQueue() {
+        if (remoteQueue.length === 0) return;
+        setSyncState('syncing', 'Subiendo cambios...');
+        
+        const firstModelName = Array.from(loadedModels.keys())[0] || 'local';
+        const modelKey = normalizeRemoteModelKey(firstModelName);
+
+        const payload = {
+            action: 'status_set',
+            sheetId: STATUS_SHEET_ID,
+            model: modelKey,
+            updates: remoteQueue.map(q => ({ id: q.id, status: q.status, at: q.at }))
+        };
+
+        try {
+            await fetch(STATUS_SHEET_SCRIPT_URL, {
+                method: 'POST',
+                mode: 'no-cors',
+                headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+                body: JSON.stringify(payload)
+            });
+            remoteQueue = [];
+            writeStorageJson(remoteQueueLsKey, remoteQueue);
+        } catch (err) {
+            console.warn("Failed to flush status queue:", err);
+            throw err;
+        }
+    }
+
+    async function fetchRemoteStatuses(modelName: string) {
+        const url = new URL(STATUS_SHEET_SCRIPT_URL);
+        url.searchParams.set('action', 'status_get');
+        url.searchParams.set('sheetId', STATUS_SHEET_ID);
+        url.searchParams.set('model', normalizeRemoteModelKey(modelName));
+
+        const data = await jsonpRequestWithRetry<{
+            ok?: boolean;
+            error?: string;
+            statuses?: Record<string, string>;
+            history?: Record<string, Array<{ status: string; at: string }>>;
+        }>(url, { timeoutMs: 30000, retries: 3 });
+
+        if (data && data.ok !== false) {
+            if (data.statuses && typeof data.statuses === 'object') {
+                for (const [id, st] of Object.entries(data.statuses)) {
+                    const statusVal = normalizeConstructionStatus(st);
+                    if (statusVal) {
+                        elementStatuses[id] = statusVal;
+                    }
+                }
+                writeStorageJson(elementStatusesLsKey, elementStatuses);
+            }
+            if (data.history && typeof data.history === 'object') {
+                for (const [id, entries] of Object.entries(data.history)) {
+                    if (Array.isArray(entries)) {
+                        elementHistory[id] = entries.map(e => ({
+                            status: normalizeConstructionStatus(e.status) || 'NINGUNO',
+                            at: String(e.at || '')
+                        })).filter(h => h.at);
+                    }
+                }
+                writeStorageJson(elementHistoryLsKey, elementHistory);
+            }
+        }
+    }
+
+    function setSyncState(status: 'offline' | 'online' | 'syncing', label: string) {
+        syncState = { status, label };
+        const badge = sPanel.querySelector('.q-sync-badge');
+        if (badge) {
+            badge.className = `q-sync-badge ${status}`;
+            badge.textContent = label;
+        }
+    }
+
+    // Status change handlers
+    function handleChangeStatus(id: string, newStatus: ConstructionStatus) {
+        const firstModelName = Array.from(loadedModels.keys())[0] || 'local';
+        const modelKey = normalizeRemoteModelKey(firstModelName);
+        const at = new Date().toISOString();
+
+        elementStatuses[id] = newStatus;
+        writeStorageJson(elementStatusesLsKey, elementStatuses);
+
+        if (!elementHistory[id]) elementHistory[id] = [];
+        elementHistory[id].push({ status: newStatus, at });
+        writeStorageJson(elementHistoryLsKey, elementHistory);
+
+        // Queue status upload
+        remoteQueue = remoteQueue.filter((q) => q.id !== id);
+        remoteQueue.push({ id, status: newStatus, modelKey, at });
+        writeStorageJson(remoteQueueLsKey, remoteQueue);
+
+        // Sync updates
+        syncWithRemote().catch(console.error);
+
+        // Visual refresh
+        renderStatusContent();
+    }
+
+    function handleChangeStatusMany(ids: string[], newStatus: ConstructionStatus) {
+        const firstModelName = Array.from(loadedModels.keys())[0] || 'local';
+        const modelKey = normalizeRemoteModelKey(firstModelName);
+        const at = new Date().toISOString();
+
+        ids.forEach(id => {
+            elementStatuses[id] = newStatus;
+            if (!elementHistory[id]) elementHistory[id] = [];
+            elementHistory[id].push({ status: newStatus, at });
+
+            remoteQueue = remoteQueue.filter((q) => q.id !== id);
+            remoteQueue.push({ id, status: newStatus, modelKey, at });
+        });
+
+        writeStorageJson(elementStatusesLsKey, elementStatuses);
+        writeStorageJson(elementHistoryLsKey, elementHistory);
+        writeStorageJson(remoteQueueLsKey, remoteQueue);
+
+        selectedElementIds = [];
+        syncWithRemote().catch(console.error);
+
+        renderStatusContent();
+    }
+
+    // 3D Highlighter integration
+    const prevStatusApplied: Record<string, boolean> = {};
+
+    function applyStatusColorizationToViewer(elements: any[]) {
+        const highlighter = components.get(OBF.Highlighter);
+        if (!highlighter) return;
+
+        const statusStyles = [
+            'status_const_NINGUNO',
+            'status_const_EN_PROGRESO',
+            'status_const_PARA_INSPECCION',
+            'status_const_APROBADO',
+            'status_const_CERRADO',
+            'status_const_RECHAZADO'
+        ];
+
+        if (!statusColorsEnabled) {
+            statusStyles.forEach(style => {
+                try {
+                    highlighter.clear(style);
+                } catch {}
+                prevStatusApplied[style] = false;
+            });
+            return;
+        }
+
+        const styleToElements: Record<string, any[]> = {
+            status_const_NINGUNO: [],
+            status_const_EN_PROGRESO: [],
+            status_const_PARA_INSPECCION: [],
+            status_const_APROBADO: [],
+            status_const_CERRADO: [],
+            status_const_RECHAZADO: []
+        };
+
+        elements.forEach(el => {
+            const st = getElementStatusAtDate(el.id, selectedTimelineDate);
+            const style = `status_const_${st.replace(/ /g, '_').normalize("NFD").replace(/[\u0300-\u036f]/g, "")}`;
+            if (styleToElements[style]) {
+                styleToElements[style].push(el);
+            } else {
+                styleToElements.status_const_NINGUNO.push(el);
+            }
+        });
+
+        statusStyles.forEach(style => {
+            const els = styleToElements[style] || [];
+            if (els.length > 0) {
+                const map: Record<string, number[]> = {};
+                els.forEach(el => {
+                    if (!map[el.modelUUID]) map[el.modelUUID] = [];
+                    map[el.modelUUID].push(el.expressID);
+                });
+                try {
+                    highlighter.highlightByID(style, map as any, true, false);
+                    prevStatusApplied[style] = true;
+                } catch (err) {
+                    console.error("Error highlighting style:", style, err);
+                }
+            } else {
+                if (prevStatusApplied[style]) {
+                    try {
+                        highlighter.clear(style);
+                    } catch {}
+                    prevStatusApplied[style] = false;
+                }
+            }
+        });
+    }
+
+    function highlightSelectionInViewer(elements: any[]) {
+        const highlighter = components.get(OBF.Highlighter);
+        if (!highlighter) return;
+
+        if (selectedElementIds.length === 0) {
+            highlighter.clear('select');
+            return;
+        }
+
+        const map: Record<string, number[]> = {};
+        elements.forEach(el => {
+            if (selectedElementIds.includes(el.expressID)) {
+                if (!map[el.modelUUID]) map[el.modelUUID] = [];
+                map[el.modelUUID].push(el.expressID);
+            }
+        });
+
+        try {
+            highlighter.highlightByID('select', map as any, true, true);
+        } catch (err) {
+            console.error("Error setting viewer selection:", err);
+        }
+    }
+
+    // Two-way selection listeners
+    const onHighlightCallback = (modelIdMap: any) => {
+        if (!isPanelOpen) return;
+        const ids: number[] = [];
+        for (const set of Object.values(modelIdMap)) {
+            if (set instanceof Set) {
+                set.forEach((id) => ids.push(id));
+            } else if (Array.isArray(set)) {
+                (set as any[]).forEach((id) => ids.push(Number(id)));
+            }
+        }
+        selectedElementIds = ids;
+        updateSelectedRowsInUI();
+        updateBulkActionBar();
+    };
+
+    const onClearCallback = () => {
+        if (!isPanelOpen) return;
+        selectedElementIds = [];
+        updateSelectedRowsInUI();
+        updateBulkActionBar();
+    };
+
+    const highlighter = components.get(OBF.Highlighter);
+    if (highlighter) {
+        highlighter.events.select.onHighlight.add(onHighlightCallback);
+        highlighter.events.select.onClear.add(onClearCallback);
+    }
+
+    function updateSelectedRowsInUI() {
+        const rows = contentArea?.querySelectorAll('tbody tr[data-id]');
+        if (rows) {
+            rows.forEach((row) => {
+                const idStr = row.getAttribute('data-id');
+                const id = idStr ? parseInt(idStr, 10) : NaN;
+                if (!isNaN(id) && selectedElementIds.includes(id)) {
+                    row.classList.add('q-table-row-selected');
+                } else {
+                    row.classList.remove('q-table-row-selected');
+                }
+            });
+        }
+    }
+
+    function updateBulkActionBar() {
+        let bulkBar = sPanel.querySelector('.q-bulk-bar') as HTMLElement;
+        if (selectedElementIds.length === 0) {
+            if (bulkBar) bulkBar.remove();
+            return;
+        }
+
+        if (!bulkBar) {
+            bulkBar = document.createElement('div');
+            bulkBar.className = 'q-bulk-bar';
+            sPanel.insertBefore(bulkBar, contentArea);
+        }
+
+        bulkBar.innerHTML = `
+            <div class="q-bulk-bar-left">
+                <span>${selectedElementIds.length} seleccionado(s)</span>
+            </div>
+            <div class="q-bulk-bar-right">
+                <button type="button" class="q-btn-xs" data-status="NINGUNO">Ninguno</button>
+                <button type="button" class="q-btn-xs" data-status="EN PROGRESO" style="background: #fde68a; color: #78350f;">En Progreso</button>
+                <button type="button" class="q-btn-xs" data-status="PARA INSPECCIÓN" style="background: #bfdbfe; color: #1e3a8a;">Para Inspección</button>
+                <button type="button" class="q-btn-xs" data-status="APROBADO" style="background: #a7f3d0; color: #064e3b;">Aprobado</button>
+                <button type="button" class="q-btn-xs" data-status="CERRADO" style="background: #bbf7d0; color: #14532d;">Cerrado</button>
+                <button type="button" class="q-btn-xs" data-status="RECHAZADO" style="background: #fecaca; color: #7f1d1d;">Rechazado</button>
+            </div>
+        `;
+
+        bulkBar.querySelectorAll('.q-btn-xs[data-status]').forEach((btn) => {
+            btn.addEventListener('click', () => {
+                const targetStatus = btn.getAttribute('data-status') as ConstructionStatus;
+                if (targetStatus) {
+                    const stringIds = selectedElementIds.map(id => String(id));
+                    handleChangeStatusMany(stringIds, targetStatus);
+                }
+            });
+        });
+    }
+
+    // Toggle button handler
+    toggleBtn.addEventListener('click', () => {
+        const currentlyClosed = sPanel.classList.contains('closed');
+        isPanelOpen = currentlyClosed;
+        
+        if (currentlyClosed) {
+            // Close quantities panel if open
+            const qPanel = document.getElementById('quantities-panel');
+            const qToggle = document.getElementById('quantities-toggle');
+            if (qPanel && !qPanel.classList.contains('closed')) {
+                qPanel.classList.add('closed');
+                if (qToggle) qToggle.classList.remove('active');
+            }
+
+            sPanel.classList.remove('closed');
+            toggleBtn.classList.add('active');
+            renderStatusContent();
+            if (!firstLoadDone) {
+                firstLoadDone = true;
+                syncWithRemote();
+            }
+        } else {
+            sPanel.classList.add('closed');
+            toggleBtn.classList.remove('active');
+            stopTimelinePlayback();
+            selectedTimelineDate = null;
+            timelineIndex = null;
+            // Clear status highlighting when closed
+            const currentColorsEnabled = statusColorsEnabled;
+            statusColorsEnabled = false;
+            applyStatusColorizationToViewer(extractAllElements());
+            statusColorsEnabled = currentColorsEnabled;
+        }
+    });
+
+    if (closeBtn) {
+        closeBtn.addEventListener('click', () => {
+            isPanelOpen = false;
+            sPanel.classList.add('closed');
+            toggleBtn.classList.remove('active');
+            stopTimelinePlayback();
+            selectedTimelineDate = null;
+            timelineIndex = null;
+            // Clear status highlighting when closed
+            const currentColorsEnabled = statusColorsEnabled;
+            statusColorsEnabled = false;
+            applyStatusColorizationToViewer(extractAllElements());
+            statusColorsEnabled = currentColorsEnabled;
+        });
+    }
+
+    // Resizer logic
+    if (resizer) {
+        let isResizing = false;
+        resizer.addEventListener('mousedown', (e) => {
+            isResizing = true;
+            resizer.classList.add('resizing');
+            document.body.style.cursor = 'ns-resize';
+            e.preventDefault();
+        });
+        document.addEventListener('mousemove', (e) => {
+            if (!isResizing) return;
+            const newHeight = window.innerHeight - e.clientY;
+            if (newHeight > 150 && newHeight < window.innerHeight - 100) {
+                sPanel.style.height = `${newHeight}px`;
+            }
+        });
+        document.addEventListener('mouseup', () => {
+            if (isResizing) {
+                isResizing = false;
+                resizer.classList.remove('resizing');
+                document.body.style.cursor = 'default';
+            }
+        });
+    }
+
+    const tabBtns = sPanel.querySelectorAll('.q-tab-btn');
+    tabBtns.forEach(btn => {
+        btn.addEventListener('click', () => {
+            tabBtns.forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            activeTab = btn.getAttribute('data-tab') as 'detalle' | 'estados' | 'historial';
+            renderStatusContent();
+        });
+    });
+
+    // Render logic
+    function renderStatusContent() {
+        if (!contentArea) return;
+        const elements = extractAllElements();
+
+        if (elements.length === 0) {
+            contentArea.innerHTML = '<div class="q-empty-msg">No hay datos de avance. Asegúrate de cargar un modelo IFC con propiedades.</div>';
+            const totalsEl = document.getElementById('s-header-totals');
+            if (totalsEl) totalsEl.innerHTML = '';
+            return;
+        }
+
+        // Apply status highlighting in viewer
+        applyStatusColorizationToViewer(elements);
+
+        // Render toolbar first
+        renderToolbar(elements);
+
+        // Render timeline bar second
+        renderTimelineBar(elements);
+
+        // Render the active tab content
+        renderTableData(elements);
+
+        // Update bulk action status bar
+        updateBulkActionBar();
+    }
+
+    function renderToolbar(elements: any[]) {
+        let toolbar = sPanel.querySelector('.q-toolbar');
+        if (!toolbar) {
+            toolbar = document.createElement('div');
+            toolbar.className = 'q-toolbar';
+            sPanel.insertBefore(toolbar, contentArea);
+        }
+
+        const classifications = Array.from(new Set(elements.map(e => e.classification))).sort();
+        const levels = Array.from(new Set(elements.map(e => e.level))).sort();
+
+        toolbar.innerHTML = `
+            <div class="q-toolbar-left">
+                <div class="q-control-group">
+                    Buscar
+                    <input type="text" id="s-search" class="q-input" value="${searchQuery}" placeholder="ID o nombre..." style="width: 140px;" />
+                </div>
+                <div class="q-control-group">
+                    Clasificación
+                    <select id="s-filter-class" class="q-select">
+                        <option value="Todos">Todos</option>
+                        ${classifications.map(c => `<option value="${c}" ${filterClassification === c ? 'selected' : ''}>${c}</option>`).join('')}
+                    </select>
+                </div>
+                <div class="q-control-group">
+                    Nivel
+                    <select id="s-filter-level" class="q-select">
+                        <option value="Todos">Todos</option>
+                        ${levels.map(l => `<option value="${l}" ${filterLevel === l ? 'selected' : ''}>${l}</option>`).join('')}
+                    </select>
+                </div>
+                <div class="q-control-group">
+                    Estado
+                    <select id="s-filter-status" class="q-select">
+                        <option value="Todos">Todos</option>
+                        ${STATUS_ORDER.map(s => `<option value="${s}" ${filterStatus === s ? 'selected' : ''}>${s}</option>`).join('')}
+                    </select>
+                </div>
+            </div>
+            <div class="q-toolbar-right">
+                <button type="button" id="s-toggle-colors" class="q-btn-xs ${statusColorsEnabled ? 'active' : ''}">Colores 3D</button>
+                <button type="button" id="s-btn-sync" class="q-btn-xs"><i class="fa-solid fa-rotate"></i> Sync</button>
+                <span class="q-sync-badge ${syncState.status}">${syncState.label}</span>
+            </div>
+        `;
+
+        const searchInput = toolbar.querySelector('#s-search') as HTMLInputElement;
+        searchInput?.addEventListener('input', (e) => {
+            searchQuery = (e.target as HTMLInputElement).value;
+            renderTableData(elements);
+        });
+
+        toolbar.querySelector('#s-filter-class')?.addEventListener('change', (e) => {
+            filterClassification = (e.target as HTMLSelectElement).value;
+            renderTableData(elements);
+        });
+
+        toolbar.querySelector('#s-filter-level')?.addEventListener('change', (e) => {
+            filterLevel = (e.target as HTMLSelectElement).value;
+            renderTableData(elements);
+        });
+
+        toolbar.querySelector('#s-filter-status')?.addEventListener('change', (e) => {
+            filterStatus = (e.target as HTMLSelectElement).value;
+            renderTableData(elements);
+        });
+
+        toolbar.querySelector('#s-toggle-colors')?.addEventListener('click', (e) => {
+            statusColorsEnabled = !statusColorsEnabled;
+            const btn = e.currentTarget as HTMLElement;
+            if (statusColorsEnabled) btn.classList.add('active');
+            else btn.classList.remove('active');
+            applyStatusColorizationToViewer(elements);
+        });
+
+        toolbar.querySelector('#s-btn-sync')?.addEventListener('click', () => {
+            syncWithRemote().catch(console.error);
+        });
+    }
+
+    function renderTableData(elements: any[]) {
+        if (!contentArea) return;
+
+        let filtered = elements;
+        if (searchQuery.trim() !== '') {
+            const q = searchQuery.toLowerCase();
+            filtered = filtered.filter(e => e.id.includes(q) || e.name.toLowerCase().includes(q));
+        }
+        if (filterClassification !== 'Todos') {
+            filtered = filtered.filter(e => e.classification === filterClassification);
+        }
+        if (filterLevel !== 'Todos') {
+            filtered = filtered.filter(e => e.level === filterLevel);
+        }
+        if (filterStatus !== 'Todos') {
+            filtered = filtered.filter(e => getElementStatusAtDate(e.id, selectedTimelineDate) === filterStatus);
+        }
+
+        // Calculate totals on the filtered subset
+        let totalCount = 0;
+        let totalArea = 0;
+        let totalLength = 0;
+        let totalVolume = 0;
+        filtered.forEach(el => {
+            totalCount++;
+            totalArea += el.area || 0;
+            totalLength += el.length || 0;
+            totalVolume += el.volume || 0;
+        });
+
+        const formatNumber = (n: number) => n.toLocaleString('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        const formatInt = (n: number) => n.toLocaleString('es-CO', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+
+        const totalsEl = document.getElementById('s-header-totals');
+        if (totalsEl) {
+            totalsEl.innerHTML = `
+                <span>Elementos: ${formatInt(totalCount)}</span>
+                <span>Área: ${formatNumber(totalArea)} m²</span>
+                <span>Longitud: ${formatNumber(totalLength)} m</span>
+                <span>Volumen: ${formatNumber(totalVolume)} m³</span>
+            `;
+        }
+
+        if (activeTab === 'detalle') {
+            const maxElements = 150;
+            const shownElements = filtered.slice(0, maxElements);
+
+            let html = `
+                <div style="font-size: 11px; margin-bottom: 6px; font-weight: 600; color: var(--text-med-gray); text-transform: uppercase;">
+                    Mostrando ${shownElements.length} de ${filtered.length} elementos filtrados
+                </div>
+                <table class="q-table">
+                    <thead>
+                        <tr>
+                            <th style="width: 130px;">Estado</th>
+                            <th>Clasificación</th>
+                            <th>Tipo</th>
+                            <th>Categoría</th>
+                            <th>Elemento</th>
+                            <th>Detalle</th>
+                            <th>Material</th>
+                            <th>Ubicación</th>
+                            <th style="text-align: right;">Área (m²)</th>
+                            <th style="text-align: right;">Longitud (m)</th>
+                            <th style="text-align: right;">Volumen (m³)</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+            `;
+
+            if (shownElements.length === 0) {
+                html += `<tr><td colspan="11" style="text-align: center; color: var(--text-med-gray); padding: 20px; font-style: italic;">No se encontraron elementos.</td></tr>`;
+            } else {
+                shownElements.forEach(el => {
+                    const st = getElementStatusAtDate(el.id, selectedTimelineDate);
+                    const isSelected = selectedElementIds.includes(el.expressID);
+                    const cleanStKey = st.toLowerCase().replace(/ /g, '-').normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+
+                    html += `
+                        <tr class="status-row-${cleanStKey} ${isSelected ? 'q-table-row-selected' : ''}" data-id="${el.id}" data-model="${el.modelUUID}">
+                            <td class="px-2 py-1">
+                                <button type="button" class="status-pill-${cleanStKey} q-row-status-btn" data-id="${el.id}" style="padding: 2px 8px; border-radius: 4px; font-size: 10px; font-weight: bold; border: none; cursor: pointer; text-transform: uppercase; width: 100%;">
+                                    ${st}
+                                </button>
+                            </td>
+                            <td>${el.classification}</td>
+                            <td>${el.name}</td>
+                            <td>${el.category}</td>
+                            <td>${el.name}</td>
+                            <td>${el.detail}</td>
+                            <td>${el.material}</td>
+                            <td>${el.level}</td>
+                            <td style="text-align: right; font-family: monospace;">${el.area > 0 ? el.area.toFixed(2) : '-'}</td>
+                            <td style="text-align: right; font-family: monospace;">${el.length > 0 ? el.length.toFixed(2) : '-'}</td>
+                            <td style="text-align: right; font-family: monospace; font-weight: bold;">${el.volume > 0 ? el.volume.toFixed(3) : '-'}</td>
+                        </tr>
+                    `;
+                });
+            }
+
+            html += `
+                    </tbody>
+                </table>
+            `;
+
+            contentArea.innerHTML = html;
+
+            contentArea.querySelectorAll('tbody tr[data-id]').forEach(row => {
+                row.addEventListener('click', (e: Event) => {
+                    const me = e as MouseEvent;
+                    if ((e.target as HTMLElement).classList.contains('q-row-status-btn')) return;
+                    
+                    const idStr = row.getAttribute('data-id') || '';
+                    const id = parseInt(idStr, 10);
+
+                    if (me.ctrlKey) {
+                        if (selectedElementIds.includes(id)) {
+                            selectedElementIds = selectedElementIds.filter(x => x !== id);
+                        } else {
+                            selectedElementIds.push(id);
+                        }
+                    } else {
+                        selectedElementIds = [id];
+                    }
+
+                    updateSelectedRowsInUI();
+                    updateBulkActionBar();
+                    highlightSelectionInViewer(elements);
+                });
+            });
+
+            contentArea.querySelectorAll('.q-row-status-btn').forEach((btn) => {
+                btn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    if (selectedTimelineDate !== null) {
+                        alert('No se pueden modificar estados al visualizar el historial de la línea de tiempo.');
+                        return;
+                    }
+                    const id = (e.target as HTMLElement).getAttribute('data-id') || '';
+                    const curSt = getElementStatusAtDate(id, null);
+                    const nextSt = nextStatus(curSt);
+                    if (id && nextSt) handleChangeStatus(id, nextSt);
+                });
+            });
+
+        } else if (activeTab === 'estados') {
+            const statusTotals: Record<ConstructionStatus, { count: number; length: number; area: number; volume: number }> = {
+                'NINGUNO': { count: 0, length: 0, area: 0, volume: 0 },
+                'EN PROGRESO': { count: 0, length: 0, area: 0, volume: 0 },
+                'PARA INSPECCIÓN': { count: 0, length: 0, area: 0, volume: 0 },
+                'APROBADO': { count: 0, length: 0, area: 0, volume: 0 },
+                'CERRADO': { count: 0, length: 0, area: 0, volume: 0 },
+                'RECHAZADO': { count: 0, length: 0, area: 0, volume: 0 }
+            };
+
+            let grandTotal = { count: 0, length: 0, area: 0, volume: 0 };
+
+            filtered.forEach(el => {
+                const st = getElementStatusAtDate(el.id, selectedTimelineDate);
+                if (statusTotals[st]) {
+                    statusTotals[st].count++;
+                    statusTotals[st].length += el.length;
+                    statusTotals[st].area += el.area;
+                    statusTotals[st].volume += el.volume;
+
+                    grandTotal.count++;
+                    grandTotal.length += el.length;
+                    grandTotal.area += el.area;
+                    grandTotal.volume += el.volume;
+                }
+            });
+
+            let html = `
+                <table class="q-table">
+                    <thead>
+                        <tr>
+                            <th>Estado de Construcción</th>
+                            <th style="text-align: right;">Cantidad</th>
+                            <th style="text-align: right;">Área Total (m²)</th>
+                            <th style="text-align: right;">Longitud Total (m)</th>
+                            <th style="text-align: right;">Volumen Total (m³)</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+            `;
+
+            STATUS_ORDER.forEach(st => {
+                const vals = statusTotals[st];
+                const cleanStKey = st.toLowerCase().replace(/ /g, '-').normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+                html += `
+                    <tr class="status-row-${cleanStKey}" data-status-row="${st}">
+                        <td>
+                            <span class="status-pill-${cleanStKey}" style="padding: 2px 8px; border-radius: 4px; font-size: 10px; font-weight: bold; text-transform: uppercase;">
+                                ${st}
+                            </span>
+                        </td>
+                        <td style="text-align: right; font-weight: bold;">${vals.count}</td>
+                        <td style="text-align: right; font-family: monospace;">${vals.area > 0 ? vals.area.toFixed(2) : '-'}</td>
+                        <td style="text-align: right; font-family: monospace;">${vals.length > 0 ? vals.length.toFixed(2) : '-'}</td>
+                        <td style="text-align: right; font-family: monospace; font-weight: bold;">${vals.volume > 0 ? vals.volume.toFixed(3) : '-'}</td>
+                    </tr>
+                `;
+            });
+
+            html += `
+                <tr style="background: #e2e8f0; font-weight: bold; border-top: 2px solid var(--border-color);">
+                    <td>TOTAL GENERAL</td>
+                    <td style="text-align: right;">${grandTotal.count}</td>
+                    <td style="text-align: right; font-family: monospace;">${grandTotal.area.toFixed(2)}</td>
+                    <td style="text-align: right; font-family: monospace;">${grandTotal.length.toFixed(2)}</td>
+                    <td style="text-align: right; font-family: monospace;">${grandTotal.volume.toFixed(3)}</td>
+                </tr>
+                    </tbody>
+                </table>
+            `;
+
+            contentArea.innerHTML = html;
+
+            contentArea.querySelectorAll('tbody tr[data-status-row]').forEach(row => {
+                row.addEventListener('click', () => {
+                    const st = row.getAttribute('data-status-row') || '';
+                    const matchElements = filtered.filter(el => getElementStatusAtDate(el.id, selectedTimelineDate) === st);
+
+                    const map: Record<string, number[]> = {};
+                    matchElements.forEach(el => {
+                        if (!map[el.modelUUID]) map[el.modelUUID] = [];
+                        map[el.modelUUID].push(el.expressID);
+                    });
+
+                    const highlighter = components.get(OBF.Highlighter);
+                    if (highlighter) {
+                        highlighter.highlightByID('select', map as any, true, true);
+                    }
+                });
+            });
+
+        } else if (activeTab === 'historial') {
+            let html = `
+                <table class="q-table">
+                    <thead>
+                        <tr>
+                            <th>ID Express</th>
+                            <th>Nombre</th>
+                            <th>Ninguno</th>
+                            <th>En Progreso</th>
+                            <th>Para Inspección</th>
+                            <th>Aprobado</th>
+                            <th>Cerrado</th>
+                            <th>Rechazado</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+            `;
+
+            if (filtered.length === 0) {
+                html += `<tr><td colspan="8" style="text-align: center; color: var(--text-med-gray); padding: 20px;">No hay datos de historial.</td></tr>`;
+            } else {
+                const maxRows = 200;
+                const pageHist = filtered.slice(0, maxRows);
+
+                pageHist.forEach(el => {
+                    const hist = elementHistory[el.id] || [];
+                    const dates: Record<string, string> = {};
+                    hist.forEach(h => {
+                        if (h.at) {
+                            const d = new Date(h.at);
+                            dates[h.status] = d.toLocaleString('es-CO', { hour12: false }).split(',')[0];
+                        }
+                    });
+
+                    html += `
+                        <tr data-id="${el.id}">
+                            <td><strong>${el.expressID}</strong></td>
+                            <td>${el.name}</td>
+                            <td style="font-family: monospace; font-size: 10px; color: #64748b;">${dates.NINGUNO || '-'}</td>
+                            <td style="font-family: monospace; font-size: 10px; color: #b45309;">${dates['EN PROGRESO'] || '-'}</td>
+                            <td style="font-family: monospace; font-size: 10px; color: #1d4ed8;">${dates['PARA INSPECCIÓN'] || '-'}</td>
+                            <td style="font-family: monospace; font-size: 10px; color: #047857;">${dates.APROBADO || '-'}</td>
+                            <td style="font-family: monospace; font-size: 10px; color: #15803d;">${dates.CERRADO || '-'}</td>
+                            <td style="font-family: monospace; font-size: 10px; color: #b91c1c;">${dates.RECHAZADO || '-'}</td>
+                        </tr>
+                    `;
+                });
+            }
+
+            html += `
+                    </tbody>
+                </table>
+            `;
+
+            contentArea.innerHTML = html;
+        }
+    }
+
+    function exportCurrentTabToCsv() {
+        const elements = extractAllElements();
+        let csvContent = '';
+        let filename = `avance_${activeTab}.csv`;
+
+        let filtered = elements;
+        if (searchQuery.trim() !== '') {
+            const q = searchQuery.toLowerCase();
+            filtered = filtered.filter(e => e.id.includes(q) || e.name.toLowerCase().includes(q));
+        }
+        if (filterClassification !== 'Todos') {
+            filtered = filtered.filter(e => e.classification === filterClassification);
+        }
+        if (filterLevel !== 'Todos') {
+            filtered = filtered.filter(e => e.level === filterLevel);
+        }
+        if (filterStatus !== 'Todos') {
+            filtered = filtered.filter(e => getElementStatusAtDate(e.id, selectedTimelineDate) === filterStatus);
+        }
+
+        const escapeCsvValue = (val: any) => {
+            const str = val === undefined || val === null ? '' : String(val);
+            if (str.includes(',') || str.includes('"') || str.includes('\n') || str.includes('\r')) {
+                return `"${str.replace(/"/g, '""')}"`;
+            }
+            return str;
+        };
+
+        if (activeTab === 'detalle') {
+            const headers = ['Estado', 'Clasificacion', 'Tipo', 'Categoria', 'Elemento', 'Detalle', 'Material', 'Ubicacion', 'Area M2', 'Longitud M', 'Volumen M3'];
+            csvContent += headers.join(',') + '\r\n';
+            filtered.forEach(el => {
+                const st = getElementStatusAtDate(el.id, selectedTimelineDate);
+                const row = [st, el.classification, el.name, el.category, el.name, el.detail, el.material, el.level, el.area.toFixed(2), el.length.toFixed(2), el.volume.toFixed(3)];
+                csvContent += row.map(escapeCsvValue).join(',') + '\r\n';
+            });
+        } else if (activeTab === 'estados') {
+            const headers = ['Estado de Construccion', 'Cantidad', 'Area Total (m2)', 'Longitud Total (m)', 'Volumen Total (m3)'];
+            csvContent += headers.join(',') + '\r\n';
+
+            const statusTotals: Record<ConstructionStatus, { count: number; length: number; area: number; volume: number }> = {
+                'NINGUNO': { count: 0, length: 0, area: 0, volume: 0 },
+                'EN PROGRESO': { count: 0, length: 0, area: 0, volume: 0 },
+                'PARA INSPECCIÓN': { count: 0, length: 0, area: 0, volume: 0 },
+                'APROBADO': { count: 0, length: 0, area: 0, volume: 0 },
+                'CERRADO': { count: 0, length: 0, area: 0, volume: 0 },
+                'RECHAZADO': { count: 0, length: 0, area: 0, volume: 0 }
+            };
+            let grandTotal = { count: 0, length: 0, area: 0, volume: 0 };
+
+            filtered.forEach(el => {
+                const st = getElementStatusAtDate(el.id, selectedTimelineDate);
+                if (statusTotals[st]) {
+                    statusTotals[st].count++;
+                    statusTotals[st].length += el.length;
+                    statusTotals[st].area += el.area;
+                    statusTotals[st].volume += el.volume;
+
+                    grandTotal.count++;
+                    grandTotal.length += el.length;
+                    grandTotal.area += el.area;
+                    grandTotal.volume += el.volume;
+                }
+            });
+
+            STATUS_ORDER.forEach(st => {
+                const vals = statusTotals[st];
+                const row = [
+                    st,
+                    vals.count,
+                    vals.area.toFixed(2),
+                    vals.length.toFixed(2),
+                    vals.volume.toFixed(3)
+                ];
+                csvContent += row.map(escapeCsvValue).join(',') + '\r\n';
+            });
+            const totalRow = [
+                'TOTAL GENERAL',
+                grandTotal.count,
+                grandTotal.area.toFixed(2),
+                grandTotal.length.toFixed(2),
+                grandTotal.volume.toFixed(3)
+            ];
+            csvContent += totalRow.map(escapeCsvValue).join(',') + '\r\n';
+
+        } else if (activeTab === 'historial') {
+            const headers = ['ID Express', 'Nombre', 'Ninguno', 'En Progreso', 'Para Inspeccion', 'Aprobado', 'Cerrado', 'Rechazado'];
+            csvContent += headers.join(',') + '\r\n';
+
+            filtered.forEach(el => {
+                const hist = elementHistory[el.id] || [];
+                const dates: Record<string, string> = {};
+                hist.forEach(h => {
+                    if (h.at) {
+                        const d = new Date(h.at);
+                        dates[h.status] = d.toLocaleString('es-CO', { hour12: false });
+                    }
+                });
+                const row = [
+                    el.expressID,
+                    el.name,
+                    dates.NINGUNO || '',
+                    dates['EN PROGRESO'] || '',
+                    dates['PARA INSPECCIÓN'] || '',
+                    dates.APROBADO || '',
+                    dates.CERRADO || '',
+                    dates.RECHAZADO || ''
+                ];
+                csvContent += row.map(escapeCsvValue).join(',') + '\r\n';
+            });
+        }
+
+        const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' });
+        const link = document.createElement('a');
+        if (link.download !== undefined) {
+            const url = URL.createObjectURL(blob);
+            link.setAttribute('href', url);
+            link.setAttribute('download', filename);
+            link.style.visibility = 'hidden';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        }
+    }
+
+    if (csvBtn) {
+        csvBtn.addEventListener('click', () => {
+            exportCurrentTabToCsv();
+        });
+    }
+
+    (window as any).refreshStatusUI = renderStatusContent;
+}
+
+async function classifyModel(model: any) {
+    logToScreen('Clasificando modelo...');
+    const modelUUID = model.uuid;
+    clearModelFromIndex(modelUUID);
+
+    // Per-element value maps
+    const integratedClassById    = new Map<number, string>();
+    const integratedLevelById    = new Map<number, string>();
+    const integratedMaterialById = new Map<number, string>();
+    const integratedNameById     = new Map<number, string>();
+    const integratedSubById      = new Map<number, string>();
+    const elementFallbackById    = new Map<number, string>();
+
+    // Helper: unwrap {type, value} objects or return plain string
+    const getVal = (obj: any, ...keys: string[]): string | null => {
+        if (!obj || typeof obj !== 'object') return null;
+
+        // 1. Try top-level keys first
+        for (const k of keys) {
+            const raw = obj[k];
+            if (raw !== undefined && raw !== null) {
+                const v = (raw && typeof raw === 'object' && 'value' in raw) ? raw.value : raw;
+                if (v !== null && v !== undefined && String(v).trim() !== '') return String(v).trim();
+            }
+        }
+
+        // 2. Recursive deep search (BFS)
+        const queue = [obj];
+        const seen = new Set<any>();
+        let steps = 0;
+        const maxSteps = 1000;
+
+        while (queue.length > 0 && steps < maxSteps) {
+            const current = queue.shift();
+            if (!current || typeof current !== 'object') continue;
+            if (seen.has(current)) continue;
+            seen.add(current);
+            steps++;
+
+            for (const k of keys) {
+                const raw = current[k];
+                if (raw !== undefined && raw !== null) {
+                    const v = (raw && typeof raw === 'object' && 'value' in raw) ? raw.value : raw;
+                    if (v !== null && v !== undefined && String(v).trim() !== '') return String(v).trim();
+                }
+            }
+
+            for (const key in current) {
+                if (key === 'ObjectPlacement' || key === 'Representation' || key === 'OwnerHistory') continue;
+                const val = current[key];
+                if (val && typeof val === 'object') {
+                    queue.push(val);
+                }
+            }
+        }
+
+        return null;
+    };
+
+    // Helper: read integrated fields from an attribute object
+    const readFields = (attrs: any, expressID: number) => {
+        const clasif = getVal(attrs,
+            'CLASIFICACIÓN', 'Clasificaci\u00f3n', 'CLASIFICACION', 'clasificacion');
+        if (clasif) integratedClassById.set(expressID, clasif);
+
+        const nivel = getVal(attrs,
+            'NIVEL INTEGRADO', 'Nivel Integrado', 'nivel integrado');
+        if (nivel) integratedLevelById.set(expressID, nivel);
+
+        const material = getVal(attrs,
+            'MATERIAL INTEGRADO', 'Material Integrado', 'material integrado');
+        if (material) integratedMaterialById.set(expressID, material);
+
+        const nombre = getVal(attrs,
+            'NOMBRE INTEGRADO', 'Nombre Integrado', 'nombre integrado');
+        if (nombre) integratedNameById.set(expressID, nombre);
+
+        const sub = getVal(attrs,
+            'SUBPROYECTOS INTEGRADO', 'Subproyectos Integrado', 'subproyectos integrado',
+            'SUBPROYECTO INTEGRADO', 'Workset1', 'Workset');
+        if (sub) integratedSubById.set(expressID, sub);
+
+        if (!clasif) {
+            const name = getVal(attrs, 'Name', 'name', 'ObjectType', 'objectType');
+            if (name) elementFallbackById.set(expressID, name);
+        }
+
+        return !!clasif;
+    };
+
+    // --- STRATEGY 1: fragments.getData() — same data source as the properties panel ---
+    // The panel uses: const attrs = raw.data || raw.attributes || raw
+    let gdataHits = 0;
+    try {
+        const idsWithGeometry: number[] = await model.getItemsIdsWithGeometry();
+        if (idsWithGeometry && idsWithGeometry.length > 0) {
+            logToScreen(`[Classify] getData para ${idsWithGeometry.length} elementos...`);
+            const CHUNK = 1000;
+            for (let i = 0; i < idsWithGeometry.length; i += CHUNK) {
+                const chunk = idsWithGeometry.slice(i, i + CHUNK);
+                try {
+                    const result = await fragments.getData(
+                        { [modelUUID]: chunk } as any,
+                        { attributesDefault: true } as any
+                    );
+                    const items: any[] = (result as any)[modelUUID] || [];
+                    items.forEach((raw: any, idx: number) => {
+                        const expressID: number = chunk[idx];
+                        if (expressID === undefined) return;
+                        // EXACTLY like the properties panel:
+                        const attrs = raw?.data || raw?.attributes || raw || {};
+                        if (readFields(attrs, expressID)) gdataHits++;
+                    });
+                } catch (e) {
+                    console.warn('[Classify] getData chunk error:', e);
+                }
+            }
+            logToScreen(`[Classify] getData: ${gdataHits} hits CLASIFICACIÓN de ${idsWithGeometry.length} elem`);
+        }
+    } catch (e) {
+        console.warn('[Classify] getItemsIdsWithGeometry error:', e);
+    }
+
+    // --- STRATEGY 2: model.properties JSON (external .json file loaded from Drive or URL) ---
+    if (gdataHits === 0 && model.properties) {
+        const jsonKeys = Object.keys(model.properties);
+        logToScreen(`[Classify] Fallback JSON: ${jsonKeys.length} entradas...`);
+        let jsonHits = 0;
+        for (const keyStr of jsonKeys) {
+            const entity: any = model.properties[keyStr];
+            if (!entity || typeof entity !== 'object') continue;
+            const expressID = parseInt(keyStr, 10);
+            if (isNaN(expressID)) continue;
+            if (readFields(entity, expressID)) jsonHits++;
+        }
+        logToScreen(`[Classify] JSON hits: ${jsonHits}`);
+    }
+
+    // --- Build index ---
+    const allIds = new Set<number>([
+        ...integratedClassById.keys(),
+        ...integratedLevelById.keys(),
+        ...integratedMaterialById.keys(),
+        ...integratedNameById.keys(),
+        ...integratedSubById.keys(),
+        ...elementFallbackById.keys(),
+    ]);
+
+    // If still nothing, index all JSON keys as fallback
+    if (allIds.size === 0 && model.properties) {
+        for (const k of Object.keys(model.properties)) {
+            const id = parseInt(k, 10);
+            if (!isNaN(id)) allIds.add(id);
+        }
+    }
+
+    for (const id of allIds) {
+        addToIndex('CLASIFICACIÓN',          modelUUID, normalizeValue(integratedClassById.get(id)    ?? elementFallbackById.get(id) ?? 'Sin Tipo'), id);
+        addToIndex('NIVEL INTEGRADO',        modelUUID, normalizeValue(integratedLevelById.get(id)    ?? 'Sin Nivel'), id);
+        addToIndex('MATERIAL INTEGRADO',     modelUUID, normalizeValue(integratedMaterialById.get(id) ?? 'Sin Material'), id);
+        addToIndex('NOMBRE INTEGRADO',       modelUUID, normalizeValue(integratedNameById.get(id)     ?? ''), id);
+        addToIndex('SUBPROYECTOS INTEGRADO', modelUUID, normalizeValue(integratedSubById.get(id)      ?? ''), id);
+    }
+
+    classifier.list.clear();
+    classifier.list.set(
+        integratedClassificationField,
+        buildClassifierMap(integratedClassificationField, integratedClassificationOrder) as any
+    );
+
+    logToScreen(`✓ Clasificado: ${allIds.size} elem | CLASIF:${integratedClassById.size} NIVEL:${integratedLevelById.size} MAT:${integratedMaterialById.size} NOMBRE:${integratedNameById.size} SUB:${integratedSubById.size}`);
+    
+    if (typeof (window as any).refreshQuantitiesUI === 'function') {
+        try {
+            (window as any).refreshQuantitiesUI();
+        } catch (err) {
+            console.error('Error refreshing quantities UI:', err);
+        }
+    }
+}
+
+
+
+function setupVisibilityToolbar() {
+    const hideBtn = document.getElementById('btn-hide');
+    const isolateBtn = document.getElementById('btn-isolate');
+    const showAllBtn = document.getElementById('btn-show-all');
+
+    if (hideBtn) {
+        hideBtn.addEventListener('click', async () => {
+             const selection = highlighter.selection.select;
+             if (selection && Object.keys(selection).length > 0) {
+                 await hider.set(false, selection);
+                 highlighter.clear('select');
+             }
+        });
+    }
+
+    if (isolateBtn) {
+        isolateBtn.addEventListener('click', async () => {
+             const selection = highlighter.selection.select;
+             if (selection && Object.keys(selection).length > 0) {
+                 await hider.isolate(selection);
+                 highlighter.clear('select');
+             }
+        });
+    }
+
+    if (showAllBtn) {
+        showAllBtn.addEventListener('click', async () => {
+             await hider.set(true);
+             highlighter.clear('select');
+        });
+    }
+}
+
+function setupMeasurementTools_Deprecated() {
+    const lengthBtn = document.getElementById('btn-measure-length');
+    const areaBtn = document.getElementById('btn-measure-area');
+    const angleBtn = document.getElementById('btn-measure-angle');
+    const slopeBtn = document.getElementById('btn-measure-slope');
+    const pointBtn = document.getElementById('btn-measure-point');
+    const deleteBtn = document.getElementById('btn-measure-delete');
+
+    // Initialize Components
+    const length = components.get(OBF.LengthMeasurement);
+    const area = components.get(OBF.AreaMeasurement);
+    
+    // Initialize Snapper (Native)
+    /*
+    try {
+        // @ts-ignore
+        if (OBC.Snapper) {
+            // @ts-ignore
+            const snapper = components.get(OBC.Snapper);
+            snapper.enabled = true;
+            snapper.snapDistance = 15;
+        }
+    } catch (e) {
+        console.warn('Snapper component not available:', e);
+    }
+    */
+
+    // AngleMeasurement is not available in current version, implemented manually below
+    
+    length.world = world;
+    area.world = world;
+    
+    // Custom Tools State
+    let activeTool: 'none' | 'length' | 'area' | 'angle' | 'slope' | 'point' = 'none';
+    let customLabels: any[] = []; // Store CSS2DObjects or HTML overlays
+    let customMeshes: THREE.Mesh[] = [];
+    let slopePoints: THREE.Vector3[] = [];
+    let anglePoints: THREE.Vector3[] = [];
+    let snapLock: { point: THREE.Vector3; type: 'section' | 'vertex' | 'edge'; } | null = null;
+
+    // Snap Cursor
+    const cursorGeom = new THREE.SphereGeometry(0.2, 16, 16);
+    const cursorMat = new THREE.MeshBasicMaterial({ color: 0xff00ff, transparent: true, opacity: 0.6, depthTest: false });
+    const cursorMesh = new THREE.Mesh(cursorGeom, cursorMat);
+    world.scene.three.add(cursorMesh);
+    cursorMesh.visible = false;
+
+    // Simple Raycaster Helper
+    const raycaster = new THREE.Raycaster();
+    // Increase threshold for points/lines based on user feedback
+    raycaster.params.Points.threshold = 0.2; 
+    raycaster.params.Line.threshold = 0.2;
+
+    const mouse = new THREE.Vector2();
+
+    const logToScreen = (msg: string) => {
+        console.log('[UI]', msg);
+    };
+
+    const toScreenPoint = (v: THREE.Vector3) => {
+        const p = v.clone().project(world.camera.three);
+        const rect = container.getBoundingClientRect();
+        return {
+            x: (p.x * 0.5 + 0.5) * rect.width + rect.left,
+            y: (-(p.y * 0.5) + 0.5) * rect.height + rect.top,
+            z: p.z
+        };
+    };
+
+    const distanceToMousePx = (screenPoint: { x: number; y: number }, mouseScreen: { x: number; y: number }) => {
+        const dx = screenPoint.x - mouseScreen.x;
+        const dy = screenPoint.y - mouseScreen.y;
+        return Math.sqrt(dx * dx + dy * dy);
+    };
+
+    const pushUniquePoint = (points: THREE.Vector3[], candidate: THREE.Vector3) => {
+        for (const existing of points) {
+            if (existing.distanceToSquared(candidate) < 1e-8) return;
+        }
+        points.push(candidate);
+    };
+
+    const getIntersection = (event: MouseEvent) => {
+        const rect = container.getBoundingClientRect();
+        mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+        mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+        
+        // --- USE OFFICIAL RAYCASTER COMPONENT ---
+        const raycasters = components.get(OBC.Raycasters);
+        const caster = raycasters.get(world);
+        
+        const mouseVec = new THREE.Vector2(mouse.x, mouse.y);
+        
+        let valid = null;
+        try {
+             // Official component handles the raycasting
+             // Now using components.meshes which we populated in loadModel
+             valid = caster.castRayToObjects(components.meshes, mouseVec);
+        } catch (e) {
+            console.error("OBC Raycaster failed:", e);
+        }
+
+            if (event.type === 'click' || event.type === 'pointerdown') {
+                if (valid) {
+                     logToScreen(`Hit (OBC): ${valid.object.type} @ ${valid.point.x.toFixed(2)},${valid.point.y.toFixed(2)}`);
+                } else {
+                    if (components.meshes) {
+                        logToScreen(`No Hit (OBC). Searched ${components.meshes.length} meshes.`);
+                    } else {
+                        logToScreen(`No Hit (OBC). No meshes registered.`);
+                    }
+                }
+            }
+            
+            if (valid) {
+                // --- ENHANCED SNAP LOGIC (Screen Space) ---
+                const hitPoint = valid.point;
+                let snapPoint = hitPoint.clone();
+                let isSnapped = false;
+                const mouseScreen = { x: event.clientX, y: event.clientY };
+                const VERTEX_THRESHOLD_PX = 24;
+                const EDGE_THRESHOLD_PX = 5;
+                const SNAP_LOCK_RELEASE_PX = 24;
+
+                if (snapLock) {
+                    const lockScreen = toScreenPoint(snapLock.point);
+                    const lockDist = distanceToMousePx(lockScreen, mouseScreen);
+                    if (Math.abs(lockScreen.z) <= 1 && lockDist <= SNAP_LOCK_RELEASE_PX) {
+                        snapPoint = snapLock.point.clone();
+                        isSnapped = true;
+                    } else {
+                        snapLock = null;
+                    }
+                }
+                
+                try {
+                    const geom = (valid.object as any).geometry;
+                    const sectionCandidates: THREE.Vector3[] = [];
+                    const vertexCandidates: THREE.Vector3[] = [];
+                    const edgeCandidates: THREE.Vector3[] = [];
+                    const SECTION_THRESHOLD_PX = 18;
+
+                    // Handle Meshes
+                    if (!isSnapped && valid.face && (valid.object instanceof THREE.Mesh || valid.object instanceof THREE.InstancedMesh)) {
+                        const pos = geom.attributes.position;
+                        
+                        const vA = new THREE.Vector3();
+                        const vB = new THREE.Vector3();
+                        const vC = new THREE.Vector3();
+
+                        // Safe check for geometry access
+                        // DELETE ORIGINAL UNSAFE BLOCK
+                        /*
+                        vA.fromBufferAttribute(pos, valid.face.a);
+                        vB.fromBufferAttribute(pos, valid.face.b);
+                        vC.fromBufferAttribute(pos, valid.face.c);
+
+                        // Transform to world space
+                        if (valid.object instanceof THREE.InstancedMesh && valid.instanceId !== undefined) {
+                             const instanceMatrix = new THREE.Matrix4();
+                             valid.object.getMatrixAt(valid.instanceId, instanceMatrix);
+                             const matrixWorld = valid.object.matrixWorld;
+                             vA.applyMatrix4(instanceMatrix).applyMatrix4(matrixWorld);
+                             vB.applyMatrix4(instanceMatrix).applyMatrix4(matrixWorld);
+                             vC.applyMatrix4(instanceMatrix).applyMatrix4(matrixWorld);
+                        } else {
+                            valid.object.updateMatrixWorld(); 
+                            vA.applyMatrix4(valid.object.matrixWorld);
+                            vB.applyMatrix4(valid.object.matrixWorld);
+                            vC.applyMatrix4(valid.object.matrixWorld);
+                        }
+
+                        // Project to Screen Space for "Visual" Snapping
+                        const toScreen = (v: THREE.Vector3) => {
+                            const p = v.clone().project(world.camera.three);
+                            const rect = container.getBoundingClientRect();
+                            return {
+                                x: (p.x * 0.5 + 0.5) * rect.width + rect.left,
+                                y: (-(p.y * 0.5) + 0.5) * rect.height + rect.top,
+                                z: p.z,
+                                vec3: v // Keep original 3D for reverse mapping
+                            };
+                        };
+
+                        const sA = toScreen(vA);
+                        const sB = toScreen(vB);
+                        const sC = toScreen(vC);
+                        const mouseScreen = { x: event.clientX, y: event.clientY };
+
+                        // Helper: Distance to segment in screen space
+                        const distToSegment = (p: {x: number, y: number}, a: {x: number, y: number}, b: {x: number, y: number}) => {
+                            const l2 = (a.x - b.x)**2 + (a.y - b.y)**2;
+                            if (l2 === 0) return { dist: Math.sqrt((p.x - a.x)**2 + (p.y - a.y)**2), t: 0 };
+                            let t = ((p.x - a.x) * (b.x - a.x) + (p.y - a.y) * (b.y - a.y)) / l2;
+                            t = Math.max(0, Math.min(1, t));
+                            const projX = a.x + t * (b.x - a.x);
+                            const projY = a.y + t * (b.y - a.y);
+                            return { 
+                                dist: Math.sqrt((p.x - projX)**2 + (p.y - projY)**2), 
+                                t: t 
+                            };
+                        };
+                        */
+
+                        // Candidates: Vertices
+                        // Safe check for geometry access
+                        if (pos && pos.count > 0) {
+                            // Ensure indices are within bounds
+                            const maxIndex = pos.count - 1;
+                            
+                            const getVertex = (idx: number, target: THREE.Vector3) => {
+                                if (idx > maxIndex) return false;
+                                try {
+                                    target.fromBufferAttribute(pos, idx);
+                                    return true;
+                                } catch (e) {
+                                    return false;
+                                }
+                            };
+
+                            if (getVertex(valid.face.a, vA) && 
+                                getVertex(valid.face.b, vB) && 
+                                getVertex(valid.face.c, vC)) {
+
+                                // DEBUG: Check for suspicious vertices (all zero or NaN)
+                                if (vA.lengthSq() < 0.0001 && vB.lengthSq() < 0.0001 && vC.lengthSq() < 0.0001) {
+                                    console.warn("[SNAP] All vertices are zero! Geometry likely corrupt or uninitialized.");
+                                }
+
+                                // Transform to world space
+                                if (valid.object instanceof THREE.InstancedMesh && valid.instanceId !== undefined) {
+                                     const instanceMatrix = new THREE.Matrix4();
+                                     valid.object.getMatrixAt(valid.instanceId, instanceMatrix);
+                                     const matrixWorld = valid.object.matrixWorld;
+                                     vA.applyMatrix4(instanceMatrix).applyMatrix4(matrixWorld);
+                                     vB.applyMatrix4(instanceMatrix).applyMatrix4(matrixWorld);
+                                     vC.applyMatrix4(instanceMatrix).applyMatrix4(matrixWorld);
+                                } else {
+                                    valid.object.updateMatrixWorld(); 
+                                    vA.applyMatrix4(valid.object.matrixWorld);
+                                    vB.applyMatrix4(valid.object.matrixWorld);
+                                    vC.applyMatrix4(valid.object.matrixWorld);
+                                }
+
+                                const sA = toScreenPoint(vA);
+                                const sB = toScreenPoint(vB);
+                                const sC = toScreenPoint(vC);
+
+                                // Helper: Distance to segment in screen space
+                                const distToSegment = (p: {x: number, y: number}, a: {x: number, y: number}, b: {x: number, y: number}) => {
+                                    const l2 = (a.x - b.x)**2 + (a.y - b.y)**2;
+                                    if (l2 === 0) return { dist: Math.sqrt((p.x - a.x)**2 + (p.y - a.y)**2), t: 0 };
+                                    let t = ((p.x - a.x) * (b.x - a.x) + (p.y - a.y) * (b.y - a.y)) / l2;
+                                    t = Math.max(0, Math.min(1, t));
+                                    const projX = a.x + t * (b.x - a.x);
+                                    const projY = a.y + t * (b.y - a.y);
+                                    return { 
+                                        dist: Math.sqrt((p.x - projX)**2 + (p.y - projY)**2), 
+                                        t: t 
+                                    };
+                                };
+
+                                const coplanarVertices = getConnectedCoplanarVertices(valid);
+                                const sectionPoints = getSectionSnapCandidates([vA, vB, vC], hitPoint);
+                                for (const point of sectionPoints) {
+                                    pushUniquePoint(sectionCandidates, point);
+                                }
+
+                                // Exact corners from the full coplanar face have next priority.
+                                const visualVertexPool = coplanarVertices.length > 0 ? coplanarVertices : [vA, vB, vC];
+                                for (const vertex of visualVertexPool) {
+                                    pushUniquePoint(vertexCandidates, vertex);
+                                }
+
+                                // Candidates: Dynamic Edge Snapping (Screen Space Project)
+                                const edges = [
+                                    { start: sA, end: sB, vStart: vA, vEnd: vB },
+                                    { start: sB, end: sC, vStart: vB, vEnd: vC },
+                                    { start: sC, end: sA, vStart: vC, vEnd: vA }
+                                ];
+
+                                for (const edge of edges) {
+                                    const res = distToSegment(mouseScreen, edge.start, edge.end);
+                                    if (res.dist < EDGE_THRESHOLD_PX) {
+                                        // Interpolate 3D point
+                                        const edgeVec = new THREE.Vector3().subVectors(edge.vEnd, edge.vStart);
+                                        const snapPt = new THREE.Vector3().copy(edge.vStart).add(edgeVec.multiplyScalar(res.t));
+                                        pushUniquePoint(edgeCandidates, snapPt);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    // Handle Lines
+                    else if (!isSnapped && (valid.object instanceof THREE.Line || valid.object instanceof THREE.LineSegments) && valid.index !== undefined) {
+                         const pos = geom.attributes.position;
+                         const vA = new THREE.Vector3();
+                         const vB = new THREE.Vector3();
+                         
+                         let idx1, idx2;
+                         if (valid.object instanceof THREE.LineSegments) {
+                             idx1 = valid.index;
+                             idx2 = valid.index + 1;
+                             if (geom.index) {
+                                 idx1 = geom.index.getX(valid.index);
+                                 idx2 = geom.index.getX(valid.index + 1);
+                             }
+                         } else {
+                             idx1 = valid.index;
+                             idx2 = valid.index + 1;
+                             if (geom.index) {
+                                 idx1 = geom.index.getX(valid.index);
+                                 idx2 = geom.index.getX(valid.index + 1);
+                             }
+                         }
+
+                         if (idx1 !== undefined && idx2 !== undefined) {
+                             vA.fromBufferAttribute(pos, idx1);
+                             vB.fromBufferAttribute(pos, idx2);
+                             
+                             valid.object.updateMatrixWorld();
+                             vA.applyMatrix4(valid.object.matrixWorld);
+                             vB.applyMatrix4(valid.object.matrixWorld);
+                             
+                            pushUniquePoint(vertexCandidates, vA);
+                            pushUniquePoint(vertexCandidates, vB);
+                         }
+                    }
+
+                    if (!isSnapped && (sectionCandidates.length > 0 || vertexCandidates.length > 0 || edgeCandidates.length > 0)) {
+                        const findBestCandidate = (points: THREE.Vector3[], thresholdPx: number) => {
+                            let bestDist = thresholdPx;
+                            let bestPoint: THREE.Vector3 | null = null;
+                            for (const p of points) {
+                                const s = toScreenPoint(p);
+                                if (Math.abs(s.z) > 1) continue;
+                                const dist = distanceToMousePx(s, mouseScreen);
+                                if (dist < bestDist) {
+                                    bestDist = dist;
+                                    bestPoint = p;
+                                }
+                            }
+                            return bestPoint;
+                        };
+
+                        const bestSection = findBestCandidate(sectionCandidates, SECTION_THRESHOLD_PX);
+                        const bestVertex = bestSection ? null : findBestCandidate(vertexCandidates, VERTEX_THRESHOLD_PX);
+                        const bestEdge = (bestSection || bestVertex) ? null : findBestCandidate(edgeCandidates, EDGE_THRESHOLD_PX);
+                const bestPoint = bestSection || bestVertex || bestEdge;
+
+                        if (bestPoint) {
+                            snapPoint = bestPoint;
+                            isSnapped = true;
+                            snapLock = {
+                                point: bestPoint.clone(),
+                                type: bestSection ? 'section' : bestVertex ? 'vertex' : 'edge'
+                            };
+                        } else {
+                            snapLock = null;
+                        }
+                    }
+                } catch (err) {
+                    console.warn("Snap calculation error:", err);
+                }
+                
+                // Visual Feedback for Snap
+                if (isSnapped) {
+                    cursorMat.color.setHex(0x00ff00); // Green
+                    cursorMesh.scale.set(1.5, 1.5, 1.5);
+                    valid.point.copy(snapPoint); // CRITICAL: Update the hit point
+                    
+                    // Show Snap Indicator
+                    logToScreen(`SNAP! (X:${snapPoint.x.toFixed(2)}, Y:${snapPoint.y.toFixed(2)}, Z:${snapPoint.z.toFixed(2)})`);
+                } else {
+                    snapLock = null;
+                    cursorMat.color.setHex(0xff00ff); // Magenta
+                    cursorMesh.scale.set(1.0, 1.0, 1.0);
+                }
+                
+                return valid;
+            }
+            
+            return valid;
+
+    };
+
+    // --- CURSOR MOVEMENT ---
+    container.addEventListener('mousemove', (event) => {
+        if (activeTool === 'none') {
+            cursorMesh.visible = false;
+            return;
+        }
+        // Only update cursor for custom tools or if we want to show snap for all
+        if (['angle', 'slope', 'point'].includes(activeTool)) {
+            const hit = getIntersection(event);
+            if (hit) {
+                cursorMesh.visible = true;
+                cursorMesh.position.copy(hit.point);
+            } else {
+                cursorMesh.visible = false;
+            }
+        } else {
+             cursorMesh.visible = false;
+        }
+    });
+
+    // --- POINT TOOL HANDLER ---
+    const pointHandler = (event: MouseEvent) => {
+        if (activeTool !== 'point') return;
+        
+        // Disable built-in highlighter raycasting which seems to be crashing
+                if (components.get(OBF.Highlighter)) {
+                    // This is a bit of a hack to prevent the library from crashing
+                    // We only want our manual raycast to run
+                }
+
+        event.stopImmediatePropagation();
+        event.preventDefault(); // Add this
+        
+        console.log("[DEBUG] Point tool click detected");
+        const hit = getIntersection(event);
+        if (hit) {
+            const p = hit.point;
+            
+            // Create Marker (Sphere)
+            const geom = new THREE.SphereGeometry(0.2, 16, 16);
+            const mat = new THREE.MeshBasicMaterial({ color: 0xff0000, depthTest: false, transparent: true, opacity: 0.8 });
+            const mesh = new THREE.Mesh(geom, mat);
+            mesh.position.copy(p);
+            world.scene.three.add(mesh);
+            customMeshes.push(mesh);
+            
+            // Create Label
+            const div = document.createElement('div');
+            div.className = 'floating-label';
+            div.style.position = 'absolute';
+            div.style.background = 'rgba(0, 0, 0, 0.7)';
+            div.style.color = 'white';
+            div.style.padding = '5px 10px';
+            div.style.borderRadius = '4px';
+            div.style.pointerEvents = 'none';
+            div.style.transform = 'translate(-50%, -100%)';
+            div.style.marginTop = '-10px';
+            div.style.fontSize = '12px';
+            div.innerHTML = `X: ${p.x.toFixed(2)}<br>Y: ${p.y.toFixed(2)}<br>Z: ${p.z.toFixed(2)}`;
+            
+            // Simple CSS2D emulation
+            const updateLabel = () => {
+                if (!mesh.parent) {
+                    div.remove();
+                    world.camera.controls.removeEventListener('update', updateLabel);
+                    return;
+                }
+                const v = p.clone().project(world.camera.three);
+                const x = (v.x * .5 + .5) * container.clientWidth;
+                const y = (v.y * -.5 + .5) * container.clientHeight;
+                div.style.left = `${x}px`;
+                div.style.top = `${y}px`;
+                
+                // Hide if behind camera
+                div.style.display = v.z > 1 ? 'none' : 'block';
+            };
+            
+            container.appendChild(div);
+            customLabels.push({ removeFromParent: () => div.remove() });
+            world.camera.controls.addEventListener('update', updateLabel);
+            updateLabel(); // Initial pos
+        }
+    };
+
+    // --- LENGTH TOOL HANDLER ---
+    let lengthPoints: THREE.Vector3[] = [];
+    const lengthHandler = (event: MouseEvent) => {
+        if (activeTool !== 'length') return;
+        
+        // Force disable highlighter
+        const highlighter = components.get(OBF.Highlighter);
+        highlighter.enabled = false;
+        highlighter.clear('select');
+
+        event.stopImmediatePropagation();
+        event.preventDefault();
+
+        const hit = getIntersection(event);
+        if (hit) {
+            const p = hit.point;
+            lengthPoints.push(p);
+            
+            // Marker
+            const geom = new THREE.SphereGeometry(0.1, 8, 8);
+            const mat = new THREE.MeshBasicMaterial({ color: 0xff0000, depthTest: false });
+            const mesh = new THREE.Mesh(geom, mat);
+            mesh.position.copy(p);
+            world.scene.three.add(mesh);
+            customMeshes.push(mesh);
+            
+            if (lengthPoints.length === 2) {
+                const p1 = lengthPoints[0];
+                const p2 = lengthPoints[1];
+                const dist = p1.distanceTo(p2);
+                
+                // Draw Line
+                const lineGeom = new THREE.BufferGeometry().setFromPoints([p1, p2]);
+                const lineMat = new THREE.LineBasicMaterial({ color: 0xff0000, depthTest: false });
+                const line = new THREE.Line(lineGeom, lineMat);
+                world.scene.three.add(line);
+                customMeshes.push(line);
+                
+                // Label
+                const mid = new THREE.Vector3().addVectors(p1, p2).multiplyScalar(0.5);
+                const div = document.createElement('div');
+                div.className = 'floating-label';
+                div.style.position = 'absolute';
+                div.style.background = 'rgba(0, 0, 0, 0.7)';
+                div.style.color = '#ff0000';
+                div.style.padding = '4px 8px';
+                div.style.borderRadius = '4px';
+                div.style.pointerEvents = 'none';
+                div.style.transform = 'translate(-50%, -50%)';
+                div.style.fontSize = '12px';
+                div.innerHTML = `${dist.toFixed(3)} m`;
+                
+                const updateLabel = () => {
+                    if (!line.parent) {
+                        div.remove();
+                        world.camera.controls.removeEventListener('update', updateLabel);
+                        return;
+                    }
+                    const v = mid.clone().project(world.camera.three);
+                    const x = (v.x * .5 + .5) * container.clientWidth;
+                    const y = (v.y * -.5 + .5) * container.clientHeight;
+                    div.style.left = `${x}px`;
+                    div.style.top = `${y}px`;
+                    div.style.display = v.z > 1 ? 'none' : 'block';
+                };
+                
+                container.appendChild(div);
+                customLabels.push({ removeFromParent: () => div.remove() });
+                world.camera.controls.addEventListener('update', updateLabel);
+                updateLabel();
+                
+                lengthPoints = [];
+            }
+        }
+    };
+
+    // --- AREA TOOL HANDLER (Simplified: Points + Lines) ---
+    let areaPoints: THREE.Vector3[] = [];
+    const areaHandler = (event: MouseEvent) => {
+        if (activeTool !== 'area') return;
+        
+        const highlighter = components.get(OBF.Highlighter);
+        highlighter.enabled = false;
+        highlighter.clear('select');
+
+        event.stopImmediatePropagation();
+        event.preventDefault();
+
+        const hit = getIntersection(event);
+        if (hit) {
+            const p = hit.point;
+            
+            // Check if closing loop (click near first point)
+            let isClosing = false;
+            if (areaPoints.length >= 2) {
+                const first = areaPoints[0];
+                // Project to screen to check click distance
+                const pScreen = p.clone().project(world.camera.three);
+                const firstScreen = first.clone().project(world.camera.three);
+                const dx = (pScreen.x - firstScreen.x) * container.clientWidth / 2;
+                const dy = (pScreen.y - firstScreen.y) * container.clientHeight / 2;
+                if (Math.sqrt(dx*dx + dy*dy) < 20) {
+                    isClosing = true;
+                }
+            }
+
+            if (isClosing) {
+                // Close loop
+                const p1 = areaPoints[areaPoints.length - 1];
+                const p2 = areaPoints[0];
+                
+                const lineGeom = new THREE.BufferGeometry().setFromPoints([p1, p2]);
+                const lineMat = new THREE.LineBasicMaterial({ color: 0x00ff00, depthTest: false });
+                const line = new THREE.Line(lineGeom, lineMat);
+                world.scene.three.add(line);
+                customMeshes.push(line);
+                
+                // Calculate Area (Polygon 3D projected to dominant plane? or sum of triangles)
+                // Simple: Sum of triangles from centroid
+                const center = new THREE.Vector3();
+                areaPoints.forEach(pt => center.add(pt));
+                center.divideScalar(areaPoints.length);
+                
+                let areaVal = 0;
+                for (let i = 0; i < areaPoints.length; i++) {
+                    const v1 = areaPoints[i];
+                    const v2 = areaPoints[(i + 1) % areaPoints.length];
+                    // Triangle area: 0.5 * |(v1-c) x (v2-c)|
+                    const a = new THREE.Vector3().subVectors(v1, center);
+                    const b = new THREE.Vector3().subVectors(v2, center);
+                    areaVal += 0.5 * new THREE.Vector3().crossVectors(a, b).length();
+                }
+                
+                // Label at Center
+                const div = document.createElement('div');
+                div.className = 'floating-label';
+                div.style.position = 'absolute';
+                div.style.background = 'rgba(0, 0, 0, 0.7)';
+                div.style.color = '#00ff00';
+                div.style.padding = '4px 8px';
+                div.style.borderRadius = '4px';
+                div.style.pointerEvents = 'none';
+                div.style.transform = 'translate(-50%, -50%)';
+                div.style.fontSize = '12px';
+                div.innerHTML = `${areaVal.toFixed(2)} m²`;
+                
+                const updateLabel = () => {
+                    if (!line.parent) { // Check if line still exists
+                        div.remove();
+                        world.camera.controls.removeEventListener('update', updateLabel);
+                        return;
+                    }
+                    const v = center.clone().project(world.camera.three);
+                    const x = (v.x * .5 + .5) * container.clientWidth;
+                    const y = (v.y * -.5 + .5) * container.clientHeight;
+                    div.style.left = `${x}px`;
+                    div.style.top = `${y}px`;
+                    div.style.display = v.z > 1 ? 'none' : 'block';
+                };
+                
+                container.appendChild(div);
+                customLabels.push({ removeFromParent: () => div.remove() });
+                world.camera.controls.addEventListener('update', updateLabel);
+                updateLabel();
+                
+                areaPoints = [];
+            } else {
+                areaPoints.push(p);
+                
+                // Marker
+                const geom = new THREE.SphereGeometry(0.1, 8, 8);
+                const mat = new THREE.MeshBasicMaterial({ color: 0x00ff00, depthTest: false });
+                const mesh = new THREE.Mesh(geom, mat);
+                mesh.position.copy(p);
+                world.scene.three.add(mesh);
+                customMeshes.push(mesh);
+                
+                // Draw Line to previous
+                if (areaPoints.length > 1) {
+                    const prev = areaPoints[areaPoints.length - 2];
+                    const lineGeom = new THREE.BufferGeometry().setFromPoints([prev, p]);
+                    const lineMat = new THREE.LineBasicMaterial({ color: 0x00ff00, depthTest: false });
+                    const line = new THREE.Line(lineGeom, lineMat);
+                    world.scene.three.add(line);
+                    customMeshes.push(line);
+                }
+            }
+        }
+    };
+
+    // --- SLOPE TOOL HANDLER ---
+    const slopeHandler = (event: MouseEvent) => {
+        if (activeTool !== 'slope') return;
+
+        // Force disable highlighter
+        const highlighter = components.get(OBF.Highlighter);
+        highlighter.enabled = false;
+        highlighter.clear('select');
+
+        event.stopImmediatePropagation();
+        event.preventDefault();
+
+        console.log("[DEBUG] Slope tool click detected");
+        const hit = getIntersection(event);
+        if (hit) {
+            const p = hit.point;
+            slopePoints.push(p);
+            
+            // Marker for click
+            const geom = new THREE.SphereGeometry(0.1, 8, 8);
+            const mat = new THREE.MeshBasicMaterial({ color: 0xffff00, depthTest: false });
+            const mesh = new THREE.Mesh(geom, mat);
+            mesh.position.copy(p);
+            world.scene.three.add(mesh);
+            customMeshes.push(mesh);
+
+            if (slopePoints.length === 2) {
+                const p1 = slopePoints[0];
+                const p2 = slopePoints[1];
+                
+                // Calculate Slope
+                const dy = Math.abs(p2.y - p1.y);
+                const dx = Math.sqrt(Math.pow(p2.x - p1.x, 2) + Math.pow(p2.z - p1.z, 2));
+                
+                let slopePct = 0;
+                let slopeDeg = 0;
+                
+                if (dx > 0.001) {
+                    slopePct = (dy / dx) * 100;
+                    slopeDeg = Math.atan(dy / dx) * (180 / Math.PI);
+                } else {
+                    slopePct = 9999; // Vertical
+                    slopeDeg = 90;
+                }
+
+                // Draw Line
+                const lineGeom = new THREE.BufferGeometry().setFromPoints([p1, p2]);
+                const lineMat = new THREE.LineBasicMaterial({ color: 0xffff00, depthTest: false });
+                const line = new THREE.Line(lineGeom, lineMat);
+                world.scene.three.add(line);
+                customMeshes.push(line);
+
+                // Label
+                const mid = new THREE.Vector3().addVectors(p1, p2).multiplyScalar(0.5);
+                const div = document.createElement('div');
+                div.className = 'floating-label';
+                div.style.position = 'absolute';
+                div.style.background = 'rgba(0, 0, 0, 0.7)';
+                div.style.color = '#ffff00';
+                div.style.padding = '4px 8px';
+                div.style.borderRadius = '4px';
+                div.style.pointerEvents = 'none';
+                div.style.transform = 'translate(-50%, -50%)';
+                div.style.fontSize = '12px';
+                div.innerHTML = `Pendiente:<br>${slopePct.toFixed(2)}%<br>${slopeDeg.toFixed(2)}°`;
+                
+                const updateLabel = () => {
+                    if (!line.parent) {
+                        div.remove();
+                        world.camera.controls.removeEventListener('update', updateLabel);
+                        return;
+                    }
+                    const v = mid.clone().project(world.camera.three);
+                    const x = (v.x * .5 + .5) * container.clientWidth;
+                    const y = (v.y * -.5 + .5) * container.clientHeight;
+                    div.style.left = `${x}px`;
+                    div.style.top = `${y}px`;
+                    div.style.display = v.z > 1 ? 'none' : 'block';
+                };
+                
+                container.appendChild(div);
+                customLabels.push({ removeFromParent: () => div.remove() });
+                world.camera.controls.addEventListener('update', updateLabel);
+                updateLabel();
+
+                // Reset
+                slopePoints = [];
+            }
+        }
+    };
+
+    // --- ANGLE TOOL HANDLER ---
+    const angleHandler = (event: MouseEvent) => {
+        if (activeTool !== 'angle') return;
+
+        // Force disable highlighter
+        const highlighter = components.get(OBF.Highlighter);
+        highlighter.enabled = false;
+        highlighter.clear('select');
+
+        event.stopImmediatePropagation();
+        event.preventDefault();
+
+        console.log("[DEBUG] Angle tool click detected");
+        const hit = getIntersection(event);
+        if (hit) {
+            const p = hit.point;
+            anglePoints.push(p);
+            
+            // Marker
+            const geom = new THREE.SphereGeometry(0.1, 8, 8);
+            const mat = new THREE.MeshBasicMaterial({ color: 0x00ffff, depthTest: false });
+            const mesh = new THREE.Mesh(geom, mat);
+            mesh.position.copy(p);
+            world.scene.three.add(mesh);
+            customMeshes.push(mesh);
+            
+            if (anglePoints.length === 3) {
+                const p1 = anglePoints[0]; // Vertex? Usually User clicks Vertex 2nd? 
+                // Let's assume User clicks: Vertex, Point A, Point B.
+                // Or Point A, Vertex, Point B.
+                // Standard convention: Click Vertex, then Direction 1, then Direction 2.
+                // Let's use: Point A, Vertex, Point B -> Angle at Vertex.
+                // So click 2 is the vertex.
+                
+                // Wait, easier for user: Click Vertex, then two points defining legs.
+                // Let's assume p1 is Vertex.
+                const vertex = anglePoints[0];
+                const leg1 = anglePoints[1];
+                const leg2 = anglePoints[2];
+                
+                const v1 = new THREE.Vector3().subVectors(leg1, vertex).normalize();
+                const v2 = new THREE.Vector3().subVectors(leg2, vertex).normalize();
+                
+                const angleRad = v1.angleTo(v2);
+                const angleDeg = angleRad * (180 / Math.PI);
+                
+                // Draw Lines
+                const lineGeom = new THREE.BufferGeometry().setFromPoints([leg1, vertex, leg2]);
+                const lineMat = new THREE.LineBasicMaterial({ color: 0x00ffff, depthTest: false });
+                const line = new THREE.Line(lineGeom, lineMat);
+                world.scene.three.add(line);
+                customMeshes.push(line);
+                
+                // Label
+                const div = document.createElement('div');
+                div.className = 'floating-label';
+                div.style.position = 'absolute';
+                div.style.background = 'rgba(0, 0, 0, 0.7)';
+                div.style.color = '#00ffff';
+                div.style.padding = '4px 8px';
+                div.style.borderRadius = '4px';
+                div.style.pointerEvents = 'none';
+                div.style.transform = 'translate(-50%, -100%)';
+                div.style.fontSize = '12px';
+                div.innerHTML = `Ángulo: ${angleDeg.toFixed(2)}°`;
+                
+                const updateLabel = () => {
+                    if (!line.parent) {
+                        div.remove();
+                        world.camera.controls.removeEventListener('update', updateLabel);
+                        return;
+                    }
+                    const v = vertex.clone().project(world.camera.three);
+                    const x = (v.x * .5 + .5) * container.clientWidth;
+                    const y = (v.y * -.5 + .5) * container.clientHeight;
+                    div.style.left = `${x}px`;
+                    div.style.top = `${y}px`;
+                    div.style.display = v.z > 1 ? 'none' : 'block';
+                };
+                
+                container.appendChild(div);
+                customLabels.push({ removeFromParent: () => div.remove() });
+                world.camera.controls.addEventListener('update', updateLabel);
+                updateLabel();
+                
+                anglePoints = [];
+            }
+        }
+    };
+    
+    // Helper to reset all tools
+    const disableAll = () => {
+        length.enabled = false;
+        area.enabled = false;
+        // angle.enabled = false;
+        
+        // Reset buttons
+        [lengthBtn, areaBtn, angleBtn, slopeBtn, pointBtn].forEach(btn => {
+            if (btn) btn.classList.remove('active');
+        });
+
+        // Hide Snap Cursor
+        cursorMesh.visible = false;
+
+        // Disable Highlighter selection while measuring to avoid conflicts
+        const highlighter = components.get(OBF.Highlighter);
+        highlighter.enabled = true; // Re-enable selection when tools are off
+        
+        activeTool = 'none';
+        
+        // Remove custom event listeners
+        container.removeEventListener('pointerdown', slopeHandler, { capture: true });
+        container.removeEventListener('pointerdown', pointHandler, { capture: true });
+        container.removeEventListener('pointerdown', angleHandler, { capture: true });
+        container.removeEventListener('pointerdown', lengthHandler, { capture: true });
+        container.removeEventListener('pointerdown', areaHandler, { capture: true });
+        
+        // Reset points
+        lengthPoints = [];
+        areaPoints = [];
+        slopePoints = [];
+        anglePoints = [];
+    };
+
+    const activateTool = (tool: string, btn: HTMLElement | null) => {
+        if (activeTool === tool) {
+            disableAll();
+            return;
+        }
+        
+        disableAll();
+        activeTool = tool as any;
+        if (btn) btn.classList.add('active');
+        
+        // Disable selection to prevent picking objects while measuring
+        const highlighter = components.get(OBF.Highlighter);
+        highlighter.enabled = false;
+        highlighter.clear('select');
+        highlighter.clear('hover');
+
+        if (tool === 'length') {
+            container.addEventListener('pointerdown', lengthHandler, { capture: true });
+            logToScreen('Herramienta Longitud: Selecciona 2 puntos');
+        }
+        if (tool === 'area') {
+            container.addEventListener('pointerdown', areaHandler, { capture: true });
+            logToScreen('Herramienta Área: Selecciona puntos. Clic en inicio para cerrar.');
+        }
+        if (tool === 'angle') {
+            container.addEventListener('pointerdown', angleHandler, { capture: true });
+            logToScreen('Herramienta Ángulo: Clic Vértice -> Puntos Extremos');
+        }
+        if (tool === 'slope') {
+            container.addEventListener('pointerdown', slopeHandler, { capture: true });
+            logToScreen('Herramienta Pendiente: Selecciona 2 puntos');
+        }
+        if (tool === 'point') {
+            container.addEventListener('pointerdown', pointHandler, { capture: true });
+            logToScreen('Herramienta Punto: Haz clic para obtener coordenadas');
+        }
+    };
+
+    // --- BUTTON LISTENERS ---
+    if (lengthBtn) {
+        lengthBtn.addEventListener('click', async () => {
+            disableAll(); // Reset other tools
+            if (activeTool === 'length') {
+                activeTool = 'none';
+                length.enabled = false;
+                lengthBtn.classList.remove('active');
+            } else {
+                activeTool = 'length';
+                lengthBtn.classList.add('active');
+                
+                // Use Official Component
+                length.enabled = true;
+                length.world = world; // Ensure world is set
+                // Attempt to create measurement
+                try {
+                    await length.create();
+                    logToScreen('Herramienta Longitud (Oficial): Clic para medir');
+                } catch (e) {
+                    console.error("Length tool error:", e);
+                    logToScreen('Error iniciando herramienta longitud');
+                }
+            }
+        });
+    }
+
+    if (areaBtn) {
+        areaBtn.addEventListener('click', async () => {
+            disableAll(); // Reset other tools
+            if (activeTool === 'area') {
+                activeTool = 'none';
+                area.enabled = false;
+                areaBtn.classList.remove('active');
+            } else {
+                activeTool = 'area';
+                areaBtn.classList.add('active');
+                
+                // Use Official Component
+                area.enabled = true;
+                area.world = world;
+                try {
+                    await area.create();
+                    logToScreen('Herramienta Área (Oficial): Clic para medir');
+                } catch (e) {
+                     console.error("Area tool error:", e);
+                     logToScreen('Error iniciando herramienta área');
+                }
+            }
+        });
+    }
+
+    // Keep Custom Handlers for tools NOT supported by library or if we prefer custom logic
+    // Angle and Slope are not standard in the basic components version we have?
+    // Let's keep custom for now unless we find them.
+    if (angleBtn) angleBtn.addEventListener('click', () => activateTool('angle', angleBtn));
+    if (slopeBtn) slopeBtn.addEventListener('click', () => activateTool('slope', slopeBtn));
+    if (pointBtn) pointBtn.addEventListener('click', () => activateTool('point', pointBtn));
+    
+    if (deleteBtn) {
+        deleteBtn.addEventListener('click', () => {
+            try {
+                // Clear Official
+                length.enabled = false;
+                length.deleteAll();
+                
+                area.enabled = false;
+                area.deleteAll();
+
+            } catch (e) {
+                console.error("Error clearing measurements:", e);
+            }
+
+            // Clear custom measurements
+            customLabels.forEach(label => label.removeFromParent());
+            customLabels = [];
+            customMeshes.forEach(mesh => {
+                mesh.removeFromParent();
+                if (mesh.geometry) mesh.geometry.dispose();
+                if (mesh.material) (mesh.material as any).dispose();
+            });
+            customMeshes = [];
+        });
+    }
+}
+
+
+
+
+// --- Measurement Tools Implementation (Custom Snapping) ---
+
+
+
+function setupMeasurementTools() {
+    console.log('[DEBUG] Setting up measurement tools...');
+
+    // Initialize Area Tool
+    try {
+        areaTool = components.get(OBF.AreaMeasurement);
+        areaTool.world = world;
+        areaTool.enabled = false;
+        console.log('[DEBUG] Area Tool initialized');
+    } catch (e) {
+        console.warn('Could not initialize Area Tool:', e);
+    }
+
+    // Initialize Snapping Cursor
+    if (!snappingCursor) {
+        const cursorGeom = new THREE.SphereGeometry(0.15, 16, 16);
+        const cursorMat = new THREE.MeshBasicMaterial({ color: 0xff00ff, transparent: true, opacity: 0.8, depthTest: false });
+        snappingCursor = new THREE.Mesh(cursorGeom, cursorMat);
+        snappingCursor.renderOrder = 2000;
+        world.scene.three.add(snappingCursor);
+        snappingCursor.visible = false;
+    }
+    
+    const btnLength = document.getElementById('btn-measure-length');
+    const btnPoint = document.getElementById('btn-measure-point');
+    const btnArea = document.getElementById('btn-measure-area');
+    const btnAngle = document.getElementById('btn-measure-angle');
+    const btnSlope = document.getElementById('btn-measure-slope');
+    const btnDelete = document.getElementById('btn-measure-delete');
+    
+    if (btnLength) {
+        btnLength.addEventListener('click', () => {
+            toggleMeasurementMode('length');
+            setActiveButton(btnLength);
+        });
+    }
+    
+    if (btnPoint) {
+        btnPoint.addEventListener('click', () => {
+            toggleMeasurementMode('point');
+            setActiveButton(btnPoint);
+        });
+    }
+
+    if (btnArea) {
+        btnArea.addEventListener('click', () => {
+            toggleMeasurementMode('area');
+            setActiveButton(btnArea);
+            logToScreen('Area tool activated (Click points, Right-click to finish)');
+        });
+    }
+
+    if (btnAngle) {
+        btnAngle.addEventListener('click', () => {
+            toggleMeasurementMode('angle');
+            setActiveButton(btnAngle);
+            logToScreen('Angle tool activated (Click 3 points: Start, Vertex, End)');
+        });
+    }
+
+    if (btnSlope) {
+        btnSlope.addEventListener('click', () => {
+            toggleMeasurementMode('slope');
+            setActiveButton(btnSlope);
+            logToScreen('Slope tool activated (Click 2 points)');
+        });
+    }
+
+    if (btnDelete) {
+        btnDelete.addEventListener('click', () => {
+            console.log('[DEBUG] Delete button clicked');
+            try {
+                if (areaTool && typeof areaTool.deleteAll === 'function') {
+                    areaTool.deleteAll();
+                }
+            } catch (e) {
+                console.warn('Error clearing tools:', e);
+            }
+            
+            clearMeasurements();
+        });
+    }
+    
+    // Mouse interaction for measurement
+    const container = document.getElementById('viewer-container');
+    if (container) {
+        container.addEventListener('mousemove', onMeasureMouseMove);
+        container.addEventListener('click', onMeasureClick);
+        
+        // Add double click for volume creation (Custom Implementation)
+        // container.addEventListener('dblclick', async () => {
+        //    console.log('[DEBUG] dblclick for Volume');
+        //    if (measurementMode === 'volume') {
+        //        try {
+        //            // Use SimpleRaycaster to get the intersected object
+        //            const result = await simpleRaycaster.castRay();
+        //            if (result && result.object) {
+        //                const mesh = result.object as THREE.Mesh;
+        //                const instanceId = result.instanceId;
+        //                
+        //                console.log('[DEBUG] Calculating volume for:', mesh, 'Instance:', instanceId);
+        //                
+        //                // Calculate Volume
+        //                let volume = 0;
+        //                try {
+        //                    volume = getMeshVolume(mesh, instanceId);
+        //                } catch (err) {
+        //                    console.error('Volume calculation failed:', err);
+        //                    logToScreen('Volume calculation failed for this object');
+        //                    return;
+        //                }
+        //                
+        //                if (volume > 0) {
+        //                    // Create Label
+        //                    const center = result.point.clone(); // Use hit point for label
+        //                    // Ideally, use bounding box center, but hit point is fine
+        //                    createLabel(`${volume.toFixed(3)} m³`, center);
+        //                    logToScreen(`Volume: ${volume.toFixed(3)} m³`);
+        //                    
+        //                    // Optional: Highlight the mesh briefly?
+        //                    // No, just show label.
+        //                } else {
+        //                    logToScreen('Volume is 0 or invalid geometry');
+        //                }
+        //            } else {
+        //                console.log('[DEBUG] No intersection for volume');
+        //            }
+        //        } catch (e) {
+        //            console.error('[ERROR] Custom volume tool failed:', e);
+        //        }
+        //    }
+        // });
+
+        // Add keydown for volume finish and Escape to cancel
+        window.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') {
+                let anyAction = false;
+
+                // 1. Cancel Measurement
+                if (measurementMode) {
+                    toggleMeasurementMode(measurementMode); // This resets mode, points, temp lines, and UI buttons
+                    anyAction = true;
+                }
+                
+                // 2. Disable Clipper
+                if (clipper.enabled) {
+                    clipper.enabled = false;
+                    const btn = document.getElementById('clipper-toggle');
+                    if (btn) btn.classList.remove('active');
+                    const controls = document.getElementById('clipper-controls');
+                    if (controls) controls.style.display = 'none';
+                    anyAction = true;
+                }
+
+                // 3. Hide Snapping Cursor
+                if (snappingCursor && snappingCursor.visible) {
+                    snappingCursor.visible = false;
+                    anyAction = true;
+                }
+
+                // 4. Clear Selection (Highlighter)
+                // Check if there is any selection in the 'select' group
+                const selection = highlighter.selection.select;
+                if (selection && Object.keys(selection).length > 0) {
+                     highlighter.clear('select');
+                     anyAction = true;
+                }
+
+                if (anyAction) {
+                    logToScreen('Cancelled / Cleared');
+                }
+            }
+        });
+        
+        // Add right-click to cancel current measurement
+        container.addEventListener('contextmenu', (e) => {
+            if (measurementMode === 'area' && measurementPoints.length >= 3) {
+                e.preventDefault();
+                // Finish Area
+                const first = measurementPoints[0];
+                const last = measurementPoints[measurementPoints.length - 1];
+                createLine(last, first);
+                
+                // Calculate Area (Simple Polygon Area in 3D - assuming planar-ish)
+                // We project to 2D based on normal, or just sum triangles
+                // Shoelace formula for 2D projection (X-Z plane is most common in BIM)
+                let area = 0;
+                for (let i = 0; i < measurementPoints.length; i++) {
+                    const j = (i + 1) % measurementPoints.length;
+                    area += measurementPoints[i].x * measurementPoints[j].z;
+                    area -= measurementPoints[j].x * measurementPoints[i].z;
+                }
+                area = Math.abs(area) / 2;
+                
+                // Centroid for label
+                const center = new THREE.Vector3();
+                measurementPoints.forEach(p => center.add(p));
+                center.divideScalar(measurementPoints.length);
+                // Lift label slightly
+                center.y += 0.2;
+                
+                const labelText = `${area.toFixed(2)}m²`;
+                createLabel(labelText, center, {
+                    type: 'area',
+                    points: measurementPoints.map(p => p.clone()),
+                    label: labelText,
+                    labelPosition: center.clone()
+                });
+                logToScreen(`Area: ${labelText}`);
+                
+                measurementPoints = [];
+                if (tempMeasurementLine) {
+                    world.scene.three.remove(tempMeasurementLine);
+                    tempMeasurementLine = null;
+                }
+            } else if (measurementMode) {
+                e.preventDefault();
+                resetCurrentMeasurement();
+            }
+        });
+    }
+}
+
+function setActiveButton(activeBtn: HTMLElement | null) {
+    // Reset all measure buttons
+    ['btn-measure-length', 'btn-measure-point', 'btn-measure-area', 'btn-measure-angle', 'btn-measure-slope'].forEach(id => {
+        const btn = document.getElementById(id);
+        if (btn) btn.classList.remove('active');
+    });
+    if (activeBtn) activeBtn.classList.add('active');
+}
+
+function toggleMeasurementMode(mode: 'length' | 'point' | 'area' | 'angle' | 'slope') {
+    // Deactivate previous tools
+    if (areaTool && areaTool.enabled) areaTool.enabled = false;
+
+    if (measurementMode === mode) {
+        // Toggle off
+        measurementMode = null;
+        resetCurrentMeasurement();
+        logToScreen('Measurement mode disabled');
+        setActiveButton(null);
+        if (snappingCursor) snappingCursor.visible = false;
+    } else {
+        measurementMode = mode;
+        resetCurrentMeasurement();
+        
+        let modeName = '';
+        switch(mode) {
+            case 'length': modeName = 'Distance'; break;
+            case 'area': modeName = 'Area'; break;
+            case 'angle': modeName = 'Angle (3 Points)'; break;
+            case 'slope': modeName = 'Slope (2 Points)'; break;
+            case 'point': modeName = 'Point Coordinate'; break;
+        }
+        logToScreen(`Measurement mode: ${modeName}`);
+    }
+}
+
+function resetCurrentMeasurement() {
+    measurementPoints = [];
+    if (tempMeasurementLine) {
+        world.scene.three.remove(tempMeasurementLine);
+        tempMeasurementLine = null;
+    }
+}
+
+function clearMeasurements() {
+    // Remove all markers and labels
+    measurementMarkers.forEach(marker => world.scene.three.remove(marker));
+    measurementMarkers.length = 0;
+    
+    measurementLabels.forEach(label => label.remove());
+    measurementLabels.length = 0;
+    
+    resetCurrentMeasurement();
+    completedMeasurements = [];
+    logToScreen('Measurements cleared');
+}
+
+// Marker helper
+function createMarker(position: THREE.Vector3, color = 0xff0000) {
+    const geometry = new THREE.SphereGeometry(0.1, 16, 16); // Small sphere
+    const material = new THREE.MeshBasicMaterial({ color, depthTest: false, transparent: true, opacity: 0.8 });
+    const marker = new THREE.Mesh(geometry, material);
+    marker.position.copy(position);
+    marker.renderOrder = 1000; // On top
+    world.scene.three.add(marker);
+    measurementMarkers.push(marker);
+    return marker;
+}
+
+function createLine(start: THREE.Vector3, end: THREE.Vector3) {
+    const geometry = new THREE.BufferGeometry().setFromPoints([start, end]);
+    const material = new THREE.LineBasicMaterial({ color: 0xffff00, depthTest: false, linewidth: 2 });
+    const line = new THREE.Line(geometry, material);
+    line.renderOrder = 999;
+    world.scene.three.add(line);
+    measurementMarkers.push(line as any); 
+    return line;
+}
+
+function createLabel(text: string, position: THREE.Vector3, data?: MeasurementData): HTMLDivElement {
+    const div = document.createElement('div');
+    div.className = 'measurement-label';
+    div.textContent = text;
+    div.style.position = 'absolute';
+    div.style.background = 'rgba(0, 0, 0, 0.7)';
+    div.style.color = 'white';
+    div.style.padding = '4px 8px';
+    div.style.borderRadius = '4px';
+    div.style.pointerEvents = 'none';
+    div.style.fontSize = '12px';
+    div.style.zIndex = '1000';
+    document.body.appendChild(div);
+    measurementLabels.push(div);
+    
+    // Store metadata if provided
+    if (data) {
+        completedMeasurements.push(data);
+    }
+    
+    const update = () => {
+        if (!div.isConnected) return;
+        const screenPos = position.clone().project(world.camera.three);
+        const x = (screenPos.x * .5 + .5) * window.innerWidth;
+        const y = (-(screenPos.y * .5) + .5) * window.innerHeight;
+        div.style.left = `${x}px`;
+        div.style.top = `${y}px`;
+        div.style.display = screenPos.z > 1 ? 'none' : 'block';
+        requestAnimationFrame(update);
+    };
+    update();
+    return div;
+}
+
+async function onMeasureMouseMove(event: MouseEvent) {
+    // Debug for v21
+    if (Math.random() < 0.05 && measurementMode) {
+         // console.log("Measure Mouse Move Active");
+    }
+
+    if (!measurementMode) {
+        if (snappingCursor) snappingCursor.visible = false;
+        return;
+    }
+    
+    // Use the simpleRaycaster which we monkey-patched to have snapping!
+    const result = await simpleRaycaster.castRay();
+    
+    if (result && result.point) {
+        if (snappingCursor) {
+            snappingCursor.position.copy(result.point);
+            snappingCursor.visible = true;
+        }
+
+        // If we have a start point, draw a temp line to current cursor
+        if (measurementMode === 'length' && measurementPoints.length === 1) {
+            const start = measurementPoints[0];
+            const end = result.point;
+            
+            if (!tempMeasurementLine) {
+                const geometry = new THREE.BufferGeometry().setFromPoints([start, end]);
+                const material = new THREE.LineBasicMaterial({ color: 0xffff00, depthTest: false, opacity: 0.5, transparent: true });
+                tempMeasurementLine = new THREE.Line(geometry, material);
+                world.scene.three.add(tempMeasurementLine);
+            } else {
+                const positions = tempMeasurementLine.geometry.attributes.position;
+                positions.setXYZ(0, start.x, start.y, start.z);
+                positions.setXYZ(1, end.x, end.y, end.z);
+                positions.needsUpdate = true;
+            }
+        } else if (measurementMode === 'area' && measurementPoints.length > 0) {
+            const start = measurementPoints[measurementPoints.length - 1];
+            const end = result.point;
+
+            if (!tempMeasurementLine) {
+                const geometry = new THREE.BufferGeometry().setFromPoints([start, end]);
+                const material = new THREE.LineBasicMaterial({ color: 0x00ffff, depthTest: false, opacity: 0.5, transparent: true });
+                tempMeasurementLine = new THREE.Line(geometry, material);
+                world.scene.three.add(tempMeasurementLine);
+            } else {
+                const positions = tempMeasurementLine.geometry.attributes.position;
+                positions.setXYZ(0, start.x, start.y, start.z);
+                positions.setXYZ(1, end.x, end.y, end.z);
+                positions.needsUpdate = true;
+            }
+        } else if (measurementMode === 'angle' && measurementPoints.length > 0) {
+            const start = measurementPoints[measurementPoints.length - 1];
+            const end = result.point;
+            
+            if (!tempMeasurementLine) {
+                const geometry = new THREE.BufferGeometry().setFromPoints([start, end]);
+                const material = new THREE.LineBasicMaterial({ color: 0xffa500, depthTest: false, opacity: 0.5, transparent: true });
+                tempMeasurementLine = new THREE.Line(geometry, material);
+                world.scene.three.add(tempMeasurementLine);
+            } else {
+                const positions = tempMeasurementLine.geometry.attributes.position;
+                positions.setXYZ(0, start.x, start.y, start.z);
+                positions.setXYZ(1, end.x, end.y, end.z);
+                positions.needsUpdate = true;
+            }
+        } else if (measurementMode === 'slope' && measurementPoints.length === 1) {
+            const start = measurementPoints[0];
+            const end = result.point;
+            
+            if (!tempMeasurementLine) {
+                const geometry = new THREE.BufferGeometry().setFromPoints([start, end]);
+                const material = new THREE.LineBasicMaterial({ color: 0x0000ff, depthTest: false, opacity: 0.5, transparent: true });
+                tempMeasurementLine = new THREE.Line(geometry, material);
+                world.scene.three.add(tempMeasurementLine);
+            } else {
+                const positions = tempMeasurementLine.geometry.attributes.position;
+                positions.setXYZ(0, start.x, start.y, start.z);
+                positions.setXYZ(1, end.x, end.y, end.z);
+                positions.needsUpdate = true;
+            }
+        }
+    } else {
+        if (snappingCursor) snappingCursor.visible = false;
+    }
+}
+
+async function onMeasureClick(event: MouseEvent) {
+    if (!measurementMode) return;
+    
+    // Don't trigger if clicking on UI
+    if ((event.target as HTMLElement).closest('button') || (event.target as HTMLElement).closest('.sidebar')) return;
+
+    const result = await simpleRaycaster.castRay();
+    if (!result || !result.point) return;
+    
+    const point = result.point;
+    
+    if (measurementMode === 'point') {
+        createMarker(point, 0x00ff00);
+        const text = `X:${point.x.toFixed(2)} Y:${point.y.toFixed(2)} Z:${point.z.toFixed(2)}`;
+        createLabel(text, point, {
+            type: 'point',
+            points: [point.clone()],
+            label: text,
+            labelPosition: point.clone()
+        });
+        logToScreen(`Point: ${text}`);
+    } else if (measurementMode === 'length') {
+        measurementPoints.push(point);
+        createMarker(point, 0xffff00);
+        
+        if (measurementPoints.length === 2) {
+            // Finish measurement
+            const p1 = measurementPoints[0];
+            const p2 = measurementPoints[1];
+            createLine(p1, p2);
+            
+            const dist = p1.distanceTo(p2);
+            const mid = p1.clone().add(p2).multiplyScalar(0.5);
+            const labelText = `${dist.toFixed(3)}m`;
+            createLabel(labelText, mid, {
+                type: 'length',
+                points: [p1.clone(), p2.clone()],
+                label: labelText,
+                labelPosition: mid.clone()
+            });
+            
+            logToScreen(`Distance: ${labelText}`);
+            
+            // Reset for next measurement
+            measurementPoints = [];
+            if (tempMeasurementLine) {
+                world.scene.three.remove(tempMeasurementLine);
+                tempMeasurementLine = null;
+            }
+        }
+    } else if (measurementMode === 'area') {
+        // Area Logic
+        measurementPoints.push(point);
+        createMarker(point, 0x00ffff);
+
+        // Draw line from previous point
+        if (measurementPoints.length > 1) {
+            const prev = measurementPoints[measurementPoints.length - 2];
+            createLine(prev, point);
+        }
+
+        // Reset temp line
+        if (tempMeasurementLine) {
+            world.scene.three.remove(tempMeasurementLine);
+            tempMeasurementLine = null;
+        }
+    } else if (measurementMode === 'angle') {
+        // Angle Logic (3 points: Start, Vertex, End)
+        measurementPoints.push(point);
+        createMarker(point, 0xffa500);
+
+        if (measurementPoints.length > 1) {
+             const prev = measurementPoints[measurementPoints.length - 2];
+             createLine(prev, point);
+        }
+
+        if (measurementPoints.length === 3) {
+            const p1 = measurementPoints[0];
+            const vertex = measurementPoints[1];
+            const p3 = measurementPoints[2];
+
+            const v1 = p1.clone().sub(vertex).normalize();
+            const v2 = p3.clone().sub(vertex).normalize();
+            
+            const angleRad = v1.angleTo(v2);
+            const angleDeg = THREE.MathUtils.radToDeg(angleRad);
+            
+            const labelText = `${angleDeg.toFixed(1)}°`;
+            createLabel(labelText, vertex, {
+                type: 'angle',
+                points: [p1.clone(), vertex.clone(), p3.clone()],
+                label: labelText,
+                labelPosition: vertex.clone()
+            });
+            logToScreen(`Angle: ${labelText}`);
+            
+            measurementPoints = [];
+            if (tempMeasurementLine) {
+                world.scene.three.remove(tempMeasurementLine);
+                tempMeasurementLine = null;
+            }
+        }
+    } else if (measurementMode === 'slope') {
+        // Slope Logic (2 points)
+        measurementPoints.push(point);
+        createMarker(point, 0x0000ff);
+        
+        if (measurementPoints.length === 2) {
+            const p1 = measurementPoints[0];
+            const p2 = measurementPoints[1];
+            createLine(p1, p2);
+            
+            const dy = Math.abs(p2.y - p1.y);
+            const dx = Math.sqrt(Math.pow(p2.x - p1.x, 2) + Math.pow(p2.z - p1.z, 2));
+            
+            let slope = 0;
+            if (dx !== 0) {
+                // Slope is angle with horizontal plane (XZ)
+                // atan(dy / dx)
+                slope = Math.atan(Math.abs(p2.y - p1.y) / dx);
+            } else {
+                slope = Math.PI / 2; // Vertical
+            }
+            
+            const slopeDeg = THREE.MathUtils.radToDeg(slope);
+            const mid = p1.clone().add(p2).multiplyScalar(0.5);
+            
+            const labelText = `${slopeDeg.toFixed(1)}°`;
+            createLabel(labelText, mid, {
+                type: 'slope',
+                points: [p1.clone(), p2.clone()],
+                label: labelText,
+                labelPosition: mid.clone()
+            });
+            logToScreen(`Slope: ${labelText}`);
+            
+            measurementPoints = [];
+            if (tempMeasurementLine) {
+                world.scene.three.remove(tempMeasurementLine);
+                tempMeasurementLine = null;
+            }
+        }
+    }
+}
+
+// Add Right-Click handler to finish Area measurement
+// Note: This needs to be added to the container event listener setup
+// We'll modify the existing contextmenu handler
+// ... (The contextmenu handler is already defined in setupMeasurementTools, let's update it separately)
+
+
+// --- Viewpoint Management ---
+function setupViewpoints() {
+    console.log('[DEBUG] Setting up Viewpoints Manager...');
+    
+    const provider: ViewpointStateProvider = {
+        getMeasurements: () => {
+            return completedMeasurements;
+        },
+        restoreMeasurements: (data: any[]) => {
+            clearMeasurements();
+            if (!data || !Array.isArray(data)) return;
+            
+            data.forEach(m => {
+                if (m.type === 'point' && m.points && m.points.length > 0) {
+                    const p = new THREE.Vector3(m.points[0].x, m.points[0].y, m.points[0].z);
+                    createMarker(p, 0x00ff00);
+                    createLabel(m.label, p, m);
+                } else if (m.type === 'length' && m.points && m.points.length === 2) {
+                    const p1 = new THREE.Vector3(m.points[0].x, m.points[0].y, m.points[0].z);
+                    const p2 = new THREE.Vector3(m.points[1].x, m.points[1].y, m.points[1].z);
+                    createMarker(p1, 0xffff00);
+                    createMarker(p2, 0xffff00);
+                    createLine(p1, p2);
+                    const mid = new THREE.Vector3(m.labelPosition.x, m.labelPosition.y, m.labelPosition.z);
+                    createLabel(m.label, mid, m);
+                } else if (m.type === 'angle' && m.points && m.points.length === 3) {
+                    const p1 = new THREE.Vector3(m.points[0].x, m.points[0].y, m.points[0].z);
+                    const vertex = new THREE.Vector3(m.points[1].x, m.points[1].y, m.points[1].z);
+                    const p3 = new THREE.Vector3(m.points[2].x, m.points[2].y, m.points[2].z);
+                    createMarker(p1, 0xffa500);
+                    createMarker(vertex, 0xffa500);
+                    createMarker(p3, 0xffa500);
+                    createLine(p1, vertex);
+                    createLine(vertex, p3);
+                    createLabel(m.label, vertex, m);
+                } else if (m.type === 'slope' && m.points && m.points.length === 2) {
+                    const p1 = new THREE.Vector3(m.points[0].x, m.points[0].y, m.points[0].z);
+                    const p2 = new THREE.Vector3(m.points[1].x, m.points[1].y, m.points[1].z);
+                    createMarker(p1, 0x0000ff);
+                    createMarker(p2, 0x0000ff);
+                    createLine(p1, p2);
+                    const mid = new THREE.Vector3(m.labelPosition.x, m.labelPosition.y, m.labelPosition.z);
+                    createLabel(m.label, mid, m);
+                } else if (m.type === 'area' && m.points && m.points.length > 2) {
+                    const points = m.points.map((p: any) => new THREE.Vector3(p.x, p.y, p.z));
+                    points.forEach((p: any) => createMarker(p, 0x00ffff));
+                    for (let i = 0; i < points.length; i++) {
+                        createLine(points[i], points[(i + 1) % points.length]);
+                    }
+                    const center = new THREE.Vector3(m.labelPosition.x, m.labelPosition.y, m.labelPosition.z);
+                    createLabel(m.label, center, m);
+                }
+            });
+        },
+        getHiddenItems: () => {
+            const serializable: Record<string, number[]> = {};
+            for (const key in hiddenItems) {
+                if (hiddenItems[key].size > 0) {
+                    serializable[key] = Array.from(hiddenItems[key]);
+                }
+            }
+            return serializable;
+        },
+        restoreHiddenItems: async (items: Record<string, number[]>) => {
+            // Reset to show all (this clears hiddenItems via monkey-patch)
+            await hider.set(true);
+            
+            // Apply new hidden state (this updates hiddenItems via monkey-patch)
+            if (Object.keys(items).length > 0) {
+                await hider.set(false, items);
+            }
+        },
+        getClippingPlanes: () => {
+            console.log('[Viewpoints] Getting clipping planes...');
+            const planes: { normal: number[], constant: number }[] = [];
+            try {
+                const rendererPlanes = world?.renderer?.three?.clippingPlanes as unknown as THREE.Plane[] | undefined;
+                if (Array.isArray(rendererPlanes) && rendererPlanes.length > 0) {
+                    console.log(`[Viewpoints] Found ${rendererPlanes.length} clipping planes in renderer.`);
+                    for (const plane of rendererPlanes) {
+                        if (!plane?.normal) continue;
+                        planes.push({
+                            normal: plane.normal.toArray(),
+                            constant: plane.constant
+                        });
+                    }
+                    return planes;
+                }
+
+                if (!clipper || !clipper.list) {
+                    console.warn('[Viewpoints] Clipper not initialized or list unavailable');
+                    return [];
+                }
+
+                console.log(`[Viewpoints] Clipper list size: ${clipper.list.size || clipper.list.length}`);
+                if (clipper.list.size > 0) {
+                    clipper.list.forEach((p, id) => {
+                        console.log(`[Viewpoints] Map.forEach - Plane ${id}:`, p);
+
+                        let plane: THREE.Plane | null = null;
+                        const anyP = p as any;
+
+                        if (anyP.plane) {
+                            plane = anyP.plane as THREE.Plane;
+                        } else if (anyP.normal && anyP.constant !== undefined) {
+                            plane = anyP;
+                        } else if (anyP.object && anyP.object.plane) {
+                            plane = anyP.object.plane;
+                        }
+
+                        if (plane) {
+                            planes.push({
+                                normal: plane.normal.toArray(),
+                                constant: plane.constant
+                            });
+                        }
+                    });
+                }
+
+                if (planes.length === 0 && (clipper as any).planes && Array.isArray((clipper as any).planes)) {
+                    const legacyPlanes = (clipper as any).planes;
+                    for (const p of legacyPlanes) {
+                        if (p?.normal && p?.constant !== undefined) {
+                            planes.push({
+                                normal: p.normal.toArray(),
+                                constant: p.constant
+                            });
+                        }
+                    }
+                }
+
+                console.log(`[Viewpoints] Serialized clipping planes count: ${planes.length}`);
+                return planes;
+            } catch (e) {
+                console.error('[Viewpoints] Error getting clipping planes:', e);
+                return [];
+            }
+        },
+        restoreClippingPlanes: (planes) => {
+            console.log('[Viewpoints] Restoring clipping planes (count):', planes ? planes.length : 0);
+            console.log('[Viewpoints] Raw planes data:', JSON.stringify(planes));
+            
+            try {
+                // Ensure clipper is cleared first
+                if (clipper.list.size > 0) {
+                    console.log(`[Viewpoints] Clearing ${clipper.list.size} existing planes...`);
+                    clipper.deleteAll();
+                }
+                if (world?.renderer?.three && Array.isArray((world.renderer.three as any).clippingPlanes)) {
+                    (world.renderer.three as any).clippingPlanes = [];
+                    (world.renderer.three as any).localClippingEnabled = true;
+                }
+                
+                if (!planes || planes.length === 0) {
+                    console.log('[Viewpoints] No planes to restore. Disabling clipper.');
+                    clipper.enabled = false;
+                    const btn = document.getElementById('clipper-toggle');
+                    if (btn) btn.classList.remove('active');
+                    const controls = document.getElementById('clipper-controls');
+                    if (controls) controls.style.display = 'none';
+                    return;
+                }
+                
+                // Enable clipper if we have planes
+                console.log('[Viewpoints] Enabling clipper tool...');
+                clipper.enabled = true;
+                const btn = document.getElementById('clipper-toggle');
+                if (btn) btn.classList.add('active');
+                const controls = document.getElementById('clipper-controls');
+                if (controls) controls.style.display = 'flex';
+
+                planes.forEach((p, index) => {
+                     console.log(`[Viewpoints] Restoring plane #${index}:`, p);
+                     if (p.normal && p.constant !== undefined) {
+                         const normal = new THREE.Vector3(p.normal[0], p.normal[1], p.normal[2]).normalize();
+                         const constant = p.constant;
+                         const coplanarPoint = normal.clone().multiplyScalar(-constant);
+                         
+                         console.log(`[Viewpoints] Creating plane #${index}: normal=${normal.toArray()}, constant=${constant}`);
+                         const created = clipper.createFromNormalAndCoplanarPoint(world, normal, coplanarPoint);
+                         console.log(`[Viewpoints] Plane #${index} created:`, created);
+                     } else {
+                          console.warn('[Viewpoints] Invalid plane data for plane #${index}:', p);
+                     }
+                 });
+            } catch (e) {
+                console.error('[Viewpoints] Error restoring clipping planes:', e);
+            }
+        },
+        getLoadedModels: () => {
+             const models: { uuid: string, url: string }[] = [];
+             
+             // Use fragments.list as primary source, fallback to groups
+             // This ensures we capture all models, including those from drag-and-drop
+             const source = (fragments.list && fragments.list.size > 0) ? fragments.list : fragments.groups;
+
+             // Handle both Map and Object
+             const entries = (source instanceof Map) 
+                ? Array.from(source.entries())
+                : Object.entries(source || {});
+
+             console.log(`[Viewpoints] Saving models. Found ${entries.length} groups/models.`);
+             logToScreen(`[Viewpoints] Found ${entries.length} models.`);
+
+             for (const [uuid, group] of entries) {
+                 // Check visibility on the object wrapper or the object itself
+                 // FragmentsGroup has .object property which is the actual THREE.Group in the scene
+                 const isVisible = (group.object && group.object.visible !== undefined) 
+                    ? group.object.visible 
+                    : (group.visible !== undefined ? group.visible : true);
+
+                 // Only save visible models
+                 if (!isVisible) {
+                     console.log(`[Viewpoints] Model ${uuid} is hidden (visible=${isVisible}). Skipping.`);
+                     logToScreen(`[Viewpoints] Skipping hidden: ${uuid}`);
+                     continue;
+                 }
+                 
+                 logToScreen(`[Viewpoints] Processing visible: ${uuid}`);
+
+                 if (group.userData) {
+                     console.log(`[Viewpoints] Inspecting model ${uuid}:`, group.userData);
+                     if (group.userData.isLocal && group.userData.dbKey) {
+                         // Encode IDB key in URL for persistence
+                         const idbUrl = `indexeddb://${group.userData.dbKey}`;
+                         models.push({ uuid, url: idbUrl });
+                         console.log(`[Viewpoints] Saved local model reference: ${idbUrl}`);
+                         logToScreen(`[Viewpoints] Saved local: ${group.userData.dbKey}`);
+                     } else if (group.userData.url) {
+                         models.push({ uuid, url: group.userData.url });
+                         console.log(`[Viewpoints] Saved remote model reference: ${group.userData.url}`);
+                         logToScreen(`[Viewpoints] Saved remote: ${group.userData.url}`);
+                     } else {
+                         console.warn(`[Viewpoints] Model ${uuid} has no URL or DB key. Skipping persistence.`);
+                         logToScreen(`[Viewpoints] SKIP: No URL/DBKey for ${uuid}`, true);
+                     }
+                 } else {
+                      console.warn(`[Viewpoints] Model ${uuid} has no userData. Skipping persistence.`);
+                      logToScreen(`[Viewpoints] SKIP: No userData for ${uuid}`, true);
+                 }
+             }
+             return models;
+        },
+        restoreLoadedModels: async (savedModels) => {
+             // Use fragments.list as primary source
+             const source = (fragments.list && fragments.list.size > 0) ? fragments.list : fragments.groups;
+             const isMap = source instanceof Map;
+             
+             const currentUUIDs = new Set(isMap ? source.keys() : Object.keys(source || {}));
+             const savedUUIDs = new Set(savedModels.map(m => m.uuid));
+             
+             // Sync visibility: Hide models not in the view, Show models that are.
+             for (const uuid of currentUUIDs) {
+                 const group = isMap ? source.get(uuid) : (source as any)[uuid];
+                 if (group) {
+                     const shouldBeVisible = savedUUIDs.has(uuid);
+                     if (group.object) {
+                         group.object.visible = shouldBeVisible;
+                     }
+                     if (group.visible !== undefined) {
+                         group.visible = shouldBeVisible;
+                     }
+                     console.log(`[Viewpoints] Sync visibility for ${uuid}: ${shouldBeVisible}`);
+                 }
+             }
+             updateProjectLinksBarVisibility();
+             
+             // Load missing models
+             for (const m of savedModels) {
+                 if (!currentUUIDs.has(m.uuid)) {
+                     try {
+                        console.log(`[Viewpoints] Restoring model: ${m.uuid} from ${m.url}`);
+                        
+                        let loadUrl = m.url;
+                        let isLocal = false;
+                        let dbKey = '';
+
+                        // Check if it's a local model in IndexedDB
+                        if (m.url.startsWith('indexeddb://')) {
+                            dbKey = m.url.replace('indexeddb://', '');
+                            logToScreen(`Restoring local model from storage: ${dbKey}...`);
+                            
+                            const buffer = await loadFromIndexedDB(dbKey);
+                            if (buffer) {
+                                console.log(`[Viewpoints] Retrieved ${buffer.byteLength} bytes from IDB for ${dbKey}`);
+                                const blob = new Blob([buffer]);
+                                loadUrl = URL.createObjectURL(blob);
+                                isLocal = true;
+                            } else {
+                                console.warn(`Local model ${dbKey} not found in IndexedDB.`);
+                                logToScreen(`Error: Local model ${dbKey} expired/missing. Please reload file.`, true);
+                                continue;
+                            }
+                        }
+
+                        console.log(`[Viewpoints] Calling loadModel with URL: ${loadUrl}`);
+                        await loadModel(loadUrl, m.uuid);
+                        console.log(`[Viewpoints] loadModel completed for ${m.uuid}`);
+                        
+                        // Restore local flags if needed
+                        if (isLocal) {
+                             const model = isMap ? fragments.groups.get(m.uuid) : (fragments.groups as any)[m.uuid];
+                             if (model) {
+                                 if (!model.userData) model.userData = {};
+                                 model.userData.isLocal = true;
+                                 model.userData.dbKey = dbKey;
+                                 // Update URL to current blob for subsequent saves in this session
+                                 model.userData.url = loadUrl; 
+                                 console.log(`[Viewpoints] Restored local metadata for ${m.uuid}`);
+                             } else {
+                                 console.error(`[Viewpoints] Model ${m.uuid} not found in fragments.groups after load!`);
+                             }
+                        }
+
+                     } catch (e) {
+                         console.error(`[Viewpoints] Failed to restore model ${m.uuid}:`, e);
+                     }
+                 } else {
+                     console.log(`[Viewpoints] Model ${m.uuid} already loaded. Skipping.`);
+                 }
+             }
+             updateProjectLinksBarVisibility();
+        }
+    };
+
+    viewpointsManager = new ViewpointsManager(components, world, provider);
+    
+    // Connect UI
+    const container = document.getElementById('viewpoints-list-container');
+    if (container) {
+        viewpointsManager.createUI(container);
+    }
+    
+    // Connect Add Button (Header)
+    const addBtn = document.getElementById('btn-add-viewpoint');
+    if (addBtn) {
+        const newBtn = addBtn.cloneNode(true) as HTMLElement;
+        addBtn.parentNode?.replaceChild(newBtn, addBtn);
+        
+        newBtn.addEventListener('click', () => {
+            viewpointsManager?.openSaveModal();
+        });
+    }
+}
+
+const LOGIN_URL = 'https://alcabama-commits.github.io/bim/inse.html';
+
+function getStoredUserAccount() {
+    if (window.location.search.includes('bypassAuth=true')) {
+        return { name: 'Model Testing Agent', email: 'agent@artisure.com', role: 'Tester' };
+    }
+    const userAccountStr = sessionStorage.getItem('userAccount') || localStorage.getItem('userAccount');
+    if (!userAccountStr) return null;
+    try {
+        const userAccount = JSON.parse(userAccountStr);
+        if (!userAccount || typeof userAccount !== 'object') return null;
+        return userAccount;
+    } catch (e) {
+        console.error('[Auth] Error parsing user account:', e);
+        return null;
+    }
+}
+
+function enforceAuthenticatedAccess() {
+    const app = document.getElementById('app');
+    if (!app) return;
+    const userAccount = getStoredUserAccount();
+    const existingGate = document.getElementById('auth-gate-overlay');
+
+    if (userAccount) {
+        existingGate?.remove();
+        app.style.pointerEvents = '';
+        app.style.userSelect = '';
+        app.style.filter = '';
+        document.body.style.overflow = '';
+        return;
+    }
+
+    if (existingGate) return;
+
+    app.style.pointerEvents = 'none';
+    app.style.userSelect = 'none';
+    app.style.filter = 'blur(4px)';
+    document.body.style.overflow = 'hidden';
+
+    const overlay = document.createElement('div');
+    overlay.id = 'auth-gate-overlay';
+    overlay.style.position = 'fixed';
+    overlay.style.inset = '0';
+    overlay.style.zIndex = '10000';
+    overlay.style.display = 'flex';
+    overlay.style.alignItems = 'center';
+    overlay.style.justifyContent = 'center';
+    overlay.style.padding = '24px';
+    overlay.style.background = 'radial-gradient(circle at top, rgba(2, 73, 89, 0.18), rgba(2, 73, 89, 0) 30%), linear-gradient(135deg, rgba(255,255,255,0.97), rgba(246,246,244,0.97))';
+    overlay.innerHTML = `
+        <div style="width:min(520px, 100%); background:#ffffff; border:1px solid rgba(2, 73, 89, 0.12); border-radius:24px; padding:36px 32px; box-shadow:0 30px 80px rgba(64, 69, 66, 0.14); text-align:center; font-family:Inter, Arial, sans-serif;">
+            <img src="https://i.postimg.cc/vmKVZndP/artis-urbano2.png" alt="Artis Urbano" style="height:44px; width:auto; margin:0 auto 22px; display:block;" />
+            <div style="width:72px; height:72px; margin:0 auto 18px; border-radius:50%; display:flex; align-items:center; justify-content:center; background:rgba(2, 73, 89, 0.08); color:#024959; font-size:28px;">
+                <i class="fa-solid fa-lock"></i>
+            </div>
+            <h1 style="margin:0 0 10px; font-size:28px; line-height:1.15; color:#1f1f1f;">Inicia sesión para continuar</h1>
+            <p style="margin:0 0 22px; font-size:15px; line-height:1.6; color:#605e62;">
+                Debes autenticarte para acceder al visor VSR IFCA de Artis Urbano. Si abriste este enlace directamente, primero inicia sesión y luego vuelve a entrar.
+            </p>
+            <a href="${LOGIN_URL}" style="display:inline-flex; align-items:center; justify-content:center; gap:10px; min-width:220px; padding:14px 18px; border-radius:12px; background:#024959; color:#fff; text-decoration:none; font-weight:700; font-size:15px; box-shadow:0 12px 28px rgba(2, 73, 89, 0.22);">
+                <i class="fa-solid fa-right-to-bracket"></i>
+                <span>Ir a iniciar sesión</span>
+            </a>
+            <p style="margin:16px 0 0; font-size:12px; color:#a49fa6;">
+                Cuando tu sesión esté activa, recarga esta página para ingresar.
+            </p>
+        </div>
+    `;
+    document.body.appendChild(overlay);
+}
+
+// Initialize Viewpoints
+setupViewpoints();
+
+
+// --- User Authentication Setup (Reused from home.html) ---
+function setupUserAuthentication() {
+    console.log('[Auth] Setting up user authentication...');
+    const userContainer = document.getElementById('user-profile-container');
+    
+    if (!userContainer) {
+        console.warn('[Auth] user-profile-container not found');
+        return;
+    }
+
+    const userAccount = getStoredUserAccount();
+    
+    if (userAccount) {
+        try {
+            console.log('[Auth] User found:', userAccount.name);
+            
+            // User Name Display
+            const nameSpan = document.createElement('span');
+            // Get first name
+            const firstName = userAccount.name ? userAccount.name.split(' ')[0] : 'Usuario';
+            nameSpan.textContent = `Hola, ${firstName}`;
+            nameSpan.style.fontSize = '14px';
+            nameSpan.style.fontWeight = '500';
+            nameSpan.style.color = 'var(--text-dark-gray)'; // Adapt to theme if needed
+            
+            // Avatar (Initials)
+            const avatar = document.createElement('div');
+            avatar.style.width = '32px';
+            avatar.style.height = '32px';
+            avatar.style.borderRadius = '50%';
+            avatar.style.backgroundColor = 'var(--primary-color)'; // Brand color
+            avatar.style.color = 'white';
+            avatar.style.display = 'flex';
+            avatar.style.alignItems = 'center';
+            avatar.style.justifyContent = 'center';
+            avatar.style.fontSize = '14px';
+            avatar.style.fontWeight = 'bold';
+            
+            // Initials logic
+            let initials = 'U';
+            if (userAccount.name) {
+                const parts = userAccount.name.split(' ');
+                if (parts.length >= 2) {
+                    initials = (parts[0][0] + parts[1][0]).toUpperCase();
+                } else {
+                    initials = parts[0][0].toUpperCase();
+                }
+            }
+            avatar.textContent = initials;
+            avatar.title = userAccount.name + (userAccount.role ? ` (${userAccount.role})` : '');
+            
+            // Logout Button
+            const logoutBtn = document.createElement('button');
+            logoutBtn.innerHTML = '<i class="fa-solid fa-right-from-bracket"></i>';
+            logoutBtn.title = "Cerrar Sesión";
+            logoutBtn.style.background = 'none';
+            logoutBtn.style.border = 'none';
+            logoutBtn.style.cursor = 'pointer';
+            logoutBtn.style.fontSize = '16px';
+            logoutBtn.style.color = '#666';
+            logoutBtn.style.marginLeft = '5px';
+            
+            logoutBtn.onmouseover = () => { logoutBtn.style.color = 'var(--primary-color)'; };
+            logoutBtn.onmouseout = () => { logoutBtn.style.color = '#666'; };
+            
+            logoutBtn.onclick = () => {
+                if (confirm('¿Cerrar sesión?')) {
+                    sessionStorage.removeItem('userAccount');
+                    localStorage.removeItem('userAccount');
+                    window.location.reload();
+                }
+            };
+            
+            userContainer.appendChild(nameSpan);
+            userContainer.appendChild(avatar);
+            userContainer.appendChild(logoutBtn);
+            
+        } catch (e) {
+            console.error('[Auth] Error rendering user account:', e);
+            renderGuestMode(userContainer);
+        }
+    } else {
+        console.log('[Auth] No user found. Rendering guest mode.');
+        renderGuestMode(userContainer);
+    }
+}
+
+function renderGuestMode(container: HTMLElement) {
+    const loginLink = document.createElement('a');
+    loginLink.href = LOGIN_URL; 
+    loginLink.innerHTML = '<i class="fa-solid fa-user"></i> <span style="margin-left:5px; font-size:14px;">Iniciar Sesión</span>';
+    loginLink.style.textDecoration = "none";
+    loginLink.style.color = "var(--primary-color)"; // Brand color
+    loginLink.style.display = "flex";
+    loginLink.style.alignItems = "center";
+    loginLink.style.fontWeight = "500";
+    loginLink.removeAttribute('target');
+    
+    container.appendChild(loginLink);
+}
+
+// Call it
+enforceAuthenticatedAccess();
+setupUserAuthentication();
+
+// --- Test Runner (solo bajo flag; evita incluir vitest en build) ---
+if (window.location.search.includes('test=auth')) {
+    console.log('Running Auth Tests...');
+    import('./tests/auth-viewpoints.test').then(({ runViewpointAuthTests }) => {
+        (window as any).runAuthTests = runViewpointAuthTests;
+        return runViewpointAuthTests();
+    }).then(() => {
+        console.log('Auth Tests Completed.');
+    }).catch((e) => {
+        console.error('Auth Tests Failed:', e);
+    });
+}
+
+
+
+
+
+
+

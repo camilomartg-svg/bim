@@ -1,0 +1,484 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+    <meta charset="utf-8" />
+    <meta content="width=device-width, initial-scale=1.0" name="viewport" />
+    <title>Portal BIM Alcabama</title>
+    <meta name="theme-color" content="#2b2b2b" />
+    <meta name="application-name" content="Portal BIM Alcabama" />
+    <meta name="apple-mobile-web-app-title" content="Portal BIM Alcabama" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="x-app-version" data-app="portal" content="20260528-01" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="msapplication-TileColor" content="#2b2b2b" />
+    <meta name="msapplication-TileImage" content="assets/icons/portal-bim-192.png" />
+    <script src="https://cdn.tailwindcss.com?plugins=forms,typography"></script>
+    <script>
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        primary: "#D8005E",
+                        "background-light": "#FFFFFF",
+                        "background-dark": "#343434",
+                        "text-light": "#111827",
+                        "text-dark": "#F3F4F6",
+                        "card-light": "#FFFFFF",
+                        "card-dark": "#374151",
+                        "border-light": "#E5E7EB",
+                        "border-dark": "#4B5563"
+                    },
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                        'source-sans-pro': ['"Source Sans Pro"', 'sans-serif']
+                    },
+                    borderRadius: {
+                        DEFAULT: "0.5rem",
+                    },
+                },
+            },
+        };
+    </script>
+    <link href="https://fonts.googleapis.com" rel="preconnect" />
+    <link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect" />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700;800&amp;display=swap"
+        rel="stylesheet" />
+    <link href="https://fonts.googleapis.com/css2?family=Source+Sans+Pro:wght@900&display=swap" rel="stylesheet">
+    <link
+        href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200"
+        rel="stylesheet" />
+    <link rel="manifest" href="portal.webmanifest">
+    <link rel="icon" href="assets/icons/portal-bim-favicon.png" type="image/png">
+    <link rel="shortcut icon" href="assets/icons/portal-bim-favicon.png" type="image/png">
+    <link rel="apple-touch-icon" href="assets/icons/portal-bim-apple-touch.png">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+    </style>
+</head>
+
+<body class="bg-background-light dark:bg-background-dark text-text-light dark:text-text-dark">
+    <div class="relative min-h-screen bg-background-light dark:bg-background-dark">
+        <div id="update-banner" class="fixed top-0 left-0 right-0 z-50 hidden">
+            <div
+                class="mx-auto flex max-w-4xl items-center justify-between gap-4 px-4 py-3 text-sm font-semibold text-white bg-[#111827] shadow">
+                <div>Hay una nueva versión disponible.</div>
+                <button id="update-reload"
+                    class="rounded-md bg-white px-4 py-2 text-xs font-black uppercase tracking-widest text-[#111827]">Actualizar</button>
+            </div>
+        </div>
+        <header class="absolute top-0 left-0 w-full z-10 px-8 py-4">
+            <div class="container mx-auto flex items-center justify-between">
+                <div class="flex items-center gap-3">
+                    <button id="back-btn" aria-label="Volver"
+                        class="rounded-lg border border-border-light bg-white/80 px-3 py-2 hover:bg-white transition-colors">
+                        <span class="material-symbols-outlined">arrow_back</span>
+                    </button>
+                    <a href="home.html" class="flex items-center" title="Ir al Home">
+                        <img id="portal-logo-light" alt="BIM" class="h-10 w-auto object-contain dark:hidden"
+                            src="https://i.postimg.cc/jdyQ3Mr2/LOGO-BIM-NEGRO-ICO.png" />
+                        <img id="portal-logo-dark" alt="BIM" class="h-10 w-auto object-contain hidden dark:block"
+                            src="https://i.postimg.cc/yY0XpLzW/LOGO-BIM-BLANCO-ICO.png" />
+                    </a>
+                </div>
+                <div class="flex items-center space-x-4">
+                    <button id="theme-toggle" aria-label="Cambiar tema"
+                        class="text-text-light dark:text-white hover:text-primary"><span
+                            class="material-symbols-outlined">dark_mode</span></button>
+                    <div id="auth-container" class="flex items-center space-x-4"><a
+                            href="https://alcabama-commits.github.io/bim/inse.html"
+                            class="text-text-light dark:text-white hover:text-primary text-sm font-medium">Iniciar
+                            sesión</a></div>
+                </div>
+            </div>
+        </header>
+        <main>
+            <section class="relative flex h-80 pt-24 overflow-hidden">
+                <!-- Panel Izquierdo (30%) con color sólido -->
+                <div class="w-[30%] bg-[#f6f6f6] h-full">
+                </div>
+                <!-- Panel Derecho (70%) con imagen -->
+                <div id="home-hero-image" class="w-[70%] h-full bg-cover bg-center"
+                    style="background-image: url('https://i.postimg.cc/FK9n1BNP/r-trevoly.png');">
+                </div>
+            </section>
+            <section class="bg-background-light dark:bg-background-dark py-16 px-8">
+                <div class="container mx-auto">
+                    <div class="grid grid-cols-1 gap-12 md:grid-cols-2 xl:grid-cols-5">
+                        <div>
+                            <h2
+                                class="text-2xl font-bold mb-4 border-b border-border-light dark:border-border-dark pb-2">
+                                Proyectos</h2>
+                            <ul class="space-y-2" id="portal-projects-list"></ul>
+                        </div>
+                        <div>
+                            <h2
+                                class="text-2xl font-bold mb-4 border-b border-border-light dark:border-border-dark pb-2">
+                                Publicaciones</h2>
+                            <ul class="space-y-2" id="portal-publicaciones-list"></ul>
+                        </div>
+                        <div>
+                            <h2
+                                class="text-2xl font-bold mb-4 border-b border-border-light dark:border-border-dark pb-2">
+                                Solicitudes</h2>
+                            <ul class="space-y-2" id="portal-solicitudes-list"></ul>
+                        </div>
+                        <div>
+                            <h2
+                                class="text-2xl font-bold mb-4 border-b border-border-light dark:border-border-dark pb-2">
+                                Métricas</h2>
+                            <ul class="space-y-2" id="portal-metricas-list"></ul>
+                        </div>
+                        <div id="portal-admin-column" class="hidden">
+                            <h2
+                                class="text-2xl font-bold mb-4 border-b border-border-light dark:border-border-dark pb-2">
+                                Administración</h2>
+                            <ul class="space-y-2" id="portal-admin-list"></ul>
+                        </div>
+                    </div>
+                </div>
+            </section>
+        </main>
+        <footer class="bg-background-light dark:bg-background-dark py-8 px-8 mt-auto">
+            <div class="container mx-auto text-center text-gray-500 dark:text-gray-400">
+                <div class="flex items-center justify-center gap-4 mb-4">
+                    <!-- Logo secundario para modo claro -->
+                    <img id="portal-footer-logo-secondary-light" alt="Artis Urbano logo" class="h-8 dark:hidden"
+                        src="https://i.postimg.cc/RVp8pZwc/artis-urbano.png" />
+                    <!-- Logo secundario para modo oscuro -->
+                    <img id="portal-footer-logo-secondary-dark" alt="Artis Urbano logo" class="h-8 hidden dark:block"
+                        src="https://i.postimg.cc/RVp8pZwc/artis-urbano.png" />
+                    <div class="h-8 w-px bg-black animate-pulse dark:bg-white/40"></div>
+                    <!-- Logo para modo claro -->
+                    <img id="portal-footer-logo-light" alt="Alcabama logo" class="h-8 dark:hidden"
+                        src="https://i.postimg.cc/GmWLmfZZ/Logo-transparente-negro.png" />
+                    <!-- Logo para modo oscuro -->
+                    <img id="portal-footer-logo-dark" alt="Alcabama logo" class="h-8 hidden dark:block"
+                        src="https://i.postimg.cc/0yDgcyBp/Logo-transparente-blanco.png" />
+                </div>
+                <p class="text-sm" id="portal-footer-text">© 2026 Portal BIM Alcabama - Todos los derechos reservados.
+                </p>
+            </div>
+        </footer>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const heroImage = document.getElementById('home-hero-image');
+            const authContainer = document.getElementById('auth-container');
+            const projectsList = document.getElementById('portal-projects-list');
+            const publicacionesList = document.getElementById('portal-publicaciones-list');
+            const solicitudesList = document.getElementById('portal-solicitudes-list');
+            const metricasList = document.getElementById('portal-metricas-list');
+            const adminList = document.getElementById('portal-admin-list');
+            const adminColumn = document.getElementById('portal-admin-column');
+            const footerText = document.getElementById('portal-footer-text');
+            // Buscar usuario en sessionStorage y luego en localStorage
+            const userAccount = JSON.parse(sessionStorage.getItem('userAccount') || localStorage.getItem('userAccount'));
+            const userRole = userAccount?.role || '';
+            const DEFAULT_PORTAL_CONFIG = {
+                portal: {
+                    name: 'Portal BIM Alcabama',
+                    shortName: 'Portal BIM',
+                    footerText: '© 2026 Portal BIM Alcabama - Todos los derechos reservados.',
+                    heroImages: [
+                        'https://i.postimg.cc/fbwgkrDd/r-ciien.png',
+                        'https://i.postimg.cc/FK9n1BNP/r-trevoly.png'
+                    ],
+                    configPageUrl: 'portal-configurator.html',
+                    logoLight: 'https://i.postimg.cc/jdyQ3Mr2/LOGO-BIM-NEGRO-ICO.png',
+                    logoDark: 'https://i.postimg.cc/yY0XpLzW/LOGO-BIM-BLANCO-ICO.png',
+                    footerLogoLight: 'https://i.postimg.cc/GmWLmfZZ/Logo-transparente-negro.png',
+                    footerLogoDark: 'https://i.postimg.cc/0yDgcyBp/Logo-transparente-blanco.png',
+                    footerLogoSecondaryLight: 'https://i.postimg.cc/RVp8pZwc/artis-urbano.png',
+                    footerLogoSecondaryDark: 'https://i.postimg.cc/RVp8pZwc/artis-urbano.png'
+                },
+                projects: [
+                    { name: 'Arboré', homeUrl: '#', enabled: true },
+                    { name: 'Blue', homeUrl: '', enabled: true },
+                    { name: 'Ciudadela armonía', homeUrl: '#', enabled: true },
+                    { name: 'Gardenias', homeUrl: '#', enabled: true },
+                    { name: 'Iris', homeUrl: '#', enabled: true },
+                    { name: 'La figeroa', homeUrl: '#', enabled: true },
+                    { name: 'Madero', homeUrl: '#', enabled: true },
+                    { name: 'Madrigal', homeUrl: '#', enabled: true },
+                    { name: 'Magnolias', homeUrl: '#', enabled: true },
+                    { name: 'Magnolias II', homeUrl: '#', enabled: true },
+                    { name: 'Mirandé', homeUrl: '#', enabled: true },
+                    { name: 'Orión', homeUrl: '#', enabled: true },
+                    { name: 'Orión II', homeUrl: '#', enabled: true },
+                    { name: 'Tierra Llana', homeUrl: '#', enabled: true },
+                    { name: 'Trevoly', homeUrl: '', enabled: true },
+                    { name: 'Ventura', homeUrl: '', enabled: true }
+                ],
+                publicaciones: [
+                    {
+                        id: 'link-publicaciones',
+                        label: 'Publicaciones por proyecto',
+                        href: 'https://alcabama-commits.github.io/bim/Publicaciones.html',
+                        allowedRoles: ['COMBOS Y REFORMAS', 'ACÚSTICA', 'ADMINISTRADOR']
+                    }
+                ],
+                solicitudes: [
+                    {
+                        id: 'link-solicitud-cde',
+                        label: 'Solicitud de acceso a CDE',
+                        href: 'https://alcabama-commits.github.io/bim/index.html',
+                        allowedRoles: ['EDGE', 'COMBOS Y REFORMAS', 'ARQUITECTURA', 'ADMINISTRADOR']
+                    },
+                    {
+                        id: 'link-admin-usuarios',
+                        label: 'Administrar Usuarios',
+                        href: 'https://alcabama-commits.github.io/bim/addusuarios.html',
+                        allowedRoles: ['ADMINISTRADOR']
+                    },
+                    {
+                        id: 'link-lista-usuarios',
+                        label: 'Lista Usuarios',
+                        href: 'https://alcabama-commits.github.io/bim/lista_usuarios.html',
+                        allowedRoles: ['ADMINISTRADOR']
+                    }
+                ],
+                metricas: [
+                    { label: 'Auditorías', href: '#' },
+                    { label: 'Incidencias', href: '#' },
+                    { label: 'Seguimiento de proyectos', href: '#' }
+                ],
+                administracion: [
+                    {
+                        id: 'link-pba-config',
+                        label: 'Configuración PBA',
+                        href: 'portal-configurator.html',
+                        allowedRoles: ['ADMINISTRADOR']
+                    }
+                ]
+            };
+
+            const escapeHtml = (value) => String(value ?? '')
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;');
+            const slugify = (value) => String(value ?? '')
+                .normalize('NFD')
+                .replace(/[\u0300-\u036f]/g, '')
+                .toLowerCase()
+                .replace(/[^a-z0-9]+/g, '-')
+                .replace(/^-+|-+$/g, '') || 'proyecto';
+            const canAccess = (item) => {
+                if (userRole === 'ADMINISTRADOR') return true;
+                const roles = Array.isArray(item?.allowedRoles) ? item.allowedRoles : [];
+                return roles.length === 0 || (userRole && roles.includes(userRole));
+            };
+            const resolveProjectHref = (project) => {
+                if (!project || project.enabled === false) return '#';
+                const slug = slugify(project.slug || project.name || '');
+                const landingEnabled = !project.landing || project.landing.enabled !== false;
+                if (landingEnabled && slug) return `project-landing.html?project=${encodeURIComponent(slug)}`;
+                const rawUrl = String(project.homeUrl || '').trim();
+                return rawUrl || '#';
+            };
+            const renderLinkItems = (listEl, items) => {
+                if (!listEl) return;
+                const visibleItems = (Array.isArray(items) ? items : []).filter(canAccess);
+                listEl.innerHTML = visibleItems.length
+                    ? visibleItems
+                        .map((item) => `<li id="${escapeHtml(item.id || '')}"><a class="hover:text-primary dark:hover:text-primary" href="${escapeHtml(item.href || '#')}">${escapeHtml(item.label || 'Sin nombre')}</a></li>`)
+                        .join('')
+                    : '<li class="text-sm text-gray-400 dark:text-gray-500">Sin enlaces configurados.</li>';
+            };
+            const renderProjects = (projects) => {
+                if (!projectsList) return;
+                const visibleProjects = (Array.isArray(projects) ? projects : []).filter((item) => item && item.enabled !== false);
+                projectsList.innerHTML = visibleProjects.length
+                    ? visibleProjects
+                        .map((project) => `<li><a class="hover:text-primary dark:hover:text-primary" href="${escapeHtml(resolveProjectHref(project))}">${escapeHtml(project.name || 'Proyecto')}</a></li>`)
+                        .join('')
+                    : '<li class="text-sm text-gray-400 dark:text-gray-500">Sin proyectos configurados.</li>';
+            };
+            const applyHeroImages = (images) => {
+                const heroImages = (Array.isArray(images) ? images : []).filter(Boolean);
+                if (!heroImage || heroImages.length === 0) return;
+                const selectedImage = heroImages[Math.floor(Math.random() * heroImages.length)];
+                heroImage.style.backgroundImage = `url('${selectedImage}')`;
+            };
+            const applyPortalConfig = (config) => {
+                const safeConfig = config && typeof config === 'object' ? config : DEFAULT_PORTAL_CONFIG;
+                document.title = safeConfig.portal?.name || 'Portal BIM Alcabama';
+                if (footerText && safeConfig.portal?.footerText) {
+                    footerText.textContent = safeConfig.portal.footerText;
+                }
+
+                // Actualizar logos dinámicamente
+                const logoLight = safeConfig.portal?.logoLight || 'https://i.postimg.cc/jdyQ3Mr2/LOGO-BIM-NEGRO-ICO.png';
+                const logoDark = safeConfig.portal?.logoDark || 'https://i.postimg.cc/yY0XpLzW/LOGO-BIM-BLANCO-ICO.png';
+                const footerLogoLight = safeConfig.portal?.footerLogoLight || 'https://i.postimg.cc/GmWLmfZZ/Logo-transparente-negro.png';
+                const footerLogoDark = safeConfig.portal?.footerLogoDark || 'https://i.postimg.cc/0yDgcyBp/Logo-transparente-blanco.png';
+                const footerLogoSecondaryLight = safeConfig.portal?.footerLogoSecondaryLight || 'https://i.postimg.cc/RVp8pZwc/artis-urbano.png';
+                const footerLogoSecondaryDark = safeConfig.portal?.footerLogoSecondaryDark || 'https://i.postimg.cc/RVp8pZwc/artis-urbano.png';
+
+                const imgLogoLight = document.getElementById('portal-logo-light');
+                if (imgLogoLight) imgLogoLight.src = logoLight;
+                const imgLogoDark = document.getElementById('portal-logo-dark');
+                if (imgLogoDark) imgLogoDark.src = logoDark;
+                const imgFooterLight = document.getElementById('portal-footer-logo-light');
+                if (imgFooterLight) imgFooterLight.src = footerLogoLight;
+                const imgFooterDark = document.getElementById('portal-footer-logo-dark');
+                if (imgFooterDark) imgFooterDark.src = footerLogoDark;
+                const imgFooterSecondaryLight = document.getElementById('portal-footer-logo-secondary-light');
+                if (imgFooterSecondaryLight) imgFooterSecondaryLight.src = footerLogoSecondaryLight;
+                const imgFooterSecondaryDark = document.getElementById('portal-footer-logo-secondary-dark');
+                if (imgFooterSecondaryDark) imgFooterSecondaryDark.src = footerLogoSecondaryDark;
+
+                renderProjects(safeConfig.projects);
+                renderLinkItems(publicacionesList, safeConfig.publicaciones);
+                renderLinkItems(solicitudesList, safeConfig.solicitudes);
+                renderLinkItems(metricasList, safeConfig.metricas);
+                const adminItems = (Array.isArray(safeConfig.administracion) ? safeConfig.administracion : []).filter(canAccess);
+                if (adminColumn) {
+                    if (adminItems.length) {
+                        adminColumn.classList.remove('hidden');
+                        renderLinkItems(adminList, adminItems);
+                    } else {
+                        adminColumn.classList.add('hidden');
+                    }
+                }
+                applyHeroImages(safeConfig.portal?.heroImages);
+            };
+            const loadPortalConfig = async () => {
+                try {
+                    // 1. Intentar cargar de la red primero (mostrar la última versión si hay conexión)
+                    const metaVersion = document.querySelector('meta[name="x-app-version"]');
+                    const currentVersion = metaVersion?.getAttribute('content') || Date.now().toString();
+                    const response = await fetch(`portal-config.json?v=${encodeURIComponent(currentVersion)}`, { cache: 'no-store' });
+                    if (!response.ok) throw new Error('No se pudo cargar la configuracion central');
+                    const config = await response.json();
+                    applyPortalConfig({ ...DEFAULT_PORTAL_CONFIG, ...config });
+                } catch (error) {
+                    console.warn('Error al cargar configuración central de red. Intentando borrador local...', error);
+                    // 2. Si no hay conexión o falla, intentar cargar el borrador local (buffer)
+                    try {
+                        const draft = localStorage.getItem('portal:pba-config-draft:v2');
+                        if (draft) {
+                            console.log('Cargando borrador local de configuración (buffer)');
+                            const config = JSON.parse(draft);
+                            applyPortalConfig({ ...DEFAULT_PORTAL_CONFIG, ...config });
+                            return;
+                        }
+                    } catch (e) {
+                        console.warn('Error al leer borrador local:', e);
+                    }
+                    // 3. Fallback final por defecto
+                    applyPortalConfig(DEFAULT_PORTAL_CONFIG);
+                }
+            };
+            void loadPortalConfig();
+
+            // --- GESTIÓN DE AUTENTICACIÓN ---
+            if (userAccount) {
+                authContainer.innerHTML = `
+                <span class="text-sm font-medium text-text-light dark:text-white">Hola, ${userAccount.name.split(' ')[0]}</span>
+                <button id="logout-button" class="text-text-light dark:text-white hover:text-primary text-sm font-medium">Cerrar sesión</button>
+            `;
+                document.getElementById('logout-button').addEventListener('click', () => {
+                    sessionStorage.removeItem('userAccount'); // Limpiar ambas ubicaciones
+                    localStorage.removeItem('userAccount');
+                    window.location.reload();
+                });
+            }
+
+            // --- CONTROL DE ACCESO POR USUARIO ---
+            if (userAccount) {
+                console.log('User role:', userRole);
+            } else {
+                if (adminColumn) adminColumn.classList.add('hidden');
+            }
+
+            // --- GESTIÓN DEL TEMA (MODO OSCURO/CLARO) ---
+            const themeToggle = document.getElementById('theme-toggle');
+            const htmlEl = document.documentElement;
+
+            const applyTheme = (theme) => {
+                if (theme === 'dark') {
+                    htmlEl.classList.add('dark');
+                    themeToggle.querySelector('.material-symbols-outlined').textContent = 'light_mode';
+                } else {
+                    htmlEl.classList.remove('dark');
+                    themeToggle.querySelector('.material-symbols-outlined').textContent = 'dark_mode';
+                }
+            };
+
+            const savedTheme = localStorage.getItem('theme') || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+            applyTheme(savedTheme);
+
+            themeToggle.addEventListener('click', () => {
+                const newTheme = htmlEl.classList.contains('dark') ? 'light' : 'dark';
+                localStorage.setItem('theme', newTheme);
+                applyTheme(newTheme);
+            });
+
+            if ('serviceWorker' in navigator) {
+                window.addEventListener('load', () => {
+                    const meta = document.querySelector('meta[name="x-app-version"]');
+                    const appVersion = meta?.getAttribute('content') || '';
+                    const swUrl = appVersion ? `sw.js?v=${encodeURIComponent(appVersion)}` : 'sw.js';
+                    navigator.serviceWorker.register(swUrl)
+                        .then(registration => {
+                            console.log('ServiceWorker registrado con éxito:', registration.scope);
+                        })
+                        .catch(error => {
+                            console.log('Fallo en el registro de ServiceWorker:', error);
+                        });
+                });
+            }
+
+            const backBtn = document.getElementById('back-btn');
+            backBtn?.addEventListener('click', () => {
+                if (window.history.length > 1) window.history.back();
+                else window.location.href = 'home.html';
+            });
+
+            const metaVersion = document.querySelector('meta[name="x-app-version"]');
+            const appId = metaVersion?.getAttribute('data-app') || 'portal';
+            const currentVersion = metaVersion?.getAttribute('content') || '';
+            const versionKey = `${appId}:appVersion`;
+            const storedVersion = localStorage.getItem(versionKey) || '';
+            const banner = document.getElementById('update-banner');
+            const reloadBtn = document.getElementById('update-reload');
+            const showBanner = () => {
+                if (!banner) return;
+                banner.classList.remove('hidden');
+            };
+            if (currentVersion) {
+                if (!storedVersion) {
+                    localStorage.setItem(versionKey, currentVersion);
+                } else if (storedVersion !== currentVersion) {
+                    showBanner();
+                }
+            }
+            reloadBtn?.addEventListener('click', async () => {
+                try {
+                    localStorage.setItem(versionKey, currentVersion);
+                    if ('serviceWorker' in navigator) {
+                        const reg = await navigator.serviceWorker.getRegistration();
+                        if (reg) await reg.unregister();
+                    }
+                } catch {
+                }
+                const u = new URL(window.location.href);
+                if (currentVersion) u.searchParams.set('v', currentVersion);
+                window.location.replace(u.toString());
+            });
+        });
+    </script>
+</body>
+
+</html>

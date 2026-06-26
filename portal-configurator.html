@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Configuración PBA | Portal BIM Alcabama</title>
+  <meta name="theme-color" content="#2b2b2b" />
+  <script src="https://cdn.tailwindcss.com?plugins=forms,typography"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <style>
+    body {
+      font-family: 'Inter', sans-serif;
+    }
+    .material-symbols-outlined {
+      font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+    }
+    #config-map {
+      height: 360px;
+      width: 100%;
+    }
+    .leaflet-tile {
+      filter: grayscale(1) contrast(1.05);
+    }
+  </style>
+  <script>
+    (function () {
+      const rawAccount = sessionStorage.getItem('userAccount') || localStorage.getItem('userAccount');
+      const userAccount = rawAccount ? JSON.parse(rawAccount) : null;
+      const isAdmin = Boolean(userAccount && userAccount.role === 'ADMINISTRADOR');
+      if (!isAdmin) {
+        alert('Acceso denegado. Esta pagina es solo para administradores del PBA.');
+        window.location.replace('home.html');
+      }
+    })();
+  </script>
+</head>
+<body class="bg-slate-100 text-slate-900">
+  <div class="min-h-screen">
+    <header class="border-b border-slate-200 bg-white">
+      <div class="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-4 sm:px-6 lg:px-8">
+        <div class="flex items-center gap-3">
+          <a href="home.html" class="flex h-11 w-11 items-center justify-center rounded-xl border border-slate-200 bg-slate-50 text-slate-700 transition hover:bg-slate-100" aria-label="Volver al portal">
+            <span class="material-symbols-outlined">arrow_back</span>
+          </a>
+          <div>
+            <p class="text-xs font-semibold uppercase tracking-[0.24em] text-slate-500">Administración</p>
+            <h1 class="text-xl font-bold text-slate-900">Configuración completa del PBA</h1>
+          </div>
+        </div>
+        <div class="flex items-center gap-3">
+          <div id="session-user" class="hidden rounded-xl bg-slate-100 px-3 py-2 text-sm font-medium text-slate-700 sm:block"></div>
+          <a href="home.html" class="rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800">Volver al portal</a>
+        </div>
+      </div>
+    </header>
+
+    <main class="mx-auto flex max-w-7xl flex-col gap-6 px-4 py-6 sm:px-6 lg:px-8">
+      <section class="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+        <div class="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
+          <div>
+            <p class="text-xs font-semibold uppercase tracking-[0.24em] text-slate-500">Panel</p>
+            <h2 class="mt-2 text-2xl font-bold text-slate-900">Configura portal, proyectos y landing pages</h2>
+            <p class="mt-3 max-w-3xl text-sm leading-6 text-slate-600">
+              Cada proyecto puede usar la misma landing visual de Trevoly, pero con logo, textos, accesos, ciudad y punto del mapa completamente personalizados.
+            </p>
+          </div>
+          <div class="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+            <button id="save-draft-btn" class="rounded-xl bg-slate-900 px-4 py-3 text-sm font-semibold text-white transition hover:bg-slate-800">Guardar borrador local</button>
+            <button id="publish-btn" class="rounded-xl bg-emerald-600 px-4 py-3 text-sm font-semibold text-white transition hover:bg-emerald-700">Guardar en archivo</button>
+            <button id="restore-published-btn" class="rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50">Volver al publicado</button>
+            <button id="copy-json-btn" class="rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50">Copiar JSON</button>
+            <button id="export-json-btn" class="rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50">Descargar JSON</button>
+            <button id="import-json-btn" class="rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50">Importar JSON</button>
+            <button id="clear-draft-btn" class="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-700 transition hover:bg-rose-100">Borrar borrador</button>
+          </div>
+        </div>
+        <input id="import-json-input" type="file" accept="application/json" class="hidden" />
+        <div id="status-banner" class="mt-4 hidden rounded-2xl border px-4 py-3 text-sm font-medium"></div>
+      </section>
+
+      <section class="grid gap-6 xl:grid-cols-[0.34fr_0.66fr]">
+        <div class="flex flex-col gap-6">
+          <section class="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+            <p class="text-xs font-semibold uppercase tracking-[0.24em] text-slate-500">Portal</p>
+            <h2 class="mt-2 text-lg font-bold text-slate-900">Generalidades</h2>
+            <div class="mt-4 grid gap-4">
+              <label class="block"><span class="mb-2 block text-sm font-semibold text-slate-700">Nombre del portal</span><input id="portal-name" class="w-full rounded-xl border-slate-200" type="text" /></label>
+              <label class="block"><span class="mb-2 block text-sm font-semibold text-slate-700">Nombre corto</span><input id="portal-short-name" class="w-full rounded-xl border-slate-200" type="text" /></label>
+              <div class="grid gap-4 md:grid-cols-2">
+                <label class="block"><span class="mb-2 block text-sm font-semibold text-slate-700">Logo principal claro</span><input id="portal-logo-light" class="w-full rounded-xl border-slate-200" type="text" placeholder="https://..." /></label>
+                <label class="block"><span class="mb-2 block text-sm font-semibold text-slate-700">Logo principal oscuro</span><input id="portal-logo-dark" class="w-full rounded-xl border-slate-200" type="text" placeholder="https://..." /></label>
+              </div>
+              <div class="grid gap-4 md:grid-cols-2">
+                <label class="block"><span class="mb-2 block text-sm font-semibold text-slate-700">Logo footer (Alcabama) claro</span><input id="portal-logo-footer-light" class="w-full rounded-xl border-slate-200" type="text" placeholder="https://..." /></label>
+                <label class="block"><span class="mb-2 block text-sm font-semibold text-slate-700">Logo footer (Alcabama) oscuro</span><input id="portal-logo-footer-dark" class="w-full rounded-xl border-slate-200" type="text" placeholder="https://..." /></label>
+              </div>
+              <div class="grid gap-4 md:grid-cols-2">
+                <label class="block"><span class="mb-2 block text-sm font-semibold text-slate-700">Logo footer (Artis) claro</span><input id="portal-logo-footer-secondary-light" class="w-full rounded-xl border-slate-200" type="text" placeholder="https://..." /></label>
+                <label class="block"><span class="mb-2 block text-sm font-semibold text-slate-700">Logo footer (Artis) oscuro</span><input id="portal-logo-footer-secondary-dark" class="w-full rounded-xl border-slate-200" type="text" placeholder="https://..." /></label>
+              </div>
+              <label class="block"><span class="mb-2 block text-sm font-semibold text-slate-700">Texto del footer</span><input id="portal-footer" class="w-full rounded-xl border-slate-200" type="text" /></label>
+              <label class="block"><span class="mb-2 block text-sm font-semibold text-slate-700">Ruta de configuración</span><input id="portal-config-page-url" class="w-full rounded-xl border-slate-200" type="text" /></label>
+              <label class="block"><span class="mb-2 block text-sm font-semibold text-slate-700">Imágenes del home</span><textarea id="portal-hero-images" class="w-full rounded-2xl border-slate-200 font-mono text-xs" rows="5" placeholder="Una URL por línea"></textarea></label>
+            </div>
+          </section>
+
+          <section class="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+            <div class="flex items-center justify-between gap-3">
+              <div>
+                <p class="text-xs font-semibold uppercase tracking-[0.24em] text-slate-500">Proyectos</p>
+                <h2 class="mt-2 text-lg font-bold text-slate-900">Listado</h2>
+              </div>
+              <button id="add-project-btn" class="rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800">Agregar</button>
+            </div>
+            <div class="mt-4 flex gap-2">
+              <button id="duplicate-project-btn" class="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50">Duplicar</button>
+              <button id="remove-project-btn" class="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm font-semibold text-rose-700 transition hover:bg-rose-100">Eliminar</button>
+              <button id="apply-trevoly-btn" class="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm font-semibold text-amber-700 transition hover:bg-amber-100">Base Trevoly</button>
+            </div>
+            <div id="project-list" class="mt-4 flex max-h-[720px] flex-col gap-2 overflow-auto pr-1"></div>
+          </section>
+        </div>
+
+        <div class="flex flex-col gap-6">
+          <section class="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+            <div class="mb-5 flex items-center justify-between gap-3">
+              <div>
+                <p class="text-xs font-semibold uppercase tracking-[0.24em] text-slate-500">Proyecto</p>
+                <h2 id="editor-project-title" class="mt-2 text-xl font-bold text-slate-900">Selecciona un proyecto</h2>
+              </div>
+              <div class="rounded-xl bg-slate-100 px-3 py-2 text-xs font-semibold uppercase tracking-[0.18em] text-slate-600">Landing dinámica</div>
+            </div>
+
+            <div class="grid gap-6">
+              <section>
+                <h3 class="text-sm font-bold uppercase tracking-[0.2em] text-slate-500">Información base</h3>
+                <div class="mt-4 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+                  <label class="block"><span class="mb-2 block text-sm font-semibold text-slate-700">Nombre</span><input id="project-name" class="w-full rounded-xl border-slate-200" type="text" /></label>
+                  <label class="block"><span class="mb-2 block text-sm font-semibold text-slate-700">Slug</span><input id="project-slug" class="w-full rounded-xl border-slate-200" type="text" /></label>
+                  <label class="block"><span class="mb-2 block text-sm font-semibold text-slate-700">Home personalizado</span><input id="project-home-url" class="w-full rounded-xl border-slate-200" type="text" placeholder="Vacío = usar landing automática" /></label>
+                  <label class="block"><span class="mb-2 block text-sm font-semibold text-slate-700">Ciudad</span><input id="project-city" class="w-full rounded-xl border-slate-200" type="text" /></label>
+                  <label class="block"><span class="mb-2 block text-sm font-semibold text-slate-700">Tipo</span><input id="project-type" class="w-full rounded-xl border-slate-200" type="text" /></label>
+                  <label class="block"><span class="mb-2 block text-sm font-semibold text-slate-700">Estado</span><input id="project-status" class="w-full rounded-xl border-slate-200" type="text" /></label>
+                  <label class="inline-flex items-center gap-2 rounded-xl border border-slate-200 px-4 py-3 text-sm font-semibold text-slate-700"><input id="project-enabled" class="rounded border-slate-300" type="checkbox" />Proyecto activo en el portal</label>
+                  <label class="inline-flex items-center gap-2 rounded-xl border border-slate-200 px-4 py-3 text-sm font-semibold text-slate-700"><input id="project-landing-enabled" class="rounded border-slate-300" type="checkbox" />Usar landing tipo Trevoly</label>
+                </div>
+              </section>
+
+              <section>
+                <h3 class="text-sm font-bold uppercase tracking-[0.2em] text-slate-500">Branding y textos</h3>
+                <div class="mt-4 grid gap-4 md:grid-cols-2">
+                  <label class="block"><span class="mb-2 block text-sm font-semibold text-slate-700">Logo del proyecto</span><input id="landing-logo-url" class="w-full rounded-xl border-slate-200" type="text" placeholder="https://..." /></label>
+                  <label class="block"><span class="mb-2 block text-sm font-semibold text-slate-700">Logo portal claro</span><input id="landing-portal-logo-light" class="w-full rounded-xl border-slate-200" type="text" placeholder="https://..." /></label>
+                  <label class="block md:col-span-2"><span class="mb-2 block text-sm font-semibold text-slate-700">Logo portal oscuro</span><input id="landing-portal-logo-dark" class="w-full rounded-xl border-slate-200" type="text" placeholder="https://..." /></label>
+                  <label class="block"><span class="mb-2 block text-sm font-semibold text-slate-700">Eyebrow superior</span><input id="landing-eyebrow" class="w-full rounded-xl border-slate-200" type="text" /></label>
+                  <label class="block"><span class="mb-2 block text-sm font-semibold text-slate-700">Título landing</span><input id="landing-title" class="w-full rounded-xl border-slate-200" type="text" /></label>
+                  <label class="block md:col-span-2"><span class="mb-2 block text-sm font-semibold text-slate-700">Descripción principal</span><textarea id="landing-subtitle" class="w-full rounded-2xl border-slate-200" rows="3"></textarea></label>
+                  <label class="block"><span class="mb-2 block text-sm font-semibold text-slate-700">Eyebrow acciones</span><input id="landing-action-eyebrow" class="w-full rounded-xl border-slate-200" type="text" /></label>
+                  <label class="block"><span class="mb-2 block text-sm font-semibold text-slate-700">Título acciones</span><input id="landing-action-title" class="w-full rounded-xl border-slate-200" type="text" /></label>
+                  <label class="block md:col-span-2"><span class="mb-2 block text-sm font-semibold text-slate-700">Descripción acciones</span><textarea id="landing-action-description" class="w-full rounded-2xl border-slate-200" rows="3"></textarea></label>
+                </div>
+              </section>
+
+              <section>
+                <h3 class="text-sm font-bold uppercase tracking-[0.2em] text-slate-500">Mapa y ciudad</h3>
+                <div class="mt-4 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+                  <label class="block"><span class="mb-2 block text-sm font-semibold text-slate-700">Eyebrow mapa</span><input id="landing-map-eyebrow" class="w-full rounded-xl border-slate-200" type="text" /></label>
+                  <label class="block"><span class="mb-2 block text-sm font-semibold text-slate-700">Nombre ciudad visible</span><input id="landing-city-label" class="w-full rounded-xl border-slate-200" type="text" /></label>
+                  <label class="block"><span class="mb-2 block text-sm font-semibold text-slate-700">Zoom del mapa</span><input id="landing-map-zoom" class="w-full rounded-xl border-slate-200" type="number" step="1" /></label>
+                  <label class="block"><span class="mb-2 block text-sm font-semibold text-slate-700">Latitud</span><input id="landing-map-lat" class="w-full rounded-xl border-slate-200" type="number" step="any" /></label>
+                  <label class="block"><span class="mb-2 block text-sm font-semibold text-slate-700">Longitud</span><input id="landing-map-lng" class="w-full rounded-xl border-slate-200" type="number" step="any" /></label>
+                  <div class="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">Haz clic sobre el mapa para actualizar latitud y longitud del proyecto.</div>
+                  <label class="block md:col-span-2 xl:col-span-3"><span class="mb-2 block text-sm font-semibold text-slate-700">Descripción de ciudad</span><textarea id="landing-map-description" class="w-full rounded-2xl border-slate-200" rows="3"></textarea></label>
+                  <label class="block md:col-span-2 xl:col-span-3"><span class="mb-2 block text-sm font-semibold text-slate-700">Dirección</span><input id="landing-address" class="w-full rounded-xl border-slate-200" type="text" /></label>
+                </div>
+                <div class="mt-4 overflow-hidden rounded-3xl border border-slate-200"><div id="config-map"></div></div>
+              </section>
+
+              <section>
+                <h3 class="text-sm font-bold uppercase tracking-[0.2em] text-slate-500">Modelos IFC y Fuentes de datos</h3>
+                <div class="mt-4 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+                  <label class="block"><span class="mb-2 block text-sm font-semibold text-slate-700">Nombre Carpeta Modelos IFC (Drive)</span><input id="drive-folder-name" class="w-full rounded-xl border-slate-200" type="text" placeholder="TREVOLY, ARBORE, ..." /></label>
+                  <label class="block"><span class="mb-2 block text-sm font-semibold text-slate-700">ID Carpeta Modelos IFC (Drive)</span><input id="drive-folder-id" class="w-full rounded-xl border-slate-200" type="text" placeholder="1abc..." /></label>
+                  <label class="block md:col-span-2 xl:col-span-1"><span class="mb-2 block text-sm font-semibold text-slate-700">Script de Modelos (Drive)</span><input id="drive-script-url" class="w-full rounded-xl border-slate-200" type="text" placeholder="https://script.google.com/..." /></label>
+                  <label class="block"><span class="mb-2 block text-sm font-semibold text-slate-700">Sheet ID STATUS</span><input id="status-sheet-id" class="w-full rounded-xl border-slate-200" type="text" /></label>
+                  <label class="block"><span class="mb-2 block text-sm font-semibold text-slate-700">Script STATUS</span><input id="status-script-url" class="w-full rounded-xl border-slate-200" type="text" placeholder="https://script.google.com/..." /></label>
+                  <label class="block"><span class="mb-2 block text-sm font-semibold text-slate-700">Sheet ID CANTIDADES</span><input id="cantidades-sheet-id" class="w-full rounded-xl border-slate-200" type="text" /></label>
+                  <label class="block md:col-span-2 xl:col-span-2"><span class="mb-2 block text-sm font-semibold text-slate-700">Script CANTIDADES</span><input id="cantidades-script-url" class="w-full rounded-xl border-slate-200" type="text" placeholder="https://script.google.com/..." /></label>
+                  <div class="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
+                    El portal enviará esta configuración al abrir `VSR_IFCA` (Visor IFC), `STATUS` y `CANTIDADES`, para que cada proyecto consuma su propia carpeta de modelos en Google Drive y sus propias hojas de cálculo.
+                  </div>
+                </div>
+              </section>
+
+              <section>
+                <h3 class="text-sm font-bold uppercase tracking-[0.2em] text-slate-500">Módulos del proyecto</h3>
+                <div class="mt-4 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+                  <label class="block"><span class="mb-2 block text-sm font-semibold text-slate-700">Visor IFC</span><input id="module-ifc" class="w-full rounded-xl border-slate-200" type="text" /></label>
+                  <label class="block"><span class="mb-2 block text-sm font-semibold text-slate-700">STATUS</span><input id="module-status" class="w-full rounded-xl border-slate-200" type="text" /></label>
+                  <label class="block"><span class="mb-2 block text-sm font-semibold text-slate-700">CANTIDADES</span><input id="module-cantidades" class="w-full rounded-xl border-slate-200" type="text" /></label>
+                  <label class="block"><span class="mb-2 block text-sm font-semibold text-slate-700">Visor PDF</span><input id="module-pdf" class="w-full rounded-xl border-slate-200" type="text" /></label>
+                  <label class="block"><span class="mb-2 block text-sm font-semibold text-slate-700">Visor DWG</span><input id="module-dwg" class="w-full rounded-xl border-slate-200" type="text" /></label>
+                </div>
+              </section>
+
+              <section>
+                <h3 class="text-sm font-bold uppercase tracking-[0.2em] text-slate-500">Acciones del panel</h3>
+                <div class="mt-4 grid gap-4 md:grid-cols-3">
+                  <label class="block"><span class="mb-2 block text-sm font-semibold text-slate-700">Publicaciones</span><input id="action-publicaciones" class="w-full rounded-xl border-slate-200" type="text" /></label>
+                  <label class="block"><span class="mb-2 block text-sm font-semibold text-slate-700">Solicitudes</span><input id="action-solicitudes" class="w-full rounded-xl border-slate-200" type="text" /></label>
+                  <label class="block"><span class="mb-2 block text-sm font-semibold text-slate-700">Equipo</span><input id="action-equipo" class="w-full rounded-xl border-slate-200" type="text" /></label>
+                </div>
+              </section>
+            </div>
+          </section>
+
+          <section class="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+            <div class="grid gap-6 lg:grid-cols-[0.34fr_0.66fr]">
+              <div>
+                <p class="text-xs font-semibold uppercase tracking-[0.24em] text-slate-500">Resumen</p>
+                <h2 class="mt-2 text-lg font-bold text-slate-900">Vista rápida</h2>
+                <div class="mt-4 grid gap-3 sm:grid-cols-2">
+                  <div class="rounded-2xl bg-slate-50 p-4">
+                    <div class="text-xs uppercase tracking-[0.18em] text-slate-500">Proyectos activos</div>
+                    <div id="summary-project-count" class="mt-2 text-3xl font-bold text-slate-900">0</div>
+                  </div>
+                  <div class="rounded-2xl bg-slate-50 p-4">
+                    <div class="text-xs uppercase tracking-[0.18em] text-slate-500">Proyecto editando</div>
+                    <div id="summary-current-project" class="mt-2 text-xl font-bold text-slate-900">-</div>
+                  </div>
+                </div>
+                <div class="mt-4 rounded-2xl bg-slate-50 p-4 text-sm text-slate-600">
+                  El portal usará `project-landing.html?project=slug` para abrir la landing de cada proyecto cuando la landing esté activa.
+                </div>
+              </div>
+              <div>
+                <p class="text-xs font-semibold uppercase tracking-[0.24em] text-slate-500">Salida</p>
+                <h2 class="mt-2 text-lg font-bold text-slate-900">JSON generado</h2>
+                <pre id="json-preview" class="mt-4 max-h-[420px] overflow-auto rounded-2xl bg-slate-950 p-4 text-xs leading-6 text-slate-100"></pre>
+              </div>
+            </div>
+          </section>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="portal-configurator.js"></script>
+</body>
+</html>

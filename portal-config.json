@@ -1,0 +1,860 @@
+{
+  "portal": {
+    "name": "Portal BIM Alcabama",
+    "shortName": "Portal BIM",
+    "footerText": "© 2026 Portal BIM Alcabama - Todos los derechos reservados.",
+    "heroImages": [
+      "https://i.postimg.cc/fbwgkrDd/r-ciien.png",
+      "https://i.postimg.cc/FK9n1BNP/r-trevoly.png",
+      "https://i.postimg.cc/7LxQbWwG/r-arbore.png",
+      "https://i.postimg.cc/tgXm7Mpx/r-blue.png",
+      "https://i.postimg.cc/Dz2YmMns/r-madero.png",
+      "https://i.postimg.cc/9fWNznCt/r-mirande.png"
+    ],
+    "configPageUrl": "portal-configurator.html",
+    "logoLight": "https://i.postimg.cc/jdyQ3Mr2/LOGO-BIM-NEGRO-ICO.png",
+    "logoDark": "https://i.postimg.cc/yY0XpLzW/LOGO-BIM-BLANCO-ICO.png",
+    "footerLogoLight": "https://i.postimg.cc/GmWLmfZZ/Logo-transparente-negro.png",
+    "footerLogoDark": "https://i.postimg.cc/0yDgcyBp/Logo-transparente-blanco.png",
+    "footerLogoSecondaryLight": "https://i.postimg.cc/RVp8pZwc/artis-urbano.png",
+    "footerLogoSecondaryDark": "https://i.postimg.cc/RVp8pZwc/artis-urbano.png"
+  },
+  "projects": [
+    {
+      "name": "Arboré",
+      "slug": "arbore",
+      "homeUrl": "",
+      "city": "Bogotá",
+      "type": "Residencial",
+      "status": "Planeacion",
+      "enabled": true,
+      "modules": {
+        "ifc": "VSR_IFCA/",
+        "status": "STATUS/",
+        "cantidades": "CANTIDADES/",
+        "pdf": "VSR_PDFA/",
+        "dwg": "VSR_DWGA/"
+      },
+      "actions": {
+        "publicaciones": "Publicaciones.html",
+        "solicitudes": "index.html",
+        "equipo": "lista_usuarios.html"
+      },
+      "dataSources": {
+        "driveFolderName": "Arboré",
+        "driveFolderId": "",
+        "driveScriptUrl": "",
+        "statusSheetId": "",
+        "statusScriptUrl": "",
+        "cantidadesSheetId": "",
+        "cantidadesScriptUrl": ""
+      },
+      "landing": {
+        "enabled": true,
+        "eyebrow": "Portal BIM",
+        "title": "ARBORÉ",
+        "subtitle": "Accesos rápidos, seguimiento y contexto del proyecto.",
+        "actionEyebrow": "Panel",
+        "actionTitle": "Acciones",
+        "actionDescription": "Atajos para publicaciones, solicitudes y equipo.",
+        "mapEyebrow": "Ubicación",
+        "cityLabel": "Bogotá",
+        "mapDescription": "Portal de acceso al CDE del proyecto.",
+        "address": "",
+        "logoUrl": "https://i.postimg.cc/J4Fy2Qsx/LOGO-(1).jpg",
+        "portalLogoLight": "https://i.postimg.cc/jdyQ3Mr2/LOGO-BIM-NEGRO-ICO.png",
+        "portalLogoDark": "https://i.postimg.cc/yY0XpLzW/LOGO-BIM-BLANCO-ICO.png",
+        "map": {
+          "lat": 4.773428,
+          "lng": -74.059493,
+          "zoom": 16
+        }
+      }
+    },
+    {
+      "name": "Blue",
+      "slug": "blue",
+      "homeUrl": "",
+      "city": "Bogotá",
+      "type": "Residencial",
+      "status": "Activo",
+      "enabled": true,
+      "modules": {
+        "ifc": "VSR_IFCA/",
+        "status": "STATUS/",
+        "cantidades": "CANTIDADES/",
+        "pdf": "VSR_PDFA/",
+        "dwg": "VSR_DWGA/"
+      },
+      "actions": {
+        "publicaciones": "Publicaciones.html",
+        "solicitudes": "index.html",
+        "equipo": "lista_usuarios.html"
+      },
+      "dataSources": {
+        "driveFolderName": "Blue",
+        "driveFolderId": "",
+        "driveScriptUrl": "",
+        "statusSheetId": "",
+        "statusScriptUrl": "",
+        "cantidadesSheetId": "",
+        "cantidadesScriptUrl": ""
+      },
+      "landing": {
+        "enabled": true,
+        "eyebrow": "Portal BIM",
+        "title": "BLUE",
+        "subtitle": "Accesos rápidos, seguimiento y contexto del proyecto.",
+        "actionEyebrow": "Panel",
+        "actionTitle": "Acciones",
+        "actionDescription": "Atajos para publicaciones, solicitudes y equipo.",
+        "mapEyebrow": "Ubicación",
+        "cityLabel": "Bogotá",
+        "mapDescription": "Portal de acceso al CDE del proyecto.",
+        "address": "",
+        "logoUrl": "https://i.postimg.cc/FKqjgZM4/LOGO-BLUE.jpg",
+        "portalLogoLight": "https://i.postimg.cc/jdyQ3Mr2/LOGO-BIM-NEGRO-ICO.png",
+        "portalLogoDark": "https://i.postimg.cc/yY0XpLzW/LOGO-BIM-BLANCO-ICO.png",
+        "map": {
+          "lat": 4.297488,
+          "lng": -74.821762,
+          "zoom": 16
+        }
+      }
+    },
+    {
+      "name": "Ciudadela armonía",
+      "slug": "ciudadela-armonia",
+      "homeUrl": "",
+      "city": "Bogotá",
+      "type": "Residencial",
+      "status": "Planeacion",
+      "enabled": true,
+      "modules": {
+        "ifc": "VSR_IFCA/",
+        "status": "STATUS/",
+        "cantidades": "CANTIDADES/",
+        "pdf": "VSR_PDFA/",
+        "dwg": "VSR_DWGA/"
+      },
+      "actions": {
+        "publicaciones": "Publicaciones.html",
+        "solicitudes": "index.html",
+        "equipo": "lista_usuarios.html"
+      },
+      "dataSources": {
+        "driveFolderName": "Ciudadela armonía",
+        "driveFolderId": "",
+        "driveScriptUrl": "",
+        "statusSheetId": "",
+        "statusScriptUrl": "",
+        "cantidadesSheetId": "",
+        "cantidadesScriptUrl": ""
+      },
+      "landing": {
+        "enabled": true,
+        "eyebrow": "Portal BIM",
+        "title": "CIUDADELA ARMONÍA",
+        "subtitle": "Accesos rápidos, seguimiento y contexto del proyecto.",
+        "actionEyebrow": "Panel",
+        "actionTitle": "Acciones",
+        "actionDescription": "Atajos para publicaciones, solicitudes y equipo.",
+        "mapEyebrow": "Ubicación",
+        "cityLabel": "Bogotá",
+        "mapDescription": "Portal de acceso al CDE del proyecto.",
+        "address": "",
+        "logoUrl": "assets/icons/portal-bim-favicon.png",
+        "portalLogoLight": "https://i.postimg.cc/jdyQ3Mr2/LOGO-BIM-NEGRO-ICO.png",
+        "portalLogoDark": "https://i.postimg.cc/yY0XpLzW/LOGO-BIM-BLANCO-ICO.png",
+        "map": {
+          "lat": 4.711,
+          "lng": -74.0721,
+          "zoom": 13
+        }
+      }
+    },
+    {
+      "name": "Iris",
+      "slug": "iris",
+      "homeUrl": "",
+      "city": "Bogotá",
+      "type": "Residencial",
+      "status": "Planeacion",
+      "enabled": true,
+      "modules": {
+        "ifc": "VSR_IFCA/",
+        "status": "STATUS/",
+        "cantidades": "CANTIDADES/",
+        "pdf": "VSR_PDFA/",
+        "dwg": "VSR_DWGA/"
+      },
+      "actions": {
+        "publicaciones": "Publicaciones.html",
+        "solicitudes": "index.html",
+        "equipo": "lista_usuarios.html"
+      },
+      "dataSources": {
+        "driveFolderName": "Iris",
+        "driveFolderId": "",
+        "driveScriptUrl": "",
+        "statusSheetId": "",
+        "statusScriptUrl": "",
+        "cantidadesSheetId": "",
+        "cantidadesScriptUrl": ""
+      },
+      "landing": {
+        "enabled": true,
+        "eyebrow": "Portal BIM",
+        "title": "IRIS",
+        "subtitle": "Accesos rápidos, seguimiento y contexto del proyecto.",
+        "actionEyebrow": "Panel",
+        "actionTitle": "Acciones",
+        "actionDescription": "Atajos para publicaciones, solicitudes y equipo.",
+        "mapEyebrow": "Ubicación",
+        "cityLabel": "Bogotá",
+        "mapDescription": "Portal de acceso al CDE del proyecto.",
+        "address": "",
+        "logoUrl": "https://i.postimg.cc/9fSGtp6j/LOGO-(1)-(1).jpg",
+        "portalLogoLight": "https://i.postimg.cc/jdyQ3Mr2/LOGO-BIM-NEGRO-ICO.png",
+        "portalLogoDark": "https://i.postimg.cc/yY0XpLzW/LOGO-BIM-BLANCO-ICO.png",
+        "map": {
+          "lat": 4.298475,
+          "lng": -74.811883,
+          "zoom": 16
+        }
+      }
+    },
+    {
+      "name": "La figeroa",
+      "slug": "la-figeroa",
+      "homeUrl": "",
+      "city": "Bogotá",
+      "type": "Residencial",
+      "status": "Planeacion",
+      "enabled": true,
+      "modules": {
+        "ifc": "VSR_IFCA/",
+        "status": "STATUS/",
+        "cantidades": "CANTIDADES/",
+        "pdf": "VSR_PDFA/",
+        "dwg": "VSR_DWGA/"
+      },
+      "actions": {
+        "publicaciones": "Publicaciones.html",
+        "solicitudes": "index.html",
+        "equipo": "lista_usuarios.html"
+      },
+      "dataSources": {
+        "driveFolderName": "La figeroa",
+        "driveFolderId": "",
+        "driveScriptUrl": "",
+        "statusSheetId": "",
+        "statusScriptUrl": "",
+        "cantidadesSheetId": "",
+        "cantidadesScriptUrl": ""
+      },
+      "landing": {
+        "enabled": true,
+        "eyebrow": "Portal BIM",
+        "title": "LA FIGEROA",
+        "subtitle": "Accesos rápidos, seguimiento y contexto del proyecto.",
+        "actionEyebrow": "Panel",
+        "actionTitle": "Acciones",
+        "actionDescription": "Atajos para publicaciones, solicitudes y equipo.",
+        "mapEyebrow": "Ubicación",
+        "cityLabel": "Bogotá",
+        "mapDescription": "Portal de acceso al CDE del proyecto.",
+        "address": "",
+        "logoUrl": "assets/icons/portal-bim-favicon.png",
+        "portalLogoLight": "https://i.postimg.cc/jdyQ3Mr2/LOGO-BIM-NEGRO-ICO.png",
+        "portalLogoDark": "https://i.postimg.cc/yY0XpLzW/LOGO-BIM-BLANCO-ICO.png",
+        "map": {
+          "lat": 4.711,
+          "lng": -74.0721,
+          "zoom": 13
+        }
+      }
+    },
+    {
+      "name": "Madero",
+      "slug": "madero",
+      "homeUrl": "",
+      "city": "Bogotá",
+      "type": "Residencial",
+      "status": "Planeacion",
+      "enabled": true,
+      "modules": {
+        "ifc": "VSR_IFCA/",
+        "status": "STATUS/",
+        "cantidades": "CANTIDADES/",
+        "pdf": "VSR_PDFA/",
+        "dwg": "VSR_DWGA/"
+      },
+      "actions": {
+        "publicaciones": "Publicaciones.html",
+        "solicitudes": "index.html",
+        "equipo": "lista_usuarios.html"
+      },
+      "dataSources": {
+        "driveFolderName": "Madero",
+        "driveFolderId": "",
+        "driveScriptUrl": "",
+        "statusSheetId": "",
+        "statusScriptUrl": "",
+        "cantidadesSheetId": "",
+        "cantidadesScriptUrl": ""
+      },
+      "landing": {
+        "enabled": true,
+        "eyebrow": "Portal BIM",
+        "title": "MADERO",
+        "subtitle": "Accesos rápidos, seguimiento y contexto del proyecto.",
+        "actionEyebrow": "Panel",
+        "actionTitle": "Acciones",
+        "actionDescription": "Atajos para publicaciones, solicitudes y equipo.",
+        "mapEyebrow": "Ubicación",
+        "cityLabel": "Bogotá",
+        "mapDescription": "Portal de acceso al CDE del proyecto.",
+        "address": "",
+        "logoUrl": "assets/icons/portal-bim-favicon.png",
+        "portalLogoLight": "https://i.postimg.cc/jdyQ3Mr2/LOGO-BIM-NEGRO-ICO.png",
+        "portalLogoDark": "https://i.postimg.cc/yY0XpLzW/LOGO-BIM-BLANCO-ICO.png",
+        "map": {
+          "lat": 4.711,
+          "lng": -74.0721,
+          "zoom": 13
+        }
+      }
+    },
+    {
+      "name": "Madrigal",
+      "slug": "madrigal",
+      "homeUrl": "",
+      "city": "Bogotá",
+      "type": "Residencial",
+      "status": "Planeacion",
+      "enabled": true,
+      "modules": {
+        "ifc": "VSR_IFCA/",
+        "status": "STATUS/",
+        "cantidades": "CANTIDADES/",
+        "pdf": "VSR_PDFA/",
+        "dwg": "VSR_DWGA/"
+      },
+      "actions": {
+        "publicaciones": "Publicaciones.html",
+        "solicitudes": "index.html",
+        "equipo": "lista_usuarios.html"
+      },
+      "dataSources": {
+        "driveFolderName": "Madrigal",
+        "driveFolderId": "",
+        "driveScriptUrl": "",
+        "statusSheetId": "",
+        "statusScriptUrl": "",
+        "cantidadesSheetId": "",
+        "cantidadesScriptUrl": ""
+      },
+      "landing": {
+        "enabled": true,
+        "eyebrow": "Portal BIM",
+        "title": "MADRIGAL",
+        "subtitle": "Accesos rápidos, seguimiento y contexto del proyecto.",
+        "actionEyebrow": "Panel",
+        "actionTitle": "Acciones",
+        "actionDescription": "Atajos para publicaciones, solicitudes y equipo.",
+        "mapEyebrow": "Ubicación",
+        "cityLabel": "Bogotá",
+        "mapDescription": "Portal de acceso al CDE del proyecto.",
+        "address": "",
+        "logoUrl": "assets/icons/portal-bim-favicon.png",
+        "portalLogoLight": "https://i.postimg.cc/jdyQ3Mr2/LOGO-BIM-NEGRO-ICO.png",
+        "portalLogoDark": "https://i.postimg.cc/yY0XpLzW/LOGO-BIM-BLANCO-ICO.png",
+        "map": {
+          "lat": 4.711,
+          "lng": -74.0721,
+          "zoom": 13
+        }
+      }
+    },
+    {
+      "name": "Magnolias",
+      "slug": "magnolias",
+      "homeUrl": "",
+      "city": "Bogotá",
+      "type": "Residencial",
+      "status": "Planeacion",
+      "enabled": true,
+      "modules": {
+        "ifc": "VSR_IFCA/",
+        "status": "STATUS/",
+        "cantidades": "CANTIDADES/",
+        "pdf": "VSR_PDFA/",
+        "dwg": "VSR_DWGA/"
+      },
+      "actions": {
+        "publicaciones": "Publicaciones.html",
+        "solicitudes": "index.html",
+        "equipo": "lista_usuarios.html"
+      },
+      "dataSources": {
+        "driveFolderName": "Magnolias",
+        "driveFolderId": "",
+        "driveScriptUrl": "",
+        "statusSheetId": "",
+        "statusScriptUrl": "",
+        "cantidadesSheetId": "",
+        "cantidadesScriptUrl": ""
+      },
+      "landing": {
+        "enabled": true,
+        "eyebrow": "Portal BIM",
+        "title": "MAGNOLIAS",
+        "subtitle": "Accesos rápidos, seguimiento y contexto del proyecto.",
+        "actionEyebrow": "Panel",
+        "actionTitle": "Acciones",
+        "actionDescription": "Atajos para publicaciones, solicitudes y equipo.",
+        "mapEyebrow": "Ubicación",
+        "cityLabel": "Bogotá",
+        "mapDescription": "Portal de acceso al CDE del proyecto.",
+        "address": "",
+        "logoUrl": "assets/icons/portal-bim-favicon.png",
+        "portalLogoLight": "https://i.postimg.cc/jdyQ3Mr2/LOGO-BIM-NEGRO-ICO.png",
+        "portalLogoDark": "https://i.postimg.cc/yY0XpLzW/LOGO-BIM-BLANCO-ICO.png",
+        "map": {
+          "lat": 4.711,
+          "lng": -74.0721,
+          "zoom": 13
+        }
+      }
+    },
+    {
+      "name": "Magnolias II",
+      "slug": "magnolias-ii",
+      "homeUrl": "",
+      "city": "Bogotá",
+      "type": "Residencial",
+      "status": "Planeacion",
+      "enabled": true,
+      "modules": {
+        "ifc": "VSR_IFCA/",
+        "status": "STATUS/",
+        "cantidades": "CANTIDADES/",
+        "pdf": "VSR_PDFA/",
+        "dwg": "VSR_DWGA/"
+      },
+      "actions": {
+        "publicaciones": "Publicaciones.html",
+        "solicitudes": "index.html",
+        "equipo": "lista_usuarios.html"
+      },
+      "dataSources": {
+        "driveFolderName": "Magnolias II",
+        "driveFolderId": "",
+        "driveScriptUrl": "",
+        "statusSheetId": "",
+        "statusScriptUrl": "",
+        "cantidadesSheetId": "",
+        "cantidadesScriptUrl": ""
+      },
+      "landing": {
+        "enabled": true,
+        "eyebrow": "Portal BIM",
+        "title": "MAGNOLIAS II",
+        "subtitle": "Accesos rápidos, seguimiento y contexto del proyecto.",
+        "actionEyebrow": "Panel",
+        "actionTitle": "Acciones",
+        "actionDescription": "Atajos para publicaciones, solicitudes y equipo.",
+        "mapEyebrow": "City Guide",
+        "cityLabel": "Bogotá",
+        "mapDescription": "Portal de acceso al CDE del proyecto.",
+        "address": "",
+        "logoUrl": "assets/icons/portal-bim-favicon.png",
+        "portalLogoLight": "https://i.postimg.cc/jdyQ3Mr2/LOGO-BIM-NEGRO-ICO.png",
+        "portalLogoDark": "https://i.postimg.cc/yY0XpLzW/LOGO-BIM-BLANCO-ICO.png",
+        "map": {
+          "lat": 4.711,
+          "lng": -74.0721,
+          "zoom": 13
+        }
+      }
+    },
+    {
+      "name": "Mirandé",
+      "slug": "mirande",
+      "homeUrl": "",
+      "city": "Bogotá",
+      "type": "Residencial",
+      "status": "Planeacion",
+      "enabled": true,
+      "modules": {
+        "ifc": "VSR_IFCA/",
+        "status": "STATUS/",
+        "cantidades": "CANTIDADES/",
+        "pdf": "VSR_PDFA/",
+        "dwg": "VSR_DWGA/"
+      },
+      "actions": {
+        "publicaciones": "Publicaciones.html",
+        "solicitudes": "index.html",
+        "equipo": "lista_usuarios.html"
+      },
+      "dataSources": {
+        "driveFolderName": "Mirandé",
+        "driveFolderId": "",
+        "driveScriptUrl": "",
+        "statusSheetId": "",
+        "statusScriptUrl": "",
+        "cantidadesSheetId": "",
+        "cantidadesScriptUrl": ""
+      },
+      "landing": {
+        "enabled": true,
+        "eyebrow": "Portal BIM",
+        "title": "MIRANDÉ",
+        "subtitle": "Accesos rápidos, seguimiento y contexto del proyecto.",
+        "actionEyebrow": "Panel",
+        "actionTitle": "Acciones",
+        "actionDescription": "Atajos para publicaciones, solicitudes y equipo.",
+        "mapEyebrow": "City Guide",
+        "cityLabel": "Bogotá",
+        "mapDescription": "Portal de acceso al CDE del proyecto.",
+        "address": "",
+        "logoUrl": "assets/icons/portal-bim-favicon.png",
+        "portalLogoLight": "https://i.postimg.cc/jdyQ3Mr2/LOGO-BIM-NEGRO-ICO.png",
+        "portalLogoDark": "https://i.postimg.cc/yY0XpLzW/LOGO-BIM-BLANCO-ICO.png",
+        "map": {
+          "lat": 4.711,
+          "lng": -74.0721,
+          "zoom": 13
+        }
+      }
+    },
+    {
+      "name": "Orión",
+      "slug": "orion",
+      "homeUrl": "",
+      "city": "Bogotá",
+      "type": "Residencial",
+      "status": "Planeacion",
+      "enabled": true,
+      "modules": {
+        "ifc": "VSR_IFCA/",
+        "status": "STATUS/",
+        "cantidades": "CANTIDADES/",
+        "pdf": "VSR_PDFA/",
+        "dwg": "VSR_DWGA/"
+      },
+      "actions": {
+        "publicaciones": "Publicaciones.html",
+        "solicitudes": "index.html",
+        "equipo": "lista_usuarios.html"
+      },
+      "dataSources": {
+        "driveFolderName": "Orión",
+        "driveFolderId": "",
+        "driveScriptUrl": "",
+        "statusSheetId": "",
+        "statusScriptUrl": "",
+        "cantidadesSheetId": "",
+        "cantidadesScriptUrl": ""
+      },
+      "landing": {
+        "enabled": true,
+        "eyebrow": "Portal BIM",
+        "title": "ORIÓN",
+        "subtitle": "Accesos rápidos, seguimiento y contexto del proyecto.",
+        "actionEyebrow": "Panel",
+        "actionTitle": "Acciones",
+        "actionDescription": "Atajos para publicaciones, solicitudes y equipo.",
+        "mapEyebrow": "City Guide",
+        "cityLabel": "Ricaurte",
+        "mapDescription": "Portal de acceso al CDE del proyecto.",
+        "address": "",
+        "logoUrl": "https://i.postimg.cc/3wv2JGqD/LOGO.jpg",
+        "portalLogoLight": "https://i.postimg.cc/jdyQ3Mr2/LOGO-BIM-NEGRO-ICO.png",
+        "portalLogoDark": "https://i.postimg.cc/yY0XpLzW/LOGO-BIM-BLANCO-ICO.png",
+        "map": {
+          "lat": 4.27762,
+          "lng": -74.766401,
+          "zoom": 17
+        }
+      }
+    },
+    {
+      "name": "Orión II",
+      "slug": "orion-ii",
+      "homeUrl": "",
+      "city": "Bogotá",
+      "type": "Residencial",
+      "status": "Planeacion",
+      "enabled": true,
+      "modules": {
+        "ifc": "VSR_IFCA/",
+        "status": "STATUS/",
+        "cantidades": "CANTIDADES/",
+        "pdf": "VSR_PDFA/",
+        "dwg": "VSR_DWGA/"
+      },
+      "actions": {
+        "publicaciones": "Publicaciones.html",
+        "solicitudes": "index.html",
+        "equipo": "lista_usuarios.html"
+      },
+      "dataSources": {
+        "driveFolderName": "Orión II",
+        "driveFolderId": "",
+        "driveScriptUrl": "",
+        "statusSheetId": "",
+        "statusScriptUrl": "",
+        "cantidadesSheetId": "",
+        "cantidadesScriptUrl": ""
+      },
+      "landing": {
+        "enabled": true,
+        "eyebrow": "Portal BIM",
+        "title": "ORIÓN II",
+        "subtitle": "Accesos rápidos, seguimiento y contexto del proyecto.",
+        "actionEyebrow": "Panel",
+        "actionTitle": "Acciones",
+        "actionDescription": "Atajos para publicaciones, solicitudes y equipo.",
+        "mapEyebrow": "City Guide",
+        "cityLabel": "Bogotá",
+        "mapDescription": "Portal de acceso al CDE del proyecto.",
+        "address": "",
+        "logoUrl": "assets/icons/portal-bim-favicon.png",
+        "portalLogoLight": "https://i.postimg.cc/jdyQ3Mr2/LOGO-BIM-NEGRO-ICO.png",
+        "portalLogoDark": "https://i.postimg.cc/yY0XpLzW/LOGO-BIM-BLANCO-ICO.png",
+        "map": {
+          "lat": 4.711,
+          "lng": -74.0721,
+          "zoom": 13
+        }
+      }
+    },
+    {
+      "name": "Tierra Llana",
+      "slug": "tierra-llana",
+      "homeUrl": "",
+      "city": "Bogotá",
+      "type": "Residencial",
+      "status": "Planeacion",
+      "enabled": true,
+      "modules": {
+        "ifc": "VSR_IFCA/",
+        "status": "STATUS/",
+        "cantidades": "CANTIDADES/",
+        "pdf": "VSR_PDFA/",
+        "dwg": "VSR_DWGA/"
+      },
+      "actions": {
+        "publicaciones": "Publicaciones.html",
+        "solicitudes": "index.html",
+        "equipo": "lista_usuarios.html"
+      },
+      "dataSources": {
+        "driveFolderName": "Tierra Llana",
+        "driveFolderId": "",
+        "driveScriptUrl": "",
+        "statusSheetId": "",
+        "statusScriptUrl": "",
+        "cantidadesSheetId": "",
+        "cantidadesScriptUrl": ""
+      },
+      "landing": {
+        "enabled": true,
+        "eyebrow": "Portal BIM",
+        "title": "TIERRA LLANA",
+        "subtitle": "Accesos rápidos, seguimiento y contexto del proyecto.",
+        "actionEyebrow": "Panel",
+        "actionTitle": "Acciones",
+        "actionDescription": "Atajos para publicaciones, solicitudes y equipo.",
+        "mapEyebrow": "City Guide",
+        "cityLabel": "Bogotá",
+        "mapDescription": "Portal de acceso al CDE del proyecto.",
+        "address": "",
+        "logoUrl": "assets/icons/portal-bim-favicon.png",
+        "portalLogoLight": "https://i.postimg.cc/jdyQ3Mr2/LOGO-BIM-NEGRO-ICO.png",
+        "portalLogoDark": "https://i.postimg.cc/yY0XpLzW/LOGO-BIM-BLANCO-ICO.png",
+        "map": {
+          "lat": 4.711,
+          "lng": -74.0721,
+          "zoom": 13
+        }
+      }
+    },
+    {
+      "name": "Trevoly",
+      "slug": "trevoly",
+      "homeUrl": "",
+      "city": "Bogotá",
+      "type": "Residencial",
+      "status": "Activo",
+      "enabled": true,
+      "modules": {
+        "ifc": "VSR_IFCA/",
+        "status": "STATUS/",
+        "cantidades": "CANTIDADES/",
+        "pdf": "VSR_PDFA/",
+        "dwg": "VSR_DWGA/"
+      },
+      "actions": {
+        "publicaciones": "Publicaciones.html",
+        "solicitudes": "index.html",
+        "equipo": "lista_usuarios.html"
+      },
+      "dataSources": {
+        "driveFolderName": "Trevoly",
+        "driveFolderId": "1fn1umYzIYsxymmwbmap6YbjTB33XJrG8",
+        "driveScriptUrl": "https://script.google.com/macros/s/AKfycbwz1XYlqzxUCLLsTeXsxW7uNzRiqRhT82OC_Y1dSt4iOvaWNFpAPWAZc74UE28iiwI/exec",
+        "statusSheetId": "1GSaNTuafarE8l7VFlJNLJcu0GIXaNUS-VDwJ9UB9038",
+        "statusScriptUrl": "https://script.google.com/macros/s/AKfycbwz1XYlqzxUCLLsTeXsxW7uNzRiqRhT82OC_Y1dSt4iOvaWNFpAPWAZc74UE28iiwI/exec",
+        "cantidadesSheetId": "1GSaNTuafarE8l7VFlJNLJcu0GIXaNUS-VDwJ9UB9038",
+        "cantidadesScriptUrl": "https://script.google.com/macros/s/AKfycbz2Lqn_w3JFpcMjW1v7EwG5k7v9gpuQIxh5tdf4S-FXJjA-MZHFrdMeAGMVTQMZ9XQ/exec"
+      },
+      "landing": {
+        "enabled": true,
+        "eyebrow": "Portal BIM",
+        "title": "TREVOLY",
+        "subtitle": "Accesos rápidos, seguimiento y contexto del proyecto.",
+        "actionEyebrow": "Panel",
+        "actionTitle": "Acciones",
+        "actionDescription": "Atajos para publicaciones, solicitudes y equipo.",
+        "mapEyebrow": "City Guide",
+        "cityLabel": "BOGOTÁ",
+        "mapDescription": "Portal de acceso al CDE del proyecto: centraliza modelos, planos y entregables, y facilita el seguimiento y la coordinación entre equipos con información vigente.",
+        "address": "Calle 57H Sur con Carrera 72 (Autopista Sur).",
+        "logoUrl": "https://i.postimg.cc/P5rsf8Yb/trevoly.png",
+        "portalLogoLight": "https://i.postimg.cc/jdyQ3Mr2/LOGO-BIM-NEGRO-ICO.png",
+        "portalLogoDark": "https://i.postimg.cc/yY0XpLzW/LOGO-BIM-BLANCO-ICO.png",
+        "map": {
+          "lat": 4.59742,
+          "lng": -74.16498,
+          "zoom": 17
+        }
+      }
+    },
+    {
+      "name": "Ventura",
+      "slug": "ventura",
+      "homeUrl": "",
+      "city": "Bogotá",
+      "type": "Residencial",
+      "status": "Activo",
+      "enabled": true,
+      "modules": {
+        "ifc": "VSR_IFCA/",
+        "status": "STATUS/",
+        "cantidades": "CANTIDADES/",
+        "pdf": "VSR_PDFA/",
+        "dwg": "VSR_DWGA/"
+      },
+      "actions": {
+        "publicaciones": "Publicaciones.html",
+        "solicitudes": "index.html",
+        "equipo": "lista_usuarios.html"
+      },
+      "dataSources": {
+        "driveFolderName": "Ventura",
+        "driveFolderId": "",
+        "driveScriptUrl": "",
+        "statusSheetId": "",
+        "statusScriptUrl": "",
+        "cantidadesSheetId": "",
+        "cantidadesScriptUrl": ""
+      },
+      "landing": {
+        "enabled": true,
+        "eyebrow": "Portal BIM",
+        "title": "VENTURA",
+        "subtitle": "Accesos rápidos, seguimiento y contexto del proyecto.",
+        "actionEyebrow": "Panel",
+        "actionTitle": "Acciones",
+        "actionDescription": "Atajos para publicaciones, solicitudes y equipo.",
+        "mapEyebrow": "City Guide",
+        "cityLabel": "Bogotá",
+        "mapDescription": "Portal de acceso al CDE del proyecto.",
+        "address": "",
+        "logoUrl": "https://i.postimg.cc/8C3hBH2N/ventura-hd2.png",
+        "portalLogoLight": "https://i.postimg.cc/jdyQ3Mr2/LOGO-BIM-NEGRO-ICO.png",
+        "portalLogoDark": "https://i.postimg.cc/yY0XpLzW/LOGO-BIM-BLANCO-ICO.png",
+        "map": {
+          "lat": 5.025507,
+          "lng": -73.986953,
+          "zoom": 15
+        }
+      }
+    }
+  ],
+  "publicaciones": [
+    {
+      "id": "link-publicaciones",
+      "label": "Publicaciones por proyecto",
+      "href": "https://alcabama-commits.github.io/bim/Publicaciones.html",
+      "allowedRoles": [
+        "COMBOS Y REFORMAS",
+        "ACÚSTICA",
+        "ADMINISTRADOR"
+      ]
+    }
+  ],
+  "solicitudes": [
+    {
+      "id": "link-solicitud-cde",
+      "label": "Solicitud de acceso a CDE",
+      "href": "https://alcabama-commits.github.io/bim/index.html",
+      "allowedRoles": [
+        "EDGE",
+        "COMBOS Y REFORMAS",
+        "ARQUITECTURA",
+        "ADMINISTRADOR"
+      ]
+    },
+    {
+      "id": "link-admin-usuarios",
+      "label": "Administrar Usuarios",
+      "href": "https://alcabama-commits.github.io/bim/addusuarios.html",
+      "allowedRoles": [
+        "ADMINISTRADOR"
+      ]
+    },
+    {
+      "id": "link-lista-usuarios",
+      "label": "Listar Usuarios",
+      "href": "https://alcabama-commits.github.io/bim/lista_usuarios.html",
+      "allowedRoles": [
+        "ADMINISTRADOR"
+      ]
+    }
+  ],
+  "metricas": [
+    {
+      "id": "item-1",
+      "label": "Auditorías",
+      "href": "#",
+      "allowedRoles": []
+    },
+    {
+      "id": "item-2",
+      "label": "Incidencias",
+      "href": "#",
+      "allowedRoles": []
+    },
+    {
+      "id": "item-3",
+      "label": "Seguimiento de proyectos",
+      "href": "#",
+      "allowedRoles": []
+    }
+  ],
+  "administracion": [
+    {
+      "id": "link-pba-config",
+      "label": "Configuración PBA",
+      "href": "portal-configurator.html",
+      "allowedRoles": [
+        "ADMINISTRADOR"
+      ]
+    }
+  ]
+}

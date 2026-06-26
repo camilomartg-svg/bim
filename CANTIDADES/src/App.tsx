@@ -1,0 +1,3072 @@
+import React, { useEffect, useMemo, useRef, useState, useCallback } from 'react';
+import * as THREE from 'three';
+import * as OBC from '@thatopen/components';
+import * as FRAGS from '@thatopen/fragments';
+import BIMViewer from './components/BIMViewer';
+import { BIMElement, CategorySummary } from './types';
+import { Folder, File, ChevronDown, ChevronLeft, ChevronRight, RefreshCw, Eye, EyeOff, Loader2, Maximize2, Minimize2, Palette, Grid3X3, SlidersHorizontal } from 'lucide-react';
+import Sidebar from './components/Sidebar';
+import DataTable from './components/DataTable';
+
+const PRIORITY_PROPS = [
+  "AREA INTEGRADO",
+  "LONGITUD INTEGRADO",
+  "MATERIAL INTEGRADO",
+  "NIVEL INTEGRADO",
+  "NOMBRE INTEGRADO",
+  "VOLUMEN INTEGRADO",
+  "DETALLE",
+  "CLASIFICACIÓN"
+];
+
+const withTimeout = async <T,>(promise: Promise<T>, timeoutMs: number, message: string): Promise<T> => {
+  let timeoutId: ReturnType<typeof setTimeout> | null = null;
+  const timeoutPromise = new Promise<T>((_, reject) => {
+    timeoutId = setTimeout(() => reject(new Error(message)), timeoutMs);
+  });
+
+  try {
+    return await Promise.race([promise, timeoutPromise]);
+  } finally {
+    if (timeoutId) clearTimeout(timeoutId);
+  }
+};
+
+type JsonpOptions = {
+  signal?: AbortSignal;
+  timeoutMs?: number;
+};
+
+const jsonpRequest = <T,>(url: URL, signalOrOptions?: AbortSignal | JsonpOptions): Promise<T> => {
+  const options: JsonpOptions = signalOrOptions && typeof signalOrOptions === 'object' && (('signal' in signalOrOptions) || ('timeoutMs' in signalOrOptions))
+    ? (signalOrOptions as JsonpOptions)
+    : { signal: signalOrOptions as AbortSignal | undefined };
+  const signal = options.signal;
+  const hasAbort = Boolean(signal && typeof (signal as any).addEventListener === 'function' && typeof (signal as any).removeEventListener === 'function');
+  const timeoutMs = typeof options.timeoutMs === 'number' && Number.isFinite(options.timeoutMs) && options.timeoutMs > 0 ? options.timeoutMs : 30000;
+  if (hasAbort && (signal as any).aborted) return Promise.reject(new DOMException('Aborted', 'AbortError'));
+  return new Promise<T>((resolve, reject) => {
+    const cbName = `__jsonp_${Math.random().toString(36).slice(2)}`;
+    url.searchParams.set('_', `${Date.now()}_${Math.random().toString(16).slice(2)}`);
+    url.searchParams.set('callback', cbName);
+
+    const script = document.createElement('script');
+    script.async = true;
+    try { (script as any).referrerPolicy = 'no-referrer'; } catch {}
+    script.src = url.toString();
+
+    let settled = false;
+    let abortHandler: (() => void) | null = null;
+    let timeoutId: number | null = null;
+
+    const cleanup = () => {
+      try {
+        delete (window as any)[cbName];
+      } catch {
+        (window as any)[cbName] = undefined;
+      }
+      if (timeoutId !== null) window.clearTimeout(timeoutId);
+      if (abortHandler && hasAbort) (signal as any).removeEventListener('abort', abortHandler);
+      if (script.parentNode) script.parentNode.removeChild(script);
+    };
+
+    (window as any)[cbName] = (data: unknown) => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      resolve(data as T);
+    };
+
+    script.onerror = () => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      reject(new Error(`Error cargando JSONP: ${script.src}`));
+    };
+
+    abortHandler = () => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      reject(new DOMException('Aborted', 'AbortError'));
+    };
+    if (hasAbort) (signal as any).addEventListener('abort', abortHandler);
+
+    timeoutId = window.setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      reject(new Error(`Tiempo de espera agotado (JSONP). URL: ${script.src}`));
+    }, timeoutMs);
+
+    document.head.appendChild(script);
+  });
+};
+
+const jsonpRequestWithRetry = async <T,>(url: URL, options?: AbortSignal | JsonpOptions & { retries?: number }): Promise<T> => {
+  const retries = typeof (options as any)?.retries === 'number' ? Math.max(1, (options as any).retries) : 3;
+  let lastErr: unknown = null;
+  for (let attempt = 0; attempt < retries; attempt++) {
+    try {
+      return await jsonpRequest<T>(new URL(url.toString()), options as any);
+    } catch (e) {
+      lastErr = e;
+      await new Promise((r) => setTimeout(r, 700 * (attempt + 1)));
+    }
+  }
+  throw (lastErr instanceof Error ? lastErr : new Error('Error cargando JSONP'));
+};
+
+const clearCantidadesClientData = async () => {
+  try {
+    for (const k of Object.keys(localStorage)) {
+      if (k.startsWith(`cantidades:${CANTIDADES_PROJECT_KEY}:`)) localStorage.removeItem(k);
+    }
+  } catch {
+  }
+  try {
+    indexedDB.deleteDatabase('cantidades-model-cache-v1');
+    indexedDB.deleteDatabase('cantidades-model-cache-v2');
+    indexedDB.deleteDatabase(MODEL_CACHE_DB_NAME);
+  } catch {
+  }
+  try {
+    if ('caches' in window) {
+      const keys = await caches.keys();
+      await Promise.all(
+        keys
+          .filter((k) => k === MODEL_CACHE_RUNTIME_NAME)
+          .map((k) => caches.delete(k)),
+      );
+    }
+  } catch {
+  }
+};
+
+type RemoteModel = {
+  name: string;
+  format: 'frag' | 'ifc';
+  fragUrl?: string;
+  ifcUrl?: string;
+  jsonUrl?: string;
+  drive?: {
+    scriptUrl: string;
+    folderId?: string;
+    fileId: string;
+    fragId?: string;
+    ifcId?: string;
+    jsonId?: string;
+  };
+  group: string;
+};
+
+type CachedModelCatalog = {
+  ts: number;
+  models: RemoteModel[];
+};
+
+type BufferedModelRecord = {
+  ts: number;
+  model: RemoteModel;
+  resources: string[];
+};
+
+type RecentRemoteModel = RemoteModel & {
+  lastOpenedAt: number;
+};
+
+type PurchaseStatus = 'PENDIENTE' | 'PEDIDO' | 'COMPRADO' | 'ALMACEN' | 'INSTALADO';
+type HistoryEntry = { status: PurchaseStatus; at: string };
+type SharedExtraKind = 'pipeAddition' | 'unionAddition';
+type SharedExtrasResponse = {
+  ok?: boolean;
+  error?: string;
+  pipeAdditionsByGroup?: Record<string, unknown>;
+  unionAdditionsByGroup?: Record<string, unknown>;
+};
+type DriveModelsManifest = {
+  folderId: string;
+  generatedAt: string;
+  models: Array<{ name: string; fragId?: string; ifcId?: string; jsonId?: string; fragUrl?: string; ifcUrl?: string; jsonUrl?: string }>;
+};
+
+type DriveListResponse = {
+  ok?: boolean;
+  error?: string;
+  models?: Array<{ name: string; format?: 'frag' | 'ifc'; fileId?: string | null; fragId?: string | null; ifcId?: string | null; jsonId?: string | null }>;
+};
+
+const GITHUB_REPO = {
+  owner: 'alcabama-commits',
+  repo: 'bim',
+  branch: 'main',
+  modelsPath: 'docs/VSR_IFC/models'
+};
+
+const rawUrlFor = (path: string) =>
+  `https://raw.githubusercontent.com/${GITHUB_REPO.owner}/${GITHUB_REPO.repo}/${GITHUB_REPO.branch}/${path.split('/').map(encodeURIComponent).join('/')}`;
+
+const ENV = ((import.meta as any).env || {}) as Record<string, string | undefined>;
+const DEFAULT_CANTIDADES_SHEET_ID = String((ENV.VITE_CANTIDADES_SHEET_ID ?? '1GSaNTuafarE8l7VFlJNLJcu0GIXaNUS-VDwJ9UB9038')).trim();
+const DEFAULT_CANTIDADES_SHEET_SCRIPT_URL = String(
+  (ENV.VITE_CANTIDADES_SHEET_SCRIPT_URL ?? 'https://script.google.com/macros/s/AKfycbz2Lqn_w3JFpcMjW1v7EwG5k7v9gpuQIxh5tdf4S-FXJjA-MZHFrdMeAGMVTQMZ9XQ/exec'),
+).trim();
+const DEFAULT_DRIVE_FOLDER_ID = String((ENV.VITE_DRIVE_FOLDER_ID ?? '18gr5TvX3pYY5S3ZRfjmWagkTLhhG3B0W')).trim();
+const currentUrl = typeof window !== 'undefined' ? new URL(window.location.href) : null;
+const currentParams = currentUrl?.searchParams ?? new URLSearchParams();
+const normalizeProjectRuntimeKey = (value: string | null | undefined) =>
+  String(value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '') || 'default';
+const DRIVE_FOLDER_ID = String(currentParams.get('driveFolderId') || DEFAULT_DRIVE_FOLDER_ID || '').trim();
+const DRIVE_SCRIPT_WEBAPP_URL = String(
+  currentParams.get('driveScriptUrl') || currentParams.get('cantidadesScriptUrl') || DEFAULT_CANTIDADES_SHEET_SCRIPT_URL || '',
+).trim();
+const CANTIDADES_SHEET_ID = String(currentParams.get('cantidadesSheetId') || DEFAULT_CANTIDADES_SHEET_ID || '').trim();
+const CANTIDADES_SHEET_SCRIPT_URL = String(
+  currentParams.get('cantidadesScriptUrl') || currentParams.get('driveScriptUrl') || DEFAULT_CANTIDADES_SHEET_SCRIPT_URL || '',
+).trim();
+const CANTIDADES_PROJECT_KEY = normalizeProjectRuntimeKey(
+  currentParams.get('project') || currentParams.get('driveFolderName') || DRIVE_FOLDER_ID || 'default',
+);
+const cantidadesLsKey = (suffix: string) => `cantidades:${CANTIDADES_PROJECT_KEY}:${suffix}`;
+const DRIVE_MODELS_MANIFEST_URL = './drive-models-manifest.json';
+const MODEL_CACHE_DB_NAME = `cantidades-model-cache-v3-${CANTIDADES_PROJECT_KEY}`;
+const MODEL_CACHE_RUNTIME_NAME = `cantidades-models-v2-${CANTIDADES_PROJECT_KEY}`;
+const MODEL_CACHE_TTL_MS = 20 * 24 * 60 * 60 * 1000;
+const MODEL_BUFFER_INDEX_STORAGE_KEY = cantidadesLsKey('modelBufferIndex:v1');
+const MODEL_CATALOG_STORAGE_KEY = cantidadesLsKey('modelCatalog:v3');
+const RECENT_MODELS_STORAGE_KEY = cantidadesLsKey('recentModels:v3');
+const REMOTE_QUEUE_STORAGE_KEY = cantidadesLsKey('remoteQueue:v1');
+const EXTRA_QUEUE_STORAGE_KEY = cantidadesLsKey('extraQueue:v1');
+const LAST_SERVER_SYNC_STORAGE_KEY = cantidadesLsKey('lastServerSyncAt');
+const stripModelExtension = (name: string | null | undefined) => String(name ?? '').replace(/\.(frag|ifc)$/i, '').trim();
+const detectModelFormat = (name: string | null | undefined): 'frag' | 'ifc' =>
+  /\.ifc$/i.test(String(name ?? '')) ? 'ifc' : 'frag';
+const normalizeModelSearchText = (value: string | null | undefined) =>
+  String(value ?? '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase();
+const normalizeRemoteModelKey = (value: string | null | undefined) => {
+  const base = stripModelExtension(value);
+  const normalized = String(base || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^A-Za-z0-9]+/g, '_')
+    .replace(/_+/g, '_')
+    .replace(/^_+|_+$/g, '');
+  return normalized ? normalized.slice(0, 70) : 'local';
+};
+const PIPE_MODEL_KEYWORDS = [
+  'apantallamiento',
+  'comunicaciones',
+  'comunicacion',
+  'incendio',
+  'deteccion de incendios',
+  'hidraulico',
+  'sanitario',
+  'desagues',
+  'gas',
+  'suministro',
+  'electricos',
+  'electrico',
+  'ele',
+  'sdi',
+  'dim',
+  'spr',
+  'com',
+  'rci',
+  'deteccion',
+];
+const PIPE_LENGTH_WITH_UNIONS_KEYWORDS = [
+  'apantallamiento',
+  'comunicaciones',
+  'comunicacion',
+  'incendio',
+  'deteccion',
+  'deteccion de incendios',
+  'sdi',
+  'dim',
+  'spr',
+  'com',
+  'electricos',
+  'electrico',
+  'ele',
+];
+const normalizeRemoteModel = <T extends RemoteModel>(model: T): T => {
+  if (!model) return model;
+  return {
+    ...model,
+    format: model.format || detectModelFormat(model.name),
+    fragUrl: model.fragUrl,
+    ifcUrl: model.ifcUrl,
+    jsonUrl: model.jsonUrl,
+  };
+};
+
+const readStorageJson = <T,>(key: string, fallback: T): T => {
+  if (typeof window === 'undefined') return fallback;
+  try {
+    const raw = window.localStorage.getItem(key);
+    if (!raw) return fallback;
+    return JSON.parse(raw) as T;
+  } catch {
+    return fallback;
+  }
+};
+
+const writeStorageJson = (key: string, value: unknown) => {
+  if (typeof window === 'undefined') return;
+  try {
+    window.localStorage.setItem(key, JSON.stringify(value));
+  } catch {
+  }
+};
+
+const normalizeSharedAdditionMap = (value: unknown): Record<string, number> => {
+  const next: Record<string, number> = {};
+  if (!value || typeof value !== 'object') return next;
+  for (const [key, raw] of Object.entries(value as Record<string, unknown>)) {
+    const safeKey = String(key ?? '').trim();
+    if (!safeKey) continue;
+    const amount = Number(raw);
+    next[safeKey] = Number.isFinite(amount) ? Math.max(0, Math.floor(amount)) : 0;
+  }
+  return next;
+};
+
+const isModelCacheFresh = (ts: unknown) => {
+  const value = Number(ts);
+  return Number.isFinite(value) && value > 0 && Date.now() - value <= MODEL_CACHE_TTL_MS;
+};
+
+const getBufferedModelKey = (modelName: string | null | undefined) =>
+  normalizeModelSearchText(stripModelExtension(modelName));
+
+const readBufferedModelIndex = (): Record<string, BufferedModelRecord> => {
+  const parsed = readStorageJson<Record<string, BufferedModelRecord>>(MODEL_BUFFER_INDEX_STORAGE_KEY, {});
+  if (!parsed || typeof parsed !== 'object') return {};
+  const next: Record<string, BufferedModelRecord> = {};
+  for (const [key, value] of Object.entries(parsed)) {
+    if (!value || typeof value !== 'object') continue;
+    if (!isModelCacheFresh((value as any).ts)) continue;
+    const model = (value as any).model;
+    if (!model || typeof model.name !== 'string') continue;
+    next[key] = {
+      ts: Number((value as any).ts || 0),
+      model: normalizeRemoteModel(model as RemoteModel),
+      resources: Array.isArray((value as any).resources)
+        ? (value as any).resources.map((item: unknown) => String(item)).filter(Boolean)
+        : [],
+    };
+  }
+  return next;
+};
+
+const writeBufferedModelIndex = (value: Record<string, BufferedModelRecord>) => {
+  writeStorageJson(MODEL_BUFFER_INDEX_STORAGE_KEY, value);
+};
+
+const listFreshBufferedModels = (): RemoteModel[] =>
+  Object.values(readBufferedModelIndex())
+    .sort((a, b) => b.ts - a.ts)
+    .map((item) => normalizeRemoteModel(item.model));
+
+const readCachedModelCatalog = (): CachedModelCatalog | null => {
+  const parsed = readStorageJson<CachedModelCatalog | null>(MODEL_CATALOG_STORAGE_KEY, null);
+  if (!parsed || !Array.isArray(parsed.models)) return null;
+  return {
+    ts: Number(parsed.ts || 0),
+    models: parsed.models
+      .filter((item) => item && typeof item.name === 'string')
+      .map((item) => normalizeRemoteModel(item))
+  };
+};
+
+const writeCachedModelCatalog = (models: RemoteModel[]) => {
+  writeStorageJson(MODEL_CATALOG_STORAGE_KEY, { ts: Date.now(), models });
+};
+
+const readRecentModels = (): RecentRemoteModel[] => {
+  const parsed = readStorageJson<RecentRemoteModel[]>(RECENT_MODELS_STORAGE_KEY, []);
+  if (!Array.isArray(parsed)) return [];
+  return parsed
+    .filter((item) => item && typeof item.name === 'string')
+    .map((item) => normalizeRemoteModel(item))
+    .sort((a, b) => Number(b.lastOpenedAt || 0) - Number(a.lastOpenedAt || 0));
+};
+
+const writeRecentModels = (models: RecentRemoteModel[]) => {
+  writeStorageJson(RECENT_MODELS_STORAGE_KEY, models.slice(0, 6));
+};
+
+const mergeRemoteModels = (...lists: RemoteModel[][]): RemoteModel[] => {
+  const merged = new Map<string, RemoteModel>();
+  for (const list of lists) {
+    for (const model of list) {
+      if (!model?.name) continue;
+      if (!merged.has(model.name)) merged.set(model.name, model);
+    }
+  }
+  return Array.from(merged.values()).sort((a, b) => a.name.localeCompare(b.name, 'es'));
+};
+
+const normalizeClassification = (v: string) =>
+  v
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[_-]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toUpperCase();
+
+const isSinClasificar = (v: string | undefined | null) => {
+  if (!v) return true;
+  const n = normalizeClassification(String(v));
+  return n === 'SIN CLASIFICAR' || n === 'SINCLASIFICAR' || n === 'SIN CLASIFICACION' || n === 'SINCLASIFICACION';
+};
+
+export default function App() {
+  const [elements, setElements] = useState<BIMElement[]>([]);
+  const [summaries, setSummaries] = useState<CategorySummary[]>([]);
+  const [selectedElementId, setSelectedElementId] = useState<string | null>(null);
+  const [selectedElementIds, setSelectedElementIds] = useState<string[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [showWelcome, setShowWelcome] = useState(true);
+  const componentsRef = useRef<OBC.Components | null>(null);
+  const remoteCacheRef = useRef<{
+    fragBytesByUrl: Map<string, Uint8Array>;
+    jsonTextByUrl: Map<string, string>;
+  }>({
+    fragBytesByUrl: new Map(),
+    jsonTextByUrl: new Map()
+  });
+  const loadAbortRef = useRef<AbortController | null>(null);
+  const [networkStatus, setNetworkStatus] = useState<'online' | 'unstable' | 'offline'>(() => (
+    typeof navigator !== 'undefined' && navigator.onLine ? 'unstable' : 'offline'
+  ));
+  const [modelsNotice, setModelsNotice] = useState<string | null>(null);
+  const [lastServerSyncAt, setLastServerSyncAt] = useState<number | null>(() => {
+    if (typeof window === 'undefined') return null;
+    const raw = Number(window.localStorage.getItem(LAST_SERVER_SYNC_STORAGE_KEY));
+    return Number.isFinite(raw) && raw > 0 ? raw : null;
+  });
+  const [offlineRecentModelNames, setOfflineRecentModelNames] = useState<string[]>(() =>
+    listFreshBufferedModels().map((item) => item.name)
+  );
+
+  const [availableModels, setAvailableModels] = useState<RemoteModel[]>([]);
+  const [modelsError, setModelsError] = useState<string | null>(null);
+  const [isModelsLoading, setIsModelsLoading] = useState(false);
+  const [selectedRemoteModelName, setSelectedRemoteModelName] = useState<string | null>(null);
+  const [refreshingModelName, setRefreshingModelName] = useState<string | null>(null);
+  const availableModelsRef = useRef<RemoteModel[]>([]);
+  const loadRemoteModelRef = useRef<((remote: RemoteModel, options?: { forceRefresh?: boolean }) => Promise<void>) | null>(null);
+  const [elementStatuses, setElementStatuses] = useState<Record<string, PurchaseStatus>>({});
+  const [elementHistory, setElementHistory] = useState<Record<string, HistoryEntry[]>>({});
+  const getModelKey = useCallback((modelName: string | null) => {
+    return normalizeRemoteModelKey(modelName);
+  }, []);
+  const updateLastServerSync = useCallback((ts: number) => {
+    setLastServerSyncAt(ts);
+    try {
+      window.localStorage.setItem(LAST_SERVER_SYNC_STORAGE_KEY, String(ts));
+    } catch {
+    }
+  }, []);
+
+  const refreshOfflineReadyNames = useCallback(() => {
+    setOfflineRecentModelNames(listFreshBufferedModels().map((item) => item.name));
+  }, []);
+
+  const rememberBufferedModel = useCallback((model: RemoteModel, resources: string[]) => {
+    const key = getBufferedModelKey(model.name);
+    const next = readBufferedModelIndex();
+    next[key] = {
+      ts: Date.now(),
+      model: normalizeRemoteModel(model),
+      resources: Array.from(new Set(resources.filter(Boolean))),
+    };
+    writeBufferedModelIndex(next);
+    refreshOfflineReadyNames();
+  }, [refreshOfflineReadyNames]);
+
+  const rememberRecentModel = useCallback((model: RemoteModel) => {
+    const next = [
+      { ...model, lastOpenedAt: Date.now() },
+      ...readRecentModels().filter((item) => item.name !== model.name)
+    ].slice(0, 6);
+    writeRecentModels(next);
+  }, []);
+
+  useEffect(() => {
+    refreshOfflineReadyNames();
+  }, [refreshOfflineReadyNames]);
+
+  useEffect(() => {
+    availableModelsRef.current = availableModels;
+  }, [availableModels]);
+
+  const verifyStableConnection = useCallback(async () => {
+    if (typeof window === 'undefined') return false;
+    if (!navigator.onLine) {
+      setNetworkStatus('offline');
+      return false;
+    }
+
+    const controller = new AbortController();
+    const timeoutId = window.setTimeout(() => controller.abort(), 6000);
+    try {
+      const probeUrl = new URL('./manifest.webmanifest', window.location.href);
+      probeUrl.searchParams.set('_', String(Date.now()));
+      const res = await fetch(probeUrl.toString(), {
+        cache: 'no-store',
+        signal: controller.signal
+      });
+      const stable = res.ok;
+      setNetworkStatus(stable ? 'online' : 'unstable');
+      return stable;
+    } catch {
+      setNetworkStatus('unstable');
+      return false;
+    } finally {
+      window.clearTimeout(timeoutId);
+    }
+  }, []);
+
+  const currentModelKey = useMemo(() => getModelKey(selectedRemoteModelName), [getModelKey, selectedRemoteModelName]);
+  const extrasStorageKey = useMemo(() => cantidadesLsKey(`extras:${currentModelKey}`), [currentModelKey]);
+  const [pipeAdditionsByGroup, setPipeAdditionsByGroup] = useState<Record<string, number>>({});
+  const [unionAdditionsByGroup, setUnionAdditionsByGroup] = useState<Record<string, number>>({});
+
+  const normalizePurchaseStatus = useCallback((v: unknown): PurchaseStatus | null => {
+    const allowed: PurchaseStatus[] = ['PENDIENTE', 'PEDIDO', 'COMPRADO', 'ALMACEN', 'INSTALADO'];
+    const s = String(v ?? '').trim().toUpperCase();
+    if (s === 'EN SITIO') return 'INSTALADO';
+    if (s === 'EN_BODEGA') return 'ALMACEN';
+    if (s === 'EN BODEGA') return 'ALMACEN';
+    if (allowed.includes(s as PurchaseStatus)) return s as PurchaseStatus;
+    return null;
+  }, []);
+
+  const fetchRemoteStatuses = useCallback(async (modelName: string, signal?: AbortSignal) => {
+    if (!CANTIDADES_SHEET_SCRIPT_URL) return;
+    const url = new URL(CANTIDADES_SHEET_SCRIPT_URL);
+    url.searchParams.set('action', 'status_get');
+    url.searchParams.set('sheetId', CANTIDADES_SHEET_ID);
+    url.searchParams.set('model', getModelKey(modelName));
+    const data = await jsonpRequestWithRetry<{
+      ok?: boolean;
+      error?: string;
+      statuses?: Record<string, unknown>;
+      history?: Record<string, Array<{ status: unknown; at: unknown }>>;
+    }>(url, { signal, timeoutMs: 30000, retries: 3 });
+
+    if (!data || typeof data !== 'object') return;
+    if (typeof (data as any).error === 'string' && String((data as any).error).trim()) {
+      throw new Error(String((data as any).error));
+    }
+    if ((data as any).ok === false) return;
+
+    const rawStatuses = (data as any).statuses;
+    if (rawStatuses && typeof rawStatuses === 'object') {
+      const nextStatuses: Record<string, PurchaseStatus> = {};
+      for (const [id, stRaw] of Object.entries(rawStatuses as Record<string, unknown>)) {
+        const st = normalizePurchaseStatus(stRaw);
+        if (st) nextStatuses[String(id)] = st;
+      }
+      setElementStatuses(nextStatuses);
+    }
+
+    const rawHistory = (data as any).history;
+    if (rawHistory && typeof rawHistory === 'object') {
+      const nextHistory: Record<string, HistoryEntry[]> = {};
+      for (const [id, entries] of Object.entries(rawHistory as Record<string, unknown>)) {
+        if (!Array.isArray(entries)) continue;
+        const arr: HistoryEntry[] = [];
+        for (const e of entries as Array<any>) {
+          const st = normalizePurchaseStatus(e?.status);
+          const at = String(e?.at ?? '').trim();
+          if (!st || !at) continue;
+          arr.push({ status: st, at });
+        }
+        if (arr.length > 0) nextHistory[String(id)] = arr;
+      }
+      setElementHistory(nextHistory);
+    }
+    updateLastServerSync(Date.now());
+  }, [getModelKey, normalizePurchaseStatus, updateLastServerSync]);
+
+  const remoteQueueRef = useRef<Array<{ modelKey: string; id: string; status: PurchaseStatus; at: string }>>(
+    readStorageJson<Array<{ modelKey: string; id: string; status: PurchaseStatus; at: string }>>(REMOTE_QUEUE_STORAGE_KEY, [])
+  );
+  const remoteFlushTimerRef = useRef<number | null>(null);
+  const remoteAbortRef = useRef<AbortController | null>(null);
+  const persistRemoteQueue = useCallback(() => {
+    writeStorageJson(REMOTE_QUEUE_STORAGE_KEY, remoteQueueRef.current);
+  }, []);
+
+  const flushRemoteQueue = useCallback(async () => {
+    if (!CANTIDADES_SHEET_SCRIPT_URL) return;
+    if (networkStatus !== 'online') return;
+    if (remoteQueueRef.current.length === 0) return;
+    const batch = remoteQueueRef.current.splice(0, 25);
+    persistRemoteQueue();
+    const controller = new AbortController();
+    remoteAbortRef.current = controller;
+    try {
+      for (const it of batch) {
+        const url = new URL(CANTIDADES_SHEET_SCRIPT_URL);
+        url.searchParams.set('action', 'status_set');
+        url.searchParams.set('sheetId', CANTIDADES_SHEET_ID);
+        url.searchParams.set('model', it.modelKey);
+        url.searchParams.set('elementId', it.id);
+        url.searchParams.set('status', it.status);
+        url.searchParams.set('at', it.at);
+        await jsonpRequest(url, { signal: controller.signal, timeoutMs: 30000 });
+      }
+      updateLastServerSync(Date.now());
+    } catch {
+      remoteQueueRef.current.unshift(...batch);
+      persistRemoteQueue();
+    } finally {
+      if (remoteQueueRef.current.length > 0) {
+        remoteFlushTimerRef.current = window.setTimeout(() => void flushRemoteQueue(), 900);
+      } else {
+        remoteFlushTimerRef.current = null;
+      }
+    }
+  }, [networkStatus, persistRemoteQueue, updateLastServerSync]);
+
+  const enqueueRemoteChange = useCallback((id: string, status: PurchaseStatus, at: string) => {
+    if (!CANTIDADES_SHEET_SCRIPT_URL) return;
+    remoteQueueRef.current.push({ modelKey: currentModelKey, id, status, at });
+    persistRemoteQueue();
+    if (networkStatus !== 'online') return;
+    if (remoteFlushTimerRef.current !== null) return;
+    remoteFlushTimerRef.current = window.setTimeout(() => void flushRemoteQueue(), 900);
+  }, [currentModelKey, flushRemoteQueue, networkStatus, persistRemoteQueue]);
+
+  const extraQueueRef = useRef<Array<{ modelKey: string; kind: SharedExtraKind; groupKey: string; value: number; at: string }>>(
+    readStorageJson<Array<{ modelKey: string; kind: SharedExtraKind; groupKey: string; value: number; at: string }>>(EXTRA_QUEUE_STORAGE_KEY, [])
+  );
+  const extraFlushTimerRef = useRef<number | null>(null);
+  const extraAbortRef = useRef<AbortController | null>(null);
+  const persistExtraQueue = useCallback(() => {
+    writeStorageJson(EXTRA_QUEUE_STORAGE_KEY, extraQueueRef.current);
+  }, []);
+
+  const applyQueuedExtraOverrides = useCallback((modelKey: string, pipeMap: Record<string, number>, unionMap: Record<string, number>) => {
+    const nextPipe = { ...pipeMap };
+    const nextUnion = { ...unionMap };
+    for (const item of extraQueueRef.current) {
+      if (item.modelKey !== modelKey) continue;
+      if (item.kind === 'pipeAddition') nextPipe[item.groupKey] = item.value;
+      if (item.kind === 'unionAddition') nextUnion[item.groupKey] = item.value;
+    }
+    return { pipe: nextPipe, union: nextUnion };
+  }, []);
+
+  const fetchRemoteExtras = useCallback(async (modelName: string, signal?: AbortSignal) => {
+    if (!CANTIDADES_SHEET_SCRIPT_URL) return;
+    const url = new URL(CANTIDADES_SHEET_SCRIPT_URL);
+    url.searchParams.set('action', 'extras_get');
+    url.searchParams.set('sheetId', CANTIDADES_SHEET_ID);
+    url.searchParams.set('model', getModelKey(modelName));
+    const data = await jsonpRequestWithRetry<SharedExtrasResponse>(url, { signal, timeoutMs: 30000, retries: 3 });
+    if (!data || typeof data !== 'object') return;
+    if (typeof data.error === 'string' && data.error.trim()) {
+      if (data.error.includes('Invalid action: extras_get')) return;
+      throw new Error(String(data.error));
+    }
+    if (data.ok === false) return;
+
+    const remotePipe = normalizeSharedAdditionMap(data.pipeAdditionsByGroup);
+    const remoteUnion = normalizeSharedAdditionMap(data.unionAdditionsByGroup);
+    const withQueued = applyQueuedExtraOverrides(getModelKey(modelName), remotePipe, remoteUnion);
+    setPipeAdditionsByGroup(withQueued.pipe);
+    setUnionAdditionsByGroup(withQueued.union);
+    updateLastServerSync(Date.now());
+  }, [applyQueuedExtraOverrides, getModelKey, updateLastServerSync]);
+
+  const flushExtraQueue = useCallback(async () => {
+    if (!CANTIDADES_SHEET_SCRIPT_URL) return;
+    if (networkStatus !== 'online') return;
+    if (extraQueueRef.current.length === 0) return;
+    const batch = extraQueueRef.current.splice(0, 25);
+    persistExtraQueue();
+    const controller = new AbortController();
+    extraAbortRef.current = controller;
+    try {
+      for (const item of batch) {
+        const url = new URL(CANTIDADES_SHEET_SCRIPT_URL);
+        url.searchParams.set('action', 'extra_set');
+        url.searchParams.set('sheetId', CANTIDADES_SHEET_ID);
+        url.searchParams.set('model', item.modelKey);
+        url.searchParams.set('kind', item.kind);
+        url.searchParams.set('groupKey', item.groupKey);
+        url.searchParams.set('value', String(item.value));
+        url.searchParams.set('at', item.at);
+        await jsonpRequest(url, { signal: controller.signal, timeoutMs: 30000 });
+      }
+      updateLastServerSync(Date.now());
+    } catch {
+      extraQueueRef.current.unshift(...batch);
+      persistExtraQueue();
+    } finally {
+      if (extraQueueRef.current.length > 0) {
+        extraFlushTimerRef.current = window.setTimeout(() => void flushExtraQueue(), 900);
+      } else {
+        extraFlushTimerRef.current = null;
+      }
+    }
+  }, [networkStatus, persistExtraQueue, updateLastServerSync]);
+
+  const enqueueExtraChange = useCallback((kind: SharedExtraKind, groupKey: string, value: number) => {
+    if (!groupKey) return;
+    const safeValue = Number.isFinite(value) ? Math.max(0, Math.floor(value)) : 0;
+    const at = new Date().toISOString();
+    const nextItem = { modelKey: currentModelKey, kind, groupKey, value: safeValue, at };
+    extraQueueRef.current = [
+      ...extraQueueRef.current.filter((item) => !(item.modelKey === currentModelKey && item.kind === kind && item.groupKey === groupKey)),
+      nextItem,
+    ];
+    persistExtraQueue();
+    if (networkStatus !== 'online') return;
+    if (extraFlushTimerRef.current !== null) return;
+    extraFlushTimerRef.current = window.setTimeout(() => void flushExtraQueue(), 900);
+  }, [currentModelKey, flushExtraQueue, networkStatus, persistExtraQueue]);
+
+  const handlePipeAdditionChange = useCallback((groupKey: string, value: number) => {
+    const safeValue = Number.isFinite(value) ? Math.max(0, Math.floor(value)) : 0;
+    setPipeAdditionsByGroup((prev) => ({ ...prev, [groupKey]: safeValue }));
+    enqueueExtraChange('pipeAddition', groupKey, safeValue);
+  }, [enqueueExtraChange]);
+
+  const handleUnionAdditionChange = useCallback((groupKey: string, value: number) => {
+    const safeValue = Number.isFinite(value) ? Math.max(0, Math.floor(value)) : 0;
+    setUnionAdditionsByGroup((prev) => ({ ...prev, [groupKey]: safeValue }));
+    enqueueExtraChange('unionAddition', groupKey, safeValue);
+  }, [enqueueExtraChange]);
+
+  useEffect(() => {
+    if (!CANTIDADES_SHEET_SCRIPT_URL) return;
+    if (!selectedRemoteModelName) return;
+    if (networkStatus !== 'online') return;
+    const controller = new AbortController();
+    void fetchRemoteStatuses(selectedRemoteModelName, controller.signal).catch((error) => {
+      console.error('No se pudieron cargar los estados remotos:', error);
+    });
+    void fetchRemoteExtras(selectedRemoteModelName, controller.signal).catch((error) => {
+      console.error('No se pudieron cargar los extras remotos:', error);
+    });
+    return () => controller.abort();
+  }, [fetchRemoteExtras, fetchRemoteStatuses, networkStatus, selectedRemoteModelName]);
+
+  useEffect(() => {
+    const local = readStorageJson<{ pipeAdditionsByGroup?: Record<string, unknown>; unionAdditionsByGroup?: Record<string, unknown> }>(
+      extrasStorageKey,
+      {},
+    );
+    const withQueued = applyQueuedExtraOverrides(
+      currentModelKey,
+      normalizeSharedAdditionMap(local.pipeAdditionsByGroup),
+      normalizeSharedAdditionMap(local.unionAdditionsByGroup),
+    );
+    setPipeAdditionsByGroup(withQueued.pipe);
+    setUnionAdditionsByGroup(withQueued.union);
+  }, [applyQueuedExtraOverrides, currentModelKey, extrasStorageKey]);
+
+  useEffect(() => {
+    writeStorageJson(extrasStorageKey, {
+      pipeAdditionsByGroup,
+      unionAdditionsByGroup,
+    });
+  }, [extrasStorageKey, pipeAdditionsByGroup, unionAdditionsByGroup]);
+
+  useEffect(() => {
+    void verifyStableConnection();
+
+    const handleOnline = () => {
+      setNetworkStatus('unstable');
+      void verifyStableConnection();
+    };
+    const handleOffline = () => setNetworkStatus('offline');
+    const handleFocus = () => void verifyStableConnection();
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') void verifyStableConnection();
+    };
+
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+    window.addEventListener('focus', handleFocus);
+    document.addEventListener('visibilitychange', handleVisibility);
+
+    const intervalId = window.setInterval(() => {
+      if (document.visibilityState === 'visible') void verifyStableConnection();
+    }, 45000);
+
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+      window.removeEventListener('focus', handleFocus);
+      document.removeEventListener('visibilitychange', handleVisibility);
+      window.clearInterval(intervalId);
+    };
+  }, [verifyStableConnection]);
+
+  const [leftPanelWidth, setLeftPanelWidth] = useState(() => {
+    const stored = Number(localStorage.getItem(cantidadesLsKey('leftPanelWidth')));
+    return Number.isFinite(stored) && stored > 0 ? stored : 300;
+  });
+  const [rightPanelWidth, setRightPanelWidth] = useState(() => {
+    const stored = Number(localStorage.getItem(cantidadesLsKey('rightPanelWidth')));
+    return Number.isFinite(stored) && stored > 0 ? stored : 320;
+  });
+  const [leftPanelCollapsed, setLeftPanelCollapsed] = useState(() => {
+    const stored = localStorage.getItem(cantidadesLsKey('leftPanelCollapsed'));
+    if (stored === null) return window.innerWidth < 768;
+    return stored === 'true';
+  });
+  const [rightPanelCollapsed, setRightPanelCollapsed] = useState(() => {
+    const stored = localStorage.getItem(cantidadesLsKey('rightPanelCollapsed'));
+    if (stored === null) return window.innerWidth < 768;
+    return stored === 'true';
+  });
+  const [tablePanelHeight, setTablePanelHeight] = useState(() => {
+    const stored = Number(localStorage.getItem(cantidadesLsKey('tablePanelHeight')));
+    return Number.isFinite(stored) && stored > 0 ? stored : 320;
+  });
+  const [isTableMaximized, setIsTableMaximized] = useState(false);
+  const [isViewerMaximized, setIsViewerMaximized] = useState(false);
+
+  // Filter states
+  const [selectedClassifications, setSelectedClassifications] = useState<string[]>([]);
+  const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
+  const [selectedSubCategories, setSelectedSubCategories] = useState<string[]>([]);
+  const [selectedLevels, setSelectedLevels] = useState<string[]>([]);
+  const [selectedDiameter, setSelectedDiameter] = useState<string>('Todos');
+  const [appliedClassifications, setAppliedClassifications] = useState<string[]>([]);
+  const [appliedCategories, setAppliedCategories] = useState<string[]>([]);
+  const [appliedSubCategories, setAppliedSubCategories] = useState<string[]>([]);
+  const [appliedLevels, setAppliedLevels] = useState<string[]>([]);
+  const [appliedDiameter, setAppliedDiameter] = useState<string>('Todos');
+  const [isIsolateMode, setIsIsolateMode] = useState(false);
+  const [statusVisibility, setStatusVisibility] = useState<Record<PurchaseStatus, boolean>>(() => {
+    try {
+      const raw = localStorage.getItem(cantidadesLsKey('statusVisibility'));
+      if (!raw) {
+        return { PENDIENTE: true, PEDIDO: true, COMPRADO: true, ALMACEN: true, INSTALADO: true };
+      }
+      const parsed = JSON.parse(raw) as Record<string, unknown>;
+      const pick = (k: string) => (typeof parsed[k] === 'boolean' ? (parsed[k] as boolean) : true);
+      return {
+        PENDIENTE: pick('PENDIENTE'),
+        PEDIDO: pick('PEDIDO'),
+        COMPRADO: pick('COMPRADO'),
+        ALMACEN: typeof parsed['ALMACEN'] === 'boolean' ? (parsed['ALMACEN'] as boolean) : pick('EN BODEGA'),
+        INSTALADO: pick('INSTALADO')
+      };
+    } catch {
+      return { PENDIENTE: true, PEDIDO: true, COMPRADO: true, ALMACEN: true, INSTALADO: true };
+    }
+  });
+  const [statusColorsEnabled, setStatusColorsEnabled] = useState(() => {
+    const raw = localStorage.getItem(cantidadesLsKey('statusColorsEnabled'));
+    if (raw === null) return true;
+    return raw === 'true';
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(cantidadesLsKey('statusVisibility'), JSON.stringify(statusVisibility));
+    } catch {
+    }
+  }, [statusVisibility]);
+  const [gridVisible, setGridVisible] = useState(() => {
+    const raw = localStorage.getItem(cantidadesLsKey('gridVisible'));
+    if (raw === null) return true;
+    return raw === 'true';
+  });
+
+  const statusStorageKey = useMemo(() => {
+    const base = selectedRemoteModelName ? stripModelExtension(selectedRemoteModelName) : 'local';
+    const safe = base.trim().toLowerCase();
+    return cantidadesLsKey(`statuses:${safe}`);
+  }, [selectedRemoteModelName]);
+
+  const historyStorageKey = useMemo(() => {
+    const base = selectedRemoteModelName ? stripModelExtension(selectedRemoteModelName) : 'local';
+    const safe = base.trim().toLowerCase();
+    return cantidadesLsKey(`history:${safe}`);
+  }, [selectedRemoteModelName]);
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(statusStorageKey);
+      if (!raw) {
+        setElementStatuses({});
+        return;
+      }
+      const parsed = JSON.parse(raw) as Record<string, unknown>;
+      const allowed: PurchaseStatus[] = ['PENDIENTE', 'PEDIDO', 'COMPRADO', 'ALMACEN', 'INSTALADO'];
+      const normalize = (v: unknown): PurchaseStatus | null => {
+        const s = String(v ?? '').trim().toUpperCase();
+        if (s === 'EN SITIO') return 'INSTALADO';
+        if (s === 'EN_BODEGA') return 'ALMACEN';
+        if (s === 'EN BODEGA') return 'ALMACEN';
+        if (allowed.includes(s as PurchaseStatus)) return s as PurchaseStatus;
+        return null;
+      };
+      if (parsed && typeof parsed === 'object') {
+        const next: Record<string, PurchaseStatus> = {};
+        for (const [k, v] of Object.entries(parsed)) {
+          const st = normalize(v);
+          if (st) next[k] = st;
+        }
+        setElementStatuses(next);
+      } else {
+        setElementStatuses({});
+      }
+    } catch {
+      setElementStatuses({});
+    }
+  }, [statusStorageKey]);
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(historyStorageKey);
+      if (!raw) {
+        setElementHistory({});
+        return;
+      }
+      const parsed = JSON.parse(raw) as Record<string, unknown>;
+      const allowed: PurchaseStatus[] = ['PENDIENTE', 'PEDIDO', 'COMPRADO', 'ALMACEN', 'INSTALADO'];
+      const normalize = (v: unknown): PurchaseStatus | null => {
+        const s = String(v ?? '').trim().toUpperCase();
+        if (s === 'EN SITIO') return 'INSTALADO';
+        if (s === 'EN_BODEGA') return 'ALMACEN';
+        if (s === 'EN BODEGA') return 'ALMACEN';
+        if (allowed.includes(s as PurchaseStatus)) return s as PurchaseStatus;
+        return null;
+      };
+      const next: Record<string, HistoryEntry[]> = {};
+      if (parsed && typeof parsed === 'object') {
+        for (const [id, entries] of Object.entries(parsed)) {
+          if (!Array.isArray(entries)) continue;
+          const arr: HistoryEntry[] = [];
+          for (const e of entries as any[]) {
+            const st = normalize(e?.status);
+            const at = String(e?.at ?? '').trim();
+            if (!st || !at) continue;
+            arr.push({ status: st, at });
+          }
+          if (arr.length > 0) next[id] = arr;
+        }
+      }
+      setElementHistory(next);
+    } catch {
+      setElementHistory({});
+    }
+  }, [historyStorageKey]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(statusStorageKey, JSON.stringify(elementStatuses));
+    } catch {
+    }
+  }, [elementStatuses, statusStorageKey]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(historyStorageKey, JSON.stringify(elementHistory));
+    } catch {
+    }
+  }, [elementHistory, historyStorageKey]);
+
+  useEffect(() => {
+    localStorage.setItem(cantidadesLsKey('leftPanelWidth'), String(leftPanelWidth));
+  }, [leftPanelWidth]);
+
+  useEffect(() => {
+    localStorage.setItem(cantidadesLsKey('rightPanelWidth'), String(rightPanelWidth));
+  }, [rightPanelWidth]);
+
+  useEffect(() => {
+    localStorage.setItem(cantidadesLsKey('leftPanelCollapsed'), String(leftPanelCollapsed));
+  }, [leftPanelCollapsed]);
+
+  useEffect(() => {
+    localStorage.setItem(cantidadesLsKey('rightPanelCollapsed'), String(rightPanelCollapsed));
+  }, [rightPanelCollapsed]);
+
+  useEffect(() => {
+    localStorage.setItem(cantidadesLsKey('tablePanelHeight'), String(tablePanelHeight));
+  }, [tablePanelHeight]);
+
+  useEffect(() => {
+    localStorage.setItem(cantidadesLsKey('statusColorsEnabled'), String(statusColorsEnabled));
+  }, [statusColorsEnabled]);
+
+  useEffect(() => {
+    localStorage.setItem(cantidadesLsKey('gridVisible'), String(gridVisible));
+  }, [gridVisible]);
+
+  const startHorizontalDrag = useCallback((startEvent: React.PointerEvent, onDeltaX: (dx: number) => void) => {
+    startEvent.preventDefault();
+    const startX = startEvent.clientX;
+    const move = (e: PointerEvent) => onDeltaX(e.clientX - startX);
+    const up = () => {
+      window.removeEventListener('pointermove', move, true);
+      window.removeEventListener('pointerup', up, true);
+      window.removeEventListener('pointercancel', up, true);
+    };
+    window.addEventListener('pointermove', move, true);
+    window.addEventListener('pointerup', up, true);
+    window.addEventListener('pointercancel', up, true);
+  }, []);
+
+  const startVerticalDrag = useCallback((startEvent: React.PointerEvent, onDeltaY: (dy: number) => void) => {
+    startEvent.preventDefault();
+    const startY = startEvent.clientY;
+    const move = (e: PointerEvent) => onDeltaY(e.clientY - startY);
+    const up = () => {
+      window.removeEventListener('pointermove', move, true);
+      window.removeEventListener('pointerup', up, true);
+      window.removeEventListener('pointercancel', up, true);
+    };
+    window.addEventListener('pointermove', move, true);
+    window.addEventListener('pointerup', up, true);
+    window.addEventListener('pointercancel', up, true);
+  }, []);
+
+  const getProp = useCallback((el: BIMElement, key: string) => {
+    if (!el.properties) return undefined;
+    
+    // 1. Try top-level first
+    const val = el.properties[key];
+    if (val !== undefined && val !== null) {
+      if (typeof val === 'object' && val !== null) {
+        if ('value' in val) return String(val.value);
+        if ('NominalValue' in val) {
+          const nv = val.NominalValue;
+          return (typeof nv === 'object' && nv !== null && 'value' in nv) ? String(nv.value) : String(nv);
+        }
+        if ('QuantityValue' in val) {
+          const qv = val.QuantityValue;
+          return (typeof qv === 'object' && qv !== null && 'value' in qv) ? String(qv.value) : String(qv);
+        }
+      }
+      return String(val);
+    }
+    
+    // 2. Recursive deep search (BFS)
+    const queue = [el.properties];
+    const seen = new Set<any>();
+    let steps = 0;
+    const maxSteps = 1000;
+    
+    while (queue.length > 0 && steps < maxSteps) {
+      const current = queue.shift();
+      if (!current || typeof current !== 'object') continue;
+      if (seen.has(current)) continue;
+      seen.add(current);
+      steps++;
+      
+      const subVal = current[key];
+      if (subVal !== undefined && subVal !== null) {
+        if (typeof subVal === 'object' && subVal !== null) {
+          if ('value' in subVal) return String(subVal.value);
+          if ('NominalValue' in subVal) {
+            const nv = subVal.NominalValue;
+            return (typeof nv === 'object' && nv !== null && 'value' in nv) ? String(nv.value) : String(nv);
+          }
+          if ('QuantityValue' in subVal) {
+            const qv = subVal.QuantityValue;
+            return (typeof qv === 'object' && qv !== null && 'value' in qv) ? String(qv.value) : String(qv);
+          }
+        }
+        return String(subVal);
+      }
+      
+      for (const k in current) {
+        if (k === 'ObjectPlacement' || k === 'Representation' || k === 'OwnerHistory') continue;
+        const nested = current[k];
+        if (nested && typeof nested === 'object') {
+          queue.push(nested);
+        }
+      }
+    }
+    
+    return undefined;
+  }, []);
+
+  const getFirstProp = useCallback((el: BIMElement, keys: string[]) => {
+    for (const key of keys) {
+      const v = getProp(el, key);
+      if (v !== undefined && v !== null && String(v).trim() !== '') return String(v);
+    }
+    return undefined;
+  }, [getProp]);
+
+  const isSanitaryModel = useMemo(() => {
+    const normalizedName = normalizeModelSearchText(selectedRemoteModelName);
+    if (PIPE_MODEL_KEYWORDS.some((keyword) => normalizedName.includes(keyword))) {
+      return true;
+    }
+
+    return elements.some((el) => {
+      const text = normalizeModelSearchText([
+        getFirstProp(el, ["CLASIFICACION", "CLASIFICACIÓN", "SUBPROYECTOS INTEGRADO", "Subproyecto", "Sistema"]),
+        getFirstProp(el, ["CATEGORIA", "CATEGORÍA", "TIPO", "DETALLE"]),
+        getFirstProp(el, ["NOMBRE INTEGRADO"]),
+        getProp(el, 'ObjectType'),
+        getProp(el, 'ifcType'),
+        el.category,
+        el.name,
+      ].join(' '));
+
+      return (
+        text.includes('tuber') ||
+        text.includes('tubo') ||
+        text.includes('union de tuberia') ||
+        text.includes('uniones de tuberia') ||
+        text.includes('ifcpipesegment') ||
+        text.includes('ifcflowsegment') ||
+        text.includes('ifcpipefitting') ||
+        text.includes('ifcflowfitting') ||
+        text.includes('pipesegment') ||
+        text.includes('pipefitting') ||
+        text.includes('conduit') ||
+        text.includes('ifcconduit') ||
+        text.includes('canalizacion') ||
+        text.includes('canalización') ||
+        text.includes('coraza') ||
+        text.includes('ducto') ||
+        text.includes('bandeja') ||
+        text.includes('canaleta') ||
+        text.includes('ifccablecarrier') ||
+        text.includes('cablecarrier')
+      );
+    });
+  }, [elements, getFirstProp, getProp, selectedRemoteModelName]);
+  const shouldMergeUnionLengthsIntoPipes = useMemo(() => {
+    const normalizedName = normalizeModelSearchText(selectedRemoteModelName);
+    return PIPE_LENGTH_WITH_UNIONS_KEYWORDS.some((keyword) => normalizedName.includes(keyword));
+  }, [selectedRemoteModelName]);
+
+  const fetchAvailableModels = useCallback(async (options?: { silent?: boolean; force?: boolean }) => {
+    const silent = options?.silent === true;
+    const force = options?.force === true;
+    const cachedCatalog = readCachedModelCatalog();
+    const bufferedModels = listFreshBufferedModels();
+    const bufferedNames = new Set(bufferedModels.map((item) => item.name));
+    const recentModels = readRecentModels()
+      .filter((item) => bufferedNames.has(item.name))
+      .map(({ lastOpenedAt: _lastOpenedAt, ...model }) => model);
+    const fallbackModels = mergeRemoteModels(bufferedModels, recentModels);
+
+    if (!silent) setIsModelsLoading(true);
+    setModelsError(null);
+    setModelsNotice(null);
+
+    let canReachServer = networkStatus === 'online';
+    if (!canReachServer && force) {
+      canReachServer = await verifyStableConnection();
+    }
+
+    if (!canReachServer) {
+      if (fallbackModels.length > 0) {
+        setAvailableModels(fallbackModels);
+        setModelsNotice('Sin conexion estable. Mostrando modelos con buffer vigente en este dispositivo.');
+      } else {
+        setAvailableModels([]);
+        setModelsError('Sin conexion estable y no hay modelos con buffer vigente en este dispositivo.');
+      }
+      if (!silent) setIsModelsLoading(false);
+      return;
+    }
+
+    let manifest: DriveModelsManifest | null = null;
+    const manifestByName = new Map<string, DriveModelsManifest['models'][number]>();
+    let manifestModels: RemoteModel[] = [];
+
+    try {
+      const manifestRes = await fetch(`${DRIVE_MODELS_MANIFEST_URL}?t=${Date.now()}`, {
+        cache: 'no-store'
+      });
+      if (manifestRes.ok) {
+        manifest = (await manifestRes.json()) as DriveModelsManifest;
+        for (const item of Array.isArray(manifest?.models) ? manifest.models : []) {
+          if (item?.name) manifestByName.set(String(item.name), item);
+        }
+        const manifestFolderId = String(manifest?.folderId || '').trim();
+        if (manifestFolderId && DRIVE_FOLDER_ID && manifestFolderId !== DRIVE_FOLDER_ID) {
+          manifest = null;
+          manifestByName.clear();
+        }
+      }
+    } catch {
+    }
+
+    if (manifest) {
+      manifestModels = (Array.isArray(manifest.models) ? manifest.models : [])
+        .filter((m) => m && m.name && (m.fragId || m.ifcId))
+        .map((m) => {
+          const group = /estructura/i.test(m.name) ? 'ESTRUCTURA' : 'GENERAL';
+          const format = m.ifcId || /\.ifc$/i.test(String(m.name)) ? 'ifc' : 'frag';
+          const fileId = format === 'ifc' ? m.ifcId : m.fragId;
+          return normalizeRemoteModel({
+            name: m.name,
+            format,
+            fragUrl: m.fragUrl ? String(m.fragUrl) : undefined,
+            ifcUrl: m.ifcUrl ? String(m.ifcUrl) : undefined,
+            jsonUrl: m.jsonUrl ? String(m.jsonUrl) : undefined,
+            group,
+            drive: {
+              scriptUrl: DRIVE_SCRIPT_WEBAPP_URL,
+              folderId: manifest?.folderId || DRIVE_FOLDER_ID,
+              fileId: String(fileId),
+              fragId: m.fragId ? String(m.fragId) : undefined,
+              ifcId: m.ifcId ? String(m.ifcId) : undefined,
+              jsonId: m.jsonId ? String(m.jsonId) : undefined,
+            },
+          });
+        })
+        .sort((a, b) => a.name.localeCompare(b.name, 'es'));
+    }
+
+    try {
+      let nextModels: RemoteModel[] = [];
+      if (DRIVE_SCRIPT_WEBAPP_URL) {
+        const liveUrl = new URL(DRIVE_SCRIPT_WEBAPP_URL);
+        liveUrl.searchParams.set('action', 'list');
+        liveUrl.searchParams.set('folderId', manifest?.folderId || DRIVE_FOLDER_ID);
+
+        const liveData = await jsonpRequestWithRetry<DriveListResponse>(liveUrl, {
+          timeoutMs: 30000,
+          retries: 3,
+        });
+        if (typeof liveData?.error === 'string' && liveData.error.trim()) {
+          throw new Error(liveData.error);
+        }
+
+        nextModels = (Array.isArray(liveData?.models) ? liveData.models : [])
+          .filter((m) => m && m.name && (m.fileId || m.fragId || m.ifcId))
+          .map((m) => {
+            const manifestMatch = manifestByName.get(String(m.name));
+            const group = /estructura/i.test(m.name) ? 'ESTRUCTURA' : 'GENERAL';
+            const format = m.format || detectModelFormat(String(m.name));
+            const fileId = m.fileId || (format === 'ifc' ? m.ifcId : m.fragId);
+            return normalizeRemoteModel({
+              name: String(m.name),
+              format,
+              fragUrl: manifestMatch?.fragUrl ? String(manifestMatch.fragUrl) : undefined,
+              ifcUrl: manifestMatch?.ifcUrl ? String(manifestMatch.ifcUrl) : undefined,
+              jsonUrl: manifestMatch?.jsonUrl ? String(manifestMatch.jsonUrl) : undefined,
+              group,
+              drive: {
+                scriptUrl: DRIVE_SCRIPT_WEBAPP_URL,
+                folderId: manifest?.folderId || DRIVE_FOLDER_ID,
+                fileId: String(fileId),
+                fragId: m.fragId ? String(m.fragId) : undefined,
+                ifcId: m.ifcId ? String(m.ifcId) : undefined,
+                jsonId: m.jsonId ? String(m.jsonId) : undefined,
+              },
+            });
+          })
+          .sort((a, b) => a.name.localeCompare(b.name, 'es'));
+      }
+
+      nextModels = mergeRemoteModels(nextModels, manifestModels);
+
+      if (nextModels.length === 0) {
+        throw new Error('No se encontraron modelos nuevos en Drive ni en la copia publicada. Si acabas de cargar archivos, verifica que el Apps Script publicado tenga el cambio `action=list` y que la carpeta use el ID correcto.');
+      }
+
+      const previousByName = new Map(availableModelsRef.current.map((item) => [item.name, item]));
+      const selectedNext = selectedRemoteModelName ? nextModels.find((item) => item.name === selectedRemoteModelName) ?? null : null;
+      const selectedPrev = selectedRemoteModelName ? previousByName.get(selectedRemoteModelName) ?? null : null;
+      const selectedChanged =
+        !!selectedNext &&
+        !!selectedPrev &&
+        (
+          selectedPrev.format !== selectedNext.format ||
+          selectedPrev.drive?.fileId !== selectedNext.drive?.fileId ||
+          selectedPrev.drive?.jsonId !== selectedNext.drive?.jsonId
+        );
+
+      setAvailableModels(nextModels);
+      writeCachedModelCatalog(nextModels);
+      updateLastServerSync(Date.now());
+      if (selectedChanged && loadRemoteModelRef.current && selectedNext) {
+        setModelsNotice('Se detectaron cambios en el modelo actual. Recargando la version mas reciente.');
+        void loadRemoteModelRef.current(selectedNext);
+      }
+      return;
+    } catch (e) {
+      const resilientFallback = mergeRemoteModels(manifestModels, cachedCatalog?.models ?? [], fallbackModels);
+      if (resilientFallback.length > 0) {
+        setAvailableModels(resilientFallback);
+        writeCachedModelCatalog(resilientFallback);
+        setModelsNotice('No se pudo consultar la lista en vivo. Se usa la ultima lista publicada y la copia local disponible.');
+      } else {
+        setModelsError(e instanceof Error ? e.message : 'Error cargando modelos');
+        setAvailableModels([]);
+      }
+    } finally {
+      if (!silent) setIsModelsLoading(false);
+    }
+  }, [networkStatus, updateLastServerSync, verifyStableConnection]);
+
+  useEffect(() => {
+    fetchAvailableModels();
+  }, [fetchAvailableModels]);
+
+  useEffect(() => {
+    if (networkStatus !== 'online') return;
+    void fetchAvailableModels({ silent: true });
+    if (remoteQueueRef.current.length > 0) void flushRemoteQueue();
+    if (extraQueueRef.current.length > 0) void flushExtraQueue();
+  }, [fetchAvailableModels, flushExtraQueue, flushRemoteQueue, networkStatus]);
+
+  useEffect(() => {
+    if (networkStatus !== 'online') return;
+
+    const refreshCatalog = () => {
+      if (document.visibilityState === 'visible') {
+        void fetchAvailableModels({ silent: true });
+      }
+    };
+
+    const intervalId = window.setInterval(refreshCatalog, 60000);
+    window.addEventListener('focus', refreshCatalog);
+    document.addEventListener('visibilitychange', refreshCatalog);
+
+    return () => {
+      window.clearInterval(intervalId);
+      window.removeEventListener('focus', refreshCatalog);
+      document.removeEventListener('visibilitychange', refreshCatalog);
+    };
+  }, [fetchAvailableModels, networkStatus]);
+
+  const baseElements = useMemo(() => {
+    return elements.filter((el) => {
+      const classifRaw = getFirstProp(el, ["CLASIFICACION", "CLASIFICACIÓN"]);
+      return !isSinClasificar(classifRaw);
+    });
+  }, [elements, getFirstProp]);
+
+  useEffect(() => {
+    setSelectedClassifications((prev) => prev.filter((c) => !isSinClasificar(c)));
+  }, [baseElements]);
+
+  useEffect(() => {
+    if (!isSanitaryModel) setSelectedDiameter('Todos');
+  }, [isSanitaryModel]);
+
+  useEffect(() => {
+    const t = window.setTimeout(() => {
+      setAppliedClassifications(selectedClassifications);
+      setAppliedCategories(selectedCategories);
+      setAppliedSubCategories(selectedSubCategories);
+      setAppliedLevels(selectedLevels);
+      setAppliedDiameter(selectedDiameter);
+    }, 250);
+    return () => window.clearTimeout(t);
+  }, [selectedCategories, selectedClassifications, selectedDiameter, selectedLevels, selectedSubCategories]);
+
+  const filteredElements = useMemo(() => {
+    return baseElements.filter(el => {
+      const classif = getFirstProp(el, ["CLASIFICACION", "CLASIFICACIÓN"]) || "SIN CLASIFICAR";
+      const nombreIntegrado = getFirstProp(el, ["NOMBRE INTEGRADO"]) || el.name;
+      const level = getProp(el, "NIVEL INTEGRADO") || "";
+      const diameter = getFirstProp(el, ["Tamaño", "TAMAÑO", "TAMANO"]) || "";
+
+      const classificationMatch = appliedClassifications.length === 0 || appliedClassifications.includes(classif);
+      const categoryMatch = appliedCategories.length === 0 || appliedCategories.includes(nombreIntegrado);
+      const levelMatch = appliedLevels.length === 0 || appliedLevels.includes(level);
+      const diameterMatch = !isSanitaryModel || appliedDiameter === 'Todos' || diameter === appliedDiameter;
+
+      return classificationMatch && categoryMatch && levelMatch && diameterMatch;
+    });
+  }, [appliedCategories, appliedClassifications, appliedDiameter, appliedLevels, baseElements, getFirstProp, getProp, isSanitaryModel]);
+
+  const statusFilteredElements = useMemo(() => {
+    return filteredElements.filter((el) => {
+      const st = elementStatuses[el.id] ?? 'PENDIENTE';
+      return statusVisibility[st] !== false;
+    });
+  }, [elementStatuses, filteredElements, statusVisibility]);
+
+  const elementsWithVolume = useMemo(() => {
+    const toNumber = (v: unknown) => {
+      if (v === undefined || v === null) return null;
+      const s = String(v).trim();
+      if (!s) return null;
+      const normalized = s.replace(',', '.').replace(/[^\d.\-]/g, '');
+      const n = Number(normalized);
+      return Number.isFinite(n) ? n : null;
+    };
+
+    return baseElements.filter((el) => {
+      const vRaw = getFirstProp(el, ["VOLUMEN INTEGRADO", "VOLUMEN", "VOLUME"]);
+      const v = toNumber(vRaw);
+      const fallback = Number.isFinite(el.volume) ? el.volume : 0;
+      return (v ?? fallback) > 0;
+    });
+  }, [baseElements, getFirstProp]);
+
+  const sidebarData = useMemo(() => {
+    const classificationMap: Record<string, Set<string>> = {};
+    
+    elementsWithVolume.forEach(el => {
+      const classification = getFirstProp(el, ["CLASIFICACION", "CLASIFICACIÓN"]) || "SIN CLASIFICAR";
+      const nombreIntegrado = getFirstProp(el, ["NOMBRE INTEGRADO"]) || el.name;
+
+      if (!classificationMap[classification]) classificationMap[classification] = new Set();
+      classificationMap[classification].add(nombreIntegrado);
+    });
+
+    return Object.entries(classificationMap).map(([classifName, categories]) => ({
+      name: classifName,
+      categories: Array.from(categories)
+        .sort((a, b) => a.localeCompare(b, 'es'))
+        .map((nombre) => ({
+          name: nombre,
+          children: []
+        }))
+    })).sort((a, b) => a.name.localeCompare(b.name));
+  }, [elementsWithVolume, getFirstProp]);
+
+  const levels = useMemo(() => {
+    const levelSet = new Set<string>();
+    baseElements.forEach(el => {
+      const level = getProp(el, "NIVEL INTEGRADO");
+      if (level) levelSet.add(level);
+    });
+    return Array.from(levelSet);
+  }, [baseElements, getProp]);
+
+  const diameters = useMemo(() => {
+    if (!isSanitaryModel) return [];
+    const diameterSet = new Set<string>();
+    baseElements.forEach(el => {
+      const diameter = getFirstProp(el, ["Tamaño", "TAMAÑO", "TAMANO"]);
+      if (diameter) diameterSet.add(diameter);
+    });
+    const asNumber = (v: string) => {
+      const n = Number(String(v).replace(',', '.').replace(/[^\d.\-]/g, ''));
+      return Number.isFinite(n) ? n : null;
+    };
+    return Array.from(diameterSet).sort((a, b) => {
+      const na = asNumber(a);
+      const nb = asNumber(b);
+      if (na !== null && nb !== null) return na - nb;
+      if (na !== null) return -1;
+      if (nb !== null) return 1;
+      return a.localeCompare(b, 'es');
+    });
+  }, [baseElements, getFirstProp, isSanitaryModel]);
+
+  const toggleClassification = (name: string) => {
+    setSelectedClassifications(prev => 
+      prev.includes(name) ? prev.filter(c => c !== name) : [...prev, name]
+    );
+  };
+
+  const toggleCategory = (name: string) => {
+    setSelectedCategories(prev => 
+      prev.includes(name) ? prev.filter(c => c !== name) : [...prev, name]
+    );
+  };
+
+  const toggleSubCategory = (name: string) => {
+    setSelectedSubCategories(prev => 
+      prev.includes(name) ? prev.filter(c => c !== name) : [...prev, name]
+    );
+  };
+
+  const toggleLevel = (level: string) => {
+    setSelectedLevels(prev => 
+      prev.includes(level) ? prev.filter(l => l !== level) : [...prev, level]
+    );
+  };
+
+  const processModel = useCallback(async (model: any) => {
+    console.log("Procesando modelo cargado ID:", model.uuid || model.modelId);
+    const extractedElements: BIMElement[] = [];
+    const categoryMap: Record<string, { totalVolume: number; count: number }> = {};
+
+    try {
+      const ids = await model.getLocalIds();
+      console.log(`Modelo con ${ids.length} elementos locales.`);
+
+      // Intentar obtener datos básicos de los elementos
+      const itemsData = await model.getItemsData(ids, {
+        attributesDefault: true,
+      });
+
+      const getValue = (attr: any) => {
+        if (attr === undefined || attr === null) return undefined;
+        if (typeof attr === 'object') {
+          if ('value' in attr) return attr.value;
+          if ('NominalValue' in attr) {
+            const nv = attr.NominalValue;
+            return (nv && typeof nv === 'object' && 'value' in nv) ? nv.value : nv;
+          }
+          if ('QuantityValue' in attr) {
+            const qv = attr.QuantityValue;
+            return (qv && typeof qv === 'object' && 'value' in qv) ? qv.value : qv;
+          }
+        }
+        return attr;
+      };
+
+      for (let i = 0; i < ids.length; i++) {
+        const localId = ids[i];
+        const data = itemsData[i] || {};
+        
+        // Extraer todos los IDs posibles para asegurar vinculación
+        const rawId = getValue(data.expressID || data.ExpressID || data.id || localId);
+        const expressId = rawId !== undefined && rawId !== null ? rawId.toString() : localId.toString();
+        
+        const rawGlobalId = getValue(data.GlobalId || data.globalId || data.guid || data.Guid || data.GlobalID);
+        const globalId = rawGlobalId?.toString();
+        
+        const rawCategory = getValue(data.type || data.ifcType || data.Category || data.ObjectType || 'Elemento');
+        const category = (rawCategory !== undefined && rawCategory !== null ? rawCategory : 'Elemento').toString();
+        const rawName = getValue(data.Name || data.name);
+        const name = (rawName !== undefined && rawName !== null ? rawName : `${category} - ${expressId}`).toString();
+        const volume = 0;
+
+        extractedElements.push({
+          id: expressId, 
+          globalId: globalId,
+          name,
+          category,
+          volume: volume,
+          unit: 'm³',
+          properties: { ...data },
+          modelId: model.uuid || model.id || model.modelId,
+          localId: localId
+        });
+
+        if (!categoryMap[category]) {
+          categoryMap[category] = { totalVolume: 0, count: 0 };
+        }
+        categoryMap[category].count += 1;
+        categoryMap[category].totalVolume += volume;
+      }
+
+      setElements(extractedElements);
+      setSummaries(Object.entries(categoryMap).map(([category, data]) => ({
+        category,
+        totalVolume: data.totalVolume,
+        count: data.count
+      })));
+      
+      console.log(`Preparados ${extractedElements.length} elementos para vinculación.`);
+    } catch (err) {
+      console.error("Error en processModel:", err);
+    }
+  }, []);
+
+  const handleModelLoaded = useCallback((components: OBC.Components) => {
+    componentsRef.current = components;
+  }, []);
+
+  const clearScene = async () => {
+    console.log("Limpiando escena...");
+    if (!componentsRef.current) return;
+    const fragments = componentsRef.current.get(OBC.FragmentsManager);
+    
+    // En v3, usamos fragments.list y fragments.core.disposeModel()
+    const modelIds = Array.from((fragments as any).list?.keys?.() ?? []);
+    for (const id of modelIds) {
+      await fragments.core.disposeModel(id);
+    }
+    
+    // También limpiar cualquier grupo manual (como el de ejemplo)
+    const worlds = componentsRef.current.get(OBC.Worlds);
+    const world = worlds.list.values().next().value;
+    if (world) {
+      const toRemove: THREE.Object3D[] = [];
+      world.scene.three.traverse((obj) => {
+        if (obj instanceof THREE.Group && obj.name === "SampleGroup") {
+          toRemove.push(obj);
+        }
+      });
+      toRemove.forEach(obj => {
+        world.scene.three.remove(obj);
+        console.log("Removido objeto de ejemplo.");
+      });
+    }
+    setElements([]);
+    setSummaries([]);
+  };
+
+  const applyJsonText = useCallback(async (text: string) => {
+    const rawData = JSON.parse(text);
+    let propertiesMap: Record<string, any> = {};
+
+    if (Array.isArray(rawData)) {
+      rawData.forEach(item => {
+        const id = item.ExpressID || item.expressID || item.id || item.Id || item.GlobalId || item.globalId || item.Guid || item.GUID;
+        if (id !== undefined && id !== null) {
+          propertiesMap[id.toString()] = item;
+        }
+      });
+    } else {
+      propertiesMap = rawData;
+    }
+
+    const targetsLowerToOriginal = PRIORITY_PROPS.reduce<Record<string, string>>((acc, p) => {
+      acc[p.trim().toLowerCase()] = p;
+      return acc;
+    }, {});
+    const targetKeySet = new Set(Object.keys(targetsLowerToOriginal));
+
+    const unwrap = (attr: any) => {
+      if (attr === undefined || attr === null) return undefined;
+      if (typeof attr === 'object') {
+        if ('value' in attr) return attr.value;
+        if ('NominalValue' in attr) {
+          const nv = attr.NominalValue;
+          return (nv && typeof nv === 'object' && 'value' in nv) ? nv.value : nv;
+        }
+        if ('QuantityValue' in attr) {
+          const qv = attr.QuantityValue;
+          return (qv && typeof qv === 'object' && 'value' in qv) ? qv.value : qv;
+        }
+      }
+      return attr;
+    };
+
+    const extractIntegrated = (root: any) => {
+      const integratedProps: Record<string, any> = {};
+      let foundVolume: number | null = null;
+      let foundName: string | null = null;
+      let derivedClassification: string | null = null;
+      let derivedCategory: string | null = null;
+      let derivedType: string | null = null;
+      let derivedDetail: string | null = null;
+      let derivedLevel: string | null = null;
+      let derivedMaterial: string | null = null;
+
+      const stack: any[] = [root];
+      const seen = new WeakSet<object>();
+      let nodes = 0;
+      const maxNodes = 8000;
+
+      const setIntegratedIfMissing = (key: string, value: unknown) => {
+        if (integratedProps[key] !== undefined) return;
+        if (value === undefined || value === null) return;
+        const stringValue = typeof value === 'string' ? value.trim() : value;
+        if (stringValue === '') return;
+        integratedProps[key] = stringValue;
+      };
+
+      const setDerivedIfEmpty = (current: string | null, value: unknown) => {
+        if (current) return current;
+        if (value === undefined || value === null) return current;
+        const normalized = String(value).trim();
+        return normalized ? normalized : current;
+      };
+
+      while (stack.length > 0 && nodes < maxNodes) {
+        const cur = stack.pop();
+        if (!cur) continue;
+        const t = typeof cur;
+        if (t !== 'object') continue;
+        if (seen.has(cur as object)) continue;
+        seen.add(cur as object);
+        nodes++;
+
+        if (Array.isArray(cur)) {
+          for (let i = 0; i < cur.length; i++) stack.push(cur[i]);
+          continue;
+        }
+
+        for (const key in cur) {
+          const rawVal = (cur as any)[key];
+          const kl = key.trim().toLowerCase();
+
+          if (targetKeySet.has(kl)) {
+            const original = targetsLowerToOriginal[kl];
+            if (integratedProps[original] === undefined) {
+              const v = unwrap(rawVal);
+              if (v !== undefined) integratedProps[original] = v;
+            }
+          }
+
+          const unwrapped = unwrap(rawVal);
+
+          if (kl === 'clasificacion' || kl === 'clasificación') {
+            derivedClassification = setDerivedIfEmpty(derivedClassification, unwrapped);
+          }
+          if (kl === 'subproyectos integrado' || kl === 'subproyecto' || kl === 'sistema') {
+            derivedClassification = setDerivedIfEmpty(derivedClassification, unwrapped);
+          }
+          if (kl === 'categoria' || kl === 'categoría') {
+            derivedCategory = setDerivedIfEmpty(derivedCategory, unwrapped);
+          }
+          if (kl === 'tipo') {
+            derivedType = setDerivedIfEmpty(derivedType, unwrapped);
+          }
+          if (kl === 'familia y tipo' || kl === 'familia') {
+            derivedDetail = setDerivedIfEmpty(derivedDetail, unwrapped);
+          }
+          if (kl === 'nivel' || kl === 'nivel integrado' || kl === 'nivel de tabla de planificacion' || kl === 'nivel de tabla de planificación') {
+            derivedLevel = setDerivedIfEmpty(derivedLevel, unwrapped);
+          }
+          if (kl === 'material' || kl === 'material integrado') {
+            derivedMaterial = setDerivedIfEmpty(derivedMaterial, unwrapped);
+          }
+
+          if (foundVolume === null && (kl.includes('volumen') || kl.includes('volume'))) {
+            const v = unwrapped;
+            const n = typeof v === 'number' ? v : Number(v);
+            if (Number.isFinite(n) && n > 0) foundVolume = n;
+          }
+
+          if (foundName === null && kl.includes('nombre') && (kl.includes('integrado') || kl === 'nombre')) {
+            const v = unwrapped;
+            if (v !== undefined && v !== null) foundName = String(v);
+          }
+
+          if (rawVal && typeof rawVal === 'object') stack.push(rawVal);
+        }
+
+        if (Object.keys(integratedProps).length >= PRIORITY_PROPS.length && foundVolume !== null && foundName !== null) {
+          break;
+        }
+      }
+
+      const volVal = integratedProps["VOLUMEN INTEGRADO"];
+      if (volVal !== undefined) {
+        const n = typeof volVal === 'number' ? volVal : Number(volVal);
+        if (Number.isFinite(n) && n > 0) foundVolume = n;
+      }
+
+      const nameVal = integratedProps["NOMBRE INTEGRADO"];
+      if (nameVal !== undefined && nameVal !== null) foundName = String(nameVal);
+
+      const finalClassification = integratedProps["CLASIFICACIÓN"] ?? integratedProps["CLASIFICACION"] ?? derivedClassification ?? derivedCategory ?? root?.ifcType ?? root?.type;
+      const finalCategory = integratedProps["CATEGORÍA"] ?? integratedProps["CATEGORIA"] ?? derivedCategory ?? root?.ifcType ?? root?.type;
+      const finalType = integratedProps["TIPO"] ?? derivedType ?? foundName ?? root?.ObjectType ?? root?.ifcType ?? root?.type;
+      const finalDetail = integratedProps["DETALLE"] ?? derivedDetail ?? root?.Name;
+      const finalLevel = integratedProps["NIVEL INTEGRADO"] ?? derivedLevel;
+      const finalMaterial = integratedProps["MATERIAL INTEGRADO"] ?? derivedMaterial;
+
+      setIntegratedIfMissing("CLASIFICACIÓN", finalClassification);
+      setIntegratedIfMissing("CLASIFICACION", finalClassification);
+      setIntegratedIfMissing("CATEGORÍA", finalCategory);
+      setIntegratedIfMissing("CATEGORIA", finalCategory);
+      setIntegratedIfMissing("TIPO", finalType);
+      setIntegratedIfMissing("DETALLE", finalDetail);
+      setIntegratedIfMissing("NIVEL INTEGRADO", finalLevel);
+      setIntegratedIfMissing("MATERIAL INTEGRADO", finalMaterial);
+      if (foundName === null && finalType) foundName = String(finalType);
+
+      return { integratedProps, foundVolume, foundName };
+    };
+
+    setElements(prevElements => {
+      if (prevElements.length === 0) return prevElements;
+
+      const updatedElements = prevElements.map(el => {
+        let props = propertiesMap[el.id];
+        if (!props && el.globalId) {
+          props = propertiesMap[el.globalId];
+        }
+        if (!props) return el;
+        const { integratedProps, foundVolume, foundName } = extractIntegrated(props);
+        const updatedEl = {
+          ...el,
+          properties: { ...el.properties, ...props, ...integratedProps }
+        };
+
+        if (foundVolume !== null) {
+          updatedEl.volume = foundVolume;
+        }
+        if (foundName) {
+          updatedEl.name = foundName;
+        }
+
+        return updatedEl;
+      });
+
+      const newCategoryMap: Record<string, { totalVolume: number; count: number }> = {};
+      updatedElements.forEach(el => {
+        if (!newCategoryMap[el.category]) {
+          newCategoryMap[el.category] = { totalVolume: 0, count: 0 };
+        }
+        newCategoryMap[el.category].totalVolume += el.volume;
+        newCategoryMap[el.category].count += 1;
+      });
+
+      setSummaries(Object.entries(newCategoryMap).map(([category, data]) => ({
+        category,
+        totalVolume: data.totalVolume,
+        count: data.count
+      })));
+
+      return updatedElements;
+    });
+  }, []);
+
+  const handleJsonUpload = async (file: File) => {
+    setIsLoading(true);
+    try {
+      await applyJsonText(await file.text());
+    } catch (error) {
+      console.error("Error procesando JSON:", error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const loadFragBytes = useCallback(async (fragName: string, bytes: Uint8Array) => {
+    if (!componentsRef.current) return null;
+    await clearScene();
+    const fragments = componentsRef.current.get(OBC.FragmentsManager);
+
+    if (!fragments.initialized) {
+      let attempts = 0;
+      while (!fragments.initialized && attempts < 10) {
+        await new Promise(resolve => setTimeout(resolve, 500));
+        attempts++;
+      }
+      if (!fragments.initialized) {
+        throw new Error("No se pudo inicializar FragmentsManager. Revisa la carga del worker.");
+      }
+    }
+
+    const model = await withTimeout<any>(
+      fragments.core.load(bytes, { modelId: fragName }),
+      60000,
+      "Tiempo de espera agotado cargando el archivo .frag"
+    );
+
+    if (!model) return null;
+
+    const worlds = componentsRef.current.get(OBC.Worlds);
+    const world = worlds.list.values().next().value;
+    if (!world) return model;
+
+    const modelObject = model.object ?? model;
+
+    try {
+      if (model.uuid !== fragName) model.uuid = fragName;
+    } catch {
+    }
+
+    try {
+      if (typeof model.useCamera === 'function') model.useCamera(world.camera.three);
+    } catch {
+    }
+
+    try {
+      const list = (fragments as any).list;
+      if (list?.set && !list.has?.(model.uuid)) list.set(model.uuid, model);
+    } catch {
+    }
+
+    if (!world.scene.three.children.includes(modelObject)) {
+      world.scene.three.add(modelObject);
+    }
+
+    try {
+      (modelObject as any).traverse?.((child: any) => {
+        if (child?.isMesh) {
+          world.meshes?.add?.(child);
+          if (componentsRef.current?.meshes && Array.isArray((componentsRef.current as any).meshes)) {
+            (componentsRef.current as any).meshes.push(child);
+          }
+        }
+      });
+    } catch {
+    }
+
+    try {
+      await fragments.core.update(true);
+    } catch {
+    }
+
+    setTimeout(() => {
+      if (world.camera.hasCameraControls()) {
+        const bbox = new THREE.Box3().setFromObject(modelObject);
+        const sphere = new THREE.Sphere();
+        bbox.getBoundingSphere(sphere);
+        world.camera.controls.fitToSphere(sphere, true);
+      }
+      try {
+        fragments.core.update(true);
+      } catch {
+      }
+    }, 300);
+
+    await processModel(model);
+    return model;
+  }, [processModel]);
+
+  const loadIfcBytes = useCallback(async (ifcName: string, bytes: Uint8Array) => {
+    if (!componentsRef.current) return null;
+    await clearScene();
+
+    const fragments = componentsRef.current.get(OBC.FragmentsManager);
+    if (!fragments.initialized) {
+      let attempts = 0;
+      while (!fragments.initialized && attempts < 10) {
+        await new Promise((resolve) => setTimeout(resolve, 500));
+        attempts++;
+      }
+      if (!fragments.initialized) {
+        throw new Error('No se pudo inicializar FragmentsManager para cargar el archivo IFC.');
+      }
+    }
+
+    const ifcLoader = componentsRef.current.get(OBC.IfcLoader);
+    const model = await withTimeout<any>(
+      ifcLoader.load(bytes, true, stripModelExtension(ifcName) || ifcName),
+      120000,
+      'Tiempo de espera agotado cargando el archivo .ifc',
+    );
+
+    if (!model) return null;
+
+    const worlds = componentsRef.current.get(OBC.Worlds);
+    const world = worlds.list.values().next().value;
+    if (!world) return model;
+
+    const modelObject = model.object ?? model;
+
+    try {
+      if (model.uuid !== ifcName) model.uuid = ifcName;
+    } catch {
+    }
+
+    try {
+      if (typeof model.useCamera === 'function') model.useCamera(world.camera.three);
+    } catch {
+    }
+
+    try {
+      const list = (fragments as any).list;
+      if (list?.set && !list.has?.(model.uuid)) list.set(model.uuid, model);
+    } catch {
+    }
+
+    if (!world.scene.three.children.includes(modelObject)) {
+      world.scene.three.add(modelObject);
+    }
+
+    try {
+      (modelObject as any).traverse?.((child: any) => {
+        if (child?.isMesh) {
+          world.meshes?.add?.(child);
+          if (componentsRef.current?.meshes && Array.isArray((componentsRef.current as any).meshes)) {
+            (componentsRef.current as any).meshes.push(child);
+          }
+        }
+      });
+    } catch {
+    }
+
+    try {
+      await fragments.core.update(true);
+    } catch {
+    }
+
+    setTimeout(() => {
+      if (world.camera.hasCameraControls()) {
+        const bbox = new THREE.Box3().setFromObject(modelObject);
+        const sphere = new THREE.Sphere();
+        bbox.getBoundingSphere(sphere);
+        world.camera.controls.fitToSphere(sphere, true);
+      }
+      try {
+        fragments.core.update(true);
+      } catch {
+      }
+    }, 300);
+
+    await processModel(model);
+    return model;
+  }, [processModel]);
+
+  const putLru = <T,>(map: Map<string, T>, key: string, value: T, maxEntries: number) => {
+    if (map.has(key)) map.delete(key);
+    map.set(key, value);
+    while (map.size > maxEntries) {
+      const firstKey = map.keys().next().value as string | undefined;
+      if (firstKey === undefined) break;
+      map.delete(firstKey);
+    }
+  };
+
+  const idbPromiseRef = useRef<Promise<IDBDatabase> | null>(null);
+
+  const openDiskCache = () => {
+    if (!('indexedDB' in window)) return null;
+    if (idbPromiseRef.current) return idbPromiseRef.current;
+
+    idbPromiseRef.current = new Promise<IDBDatabase>((resolve, reject) => {
+      const req = indexedDB.open(MODEL_CACHE_DB_NAME, 1);
+      req.onupgradeneeded = () => {
+        const db = req.result;
+        if (!db.objectStoreNames.contains('frag')) db.createObjectStore('frag', { keyPath: 'url' });
+        if (!db.objectStoreNames.contains('json')) db.createObjectStore('json', { keyPath: 'url' });
+      };
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error);
+    });
+
+    return idbPromiseRef.current;
+  };
+
+  const idbDelete = async (storeName: 'frag' | 'json', url: string) => {
+    try {
+      const dbPromise = openDiskCache();
+      if (!dbPromise) return;
+      const db = await dbPromise;
+      await new Promise<void>((resolve) => {
+        const tx = db.transaction(storeName, 'readwrite');
+        tx.oncomplete = () => resolve();
+        tx.onerror = () => resolve();
+        tx.objectStore(storeName).delete(url);
+      });
+    } catch {
+    }
+  };
+
+  const idbGet = async <T,>(storeName: 'frag' | 'json', url: string): Promise<T | null> => {
+    try {
+      const dbPromise = openDiskCache();
+      if (!dbPromise) return null;
+      const db = await dbPromise;
+      return await new Promise<T | null>((resolve) => {
+        const tx = db.transaction(storeName, 'readonly');
+        const store = tx.objectStore(storeName);
+        const req = store.get(url);
+        req.onsuccess = () => resolve((req.result as T) ?? null);
+        req.onerror = () => resolve(null);
+      });
+    } catch {
+      return null;
+    }
+  };
+
+  const purgeExpiredDiskCache = useCallback(async () => {
+    try {
+      const dbPromise = openDiskCache();
+      if (!dbPromise) return;
+      const db = await dbPromise;
+      for (const storeName of ['frag', 'json'] as const) {
+        const all = await new Promise<any[]>((resolve) => {
+          const tx = db.transaction(storeName, 'readonly');
+          const req = tx.objectStore(storeName).getAll();
+          req.onsuccess = () => resolve((req.result as any[]) ?? []);
+          req.onerror = () => resolve([]);
+        });
+        const expired = all.filter((item) => !isModelCacheFresh(item?.ts));
+        if (expired.length === 0) continue;
+        await new Promise<void>((resolve) => {
+          const tx = db.transaction(storeName, 'readwrite');
+          tx.oncomplete = () => resolve();
+          tx.onerror = () => resolve();
+          const store = tx.objectStore(storeName);
+          for (const item of expired) {
+            if (item?.url) store.delete(item.url);
+          }
+        });
+      }
+    } catch {
+    }
+  }, []);
+
+  useEffect(() => {
+    void purgeExpiredDiskCache();
+  }, [purgeExpiredDiskCache]);
+
+  const idbPut = async (storeName: 'frag' | 'json', record: any, maxEntries: number) => {
+    try {
+      const dbPromise = openDiskCache();
+      if (!dbPromise) return;
+      const db = await dbPromise;
+      await new Promise<void>((resolve) => {
+        const tx = db.transaction(storeName, 'readwrite');
+        tx.oncomplete = () => resolve();
+        tx.onerror = () => resolve();
+        tx.objectStore(storeName).put(record);
+      });
+
+      const all = await new Promise<any[]>((resolve) => {
+        const tx = db.transaction(storeName, 'readonly');
+        const req = tx.objectStore(storeName).getAll();
+        req.onsuccess = () => resolve((req.result as any[]) ?? []);
+        req.onerror = () => resolve([]);
+      });
+      if (all.length <= maxEntries) return;
+
+      all.sort((a, b) => Number(a?.ts ?? 0) - Number(b?.ts ?? 0));
+      const toDelete = all.slice(0, Math.max(0, all.length - maxEntries));
+      await new Promise<void>((resolve) => {
+        const tx = db.transaction(storeName, 'readwrite');
+        tx.oncomplete = () => resolve();
+        tx.onerror = () => resolve();
+        const store = tx.objectStore(storeName);
+        toDelete.forEach((r) => {
+          if (r?.url) store.delete(r.url);
+        });
+      });
+    } catch {
+    }
+  };
+
+  const fetchArrayBufferCached = useCallback(async (
+    url: string,
+    signalOrOptions?: AbortSignal | { signal?: AbortSignal; forceRefresh?: boolean }
+  ) => {
+    const options = signalOrOptions && typeof signalOrOptions === 'object' && (('signal' in signalOrOptions) || ('forceRefresh' in signalOrOptions))
+      ? signalOrOptions as { signal?: AbortSignal; forceRefresh?: boolean }
+      : { signal: signalOrOptions as AbortSignal | undefined };
+    const signal = options.signal;
+    const forceRefresh = options.forceRefresh === true;
+    let networkError: unknown = null;
+
+    if (networkStatus === 'online') {
+      try {
+        const requestUrl = forceRefresh ? new URL(url, window.location.href) : null;
+        if (requestUrl) requestUrl.searchParams.set('_', String(Date.now()));
+        const res = await fetch(requestUrl ? requestUrl.toString() : url, { signal, cache: 'no-store' });
+        if (!res.ok) throw new Error(`No se pudo descargar ${url} (${res.status})`);
+        if ('caches' in window) {
+          try {
+            const cache = await caches.open(MODEL_CACHE_RUNTIME_NAME);
+            await cache.put(url, res.clone());
+          } catch {
+          }
+        }
+        const bytes = new Uint8Array(await res.arrayBuffer());
+        putLru(remoteCacheRef.current.fragBytesByUrl, url, bytes, 2);
+        const buffer = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
+        void idbPut('frag', { url, ts: Date.now(), data: buffer }, 6);
+        updateLastServerSync(Date.now());
+        return bytes;
+      } catch (e) {
+        if (e instanceof DOMException && e.name === 'AbortError') throw e;
+        networkError = e;
+      }
+    }
+
+    const mem = remoteCacheRef.current.fragBytesByUrl.get(url);
+    if (mem) return mem;
+
+    const disk = await idbGet<{ url: string; ts: number; data: ArrayBuffer }>('frag', url);
+    if (disk?.data && isModelCacheFresh(disk.ts)) {
+      const bytes = new Uint8Array(disk.data);
+      putLru(remoteCacheRef.current.fragBytesByUrl, url, bytes, 2);
+      void idbPut('frag', { url, ts: Date.now(), data: disk.data }, 6);
+      return bytes;
+    }
+    if (disk && !isModelCacheFresh(disk.ts)) {
+      void idbDelete('frag', url);
+      if ('caches' in window) {
+        try {
+          const cache = await caches.open(MODEL_CACHE_RUNTIME_NAME);
+          await cache.delete(url);
+        } catch {
+        }
+      }
+    }
+
+    if (networkError) {
+      throw networkError instanceof Error ? networkError : new Error(`No se pudo descargar ${url}`);
+    }
+
+    throw new Error(`Sin conexion estable y no hay copia local de ${url}`);
+  }, [networkStatus, updateLastServerSync]);
+
+  const fetchTextCached = useCallback(async (
+    url: string,
+    signalOrOptions?: AbortSignal | { signal?: AbortSignal; forceRefresh?: boolean }
+  ) => {
+    const options = signalOrOptions && typeof signalOrOptions === 'object' && (('signal' in signalOrOptions) || ('forceRefresh' in signalOrOptions))
+      ? signalOrOptions as { signal?: AbortSignal; forceRefresh?: boolean }
+      : { signal: signalOrOptions as AbortSignal | undefined };
+    const signal = options.signal;
+    const forceRefresh = options.forceRefresh === true;
+    let networkError: unknown = null;
+
+    if (networkStatus === 'online') {
+      try {
+        const requestUrl = forceRefresh ? new URL(url, window.location.href) : null;
+        if (requestUrl) requestUrl.searchParams.set('_', String(Date.now()));
+        const res = await fetch(requestUrl ? requestUrl.toString() : url, { signal, cache: 'no-store' });
+        if (!res.ok) throw new Error(`No se pudo descargar ${url} (${res.status})`);
+        if ('caches' in window) {
+          try {
+            const cache = await caches.open(MODEL_CACHE_RUNTIME_NAME);
+            await cache.put(url, res.clone());
+          } catch {
+          }
+        }
+        const text = await res.text();
+        putLru(remoteCacheRef.current.jsonTextByUrl, url, text, 2);
+        void idbPut('json', { url, ts: Date.now(), data: text }, 6);
+        updateLastServerSync(Date.now());
+        return text;
+      } catch (e) {
+        if (e instanceof DOMException && e.name === 'AbortError') throw e;
+        networkError = e;
+      }
+    }
+
+    const mem = remoteCacheRef.current.jsonTextByUrl.get(url);
+    if (mem) return mem;
+
+    const disk = await idbGet<{ url: string; ts: number; data: string }>('json', url);
+    if (disk?.data && isModelCacheFresh(disk.ts)) {
+      putLru(remoteCacheRef.current.jsonTextByUrl, url, disk.data, 2);
+      void idbPut('json', { url, ts: Date.now(), data: disk.data }, 6);
+      return disk.data;
+    }
+    if (disk && !isModelCacheFresh(disk.ts)) {
+      void idbDelete('json', url);
+      if ('caches' in window) {
+        try {
+          const cache = await caches.open(MODEL_CACHE_RUNTIME_NAME);
+          await cache.delete(url);
+        } catch {
+        }
+      }
+    }
+
+    if (networkError) {
+      throw networkError instanceof Error ? networkError : new Error(`No se pudo descargar ${url}`);
+    }
+
+    throw new Error(`Sin conexion estable y no hay copia local de ${url}`);
+  }, [networkStatus, updateLastServerSync]);
+
+  const fetchDriveScriptBinaryBytes = useCallback(async (scriptUrl: string, id: string, format: 'frag' | 'ifc', signal?: AbortSignal) => {
+    const cacheKey = `drive-script:${format}:${id}`;
+    const base64ToBytes = (b64: string) => {
+      const binary = atob(b64);
+      const out = new Uint8Array(binary.length);
+      for (let i = 0; i < binary.length; i++) out[i] = binary.charCodeAt(i);
+      return out;
+    };
+
+    let networkError: unknown = null;
+
+    if (networkStatus === 'online') {
+      try {
+        const chunkLimit = 512 * 1024;
+        const chunks: Uint8Array[] = [];
+        let total = 0;
+        let offset = 0;
+        let safety = 0;
+
+        while (true) {
+          if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
+          safety++;
+          if (safety > 20000) throw new Error('Demasiados bloques descargados. Revisa el archivo.');
+
+          const url = new URL(scriptUrl);
+          url.searchParams.set('action', 'chunk');
+          url.searchParams.set('id', id);
+          url.searchParams.set('offset', String(offset));
+          url.searchParams.set('limit', String(chunkLimit));
+          url.searchParams.set('t', String(Date.now()));
+
+          const data = await jsonpRequestWithRetry<{ total: number; nextOffset: number; done: boolean; data: string; error?: string }>(url, { signal, timeoutMs: 30000, retries: 3 });
+          if (data && typeof (data as any).error === 'string' && String((data as any).error).trim()) {
+            throw new Error(String((data as any).error));
+          }
+          if (!Number.isFinite(data.total) || !Number.isFinite(data.nextOffset) || typeof data.done !== 'boolean') {
+            throw new Error('Respuesta inválida del servidor de Drive (chunk).');
+          }
+
+          total = data.total;
+          const bytes = base64ToBytes(String(data.data || ''));
+          chunks.push(bytes);
+          offset = data.nextOffset;
+          if (data.done) break;
+        }
+
+        const merged = new Uint8Array(total);
+        let pos = 0;
+        for (const c of chunks) {
+          merged.set(c, pos);
+          pos += c.length;
+        }
+
+        putLru(remoteCacheRef.current.fragBytesByUrl, cacheKey, merged, 2);
+        const buffer = merged.buffer.slice(merged.byteOffset, merged.byteOffset + merged.byteLength);
+        void idbPut('frag', { url: cacheKey, ts: Date.now(), data: buffer }, 6);
+        updateLastServerSync(Date.now());
+        return merged;
+      } catch (e) {
+        if (e instanceof DOMException && e.name === 'AbortError') throw e;
+        networkError = e;
+      }
+    }
+
+    const mem = remoteCacheRef.current.fragBytesByUrl.get(cacheKey);
+    if (mem) return mem;
+
+    const disk = await idbGet<{ url: string; ts: number; data: ArrayBuffer }>('frag', cacheKey);
+    if (disk?.data && isModelCacheFresh(disk.ts)) {
+      const bytes = new Uint8Array(disk.data);
+      putLru(remoteCacheRef.current.fragBytesByUrl, cacheKey, bytes, 2);
+      void idbPut('frag', { url: cacheKey, ts: Date.now(), data: disk.data }, 6);
+      return bytes;
+    }
+    if (disk && !isModelCacheFresh(disk.ts)) {
+      void idbDelete('frag', cacheKey);
+    }
+
+    if (networkError) {
+      throw networkError instanceof Error ? networkError : new Error('No se pudo descargar el archivo del modelo desde Drive.');
+    }
+
+    throw new Error('Sin conexion estable y no hay copia local del modelo.');
+  }, [networkStatus, updateLastServerSync]);
+
+  const fetchDriveScriptJsonText = useCallback(async (scriptUrl: string, id: string, signal?: AbortSignal) => {
+    const cacheKey = `drive-script:json:${id}`;
+    let networkError: unknown = null;
+
+    if (networkStatus === 'online') {
+      try {
+        const url = new URL(scriptUrl);
+        url.searchParams.set('action', 'text');
+        url.searchParams.set('id', id);
+        url.searchParams.set('t', String(Date.now()));
+
+        const data = await jsonpRequestWithRetry<{ text?: string; error?: string }>(url, { signal, timeoutMs: 30000, retries: 3 });
+        if (data && typeof (data as any).error === 'string' && String((data as any).error).trim()) {
+          throw new Error(String((data as any).error));
+        }
+        const text = typeof data.text === 'string' ? data.text : '';
+        putLru(remoteCacheRef.current.jsonTextByUrl, cacheKey, text, 2);
+        void idbPut('json', { url: cacheKey, ts: Date.now(), data: text }, 6);
+        updateLastServerSync(Date.now());
+        return text;
+      } catch (e) {
+        if (e instanceof DOMException && e.name === 'AbortError') throw e;
+        networkError = e;
+      }
+    }
+
+    const mem = remoteCacheRef.current.jsonTextByUrl.get(cacheKey);
+    if (mem) return mem;
+
+    const disk = await idbGet<{ url: string; ts: number; data: string }>('json', cacheKey);
+    if (disk?.data && isModelCacheFresh(disk.ts)) {
+      putLru(remoteCacheRef.current.jsonTextByUrl, cacheKey, disk.data, 2);
+      void idbPut('json', { url: cacheKey, ts: Date.now(), data: disk.data }, 6);
+      return disk.data;
+    }
+    if (disk && !isModelCacheFresh(disk.ts)) {
+      void idbDelete('json', cacheKey);
+    }
+
+    if (networkError) {
+      throw networkError instanceof Error ? networkError : new Error('No se pudo descargar el JSON desde Drive.');
+    }
+
+    throw new Error('Sin conexion estable y no hay copia local del JSON.');
+  }, [networkStatus, updateLastServerSync]);
+
+  const loadRemoteModel = useCallback(async (remote: RemoteModel, options?: { forceRefresh?: boolean }) => {
+    if (!componentsRef.current) return;
+    const forceRefresh = options?.forceRefresh === true;
+    if (loadAbortRef.current) {
+      loadAbortRef.current.abort();
+    }
+    const controller = new AbortController();
+    loadAbortRef.current = controller;
+    if (forceRefresh) {
+      setRefreshingModelName(remote.name);
+    }
+    setIsLoading(true);
+    setShowWelcome(false);
+    setSelectedRemoteModelName(remote.name);
+    try {
+      if (forceRefresh) {
+        await fetchAvailableModels({ silent: true, force: true });
+      }
+      const latestRemote = availableModelsRef.current.find((item) => item.name === remote.name) ?? remote;
+      const normalizedRemote = normalizeRemoteModel(latestRemote);
+
+      const fileUrl = normalizedRemote.format === 'ifc' ? normalizedRemote.ifcUrl : normalizedRemote.fragUrl;
+
+      if (fileUrl) {
+        const filePromise = fetchArrayBufferCached(fileUrl, { signal: controller.signal, forceRefresh });
+        const jsonPromise = normalizedRemote.jsonUrl
+          ? fetchTextCached(normalizedRemote.jsonUrl, { signal: controller.signal, forceRefresh })
+          : Promise.resolve<string | null>(null);
+        const [fileBytes, jsonText] = await Promise.all([filePromise, jsonPromise]);
+
+        if (controller.signal.aborted) return;
+        if (normalizedRemote.format === 'ifc') {
+          await loadIfcBytes(normalizedRemote.name, fileBytes);
+        } else {
+          await loadFragBytes(normalizedRemote.name, fileBytes);
+        }
+
+        if (controller.signal.aborted) return;
+        if (jsonText) {
+          await applyJsonText(jsonText);
+        }
+        rememberBufferedModel(
+          normalizedRemote,
+          [fileUrl, normalizedRemote.jsonUrl ?? ''].filter(Boolean),
+        );
+        rememberRecentModel(normalizedRemote);
+        return;
+      }
+
+      if (normalizedRemote.drive?.fileId) {
+        const filePromise = fetchDriveScriptBinaryBytes(
+          normalizedRemote.drive.scriptUrl,
+          normalizedRemote.drive.fileId,
+          normalizedRemote.format,
+          controller.signal,
+        );
+        const jsonPromise = normalizedRemote.drive.jsonId
+          ? fetchDriveScriptJsonText(normalizedRemote.drive.scriptUrl, normalizedRemote.drive.jsonId, controller.signal)
+          : Promise.resolve<string | null>(null);
+        const [fileBytes, jsonText] = await Promise.all([filePromise, jsonPromise]);
+
+        if (controller.signal.aborted) return;
+        if (normalizedRemote.format === 'ifc') {
+          await loadIfcBytes(normalizedRemote.name, fileBytes);
+        } else {
+          await loadFragBytes(normalizedRemote.name, fileBytes);
+        }
+
+        if (controller.signal.aborted) return;
+        if (jsonText) await applyJsonText(jsonText);
+        rememberBufferedModel(
+          normalizedRemote,
+          [
+            `drive-script:${normalizedRemote.format}:${normalizedRemote.drive.fileId}`,
+            normalizedRemote.drive.jsonId ? `drive-script:json:${normalizedRemote.drive.jsonId}` : '',
+          ].filter(Boolean),
+        );
+        rememberRecentModel(normalizedRemote);
+        return;
+      }
+
+      throw new Error('Modelo remoto sin URL de descarga.');
+    } catch (e) {
+      if (e instanceof DOMException && e.name === 'AbortError') return;
+      console.error('Error cargando modelo remoto:', e);
+      setModelsNotice(
+        forceRefresh
+          ? 'No se pudo actualizar este modelo en linea. Se mantiene la ultima copia disponible.'
+          : 'No se pudo cargar este modelo con la fuente remota actual. Revisa la conexion o intenta actualizar la lista.',
+      );
+    } finally {
+      if (forceRefresh) {
+        setRefreshingModelName((prev) => (prev === remote.name ? null : prev));
+      }
+      setIsLoading(false);
+    }
+  }, [applyJsonText, fetchArrayBufferCached, fetchAvailableModels, fetchDriveScriptBinaryBytes, fetchDriveScriptJsonText, fetchTextCached, loadFragBytes, loadIfcBytes, rememberBufferedModel, rememberRecentModel]);
+
+  useEffect(() => {
+    loadRemoteModelRef.current = loadRemoteModel;
+  }, [loadRemoteModel]);
+
+  const previousNetworkStatusRef = useRef(networkStatus);
+
+  useEffect(() => {
+    const previous = previousNetworkStatusRef.current;
+    previousNetworkStatusRef.current = networkStatus;
+    if (previous === networkStatus) return;
+    if (networkStatus !== 'online') return;
+    refreshOfflineReadyNames();
+    if (!selectedRemoteModelName || isLoading) return;
+    const currentModel = availableModelsRef.current.find((item) => item.name === selectedRemoteModelName);
+    if (!currentModel || !loadRemoteModelRef.current) return;
+    setModelsNotice('Conexion recuperada. Buscando actualizaciones del modelo actual...');
+    void loadRemoteModelRef.current(currentModel, { forceRefresh: true });
+  }, [isLoading, networkStatus, refreshOfflineReadyNames, selectedRemoteModelName]);
+
+  const resetFilters = () => {
+    setSelectedClassifications([]);
+    setSelectedCategories([]);
+    setSelectedSubCategories([]);
+    setSelectedLevels([]);
+    setSelectedDiameter('Todos');
+    setAppliedClassifications([]);
+    setAppliedCategories([]);
+    setAppliedSubCategories([]);
+    setAppliedLevels([]);
+    setAppliedDiameter('Todos');
+  };
+
+  const handleChangeStatus = useCallback((id: string, status: PurchaseStatus) => {
+    const at = new Date().toISOString();
+    setElementStatuses((prev) => {
+      if (prev[id] === status) return prev;
+      return { ...prev, [id]: status };
+    });
+    setElementHistory((prev) => {
+      const current = prev[id] ?? [];
+      const last = current.length > 0 ? current[current.length - 1] : null;
+      if (last && last.status === status) return prev;
+      return { ...prev, [id]: [...current, { status, at }] };
+    });
+    enqueueRemoteChange(id, status, at);
+  }, [enqueueRemoteChange]);
+
+  const handleChangeStatusMany = useCallback((ids: string[], status: PurchaseStatus) => {
+    const at = new Date().toISOString();
+    setElementStatuses((prev) => {
+      let next: Record<string, PurchaseStatus> | null = null;
+      for (const id of ids) {
+        if (prev[id] !== status) {
+          if (!next) next = { ...prev };
+          next[id] = status;
+        }
+      }
+      return next ?? prev;
+    });
+    setElementHistory((prev) => {
+      let next: Record<string, HistoryEntry[]> | null = null;
+      for (const id of ids) {
+        const current = prev[id] ?? [];
+        const last = current.length > 0 ? current[current.length - 1] : null;
+        if (last && last.status === status) continue;
+        if (!next) next = { ...prev };
+        next[id] = [...current, { status, at }];
+      }
+      return next ?? prev;
+    });
+    for (const id of ids) enqueueRemoteChange(id, status, at);
+  }, [enqueueRemoteChange]);
+
+  const [expandedModelGroups, setExpandedModelGroups] = useState<Record<string, boolean>>({
+    ESTRUCTURA: true,
+    GENERAL: true
+  });
+  const onBack = useCallback(() => {
+    try {
+      if (window.history.length > 1) window.history.back();
+      else window.location.href = '../home.html';
+    } catch {
+      window.location.href = '../home.html';
+    }
+  }, []);
+
+  useEffect(() => {
+    const meta = document.querySelector('meta[name="x-app-version"]') as HTMLMetaElement | null;
+    const appId = meta?.dataset?.app || meta?.getAttribute('data-app') || 'cantidades';
+    const version = meta?.content || meta?.getAttribute('content') || '';
+    const key = `${appId}:appVersion`;
+    let stored = '';
+    try { stored = localStorage.getItem(key) || ''; } catch {}
+
+    if (version && stored && stored !== version) {
+      try { localStorage.setItem(key, version); } catch {}
+      if (networkStatus === 'online') void fetchAvailableModels({ silent: true });
+    } else if (version && !stored) {
+      try { localStorage.setItem(key, version); } catch {}
+    }
+  }, [fetchAvailableModels, networkStatus]);
+
+  const networkBadge = useMemo(() => {
+    if (networkStatus === 'online') {
+      return {
+        label: 'En linea',
+        className: 'bg-emerald-50 text-emerald-700 border-emerald-200'
+      };
+    }
+    if (networkStatus === 'unstable') {
+      return {
+        label: 'Red inestable',
+        className: 'bg-amber-50 text-amber-700 border-amber-200'
+      };
+    }
+    return {
+      label: 'Sin conexion',
+      className: 'bg-slate-100 text-slate-600 border-slate-200'
+    };
+  }, [networkStatus]);
+
+  return (
+    <div className="flex flex-col h-screen w-screen bg-white overflow-hidden font-sans">
+      {/* Header */}
+      <header className="min-h-16 flex flex-col sm:flex-row sm:items-center sm:justify-between px-3 sm:px-8 py-2 sm:py-0 gap-2 border-b border-slate-200 bg-white">
+        <div className="w-full sm:w-auto flex items-center justify-between sm:justify-start gap-4">
+          <div className="flex items-center gap-4">
+            <button
+              type="button"
+              onClick={onBack}
+              className="p-2 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 transition-colors text-slate-700"
+              title="Volver"
+            >
+              <ChevronLeft className="w-5 h-5" />
+            </button>
+            <a href="../home.html" className="h-12 flex items-center" title="Ir al Home">
+              <img
+                src="https://i.postimg.cc/RVp8pZwc/artis_urbano.png"
+                alt="Artis Urbano"
+                className="h-7 sm:h-10 w-auto object-contain"
+                loading="eager"
+                decoding="async"
+                referrerPolicy="no-referrer"
+              />
+            </a>
+          </div>
+          <img
+            src="https://i.postimg.cc/J4Fy2Qsx/LOGO-(1).jpg"
+            alt="Arboré"
+            className="h-7 sm:hidden w-auto object-contain"
+            loading="eager"
+            decoding="async"
+            referrerPolicy="no-referrer"
+          />
+        </div>
+
+        <div className="w-full sm:flex-1 sm:max-w-3xl sm:mx-8">
+          <div className="bg-[#003E52] text-white py-1.5 px-4 sm:px-6 rounded-sm text-center font-bold uppercase tracking-widest text-xs sm:text-sm shadow-inner truncate">
+            {selectedRemoteModelName ? stripModelExtension(selectedRemoteModelName) : 'CANTIDADES'}
+          </div>
+          <div className="mt-2 flex flex-wrap items-center justify-center gap-2 text-[10px] uppercase tracking-widest">
+            <span className={`inline-flex items-center rounded-full border px-2 py-1 font-black ${networkBadge.className}`}>
+              {networkBadge.label}
+            </span>
+            {lastServerSyncAt && (
+              <span className="inline-flex items-center rounded-full border border-slate-200 bg-white px-2 py-1 font-bold text-slate-500">
+                Ultima sync {new Date(lastServerSyncAt).toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' })}
+              </span>
+            )}
+          </div>
+        </div>
+
+        <div className="hidden sm:flex items-center gap-4">
+          <img
+            src="https://i.postimg.cc/J4Fy2Qsx/LOGO-(1).jpg"
+            alt="Arboré"
+            className="h-10 w-auto object-contain"
+            loading="eager"
+            decoding="async"
+            referrerPolicy="no-referrer"
+          />
+        </div>
+      </header>
+
+      <div className="flex flex-1 overflow-hidden">
+        <>
+          <div
+            className="bg-white border-r border-slate-200 flex flex-col h-full overflow-hidden"
+            style={{ width: leftPanelCollapsed ? 44 : leftPanelWidth }}
+          >
+            <div className={`border-b border-slate-100 bg-slate-50/50 flex items-center justify-between ${leftPanelCollapsed ? 'p-2' : 'p-4'}`}>
+              {!leftPanelCollapsed && (
+                <h3 className="text-xs font-bold text-slate-500 uppercase tracking-widest">Modelos IFC</h3>
+              )}
+              <div className="flex items-center gap-1">
+                <button
+                  type="button"
+                  onClick={() => setLeftPanelCollapsed((v) => !v)}
+                  className="p-1 hover:bg-slate-200 rounded transition-colors"
+                  title={leftPanelCollapsed ? 'Mostrar panel' : 'Ocultar panel'}
+                >
+                  {leftPanelCollapsed ? <ChevronRight className="w-4 h-4" /> : <ChevronLeft className="w-4 h-4" />}
+                </button>
+                {!leftPanelCollapsed && (
+                  <button
+                    type="button"
+                    onClick={() => void fetchAvailableModels({ force: true })}
+                    className="p-1 hover:bg-slate-200 rounded transition-colors"
+                    title="Actualizar lista"
+                  >
+                    {isModelsLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {!leftPanelCollapsed && (
+              <div className="flex-1 overflow-y-auto p-2">
+                {modelsNotice && (
+                  <div className="mb-2 p-3 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg">
+                    {modelsNotice}
+                  </div>
+                )}
+                {modelsError && (
+                  <div className="p-3 text-xs text-red-600 bg-red-50 border border-red-200 rounded-lg">
+                    <div className="font-bold">Error cargando modelos</div>
+                    <div className="mt-1 break-words">{modelsError}</div>
+                    <div className="mt-3 flex gap-2">
+                      <button
+                        type="button"
+                        onClick={() => void fetchAvailableModels({ force: true })}
+                        className="px-3 py-2 rounded-md bg-white border border-red-200 text-red-700 font-black uppercase tracking-widest text-[10px] hover:bg-red-50"
+                      >
+                        Reintentar
+                      </button>
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          setModelsError(null);
+                          await clearCantidadesClientData();
+                          await fetchAvailableModels();
+                        }}
+                        className="px-3 py-2 rounded-md bg-red-600 border border-red-600 text-white font-black uppercase tracking-widest text-[10px] hover:bg-red-700"
+                      >
+                        Limpiar y reintentar
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {!modelsError && availableModels.length === 0 && !isModelsLoading && (
+                  <div className="p-3 text-xs text-slate-500">
+                    No se encontraron modelos disponibles en la carpeta de Drive configurada.
+                  </div>
+                )}
+
+                {(['ESTRUCTURA', 'GENERAL'] as const).map((group) => {
+                  const items = availableModels.filter((m) => m.group === group);
+                  if (items.length === 0) return null;
+                  const expanded = expandedModelGroups[group];
+                  return (
+                    <div key={group} className="mb-3">
+                      <button
+                        type="button"
+                        onClick={() => setExpandedModelGroups((prev) => ({ ...prev, [group]: !prev[group] }))}
+                        className="w-full flex items-center gap-2 px-2 py-2 rounded-lg hover:bg-slate-50 text-left"
+                      >
+                        <Folder className="w-4 h-4 text-slate-500" />
+                        <span className="flex-1 text-[10px] font-black text-slate-600 uppercase tracking-widest">{group}</span>
+                        {expanded ? <ChevronDown className="w-4 h-4 text-slate-400" /> : <ChevronRight className="w-4 h-4 text-slate-400" />}
+                      </button>
+
+                      {expanded && (
+                        <div className="mt-1 space-y-1">
+                          {items.map((m) => {
+                            const isSelected = selectedRemoteModelName === m.name;
+                            const isRowLoading = isLoading && isSelected;
+                            const isOfflineReady = offlineRecentModelNames.includes(m.name);
+                            return (
+                              <div
+                                key={m.name}
+                                className={`w-full flex items-center gap-1 rounded-lg border transition-colors ${
+                                  isSelected ? 'bg-blue-50 border-blue-200' : 'bg-white border-transparent hover:bg-slate-50'
+                                }`}
+                                title={m.name}
+                              >
+                                <button
+                                  type="button"
+                                  onClick={() => loadRemoteModel(m)}
+                                  className="min-w-0 flex-1 flex items-center gap-2 px-2 py-2 text-left"
+                                >
+                                  <File className="w-4 h-4 shrink-0 text-slate-500" />
+                                  <span className="flex-1 text-[11px] text-slate-700 truncate">
+                                    {stripModelExtension(m.name)}
+                                  </span>
+                                  {isOfflineReady && (
+                                    <span className="shrink-0 rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[9px] font-black uppercase tracking-widest text-slate-500">
+                                      Offline
+                                    </span>
+                                  )}
+                                  {isRowLoading ? (
+                                    <Loader2 className="w-4 h-4 animate-spin text-blue-600" />
+                                  ) : isSelected ? (
+                                    <Eye className="w-4 h-4 text-blue-600" />
+                                  ) : (
+                                    <div className="w-4 h-4" />
+                                  )}
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => void loadRemoteModel(m, { forceRefresh: true })}
+                                  className="mr-1 shrink-0 rounded-md p-1 text-slate-500 hover:bg-white hover:text-slate-700"
+                                  title="Actualizar este modelo"
+                                >
+                                  <RefreshCw className={`w-4 h-4 ${refreshingModelName === m.name ? 'animate-spin text-blue-600' : ''}`} />
+                                </button>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          {!leftPanelCollapsed && (
+            <div
+              className="w-1.5 bg-slate-100 hover:bg-blue-200 active:bg-blue-300 cursor-col-resize"
+              onPointerDown={(e) => {
+                const start = leftPanelWidth;
+                startHorizontalDrag(e, (dx) => {
+                  const next = Math.min(520, Math.max(220, start + dx));
+                  setLeftPanelWidth(next);
+                });
+              }}
+            />
+          )}
+
+          <div className="flex-1 flex flex-col overflow-hidden relative">
+            <div className={isViewerMaximized ? "fixed inset-0 z-50 bg-white flex flex-col" : "flex-1 relative bg-slate-50"}>
+              {isViewerMaximized && (
+                <div className="h-12 px-6 border-b border-slate-200 bg-white flex items-center justify-between">
+                  <div className="text-xs font-bold text-slate-500 uppercase tracking-widest">Modelo 3D</div>
+                  <button
+                    type="button"
+                    onClick={() => setIsViewerMaximized(false)}
+                    className="p-2 rounded-lg border border-slate-200 hover:bg-slate-50 transition-colors flex items-center gap-2"
+                    title="Volver"
+                  >
+                    <Minimize2 className="w-4 h-4 text-slate-600" />
+                    <span className="text-[10px] font-bold uppercase tracking-widest text-slate-600">Volver</span>
+                  </button>
+                </div>
+              )}
+
+              <div className={isViewerMaximized ? "flex-1 relative bg-slate-50" : "absolute inset-0"}>
+                {showWelcome && !isLoading && (
+                  <div className="absolute inset-0 z-10 flex items-center justify-center pointer-events-none">
+                    <div className="bg-white/95 backdrop-blur-xl p-8 rounded-3xl shadow-2xl border border-slate-200 max-w-md text-center pointer-events-auto">
+                      <h2 className="text-2xl font-light text-slate-900 mb-2">Extractor de Cantidades</h2>
+                      <p className="text-slate-500 text-sm">
+                        Selecciona un modelo del menú izquierdo.
+                      </p>
+                    </div>
+                  </div>
+                )}
+
+                <BIMViewer
+                  onModelLoaded={handleModelLoaded}
+                  allElements={baseElements}
+                  visibleElements={statusFilteredElements}
+                  statuses={elementStatuses}
+                  statusVisibility={statusVisibility}
+                  onToggleStatusVisibility={(key) => setStatusVisibility((prev) => ({ ...prev, [key]: !(prev[key] !== false) }))}
+                  statusColorsEnabled={statusColorsEnabled}
+                  gridVisible={gridVisible}
+                  isLoading={isLoading}
+                  selectedElementId={selectedElementId || undefined}
+                  selectedElementIds={selectedElementIds}
+                  onSelectionChange={(ids) => {
+                    setSelectedElementIds(ids);
+                    setSelectedElementId(ids[0] ?? null);
+                  }}
+                  isIsolateMode={isIsolateMode}
+                />
+
+                <div className="absolute top-4 right-4 flex flex-col gap-2">
+                  <button
+                    onClick={() => setIsViewerMaximized((v) => !v)}
+                    className="p-2 rounded-lg shadow border transition-all flex items-center gap-2 bg-white/90 backdrop-blur-md text-slate-700 border-slate-200 hover:bg-white"
+                    title={isViewerMaximized ? 'Volver' : 'Maximizar modelo'}
+                  >
+                    {isViewerMaximized ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
+                    <span className="text-[10px] font-bold uppercase tracking-widest">{isViewerMaximized ? 'Volver' : 'Maximizar'}</span>
+                  </button>
+                  <button
+                    onClick={() => setIsIsolateMode(!isIsolateMode)}
+                    className={`p-2 rounded-lg shadow border transition-all flex items-center gap-2 ${isIsolateMode ? 'bg-blue-600 text-white border-blue-500' : 'bg-white/90 backdrop-blur-md text-slate-700 border-slate-200 hover:bg-white'}`}
+                    title={isIsolateMode ? "Desactivar Aislamiento" : "Activar Aislamiento"}
+                  >
+                    <div className={`w-2 h-2 rounded-full ${isIsolateMode ? 'bg-white animate-pulse' : 'bg-slate-300'}`} />
+                    <span className="text-[10px] font-bold uppercase tracking-widest">Aislar Selección</span>
+                  </button>
+                  <button
+                    onClick={() => setStatusColorsEnabled((v) => !v)}
+                    className={`p-2 rounded-lg shadow border transition-all flex items-center gap-2 ${statusColorsEnabled ? 'bg-[#024959] text-white border-[#003E52]' : 'bg-white/90 backdrop-blur-md text-slate-700 border-slate-200 hover:bg-white'}`}
+                    title={statusColorsEnabled ? 'Apagar colores' : 'Encender colores'}
+                  >
+                    <Palette className="w-4 h-4" />
+                    <span className="text-[10px] font-bold uppercase tracking-widest">Colores</span>
+                  </button>
+                  <button
+                    onClick={() => setGridVisible((v) => !v)}
+                    className={`p-2 rounded-lg shadow border transition-all flex items-center gap-2 ${gridVisible ? 'bg-white/90 backdrop-blur-md text-slate-700 border-slate-200 hover:bg-white' : 'bg-white/70 backdrop-blur-md text-slate-400 border-slate-200 hover:bg-white'}`}
+                    title={gridVisible ? 'Apagar rejilla' : 'Encender rejilla'}
+                  >
+                    <Grid3X3 className="w-4 h-4" />
+                    <span className="text-[10px] font-bold uppercase tracking-widest">Rejilla</span>
+                  </button>
+                  <button
+                    onClick={resetFilters}
+                    className="p-2 rounded-lg shadow border transition-all flex items-center gap-2 bg-white/90 backdrop-blur-md text-slate-700 border-slate-200 hover:bg-white"
+                    title="Limpiar filtros"
+                  >
+                    <ChevronLeft className="w-4 h-4 rotate-180" />
+                    <span className="text-[10px] font-bold uppercase tracking-widest">Limpiar filtros</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {!isViewerMaximized && (
+              <>
+                <div
+                  className="h-3 bg-slate-100 hover:bg-blue-200 active:bg-blue-300 cursor-row-resize select-none touch-none relative z-20"
+                  onPointerDown={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    try {
+                      (e.currentTarget as HTMLDivElement).setPointerCapture(e.pointerId);
+                    } catch {
+                    }
+                    const start = tablePanelHeight;
+                    startVerticalDrag(e, (dy) => {
+                      const next = Math.min(900, Math.max(180, start - dy));
+                      setTablePanelHeight(next);
+                    });
+                  }}
+                />
+
+                <div className="flex flex-col border-t border-slate-200" style={{ height: tablePanelHeight }}>
+                  <div className="h-10 px-4 border-b border-slate-100 bg-slate-50/50 flex items-center justify-between">
+                    <div className="text-xs font-bold text-slate-500 uppercase tracking-widest">Tabla de cantidades</div>
+                    <button
+                      type="button"
+                      onClick={() => setIsTableMaximized(true)}
+                      className="p-1 hover:bg-slate-200 rounded transition-colors"
+                      title="Maximizar"
+                    >
+                      <Maximize2 className="w-4 h-4" />
+                    </button>
+                  </div>
+                  {!isTableMaximized && (
+                    <DataTable
+                      elements={statusFilteredElements}
+                      onSelectElement={(id) => {
+                        setSelectedElementId(id);
+                        setSelectedElementIds(id ? [id] : []);
+                      }}
+                      selectedElementId={selectedElementId || undefined}
+                      selectedElementIds={selectedElementIds}
+                      onSetSelectedElementIds={setSelectedElementIds}
+                      modelKey={currentModelKey}
+                      statuses={elementStatuses}
+                      history={elementHistory}
+                      isSanitaryModel={isSanitaryModel}
+                      mergeUnionLengthsIntoPipes={shouldMergeUnionLengthsIntoPipes}
+                      pipeAdditionsByGroup={pipeAdditionsByGroup}
+                      unionAdditionsByGroup={unionAdditionsByGroup}
+                      onChangeStatus={handleChangeStatus}
+                      onChangeStatusMany={handleChangeStatusMany}
+                      onPipeAdditionChange={handlePipeAdditionChange}
+                      onUnionAdditionChange={handleUnionAdditionChange}
+                      onClearFilters={resetFilters}
+                    />
+                  )}
+                </div>
+              </>
+            )}
+          </div>
+
+          {!rightPanelCollapsed && (
+            <div
+              className="w-1.5 bg-slate-100 hover:bg-blue-200 active:bg-blue-300 cursor-col-resize"
+              onPointerDown={(e) => {
+                const start = rightPanelWidth;
+                startHorizontalDrag(e, (dx) => {
+                  const next = Math.min(520, Math.max(260, start - dx));
+                  setRightPanelWidth(next);
+                });
+              }}
+            />
+          )}
+
+          {rightPanelCollapsed ? (
+            <div style={{ width: 44 }} className="bg-white border-l border-slate-200 flex flex-col h-full overflow-hidden">
+              <div className="p-2 border-b border-slate-100 bg-slate-50/50 flex items-center justify-center">
+                <button
+                  type="button"
+                  onClick={() => setRightPanelCollapsed(false)}
+                  className="p-1 hover:bg-slate-200 rounded transition-colors"
+                  title="Mostrar panel"
+                >
+                  <ChevronLeft className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div style={{ width: rightPanelWidth }} className="h-full overflow-hidden">
+              <Sidebar
+                categories={sidebarData}
+                selectedClassifications={selectedClassifications}
+                selectedCategories={selectedCategories}
+                selectedSubCategories={selectedSubCategories}
+                onToggleClassification={toggleClassification}
+                onToggleCategory={toggleCategory}
+                onToggleSubCategory={toggleSubCategory}
+                levels={levels}
+                selectedLevels={selectedLevels}
+                onToggleLevel={toggleLevel}
+                isSanitaryModel={isSanitaryModel}
+                diameters={diameters}
+                selectedDiameter={selectedDiameter}
+                onDiameterChange={setSelectedDiameter}
+                onResetFilters={resetFilters}
+                onToggleCollapse={() => setRightPanelCollapsed(true)}
+              />
+            </div>
+          )}
+        </>
+
+        {isTableMaximized && (
+          <div className="fixed inset-0 z-50 bg-white flex flex-col">
+            <div className="h-12 px-6 border-b border-slate-200 bg-white flex items-center justify-between">
+              <div className="text-xs font-bold text-slate-500 uppercase tracking-widest">Tabla de cantidades</div>
+              <button
+                type="button"
+                onClick={() => setIsTableMaximized(false)}
+                className="p-2 rounded-lg border border-slate-200 hover:bg-slate-50 transition-colors flex items-center gap-2"
+                title="Volver"
+              >
+                <Minimize2 className="w-4 h-4 text-slate-600" />
+                <span className="text-[10px] font-bold uppercase tracking-widest text-slate-600">Volver</span>
+              </button>
+            </div>
+            <DataTable
+              elements={statusFilteredElements}
+              onSelectElement={(id) => {
+                setSelectedElementId(id);
+                setSelectedElementIds(id ? [id] : []);
+              }}
+              selectedElementId={selectedElementId || undefined}
+              selectedElementIds={selectedElementIds}
+              onSetSelectedElementIds={setSelectedElementIds}
+              modelKey={currentModelKey}
+              statuses={elementStatuses}
+              history={elementHistory}
+              isSanitaryModel={isSanitaryModel}
+              mergeUnionLengthsIntoPipes={shouldMergeUnionLengthsIntoPipes}
+              pipeAdditionsByGroup={pipeAdditionsByGroup}
+              unionAdditionsByGroup={unionAdditionsByGroup}
+              onChangeStatus={handleChangeStatus}
+              onChangeStatusMany={handleChangeStatusMany}
+              onPipeAdditionChange={handlePipeAdditionChange}
+              onUnionAdditionChange={handleUnionAdditionChange}
+              onClearFilters={resetFilters}
+            />
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}

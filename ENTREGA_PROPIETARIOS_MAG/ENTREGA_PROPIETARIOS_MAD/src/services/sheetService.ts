@@ -1,0 +1,325 @@
+import { API_CONFIG } from '../config';
+import { LEGACY_SCRIPT_URL_STORAGE_KEY, readStoredProjectSettings } from '../projectSettings';
+
+export interface SheetData {
+  towerId: number | string;
+  aptNumber: string;
+  status: string;
+  weeklyGoalDate?: string | null;
+}
+
+export interface StructureApartmentInput {
+  number: string;
+  status: string;
+  weeklyGoalDate?: string | null;
+}
+
+export interface StructureTowerInput {
+  id: number;
+  apartments: StructureApartmentInput[];
+}
+
+type JsonpOptions = {
+  timeoutMs?: number;
+};
+
+const FALLBACK_SCRIPT_URLS: string[] = [];
+
+const readStoredScriptUrl = (): string | null => {
+  try {
+    const v = localStorage.getItem(LEGACY_SCRIPT_URL_STORAGE_KEY);
+    const s = String(v ?? '').trim();
+    return s ? s : null;
+  } catch {
+    return null;
+  }
+};
+
+const writeStoredScriptUrl = (url: string) => {
+  try {
+    localStorage.setItem(LEGACY_SCRIPT_URL_STORAGE_KEY, url);
+  } catch {
+  }
+};
+
+const getCandidateScriptUrls = (): string[] => {
+  const runtimeSettings = readStoredProjectSettings();
+  const raw: Array<string | null | undefined> = [runtimeSettings.scriptUrl, API_CONFIG.scriptUrl, readStoredScriptUrl(), ...FALLBACK_SCRIPT_URLS];
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const u of raw) {
+    const s = String(u ?? '').trim();
+    if (!s) continue;
+    if (seen.has(s)) continue;
+    seen.add(s);
+    out.push(s);
+  }
+  return out;
+};
+
+const jsonpRequest = async <T>(url: URL, options?: JsonpOptions): Promise<T> => {
+  const timeoutMs = typeof options?.timeoutMs === 'number' && Number.isFinite(options.timeoutMs) && options.timeoutMs > 0 ? options.timeoutMs : 45000;
+  const callbackName = `__gas_jsonp_cb_${Date.now()}_${Math.random().toString(16).slice(2)}`;
+  url.searchParams.set('callback', callbackName);
+  url.searchParams.set('_', `${Date.now()}_${Math.random().toString(16).slice(2)}`);
+
+  return new Promise<T>((resolve, reject) => {
+    const w = window as unknown as Record<string, unknown>;
+    const script = document.createElement('script');
+
+    let settled = false;
+    const cleanup = () => {
+      try {
+        delete w[callbackName];
+      } catch {
+        w[callbackName] = undefined;
+      }
+      if (script.parentNode) script.parentNode.removeChild(script);
+    };
+
+    const timer = window.setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      reject(new Error(`JSONP timeout: ${script.src || url.toString()}`));
+    }, timeoutMs);
+
+    w[callbackName] = (data: unknown) => {
+      if (settled) return;
+      settled = true;
+      window.clearTimeout(timer);
+      cleanup();
+      resolve(data as T);
+    };
+
+    script.async = true;
+    try { (script as any).referrerPolicy = 'no-referrer'; } catch {}
+    script.src = url.toString();
+    script.onerror = () => {
+      if (settled) return;
+      settled = true;
+      window.clearTimeout(timer);
+      cleanup();
+      reject(new Error(`JSONP load error: ${script.src || url.toString()}`));
+    };
+
+    document.head.appendChild(script);
+  });
+};
+
+const jsonpRequestWithRetry = async <T>(url: URL, options?: JsonpOptions & { retries?: number }): Promise<T> => {
+  const retries = typeof options?.retries === 'number' && Number.isFinite(options.retries) ? Math.max(1, Math.floor(options.retries)) : 3;
+  let lastErr: unknown = null;
+  for (let attempt = 0; attempt < retries; attempt++) {
+    try {
+      return await jsonpRequest<T>(new URL(url.toString()), options);
+    } catch (e) {
+      lastErr = e;
+      await new Promise((r) => setTimeout(r, 700 * (attempt + 1)));
+    }
+  }
+  throw (lastErr instanceof Error ? lastErr : new Error('JSONP load error'));
+};
+
+const requestFromAnyScriptUrl = async <T>(
+  buildUrl: (base: string) => URL,
+  options?: JsonpOptions & { retries?: number },
+): Promise<{ data: T; scriptUrl: string }> => {
+  const candidates = getCandidateScriptUrls();
+  let lastErr: unknown = null;
+  for (const base of candidates) {
+    try {
+      const url = buildUrl(base);
+      const data = await jsonpRequestWithRetry<T>(url, options);
+      const stored = readStoredScriptUrl();
+      const storedIsFallback = stored ? FALLBACK_SCRIPT_URLS.includes(stored) : false;
+      if (!stored || storedIsFallback) writeStoredScriptUrl(base);
+      return { data, scriptUrl: base };
+    } catch (e) {
+      lastErr = e;
+    }
+  }
+  throw (lastErr instanceof Error ? lastErr : new Error('JSONP load error'));
+};
+
+export const fetchSheetData = async (): Promise<SheetData[] | null> => {
+  const runtimeSettings = readStoredProjectSettings();
+  const sheetId = runtimeSettings.sheetId || API_CONFIG.sheetId;
+  const sheetName = runtimeSettings.sheetName || API_CONFIG.sheetName;
+  const gvizUrl = `https://docs.google.com/spreadsheets/d/${sheetId}/gviz/tq?tqx=out:json&sheet=${sheetName}`;
+
+  try {
+    const res = await fetch(gvizUrl);
+    if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
+    const text = await res.text();
+    // Extract JSON from gviz response format /*O_o*/\ngoogle.visualization.Query.setResponse({...})
+    const jsonString = text.substring(text.indexOf('{'), text.lastIndexOf('}') + 1);
+    const json = JSON.parse(jsonString);
+
+    if (json.status !== 'ok') {
+      throw new Error('GViz returned error status');
+    }
+
+    const towers: SheetData[] = [];
+    for (const row of json.table.rows) {
+      if (!row.c || !row.c[0] || row.c[0].v == null) continue;
+
+      const towerId = row.c[0].v;
+      const aptNumberRaw = row.c[1] ? row.c[1].v : null;
+      let aptNumber = aptNumberRaw == null ? '' : String(aptNumberRaw);
+      
+      // If aptNumber is "NaN" and it's special, we handle it as COW
+      if (aptNumber === 'NaN' || !aptNumber) {
+        if (row.c[2] && String(row.c[2].v).toLowerCase() === 'special') {
+          aptNumber = 'COW';
+        }
+      }
+
+      const baseStatusRaw = row.c[2] ? String(row.c[2].v).trim().toLowerCase() : '';
+      const isListNotarized = row.c[5] ? Boolean(row.c[5].v) : false;
+      const weeklyDateRaw = row.c[4] ? String(row.c[4].v) : '';
+      let weeklyGoalDate = null;
+      if (weeklyDateRaw && weeklyDateRaw !== 'null' && weeklyDateRaw !== 'Date(1899,11,30)') {
+         weeklyGoalDate = row.c[4].f ? String(row.c[4].f) : weeklyDateRaw;
+      }
+
+      let base = baseStatusRaw || 'in_process';
+      if (base === 'sin proceso') base = 'in_process';
+      if (base === 'en obra') base = 'under_construction';
+
+      let status = base;
+      if (base === 'special') {
+        status = 'special';
+      } else if (base === 'notarized') {
+        status = 'notarized';
+      } else if (base === 'in_process' || base === 'under_construction') {
+        status = isListNotarized ? 'notarized' : base;
+      } else {
+        status = base;
+      }
+
+      towers.push({
+        towerId,
+        aptNumber,
+        status,
+        weeklyGoalDate
+      });
+    }
+
+    if (towers.length > 0) {
+      return towers;
+    }
+    
+  } catch (err) {
+    console.error('GViz direct fetch failed, falling back to Apps Script', err);
+  }
+
+  // Fallback to Apps Script if GViz fails
+  if (!runtimeSettings.scriptUrl) {
+    console.warn('Google Apps Script URL not configured. Using local data.');
+    return null;
+  }
+
+  try {
+    const { data } = await requestFromAnyScriptUrl<{ towers?: SheetData[]; error?: string }>((base) => {
+      const url = new URL(base);
+      url.searchParams.set('_ts', String(Date.now()));
+      return url;
+    }, { timeoutMs: 45000, retries: 3 });
+    if (data && typeof data === 'object' && typeof (data as any).error === 'string' && String((data as any).error).trim()) {
+      throw new Error(String((data as any).error));
+    }
+    return data.towers || [];
+  } catch (error) {
+    console.error('Error fetching data from Google Sheets (JSONP):', error);
+    return null;
+  }
+};
+
+export const triggerSync = async (): Promise<boolean> => {
+  const runtimeSettings = readStoredProjectSettings();
+  if (!runtimeSettings.scriptUrl) return false;
+
+  try {
+    const { data } = await requestFromAnyScriptUrl<{ ok?: boolean; error?: string }>((base) => {
+      const u = new URL(base);
+      u.searchParams.set('action', 'sync');
+      u.searchParams.set('_ts', String(Date.now()));
+      return u;
+    }, { timeoutMs: 45000, retries: 3 });
+    if (data && typeof data === 'object' && typeof (data as any).error === 'string' && String((data as any).error).trim()) {
+      return false;
+    }
+    if (data && typeof data === 'object' && typeof (data as any).ok === 'boolean') return Boolean((data as any).ok);
+    return true;
+  } catch (error) {
+    console.error('Error triggering sync (JSONP):', error);
+    return false;
+  }
+};
+
+export const updateSheetStatus = async (towerId: number, aptNumber: string, status: string, weeklyGoalDate?: string | null): Promise<boolean> => {
+  const runtimeSettings = readStoredProjectSettings();
+  const stored = readStoredScriptUrl();
+  const storedIsFallback = stored ? FALLBACK_SCRIPT_URLS.includes(stored) : false;
+  // Always prefer the configured URL; only fall back to stored URL if config is empty
+  const base = runtimeSettings.scriptUrl || API_CONFIG.scriptUrl || (stored && !storedIsFallback ? stored : null);
+  if (!base) {
+    console.warn('Google Apps Script URL not configured. Change not saved to sheet.');
+    return true; // Simulate success so UI updates even without backend
+  }
+
+  try {
+    const response = await fetch(base, {
+      method: 'POST',
+      mode: 'no-cors',
+      headers: {
+        'Content-Type': 'text/plain;charset=utf-8', // GAS prefers text/plain to avoid preflight
+      },
+      body: JSON.stringify({
+        action: 'update',
+        towerId,
+        aptNumber,
+        status,
+        weeklyGoalDate: status === 'weekly_goal' ? (weeklyGoalDate ?? null) : null
+      })
+    });
+
+    void response;
+    return true;
+  } catch (error) {
+    console.error('Error updating status in Google Sheets:', error);
+    return false;
+  }
+};
+
+export const saveSheetStructure = async (towers: StructureTowerInput[]): Promise<boolean> => {
+  const runtimeSettings = readStoredProjectSettings();
+  const stored = readStoredScriptUrl();
+  const storedIsFallback = stored ? FALLBACK_SCRIPT_URLS.includes(stored) : false;
+  const base = runtimeSettings.scriptUrl || API_CONFIG.scriptUrl || (stored && !storedIsFallback ? stored : null);
+  if (!base) {
+    console.warn('Google Apps Script URL not configured. Structure not saved to sheet.');
+    return false;
+  }
+
+  try {
+    const response = await fetch(base, {
+      method: 'POST',
+      mode: 'no-cors',
+      headers: {
+        'Content-Type': 'text/plain;charset=utf-8',
+      },
+      body: JSON.stringify({
+        action: 'saveStructure',
+        towers,
+      })
+    });
+
+    void response;
+    return true;
+  } catch (error) {
+    console.error('Error saving structure in Google Sheets:', error);
+    return false;
+  }
+};
