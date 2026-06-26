@@ -2153,7 +2153,7 @@ async function loadModelList() {
     }
 
     try {
-        const GITHUB_API_URL = 'https://api.github.com/repos/alcabama-commits/bim/contents/docs/VSR_IFC/models';
+        const GITHUB_API_URL = 'https://api.github.com/repos/camilomartg-svg/bim/contents/docs/VSR_IFC/models';
         logToScreen('Scanning GitHub for models...');
         
         const response = await fetch(GITHUB_API_URL);
@@ -5399,7 +5399,7 @@ function setupUserAuthentication() {
 function renderGuestMode(container: HTMLElement) {
     const loginLink = document.createElement('a');
     // Use the production URL for login
-    loginLink.href = "https://alcabama-commits.github.io/bim/inse.html"; 
+    loginLink.href = "https://camilomartg-svg.github.io/bim/inse.html"; 
     loginLink.innerHTML = '<i class="fa-solid fa-user"></i> <span style="margin-left:5px; font-size:14px;">Iniciar Sesión</span>';
     loginLink.style.textDecoration = "none";
     loginLink.style.color = "var(--primary-color)"; // Brand color

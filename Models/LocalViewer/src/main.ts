@@ -2178,7 +2178,7 @@ async function loadModelList() {
     }
 
     try {
-        const GITHUB_API_URL = 'https://api.github.com/repos/alcabama-commits/bim/contents/docs/VSR_IFC/models';
+        const GITHUB_API_URL = 'https://api.github.com/repos/camilomartg-svg/bim/contents/docs/VSR_IFC/models';
         logToScreen('Scanning GitHub for models...');
         
         const response = await fetch(GITHUB_API_URL);

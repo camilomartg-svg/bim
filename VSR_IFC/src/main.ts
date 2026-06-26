@@ -2888,7 +2888,7 @@ async function loadModelList() {
             models = await response.json();
             logToScreen(`Local Scan: ${models.length} .frag models found`);
         } else {
-            const GITHUB_API_URL = 'https://api.github.com/repos/alcabama-commits/bim/contents/docs/VSR_IFC/models';
+            const GITHUB_API_URL = 'https://api.github.com/repos/camilomartg-svg/bim/contents/docs/VSR_IFC/models';
             logToScreen('Scanning GitHub for models...');
             
             const response = await fetch(GITHUB_API_URL);
@@ -6066,7 +6066,7 @@ function setupViewpoints() {
     }
 }
 
-const LOGIN_URL = 'https://alcabama-commits.github.io/bim/inse.html';
+const LOGIN_URL = 'https://camilomartg-svg.github.io/bim/inse.html';
 
 function getStoredUserAccount() {
     const userAccountStr = sessionStorage.getItem('userAccount') || localStorage.getItem('userAccount');

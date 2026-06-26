@@ -790,7 +790,7 @@
     {
       "id": "link-publicaciones",
       "label": "Publicaciones por proyecto",
-      "href": "https://alcabama-commits.github.io/bim/Publicaciones.html",
+      "href": "https://camilomartg-svg.github.io/bim/Publicaciones.html",
       "allowedRoles": [
         "COMBOS Y REFORMAS",
         "ACÚSTICA",
@@ -802,7 +802,7 @@
     {
       "id": "link-solicitud-cde",
       "label": "Solicitud de acceso a CDE",
-      "href": "https://alcabama-commits.github.io/bim/index.html",
+      "href": "https://camilomartg-svg.github.io/bim/index.html",
       "allowedRoles": [
         "EDGE",
         "COMBOS Y REFORMAS",
@@ -813,7 +813,7 @@
     {
       "id": "link-admin-usuarios",
       "label": "Administrar Usuarios",
-      "href": "https://alcabama-commits.github.io/bim/addusuarios.html",
+      "href": "https://camilomartg-svg.github.io/bim/addusuarios.html",
       "allowedRoles": [
         "ADMINISTRADOR"
       ]
@@ -821,7 +821,7 @@
     {
       "id": "link-lista-usuarios",
       "label": "Listar Usuarios",
-      "href": "https://alcabama-commits.github.io/bim/lista_usuarios.html",
+      "href": "https://camilomartg-svg.github.io/bim/lista_usuarios.html",
       "allowedRoles": [
         "ADMINISTRADOR"
       ]

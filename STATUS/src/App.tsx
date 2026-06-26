@@ -163,7 +163,7 @@ type ConstructionStatus =
   | 'RECHAZADO';
 
 const GITHUB_REPO = {
-  owner: 'alcabama-commits',
+  owner: 'camilomartg-svg',
   repo: 'bim',
   branch: 'main',
   modelsPath: 'docs/VSR_IFC/models'

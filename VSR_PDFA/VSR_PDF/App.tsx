@@ -10,7 +10,7 @@ interface DrawingItem {
   folder: string;
 }
 
-const DRAWING_BASE_URL = 'https://raw.githubusercontent.com/alcabama-commits/bim/main/VSR_PDF/public/Drawing';
+const DRAWING_BASE_URL = 'https://raw.githubusercontent.com/camilomartg-svg/bim/main/VSR_PDF/public/Drawing';
 
 const App: React.FC = () => {
   const [file, setFile] = useState<File | null>(null);

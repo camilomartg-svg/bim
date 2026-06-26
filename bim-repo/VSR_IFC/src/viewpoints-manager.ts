@@ -316,7 +316,7 @@ export class ViewpointsManager extends OBC.Component implements OBC.Disposable {
     // IMPORTANTE: Reemplaza 'TU_TOKEN_AQUI' con un Personal Access Token (Classic) con permisos de 'repo'
     // Puedes crearlo aquí: https://github.com/settings/tokens
     private readonly GITHUB_TOKEN = 'TU_TOKEN_AQUI'; 
-    private readonly REPO_OWNER = 'alcabama-commits';
+    private readonly REPO_OWNER = 'camilomartg-svg';
     private readonly REPO_NAME = 'bim';
     private readonly BRANCH = 'main';
 
