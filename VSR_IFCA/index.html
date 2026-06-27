@@ -1,6 +1,7 @@
 <!doctype html>
 <html lang="en">
-  <head>
+
+<head>
     <meta charset="UTF-8" />
     <meta name="version" content="v27-EventSnap" />
     <meta name="x-app-version" data-app="vsr_ifca" content="20260420-01" />
@@ -28,336 +29,405 @@
     <title>VSR IFCA | nora</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
-      #update-banner{position:fixed;top:0;left:0;right:0;z-index:2005;display:none}
-      #update-banner .inner{margin:0 auto;max-width:980px;display:flex;align-items:center;justify-content:space-between;gap:16px;padding:12px 14px;background:#111827;color:#fff;font:600 14px/1.2 system-ui,-apple-system,Segoe UI,Roboto,Inter,Arial,sans-serif;box-shadow:0 8px 24px rgba(0,0,0,.18)}
-      #update-banner button{cursor:pointer;border:0;border-radius:8px;background:#fff;color:#111827;font-weight:900;letter-spacing:.12em;text-transform:uppercase;font-size:11px;padding:10px 12px}
+        #update-banner {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            z-index: 2005;
+            display: none
+        }
+
+        #update-banner .inner {
+            margin: 0 auto;
+            max-width: 980px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 16px;
+            padding: 12px 14px;
+            background: #111827;
+            color: #fff;
+            font: 600 14px/1.2 system-ui, -apple-system, Segoe UI, Roboto, Inter, Arial, sans-serif;
+            box-shadow: 0 8px 24px rgba(0, 0, 0, .18)
+        }
+
+        #update-banner button {
+            cursor: pointer;
+            border: 0;
+            border-radius: 8px;
+            background: #fff;
+            color: #111827;
+            font-weight: 900;
+            letter-spacing: .12em;
+            text-transform: uppercase;
+            font-size: 11px;
+            padding: 10px 12px
+        }
     </style>
     <script type="module" src="/src/main.ts"></script>
-  </head>
-  <body>
-    <div id="update-banner"><div class="inner"><div>Hay una nueva versión disponible.</div><button id="update-reload" type="button">Actualizar</button></div></div>
+</head>
+
+<body>
+    <div id="update-banner">
+        <div class="inner">
+            <div>Hay una nueva versión disponible.</div><button id="update-reload" type="button">Actualizar</button>
+        </div>
+    </div>
     <div id="app">
-      <!-- Sidebar (Left - Models) -->
-      <div id="sidebar" class="sidebar">
-        
-        <div class="sidebar-tabs">
-            <button class="tab-btn active" data-tab="models" title="Modelos">
-                <i class="fa-solid fa-cubes"></i>
-            </button>
-            <button class="tab-btn" data-tab="classification" title="Clasificación">
-                <i class="fa-solid fa-tags"></i>
-            </button>
-            <button class="tab-btn" data-tab="viewpoints" title="Vistas">
-                <i class="fa-solid fa-camera"></i>
-            </button>
-        </div>
+        <!-- Sidebar (Left - Models) -->
+        <div id="sidebar" class="sidebar">
 
-        <div id="tab-models" class="tab-content active">
-            <div class="sidebar-header">
-                <h3><i class="fa-solid fa-cubes"></i> Modelos IFC</h3>
-            </div>
-            
-            <div class="sidebar-content" id="model-list">
-                <!-- Populated by JS -->
-            </div>
-        </div>
-
-        <div id="tab-classification" class="tab-content" style="display: none;">
-            <div class="sidebar-header">
-                <h3><i class="fa-solid fa-tags"></i> Clasificación</h3>
-            </div>
-            
-            <div class="sidebar-content" id="classification-controls">
-                <div class="classification-controls">
-                    <select id="classification-field" class="classification-select" title="Parámetro de clasificación">
-                        <option value="CLASIFICACIÓN">CLASIFICACIÓN</option>
-                        <option value="NIVEL INTEGRADO">NIVEL INTEGRADO</option>
-                        <option value="MATERIAL INTEGRADO">MATERIAL INTEGRADO</option>
-                    </select>
-                    <select id="classification-mode" class="classification-select" title="Modo">
-                        <option value="filtrar">Filtrar</option>
-                        <option value="ordenar">Ordenar</option>
-                    </select>
-                    <select id="classification-order" class="classification-select" title="Orden">
-                        <option value="cantidad">Cantidad</option>
-                        <option value="az">A-Z</option>
-                    </select>
-                    <button id="classification-clear" class="classification-clear-btn" type="button" title="Limpiar filtro">
-                        Limpiar
-                    </button>
-                </div>
-            </div>
-            <div class="sidebar-content" id="classification-list">
-                <div style="padding: 20px; text-align: center; color: #888;">
-                    Carga un modelo para ver la clasificación
-                </div>
-            </div>
-        </div>
-
-        <div id="tab-viewpoints" class="tab-content" style="display: none;">
-            <div class="sidebar-header" style="display: flex; justify-content: space-between; align-items: center;">
-                <h3><i class="fa-solid fa-camera"></i> Vistas Guardadas</h3>
-                <button id="btn-add-viewpoint" class="icon-btn" title="Guardar Vista Actual" style="background: none; border: none; color: #333; cursor: pointer;">
-                    <i class="fa-solid fa-plus-circle" style="font-size: 1.2em;"></i>
+            <div class="sidebar-tabs">
+                <button class="tab-btn active" data-tab="models" title="Modelos">
+                    <i class="fa-solid fa-cubes"></i>
+                </button>
+                <button class="tab-btn" data-tab="classification" title="Clasificación">
+                    <i class="fa-solid fa-tags"></i>
+                </button>
+                <button class="tab-btn" data-tab="viewpoints" title="Vistas">
+                    <i class="fa-solid fa-camera"></i>
                 </button>
             </div>
-            
-            <div class="sidebar-content" id="viewpoints-list-container">
-                <!-- Populated by ViewpointsManager -->
+
+            <div id="tab-models" class="tab-content active">
+                <div class="sidebar-header">
+                    <h3><i class="fa-solid fa-cubes"></i> Modelos IFC</h3>
+                </div>
+
+                <div class="sidebar-content" id="model-list">
+                    <!-- Populated by JS -->
+                </div>
+            </div>
+
+            <div id="tab-classification" class="tab-content" style="display: none;">
+                <div class="sidebar-header">
+                    <h3><i class="fa-solid fa-tags"></i> Clasificación</h3>
+                </div>
+
+                <div class="sidebar-content" id="classification-controls">
+                    <div class="classification-controls">
+                        <select id="classification-field" class="classification-select"
+                            title="Parámetro de clasificación">
+                            <option value="CLASIFICACIÓN">CLASIFICACIÓN</option>
+                            <option value="NIVEL INTEGRADO">NIVEL INTEGRADO</option>
+                            <option value="MATERIAL INTEGRADO">MATERIAL INTEGRADO</option>
+                        </select>
+                        <select id="classification-mode" class="classification-select" title="Modo">
+                            <option value="filtrar">Filtrar</option>
+                            <option value="ordenar">Ordenar</option>
+                        </select>
+                        <select id="classification-order" class="classification-select" title="Orden">
+                            <option value="cantidad">Cantidad</option>
+                            <option value="az">A-Z</option>
+                        </select>
+                        <button id="classification-clear" class="classification-clear-btn" type="button"
+                            title="Limpiar filtro">
+                            Limpiar
+                        </button>
+                    </div>
+                </div>
+                <div class="sidebar-content" id="classification-list">
+                    <div style="padding: 20px; text-align: center; color: #888;">
+                        Carga un modelo para ver la clasificación
+                    </div>
+                </div>
+            </div>
+
+            <div id="tab-viewpoints" class="tab-content" style="display: none;">
+                <div class="sidebar-header" style="display: flex; justify-content: space-between; align-items: center;">
+                    <h3><i class="fa-solid fa-camera"></i> Vistas Guardadas</h3>
+                    <button id="btn-add-viewpoint" class="icon-btn" title="Guardar Vista Actual"
+                        style="background: none; border: none; color: #333; cursor: pointer;">
+                        <i class="fa-solid fa-plus-circle" style="font-size: 1.2em;"></i>
+                    </button>
+                </div>
+
+                <div class="sidebar-content" id="viewpoints-list-container">
+                    <!-- Populated by ViewpointsManager -->
+                </div>
+            </div>
+
+            <div class="sidebar-footer">
+                <input type="file" id="file-input" accept=".ifc,.frag" style="display: none;">
+                <label for="file-input" class="upload-btn">
+                    <i class="fa-solid fa-upload"></i> Cargar Local
+                </label>
+            </div>
+            <div class="resizer" id="sidebar-resizer"></div>
+        </div>
+
+        <!-- Properties Panel (Right) -->
+        <div id="properties-panel" class="properties-panel">
+            <div class="resizer-left" id="properties-resizer"></div>
+            <div class="properties-header">
+                <h3><i class="fa-solid fa-circle-info"></i> Propiedades</h3>
+            </div>
+            <div class="properties-content" id="properties-content">
+                <div class="no-selection">Selecciona un elemento para ver sus propiedades</div>
             </div>
         </div>
 
-        <div class="sidebar-footer">
-           <input type="file" id="file-input" accept=".ifc,.frag" style="display: none;">
-           <label for="file-input" class="upload-btn">
-             <i class="fa-solid fa-upload"></i> Cargar Local
-           </label>
-        </div>
-        <div class="resizer" id="sidebar-resizer"></div>
-      </div>
-
-      <!-- Properties Panel (Right) -->
-      <div id="properties-panel" class="properties-panel">
-        <div class="resizer-left" id="properties-resizer"></div>
-        <div class="properties-header">
-            <h3><i class="fa-solid fa-circle-info"></i> Propiedades</h3>
-        </div>
-        <div class="properties-content" id="properties-content">
-            <div class="no-selection">Selecciona un elemento para ver sus propiedades</div>
-        </div>
-      </div>
-
-      <div id="loading-overlay" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); display: none; justify-content: center; align-items: center; z-index: 1000;">
-        <div style="background: white; padding: 20px; border-radius: 8px; text-align: center;">
-            <div style="margin-bottom: 10px; font-weight: bold; color: #333;">Loading Model...</div>
-            <div id="loading-progress" style="color: #333;">0%</div>
-        </div>
-      </div>
-      <div id="debug-console" style="position: fixed; bottom: 0; right: 0; width: 400px; max-height: 150px; overflow-y: auto; background: rgba(0,0,0,0.8); color: #0f0; font-family: monospace; font-size: 12px; padding: 10px; pointer-events: none; z-index: 999; display: none;"></div>
-      <div id="viewer-container"></div>
-
-      <!-- Top Bar -->
-      <header class="top-bar">
-          <div class="logo-container">
-              <button id="back-btn" class="sidebar-toggle-btn" title="Volver">
-                  <i class="fa-solid fa-arrow-left"></i>
-              </button>
-              <button id="sidebar-toggle" class="sidebar-toggle-btn" title="Mostrar/Ocultar modelos">
-                  <i class="fa-solid fa-bars"></i>
-              </button>
-              <a href="../home.html" title="Volver al Home">
-                  <img id="logo-img" src="https://i.postimg.cc/HjLYj9rD/LOGO-NORA-NEGRO.png" alt="nora" class="logo-img" style="height: 40px;">
-              </a>
-          </div>
-
-          <div class="top-controls" style="display: flex; align-items: center; gap: 15px;">
-           <button id="theme-toggle" class="theme-btn" title="Cambiar Tema" style="background: none; border: none; font-size: 18px; cursor: pointer; color: var(--text-dark-gray);">
-               <i class="fa-solid fa-moon"></i>
-           </button>
- 
-           <div class="view-dropdown-container">
-               <button id="view-dropdown-btn" class="view-dropdown-btn">
-                   <span><i class="fa-solid fa-cube"></i> Vista axonométrica</span>
-                   <i class="fa-solid fa-chevron-down"></i>
-               </button>
-               <div id="view-dropdown-menu" class="view-dropdown-menu">
-                   <button class="view-dropdown-item view-btn" data-view="iso">
-                       <i class="fa-solid fa-cube"></i> Vista axonométrica
-                   </button>
-                   <button class="view-dropdown-item view-btn" data-view="top">
-                       <i class="fa-solid fa-cube"></i> Vista superior
-                   </button>
-                   <button class="view-dropdown-item view-btn" data-view="front">
-                       <i class="fa-solid fa-cube"></i> Vista frontal
-                   </button>
-                   <button class="view-dropdown-item view-btn" data-view="left">
-                       <i class="fa-solid fa-cube"></i> Vista izquierda
-                   </button>
-                   <button class="view-dropdown-item view-btn" data-view="back">
-                       <i class="fa-solid fa-cube"></i> Vista posterior
-                   </button>
-                   <button class="view-dropdown-item view-btn" data-view="right">
-                       <i class="fa-solid fa-cube"></i> Vista derecha
-                   </button>
-                   <button class="view-dropdown-item view-btn" data-view="bottom">
-                       <i class="fa-solid fa-cube"></i> Vista inferior
-                   </button>
-               </div>
-           </div>
- 
-           <button id="projection-toggle" class="projection-toggle-btn" title="Cambiar proyección (Perspectiva/Ortogonal)">
-              <i class="fa-solid fa-cubes"></i>
-              <span>Persp</span>
-          </button>
-
-          <button id="fit-model-btn" class="fit-model-btn" title="Ajustar modelo a pantalla" style="background: none; border: none; font-size: 18px; cursor: pointer; color: var(--text-dark-gray);">
-              <i class="fa-solid fa-compress-arrows-alt"></i>
-          </button>
-
-          <!-- Visibility Controls -->
-          <div class="toolbar-group visibility-group" style="display: flex; gap: 5px; margin: 0 10px; border-left: 1px solid #ccc; border-right: 1px solid #ccc; padding: 0 10px;">
-              <button id="btn-hide" class="projection-toggle-btn" title="Ocultar selección">
-                  <i class="fa-solid fa-eye-slash"></i>
-                  <span>Apagar</span>
-              </button>
-              <button id="btn-isolate" class="projection-toggle-btn" title="Aislar selección">
-                  <i class="fa-solid fa-filter"></i>
-                  <span>Aislar</span>
-              </button>
-              <button id="btn-show-all" class="projection-toggle-btn" title="Mostrar todo">
-                  <i class="fa-solid fa-eye"></i>
-                  <span>Todo</span>
-              </button>
-          </div>
-
-          <div class="toolbar-group measure-group" style="display: flex; gap: 5px; margin: 0 10px; border-left: 1px solid #ccc; border-right: 1px solid #ccc; padding: 0 10px;">
-              <button id="btn-measure-length" class="projection-toggle-btn" title="Medir Longitud">
-                  <i class="fa-solid fa-ruler"></i>
-              </button>
-              <button id="btn-measure-area" class="projection-toggle-btn" title="Medir Área">
-                  <i class="fa-solid fa-vector-square"></i>
-              </button>
-              <button id="btn-measure-angle" class="projection-toggle-btn" title="Medir Ángulo">
-                  <i class="fa-solid fa-bezier-curve"></i>
-              </button>
-              <button id="btn-measure-slope" class="projection-toggle-btn" title="Medir Pendiente">
-                  <i class="fa-solid fa-chart-line"></i>
-              </button>
-              
-              <button id="btn-measure-point" class="projection-toggle-btn" title="Coordenada Punto">
-                  <i class="fa-solid fa-location-crosshairs"></i>
-              </button>
-              <button id="btn-measure-delete" class="projection-toggle-btn" title="Borrar Medidas" style="color: #f28705;">
-                  <i class="fa-solid fa-trash"></i>
-              </button>
-          </div>
-
-          <button id="grid-toggle" class="projection-toggle-btn active" title="Mostrar/Ocultar Rejilla">
-              <i class="fa-solid fa-border-all"></i>
-              <span>Rejilla</span>
-          </button>
-
-          <button id="clipper-toggle" class="projection-toggle-btn" title="Herramienta de recorte (doble clic para crear plano)">
-              <i class="fa-solid fa-scissors"></i>
-              <span>Recorte</span>
-          </button>
-
-          <button id="quantities-toggle" class="projection-toggle-btn" title="Mostrar/Ocultar Tabla de Cantidades">
-              <i class="fa-solid fa-calculator"></i>
-              <span>Cantidades</span>
-          </button>
-
-          <button id="status-toggle" class="projection-toggle-btn" title="Mostrar/Ocultar Avance del Proyecto (STATUS)">
-              <i class="fa-solid fa-tasks"></i>
-              <span>Avance</span>
-          </button>
-
-          <div id="clipper-controls" class="clipper-controls" style="display: none; gap: 5px; align-items: center; background: rgba(0,0,0,0.2); padding: 4px; border-radius: 4px; margin-left: 10px;">
-              <button id="clipper-delete-all" class="projection-toggle-btn" title="Borrar todos los planos" style="padding: 5px 8px;">
-                  <i class="fa-solid fa-trash"></i>
-              </button>
-              <div style="width: 1px; height: 20px; background: rgba(255,255,255,0.2); margin: 0 4px;"></div>
-              <button class="projection-toggle-btn clipper-plane-btn" data-axis="x" title="Cortar en X" style="padding: 5px 8px;">X</button>
-              <button class="projection-toggle-btn clipper-plane-btn" data-axis="y" title="Cortar en Y" style="padding: 5px 8px;">Y</button>
-              <button class="projection-toggle-btn clipper-plane-btn" data-axis="z" title="Cortar en Z" style="padding: 5px 8px;">Z</button>
-          </div>
- 
-           <button id="properties-toggle" class="sidebar-toggle-btn" title="Mostrar/Ocultar propiedades">
-               <i class="fa-solid fa-circle-info"></i>
-           </button>
-
-           <!-- User Profile Container -->
-           <div id="user-profile-container" style="display: flex; align-items: center; gap: 10px; margin-left: 10px; border-left: 1px solid #ccc; padding-left: 10px;"></div>
-      </div>
-      </header>
-
-      <!-- Console Toggle (Moved to bottom left standalone) -->
-      <div class="console-toggle-container">
-          <button id="console-toggle" class="console-btn" title="Toggle Console">
-              <i class="fa-solid fa-terminal"></i>
-          </button>
-      </div>
-
-      <div id="project-links-bar" class="project-links-bar" style="display: none;">
-          <a href="https://camilomartg-svg.github.io/bim/STATUS/" target="_blank" rel="noopener noreferrer" class="project-link-btn">
-              ESTADO DEL PROYECTO
-          </a>
-          <a href="https://camilomartg-svg.github.io/bim/CANTIDADES/" target="_blank" rel="noopener noreferrer" class="project-link-btn">
-              CANTIDADES Y COMPRAS
-          </a>
-      </div>
-
-      <!-- Quantities Panel (Bottom) -->
-      <div id="quantities-panel" class="quantities-panel closed">
-        <div class="resizer-top" id="quantities-resizer"></div>
-        <div class="quantities-header">
-            <h3><i class="fa-solid fa-calculator"></i> Extractor de Cantidades</h3>
-            <div class="quantities-tabs">
-                <button class="q-tab-btn active" data-tab="detalle">Detalle</button>
-                <button class="q-tab-btn" data-tab="estados">Estados</button>
-                <button class="q-tab-btn" data-tab="historial">Historial</button>
-                <button class="q-tab-btn" data-tab="tuberias" id="q-tab-tuberias" style="display: none;">Tuberías</button>
-                <button class="q-tab-btn" data-tab="uniones" id="q-tab-uniones" style="display: none;">Uniones</button>
-                <button class="q-tab-btn" data-tab="cortes" id="q-tab-cortes" style="display: none;">Cortes</button>
-            </div>
-            <div id="q-header-totals" class="q-header-totals"></div>
-            <div class="quantities-actions">
-                <button id="btn-q-csv" class="action-btn" title="Exportar CSV"><i class="fa-solid fa-file-csv"></i> Exportar</button>
-                <button id="btn-q-close" class="action-btn" title="Cerrar"><i class="fa-solid fa-xmark"></i></button>
+        <div id="loading-overlay"
+            style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); display: none; justify-content: center; align-items: center; z-index: 1000;">
+            <div style="background: white; padding: 20px; border-radius: 8px; text-align: center;">
+                <div style="margin-bottom: 10px; font-weight: bold; color: #333;">Loading Model...</div>
+                <div id="loading-progress" style="color: #333;">0%</div>
             </div>
         </div>
-        <div class="quantities-content" id="quantities-content-area">
-            <div class="q-empty-msg">No hay datos. Carga un modelo IFC para extraer cantidades.</div>
+        <div id="debug-console"
+            style="position: fixed; bottom: 0; right: 0; width: 400px; max-height: 150px; overflow-y: auto; background: rgba(0,0,0,0.8); color: #0f0; font-family: monospace; font-size: 12px; padding: 10px; pointer-events: none; z-index: 999; display: none;">
         </div>
-      </div>
+        <div id="viewer-container"></div>
 
-      <!-- Status Panel (Bottom) -->
-      <div id="status-panel" class="quantities-panel closed">
-        <div class="resizer-top" id="status-resizer"></div>
-        <div class="quantities-header">
-            <h3><i class="fa-solid fa-tasks"></i> Control de Avance (STATUS)</h3>
-            <div class="quantities-tabs">
-                <button class="q-tab-btn active" data-tab="detalle">Detalle</button>
-                <button class="q-tab-btn" data-tab="estados">Estados</button>
-                <button class="q-tab-btn" data-tab="historial">Historial</button>
+        <!-- Top Bar -->
+        <header class="top-bar">
+            <div class="logo-container">
+                <button id="back-btn" class="sidebar-toggle-btn" title="Volver">
+                    <i class="fa-solid fa-arrow-left"></i>
+                </button>
+                <button id="sidebar-toggle" class="sidebar-toggle-btn" title="Mostrar/Ocultar modelos">
+                    <i class="fa-solid fa-bars"></i>
+                </button>
+                <a href="../home.html" title="Volver al Home">
+                    <img id="logo-img" src="https://i.postimg.cc/hPxYkdvL/LOGO-NORA-NEGRO-VERTICAL.png" alt="nora"
+                        class="logo-img" style="height: 40px;">
+                </a>
             </div>
-            <div id="s-header-totals" class="q-header-totals"></div>
-            <div class="quantities-actions">
-                <button id="btn-s-csv" class="action-btn" title="Exportar CSV"><i class="fa-solid fa-file-csv"></i> Exportar</button>
-                <button id="btn-s-close" class="action-btn" title="Cerrar"><i class="fa-solid fa-xmark"></i></button>
+
+            <div class="top-controls" style="display: flex; align-items: center; gap: 15px;">
+                <button id="theme-toggle" class="theme-btn" title="Cambiar Tema"
+                    style="background: none; border: none; font-size: 18px; cursor: pointer; color: var(--text-dark-gray);">
+                    <i class="fa-solid fa-moon"></i>
+                </button>
+
+                <div class="view-dropdown-container">
+                    <button id="view-dropdown-btn" class="view-dropdown-btn">
+                        <span><i class="fa-solid fa-cube"></i> Vista axonométrica</span>
+                        <i class="fa-solid fa-chevron-down"></i>
+                    </button>
+                    <div id="view-dropdown-menu" class="view-dropdown-menu">
+                        <button class="view-dropdown-item view-btn" data-view="iso">
+                            <i class="fa-solid fa-cube"></i> Vista axonométrica
+                        </button>
+                        <button class="view-dropdown-item view-btn" data-view="top">
+                            <i class="fa-solid fa-cube"></i> Vista superior
+                        </button>
+                        <button class="view-dropdown-item view-btn" data-view="front">
+                            <i class="fa-solid fa-cube"></i> Vista frontal
+                        </button>
+                        <button class="view-dropdown-item view-btn" data-view="left">
+                            <i class="fa-solid fa-cube"></i> Vista izquierda
+                        </button>
+                        <button class="view-dropdown-item view-btn" data-view="back">
+                            <i class="fa-solid fa-cube"></i> Vista posterior
+                        </button>
+                        <button class="view-dropdown-item view-btn" data-view="right">
+                            <i class="fa-solid fa-cube"></i> Vista derecha
+                        </button>
+                        <button class="view-dropdown-item view-btn" data-view="bottom">
+                            <i class="fa-solid fa-cube"></i> Vista inferior
+                        </button>
+                    </div>
+                </div>
+
+                <button id="projection-toggle" class="projection-toggle-btn"
+                    title="Cambiar proyección (Perspectiva/Ortogonal)">
+                    <i class="fa-solid fa-cubes"></i>
+                    <span>Persp</span>
+                </button>
+
+                <button id="fit-model-btn" class="fit-model-btn" title="Ajustar modelo a pantalla"
+                    style="background: none; border: none; font-size: 18px; cursor: pointer; color: var(--text-dark-gray);">
+                    <i class="fa-solid fa-compress-arrows-alt"></i>
+                </button>
+
+                <!-- Visibility Controls -->
+                <div class="toolbar-group visibility-group"
+                    style="display: flex; gap: 5px; margin: 0 10px; border-left: 1px solid #ccc; border-right: 1px solid #ccc; padding: 0 10px;">
+                    <button id="btn-hide" class="projection-toggle-btn" title="Ocultar selección">
+                        <i class="fa-solid fa-eye-slash"></i>
+                        <span>Apagar</span>
+                    </button>
+                    <button id="btn-isolate" class="projection-toggle-btn" title="Aislar selección">
+                        <i class="fa-solid fa-filter"></i>
+                        <span>Aislar</span>
+                    </button>
+                    <button id="btn-show-all" class="projection-toggle-btn" title="Mostrar todo">
+                        <i class="fa-solid fa-eye"></i>
+                        <span>Todo</span>
+                    </button>
+                </div>
+
+                <div class="toolbar-group measure-group"
+                    style="display: flex; gap: 5px; margin: 0 10px; border-left: 1px solid #ccc; border-right: 1px solid #ccc; padding: 0 10px;">
+                    <button id="btn-measure-length" class="projection-toggle-btn" title="Medir Longitud">
+                        <i class="fa-solid fa-ruler"></i>
+                    </button>
+                    <button id="btn-measure-area" class="projection-toggle-btn" title="Medir Área">
+                        <i class="fa-solid fa-vector-square"></i>
+                    </button>
+                    <button id="btn-measure-angle" class="projection-toggle-btn" title="Medir Ángulo">
+                        <i class="fa-solid fa-bezier-curve"></i>
+                    </button>
+                    <button id="btn-measure-slope" class="projection-toggle-btn" title="Medir Pendiente">
+                        <i class="fa-solid fa-chart-line"></i>
+                    </button>
+
+                    <button id="btn-measure-point" class="projection-toggle-btn" title="Coordenada Punto">
+                        <i class="fa-solid fa-location-crosshairs"></i>
+                    </button>
+                    <button id="btn-measure-delete" class="projection-toggle-btn" title="Borrar Medidas"
+                        style="color: #f28705;">
+                        <i class="fa-solid fa-trash"></i>
+                    </button>
+                </div>
+
+                <button id="grid-toggle" class="projection-toggle-btn active" title="Mostrar/Ocultar Rejilla">
+                    <i class="fa-solid fa-border-all"></i>
+                    <span>Rejilla</span>
+                </button>
+
+                <button id="clipper-toggle" class="projection-toggle-btn"
+                    title="Herramienta de recorte (doble clic para crear plano)">
+                    <i class="fa-solid fa-scissors"></i>
+                    <span>Recorte</span>
+                </button>
+
+                <button id="quantities-toggle" class="projection-toggle-btn"
+                    title="Mostrar/Ocultar Tabla de Cantidades">
+                    <i class="fa-solid fa-calculator"></i>
+                    <span>Cantidades</span>
+                </button>
+
+                <button id="status-toggle" class="projection-toggle-btn"
+                    title="Mostrar/Ocultar Avance del Proyecto (STATUS)">
+                    <i class="fa-solid fa-tasks"></i>
+                    <span>Avance</span>
+                </button>
+
+                <div id="clipper-controls" class="clipper-controls"
+                    style="display: none; gap: 5px; align-items: center; background: rgba(0,0,0,0.2); padding: 4px; border-radius: 4px; margin-left: 10px;">
+                    <button id="clipper-delete-all" class="projection-toggle-btn" title="Borrar todos los planos"
+                        style="padding: 5px 8px;">
+                        <i class="fa-solid fa-trash"></i>
+                    </button>
+                    <div style="width: 1px; height: 20px; background: rgba(255,255,255,0.2); margin: 0 4px;"></div>
+                    <button class="projection-toggle-btn clipper-plane-btn" data-axis="x" title="Cortar en X"
+                        style="padding: 5px 8px;">X</button>
+                    <button class="projection-toggle-btn clipper-plane-btn" data-axis="y" title="Cortar en Y"
+                        style="padding: 5px 8px;">Y</button>
+                    <button class="projection-toggle-btn clipper-plane-btn" data-axis="z" title="Cortar en Z"
+                        style="padding: 5px 8px;">Z</button>
+                </div>
+
+                <button id="properties-toggle" class="sidebar-toggle-btn" title="Mostrar/Ocultar propiedades">
+                    <i class="fa-solid fa-circle-info"></i>
+                </button>
+
+                <!-- User Profile Container -->
+                <div id="user-profile-container"
+                    style="display: flex; align-items: center; gap: 10px; margin-left: 10px; border-left: 1px solid #ccc; padding-left: 10px;">
+                </div>
+            </div>
+        </header>
+
+        <!-- Console Toggle (Moved to bottom left standalone) -->
+        <div class="console-toggle-container">
+            <button id="console-toggle" class="console-btn" title="Toggle Console">
+                <i class="fa-solid fa-terminal"></i>
+            </button>
+        </div>
+
+        <div id="project-links-bar" class="project-links-bar" style="display: none;">
+            <a href="https://camilomartg-svg.github.io/bim/STATUS/" target="_blank" rel="noopener noreferrer"
+                class="project-link-btn">
+                ESTADO DEL PROYECTO
+            </a>
+            <a href="https://camilomartg-svg.github.io/bim/CANTIDADES/" target="_blank" rel="noopener noreferrer"
+                class="project-link-btn">
+                CANTIDADES Y COMPRAS
+            </a>
+        </div>
+
+        <!-- Quantities Panel (Bottom) -->
+        <div id="quantities-panel" class="quantities-panel closed">
+            <div class="resizer-top" id="quantities-resizer"></div>
+            <div class="quantities-header">
+                <h3><i class="fa-solid fa-calculator"></i> Extractor de Cantidades</h3>
+                <div class="quantities-tabs">
+                    <button class="q-tab-btn active" data-tab="detalle">Detalle</button>
+                    <button class="q-tab-btn" data-tab="estados">Estados</button>
+                    <button class="q-tab-btn" data-tab="historial">Historial</button>
+                    <button class="q-tab-btn" data-tab="tuberias" id="q-tab-tuberias"
+                        style="display: none;">Tuberías</button>
+                    <button class="q-tab-btn" data-tab="uniones" id="q-tab-uniones"
+                        style="display: none;">Uniones</button>
+                    <button class="q-tab-btn" data-tab="cortes" id="q-tab-cortes" style="display: none;">Cortes</button>
+                </div>
+                <div id="q-header-totals" class="q-header-totals"></div>
+                <div class="quantities-actions">
+                    <button id="btn-q-csv" class="action-btn" title="Exportar CSV"><i class="fa-solid fa-file-csv"></i>
+                        Exportar</button>
+                    <button id="btn-q-close" class="action-btn" title="Cerrar"><i
+                            class="fa-solid fa-xmark"></i></button>
+                </div>
+            </div>
+            <div class="quantities-content" id="quantities-content-area">
+                <div class="q-empty-msg">No hay datos. Carga un modelo IFC para extraer cantidades.</div>
             </div>
         </div>
-        <div class="quantities-content" id="status-content-area">
-            <div class="q-empty-msg">No hay datos. Carga un modelo IFC para controlar avances.</div>
+
+        <!-- Status Panel (Bottom) -->
+        <div id="status-panel" class="quantities-panel closed">
+            <div class="resizer-top" id="status-resizer"></div>
+            <div class="quantities-header">
+                <h3><i class="fa-solid fa-tasks"></i> Control de Avance (STATUS)</h3>
+                <div class="quantities-tabs">
+                    <button class="q-tab-btn active" data-tab="detalle">Detalle</button>
+                    <button class="q-tab-btn" data-tab="estados">Estados</button>
+                    <button class="q-tab-btn" data-tab="historial">Historial</button>
+                </div>
+                <div id="s-header-totals" class="q-header-totals"></div>
+                <div class="quantities-actions">
+                    <button id="btn-s-csv" class="action-btn" title="Exportar CSV"><i class="fa-solid fa-file-csv"></i>
+                        Exportar</button>
+                    <button id="btn-s-close" class="action-btn" title="Cerrar"><i
+                            class="fa-solid fa-xmark"></i></button>
+                </div>
+            </div>
+            <div class="quantities-content" id="status-content-area">
+                <div class="q-empty-msg">No hay datos. Carga un modelo IFC para controlar avances.</div>
+            </div>
         </div>
-      </div>
 
 
     </div>
     <script>
-      (function () {
-        try {
-          var meta = document.querySelector('meta[name="x-app-version"]');
-          var appId = meta && meta.getAttribute('data-app') || 'vsr_ifca';
-          var version = meta && meta.getAttribute('content') || '';
-          var key = appId + ':appVersion';
-          var stored = localStorage.getItem(key) || '';
-          var banner = document.getElementById('update-banner');
-          var btn = document.getElementById('update-reload');
-          if (version) {
-            if (!stored) localStorage.setItem(key, version);
-            else if (stored !== version && banner) banner.style.display = 'block';
-          }
-          if (btn) {
-            btn.addEventListener('click', function () {
-              try { localStorage.setItem(key, version); } catch (e) {}
-              var u = new URL(location.href);
-              if (version) u.searchParams.set('v', version);
-              location.replace(u.toString());
-            });
-          }
-        } catch (e) {}
-      })();
+        (function () {
+            try {
+                var meta = document.querySelector('meta[name="x-app-version"]');
+                var appId = meta && meta.getAttribute('data-app') || 'vsr_ifca';
+                var version = meta && meta.getAttribute('content') || '';
+                var key = appId + ':appVersion';
+                var stored = localStorage.getItem(key) || '';
+                var banner = document.getElementById('update-banner');
+                var btn = document.getElementById('update-reload');
+                if (version) {
+                    if (!stored) localStorage.setItem(key, version);
+                    else if (stored !== version && banner) banner.style.display = 'block';
+                }
+                if (btn) {
+                    btn.addEventListener('click', function () {
+                        try { localStorage.setItem(key, version); } catch (e) { }
+                        var u = new URL(location.href);
+                        if (version) u.searchParams.set('v', version);
+                        location.replace(u.toString());
+                    });
+                }
+            } catch (e) { }
+        })();
     </script>
-  </body>
+</body>
+
 </html>
