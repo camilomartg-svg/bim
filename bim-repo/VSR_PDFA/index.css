@@ -44,7 +44,7 @@
   color: #605E62;
 }
 
-/* Artis Urbano Palette Overrides (Tailwind class skins) */
+/* nora Palette Overrides (Tailwind class skins) */
 /* Base grays */
 .bg-slate-950 { background-color: #000000 !important; }
 .bg-slate-900 { background-color: #605E62 !important; }
@@ -59,7 +59,7 @@
 .text-slate-500 { color: #827E84 !important; }
 .text-slate-900 { color: #000000 !important; }
 
-/* Primary accent (Artis Urbano Orange) */
+/* Primary accent (nora Orange) */
 .bg-yellow-500,
 .bg-yellow-600,
 .bg-yellow-400,

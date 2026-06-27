@@ -5,16 +5,16 @@
   "start_url": "home.html",
   "display": "standalone",
   "background_color": "#FFFFFF",
-  "theme_color": "#D8005E",
+  "theme_color": "#171717",
   "orientation": "portrait-primary",
   "icons": [
     {
-      "src": "https://i.postimg.cc/yN3gwWn5/logo-bim-ajustado.png",
+      "src": "https://i.postimg.cc/HjLYj9rD/LOGO-NORA-NEGRO.png",
       "sizes": "192x192",
       "type": "image/png"
     },
     {
-      "src": "https://i.postimg.cc/yN3gwWn5/logo-bim-ajustado.png",
+      "src": "https://i.postimg.cc/HjLYj9rD/LOGO-NORA-NEGRO.png",
       "sizes": "512x512",
       "type": "image/png"
     }

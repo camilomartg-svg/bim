@@ -531,7 +531,7 @@ export class ViewpointsManager extends OBC.Component implements OBC.Disposable {
             <div class="viewpoints-ui" style="padding: 10px; color: #eee;">
                 <div style="margin-bottom: 10px; padding-bottom: 5px; border-bottom: 1px solid #444;">
                     <small style="color: #aaa; font-size: 11px;">DASHBOARD DE VISTAS</small>
-                    <div style="font-weight: bold; color: var(--primary-color, #D8005E);">${userName}</div>
+                    <div style="font-weight: bold; color: var(--primary-color, #171717);">${userName}</div>
                 </div>
 
                 <div style="margin-bottom: 15px; display: flex; gap: 5px;">
@@ -1013,7 +1013,7 @@ export class ViewpointsManager extends OBC.Component implements OBC.Disposable {
             const save = document.createElement('button');
             save.textContent = 'Guardar';
             save.style.padding = '8px 12px';
-            save.style.background = 'var(--primary-color, #D8005E)';
+            save.style.background = 'var(--primary-color, #171717)';
             save.style.border = '1px solid rgba(0,0,0,0.2)';
             save.style.color = '#fff';
             save.style.borderRadius = '8px';

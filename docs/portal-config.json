@@ -12,12 +12,12 @@
       "https://i.postimg.cc/9fWNznCt/r-mirande.png"
     ],
     "configPageUrl": "portal-configurator.html",
-    "logoLight": "https://i.postimg.cc/jdyQ3Mr2/LOGO-BIM-NEGRO-ICO.png",
-    "logoDark": "https://i.postimg.cc/yY0XpLzW/LOGO-BIM-BLANCO-ICO.png",
-    "footerLogoLight": "https://i.postimg.cc/GmWLmfZZ/Logo-transparente-negro.png",
-    "footerLogoDark": "https://i.postimg.cc/0yDgcyBp/Logo-transparente-blanco.png",
-    "footerLogoSecondaryLight": "https://i.postimg.cc/RVp8pZwc/artis-urbano.png",
-    "footerLogoSecondaryDark": "https://i.postimg.cc/RVp8pZwc/artis-urbano.png"
+    "logoLight": "https://i.postimg.cc/HjLYj9rD/LOGO-NORA-NEGRO.png",
+    "logoDark": "https://i.postimg.cc/rzpVzNDL/LOGO-NORA-BLANCO.png",
+    "footerLogoLight": "https://i.postimg.cc/HjLYj9rD/LOGO-NORA-NEGRO.png",
+    "footerLogoDark": "https://i.postimg.cc/rzpVzNDL/LOGO-NORA-BLANCO.png",
+    "footerLogoSecondaryLight": "https://i.postimg.cc/HjLYj9rD/LOGO-NORA-NEGRO.png",
+    "footerLogoSecondaryDark": "https://i.postimg.cc/HjLYj9rD/LOGO-NORA-NEGRO.png"
   },
   "projects": [
     {
@@ -62,8 +62,8 @@
         "mapDescription": "Portal de acceso al CDE del proyecto.",
         "address": "",
         "logoUrl": "https://i.postimg.cc/J4Fy2Qsx/LOGO-(1).jpg",
-        "portalLogoLight": "https://i.postimg.cc/jdyQ3Mr2/LOGO-BIM-NEGRO-ICO.png",
-        "portalLogoDark": "https://i.postimg.cc/yY0XpLzW/LOGO-BIM-BLANCO-ICO.png",
+        "portalLogoLight": "https://i.postimg.cc/HjLYj9rD/LOGO-NORA-NEGRO.png",
+        "portalLogoDark": "https://i.postimg.cc/rzpVzNDL/LOGO-NORA-BLANCO.png",
         "map": {
           "lat": 4.773428,
           "lng": -74.059493,
@@ -113,8 +113,8 @@
         "mapDescription": "Portal de acceso al CDE del proyecto.",
         "address": "",
         "logoUrl": "https://i.postimg.cc/FKqjgZM4/LOGO-BLUE.jpg",
-        "portalLogoLight": "https://i.postimg.cc/jdyQ3Mr2/LOGO-BIM-NEGRO-ICO.png",
-        "portalLogoDark": "https://i.postimg.cc/yY0XpLzW/LOGO-BIM-BLANCO-ICO.png",
+        "portalLogoLight": "https://i.postimg.cc/HjLYj9rD/LOGO-NORA-NEGRO.png",
+        "portalLogoDark": "https://i.postimg.cc/rzpVzNDL/LOGO-NORA-BLANCO.png",
         "map": {
           "lat": 4.297488,
           "lng": -74.821762,
@@ -164,8 +164,8 @@
         "mapDescription": "Portal de acceso al CDE del proyecto.",
         "address": "",
         "logoUrl": "assets/icons/portal-bim-favicon.png",
-        "portalLogoLight": "https://i.postimg.cc/jdyQ3Mr2/LOGO-BIM-NEGRO-ICO.png",
-        "portalLogoDark": "https://i.postimg.cc/yY0XpLzW/LOGO-BIM-BLANCO-ICO.png",
+        "portalLogoLight": "https://i.postimg.cc/HjLYj9rD/LOGO-NORA-NEGRO.png",
+        "portalLogoDark": "https://i.postimg.cc/rzpVzNDL/LOGO-NORA-BLANCO.png",
         "map": {
           "lat": 4.711,
           "lng": -74.0721,
@@ -215,8 +215,8 @@
         "mapDescription": "Portal de acceso al CDE del proyecto.",
         "address": "",
         "logoUrl": "https://i.postimg.cc/9fSGtp6j/LOGO-(1)-(1).jpg",
-        "portalLogoLight": "https://i.postimg.cc/jdyQ3Mr2/LOGO-BIM-NEGRO-ICO.png",
-        "portalLogoDark": "https://i.postimg.cc/yY0XpLzW/LOGO-BIM-BLANCO-ICO.png",
+        "portalLogoLight": "https://i.postimg.cc/HjLYj9rD/LOGO-NORA-NEGRO.png",
+        "portalLogoDark": "https://i.postimg.cc/rzpVzNDL/LOGO-NORA-BLANCO.png",
         "map": {
           "lat": 4.298475,
           "lng": -74.811883,
@@ -266,8 +266,8 @@
         "mapDescription": "Portal de acceso al CDE del proyecto.",
         "address": "",
         "logoUrl": "assets/icons/portal-bim-favicon.png",
-        "portalLogoLight": "https://i.postimg.cc/jdyQ3Mr2/LOGO-BIM-NEGRO-ICO.png",
-        "portalLogoDark": "https://i.postimg.cc/yY0XpLzW/LOGO-BIM-BLANCO-ICO.png",
+        "portalLogoLight": "https://i.postimg.cc/HjLYj9rD/LOGO-NORA-NEGRO.png",
+        "portalLogoDark": "https://i.postimg.cc/rzpVzNDL/LOGO-NORA-BLANCO.png",
         "map": {
           "lat": 4.711,
           "lng": -74.0721,
@@ -317,8 +317,8 @@
         "mapDescription": "Portal de acceso al CDE del proyecto.",
         "address": "",
         "logoUrl": "assets/icons/portal-bim-favicon.png",
-        "portalLogoLight": "https://i.postimg.cc/jdyQ3Mr2/LOGO-BIM-NEGRO-ICO.png",
-        "portalLogoDark": "https://i.postimg.cc/yY0XpLzW/LOGO-BIM-BLANCO-ICO.png",
+        "portalLogoLight": "https://i.postimg.cc/HjLYj9rD/LOGO-NORA-NEGRO.png",
+        "portalLogoDark": "https://i.postimg.cc/rzpVzNDL/LOGO-NORA-BLANCO.png",
         "map": {
           "lat": 4.711,
           "lng": -74.0721,
@@ -368,8 +368,8 @@
         "mapDescription": "Portal de acceso al CDE del proyecto.",
         "address": "",
         "logoUrl": "assets/icons/portal-bim-favicon.png",
-        "portalLogoLight": "https://i.postimg.cc/jdyQ3Mr2/LOGO-BIM-NEGRO-ICO.png",
-        "portalLogoDark": "https://i.postimg.cc/yY0XpLzW/LOGO-BIM-BLANCO-ICO.png",
+        "portalLogoLight": "https://i.postimg.cc/HjLYj9rD/LOGO-NORA-NEGRO.png",
+        "portalLogoDark": "https://i.postimg.cc/rzpVzNDL/LOGO-NORA-BLANCO.png",
         "map": {
           "lat": 4.711,
           "lng": -74.0721,
@@ -419,8 +419,8 @@
         "mapDescription": "Portal de acceso al CDE del proyecto.",
         "address": "",
         "logoUrl": "assets/icons/portal-bim-favicon.png",
-        "portalLogoLight": "https://i.postimg.cc/jdyQ3Mr2/LOGO-BIM-NEGRO-ICO.png",
-        "portalLogoDark": "https://i.postimg.cc/yY0XpLzW/LOGO-BIM-BLANCO-ICO.png",
+        "portalLogoLight": "https://i.postimg.cc/HjLYj9rD/LOGO-NORA-NEGRO.png",
+        "portalLogoDark": "https://i.postimg.cc/rzpVzNDL/LOGO-NORA-BLANCO.png",
         "map": {
           "lat": 4.711,
           "lng": -74.0721,
@@ -470,8 +470,8 @@
         "mapDescription": "Portal de acceso al CDE del proyecto.",
         "address": "",
         "logoUrl": "assets/icons/portal-bim-favicon.png",
-        "portalLogoLight": "https://i.postimg.cc/jdyQ3Mr2/LOGO-BIM-NEGRO-ICO.png",
-        "portalLogoDark": "https://i.postimg.cc/yY0XpLzW/LOGO-BIM-BLANCO-ICO.png",
+        "portalLogoLight": "https://i.postimg.cc/HjLYj9rD/LOGO-NORA-NEGRO.png",
+        "portalLogoDark": "https://i.postimg.cc/rzpVzNDL/LOGO-NORA-BLANCO.png",
         "map": {
           "lat": 4.711,
           "lng": -74.0721,
@@ -521,8 +521,8 @@
         "mapDescription": "Portal de acceso al CDE del proyecto.",
         "address": "",
         "logoUrl": "assets/icons/portal-bim-favicon.png",
-        "portalLogoLight": "https://i.postimg.cc/jdyQ3Mr2/LOGO-BIM-NEGRO-ICO.png",
-        "portalLogoDark": "https://i.postimg.cc/yY0XpLzW/LOGO-BIM-BLANCO-ICO.png",
+        "portalLogoLight": "https://i.postimg.cc/HjLYj9rD/LOGO-NORA-NEGRO.png",
+        "portalLogoDark": "https://i.postimg.cc/rzpVzNDL/LOGO-NORA-BLANCO.png",
         "map": {
           "lat": 4.711,
           "lng": -74.0721,
@@ -572,8 +572,8 @@
         "mapDescription": "Portal de acceso al CDE del proyecto.",
         "address": "",
         "logoUrl": "https://i.postimg.cc/3wv2JGqD/LOGO.jpg",
-        "portalLogoLight": "https://i.postimg.cc/jdyQ3Mr2/LOGO-BIM-NEGRO-ICO.png",
-        "portalLogoDark": "https://i.postimg.cc/yY0XpLzW/LOGO-BIM-BLANCO-ICO.png",
+        "portalLogoLight": "https://i.postimg.cc/HjLYj9rD/LOGO-NORA-NEGRO.png",
+        "portalLogoDark": "https://i.postimg.cc/rzpVzNDL/LOGO-NORA-BLANCO.png",
         "map": {
           "lat": 4.27762,
           "lng": -74.766401,
@@ -623,8 +623,8 @@
         "mapDescription": "Portal de acceso al CDE del proyecto.",
         "address": "",
         "logoUrl": "assets/icons/portal-bim-favicon.png",
-        "portalLogoLight": "https://i.postimg.cc/jdyQ3Mr2/LOGO-BIM-NEGRO-ICO.png",
-        "portalLogoDark": "https://i.postimg.cc/yY0XpLzW/LOGO-BIM-BLANCO-ICO.png",
+        "portalLogoLight": "https://i.postimg.cc/HjLYj9rD/LOGO-NORA-NEGRO.png",
+        "portalLogoDark": "https://i.postimg.cc/rzpVzNDL/LOGO-NORA-BLANCO.png",
         "map": {
           "lat": 4.711,
           "lng": -74.0721,
@@ -674,8 +674,8 @@
         "mapDescription": "Portal de acceso al CDE del proyecto.",
         "address": "",
         "logoUrl": "assets/icons/portal-bim-favicon.png",
-        "portalLogoLight": "https://i.postimg.cc/jdyQ3Mr2/LOGO-BIM-NEGRO-ICO.png",
-        "portalLogoDark": "https://i.postimg.cc/yY0XpLzW/LOGO-BIM-BLANCO-ICO.png",
+        "portalLogoLight": "https://i.postimg.cc/HjLYj9rD/LOGO-NORA-NEGRO.png",
+        "portalLogoDark": "https://i.postimg.cc/rzpVzNDL/LOGO-NORA-BLANCO.png",
         "map": {
           "lat": 4.711,
           "lng": -74.0721,
@@ -725,8 +725,8 @@
         "mapDescription": "Portal de acceso al CDE del proyecto: centraliza modelos, planos y entregables, y facilita el seguimiento y la coordinación entre equipos con información vigente.",
         "address": "Calle 57H Sur con Carrera 72 (Autopista Sur).",
         "logoUrl": "https://i.postimg.cc/P5rsf8Yb/trevoly.png",
-        "portalLogoLight": "https://i.postimg.cc/jdyQ3Mr2/LOGO-BIM-NEGRO-ICO.png",
-        "portalLogoDark": "https://i.postimg.cc/yY0XpLzW/LOGO-BIM-BLANCO-ICO.png",
+        "portalLogoLight": "https://i.postimg.cc/HjLYj9rD/LOGO-NORA-NEGRO.png",
+        "portalLogoDark": "https://i.postimg.cc/rzpVzNDL/LOGO-NORA-BLANCO.png",
         "map": {
           "lat": 4.59742,
           "lng": -74.16498,
@@ -776,8 +776,8 @@
         "mapDescription": "Portal de acceso al CDE del proyecto.",
         "address": "",
         "logoUrl": "https://i.postimg.cc/8C3hBH2N/ventura-hd2.png",
-        "portalLogoLight": "https://i.postimg.cc/jdyQ3Mr2/LOGO-BIM-NEGRO-ICO.png",
-        "portalLogoDark": "https://i.postimg.cc/yY0XpLzW/LOGO-BIM-BLANCO-ICO.png",
+        "portalLogoLight": "https://i.postimg.cc/HjLYj9rD/LOGO-NORA-NEGRO.png",
+        "portalLogoDark": "https://i.postimg.cc/rzpVzNDL/LOGO-NORA-BLANCO.png",
         "map": {
           "lat": 5.025507,
           "lng": -73.986953,

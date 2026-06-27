@@ -21,7 +21,7 @@
             theme: {
                 extend: {
                     colors: {
-                        primary: "#D8005E",
+                        primary: "#171717",
                         "background-light": "#FFFFFF",
                         "background-dark": "#343434",
                         "text-light": "#111827",
@@ -84,9 +84,9 @@
                     </button>
                     <a href="home.html" class="flex items-center" title="Ir al Home">
                         <img id="portal-logo-light" alt="BIM" class="h-10 w-auto object-contain dark:hidden"
-                            src="https://i.postimg.cc/jdyQ3Mr2/LOGO-BIM-NEGRO-ICO.png" />
+                            src="https://i.postimg.cc/HjLYj9rD/LOGO-NORA-NEGRO.png" />
                         <img id="portal-logo-dark" alt="BIM" class="h-10 w-auto object-contain hidden dark:block"
-                            src="https://i.postimg.cc/yY0XpLzW/LOGO-BIM-BLANCO-ICO.png" />
+                            src="https://i.postimg.cc/rzpVzNDL/LOGO-NORA-BLANCO.png" />
                     </a>
                 </div>
                 <div class="flex items-center space-x-4">
@@ -151,18 +151,18 @@
             <div class="container mx-auto text-center text-gray-500 dark:text-gray-400">
                 <div class="flex items-center justify-center gap-4 mb-4">
                     <!-- Logo secundario para modo claro -->
-                    <img id="portal-footer-logo-secondary-light" alt="Artis Urbano logo" class="h-8 dark:hidden"
-                        src="https://i.postimg.cc/RVp8pZwc/artis-urbano.png" />
+                    <img id="portal-footer-logo-secondary-light" alt="nora logo" class="h-8 dark:hidden"
+                        src="https://i.postimg.cc/HjLYj9rD/LOGO-NORA-NEGRO.png" />
                     <!-- Logo secundario para modo oscuro -->
-                    <img id="portal-footer-logo-secondary-dark" alt="Artis Urbano logo" class="h-8 hidden dark:block"
-                        src="https://i.postimg.cc/RVp8pZwc/artis-urbano.png" />
+                    <img id="portal-footer-logo-secondary-dark" alt="nora logo" class="h-8 hidden dark:block"
+                        src="https://i.postimg.cc/HjLYj9rD/LOGO-NORA-NEGRO.png" />
                     <div class="h-8 w-px bg-black animate-pulse dark:bg-white/40"></div>
                     <!-- Logo para modo claro -->
                     <img id="portal-footer-logo-light" alt="Alcabama logo" class="h-8 dark:hidden"
-                        src="https://i.postimg.cc/GmWLmfZZ/Logo-transparente-negro.png" />
+                        src="https://i.postimg.cc/HjLYj9rD/LOGO-NORA-NEGRO.png" />
                     <!-- Logo para modo oscuro -->
                     <img id="portal-footer-logo-dark" alt="Alcabama logo" class="h-8 hidden dark:block"
-                        src="https://i.postimg.cc/0yDgcyBp/Logo-transparente-blanco.png" />
+                        src="https://i.postimg.cc/rzpVzNDL/LOGO-NORA-BLANCO.png" />
                 </div>
                 <p class="text-sm" id="portal-footer-text">© 2026 Portal BIM Alcabama - Todos los derechos reservados.
                 </p>
@@ -194,12 +194,12 @@
                         'https://i.postimg.cc/FK9n1BNP/r-trevoly.png'
                     ],
                     configPageUrl: 'portal-configurator.html',
-                    logoLight: 'https://i.postimg.cc/jdyQ3Mr2/LOGO-BIM-NEGRO-ICO.png',
-                    logoDark: 'https://i.postimg.cc/yY0XpLzW/LOGO-BIM-BLANCO-ICO.png',
-                    footerLogoLight: 'https://i.postimg.cc/GmWLmfZZ/Logo-transparente-negro.png',
-                    footerLogoDark: 'https://i.postimg.cc/0yDgcyBp/Logo-transparente-blanco.png',
-                    footerLogoSecondaryLight: 'https://i.postimg.cc/RVp8pZwc/artis-urbano.png',
-                    footerLogoSecondaryDark: 'https://i.postimg.cc/RVp8pZwc/artis-urbano.png'
+                    logoLight: 'https://i.postimg.cc/HjLYj9rD/LOGO-NORA-NEGRO.png',
+                    logoDark: 'https://i.postimg.cc/rzpVzNDL/LOGO-NORA-BLANCO.png',
+                    footerLogoLight: 'https://i.postimg.cc/HjLYj9rD/LOGO-NORA-NEGRO.png',
+                    footerLogoDark: 'https://i.postimg.cc/rzpVzNDL/LOGO-NORA-BLANCO.png',
+                    footerLogoSecondaryLight: 'https://i.postimg.cc/HjLYj9rD/LOGO-NORA-NEGRO.png',
+                    footerLogoSecondaryDark: 'https://i.postimg.cc/HjLYj9rD/LOGO-NORA-NEGRO.png'
                 },
                 projects: [
                     { name: 'Arboré', homeUrl: '#', enabled: true },
@@ -318,12 +318,12 @@
                 }
 
                 // Actualizar logos dinámicamente
-                const logoLight = safeConfig.portal?.logoLight || 'https://i.postimg.cc/jdyQ3Mr2/LOGO-BIM-NEGRO-ICO.png';
-                const logoDark = safeConfig.portal?.logoDark || 'https://i.postimg.cc/yY0XpLzW/LOGO-BIM-BLANCO-ICO.png';
-                const footerLogoLight = safeConfig.portal?.footerLogoLight || 'https://i.postimg.cc/GmWLmfZZ/Logo-transparente-negro.png';
-                const footerLogoDark = safeConfig.portal?.footerLogoDark || 'https://i.postimg.cc/0yDgcyBp/Logo-transparente-blanco.png';
-                const footerLogoSecondaryLight = safeConfig.portal?.footerLogoSecondaryLight || 'https://i.postimg.cc/RVp8pZwc/artis-urbano.png';
-                const footerLogoSecondaryDark = safeConfig.portal?.footerLogoSecondaryDark || 'https://i.postimg.cc/RVp8pZwc/artis-urbano.png';
+                const logoLight = safeConfig.portal?.logoLight || 'https://i.postimg.cc/HjLYj9rD/LOGO-NORA-NEGRO.png';
+                const logoDark = safeConfig.portal?.logoDark || 'https://i.postimg.cc/rzpVzNDL/LOGO-NORA-BLANCO.png';
+                const footerLogoLight = safeConfig.portal?.footerLogoLight || 'https://i.postimg.cc/HjLYj9rD/LOGO-NORA-NEGRO.png';
+                const footerLogoDark = safeConfig.portal?.footerLogoDark || 'https://i.postimg.cc/rzpVzNDL/LOGO-NORA-BLANCO.png';
+                const footerLogoSecondaryLight = safeConfig.portal?.footerLogoSecondaryLight || 'https://i.postimg.cc/HjLYj9rD/LOGO-NORA-NEGRO.png';
+                const footerLogoSecondaryDark = safeConfig.portal?.footerLogoSecondaryDark || 'https://i.postimg.cc/HjLYj9rD/LOGO-NORA-NEGRO.png';
 
                 const imgLogoLight = document.getElementById('portal-logo-light');
                 if (imgLogoLight) imgLogoLight.src = logoLight;
