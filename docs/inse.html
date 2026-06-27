@@ -6,6 +6,15 @@
     <title>Iniciar Sesión - nora</title>
     <script src="https://cdn.tailwindcss.com?plugins=forms,typography"></script>
     <script>
+        // Si el usuario ya está logueado, redirigir inmediatamente a home.html
+        (function() {
+            const userAccount = JSON.parse(sessionStorage.getItem('userAccount') || localStorage.getItem('userAccount'));
+            if (userAccount) {
+                window.location.replace('https://camilomartg-svg.github.io/bim/home.html');
+            }
+        })();
+    </script>
+    <script>
         tailwind.config = {
             darkMode: "class",
             theme: {
@@ -122,9 +131,7 @@
                 <p class="mt-8 text-center text-sm text-gray-500 dark:text-gray-400">
                     ¿No tienes una cuenta? <a href="#" class="font-semibold text-primary dark:text-white hover:underline">Regístrate</a>
                 </p>
-                <div class="mt-4 text-center">
-                    <a href="https://camilomartg-svg.github.io/bim/home.html" class="text-xs text-gray-400 hover:text-primary dark:hover:text-white transition duration-200">Volver a la página principal</a>
-                </div>
+
 
             </div>
         </div>
