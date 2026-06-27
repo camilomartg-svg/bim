@@ -3,7 +3,7 @@
 <head>
     <meta charset="utf-8"/>
     <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
-    <title>Portal BIM Alcabama</title>
+    <title>nora CDE</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap" rel="stylesheet"/>
     <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet"/>
@@ -87,13 +87,13 @@
                 </div>
                 <div class="border-l-2 border-white h-24 mx-8"></div>
                 <div class="w-2/3">
-                    <p class="text-lg">Bienvenido al Portal BIM Alcabama</p>
+                    <p class="text-lg">Bienvenido al nora CDE</p>
                 </div>
             </div>
         </div>
         <div class="bg-gray-700 text-white">
             <div class="container mx-auto px-6 py-12">
-                <h1 class="text-3xl font-bold mb-4">Función del Portal BIM Alcabama (PBA)</h1>
+                <h1 class="text-3xl font-bold mb-4">Función del nora CDE (PBA)</h1>
                 <p class="text-lg">El portal BIM Alcabama tiene como función centralizar los procesos BIM en un solo espacio, brindando un espacio de interacción entre los procesos. Se basa en tres puntos fundamentales: Metodología y procesos, Formación y Recursos.</p>
             </div>
         </div>
@@ -163,7 +163,7 @@
     </main>
     <footer class="bg-gray-800 text-white py-8 mt-12">
         <div class="container mx-auto px-6 text-center">
-            <p id="portal-footer-text">© 2025 Portal BIM Alcabama. Todos los derechos reservados.</p>
+            <p id="portal-footer-text">© 2025 nora CDE. Todos los derechos reservados.</p>
         </div>
     </footer>
     <script>
@@ -392,8 +392,8 @@
             // --- CARGAR CONFIGURACIÓN DINÁMICA ---
             const DEFAULT_PORTAL_CONFIG = {
                 portal: {
-                    name: 'Portal BIM Alcabama',
-                    footerText: '© 2026 Portal BIM Alcabama - Todos los derechos reservados.',
+                    name: 'nora CDE',
+                    footerText: '© 2026 nora CDE - Todos los derechos reservados.',
                     logoLight: 'https://i.postimg.cc/HjLYj9rD/LOGO-NORA-NEGRO.png',
                     footerLogoLight: 'https://i.postimg.cc/HjLYj9rD/LOGO-NORA-NEGRO.png'
                 }
@@ -401,7 +401,7 @@
 
             const applyPortalConfig = (config) => {
                 const safeConfig = config && typeof config === 'object' ? config : DEFAULT_PORTAL_CONFIG;
-                document.title = safeConfig.portal?.name || 'Portal BIM Alcabama';
+                document.title = safeConfig.portal?.name || 'nora CDE';
                 
                 const footerText = document.getElementById('portal-footer-text');
                 if (footerText && safeConfig.portal?.footerText) {

@@ -25,9 +25,9 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   const DEFAULT_CONFIG = {
     portal: {
-      name: 'Portal BIM Alcabama',
+      name: 'nora CDE',
       shortName: 'Portal BIM',
-      footerText: '© 2026 Portal BIM Alcabama - Todos los derechos reservados.',
+      footerText: '© 2026 nora CDE - Todos los derechos reservados.',
       heroImages: [],
       configPageUrl: 'portal-configurator.html',
       logoLight: 'https://i.postimg.cc/HjLYj9rD/LOGO-NORA-NEGRO.png',

@@ -4,10 +4,10 @@
 <head>
     <meta charset="utf-8" />
     <meta content="width=device-width, initial-scale=1.0" name="viewport" />
-    <title>Portal BIM Alcabama</title>
+    <title>nora CDE</title>
     <meta name="theme-color" content="#2b2b2b" />
-    <meta name="application-name" content="Portal BIM Alcabama" />
-    <meta name="apple-mobile-web-app-title" content="Portal BIM Alcabama" />
+    <meta name="application-name" content="nora CDE" />
+    <meta name="apple-mobile-web-app-title" content="nora CDE" />
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="x-app-version" data-app="portal" content="20260528-01" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
@@ -152,13 +152,13 @@
                 <div class="flex items-center justify-center gap-4 mb-4">
                     
                     <!-- Logo para modo claro -->
-                    <img id="portal-footer-logo-light" alt="Alcabama logo" class="h-12 dark:hidden"
+                    <img id="portal-footer-logo-light" alt="Alcabama logo" class="h-20 dark:hidden"
                         src="https://i.postimg.cc/HjLYj9rD/LOGO-NORA-NEGRO.png" />
                     <!-- Logo para modo oscuro -->
-                    <img id="portal-footer-logo-dark" alt="Alcabama logo" class="h-12 hidden dark:block"
+                    <img id="portal-footer-logo-dark" alt="Alcabama logo" class="h-20 hidden dark:block"
                         src="https://i.postimg.cc/rzpVzNDL/LOGO-NORA-BLANCO.png" />
                 </div>
-                <p class="text-sm" id="portal-footer-text">© 2026 Portal BIM Alcabama - Todos los derechos reservados.
+                <p class="text-sm" id="portal-footer-text">© 2026 nora CDE - Todos los derechos reservados.
                 </p>
             </div>
         </footer>
@@ -180,9 +180,9 @@
             const userRole = userAccount?.role || '';
             const DEFAULT_PORTAL_CONFIG = {
                 portal: {
-                    name: 'Portal BIM Alcabama',
+                    name: 'nora CDE',
                     shortName: 'Portal BIM',
-                    footerText: '© 2026 Portal BIM Alcabama - Todos los derechos reservados.',
+                    footerText: '© 2026 nora CDE - Todos los derechos reservados.',
                     heroImages: [
                         'https://i.postimg.cc/fbwgkrDd/r-ciien.png',
                         'https://i.postimg.cc/FK9n1BNP/r-trevoly.png'
@@ -306,7 +306,7 @@
             };
             const applyPortalConfig = (config) => {
                 const safeConfig = config && typeof config === 'object' ? config : DEFAULT_PORTAL_CONFIG;
-                document.title = safeConfig.portal?.name || 'Portal BIM Alcabama';
+                document.title = safeConfig.portal?.name || 'nora CDE';
                 if (footerText && safeConfig.portal?.footerText) {
                     footerText.textContent = safeConfig.portal.footerText;
                 }
