@@ -2732,14 +2732,14 @@ function initTheme() {
         if (dark) {
             document.body.classList.add('dark-mode');
             if(icon) icon.className = 'fa-solid fa-sun';
-            if(logoImg) logoImg.src = 'https://i.postimg.cc/0yDgcyBp/Logo-transparente-blanco.png';
+            if(logoImg) logoImg.src = 'https://i.postimg.cc/rzpVzNDL/LOGO-NORA-BLANCO.png';
             if (world && world.scene && world.scene.three) {
                  world.scene.three.background = new THREE.Color(0x1e1e1e); 
             }
         } else {
             document.body.classList.remove('dark-mode');
             if(icon) icon.className = 'fa-solid fa-moon';
-            if(logoImg) logoImg.src = 'https://i.postimg.cc/GmWLmfZZ/Logo-transparente-negro.png';
+            if(logoImg) logoImg.src = 'https://i.postimg.cc/HjLYj9rD/LOGO-NORA-NEGRO.png';
             if (world && world.scene && world.scene.three) {
                  world.scene.three.background = new THREE.Color(0xf5f5f5); 
             }
@@ -6120,7 +6120,7 @@ function enforceAuthenticatedAccess() {
     overlay.style.background = 'radial-gradient(circle at top, rgba(211, 4, 92, 0.22), rgba(211, 4, 92, 0) 30%), linear-gradient(135deg, rgba(255,255,255,0.96), rgba(245,245,245,0.96))';
     overlay.innerHTML = `
         <div style="width:min(520px, 100%); background:#ffffff; border:1px solid rgba(211, 4, 92, 0.14); border-radius:24px; padding:36px 32px; box-shadow:0 30px 80px rgba(96, 94, 98, 0.18); text-align:center; font-family:Inter, Arial, sans-serif;">
-            <img src="https://i.postimg.cc/GmWLmfZZ/Logo-transparente-negro.png" alt="Alcabama" style="height:44px; width:auto; margin:0 auto 22px; display:block;" />
+            <img src="https://i.postimg.cc/HjLYj9rD/LOGO-NORA-NEGRO.png" alt="Alcabama" style="height:44px; width:auto; margin:0 auto 22px; display:block;" />
             <div style="width:72px; height:72px; margin:0 auto 18px; border-radius:50%; display:flex; align-items:center; justify-content:center; background:rgba(211, 4, 92, 0.08); color:#d3045c; font-size:28px;">
                 <i class="fa-solid fa-lock"></i>
             </div>

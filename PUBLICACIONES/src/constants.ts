@@ -58,14 +58,14 @@ export interface ProjectConfig {
   id: string;
   name: string;
   logo: string;
-  company: 'Artis' | 'Alcabama';
+  company: 'nora' | 'Alcabama';
   unidades?: string[];
 }
 
 export const BRANDING = {
-  Artis: {
-    name: 'Artis Urbano',
-    logo: 'https://i.postimg.cc/vmKVZndP/artis-urbano2.png',
+  nora: {
+    name: 'nora',
+    logo: 'https://i.postimg.cc/HjLYj9rD/LOGO-NORA-NEGRO.png',
     colors: {
       primary: '#003E52',
       secondary: '#024959',
@@ -88,7 +88,7 @@ export const PROJECTS: ProjectConfig[] = [
     id: 'trevoly',
     name: "Trevoly",
     logo: "https://i.postimg.cc/Hsrt7fXx/LOGO-TREVOLY.jpg",
-    company: 'Artis'
+    company: 'nora'
   },
   {
     id: 'ventura',

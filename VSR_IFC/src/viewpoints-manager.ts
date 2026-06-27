@@ -867,7 +867,7 @@ export class ViewpointsManager extends OBC.Component implements OBC.Disposable {
             <div class="viewpoints-ui" style="padding: 10px; color: #eee; height: 100%; box-sizing: border-box; display: flex; flex-direction: column; min-height: 0;">
                 <div style="margin-bottom: 10px; padding-bottom: 5px; border-bottom: 1px solid #444;">
                     <small style="color: #aaa; font-size: 11px;">DASHBOARD DE VISTAS</small>
-                    <div style="font-weight: bold; color: var(--primary-color, #D8005E);">${userName}</div>
+                    <div style="font-weight: bold; color: var(--primary-color, #171717);">${userName}</div>
                 </div>
 
                 <div style="margin-bottom: 15px; display: flex; gap: 5px;">
@@ -895,7 +895,7 @@ export class ViewpointsManager extends OBC.Component implements OBC.Disposable {
                 </div>
 
                 <div id="vp-library-tabs" style="display: flex; gap: 6px; margin-bottom: 10px;">
-                    <button data-vp-tab="mine" class="vp-library-tab" style="flex:1; padding: 6px 8px; border-radius: 6px; border: 1px solid #555; background: var(--primary-color, #D8005E); color: white; font-size: 11px; font-weight: 700; cursor: pointer;">Mías</button>
+                    <button data-vp-tab="mine" class="vp-library-tab" style="flex:1; padding: 6px 8px; border-radius: 6px; border: 1px solid #555; background: var(--primary-color, #171717); color: white; font-size: 11px; font-weight: 700; cursor: pointer;">Mías</button>
                     <button data-vp-tab="shared-with-me" class="vp-library-tab" style="flex:1; padding: 6px 8px; border-radius: 6px; border: 1px solid #555; background: #333; color: #ddd; font-size: 11px; font-weight: 700; cursor: pointer;">Compartidas</button>
                     <button data-vp-tab="shared-by-me" class="vp-library-tab" style="flex:1; padding: 6px 8px; border-radius: 6px; border: 1px solid #555; background: #333; color: #ddd; font-size: 11px; font-weight: 700; cursor: pointer;">Yo compartí</button>
                 </div>
@@ -1018,7 +1018,7 @@ export class ViewpointsManager extends OBC.Component implements OBC.Disposable {
                 this._activeLibraryTab = nextTab;
                 libraryTabs.forEach((btn) => {
                     const isActive = String((btn as HTMLElement).dataset.vpTab) === nextTab;
-                    (btn as HTMLElement).style.background = isActive ? 'var(--primary-color, #D8005E)' : '#333';
+                    (btn as HTMLElement).style.background = isActive ? 'var(--primary-color, #171717)' : '#333';
                     (btn as HTMLElement).style.color = isActive ? '#fff' : '#ddd';
                 });
                 this.renderList(searchInput?.value?.toLowerCase() || '');
@@ -1548,7 +1548,7 @@ export class ViewpointsManager extends OBC.Component implements OBC.Disposable {
             const save = document.createElement('button');
             save.textContent = 'Guardar';
             save.style.padding = '8px 12px';
-            save.style.background = 'var(--primary-color, #D8005E)';
+            save.style.background = 'var(--primary-color, #171717)';
             save.style.border = '1px solid rgba(0,0,0,0.2)';
             save.style.color = '#fff';
             save.style.borderRadius = '8px';
