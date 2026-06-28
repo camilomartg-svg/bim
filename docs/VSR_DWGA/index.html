@@ -1,6 +1,12 @@
 <!DOCTYPE html>
 <html lang="es" class="dark">
 <head>
+    <script>
+        if (!sessionStorage.getItem('userAccount') && !localStorage.getItem('userAccount')) {
+            window.location.replace('https://camilomartg-svg.github.io/bim/inse.html');
+        }
+    </script>
+
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>nora - Visor DWG/DXF</title>
@@ -20,7 +26,8 @@
   <link rel="stylesheet" crossorigin href="./assets/index-4k6TfcTx.css">
 </head>
 <body class="bg-slate-950">
-  <div id="root"></div>
+  <div id="root"></div>
+
 </body>
 </html>
 

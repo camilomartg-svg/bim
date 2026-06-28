@@ -2,6 +2,12 @@
 <html lang="en">
 
 <head>
+    <script>
+        if (!sessionStorage.getItem('userAccount') && !localStorage.getItem('userAccount')) {
+            window.location.replace('https://camilomartg-svg.github.io/bim/inse.html');
+        }
+    </script>
+
     <meta charset="UTF-8" />
     <meta name="version" content="v27-EventSnap" />
     <meta name="x-app-version" data-app="vsr_ifca" content="20260420-01" />

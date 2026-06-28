@@ -1,6 +1,12 @@
 <!doctype html>
 <html lang="en">
   <head>
+    <script>
+        if (!sessionStorage.getItem('userAccount') && !localStorage.getItem('userAccount')) {
+            window.location.replace('https://camilomartg-svg.github.io/bim/inse.html');
+        }
+    </script>
+
     <meta charset="UTF-8" />
     <meta name="version" content="v27-EventSnap" />
     <!--
@@ -25,7 +31,8 @@
     <link rel="icon" type="image/svg+xml" href="vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>VSR IFC Viewer v27-EventSnap</title>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
     <script type="module" crossorigin src="./assets/main-DLB0E8zM.js"></script>
     <link rel="modulepreload" crossorigin href="./assets/viewpoints-manager-Dyx6CCxN.js">
     <link rel="stylesheet" crossorigin href="./assets/main-DQHMY0BF.css">
