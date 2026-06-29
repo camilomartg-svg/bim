@@ -3389,7 +3389,7 @@ function initTheme() {
         if (dark) {
             document.body.classList.add('dark-mode');
             if(icon) icon.className = 'fa-solid fa-sun';
-            if(logoImg) logoImg.src = 'https://i.postimg.cc/3xdLSg9g/artis-urbano2-(1).png';
+            if(logoImg) logoImg.src = 'https://i.postimg.cc/FFfBKzb8/LOGO-TEXTO-NORA-BLANCO.png';
             if (world && world.scene && world.scene.three) {
                  world.scene.three.background = new THREE.Color(0x1e1e1e); 
             }
