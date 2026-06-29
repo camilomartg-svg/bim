@@ -11,7 +11,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Proyecto | nora CDE</title>
   <meta name="theme-color" content="#2b2b2b" />
-  <meta name="x-app-version" data-app="project-landing" content="20260527-01" />
+  <meta name="x-app-version" data-app="project-landing" content="20260629-01" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="default" />
   <script src="https://cdn.tailwindcss.com?plugins=forms,typography"></script>
@@ -96,7 +96,7 @@
           <a href="#accesos" class="flex h-11 w-full items-center justify-center rounded-xl text-[#252a20] transition hover:bg-white/70 dark:text-white dark:hover:bg-white/10" aria-label="Accesos">
             <span class="material-symbols-outlined">bolt</span>
           </a>
-          <a href="home.html" class="mt-auto flex h-11 w-full items-center justify-center rounded-xl text-[#252a20] transition hover:bg-white/70 dark:text-white dark:hover:bg-white/10" aria-label="Portal BIM">
+          <a href="javascript:void(0)" onclick="window.location.href = 'home.html' + (new URLSearchParams(window.location.search).get('empresa') ? '?empresa=' + new URLSearchParams(window.location.search).get('empresa') : '')" class="mt-auto flex h-11 w-full items-center justify-center rounded-xl text-[#252a20] transition hover:bg-white/70 dark:text-white dark:hover:bg-white/10" aria-label="Portal BIM">
             <span class="material-symbols-outlined">home</span>
           </a>
         </nav>
@@ -109,7 +109,7 @@
               <button id="back-btn" aria-label="Volver" class="flex h-11 w-11 items-center justify-center rounded-xl bg-white/70 text-[#111827] transition hover:bg-white dark:bg-white/10 dark:text-white dark:hover:bg-white/15">
                 <span class="material-symbols-outlined">arrow_back</span>
               </button>
-              <a href="home.html" class="hidden items-center sm:flex" title="Ir al Home">
+              <a href="javascript:void(0)" onclick="window.location.href = 'home.html' + (new URLSearchParams(window.location.search).get('empresa') ? '?empresa=' + new URLSearchParams(window.location.search).get('empresa') : '')" class="hidden items-center sm:flex" title="Ir al Home">
                 <img id="header-project-logo" alt="Proyecto" class="h-9 w-auto object-contain" src="assets/icons/portal-bim-favicon.png" />
               </a>
               <div class="min-w-0">
@@ -209,8 +209,8 @@
         <footer class="px-4 pb-10 pt-6 md:px-8">
           <div class="mx-auto max-w-7xl text-center text-gray-600 dark:text-gray-300">
             <div class="mb-4 flex items-center justify-center gap-4">
-              <img id="footer-logo-light" alt="Portal BIM logo" class="h-8 dark:hidden" src="https://i.postimg.cc/L4r0gSvV/LOGO-TEXTO-NORA-NEGRO.png" />
-              <img id="footer-logo-dark" alt="Portal BIM logo" class="hidden h-8 dark:block" src="https://i.postimg.cc/FFfBKzb8/LOGO-TEXTO-NORA-BLANCO.png" />
+              <img id="footer-logo-light" alt="Portal BIM logo" class="h-8 dark:hidden" src="https://i.postimg.cc/tR3YSryT/LOGO-NORA-NEGRO.png" />
+              <img id="footer-logo-dark" alt="Portal BIM logo" class="hidden h-8 dark:block" src="https://i.postimg.cc/SQ6JTZqj/LOGO-NORA-BLANCO.png" />
             </div>
             <p id="project-footer" class="text-sm">© 2026 nora CDE - Todos los derechos reservados.</p>
           </div>
@@ -450,7 +450,27 @@
           // 1. Intentar cargar de la red primero (mostrar la última versión si hay conexión)
           const metaVersion = document.querySelector('meta[name="x-app-version"]');
           const currentVersion = metaVersion?.getAttribute('content') || Date.now().toString();
-          const response = await fetch(`portal-config.json?v=${encodeURIComponent(currentVersion)}`, { cache: 'no-store' });
+          
+          const urlParams = new URLSearchParams(window.location.search);
+          const empresaId = urlParams.get('empresa');
+          let configUrl = `portal-config.json?v=${encodeURIComponent(currentVersion)}`;
+          
+          if (empresaId) {
+            try {
+              const empRes = await fetch('empresas.json');
+              if (empRes.ok) {
+                const empresas = await empRes.json();
+                const emp = empresas.find(e => e.id === empresaId);
+                if (emp && emp.configUrl) {
+                  configUrl = `${emp.configUrl}?v=${encodeURIComponent(currentVersion)}`;
+                }
+              }
+            } catch(e) {
+                console.warn('Error cargando empresas.json', e);
+            }
+          }
+
+          const response = await fetch(configUrl, { cache: 'no-store' });
           if (!response.ok) throw new Error('No se pudo cargar la configuración del portal');
           return await response.json();
         } catch (error) {
@@ -507,15 +527,20 @@
 
       const portalLogoLight = project.landing.portalLogoLight || DEFAULT_PROJECT.landing.portalLogoLight;
       const portalLogoDark = project.landing.portalLogoDark || DEFAULT_PROJECT.landing.portalLogoDark;
-      ['project-portal-logo-light', 'footer-logo-light'].forEach((id) => {
+      ['project-portal-logo-light'].forEach((id) => {
         document.getElementById(id).src = portalLogoLight;
       });
-      ['project-portal-logo-dark', 'footer-logo-dark'].forEach((id) => {
+      ['project-portal-logo-dark'].forEach((id) => {
         document.getElementById(id).src = portalLogoDark;
       });
 
-      const footerLogoSecondaryLight = config.portal?.footerLogoSecondaryLight || 'https://i.postimg.cc/L4r0gSvV/LOGO-TEXTO-NORA-NEGRO.png';
-      const footerLogoSecondaryDark = config.portal?.footerLogoSecondaryDark || 'https://i.postimg.cc/L4r0gSvV/LOGO-TEXTO-NORA-NEGRO.png';
+      const footerLogoLight = config.portal?.footerLogoLight || 'https://i.postimg.cc/tR3YSryT/LOGO-NORA-NEGRO.png';
+      const footerLogoDark = config.portal?.footerLogoDark || 'https://i.postimg.cc/SQ6JTZqj/LOGO-NORA-BLANCO.png';
+      document.getElementById('footer-logo-light').src = footerLogoLight;
+      document.getElementById('footer-logo-dark').src = footerLogoDark;
+
+      const footerLogoSecondaryLight = config.portal?.footerLogoSecondaryLight || 'https://i.postimg.cc/tR3YSryT/LOGO-NORA-NEGRO.png';
+      const footerLogoSecondaryDark = config.portal?.footerLogoSecondaryDark || 'https://i.postimg.cc/SQ6JTZqj/LOGO-NORA-BLANCO.png';
       const imgFooterSecLight = document.getElementById('footer-logo-secondary-light');
       if (imgFooterSecLight) imgFooterSecLight.src = footerLogoSecondaryLight;
       const imgFooterSecDark = document.getElementById('footer-logo-secondary-dark');
@@ -632,8 +657,13 @@
 
       const backBtn = document.getElementById('back-btn');
       backBtn?.addEventListener('click', () => {
-        if (window.history.length > 1) window.history.back();
-        else window.location.href = 'home.html';
+        if (window.history.length > 1) {
+            window.history.back();
+        } else {
+            const urlParams = new URLSearchParams(window.location.search);
+            const empresaId = urlParams.get('empresa');
+            window.location.href = 'home.html' + (empresaId ? '?empresa=' + encodeURIComponent(empresaId) : '');
+        }
       });
 
       const nowEl = document.getElementById('project-now');

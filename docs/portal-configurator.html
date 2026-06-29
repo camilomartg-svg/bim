@@ -161,7 +161,9 @@
                 <div class="mt-4 grid gap-4 md:grid-cols-2">
                   <label class="block"><span class="mb-2 block text-sm font-semibold text-slate-700">Logo del proyecto</span><input id="landing-logo-url" class="w-full rounded-xl border-slate-200" type="text" placeholder="https://..." /></label>
                   <label class="block"><span class="mb-2 block text-sm font-semibold text-slate-700">Logo portal claro</span><input id="landing-portal-logo-light" class="w-full rounded-xl border-slate-200" type="text" placeholder="https://..." /></label>
-                  <label class="block md:col-span-2"><span class="mb-2 block text-sm font-semibold text-slate-700">Logo portal oscuro</span><input id="landing-portal-logo-dark" class="w-full rounded-xl border-slate-200" type="text" placeholder="https://..." /></label>
+                  <label class="block"><span class="mb-2 block text-sm font-semibold text-slate-700">Logo portal oscuro</span><input id="landing-portal-logo-dark" class="w-full rounded-xl border-slate-200" type="text" placeholder="https://..." /></label>
+                  <label class="block"><span class="mb-2 block text-sm font-semibold text-slate-700">Logo visor claro</span><input id="landing-viewer-logo-light" class="w-full rounded-xl border-slate-200" type="text" placeholder="https://..." /></label>
+                  <label class="block md:col-span-2"><span class="mb-2 block text-sm font-semibold text-slate-700">Logo visor oscuro</span><input id="landing-viewer-logo-dark" class="w-full rounded-xl border-slate-200" type="text" placeholder="https://..." /></label>
                   <label class="block"><span class="mb-2 block text-sm font-semibold text-slate-700">Eyebrow superior</span><input id="landing-eyebrow" class="w-full rounded-xl border-slate-200" type="text" /></label>
                   <label class="block"><span class="mb-2 block text-sm font-semibold text-slate-700">Título landing</span><input id="landing-title" class="w-full rounded-xl border-slate-200" type="text" /></label>
                   <label class="block md:col-span-2"><span class="mb-2 block text-sm font-semibold text-slate-700">Descripción principal</span><textarea id="landing-subtitle" class="w-full rounded-2xl border-slate-200" rows="3"></textarea></label>
@@ -225,7 +227,7 @@
           </section>
 
           <section class="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
-            <div class="flex flex-col gap-6">
+            <div class="grid gap-6 lg:grid-cols-[0.34fr_0.66fr]">
               <div>
                 <p class="text-xs font-semibold uppercase tracking-[0.24em] text-slate-500">Resumen</p>
                 <h2 class="mt-2 text-lg font-bold text-slate-900">Vista rápida</h2>
@@ -243,13 +245,10 @@
                   El portal usará `project-landing.html?project=slug` para abrir la landing de cada proyecto cuando la landing esté activa.
                 </div>
               </div>
-              
-              <hr class="border-slate-100" />
-              
-              <div class="min-w-0">
+              <div>
                 <p class="text-xs font-semibold uppercase tracking-[0.24em] text-slate-500">Salida</p>
                 <h2 class="mt-2 text-lg font-bold text-slate-900">JSON generado</h2>
-                <pre id="json-preview" class="mt-4 max-h-[420px] overflow-x-auto rounded-2xl bg-slate-950 p-4 text-xs leading-6 text-slate-100"></pre>
+                <pre id="json-preview" class="mt-4 max-h-[420px] overflow-auto rounded-2xl bg-slate-950 p-4 text-xs leading-6 text-slate-100"></pre>
               </div>
             </div>
           </section>

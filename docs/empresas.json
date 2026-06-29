@@ -1,0 +1,26 @@
+[
+  {
+    "id": "nora",
+    "name": "nora CDE",
+    "location": "Bogotá, Colombia",
+    "image": "https://i.postimg.cc/fbwgkrDd/r-ciien.png",
+    "configUrl": "portal-config.json",
+    "code": "001"
+  },
+  {
+    "id": "alcabama",
+    "name": "Constructora Alcabama",
+    "location": "Bogotá, Colombia",
+    "image": "https://i.postimg.cc/FK9n1BNP/r-trevoly.png",
+    "configUrl": "portal-config.json",
+    "code": "002"
+  },
+  {
+    "id": "empresa3",
+    "name": "Arquitectura y Concreto",
+    "location": "Medellín, Colombia",
+    "image": "https://i.postimg.cc/Y0kJ8NBF/6fe9d33bfb28fcbe8acc5d8450198ace.jpg",
+    "configUrl": "portal-config.json",
+    "code": "003"
+  }
+]

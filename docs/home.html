@@ -15,7 +15,7 @@
     <meta name="application-name" content="nora CDE" />
     <meta name="apple-mobile-web-app-title" content="nora CDE" />
     <meta name="mobile-web-app-capable" content="yes" />
-    <meta name="x-app-version" data-app="portal" content="20260528-01" />
+    <meta name="x-app-version" data-app="portal" content="20260629-01" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="default" />
     <meta name="msapplication-TileColor" content="#2b2b2b" />
@@ -159,10 +159,10 @@
                     
                     <!-- Logo para modo claro -->
                     <img id="portal-footer-logo-light" alt="Alcabama logo" class="h-20 dark:hidden"
-                        src="https://i.postimg.cc/L4r0gSvV/LOGO-TEXTO-NORA-NEGRO.png" />
+                        src="https://i.postimg.cc/tR3YSryT/LOGO-NORA-NEGRO.png" />
                     <!-- Logo para modo oscuro -->
                     <img id="portal-footer-logo-dark" alt="Alcabama logo" class="h-20 hidden dark:block"
-                        src="https://i.postimg.cc/FFfBKzb8/LOGO-TEXTO-NORA-BLANCO.png" />
+                        src="https://i.postimg.cc/SQ6JTZqj/LOGO-NORA-BLANCO.png" />
                 </div>
                 <p class="text-sm" id="portal-footer-text">© 2026 nora CDE - Todos los derechos reservados.
                 </p>
@@ -196,10 +196,10 @@
                     configPageUrl: 'portal-configurator.html',
                     logoLight: 'https://i.postimg.cc/L4r0gSvV/LOGO-TEXTO-NORA-NEGRO.png',
                     logoDark: 'https://i.postimg.cc/FFfBKzb8/LOGO-TEXTO-NORA-BLANCO.png',
-                    footerLogoLight: 'https://i.postimg.cc/L4r0gSvV/LOGO-TEXTO-NORA-NEGRO.png',
-                    footerLogoDark: 'https://i.postimg.cc/FFfBKzb8/LOGO-TEXTO-NORA-BLANCO.png',
-                    footerLogoSecondaryLight: 'https://i.postimg.cc/L4r0gSvV/LOGO-TEXTO-NORA-NEGRO.png',
-                    footerLogoSecondaryDark: 'https://i.postimg.cc/L4r0gSvV/LOGO-TEXTO-NORA-NEGRO.png'
+                    footerLogoLight: 'https://i.postimg.cc/tR3YSryT/LOGO-NORA-NEGRO.png',
+                    footerLogoDark: 'https://i.postimg.cc/SQ6JTZqj/LOGO-NORA-BLANCO.png',
+                    footerLogoSecondaryLight: 'https://i.postimg.cc/tR3YSryT/LOGO-NORA-NEGRO.png',
+                    footerLogoSecondaryDark: 'https://i.postimg.cc/SQ6JTZqj/LOGO-NORA-BLANCO.png'
                 },
                 projects: [
                     { name: 'Arboré', homeUrl: '#', enabled: true },
@@ -282,7 +282,12 @@
                 if (!project || project.enabled === false) return '#';
                 const slug = slugify(project.slug || project.name || '');
                 const landingEnabled = !project.landing || project.landing.enabled !== false;
-                if (landingEnabled && slug) return `project-landing.html?project=${encodeURIComponent(slug)}`;
+                
+                const urlParams = new URLSearchParams(window.location.search);
+                const empresaId = urlParams.get('empresa');
+                const empresaParam = empresaId ? `&empresa=${encodeURIComponent(empresaId)}` : '';
+
+                if (landingEnabled && slug) return `project-landing.html?project=${encodeURIComponent(slug)}${empresaParam}`;
                 const rawUrl = String(project.homeUrl || '').trim();
                 return rawUrl || '#';
             };
@@ -320,10 +325,10 @@
                 // Actualizar logos dinámicamente
                 const logoLight = safeConfig.portal?.logoLight || 'https://i.postimg.cc/L4r0gSvV/LOGO-TEXTO-NORA-NEGRO.png';
                 const logoDark = safeConfig.portal?.logoDark || 'https://i.postimg.cc/FFfBKzb8/LOGO-TEXTO-NORA-BLANCO.png';
-                const footerLogoLight = safeConfig.portal?.footerLogoLight || 'https://i.postimg.cc/L4r0gSvV/LOGO-TEXTO-NORA-NEGRO.png';
-                const footerLogoDark = safeConfig.portal?.footerLogoDark || 'https://i.postimg.cc/FFfBKzb8/LOGO-TEXTO-NORA-BLANCO.png';
-                const footerLogoSecondaryLight = safeConfig.portal?.footerLogoSecondaryLight || 'https://i.postimg.cc/L4r0gSvV/LOGO-TEXTO-NORA-NEGRO.png';
-                const footerLogoSecondaryDark = safeConfig.portal?.footerLogoSecondaryDark || 'https://i.postimg.cc/L4r0gSvV/LOGO-TEXTO-NORA-NEGRO.png';
+                const footerLogoLight = safeConfig.portal?.footerLogoLight || 'https://i.postimg.cc/tR3YSryT/LOGO-NORA-NEGRO.png';
+                const footerLogoDark = safeConfig.portal?.footerLogoDark || 'https://i.postimg.cc/SQ6JTZqj/LOGO-NORA-BLANCO.png';
+                const footerLogoSecondaryLight = safeConfig.portal?.footerLogoSecondaryLight || 'https://i.postimg.cc/tR3YSryT/LOGO-NORA-NEGRO.png';
+                const footerLogoSecondaryDark = safeConfig.portal?.footerLogoSecondaryDark || 'https://i.postimg.cc/SQ6JTZqj/LOGO-NORA-BLANCO.png';
 
                 const imgLogoLight = document.getElementById('portal-logo-light');
                 if (imgLogoLight) imgLogoLight.src = logoLight;
@@ -358,7 +363,27 @@
                     // 1. Intentar cargar de la red primero (mostrar la última versión si hay conexión)
                     const metaVersion = document.querySelector('meta[name="x-app-version"]');
                     const currentVersion = metaVersion?.getAttribute('content') || Date.now().toString();
-                    const response = await fetch(`portal-config.json?v=${encodeURIComponent(currentVersion)}`, { cache: 'no-store' });
+                    
+                    const urlParams = new URLSearchParams(window.location.search);
+                    const empresaId = urlParams.get('empresa');
+                    let configUrl = `portal-config.json?v=${encodeURIComponent(currentVersion)}`;
+                    
+                    if (empresaId) {
+                        try {
+                            const empRes = await fetch('empresas.json');
+                            if (empRes.ok) {
+                                const empresas = await empRes.json();
+                                const emp = empresas.find(e => e.id === empresaId);
+                                if (emp && emp.configUrl) {
+                                    configUrl = `${emp.configUrl}?v=${encodeURIComponent(currentVersion)}`;
+                                }
+                            }
+                        } catch(e) {
+                            console.warn('Error cargando empresas.json', e);
+                        }
+                    }
+
+                    const response = await fetch(configUrl, { cache: 'no-store' });
                     if (!response.ok) throw new Error('No se pudo cargar la configuracion central');
                     const config = await response.json();
                     applyPortalConfig({ ...DEFAULT_PORTAL_CONFIG, ...config });
