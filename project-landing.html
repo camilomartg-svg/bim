@@ -96,7 +96,7 @@
           <a href="#accesos" class="flex h-11 w-full items-center justify-center rounded-xl text-[#252a20] transition hover:bg-white/70 dark:text-white dark:hover:bg-white/10" aria-label="Accesos">
             <span class="material-symbols-outlined">bolt</span>
           </a>
-          <a href="home.html" class="mt-auto flex h-11 w-full items-center justify-center rounded-xl text-[#252a20] transition hover:bg-white/70 dark:text-white dark:hover:bg-white/10" aria-label="Portal BIM">
+          <a href="javascript:void(0)" onclick="window.location.href = 'home.html' + (new URLSearchParams(window.location.search).get('empresa') ? '?empresa=' + new URLSearchParams(window.location.search).get('empresa') : '')" class="mt-auto flex h-11 w-full items-center justify-center rounded-xl text-[#252a20] transition hover:bg-white/70 dark:text-white dark:hover:bg-white/10" aria-label="Portal BIM">
             <span class="material-symbols-outlined">home</span>
           </a>
         </nav>
@@ -109,7 +109,7 @@
               <button id="back-btn" aria-label="Volver" class="flex h-11 w-11 items-center justify-center rounded-xl bg-white/70 text-[#111827] transition hover:bg-white dark:bg-white/10 dark:text-white dark:hover:bg-white/15">
                 <span class="material-symbols-outlined">arrow_back</span>
               </button>
-              <a href="home.html" class="hidden items-center sm:flex" title="Ir al Home">
+              <a href="javascript:void(0)" onclick="window.location.href = 'home.html' + (new URLSearchParams(window.location.search).get('empresa') ? '?empresa=' + new URLSearchParams(window.location.search).get('empresa') : '')" class="hidden items-center sm:flex" title="Ir al Home">
                 <img id="header-project-logo" alt="Proyecto" class="h-9 w-auto object-contain" src="assets/icons/portal-bim-favicon.png" />
               </a>
               <div class="min-w-0">
@@ -450,7 +450,27 @@
           // 1. Intentar cargar de la red primero (mostrar la última versión si hay conexión)
           const metaVersion = document.querySelector('meta[name="x-app-version"]');
           const currentVersion = metaVersion?.getAttribute('content') || Date.now().toString();
-          const response = await fetch(`portal-config.json?v=${encodeURIComponent(currentVersion)}`, { cache: 'no-store' });
+          
+          const urlParams = new URLSearchParams(window.location.search);
+          const empresaId = urlParams.get('empresa');
+          let configUrl = `portal-config.json?v=${encodeURIComponent(currentVersion)}`;
+          
+          if (empresaId) {
+            try {
+              const empRes = await fetch('empresas.json');
+              if (empRes.ok) {
+                const empresas = await empRes.json();
+                const emp = empresas.find(e => e.id === empresaId);
+                if (emp && emp.configUrl) {
+                  configUrl = `${emp.configUrl}?v=${encodeURIComponent(currentVersion)}`;
+                }
+              }
+            } catch(e) {
+                console.warn('Error cargando empresas.json', e);
+            }
+          }
+
+          const response = await fetch(configUrl, { cache: 'no-store' });
           if (!response.ok) throw new Error('No se pudo cargar la configuración del portal');
           return await response.json();
         } catch (error) {
@@ -637,8 +657,13 @@
 
       const backBtn = document.getElementById('back-btn');
       backBtn?.addEventListener('click', () => {
-        if (window.history.length > 1) window.history.back();
-        else window.location.href = 'home.html';
+        if (window.history.length > 1) {
+            window.history.back();
+        } else {
+            const urlParams = new URLSearchParams(window.location.search);
+            const empresaId = urlParams.get('empresa');
+            window.location.href = 'home.html' + (empresaId ? '?empresa=' + encodeURIComponent(empresaId) : '');
+        }
       });
 
       const nowEl = document.getElementById('project-now');

@@ -282,7 +282,12 @@
                 if (!project || project.enabled === false) return '#';
                 const slug = slugify(project.slug || project.name || '');
                 const landingEnabled = !project.landing || project.landing.enabled !== false;
-                if (landingEnabled && slug) return `project-landing.html?project=${encodeURIComponent(slug)}`;
+                
+                const urlParams = new URLSearchParams(window.location.search);
+                const empresaId = urlParams.get('empresa');
+                const empresaParam = empresaId ? `&empresa=${encodeURIComponent(empresaId)}` : '';
+
+                if (landingEnabled && slug) return `project-landing.html?project=${encodeURIComponent(slug)}${empresaParam}`;
                 const rawUrl = String(project.homeUrl || '').trim();
                 return rawUrl || '#';
             };
@@ -358,7 +363,27 @@
                     // 1. Intentar cargar de la red primero (mostrar la última versión si hay conexión)
                     const metaVersion = document.querySelector('meta[name="x-app-version"]');
                     const currentVersion = metaVersion?.getAttribute('content') || Date.now().toString();
-                    const response = await fetch(`portal-config.json?v=${encodeURIComponent(currentVersion)}`, { cache: 'no-store' });
+                    
+                    const urlParams = new URLSearchParams(window.location.search);
+                    const empresaId = urlParams.get('empresa');
+                    let configUrl = `portal-config.json?v=${encodeURIComponent(currentVersion)}`;
+                    
+                    if (empresaId) {
+                        try {
+                            const empRes = await fetch('empresas.json');
+                            if (empRes.ok) {
+                                const empresas = await empRes.json();
+                                const emp = empresas.find(e => e.id === empresaId);
+                                if (emp && emp.configUrl) {
+                                    configUrl = `${emp.configUrl}?v=${encodeURIComponent(currentVersion)}`;
+                                }
+                            }
+                        } catch(e) {
+                            console.warn('Error cargando empresas.json', e);
+                        }
+                    }
+
+                    const response = await fetch(configUrl, { cache: 'no-store' });
                     if (!response.ok) throw new Error('No se pudo cargar la configuracion central');
                     const config = await response.json();
                     applyPortalConfig({ ...DEFAULT_PORTAL_CONFIG, ...config });

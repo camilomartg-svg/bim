@@ -10,7 +10,7 @@
         (function() {
             const userAccount = JSON.parse(sessionStorage.getItem('userAccount') || localStorage.getItem('userAccount'));
             if (userAccount) {
-                window.location.replace('https://norabim.com/home.html');
+                window.location.replace('https://norabim.com/empresas.html');
             }
         })();
     </script>
@@ -233,7 +233,7 @@
                         sessionStorage.setItem('userAccount', JSON.stringify(userProfile));
                     }
 
-                    window.location.href = 'https://norabim.com/home.html';
+                    window.location.href = 'https://norabim.com/empresas.html';
                 }
             } catch (error) {
                 console.error(error);
