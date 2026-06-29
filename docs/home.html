@@ -104,7 +104,7 @@
             <section class="relative flex h-80 pt-24 overflow-hidden">
                 <!-- Panel Izquierdo (30%) con color sólido y logo -->
                 <div class="w-[30%] bg-[#f6f6f6] dark:bg-background-dark h-full flex items-center justify-center p-8">
-                    <a href="home.html" class="block w-full max-w-[200px]" title="Ir al Home">
+                    <a href="empresas.html" class="block w-full max-w-[160px]" title="Cambiar de empresa">
                         <img id="portal-logo-light" alt="nora CDE" class="w-full h-auto object-contain dark:hidden"
                             src="https://i.postimg.cc/tR3YSryT/LOGO-NORA-NEGRO.png" />
                         <img id="portal-logo-dark" alt="nora CDE" class="w-full h-auto object-contain hidden dark:block"
@@ -121,32 +121,32 @@
                     <div class="flex flex-col xl:flex-row gap-16 items-start">
                         
                         <!-- Columna Izquierda: Menús -->
-                        <div class="w-full xl:w-1/3 flex flex-col gap-10 xl:pr-10">
+                        <div class="w-full xl:w-1/3 flex flex-col gap-8 xl:pr-8">
                             <!-- Publicaciones -->
                             <div>
-                                <h2 class="text-[10px] font-bold tracking-widest uppercase text-gray-400 dark:text-gray-500 mb-4 pb-2">Publicaciones</h2>
-                                <ul class="space-y-3" id="portal-publicaciones-list"></ul>
+                                <h2 class="text-[9px] font-bold tracking-widest uppercase text-gray-400 dark:text-gray-500 mb-3 pb-1">Publicaciones</h2>
+                                <ul class="space-y-2" id="portal-publicaciones-list"></ul>
                             </div>
                             <!-- Solicitudes -->
                             <div>
-                                <h2 class="text-[10px] font-bold tracking-widest uppercase text-gray-400 dark:text-gray-500 mb-4 pb-2">Solicitudes</h2>
-                                <ul class="space-y-3" id="portal-solicitudes-list"></ul>
+                                <h2 class="text-[9px] font-bold tracking-widest uppercase text-gray-400 dark:text-gray-500 mb-3 pb-1">Solicitudes</h2>
+                                <ul class="space-y-2" id="portal-solicitudes-list"></ul>
                             </div>
                             <!-- Métricas -->
                             <div>
-                                <h2 class="text-[10px] font-bold tracking-widest uppercase text-gray-400 dark:text-gray-500 mb-4 pb-2">Métricas</h2>
-                                <ul class="space-y-3" id="portal-metricas-list"></ul>
+                                <h2 class="text-[9px] font-bold tracking-widest uppercase text-gray-400 dark:text-gray-500 mb-3 pb-1">Métricas</h2>
+                                <ul class="space-y-2" id="portal-metricas-list"></ul>
                             </div>
                             <!-- Administración -->
                             <div id="portal-admin-column" class="hidden">
-                                <h2 class="text-[10px] font-bold tracking-widest uppercase text-gray-400 dark:text-gray-500 mb-4 pb-2">Administración</h2>
-                                <ul class="space-y-3" id="portal-admin-list"></ul>
+                                <h2 class="text-[9px] font-bold tracking-widest uppercase text-gray-400 dark:text-gray-500 mb-3 pb-1">Administración</h2>
+                                <ul class="space-y-2" id="portal-admin-list"></ul>
                             </div>
                         </div>
 
                         <!-- Columna Derecha: Proyectos (Posters) -->
                         <div class="w-full xl:w-2/3">
-                            <div id="portal-projects-grid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8 items-stretch">
+                            <div id="portal-projects-grid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 items-stretch">
                                 <!-- Proyectos se insertan aquí vía JS -->
                             </div>
                         </div>
@@ -298,9 +298,9 @@
                 const visibleItems = (Array.isArray(items) ? items : []).filter(canAccess);
                 listEl.innerHTML = visibleItems.length
                     ? visibleItems
-                        .map((item) => `<li id="${escapeHtml(item.id || '')}"><a class="text-xl font-light text-[#111] dark:text-white hover:text-gray-400 transition-colors duration-200" href="${escapeHtml(item.href || '#')}">${escapeHtml(item.label || 'Sin nombre')}</a></li>`)
+                        .map((item) => `<li id="${escapeHtml(item.id || '')}"><a class="text-base font-light text-[#111] dark:text-white hover:text-gray-400 transition-colors duration-200" href="${escapeHtml(item.href || '#')}">${escapeHtml(item.label || 'Sin nombre')}</a></li>`)
                         .join('')
-                    : '<li class="text-xs font-light text-gray-400">Sin enlaces configurados</li>';
+                    : '<li class="text-[10px] font-light text-gray-400">Sin enlaces configurados</li>';
             };
             const renderProjects = (projects) => {
                 if (!projectsList) return;
@@ -317,18 +317,18 @@
                                 acronym = name.substring(0, 3).toUpperCase();
                             }
                             return `
-                            <a href="${escapeHtml(resolveProjectHref(project))}" class="group flex flex-col bg-[#efefef] dark:bg-[#1a1a1a] p-6 transition-transform duration-300 hover:-translate-y-2 min-h-[400px]">
-                                <div class="flex justify-between items-start mb-6 text-[8px] font-bold tracking-widest uppercase text-gray-600 dark:text-gray-400 border-b border-gray-300 dark:border-gray-700 pb-3">
+                            <a href="${escapeHtml(resolveProjectHref(project))}" class="group flex flex-col bg-[#efefef] dark:bg-[#1a1a1a] p-5 transition-transform duration-300 hover:-translate-y-2 min-h-[380px]">
+                                <div class="flex justify-between items-start mb-6 text-[7px] font-bold tracking-widest uppercase text-gray-600 dark:text-gray-400 border-b border-gray-300 dark:border-gray-700 pb-2">
                                     <span>NORA CDE™</span>
                                     <span>PROYECTO</span>
                                 </div>
-                                <h3 class="text-6xl font-medium tracking-tighter text-[#111] dark:text-white leading-none mb-10">${acronym}</h3>
+                                <h3 class="text-5xl font-medium tracking-tighter text-[#111] dark:text-white leading-none mb-8">${acronym}</h3>
                                 
-                                <div class="mt-auto border-t border-gray-300 dark:border-gray-700 pt-5">
-                                    <h4 class="text-2xl font-medium tracking-tight text-[#111] dark:text-white leading-none mb-2">${escapeHtml(name)}</h4>
-                                    <p class="text-[9px] uppercase tracking-widest text-gray-500 dark:text-gray-400 mb-6">[Activo]</p>
+                                <div class="mt-auto border-t border-gray-300 dark:border-gray-700 pt-4">
+                                    <h4 class="text-xl font-medium tracking-tight text-[#111] dark:text-white leading-none mb-2">${escapeHtml(name)}</h4>
+                                    <p class="text-[8px] uppercase tracking-widest text-gray-500 dark:text-gray-400 mb-4">[Activo]</p>
                                     
-                                    <p class="text-[8px] text-gray-500 dark:text-gray-500 leading-relaxed text-justify font-mono">
+                                    <p class="text-[8px] text-gray-500 dark:text-gray-500 leading-tight text-justify font-mono">
                                         Entorno de datos comunes proporcionado por Nora CDE. / Acceda para interactuar con modelos y documentación. / Se requiere autorización. / Mantenga la confidencialidad de la información de este proyecto. /
                                     </p>
                                 </div>
