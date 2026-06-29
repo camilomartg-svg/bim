@@ -90,9 +90,9 @@
                     </button>
                     <a href="home.html" class="flex items-center" title="Ir al Home">
                         <img id="portal-logo-light" alt="BIM" class="h-16 w-auto object-contain dark:hidden"
-                            src="https://i.postimg.cc/hPxYkdvL/LOGO-NORA-NEGRO-VERTICAL.png" />
+                            src="https://i.postimg.cc/L4r0gSvV/LOGO-TEXTO-NORA-NEGRO.png" />
                         <img id="portal-logo-dark" alt="BIM" class="h-16 w-auto object-contain hidden dark:block"
-                            src="https://i.postimg.cc/rzpVzNDL/LOGO-NORA-BLANCO.png" />
+                            src="https://i.postimg.cc/FFfBKzb8/LOGO-TEXTO-NORA-BLANCO.png" />
                     </a>
                 </div>
                 <div class="flex items-center space-x-4">
@@ -159,10 +159,10 @@
                     
                     <!-- Logo para modo claro -->
                     <img id="portal-footer-logo-light" alt="Alcabama logo" class="h-20 dark:hidden"
-                        src="https://i.postimg.cc/hPxYkdvL/LOGO-NORA-NEGRO-VERTICAL.png" />
+                        src="https://i.postimg.cc/L4r0gSvV/LOGO-TEXTO-NORA-NEGRO.png" />
                     <!-- Logo para modo oscuro -->
                     <img id="portal-footer-logo-dark" alt="Alcabama logo" class="h-20 hidden dark:block"
-                        src="https://i.postimg.cc/rzpVzNDL/LOGO-NORA-BLANCO.png" />
+                        src="https://i.postimg.cc/FFfBKzb8/LOGO-TEXTO-NORA-BLANCO.png" />
                 </div>
                 <p class="text-sm" id="portal-footer-text">© 2026 nora CDE - Todos los derechos reservados.
                 </p>
@@ -194,12 +194,12 @@
                         'https://i.postimg.cc/FK9n1BNP/r-trevoly.png'
                     ],
                     configPageUrl: 'portal-configurator.html',
-                    logoLight: 'https://i.postimg.cc/hPxYkdvL/LOGO-NORA-NEGRO-VERTICAL.png',
-                    logoDark: 'https://i.postimg.cc/rzpVzNDL/LOGO-NORA-BLANCO.png',
-                    footerLogoLight: 'https://i.postimg.cc/hPxYkdvL/LOGO-NORA-NEGRO-VERTICAL.png',
-                    footerLogoDark: 'https://i.postimg.cc/rzpVzNDL/LOGO-NORA-BLANCO.png',
-                    footerLogoSecondaryLight: 'https://i.postimg.cc/hPxYkdvL/LOGO-NORA-NEGRO-VERTICAL.png',
-                    footerLogoSecondaryDark: 'https://i.postimg.cc/HjLYj9rD/LOGO-NORA-NEGRO.png'
+                    logoLight: 'https://i.postimg.cc/L4r0gSvV/LOGO-TEXTO-NORA-NEGRO.png',
+                    logoDark: 'https://i.postimg.cc/FFfBKzb8/LOGO-TEXTO-NORA-BLANCO.png',
+                    footerLogoLight: 'https://i.postimg.cc/L4r0gSvV/LOGO-TEXTO-NORA-NEGRO.png',
+                    footerLogoDark: 'https://i.postimg.cc/FFfBKzb8/LOGO-TEXTO-NORA-BLANCO.png',
+                    footerLogoSecondaryLight: 'https://i.postimg.cc/L4r0gSvV/LOGO-TEXTO-NORA-NEGRO.png',
+                    footerLogoSecondaryDark: 'https://i.postimg.cc/L4r0gSvV/LOGO-TEXTO-NORA-NEGRO.png'
                 },
                 projects: [
                     { name: 'Arboré', homeUrl: '#', enabled: true },
@@ -318,12 +318,12 @@
                 }
 
                 // Actualizar logos dinámicamente
-                const logoLight = safeConfig.portal?.logoLight || 'https://i.postimg.cc/hPxYkdvL/LOGO-NORA-NEGRO-VERTICAL.png';
-                const logoDark = safeConfig.portal?.logoDark || 'https://i.postimg.cc/rzpVzNDL/LOGO-NORA-BLANCO.png';
-                const footerLogoLight = safeConfig.portal?.footerLogoLight || 'https://i.postimg.cc/hPxYkdvL/LOGO-NORA-NEGRO-VERTICAL.png';
-                const footerLogoDark = safeConfig.portal?.footerLogoDark || 'https://i.postimg.cc/rzpVzNDL/LOGO-NORA-BLANCO.png';
-                const footerLogoSecondaryLight = safeConfig.portal?.footerLogoSecondaryLight || 'https://i.postimg.cc/hPxYkdvL/LOGO-NORA-NEGRO-VERTICAL.png';
-                const footerLogoSecondaryDark = safeConfig.portal?.footerLogoSecondaryDark || 'https://i.postimg.cc/HjLYj9rD/LOGO-NORA-NEGRO.png';
+                const logoLight = safeConfig.portal?.logoLight || 'https://i.postimg.cc/L4r0gSvV/LOGO-TEXTO-NORA-NEGRO.png';
+                const logoDark = safeConfig.portal?.logoDark || 'https://i.postimg.cc/FFfBKzb8/LOGO-TEXTO-NORA-BLANCO.png';
+                const footerLogoLight = safeConfig.portal?.footerLogoLight || 'https://i.postimg.cc/L4r0gSvV/LOGO-TEXTO-NORA-NEGRO.png';
+                const footerLogoDark = safeConfig.portal?.footerLogoDark || 'https://i.postimg.cc/FFfBKzb8/LOGO-TEXTO-NORA-BLANCO.png';
+                const footerLogoSecondaryLight = safeConfig.portal?.footerLogoSecondaryLight || 'https://i.postimg.cc/L4r0gSvV/LOGO-TEXTO-NORA-NEGRO.png';
+                const footerLogoSecondaryDark = safeConfig.portal?.footerLogoSecondaryDark || 'https://i.postimg.cc/L4r0gSvV/LOGO-TEXTO-NORA-NEGRO.png';
 
                 const imgLogoLight = document.getElementById('portal-logo-light');
                 if (imgLogoLight) imgLogoLight.src = logoLight;

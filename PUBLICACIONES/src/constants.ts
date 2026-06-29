@@ -65,7 +65,7 @@ export interface ProjectConfig {
 export const BRANDING = {
   nora: {
     name: 'nora',
-    logo: 'https://i.postimg.cc/HjLYj9rD/LOGO-NORA-NEGRO.png',
+    logo: 'https://i.postimg.cc/L4r0gSvV/LOGO-TEXTO-NORA-NEGRO.png',
     colors: {
       primary: '#003E52',
       secondary: '#024959',

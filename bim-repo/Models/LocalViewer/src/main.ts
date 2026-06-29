@@ -2028,14 +2028,14 @@ function initTheme() {
         if (dark) {
             document.body.classList.add('dark-mode');
             if(icon) icon.className = 'fa-solid fa-sun';
-            if(logoImg) logoImg.src = 'https://i.postimg.cc/rzpVzNDL/LOGO-NORA-BLANCO.png';
+            if(logoImg) logoImg.src = 'https://i.postimg.cc/FFfBKzb8/LOGO-TEXTO-NORA-BLANCO.png';
             if (world && world.scene && world.scene.three) {
                  world.scene.three.background = new THREE.Color(0x1e1e1e); 
             }
         } else {
             document.body.classList.remove('dark-mode');
             if(icon) icon.className = 'fa-solid fa-moon';
-            if(logoImg) logoImg.src = 'https://i.postimg.cc/HjLYj9rD/LOGO-NORA-NEGRO.png';
+            if(logoImg) logoImg.src = 'https://i.postimg.cc/L4r0gSvV/LOGO-TEXTO-NORA-NEGRO.png';
             if (world && world.scene && world.scene.three) {
                  world.scene.three.background = new THREE.Color(0xf5f5f5); 
             }

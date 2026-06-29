@@ -3396,7 +3396,7 @@ function initTheme() {
         } else {
             document.body.classList.remove('dark-mode');
             if(icon) icon.className = 'fa-solid fa-moon';
-            if(logoImg) logoImg.src = 'https://i.postimg.cc/HjLYj9rD/LOGO-NORA-NEGRO.png';
+            if(logoImg) logoImg.src = 'https://i.postimg.cc/L4r0gSvV/LOGO-TEXTO-NORA-NEGRO.png';
             if (world && world.scene && world.scene.three) {
                  world.scene.three.background = new THREE.Color(0xf5f5f5); 
             }
@@ -10266,7 +10266,7 @@ function enforceAuthenticatedAccess() {
     overlay.style.background = 'radial-gradient(circle at top, rgba(2, 73, 89, 0.18), rgba(2, 73, 89, 0) 30%), linear-gradient(135deg, rgba(255,255,255,0.97), rgba(246,246,244,0.97))';
     overlay.innerHTML = `
         <div style="width:min(520px, 100%); background:#ffffff; border:1px solid rgba(2, 73, 89, 0.12); border-radius:24px; padding:36px 32px; box-shadow:0 30px 80px rgba(64, 69, 66, 0.14); text-align:center; font-family:Inter, Arial, sans-serif;">
-            <img src="https://i.postimg.cc/HjLYj9rD/LOGO-NORA-NEGRO.png" alt="nora" style="height:44px; width:auto; margin:0 auto 22px; display:block;" />
+            <img src="https://i.postimg.cc/L4r0gSvV/LOGO-TEXTO-NORA-NEGRO.png" alt="nora" style="height:44px; width:auto; margin:0 auto 22px; display:block;" />
             <div style="width:72px; height:72px; margin:0 auto 18px; border-radius:50%; display:flex; align-items:center; justify-content:center; background:rgba(2, 73, 89, 0.08); color:#024959; font-size:28px;">
                 <i class="fa-solid fa-lock"></i>
             </div>
