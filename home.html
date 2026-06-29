@@ -88,12 +88,6 @@
                         class="rounded-lg border border-border-light bg-white/80 px-3 py-2 hover:bg-white transition-colors">
                         <span class="material-symbols-outlined">arrow_back</span>
                     </button>
-                    <a href="home.html" class="flex items-center" title="Ir al Home">
-                        <img id="portal-logo-light" alt="BIM" class="h-16 w-auto object-contain dark:hidden"
-                            src="https://i.postimg.cc/L4r0gSvV/LOGO-TEXTO-NORA-NEGRO.png" />
-                        <img id="portal-logo-dark" alt="BIM" class="h-16 w-auto object-contain hidden dark:block"
-                            src="https://i.postimg.cc/FFfBKzb8/LOGO-TEXTO-NORA-BLANCO.png" />
-                    </a>
                 </div>
                 <div class="flex items-center space-x-4">
                     <button id="theme-toggle" aria-label="Cambiar tema"
@@ -108,8 +102,14 @@
         </header>
         <main>
             <section class="relative flex h-80 pt-24 overflow-hidden">
-                <!-- Panel Izquierdo (30%) con color sólido -->
-                <div class="w-[30%] bg-[#f6f6f6] h-full">
+                <!-- Panel Izquierdo (30%) con color sólido y logo -->
+                <div class="w-[30%] bg-[#f6f6f6] dark:bg-background-dark h-full flex items-center justify-center p-8">
+                    <a href="home.html" class="block w-full max-w-[200px]" title="Ir al Home">
+                        <img id="portal-logo-light" alt="nora CDE" class="w-full h-auto object-contain dark:hidden"
+                            src="https://i.postimg.cc/tR3YSryT/LOGO-NORA-NEGRO.png" />
+                        <img id="portal-logo-dark" alt="nora CDE" class="w-full h-auto object-contain hidden dark:block"
+                            src="https://i.postimg.cc/SQ6JTZqj/LOGO-NORA-BLANCO.png" />
+                    </a>
                 </div>
                 <!-- Panel Derecho (70%) con imagen -->
                 <div id="home-hero-image" class="w-[70%] h-full bg-cover bg-center"
@@ -172,10 +172,6 @@
 
                         <!-- Columna Derecha: Proyectos (Cuadros Blancos) -->
                         <div class="w-full xl:w-[65%]">
-                            <div class="flex items-center gap-3 mb-8">
-                                <span class="material-symbols-outlined text-4xl text-text-light dark:text-white">domain</span>
-                                <h2 class="text-4xl font-bold tracking-tight text-text-light dark:text-white">Tus Proyectos</h2>
-                            </div>
                             <div id="portal-projects-grid" class="grid grid-cols-1 md:grid-cols-2 gap-6 items-start auto-rows-max">
                                 <!-- Proyectos se insertan aquí vía JS -->
                             </div>
