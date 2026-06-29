@@ -116,39 +116,51 @@
                     style="background-image: url('https://i.postimg.cc/FK9n1BNP/r-trevoly.png');">
                 </div>
             </section>
-            <section class="bg-background-light dark:bg-background-dark py-16 px-8">
+            <section class="bg-[#f6f6f6] dark:bg-background-dark py-16 px-8">
                 <div class="container mx-auto">
-                    <div class="grid grid-cols-1 gap-12 md:grid-cols-2 xl:grid-cols-5">
-                        <div>
-                            <h2
-                                class="text-2xl font-bold mb-4 border-b border-border-light dark:border-border-dark pb-2">
-                                Proyectos</h2>
-                            <ul class="space-y-2" id="portal-projects-list"></ul>
+                    <!-- Menús (Cuadros Negros) -->
+                    <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6 mb-16">
+                        <!-- Publicaciones -->
+                        <div class="bg-[#171717] dark:bg-[#222] text-white p-8 rounded-2xl shadow-lg flex flex-col h-full">
+                            <div class="flex items-center gap-3 mb-6 border-b border-white/20 pb-4">
+                                <span class="material-symbols-outlined text-3xl">article</span>
+                                <h2 class="text-xl font-bold">Publicaciones</h2>
+                            </div>
+                            <ul class="space-y-4 flex-grow" id="portal-publicaciones-list"></ul>
                         </div>
-                        <div>
-                            <h2
-                                class="text-2xl font-bold mb-4 border-b border-border-light dark:border-border-dark pb-2">
-                                Publicaciones</h2>
-                            <ul class="space-y-2" id="portal-publicaciones-list"></ul>
+                        <!-- Solicitudes -->
+                        <div class="bg-[#171717] dark:bg-[#222] text-white p-8 rounded-2xl shadow-lg flex flex-col h-full">
+                            <div class="flex items-center gap-3 mb-6 border-b border-white/20 pb-4">
+                                <span class="material-symbols-outlined text-3xl">assignment</span>
+                                <h2 class="text-xl font-bold">Solicitudes</h2>
+                            </div>
+                            <ul class="space-y-4 flex-grow" id="portal-solicitudes-list"></ul>
                         </div>
-                        <div>
-                            <h2
-                                class="text-2xl font-bold mb-4 border-b border-border-light dark:border-border-dark pb-2">
-                                Solicitudes</h2>
-                            <ul class="space-y-2" id="portal-solicitudes-list"></ul>
+                        <!-- Métricas -->
+                        <div class="bg-[#171717] dark:bg-[#222] text-white p-8 rounded-2xl shadow-lg flex flex-col h-full">
+                            <div class="flex items-center gap-3 mb-6 border-b border-white/20 pb-4">
+                                <span class="material-symbols-outlined text-3xl">bar_chart</span>
+                                <h2 class="text-xl font-bold">Métricas</h2>
+                            </div>
+                            <ul class="space-y-4 flex-grow" id="portal-metricas-list"></ul>
                         </div>
-                        <div>
-                            <h2
-                                class="text-2xl font-bold mb-4 border-b border-border-light dark:border-border-dark pb-2">
-                                Métricas</h2>
-                            <ul class="space-y-2" id="portal-metricas-list"></ul>
+                        <!-- Administración -->
+                        <div id="portal-admin-column" class="bg-[#171717] dark:bg-[#222] text-white p-8 rounded-2xl shadow-lg flex-col h-full hidden">
+                            <div class="flex items-center gap-3 mb-6 border-b border-white/20 pb-4">
+                                <span class="material-symbols-outlined text-3xl">admin_panel_settings</span>
+                                <h2 class="text-xl font-bold">Administración</h2>
+                            </div>
+                            <ul class="space-y-4 flex-grow" id="portal-admin-list"></ul>
                         </div>
-                        <div id="portal-admin-column" class="hidden">
-                            <h2
-                                class="text-2xl font-bold mb-4 border-b border-border-light dark:border-border-dark pb-2">
-                                Administración</h2>
-                            <ul class="space-y-2" id="portal-admin-list"></ul>
-                        </div>
+                    </div>
+
+                    <!-- Proyectos (Cuadros Blancos) -->
+                    <div class="mb-6 flex items-center gap-3">
+                        <span class="material-symbols-outlined text-3xl text-text-light dark:text-white">domain</span>
+                        <h2 class="text-3xl font-black tracking-tight text-text-light dark:text-white">Tus Proyectos</h2>
+                    </div>
+                    <div id="portal-projects-grid" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-6">
+                        <!-- Proyectos se insertan aquí vía JS -->
                     </div>
                 </div>
             </section>
@@ -158,10 +170,10 @@
                 <div class="flex items-center justify-center gap-4 mb-4">
                     
                     <!-- Logo para modo claro -->
-                    <img id="portal-footer-logo-light" alt="Alcabama logo" class="h-20 dark:hidden"
+                    <img id="portal-footer-logo-light" alt="Alcabama logo" class="h-40 dark:hidden"
                         src="https://i.postimg.cc/tR3YSryT/LOGO-NORA-NEGRO.png" />
                     <!-- Logo para modo oscuro -->
-                    <img id="portal-footer-logo-dark" alt="Alcabama logo" class="h-20 hidden dark:block"
+                    <img id="portal-footer-logo-dark" alt="Alcabama logo" class="h-40 hidden dark:block"
                         src="https://i.postimg.cc/SQ6JTZqj/LOGO-NORA-BLANCO.png" />
                 </div>
                 <p class="text-sm" id="portal-footer-text">© 2026 nora CDE - Todos los derechos reservados.
@@ -174,7 +186,7 @@
         document.addEventListener('DOMContentLoaded', () => {
             const heroImage = document.getElementById('home-hero-image');
             const authContainer = document.getElementById('auth-container');
-            const projectsList = document.getElementById('portal-projects-list');
+            const projectsList = document.getElementById('portal-projects-grid');
             const publicacionesList = document.getElementById('portal-publicaciones-list');
             const solicitudesList = document.getElementById('portal-solicitudes-list');
             const metricasList = document.getElementById('portal-metricas-list');
@@ -296,18 +308,28 @@
                 const visibleItems = (Array.isArray(items) ? items : []).filter(canAccess);
                 listEl.innerHTML = visibleItems.length
                     ? visibleItems
-                        .map((item) => `<li id="${escapeHtml(item.id || '')}"><a class="hover:text-primary dark:hover:text-primary" href="${escapeHtml(item.href || '#')}">${escapeHtml(item.label || 'Sin nombre')}</a></li>`)
+                        .map((item) => `<li id="${escapeHtml(item.id || '')}"><a class="flex items-center gap-2 text-white/80 hover:text-white transition-colors duration-200" href="${escapeHtml(item.href || '#')}"><span class="material-symbols-outlined text-sm">chevron_right</span>${escapeHtml(item.label || 'Sin nombre')}</a></li>`)
                         .join('')
-                    : '<li class="text-sm text-gray-400 dark:text-gray-500">Sin enlaces configurados.</li>';
+                    : '<li class="text-sm text-white/50">Sin enlaces configurados.</li>';
             };
             const renderProjects = (projects) => {
                 if (!projectsList) return;
                 const visibleProjects = (Array.isArray(projects) ? projects : []).filter((item) => item && item.enabled !== false);
                 projectsList.innerHTML = visibleProjects.length
                     ? visibleProjects
-                        .map((project) => `<li><a class="hover:text-primary dark:hover:text-primary" href="${escapeHtml(resolveProjectHref(project))}">${escapeHtml(project.name || 'Proyecto')}</a></li>`)
+                        .map((project) => `
+                            <a href="${escapeHtml(resolveProjectHref(project))}" class="group block bg-white dark:bg-[#374151] rounded-2xl p-6 shadow-sm hover:shadow-xl transition-all duration-300 border border-border-light dark:border-border-dark hover:-translate-y-1">
+                                <div class="flex items-center justify-between mb-4">
+                                    <div class="w-12 h-12 rounded-full bg-[#f6f6f6] dark:bg-[#2b2b2b] flex items-center justify-center text-primary dark:text-white group-hover:scale-110 transition-transform">
+                                        <span class="material-symbols-outlined">apartment</span>
+                                    </div>
+                                    <span class="material-symbols-outlined text-gray-300 dark:text-gray-600 group-hover:text-primary dark:group-hover:text-white transition-colors">arrow_outward</span>
+                                </div>
+                                <h3 class="text-xl font-bold text-text-light dark:text-white">${escapeHtml(project.name || 'Proyecto')}</h3>
+                            </a>
+                        `)
                         .join('')
-                    : '<li class="text-sm text-gray-400 dark:text-gray-500">Sin proyectos configurados.</li>';
+                    : '<div class="col-span-full text-center py-12 text-gray-500">Sin proyectos configurados.</div>';
             };
             const applyHeroImages = (images) => {
                 const heroImages = (Array.isArray(images) ? images : []).filter(Boolean);
@@ -351,6 +373,7 @@
                 if (adminColumn) {
                     if (adminItems.length) {
                         adminColumn.classList.remove('hidden');
+                        adminColumn.classList.add('flex');
                         renderLinkItems(adminList, adminItems);
                     } else {
                         adminColumn.classList.add('hidden');
