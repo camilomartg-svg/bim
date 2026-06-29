@@ -6066,7 +6066,7 @@ function setupViewpoints() {
     }
 }
 
-const LOGIN_URL = 'https://camilomartg-svg.github.io/bim/inse.html';
+const LOGIN_URL = 'https://norabim.com/inse.html';
 
 function getStoredUserAccount() {
     const userAccountStr = sessionStorage.getItem('userAccount') || localStorage.getItem('userAccount');

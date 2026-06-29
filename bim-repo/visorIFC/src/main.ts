@@ -202,7 +202,7 @@ fragments.list.onItemSet.add(async ({ value: model }) => {
 // -------------------------
 async function loadModels() {
   const basePath =
-    "https://camilomartg-svg.github.io/bim/visorIFC/Models/";
+    "https://norabim.com/visorIFC/Models/";
 
   const models = ["02_GI_BLU_Estructura_CBombas.ifc", "19_ZI_ALL_Estructura_Torre_ModuloA_T1-T2.ifc", "19_ZI_ALL_Estructura_Torre_ModuloA_T3-T4.ifc"];
 

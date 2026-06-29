@@ -10,7 +10,7 @@
         (function() {
             const userAccount = JSON.parse(sessionStorage.getItem('userAccount') || localStorage.getItem('userAccount'));
             if (userAccount) {
-                window.location.replace('https://camilomartg-svg.github.io/bim/home.html');
+                window.location.replace('https://norabim.com/home.html');
             }
         })();
     </script>
@@ -233,7 +233,7 @@
                         sessionStorage.setItem('userAccount', JSON.stringify(userProfile));
                     }
 
-                    window.location.href = 'https://camilomartg-svg.github.io/bim/home.html';
+                    window.location.href = 'https://norabim.com/home.html';
                 }
             } catch (error) {
                 console.error(error);

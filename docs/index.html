@@ -3,7 +3,7 @@
 <head>
     <script>
         if (!sessionStorage.getItem('userAccount') && !localStorage.getItem('userAccount')) {
-            window.location.replace('https://camilomartg-svg.github.io/bim/inse.html');
+            window.location.replace('https://norabim.com/inse.html');
         }
     </script>
 
@@ -40,7 +40,7 @@
             // 1. Si no hay usuario, redirigir al login.
             if (!userAccount) {
                 alert('Acceso denegado. Por favor, inicie sesión.');
-                window.location.href = 'https://camilomartg-svg.github.io/bim/inse.html'; // URL de tu página de login
+                window.location.href = 'https://norabim.com/inse.html'; // URL de tu página de login
                 return;
             }
 
@@ -53,7 +53,7 @@
 
             if (!isAllowed) {
                 alert('Acceso denegado. No tiene permisos para ver esta página.');
-                window.location.href = 'https://camilomartg-svg.github.io/bim/home.html'; // URL de tu página principal
+                window.location.href = 'https://norabim.com/home.html'; // URL de tu página principal
             }
         })();
     </script>
@@ -62,20 +62,20 @@
     <header class="bg-white shadow-md">
         <nav class="container mx-auto px-6 py-4 flex justify-between items-center">
             <div class="flex items-center">
-                <a href="https://camilomartg-svg.github.io/bim/home.html">
+                <a href="https://norabim.com/home.html">
                     <img id="portal-logo-alcabama" alt="Logo de Alcabama" class="h-8 mr-4" src="https://i.postimg.cc/HxDQsbNG/Logo-ALCABAMA-SOLO.jpg"/>
                 </a>
             </div>
             <div class="hidden md:flex items-center space-x-6">
-                <a class="text-gray-600 hover:text-main" href="https://camilomartg-svg.github.io/bim/home.html">Página principal</a>
-                <a class="text-gray-600 hover:text-main" href="https://camilomartg-svg.github.io/bim/index.html">Solicitud acceso a plataformas</a>
+                <a class="text-gray-600 hover:text-main" href="https://norabim.com/home.html">Página principal</a>
+                <a class="text-gray-600 hover:text-main" href="https://norabim.com/index.html">Solicitud acceso a plataformas</a>
                 <a class="text-gray-600 hover:text-main flex items-center" href="#">
                     PROYECTOS <span class="material-icons text-sm ml-1">expand_more</span>
                 </a>
                 <span class="material-icons text-gray-600 cursor-pointer">search</span>
                 <!-- Contenedor para el estado de autenticación -->
                 <div id="auth-container" class="flex items-center space-x-4">
-                   <a class="text-gray-600 hover:text-main" href="https://camilomartg-svg.github.io/bim/inse.html">Iniciar sesión</a>
+                   <a class="text-gray-600 hover:text-main" href="https://norabim.com/inse.html">Iniciar sesión</a>
                 </div>
             </div>
             <div class="md:hidden">

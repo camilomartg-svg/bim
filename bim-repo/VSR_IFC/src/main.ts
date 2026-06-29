@@ -5399,7 +5399,7 @@ function setupUserAuthentication() {
 function renderGuestMode(container: HTMLElement) {
     const loginLink = document.createElement('a');
     // Use the production URL for login
-    loginLink.href = "https://camilomartg-svg.github.io/bim/inse.html"; 
+    loginLink.href = "https://norabim.com/inse.html"; 
     loginLink.innerHTML = '<i class="fa-solid fa-user"></i> <span style="margin-left:5px; font-size:14px;">Iniciar Sesión</span>';
     loginLink.style.textDecoration = "none";
     loginLink.style.color = "var(--primary-color)"; // Brand color
