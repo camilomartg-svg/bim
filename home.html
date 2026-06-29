@@ -86,17 +86,17 @@
             <div class="container mx-auto flex items-center justify-between">
                 <div class="flex items-center gap-3">
                     <button id="back-btn" aria-label="Volver"
-                        class="rounded-lg border border-border-light bg-white/80 px-3 py-2 hover:bg-white transition-colors">
-                        <span class="material-symbols-outlined">arrow_back</span>
+                        class="rounded-lg border border-border-light bg-white/80 px-2 py-1 hover:bg-white transition-colors">
+                        <span class="material-symbols-outlined text-[16px]">arrow_back</span>
                     </button>
                 </div>
                 <div class="flex items-center space-x-4">
                     <button id="theme-toggle" aria-label="Cambiar tema"
                         class="text-text-light dark:text-white hover:text-primary"><span
-                            class="material-symbols-outlined">dark_mode</span></button>
+                            class="material-symbols-outlined text-[16px]">dark_mode</span></button>
                     <div id="auth-container" class="flex items-center space-x-4"><a
                             href="https://norabim.com/inse.html"
-                            class="text-text-light dark:text-white hover:text-primary text-sm font-medium">Iniciar
+                            class="text-text-light dark:text-white hover:text-primary text-xs font-medium uppercase tracking-wider">Iniciar
                             sesión</a></div>
                 </div>
             </div>
@@ -440,8 +440,8 @@
             // --- GESTIÓN DE AUTENTICACIÓN ---
             if (userAccount) {
                 authContainer.innerHTML = `
-                <span class="text-sm font-medium text-text-light dark:text-white">Hola, ${userAccount.name.split(' ')[0]}</span>
-                <button id="logout-button" class="text-text-light dark:text-white hover:text-primary text-sm font-medium">Cerrar sesión</button>
+                <span class="text-[10px] uppercase tracking-wider font-medium text-text-light dark:text-white">Hola, ${userAccount.name.split(' ')[0]}</span>
+                <button id="logout-button" class="text-text-light dark:text-white hover:text-primary text-[10px] uppercase tracking-wider font-medium">Cerrar sesión</button>
             `;
                 document.getElementById('logout-button').addEventListener('click', () => {
                     sessionStorage.removeItem('userAccount'); // Limpiar ambas ubicaciones
