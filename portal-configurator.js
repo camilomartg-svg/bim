@@ -16,6 +16,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     logoUrl: 'https://i.postimg.cc/P5rsf8Yb/trevoly.png',
     portalLogoLight: 'https://i.postimg.cc/L4r0gSvV/LOGO-TEXTO-NORA-NEGRO.png',
     portalLogoDark: 'https://i.postimg.cc/FFfBKzb8/LOGO-TEXTO-NORA-BLANCO.png',
+    viewerLogoLight: 'https://i.postimg.cc/L4r0gSvV/LOGO-TEXTO-NORA-NEGRO.png',
+    viewerLogoDark: 'https://i.postimg.cc/FFfBKzb8/LOGO-TEXTO-NORA-BLANCO.png',
     map: {
       lat: 4.59742,
       lng: -74.16498,
@@ -88,6 +90,8 @@ document.addEventListener('DOMContentLoaded', async () => {
       logoUrl: 'assets/icons/portal-bim-favicon.png',
       portalLogoLight: 'https://i.postimg.cc/L4r0gSvV/LOGO-TEXTO-NORA-NEGRO.png',
       portalLogoDark: 'https://i.postimg.cc/FFfBKzb8/LOGO-TEXTO-NORA-BLANCO.png',
+      viewerLogoLight: 'https://i.postimg.cc/L4r0gSvV/LOGO-TEXTO-NORA-NEGRO.png',
+      viewerLogoDark: 'https://i.postimg.cc/FFfBKzb8/LOGO-TEXTO-NORA-BLANCO.png',
       map: {
         lat: 4.711,
         lng: -74.0721,
@@ -129,6 +133,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     landingLogoUrl: document.getElementById('landing-logo-url'),
     landingPortalLogoLight: document.getElementById('landing-portal-logo-light'),
     landingPortalLogoDark: document.getElementById('landing-portal-logo-dark'),
+    landingViewerLogoLight: document.getElementById('landing-viewer-logo-light'),
+    landingViewerLogoDark: document.getElementById('landing-viewer-logo-dark'),
     landingMapEyebrow: document.getElementById('landing-map-eyebrow'),
     landingCityLabel: document.getElementById('landing-city-label'),
     landingMapDescription: document.getElementById('landing-map-description'),
@@ -289,6 +295,8 @@ document.addEventListener('DOMContentLoaded', async () => {
         logoUrl: String(landing?.logoUrl || DEFAULT_PROJECT.landing.logoUrl).trim(),
         portalLogoLight: String(landing?.portalLogoLight || DEFAULT_PROJECT.landing.portalLogoLight).trim(),
         portalLogoDark: String(landing?.portalLogoDark || DEFAULT_PROJECT.landing.portalLogoDark).trim(),
+        viewerLogoLight: String(landing?.viewerLogoLight || DEFAULT_PROJECT.landing.viewerLogoLight).trim(),
+        viewerLogoDark: String(landing?.viewerLogoDark || DEFAULT_PROJECT.landing.viewerLogoDark).trim(),
         map: {
           lat: Number.isFinite(Number(map.lat)) ? Number(map.lat) : DEFAULT_PROJECT.landing.map.lat,
           lng: Number.isFinite(Number(map.lng)) ? Number(map.lng) : DEFAULT_PROJECT.landing.map.lng,
@@ -374,6 +382,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     el.landingLogoUrl.value = project.landing.logoUrl;
     el.landingPortalLogoLight.value = project.landing.portalLogoLight;
     el.landingPortalLogoDark.value = project.landing.portalLogoDark;
+    el.landingViewerLogoLight.value = project.landing.viewerLogoLight;
+    el.landingViewerLogoDark.value = project.landing.viewerLogoDark;
     el.landingMapEyebrow.value = project.landing.mapEyebrow;
     el.landingCityLabel.value = project.landing.cityLabel;
     el.landingMapDescription.value = project.landing.mapDescription;
@@ -564,6 +574,8 @@ document.addEventListener('DOMContentLoaded', async () => {
       [el.landingLogoUrl, (project, value) => { project.landing.logoUrl = value; }],
       [el.landingPortalLogoLight, (project, value) => { project.landing.portalLogoLight = value; }],
       [el.landingPortalLogoDark, (project, value) => { project.landing.portalLogoDark = value; }],
+      [el.landingViewerLogoLight, (project, value) => { project.landing.viewerLogoLight = value; }],
+      [el.landingViewerLogoDark, (project, value) => { project.landing.viewerLogoDark = value; }],
       [el.landingMapEyebrow, (project, value) => { project.landing.mapEyebrow = value; }],
       [el.landingCityLabel, (project, value) => { project.landing.cityLabel = value; }],
       [el.landingMapDescription, (project, value) => { project.landing.mapDescription = value; }],

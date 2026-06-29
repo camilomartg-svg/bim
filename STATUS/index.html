@@ -73,5 +73,81 @@
       })();
     </script>
     <script type="module" src="/src/main.tsx"></script>
-  </body>
+  
+    <!-- VIEWER LOGO INJECT START -->
+    <script>
+        (async function() {
+            try {
+                const logoImg = document.getElementById('logo-img');
+                if (!logoImg) return;
+                
+                const metaVersion = document.querySelector('meta[name="x-app-version"]');
+                const currentVersion = metaVersion?.getAttribute('content') || Date.now().toString();
+                
+                let config = null;
+                try {
+                    const response = await fetch(`../portal-config.json?v=${encodeURIComponent(currentVersion)}`, { cache: 'no-store' });
+                    if (response.ok) config = await response.json();
+                } catch (e) {}
+
+                if (!config) {
+                    const draft = localStorage.getItem('portal:pba-config-draft:v2');
+                    if (draft) config = JSON.parse(draft);
+                }
+
+                if (!config) return;
+
+                const params = new URLSearchParams(window.location.search);
+                const projectSlug = params.get('project');
+                
+                // Fallback a los logos del portal
+                let lightLogo = config.portal?.logoLight || 'https://i.postimg.cc/L4r0gSvV/LOGO-TEXTO-NORA-NEGRO.png';
+                let darkLogo = config.portal?.logoDark || 'https://i.postimg.cc/FFfBKzb8/LOGO-TEXTO-NORA-BLANCO.png';
+                
+                if (projectSlug && config.projects) {
+                    const proj = config.projects.find(p => p.slug === projectSlug);
+                    if (proj && proj.landing) {
+                        // Priorizar viewerLogo (el nuevo campo), sino usar portalLogo
+                        if (proj.landing.viewerLogoLight) lightLogo = proj.landing.viewerLogoLight;
+                        else if (proj.landing.portalLogoLight) lightLogo = proj.landing.portalLogoLight;
+                        
+                        if (proj.landing.viewerLogoDark) darkLogo = proj.landing.viewerLogoDark;
+                        else if (proj.landing.portalLogoDark) darkLogo = proj.landing.portalLogoDark;
+                    }
+                }
+                
+                const updateLogo = () => {
+                    const isDark = document.body.classList.contains('dark-mode') || document.documentElement.classList.contains('dark');
+                    const desiredSrc = isDark ? darkLogo : lightLogo;
+                    if (logoImg.getAttribute('src') !== desiredSrc) {
+                        logoImg.src = desiredSrc;
+                    }
+                };
+
+                const observer = new MutationObserver(() => updateLogo());
+                observer.observe(document.body, { attributes: true, attributeFilter: ['class'] });
+                observer.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
+                
+                const origSetAttribute = logoImg.setAttribute.bind(logoImg);
+                logoImg.setAttribute = function(name, value) {
+                    if (name === 'src') {
+                        const isDark = document.body.classList.contains('dark-mode') || document.documentElement.classList.contains('dark');
+                        const desiredSrc = isDark ? darkLogo : lightLogo;
+                        if (value !== desiredSrc) {
+                            origSetAttribute('src', desiredSrc);
+                            return;
+                        }
+                    }
+                    origSetAttribute(name, value);
+                };
+
+                updateLogo();
+            } catch (e) {
+                console.warn('Error loading dynamic logo', e);
+            }
+        })();
+    </script>
+    <!-- VIEWER LOGO INJECT END -->
+
+</body>
 </html>
