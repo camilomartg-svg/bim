@@ -1,15 +1,16 @@
 {
   "portal": {
-    "name": "nora CDE",
+    "name": "noar CDE",
     "shortName": "Portal BIM",
-    "footerText": "© 2026 nora CDE - Todos los derechos reservados.",
+    "footerText": "© 2026 noar CDE - Todos los derechos reservados.",
     "heroImages": [
-      "https://i.postimg.cc/fbwgkrDd/r-ciien.png",
-      "https://i.postimg.cc/FK9n1BNP/r-trevoly.png",
-      "https://i.postimg.cc/7LxQbWwG/r-arbore.png",
-      "https://i.postimg.cc/tgXm7Mpx/r-blue.png",
-      "https://i.postimg.cc/Dz2YmMns/r-madero.png",
-      "https://i.postimg.cc/9fWNznCt/r-mirande.png"
+      "https://i.postimg.cc/gjdf4ybv/1bed16470705aeff4a1bf5c9d6a4d92d.jpg",
+      "https://i.postimg.cc/Y0kJ8NBF/6fe9d33bfb28fcbe8acc5d8450198ace.jpg",
+      "https://i.postimg.cc/br8KL0fS/9ac65d507569e6a578661338b7cf711c.jpg",
+      "https://i.postimg.cc/WzjQSmcm/a4914f0568cbc13fb185237cab88c64e.jpg",
+      "https://i.postimg.cc/x8YWgGVJ/d603ef667ae6d6d62abfa6e52e31e819.jpg",
+      "https://i.postimg.cc/nrZ6TKfG/dfde730b8f85a5ed6a558a6d216008a3.jpg",
+      "https://i.postimg.cc/T1GZQjvW/e1c05af2d2065ca689c71c6a36dae203.jpg"
     ],
     "configPageUrl": "portal-configurator.html",
     "logoLight": "https://i.postimg.cc/HjLYj9rD/LOGO-NORA-NEGRO.png",
