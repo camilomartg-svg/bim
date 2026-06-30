@@ -3,7 +3,7 @@
     "id": "nora",
     "name": "nora CDE",
     "location": "Bogotá, Colombia",
-    "image": "https://i.postimg.cc/fbwgkrDd/r-ciien.png",
+    "image": "https://i.postimg.cc/hPxkssjR/163e92a4bd61d937eac31bd6787d270a.jpg",
     "configUrl": "portal-config.json",
     "code": "001"
   },
@@ -11,7 +11,7 @@
     "id": "alcabama",
     "name": "Constructora Alcabama",
     "location": "Bogotá, Colombia",
-    "image": "https://i.postimg.cc/FK9n1BNP/r-trevoly.png",
+    "image": "https://i.postimg.cc/02mTnnQv/21bd5ee9d2351270615280386caad1f3.jpg",
     "configUrl": "portal-config.json",
     "code": "002"
   },
@@ -19,7 +19,7 @@
     "id": "empresa3",
     "name": "Arquitectura y Concreto",
     "location": "Medellín, Colombia",
-    "image": "https://i.postimg.cc/Y0kJ8NBF/6fe9d33bfb28fcbe8acc5d8450198ace.jpg",
+    "image": "https://i.postimg.cc/Vk83VtS3/5609319d9744b78b1c3c28bee582e081.jpg",
     "configUrl": "portal-config.json",
     "code": "003"
   }
