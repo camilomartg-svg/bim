@@ -165,8 +165,19 @@
         </div>
     </main>
 
-    <!-- Footer (Oculto/Eliminado) -->
-    <footer class="w-full px-8 py-6 z-10 mt-12">
+    <!-- Footer -->
+    <footer class="bg-white dark:bg-background-dark py-8 px-8 mt-auto border-t border-border-light dark:border-gray-800">
+        <div class="container mx-auto text-center text-gray-500 dark:text-gray-400">
+            <div class="flex items-center justify-center gap-4 mb-4">
+                <!-- Logo para modo claro -->
+                <img id="portal-footer-logo-light" alt="nora CDE logo" class="h-40 dark:hidden object-contain"
+                    src="https://i.postimg.cc/tR3YSryT/LOGO-NORA-NEGRO.png" />
+                <!-- Logo para modo oscuro -->
+                <img id="portal-footer-logo-dark" alt="nora CDE logo" class="h-40 hidden dark:block object-contain"
+                    src="https://i.postimg.cc/SQ6JTZqj/LOGO-NORA-BLANCO.png" />
+            </div>
+            <p class="text-sm" id="portal-footer-text">© 2026 nora CDE - Todos los derechos reservados.</p>
+        </div>
     </footer>
 
     <script>
