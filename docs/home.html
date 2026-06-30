@@ -105,11 +105,12 @@
             <section class="relative flex h-[270px] pt-14 overflow-hidden">
                 <!-- Panel Izquierdo (30%) con color sólido y logo -->
                 <div class="w-[30%] bg-[#f6f6f6] dark:bg-background-dark h-full flex items-center justify-center p-8">
-                    <a href="empresas.html" class="block w-full max-w-[160px]" title="Cambiar de empresa">
-                        <img id="portal-logo-light" alt="nora CDE" class="w-full h-auto object-contain dark:hidden"
+                    <a href="empresas.html" class="flex flex-col items-center justify-center w-full max-w-[160px] group" title="Cambiar de empresa">
+                        <img id="portal-logo-light" alt="nora CDE" class="w-full h-auto object-contain dark:hidden transition-transform group-hover:scale-105"
                             src="https://i.postimg.cc/tR3YSryT/LOGO-NORA-NEGRO.png" />
-                        <img id="portal-logo-dark" alt="nora CDE" class="w-full h-auto object-contain hidden dark:block"
+                        <img id="portal-logo-dark" alt="nora CDE" class="w-full h-auto object-contain hidden dark:block transition-transform group-hover:scale-105"
                             src="https://i.postimg.cc/SQ6JTZqj/LOGO-NORA-BLANCO.png" />
+                        <span id="portal-company-name" class="mt-4 text-[10px] font-bold uppercase tracking-widest text-[#111] dark:text-white text-center hidden"></span>
                     </a>
                 </div>
                 <!-- Panel Derecho (70%) con imagen -->
@@ -368,6 +369,21 @@
                 const imgFooterDark = document.getElementById('portal-footer-logo-dark');
                 if (imgFooterDark) imgFooterDark.src = footerLogoDark;
                 const imgFooterSecondaryLight = document.getElementById('portal-footer-logo-secondary-light');
+                
+                // Aplicar nombre de empresa bajo el logo
+                const companyNameLabel = document.getElementById('portal-company-name');
+                if (companyNameLabel) {
+                    if (window.currentEmpresaName && window.currentEmpresaName !== 'nora CDE') {
+                        companyNameLabel.textContent = window.currentEmpresaName;
+                        companyNameLabel.classList.remove('hidden');
+                    } else if (safeConfig.portal?.name && safeConfig.portal.name !== 'nora CDE' && safeConfig.portal.name !== 'noar CDE') {
+                        companyNameLabel.textContent = safeConfig.portal.name;
+                        companyNameLabel.classList.remove('hidden');
+                    } else {
+                        companyNameLabel.classList.add('hidden');
+                    }
+                }
+
                 if (imgFooterSecondaryLight) imgFooterSecondaryLight.src = footerLogoSecondaryLight;
                 const imgFooterSecondaryDark = document.getElementById('portal-footer-logo-secondary-dark');
                 if (imgFooterSecondaryDark) imgFooterSecondaryDark.src = footerLogoSecondaryDark;
@@ -404,8 +420,11 @@
                             if (empRes.ok) {
                                 const empresas = await empRes.json();
                                 const emp = empresas.find(e => e.id === empresaId);
-                                if (emp && emp.configUrl) {
-                                    configUrl = `${emp.configUrl}?v=${encodeURIComponent(currentVersion)}`;
+                                if (emp) {
+                                    if (emp.configUrl) {
+                                        configUrl = `${emp.configUrl}?v=${encodeURIComponent(currentVersion)}`;
+                                    }
+                                    window.currentEmpresaName = emp.name;
                                 }
                             }
                         } catch(e) {
