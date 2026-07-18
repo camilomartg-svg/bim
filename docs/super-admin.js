@@ -22,12 +22,13 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   // Tab elements
   const tabs = {
-    btns: [document.getElementById('tab-btn-ficha'), document.getElementById('tab-btn-usuarios'), document.getElementById('tab-btn-proyectos')],
-    contents: [document.getElementById('tab-content-ficha'), document.getElementById('tab-content-usuarios'), document.getElementById('tab-content-proyectos')]
+    btns: [document.getElementById('tab-btn-ficha'), document.getElementById('tab-btn-usuarios'), document.getElementById('tab-btn-proyectos'), document.getElementById('tab-btn-configuracion')],
+    contents: [document.getElementById('tab-content-ficha'), document.getElementById('tab-content-usuarios'), document.getElementById('tab-content-proyectos'), document.getElementById('tab-content-configuracion')]
   };
 
   const usersListEl = document.getElementById('usuarios-list');
   const projectsListEl = document.getElementById('proyectos-list-tab');
+  const configListEl = document.getElementById('configuracion-list-tab');
 
   // References to all inputs
   const el = {
@@ -475,16 +476,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   // Projects CRUD
   
   window.openProjectAccordions = window.openProjectAccordions || {};
-    window.projectInnerTabs = window.projectInnerTabs || {};
-    window.switchProjectInnerTab = (slug, tab) => {
-      window.projectInnerTabs[slug] = tab;
-      
-      // Stop event propagation to prevent accordion from toggling
-      if (window.event) window.event.stopPropagation();
-      
-      renderProjects();
-    };
-
+  window.openConfigAccordions = window.openConfigAccordions || {};
   window.toggleProjectAccordion = (slug) => {
     window.openProjectAccordions[slug] = !window.openProjectAccordions[slug];
     renderProjects();
@@ -505,21 +497,11 @@ document.addEventListener('DOMContentLoaded', async () => {
       const canEditDataSources = isSuperAdmin || !isLocked;
       const disableAttr = canEditDataSources ? '' : 'disabled="disabled"';
       const disableClass = canEditDataSources ? '' : 'opacity-50 cursor-not-allowed';
-        let accordionContent = '';
+let contentBase = '';
         if (isOpen) {
-          const innerTab = window.projectInnerTabs?.[p.slug] || 'base';
-          
-          const tabsHTML = `
-            <ul class="flex border-t border-slate-200 text-sm font-semibold text-slate-500 px-5 pt-3 bg-slate-50 gap-4">
-              <li><button onclick="switchProjectInnerTab('${p.slug}', 'base')" class="block px-4 py-2 hover:text-blue-600 focus:outline-none ${innerTab === 'base' ? 'border-b-2 border-blue-600 text-blue-600' : ''}">Información Base</button></li>
-              <li><button onclick="switchProjectInnerTab('${p.slug}', 'config')" class="block px-4 py-2 hover:text-blue-600 focus:outline-none ${innerTab === 'config' ? 'border-b-2 border-blue-600 text-blue-600' : ''}">Configuración</button></li>
-            </ul>
-          `;
-          
-          const contentBase = `
-            ${tabsHTML}
-            <div class="p-5 bg-white border-t border-slate-200">
-              <div class="grid gap-6">
+          contentBase = `
+          <div class="p-5 border-t border-slate-200 bg-white">
+            <div class="grid gap-6">
 
             <section>
               <h3 class="text-sm font-bold uppercase tracking-[0.2em] text-slate-500">Información base</h3>
@@ -589,13 +571,44 @@ document.addEventListener('DOMContentLoaded', async () => {
             </section>
 
             
+            </div>
+          </div>`;
+        }
+        
+        return `
+          <div class="border-b border-slate-100 last:border-0 bg-slate-50">
+            <div class="grid grid-cols-12 gap-2 p-3 text-sm items-center hover:bg-slate-100 cursor-pointer" onclick="toggleProjectAccordion('${p.slug}')">
+              <div class="col-span-4 font-semibold text-slate-800 flex items-center gap-2">
+                  <span class="material-symbols-outlined text-slate-400 text-lg transition-transform ${isOpen ? 'rotate-180' : ''}">expand_more</span>
+                  ${p.name || p.title || 'Proyecto'}
+              </div>
+              <div class="col-span-3 font-mono text-[10px] text-slate-500 truncate" title="${p.slug}">${p.slug}</div>
+              <div class="col-span-2">
+                  <span class="text-[10px] px-2 py-0.5 rounded font-bold uppercase tracking-wider ${p.status==='Activo'?'bg-emerald-100 text-emerald-700':p.status==='Cerrado'?'bg-rose-100 text-rose-700':'bg-slate-200 text-slate-700'}">${p.status}</span>
+              </div>
+              <div class="col-span-3 text-right flex justify-end gap-2" onclick="event.stopPropagation()">
+                <button onclick="deleteProject('${p.slug}')" class="text-rose-500 hover:text-rose-700 p-1 bg-white border border-rose-200 rounded shadow-sm hover:shadow"><span class="material-symbols-outlined text-sm">delete</span></button>
               </div>
             </div>
-          `;
+            ${contentBase}
+          </div>
+        `;
+      }).join('');
 
-          const contentConfig = `
-            ${tabsHTML}
-            <div class="p-5 bg-white border-t border-slate-200">
+      if (configListEl) {
+        configListEl.innerHTML = config.projects.map((p, i) => {
+          const isOpen = !!window.openConfigAccordions[p.slug];
+          const isSuperAdmin = userRole === 'SUPER_ADMINISTRADOR';
+          
+          const isLocked = p.lockDataSources === true;
+          const canEditDataSources = isSuperAdmin || !isLocked;
+          const disableAttr = canEditDataSources ? '' : 'disabled="disabled"';
+          const disableClass = canEditDataSources ? '' : 'opacity-50 cursor-not-allowed';
+    
+          let contentConfig = '';
+          if (isOpen) {
+            contentConfig = `
+            <div class="p-5 border-t border-slate-200 bg-white">
               <div class="grid gap-6">
 <section>
               <h3 class="text-sm font-bold uppercase tracking-[0.2em] text-slate-500">Branding y textos</h3>
@@ -671,31 +684,32 @@ document.addEventListener('DOMContentLoaded', async () => {
               </div>
             </section>
               </div>
+            </div>`;
+          }
+          
+          return `
+            <div class="border-b border-slate-100 last:border-0 bg-slate-50">
+              <div class="grid grid-cols-12 gap-2 p-3 text-sm items-center hover:bg-slate-100 cursor-pointer" onclick="toggleConfigAccordion('${p.slug}')">
+                <div class="col-span-4 font-semibold text-slate-800 flex items-center gap-2">
+                    <span class="material-symbols-outlined text-slate-400 text-lg transition-transform ${isOpen ? 'rotate-180' : ''}">expand_more</span>
+                    ${p.name || p.title || 'Proyecto'}
+                </div>
+                <div class="col-span-3 font-mono text-[10px] text-slate-500 truncate" title="${p.slug}">${p.slug}</div>
+                <div class="col-span-2">
+                    <span class="text-[10px] px-2 py-0.5 rounded font-bold uppercase tracking-wider ${p.status==='Activo'?'bg-emerald-100 text-emerald-700':p.status==='Cerrado'?'bg-rose-100 text-rose-700':'bg-slate-200 text-slate-700'}">${p.status}</span>
+                </div>
+                <div class="col-span-3 text-right flex justify-end gap-2" onclick="event.stopPropagation()">
+                  <button onclick="deleteProject('${p.slug}')" class="text-rose-500 hover:text-rose-700 p-1 bg-white border border-rose-200 rounded shadow-sm hover:shadow"><span class="material-symbols-outlined text-sm">delete</span></button>
+                </div>
+              </div>
+              ${contentConfig}
             </div>
           `;
+        }).join('');
+      }
 
-          accordionContent = innerTab === 'base' ? contentBase : contentConfig;
-        }
-
-      return `
-        <div class="border-b border-slate-100 last:border-0 bg-slate-50">
-          <div class="grid grid-cols-12 gap-2 p-3 text-sm items-center hover:bg-slate-100 cursor-pointer" onclick="toggleProjectAccordion('${p.slug}')">
-            <div class="col-span-4 font-semibold text-slate-800 flex items-center gap-2">
-                <span class="material-symbols-outlined text-slate-400 text-lg transition-transform ${isOpen ? 'rotate-180' : ''}">expand_more</span>
-                ${p.name || p.title || 'Proyecto'}
-            </div>
-            <div class="col-span-3 font-mono text-[10px] text-slate-500 truncate" title="${p.slug}">${p.slug}</div>
-            <div class="col-span-2">
-                <span class="text-[10px] px-2 py-0.5 rounded font-bold uppercase tracking-wider ${p.status==='Activo'?'bg-emerald-100 text-emerald-700':p.status==='Cerrado'?'bg-rose-100 text-rose-700':'bg-slate-200 text-slate-700'}">${p.status}</span>
-            </div>
-            <div class="col-span-3 text-right flex justify-end gap-2" onclick="event.stopPropagation()">
-              <button onclick="deleteProject('${p.slug}')" class="text-rose-500 hover:text-rose-700 p-1 bg-white border border-rose-200 rounded shadow-sm hover:shadow"><span class="material-symbols-outlined text-sm">delete</span></button>
-            </div>
-          </div>
-          ${accordionContent}
-        </div>
-      `;
-    }).join('');
+      // Map initialization placeholder logic wrapper end
+        
 
     // Map initialization
     setTimeout(() => {
