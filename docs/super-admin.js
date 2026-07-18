@@ -482,6 +482,11 @@ document.addEventListener('DOMContentLoaded', async () => {
     renderProjects();
   };
 
+  window.toggleConfigAccordion = (slug) => {
+    window.openConfigAccordions[slug] = !window.openConfigAccordions[slug];
+    renderProjects();
+  };
+
   function renderProjects() {
     if (selectedIndex === -1) return;
     const emp = empresas[selectedIndex];
