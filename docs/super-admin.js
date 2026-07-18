@@ -99,6 +99,11 @@ document.addEventListener('DOMContentLoaded', async () => {
           if (subtitle) subtitle.textContent = 'Administración';
       }
 
+      if (userRole !== 'SUPER_ADMINISTRADOR') {
+          const configTabBtn = document.getElementById('tab-btn-configuracion');
+          if (configTabBtn) configTabBtn.classList.add('hidden');
+      }
+
       renderList();
     } catch (e) { showBanner('Error cargando datos', 'error'); }
   }
