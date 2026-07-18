@@ -509,6 +509,37 @@ document.addEventListener('DOMContentLoaded', async () => {
       const disableClass = canEditDataSources ? '' : 'opacity-50 cursor-not-allowed';
 let contentBase = '';
         if (isOpen) {
+          
+          const citiesByCountry = {
+            "Colombia": ["Bogotá", "Medellín", "Cali", "Barranquilla", "Bucaramanga", "Cartagena", "Otro"],
+            "México": ["Ciudad de México", "Guadalajara", "Monterrey", "Puebla", "Tijuana", "Otro"],
+            "Perú": ["Lima", "Arequipa", "Trujillo", "Chiclayo", "Piura", "Otro"],
+            "Chile": ["Santiago", "Valparaíso", "Concepción", "La Serena", "Antofagasta", "Otro"],
+            "Argentina": ["Buenos Aires", "Córdoba", "Rosario", "Mendoza", "Tucumán", "Otro"],
+            "Ecuador": ["Quito", "Guayaquil", "Cuenca", "Santo Domingo", "Machala", "Otro"],
+            "Panamá": ["Ciudad de Panamá", "San Miguelito", "Tocumen", "David", "Colón", "Otro"],
+            "España": ["Madrid", "Barcelona", "Valencia", "Sevilla", "Zaragoza", "Otro"],
+            "Estados Unidos": ["New York", "Los Angeles", "Chicago", "Houston", "Miami", "Otro"]
+          };
+          let cityInputHTML = '';
+          if (p.country && p.country !== 'Otro' && citiesByCountry[p.country]) {
+            const cities = citiesByCountry[p.country];
+            const isCustomCity = p.city && !cities.includes(p.city) && p.city !== '';
+            const selectValue = isCustomCity ? 'Otro' : (p.city || '');
+            
+            cityInputHTML = `
+              <select class="w-full text-xs rounded-xl border-slate-200 ${isCustomCity ? 'mb-2' : ''}" onchange="if(this.value === 'Otro') { this.nextElementSibling.classList.remove('hidden'); this.classList.add('mb-2'); this.nextElementSibling.focus(); } else { this.nextElementSibling.classList.add('hidden'); this.classList.remove('mb-2'); updateProject('${p.slug}', 'city', this.value); }">
+                <option value="">Seleccionar...</option>
+                ${cities.map(c => `<option value="${c}" ${selectValue === c ? 'selected' : ''}>${c}</option>`).join('')}
+              </select>
+              <input class="w-full text-xs rounded-xl border-slate-200 ${isCustomCity ? '' : 'hidden'}" type="text" placeholder="¿Cuál?" value="${isCustomCity ? p.city : ''}" onchange="updateProject('${p.slug}', 'city', this.value)" />
+            `;
+          } else if (p.country === 'Otro') {
+            cityInputHTML = `<input class="w-full text-xs rounded-xl border-slate-200" type="text" placeholder="¿Cuál?" value="${p.city || ''}" onchange="updateProject('${p.slug}', 'city', this.value)" />`;
+          } else {
+            cityInputHTML = `<select class="w-full text-xs rounded-xl border-slate-200" disabled><option value="">Selecciona un país primero</option></select>`;
+          }
+
           contentBase = `
           <div class="p-5 border-t border-slate-200 bg-white">
             <div class="grid gap-6">
@@ -533,22 +564,7 @@ let contentBase = '';
                     </select>
                   </label>
                   <label class="block"><span class="mb-2 block text-sm font-semibold text-slate-700">Ciudad</span>
-                    <input list="city-list-${p.slug}" class="w-full text-xs rounded-xl border-slate-200" type="text" placeholder="Selecciona o escribe..." value="${p.city || ''}" onchange="updateProject('${p.slug}', 'city', this.value)" />
-                    <datalist id="city-list-${p.slug}">
-                      <option value="Bogotá"></option>
-                      <option value="Medellín"></option>
-                      <option value="Cali"></option>
-                      <option value="Barranquilla"></option>
-                      <option value="Bucaramanga"></option>
-                      <option value="Cartagena"></option>
-                      <option value="Ciudad de México"></option>
-                      <option value="Lima"></option>
-                      <option value="Santiago"></option>
-                      <option value="Buenos Aires"></option>
-                      <option value="Quito"></option>
-                      <option value="Madrid"></option>
-                      <option value="Miami"></option>
-                    </datalist>
+                    ${cityInputHTML}
                   </label>
                   <label class="block"><span class="mb-2 block text-sm font-semibold text-slate-700">Dirección</span><input class="w-full text-xs rounded-xl border-slate-200" type="text" value="${p.address || ''}" placeholder="Ej. Av. Siempre Viva 123" onchange="updateProject('${p.slug}', 'address', this.value)" /></label>
                   
