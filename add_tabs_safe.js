@@ -66,7 +66,7 @@ if (contentStartIdx !== -1) {
             \${tabsHTML}
             <div class="p-5 bg-white border-t border-slate-200">
               <div class="grid gap-6">
-\${innerBase}
+${innerBase}
               </div>
             </div>
           \`;
@@ -75,7 +75,7 @@ if (contentStartIdx !== -1) {
             \${tabsHTML}
             <div class="p-5 bg-white border-t border-slate-200">
               <div class="grid gap-6">
-\${innerConfig}
+${innerConfig}
               </div>
             </div>
           \`;
