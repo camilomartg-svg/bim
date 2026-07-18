@@ -517,10 +517,7 @@ let contentBase = '';
               <h3 class="text-sm font-bold uppercase tracking-[0.2em] text-slate-500">Información base</h3>
               <div class="mt-4 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
                 <label class="block"><span class="mb-2 block text-sm font-semibold text-slate-700">Nombre</span><input class="w-full text-xs rounded-xl border-slate-200" type="text" value="${p.name || ''}" onchange="updateProject('${p.slug}', 'name', this.value)" /></label>
-                <label class="block"><span class="mb-2 block text-sm font-semibold text-slate-700">Slug (Solo lectura)</span><input class="w-full text-xs rounded-xl border-slate-200 bg-slate-100" type="text" value="${p.slug || ''}" readonly disabled /></label>
-                <label class="block"><span class="mb-2 block text-sm font-semibold text-slate-700">Home personalizado</span><input class="w-full text-xs rounded-xl border-slate-200" type="text" placeholder="Vacío = usar landing automática" value="${p.homeUrl || ''}" onchange="updateProject('${p.slug}', 'homeUrl', this.value)" /></label>
-                
-                  <label class="block"><span class="mb-2 block text-sm font-semibold text-slate-700">País</span>
+<label class="block"><span class="mb-2 block text-sm font-semibold text-slate-700">País</span>
                     <select class="w-full text-xs rounded-xl border-slate-200" onchange="updateProject('${p.slug}', 'country', this.value)">
                       <option value="">Seleccionar...</option>
                       <option value="Colombia" ${p.country==='Colombia'?'selected':''}>Colombia</option>
@@ -620,6 +617,14 @@ let contentBase = '';
             contentConfig = `
             <div class="p-5 border-t border-slate-200 bg-white">
               <div class="grid gap-6">
+<section>
+  <h3 class="text-sm font-bold uppercase tracking-[0.2em] text-slate-500">Configuración de URLs</h3>
+  <div class="mt-4 grid gap-4 md:grid-cols-2">
+    <label class="block"><span class="mb-2 block text-sm font-semibold text-slate-700">Slug (Solo lectura)</span><input class="w-full text-xs rounded-xl border-slate-200 bg-slate-100" type="text" value="${p.slug || ''}" readonly disabled /></label>
+    <label class="block"><span class="mb-2 block text-sm font-semibold text-slate-700">Home personalizado</span><input class="w-full text-xs rounded-xl border-slate-200" type="text" placeholder="Vacío = usar landing automática" value="${p.homeUrl || ''}" onchange="updateProject('${p.slug}', 'homeUrl', this.value)" /></label>
+  </div>
+</section>
+
 <section>
               <h3 class="text-sm font-bold uppercase tracking-[0.2em] text-slate-500">Branding y textos</h3>
               <div class="mt-4 grid gap-4 md:grid-cols-2">
