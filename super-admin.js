@@ -801,6 +801,20 @@ let contentBase = '';
       }, 50);
   }
 
+  window.updateProject = (slug, field, val) => {
+    if (selectedIndex === -1) return;
+    const emp = empresas[selectedIndex];
+    const config = companyConfigs[emp.id];
+    if (!config || !config.projects) return;
+    const proj = config.projects.find(p => p.slug === slug);
+    if(proj) {
+      proj[field] = val;
+      if (field === 'country' || field === 'city') {
+        renderProjects();
+      }
+    }
+  };
+
   window.updateProjectDeep = (slug, parent, field, val) => {
     if (selectedIndex === -1) return;
     const emp = empresas[selectedIndex];
