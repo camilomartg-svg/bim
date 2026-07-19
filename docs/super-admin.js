@@ -640,7 +640,7 @@ let contentBase = '';
                 </label>
               </div>
               
-              <div class="${p.isOwnProject ? 'opacity-40 pointer-events-none grayscale' : ''} transition-all duration-300 border border-slate-200 rounded-xl p-5 bg-slate-50">
+              <div class="${p.isOwnProject ? 'hidden' : 'block'} transition-all duration-300 border border-slate-200 rounded-xl p-5 bg-slate-50 mt-2">
                 <div class="grid gap-4 md:grid-cols-2">
                    <label class="block"><span class="mb-2 block text-sm font-semibold text-slate-700">Nombre de la organización ${p.isOwnProject ? '' : '<span class="text-rose-500">*</span>'}</span><input class="w-full text-xs rounded-xl border-slate-200" type="text" placeholder="Ej. Constructora Alcabama" value="${p.clientName || ''}" onchange="updateProject('${p.slug}', 'clientName', this.value)" ${p.isOwnProject ? 'disabled' : 'required'} /></label>
                    
