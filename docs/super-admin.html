@@ -56,7 +56,7 @@
         </div>
         
         <!-- Pestañas Centrales -->
-        <div class="hidden md:flex bg-slate-100 p-1 rounded-xl w-1/3 justify-center">
+        <div id="global-tabs-container" class="hidden md:flex bg-slate-100 p-1 rounded-xl w-1/3 justify-center">
             <button id="tab-empresas" onclick="switchGlobalView('empresas')" class="px-6 py-2 rounded-lg text-sm font-bold bg-white text-slate-800 shadow-sm transition-all flex items-center gap-2">
                 <span class="material-symbols-outlined text-sm">domain</span> Empresas
             </button>
@@ -307,6 +307,34 @@
               <div class="mb-4">
                 <p class="text-xs text-slate-500">El primer miembro de la lista con rol de ADMINISTRADOR será considerado el administrador general de la empresa. Puedes arrastrar o reordenar desde aquí creando usuarios nuevos y eliminando los anteriores.</p>
               </div>
+
+              <!-- SOLICITUDES PENDIENTES -->
+              <div id="pending-requests-section" class="mb-8 hidden">
+                  <div class="flex items-center gap-2 mb-4">
+                      <span class="material-symbols-outlined text-amber-500">pending_actions</span>
+                      <h4 class="text-lg font-bold text-slate-800">Solicitudes de Acceso Pendientes</h4>
+                      <span id="pending-count" class="bg-amber-100 text-amber-700 text-xs font-bold px-2 py-0.5 rounded-full ml-2">0</span>
+                  </div>
+                  <p class="text-xs text-slate-500 mb-4">Estos usuarios se registraron indicando que pertenecen a esta empresa. Acéptalos para darles acceso a los proyectos.</p>
+                  
+                  <div class="bg-amber-50 rounded-xl border border-amber-200 overflow-hidden">
+                      <table class="w-full text-left border-collapse">
+                          <thead class="bg-amber-100/50">
+                              <tr>
+                                  <th class="py-3 px-4 text-xs font-bold text-slate-600 uppercase tracking-wider">Usuario</th>
+                                  <th class="py-3 px-4 text-xs font-bold text-slate-600 uppercase tracking-wider">Correo</th>
+                                  <th class="py-3 px-4 text-xs font-bold text-slate-600 uppercase tracking-wider">Especialidad</th>
+                                  <th class="py-3 px-4 text-xs font-bold text-slate-600 uppercase tracking-wider text-right">Acción</th>
+                              </tr>
+                          </thead>
+                          <tbody id="pending-requests-list" class="divide-y divide-amber-100">
+                              <!-- Rendered via JS -->
+                          </tbody>
+                      </table>
+                  </div>
+              </div>
+
+
               <div class="bg-white rounded-xl border border-slate-200 p-4">
                 <div id="usuarios-list" class="flex flex-col gap-4">
                   <!-- Usuarios Injected via JS -->

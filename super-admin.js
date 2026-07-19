@@ -14,6 +14,11 @@ document.addEventListener('DOMContentLoaded', async () => {
   let companyConfigs = {}; // Store configs by emp.id
   let selectedIndex = -1;
   let searchTerm = '';
+  
+  // Expose to global scope for our new modules
+  window.empresas = empresas;
+  window.selectedIndex = selectedIndex;
+  window.userRole = userRole;
 
   const listEl = document.getElementById('empresas-list');
   const editorEl = document.getElementById('empresa-editor');
@@ -86,6 +91,12 @@ document.addEventListener('DOMContentLoaded', async () => {
       
       el.superAdmins.value = superAdmins.join(',\n');
       
+      if (userRole !== 'SUPER_ADMINISTRADOR') {
+          const globalTabs = document.getElementById('global-tabs-container');
+          if(globalTabs) globalTabs.classList.add('hidden');
+          if(globalTabs) globalTabs.classList.remove('md:flex');
+      }
+      
       if (userRole === 'ADMINISTRADOR_EMPRESA') {
           // Hide Super Admins section
           document.getElementById('super-admins-input').closest('section').classList.add('hidden');
@@ -116,6 +127,12 @@ document.addEventListener('DOMContentLoaded', async () => {
         (emp.id && emp.id.toLowerCase().includes(searchTerm));
       
       let hasAccess = true;
+      if (userRole !== 'SUPER_ADMINISTRADOR') {
+          const globalTabs = document.getElementById('global-tabs-container');
+          if(globalTabs) globalTabs.classList.add('hidden');
+          if(globalTabs) globalTabs.classList.remove('md:flex');
+      }
+      
       if (userRole === 'ADMINISTRADOR_EMPRESA') {
           hasAccess = emp.members && emp.members.some(m => m.email && m.email.toLowerCase() === userEmail && (m.role === 'ADMINISTRADOR_EMPRESA' || m.role === 'ADMINISTRADOR'));
       }
@@ -158,6 +175,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   window.selectEmpresa = async (index) => {
     selectedIndex = index;
+      window.selectedIndex = index;
     const emp = empresas[index];
     
     // Load projects for this company
@@ -198,7 +216,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     el.terminosAceptados.checked = emp.terminosAceptados || false;
     el.tratamientoDatos.checked = emp.tratamientoDatos || false;
 
-    renderUsers();
+    if(window.renderUsersRef) window.renderUsersRef();
     renderProjects();
 
     editorEl.classList.remove('hidden');
@@ -235,7 +253,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       btnEspecialidad.className = 'px-3 py-1.5 rounded-md bg-white shadow-sm text-slate-800 transition-colors';
       btnEmpresa.className = 'px-3 py-1.5 rounded-md text-slate-500 hover:text-slate-800 transition-colors';
     }
-    renderUsers();
+    if(window.renderUsersRef) window.renderUsersRef();
   };
 
   window.toggleGroup = (id) => {
@@ -283,7 +301,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
   };
 
+  window.renderUsers = function() {
   function renderUsers() {
+    window.renderUsersRef = renderUsers;
     // Reset global collapse state
     window.allGroupsCollapsed = false;
     const iconAll = document.getElementById('icon-toggle-all');
@@ -467,7 +487,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   window.deleteUser = (idx) => {
     if(confirm('¿Eliminar usuario?')) {
       empresas[selectedIndex].members.splice(idx, 1);
-      renderUsers();
+      if(window.renderUsersRef) window.renderUsersRef();
     }
   };
 
@@ -475,7 +495,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (selectedIndex === -1) return;
     if (!empresas[selectedIndex].members) empresas[selectedIndex].members = [];
     empresas[selectedIndex].members.push({ name: 'Nuevo Usuario', email: '', role: 'INVITADO' });
-    renderUsers();
+    if(window.renderUsersRef) window.renderUsersRef();
   });
 
   // Projects CRUD
@@ -1518,10 +1538,105 @@ window.saveGlobalUser = function() {
     
     // Auto-update the current selected company view if they are editing someone in it
     if(window.selectedIndex !== -1) {
-        renderUsers(); 
+        if(window.renderUsersRef) window.renderUsersRef(); 
     }
 
     // Trigger the save process for empresas.json
-    saveConfig(new Event('submit')); 
+    if(window.saveConfigRef) window.saveConfigRef(new Event('submit')); 
 }
+
+
+
+
+// ==========================================
+// MÓDULO: SOLICITUDES PENDIENTES
+// ==========================================
+window.globalScriptUsers = [];
+
+window.fetchPendingRequests = async function(companyName) {
+    if(!companyName) return;
+    
+    const listEl = document.getElementById('pending-requests-list');
+    const countEl = document.getElementById('pending-count');
+    const section = document.getElementById('pending-requests-section');
+    
+    if(!listEl || !countEl || !section) return;
+
+    listEl.innerHTML = '<tr><td colspan="4" class="p-4 text-center text-amber-600">Cargando solicitudes...</td></tr>';
+    section.classList.remove('hidden');
+
+    try {
+        if(window.globalScriptUsers.length === 0) {
+            const res = await fetch('https://script.google.com/macros/s/AKfycbx4NEpE6EyrC2ggk8To0F0TP5P9y0YnaxiWzCbcIhSR7-KRSy4Wu0PM9hYyNY5y72Q/exec');
+            window.globalScriptUsers = await res.json();
+        }
+
+        // Find current company members
+        const currentEmp = window.empresas[window.selectedIndex];
+        const existingEmails = (currentEmp.members || []).map(m => m.email ? m.email.toLowerCase().trim() : '');
+
+        // Filter users who requested this company BUT are not in existingEmails
+        const pending = window.globalScriptUsers.filter(u => {
+            if(!u.email || !u.empresa) return false;
+            // Strict or loose match for company name? Let's do case-insensitive exact match
+            const requestedCompany = u.empresa.toLowerCase().trim();
+            const thisCompany = companyName.toLowerCase().trim();
+            
+            if(requestedCompany !== thisCompany) return false;
+            
+            const email = u.email.toLowerCase().trim();
+            return !existingEmails.includes(email);
+        });
+
+        countEl.textContent = pending.length;
+
+        if(pending.length === 0) {
+            listEl.innerHTML = '<tr><td colspan="4" class="p-4 text-center text-slate-500 italic">No hay solicitudes pendientes.</td></tr>';
+            return;
+        }
+
+        listEl.innerHTML = '';
+        pending.forEach(u => {
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+                <td class="py-2 px-4 font-semibold text-slate-700 text-sm">${u.nombre || 'Sin Nombre'}</td>
+                <td class="py-2 px-4 text-slate-500 text-sm">${u.email}</td>
+                <td class="py-2 px-4 text-slate-500 text-sm">${u.especialidad || '-'}</td>
+                <td class="py-2 px-4 text-right">
+                    <button onclick='approvePendingUser(${JSON.stringify(u)})' class="bg-emerald-100 hover:bg-emerald-200 text-emerald-700 px-3 py-1.5 rounded-lg text-xs font-bold transition-colors">
+                        Aprobar
+                    </button>
+                </td>
+            `;
+            listEl.appendChild(tr);
+        });
+
+    } catch (e) {
+        console.error("Error fetching pending requests", e);
+        listEl.innerHTML = '<tr><td colspan="4" class="p-4 text-center text-red-500">Error cargando solicitudes.</td></tr>';
+    }
+};
+
+window.approvePendingUser = function(user) {
+    if(window.selectedIndex === -1) return;
+    const emp = window.empresas[window.selectedIndex];
+    
+    if(!emp.members) emp.members = [];
+    
+    emp.members.push({
+        name: user.nombre || user.email.split('@')[0],
+        email: user.email.toLowerCase().trim(),
+        role: 'VISOR', // Default role upon approval
+        especialidad: user.especialidad || '',
+        cargo: '',
+        empresaUsuario: emp.name
+    });
+
+    // Re-render
+    if(window.renderUsersRef) window.renderUsersRef();
+    window.fetchPendingRequests(emp.name);
+    
+    // Auto-save
+    if(window.saveConfigRef) window.saveConfigRef(new Event('submit'));
+};
 
