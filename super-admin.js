@@ -802,6 +802,7 @@ let contentBase = '';
   }
 
   window.updateProject = (slug, field, val) => {
+    alert('updateProject activado para: ' + field + ' = ' + val);
     console.log('[DEBUG] updateProject called with:', slug, field, val);
     if (selectedIndex === -1) {
       console.log('[DEBUG] selectedIndex is -1, returning');
