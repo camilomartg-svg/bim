@@ -801,6 +801,35 @@ let contentBase = '';
       }, 50);
   }
 
+  window.updateProject = (slug, field, val) => {
+    alert('updateProject activado para: ' + field + ' = ' + val);
+    console.log('[DEBUG] updateProject called with:', slug, field, val);
+    if (selectedIndex === -1) {
+      console.log('[DEBUG] selectedIndex is -1, returning');
+      return;
+    }
+    const emp = empresas[selectedIndex];
+    const config = companyConfigs[emp.id];
+    if (!config || !config.projects) {
+      console.log('[DEBUG] no config or projects found, returning');
+      return;
+    }
+    const proj = config.projects.find(p => p.slug === slug);
+    if(proj) {
+      console.log(`[DEBUG] Updating project ${slug}: changing ${field} to ${val}`);
+      proj[field] = val;
+      if (field === 'country' || field === 'city') {
+        console.log('[DEBUG] Triggering renderProjects via setTimeout...');
+        setTimeout(() => {
+          renderProjects();
+          console.log('[DEBUG] renderProjects finished');
+        }, 10);
+      }
+    } else {
+      console.log('[DEBUG] Project not found for slug:', slug);
+    }
+  };
+
   window.updateProjectDeep = (slug, parent, field, val) => {
     if (selectedIndex === -1) return;
     const emp = empresas[selectedIndex];
