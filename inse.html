@@ -174,6 +174,14 @@
                         <!-- Información Laboral -->
                         <div>
                             <h3 class="text-xs font-bold uppercase tracking-widest text-gray-400 mb-3 border-b border-gray-200 dark:border-gray-700 pb-1">Información Laboral (Obligatoria)</h3>
+                                <div class="mb-4 relative mt-3">
+                                    <label class="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Organización a la que pertenece <span class="text-red-500">*</span></label>
+                                    <input type="text" id="reg-organization-search" required placeholder="Busca tu empresa..." class="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-800 text-sm focus:ring-2 focus:ring-primary focus:border-primary transition duration-200" autocomplete="off">
+                                    <input type="hidden" id="reg-organization-id">
+                                    <div id="org-autocomplete-results" class="absolute z-10 w-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg mt-1 hidden max-h-48 overflow-y-auto">
+                                        <!-- Resultados de búsqueda irán aquí -->
+                                    </div>
+                                </div>
                                 <!-- Se eliminaron los campos Empresa, Cargo y Departamento -->
                                 <div class="grid grid-cols-2 gap-4">
                                     <div>
@@ -197,6 +205,180 @@
 
                         <button type="submit" class="w-full bg-primary hover:bg-black dark:bg-white dark:hover:bg-gray-200 dark:text-black text-white font-bold py-3 px-4 rounded-lg shadow-md transition duration-300 flex justify-center items-center mt-6">
                             Completar Registro y Acceder
+                        </button>
+                    </form>
+                </div>
+                <!-- SECCIÓN DE CREAR EMPRESA (OCULTA POR DEFECTO) -->
+                <div id="create-company-section" class="w-full hidden">
+                    <button type="button" id="back-to-registration" onclick="hideCreateCompanyForm()" class="mb-6 flex items-center text-sm text-gray-500 hover:text-primary dark:hover:text-white transition duration-200">
+                        <span class="material-symbols-outlined text-sm mr-1">arrow_back</span> Volver al registro
+                    </button>
+                    <h2 class="text-2xl font-bold mb-2">Crear nueva organización</h2>
+                    <p class="text-gray-500 dark:text-gray-400 mb-6 text-sm">Ingresa los datos de tu empresa para registrarla en el sistema.</p>
+
+                    <form id="create-company-form" class="space-y-6" onsubmit="event.preventDefault(); handleCreateCompany();">
+                        
+                        <!-- 1. Información básica -->
+                        <div>
+                            <h3 class="text-xs font-bold uppercase tracking-widest text-gray-400 mb-3 border-b border-gray-200 dark:border-gray-700 pb-1">1. Información básica</h3>
+                            <div class="space-y-4">
+                                <div>
+                                    <label class="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Nombre comercial <span class="text-red-500">*</span></label>
+                                    <input type="text" id="new-org-name" required placeholder="Ej. Horizonte" class="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-800 text-sm focus:ring-2 focus:ring-primary focus:border-primary">
+                                </div>
+                                <div>
+                                    <label class="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Razón social <span class="text-red-500">*</span></label>
+                                    <input type="text" id="new-org-legal-name" required placeholder="Ej. Constructora Horizonte S.A.S." class="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-800 text-sm focus:ring-2 focus:ring-primary focus:border-primary">
+                                </div>
+                                <div>
+                                    <label class="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Tipo de organización <span class="text-red-500">*</span></label>
+                                    <select id="new-org-type" required class="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-800 text-sm focus:ring-2 focus:ring-primary focus:border-primary">
+                                        <option value="">Seleccionar...</option>
+                                        <option value="Empresa privada">Empresa privada</option>
+                                        <option value="Entidad pública">Entidad pública</option>
+                                        <option value="Persona natural">Persona natural</option>
+                                        <option value="Consorcio">Consorcio</option>
+                                        <option value="Unión temporal">Unión temporal</option>
+                                        <option value="ONG">ONG</option>
+                                        <option value="Institución educativa">Institución educativa</option>
+                                        <option value="Otro">Otro</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- 2. Información de contacto -->
+                        <div>
+                            <h3 class="text-xs font-bold uppercase tracking-widest text-gray-400 mb-3 border-b border-gray-200 dark:border-gray-700 pb-1">2. Información de contacto</h3>
+                            <div class="space-y-4">
+                                <div class="grid grid-cols-2 gap-4">
+                                    <div>
+                                        <label class="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Sitio web <span class="text-gray-400 font-normal">(Opcional)</span></label>
+                                        <input type="url" id="new-org-website" placeholder="https://..." class="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-800 text-sm focus:ring-2 focus:ring-primary focus:border-primary">
+                                    </div>
+                                    <div>
+                                        <label class="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Correo electrónico general <span class="text-gray-400 font-normal">(Opcional)</span></label>
+                                        <input type="email" id="new-org-email" placeholder="contacto@empresa.com" class="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-800 text-sm focus:ring-2 focus:ring-primary focus:border-primary">
+                                    </div>
+                                </div>
+                                <div>
+                                    <label class="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Teléfono principal <span class="text-red-500">*</span></label>
+                                    <input type="tel" id="new-org-phone" required placeholder="+57 300 000 0000" class="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-800 text-sm focus:ring-2 focus:ring-primary focus:border-primary">
+                                </div>
+                                <div class="grid grid-cols-2 gap-4">
+                                    <div>
+                                        <label class="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">País <span class="text-red-500">*</span></label>
+                                        <select id="new-org-country" required class="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-800 text-sm focus:ring-2 focus:ring-primary focus:border-primary">
+                                            <option value="">Seleccionar...</option>
+                                            <option value="Colombia">Colombia</option>
+                                            <option value="México">México</option>
+                                            <option value="Perú">Perú</option>
+                                            <option value="Chile">Chile</option>
+                                            <option value="España">España</option>
+                                            <option value="Otro">Otro</option>
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label class="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Departamento / Estado <span class="text-red-500">*</span></label>
+                                        <input type="text" id="new-org-state" required class="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-800 text-sm focus:ring-2 focus:ring-primary focus:border-primary">
+                                    </div>
+                                </div>
+                                <div class="grid grid-cols-2 gap-4">
+                                    <div>
+                                        <label class="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Ciudad <span class="text-red-500">*</span></label>
+                                        <input type="text" id="new-org-city" required class="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-800 text-sm focus:ring-2 focus:ring-primary focus:border-primary">
+                                    </div>
+                                    <div>
+                                        <label class="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Código Postal</label>
+                                        <input type="text" id="new-org-zip" class="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-800 text-sm focus:ring-2 focus:ring-primary focus:border-primary">
+                                    </div>
+                                </div>
+                                <div>
+                                    <label class="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Dirección <span class="text-red-500">*</span></label>
+                                    <input type="text" id="new-org-address" required class="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-800 text-sm focus:ring-2 focus:ring-primary focus:border-primary">
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- 3. Clasificación de la empresa -->
+                        <div>
+                            <h3 class="text-xs font-bold uppercase tracking-widest text-gray-400 mb-3 border-b border-gray-200 dark:border-gray-700 pb-1">3. Clasificación de la empresa</h3>
+                            <div class="space-y-4">
+                                <div>
+                                    <label class="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-2">Sector de actividad <span class="text-red-500">*</span></label>
+                                    <div class="grid grid-cols-2 gap-2 max-h-40 overflow-y-auto p-2 border border-gray-200 dark:border-gray-700 rounded-lg bg-gray-50 dark:bg-gray-800">
+                                        <label class="flex items-center text-xs text-gray-600 dark:text-gray-300"><input type="checkbox" name="org-sector" value="Arquitectura" class="mr-2"> Arquitectura</label>
+                                        <label class="flex items-center text-xs text-gray-600 dark:text-gray-300"><input type="checkbox" name="org-sector" value="Ingeniería" class="mr-2"> Ingeniería</label>
+                                        <label class="flex items-center text-xs text-gray-600 dark:text-gray-300"><input type="checkbox" name="org-sector" value="Construcción" class="mr-2"> Construcción</label>
+                                        <label class="flex items-center text-xs text-gray-600 dark:text-gray-300"><input type="checkbox" name="org-sector" value="Promoción inmobiliaria" class="mr-2"> Promoción inmobiliaria</label>
+                                        <label class="flex items-center text-xs text-gray-600 dark:text-gray-300"><input type="checkbox" name="org-sector" value="Consultoría" class="mr-2"> Consultoría</label>
+                                        <label class="flex items-center text-xs text-gray-600 dark:text-gray-300"><input type="checkbox" name="org-sector" value="Interventoría" class="mr-2"> Interventoría</label>
+                                        <label class="flex items-center text-xs text-gray-600 dark:text-gray-300"><input type="checkbox" name="org-sector" value="Gerencia de proyectos" class="mr-2"> Gerencia de proyectos</label>
+                                        <label class="flex items-center text-xs text-gray-600 dark:text-gray-300"><input type="checkbox" name="org-sector" value="Fabricación" class="mr-2"> Fabricación</label>
+                                        <label class="flex items-center text-xs text-gray-600 dark:text-gray-300"><input type="checkbox" name="org-sector" value="Suministro de productos" class="mr-2"> Suministro de productos</label>
+                                        <label class="flex items-center text-xs text-gray-600 dark:text-gray-300"><input type="checkbox" name="org-sector" value="Operación y mantenimiento" class="mr-2"> Operación y mantenimiento</label>
+                                        <label class="flex items-center text-xs text-gray-600 dark:text-gray-300"><input type="checkbox" name="org-sector" value="Sector público" class="mr-2"> Sector público</label>
+                                        <label class="flex items-center text-xs text-gray-600 dark:text-gray-300"><input type="checkbox" name="org-sector" value="Educación" class="mr-2"> Educación</label>
+                                        <label class="flex items-center text-xs text-gray-600 dark:text-gray-300"><input type="checkbox" name="org-sector" value="Tecnología" class="mr-2"> Tecnología</label>
+                                        <label class="flex items-center text-xs text-gray-600 dark:text-gray-300"><input type="checkbox" name="org-sector" value="Otro" class="mr-2"> Otro</label>
+                                    </div>
+                                </div>
+                                <div>
+                                    <label class="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-2">Especialidades</label>
+                                    <div class="border border-gray-200 dark:border-gray-700 rounded-lg bg-gray-50 dark:bg-gray-800 p-3 max-h-48 overflow-y-auto">
+                                        <p class="text-[10px] font-bold text-gray-500 uppercase mb-2">Arquitectura</p>
+                                        <div class="grid grid-cols-2 gap-2 mb-3">
+                                            <label class="flex items-center text-xs text-gray-600 dark:text-gray-300"><input type="checkbox" name="org-specialty" value="Ambiental" class="mr-2"> Ambiental</label>
+                                            <label class="flex items-center text-xs text-gray-600 dark:text-gray-300"><input type="checkbox" name="org-specialty" value="CCTV" class="mr-2"> CCTV</label>
+                                            <label class="flex items-center text-xs text-gray-600 dark:text-gray-300"><input type="checkbox" name="org-specialty" value="Diseño arquitectónico" class="mr-2"> Diseño arquitectónico</label>
+                                            <label class="flex items-center text-xs text-gray-600 dark:text-gray-300"><input type="checkbox" name="org-specialty" value="Urbanismo" class="mr-2"> Urbanismo</label>
+                                            <label class="flex items-center text-xs text-gray-600 dark:text-gray-300"><input type="checkbox" name="org-specialty" value="Paisajismo" class="mr-2"> Paisajismo</label>
+                                            <label class="flex items-center text-xs text-gray-600 dark:text-gray-300"><input type="checkbox" name="org-specialty" value="Seguridad humana" class="mr-2"> Seguridad humana</label>
+                                            <label class="flex items-center text-xs text-gray-600 dark:text-gray-300"><input type="checkbox" name="org-specialty" value="Interiorismo" class="mr-2"> Interiorismo</label>
+                                        </div>
+                                        <p class="text-[10px] font-bold text-gray-500 uppercase mb-2">Ingeniería</p>
+                                        <div class="grid grid-cols-2 gap-2 mb-3">
+                                            <label class="flex items-center text-xs text-gray-600 dark:text-gray-300"><input type="checkbox" name="org-specialty" value="Estructuras" class="mr-2"> Estructuras</label>
+                                            <label class="flex items-center text-xs text-gray-600 dark:text-gray-300"><input type="checkbox" name="org-specialty" value="Hidrosanitaria y gas" class="mr-2"> Hidrosanitaria y gas</label>
+                                            <label class="flex items-center text-xs text-gray-600 dark:text-gray-300"><input type="checkbox" name="org-specialty" value="Eléctrica" class="mr-2"> Eléctrica</label>
+                                            <label class="flex items-center text-xs text-gray-600 dark:text-gray-300"><input type="checkbox" name="org-specialty" value="Climatización y Ventilación HVAC" class="mr-2"> Climatización y HVAC</label>
+                                            <label class="flex items-center text-xs text-gray-600 dark:text-gray-300"><input type="checkbox" name="org-specialty" value="Protección contra incendios" class="mr-2"> Protección incendios</label>
+                                            <label class="flex items-center text-xs text-gray-600 dark:text-gray-300"><input type="checkbox" name="org-specialty" value="Presupuestos" class="mr-2"> Presupuestos</label>
+                                            <label class="flex items-center text-xs text-gray-600 dark:text-gray-300"><input type="checkbox" name="org-specialty" value="Propiedad horizontal" class="mr-2"> Propiedad horizontal</label>
+                                            <label class="flex items-center text-xs text-gray-600 dark:text-gray-300"><input type="checkbox" name="org-specialty" value="Geotecnia y Suelos" class="mr-2"> Geotecnia y Suelos</label>
+                                        </div>
+                                        <p class="text-[10px] font-bold text-gray-500 uppercase mb-2">Construcción</p>
+                                        <div class="grid grid-cols-2 gap-2">
+                                            <label class="flex items-center text-xs text-gray-600 dark:text-gray-300"><input type="checkbox" name="org-specialty" value="Edificación" class="mr-2"> Edificación</label>
+                                            <label class="flex items-center text-xs text-gray-600 dark:text-gray-300"><input type="checkbox" name="org-specialty" value="Infraestructura" class="mr-2"> Infraestructura</label>
+                                            <label class="flex items-center text-xs text-gray-600 dark:text-gray-300"><input type="checkbox" name="org-specialty" value="Urbanismo" class="mr-2"> Urbanismo</label>
+                                            <label class="flex items-center text-xs text-gray-600 dark:text-gray-300"><input type="checkbox" name="org-specialty" value="Vivienda" class="mr-2"> Vivienda</label>
+                                            <label class="flex items-center text-xs text-gray-600 dark:text-gray-300"><input type="checkbox" name="org-specialty" value="Vias e Infraestructura" class="mr-2"> Vias e Infraestructura</label>
+                                            <label class="flex items-center text-xs text-gray-600 dark:text-gray-300"><input type="checkbox" name="org-specialty" value="Obras industriales" class="mr-2"> Obras industriales</label>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- 4. Logo -->
+                        <div>
+                            <h3 class="text-xs font-bold uppercase tracking-widest text-gray-400 mb-3 border-b border-gray-200 dark:border-gray-700 pb-1">4. Logo</h3>
+                            <p class="text-xs text-gray-500 dark:text-gray-400 mb-4">Sube el logotipo de tu empresa (Formato: webp o png fondo transparente).</p>
+                            <div class="space-y-4">
+                                <div>
+                                    <label class="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Logo (Fondo Claro) <span class="text-gray-400 font-normal">(Opcional)</span></label>
+                                    <input type="file" id="new-org-logo-light" accept=".png, .webp" class="w-full text-xs text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-xs file:font-semibold file:bg-gray-100 file:text-primary hover:file:bg-gray-200 cursor-pointer">
+                                </div>
+                                <div>
+                                    <label class="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Logo (Fondo Oscuro) <span class="text-gray-400 font-normal">(Opcional)</span></label>
+                                    <input type="file" id="new-org-logo-dark" accept=".png, .webp" class="w-full text-xs text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-xs file:font-semibold file:bg-gray-100 file:text-primary hover:file:bg-gray-200 cursor-pointer">
+                                </div>
+                            </div>
+                        </div>
+
+                        <button type="submit" class="w-full bg-primary hover:bg-black dark:bg-white dark:hover:bg-gray-200 dark:text-black text-white font-bold py-3 px-4 rounded-lg shadow-md transition duration-300 flex justify-center items-center mt-6">
+                            Guardar y Continuar
                         </button>
                     </form>
                 </div>
@@ -481,6 +663,7 @@
             // Ocultar login, mostrar registro
             loginSection.classList.add('hidden');
             registrationSection.classList.remove('hidden');
+            if (window.empresasList.length === 0) fetchEmpresas();
             if (errorMessage) errorMessage.textContent = "";
             
             if (googleProfile) {
@@ -522,6 +705,132 @@
         // The inline onclick handles the back-to-login button logic
 
         // The inline onclick handles the register-link logic
+
+        
+        // --- LOGICA DE ORGANIZACIÓN ---
+        window.empresasList = [];
+        window.newCompanyData = null;
+
+        async function fetchEmpresas() {
+            try {
+                const res = await fetch('empresas.json');
+                if(res.ok) {
+                    window.empresasList = await res.json();
+                }
+            } catch(e) {
+                console.error("Error fetching empresas", e);
+            }
+        }
+
+        const orgSearchInput = document.getElementById('reg-organization-search');
+        const orgResults = document.getElementById('org-autocomplete-results');
+        const orgIdInput = document.getElementById('reg-organization-id');
+
+        if(orgSearchInput) {
+            orgSearchInput.addEventListener('input', (e) => {
+                const query = e.target.value.toLowerCase();
+                orgResults.innerHTML = '';
+                
+                if (query.length > 0) {
+                    const matches = window.empresasList.filter(emp => emp.name.toLowerCase().includes(query));
+                    
+                    matches.forEach(emp => {
+                        const div = document.createElement('div');
+                        div.className = 'px-4 py-2 hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer text-sm text-gray-700 dark:text-gray-200 border-b border-gray-100 dark:border-gray-700';
+                        div.textContent = emp.name;
+                        div.onclick = () => {
+                            orgSearchInput.value = emp.name;
+                            orgIdInput.value = emp.id;
+                            orgResults.classList.add('hidden');
+                            window.newCompanyData = null; // Clear if an existing one is selected
+                        };
+                        orgResults.appendChild(div);
+                    });
+
+                    // Add 'Crear empresa' option at the end
+                    const createDiv = document.createElement('div');
+                    createDiv.className = 'px-4 py-3 bg-gray-50 dark:bg-gray-900 hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer text-sm font-semibold text-primary dark:text-white border-t border-gray-200 dark:border-gray-600 flex items-center';
+                    createDiv.innerHTML = '<span class="material-symbols-outlined text-sm mr-2">add_circle</span> Crear empresa';
+                    createDiv.onclick = () => {
+                        orgResults.classList.add('hidden');
+                        showCreateCompanyForm(orgSearchInput.value);
+                    };
+                    orgResults.appendChild(createDiv);
+                    
+                    orgResults.classList.remove('hidden');
+                } else {
+                    orgResults.classList.add('hidden');
+                    orgIdInput.value = '';
+                }
+            });
+
+            // Hide dropdown when clicking outside
+            document.addEventListener('click', (e) => {
+                if (!orgSearchInput.contains(e.target) && !orgResults.contains(e.target)) {
+                    orgResults.classList.add('hidden');
+                }
+            });
+        }
+
+        window.showCreateCompanyForm = function(initialName = '') {
+            document.getElementById('registration-section').classList.add('hidden');
+            document.getElementById('create-company-section').classList.remove('hidden');
+            
+            const nameInput = document.getElementById('new-org-name');
+            if(nameInput && initialName && !nameInput.value) {
+                nameInput.value = initialName;
+            }
+        }
+
+        window.hideCreateCompanyForm = function() {
+            document.getElementById('create-company-section').classList.add('hidden');
+            document.getElementById('registration-section').classList.remove('hidden');
+        }
+
+        window.handleCreateCompany = async function() {
+            // Get multiselect / checkbox values
+            const selectedSectors = Array.from(document.querySelectorAll('input[name="org-sector"]:checked')).map(cb => cb.value);
+            const selectedSpecialties = Array.from(document.querySelectorAll('input[name="org-specialty"]:checked')).map(cb => cb.value);
+            
+            window.newCompanyData = {
+                name: document.getElementById('new-org-name').value.trim(),
+                legalName: document.getElementById('new-org-legal-name').value.trim(),
+                type: document.getElementById('new-org-type').value,
+                website: document.getElementById('new-org-website').value.trim(),
+                email: document.getElementById('new-org-email').value.trim(),
+                phone: document.getElementById('new-org-phone').value.trim(),
+                country: document.getElementById('new-org-country').value,
+                state: document.getElementById('new-org-state').value.trim(),
+                city: document.getElementById('new-org-city').value.trim(),
+                zip: document.getElementById('new-org-zip').value.trim(),
+                address: document.getElementById('new-org-address').value.trim(),
+                sectors: selectedSectors,
+                specialties: selectedSpecialties,
+                // Note: file processing for logos can be complex without a backend API.
+                // For now we will just note they exist, or convert to Base64 if needed.
+            };
+
+            // Process logos as base64 (if user selected any)
+            const lightLogoFile = document.getElementById('new-org-logo-light').files[0];
+            const darkLogoFile = document.getElementById('new-org-logo-dark').files[0];
+            
+            const toBase64 = file => new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.readAsDataURL(file);
+                reader.onload = () => resolve(reader.result);
+                reader.onerror = error => reject(error);
+            });
+
+            if(lightLogoFile) window.newCompanyData.logoLightBase64 = await toBase64(lightLogoFile);
+            if(darkLogoFile) window.newCompanyData.logoDarkBase64 = await toBase64(darkLogoFile);
+
+            // Update registration form UI
+            orgSearchInput.value = window.newCompanyData.name;
+            orgIdInput.value = 'NEW_COMPANY';
+            
+            // Go back to registration
+            hideCreateCompanyForm();
+        }
 
         window.handleCompleteRegistration = async function() {
             // Validaciones
@@ -570,7 +879,12 @@
                     method: 'POST',
                     mode: 'no-cors',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ name, email, phone, country, city })
+                    body: JSON.stringify({ 
+                        name, email, phone, country, city, 
+                        organizationId: document.getElementById('reg-organization-id').value,
+                        organizationName: document.getElementById('reg-organization-search').value,
+                        newCompanyData: window.newCompanyData
+                    })
                 });
                 
                 // Login immediately as INVITADO
@@ -596,6 +910,8 @@
                 phone: phone,
                 country: country,
                 city: city,
+                organizationId: document.getElementById('reg-organization-id').value,
+                organizationName: document.getElementById('reg-organization-search').value,
                 picture: window.tempGoogleUser?.picture || ''
             };
 
