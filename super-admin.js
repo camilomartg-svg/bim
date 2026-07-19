@@ -1229,11 +1229,11 @@ let contentBase = '';
 
 
 // ==========================================
-// MÓDULO: DIRECTORIO GLOBAL DE USUARIOS
+// MÓDULO: DIRECTORIO GLOBAL DE USUARIOS (Google Sheets Single Source of Truth)
 // ==========================================
-window.globalUsersMap = new Map(); // Para almacenar los usuarios combinados y deduplicados por email
+window.globalUsersMap = new Map();
 window.currentGlobalUserEmail = null;
-const ROLES_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbx4NEpE6EyrC2ggk8To0F0TP5P9y0YnaxiWzCbcIhSR7-KRSy4Wu0PM9hYyNY5y72Q/exec';
+const ROLES_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbx266o-ea0OAT-xE_9kKSKChRk7MJo0sthjwWI7WUCbFzq3Y578sbD8HgZpWSb7v8H8Fw/exec';
 
 window.switchGlobalView = function(viewName) {
     const btnEmpresas = document.getElementById('tab-empresas');
@@ -1241,31 +1241,29 @@ window.switchGlobalView = function(viewName) {
     const vEmpresas = document.getElementById('empresas-view');
     const vUsuarios = document.getElementById('usuarios-view');
 
-    if(viewName === 'empresas') {
+    if (viewName === 'empresas') {
         btnEmpresas.classList.replace('text-slate-500', 'text-slate-800');
-        btnEmpresas.classList.replace('bg-transparent', 'bg-white');
+        btnEmpresas.classList.replace('hover:text-slate-700', 'bg-white');
         btnEmpresas.classList.add('shadow-sm');
-        
+
         btnUsuarios.classList.replace('text-slate-800', 'text-slate-500');
-        btnUsuarios.classList.replace('bg-white', 'bg-transparent');
+        btnUsuarios.classList.replace('bg-white', 'hover:text-slate-700');
         btnUsuarios.classList.remove('shadow-sm');
 
-        vEmpresas.classList.remove('hidden');
         vUsuarios.classList.add('hidden');
+        vEmpresas.classList.remove('hidden');
     } else {
         btnUsuarios.classList.replace('text-slate-500', 'text-slate-800');
-        btnUsuarios.classList.replace('bg-transparent', 'bg-white');
+        btnUsuarios.classList.replace('hover:text-slate-700', 'bg-white');
         btnUsuarios.classList.add('shadow-sm');
-        
+
         btnEmpresas.classList.replace('text-slate-800', 'text-slate-500');
-        btnEmpresas.classList.replace('bg-white', 'bg-transparent');
+        btnEmpresas.classList.replace('bg-white', 'hover:text-slate-700');
         btnEmpresas.classList.remove('shadow-sm');
 
         vEmpresas.classList.add('hidden');
         vUsuarios.classList.remove('hidden');
-        vUsuarios.classList.add('flex'); // Add flex back
-
-        // Cargar usuarios al entrar a la vista por primera vez
+        
         if (window.globalUsersMap.size === 0) {
             fetchGlobalUsers();
         } else {
@@ -1279,16 +1277,11 @@ window.fetchGlobalUsers = async function() {
     document.getElementById('global-users-tbody').innerHTML = '';
     
     try {
-        // 1. Fetch from Google Script
         const res = await fetch(ROLES_SCRIPT_URL);
         const scriptUsers = await res.json();
         
-        // 2. Fetch or use existing empresas.json data
-        // La variable global 'empresas' ya debería existir por la carga principal.
-        
         window.globalUsersMap.clear();
 
-        // Add users from script
         scriptUsers.forEach(u => {
             if(!u.email) return;
             const email = u.email.toLowerCase().trim();
@@ -1296,40 +1289,11 @@ window.fetchGlobalUsers = async function() {
                 email: email,
                 name: u.nombre || u.email.split('@')[0],
                 role: u.rol || 'INVITADO',
-                companyId: '',
-                companyName: 'Sin Empresa Asignada',
+                companyName: u.empresa || 'Sin Empresa Asignada',
                 specialty: u.especialidad || '',
-                source: 'script'
+                cargo: u.cargo || '',
+                estado: u.estado || 'PENDIENTE'
             });
-        });
-
-        // Add/Merge users from empresas
-        window.empresas.forEach(emp => {
-            if(emp.members) {
-                emp.members.forEach(m => {
-                    if(!m.email) return;
-                    const email = m.email.toLowerCase().trim();
-                    const existing = window.globalUsersMap.get(email);
-                    if (existing) {
-                        // Merge: give priority to local company assignment
-                        existing.companyId = emp.id;
-                        existing.companyName = emp.name;
-                        existing.role = m.role || existing.role;
-                        existing.specialty = m.especialidad || existing.specialty;
-                        existing.name = m.name || existing.name;
-                    } else {
-                        window.globalUsersMap.set(email, {
-                            email: email,
-                            name: m.name || email.split('@')[0],
-                            role: m.role || 'INVITADO',
-                            companyId: emp.id,
-                            companyName: emp.name,
-                            specialty: m.especialidad || '',
-                            source: 'empresa'
-                        });
-                    }
-                });
-            }
         });
 
         renderGlobalUsers();
@@ -1347,11 +1311,8 @@ window.renderGlobalUsers = function(searchTerm = '') {
     tbody.innerHTML = '';
     
     const term = searchTerm.toLowerCase();
-    
-    // Sort by name
     const usersArr = Array.from(window.globalUsersMap.values()).sort((a, b) => a.name.localeCompare(b.name));
 
-    let count = 0;
     usersArr.forEach(u => {
         if(term) {
             const matches = u.name.toLowerCase().includes(term) || u.email.toLowerCase().includes(term) || u.companyName.toLowerCase().includes(term);
@@ -1361,191 +1322,173 @@ window.renderGlobalUsers = function(searchTerm = '') {
         const tr = document.createElement('tr');
         tr.className = "hover:bg-slate-50 transition-colors group";
         
-        const roleColors = {
-            'SUPER_ADMINISTRADOR': 'bg-purple-100 text-purple-700 border-purple-200',
-            'ADMINISTRADOR_EMPRESA': 'bg-blue-100 text-blue-700 border-blue-200',
-            'ADMINISTRADOR': 'bg-emerald-100 text-emerald-700 border-emerald-200',
-            'EDITOR': 'bg-amber-100 text-amber-700 border-amber-200',
-            'VISOR': 'bg-slate-100 text-slate-700 border-slate-200',
-            'INVITADO': 'bg-gray-100 text-gray-500 border-gray-200'
-        };
-        const roleClass = roleColors[u.role] || roleColors['INVITADO'];
+        let roleStyle = 'bg-slate-100 text-slate-600';
+        if(u.role === 'SUPER_ADMINISTRADOR') roleStyle = 'bg-purple-100 text-purple-700';
+        else if(u.role === 'ADMINISTRADOR_EMPRESA') roleStyle = 'bg-blue-100 text-blue-700';
+        else if(u.role === 'EDITOR') roleStyle = 'bg-emerald-100 text-emerald-700';
+        
+        let statusBadge = '';
+        if(u.estado === 'PENDIENTE') statusBadge = '<span class="ml-2 inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-amber-100 text-amber-800">Pendiente</span>';
 
         tr.innerHTML = `
-            <td class="py-3 px-6">
-                <div class="flex items-center gap-3">
-                    <div class="h-10 w-10 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 font-bold text-sm shrink-0">
-                        ${u.name.substring(0,2).toUpperCase()}
+            <td class="py-3 px-6 whitespace-nowrap">
+                <div class="flex items-center">
+                    <div class="h-8 w-8 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center font-bold text-xs uppercase mr-3">
+                        ${u.name.substring(0,2)}
                     </div>
                     <div>
-                        <div class="font-bold text-slate-800 text-sm">${u.name}</div>
+                        <div class="text-sm font-bold text-slate-900">${u.name} ${statusBadge}</div>
                         <div class="text-xs text-slate-500">${u.email}</div>
                     </div>
                 </div>
             </td>
-            <td class="py-3 px-6">
-                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold border ${roleClass}">
+            <td class="py-3 px-6 whitespace-nowrap">
+                <span class="px-2.5 py-1 inline-flex text-[10px] leading-4 font-bold rounded-full uppercase tracking-wide ${roleStyle}">
                     ${u.role}
                 </span>
             </td>
-            <td class="py-3 px-6 text-sm text-slate-600 font-medium">
-                ${u.companyId ? `<span class="material-symbols-outlined text-xs align-middle mr-1 text-slate-400">domain</span> ${u.companyName}` : '<span class="text-slate-400 italic">Sin Empresa Asignada</span>'}
+            <td class="py-3 px-6 whitespace-nowrap">
+                <div class="text-sm text-slate-600 font-medium">${u.companyName}</div>
             </td>
-            <td class="py-3 px-6 text-sm text-slate-600">
+            <td class="py-3 px-6 whitespace-nowrap text-sm text-slate-500">
                 ${u.specialty || '-'}
             </td>
-            <td class="py-3 px-6 text-right">
-                <button onclick='openEditUserModal(${JSON.stringify(u)})' class="p-2 text-slate-400 hover:text-blue-600 bg-slate-50 hover:bg-blue-50 rounded-lg transition-colors" title="Editar Usuario">
-                    <span class="material-symbols-outlined text-sm">edit</span>
+            <td class="py-3 px-6 whitespace-nowrap text-right text-sm font-medium">
+                <button onclick='openEditUserModal("${u.email}")' class="text-slate-400 hover:text-blue-600 transition-colors p-1.5 rounded-lg hover:bg-blue-50">
+                    <span class="material-symbols-outlined text-[20px]">edit</span>
                 </button>
             </td>
         `;
         tbody.appendChild(tr);
-        count++;
     });
-
-    if (count === 0) {
-        tbody.innerHTML = '<tr><td colspan="5" class="p-8 text-center text-slate-500 italic">No se encontraron usuarios coincidentes.</td></tr>';
-    }
 }
 
-// Search binding
-document.getElementById('global-user-search')?.addEventListener('input', (e) => {
-    window.renderGlobalUsers(e.target.value);
+// Search listener
+document.addEventListener('DOMContentLoaded', () => {
+    const searchInput = document.getElementById('global-user-search');
+    if(searchInput) {
+        searchInput.addEventListener('input', (e) => {
+            window.renderGlobalUsers(e.target.value);
+        });
+    }
 });
 
-window.populateGlobalCompanySelect = function() {
-    const select = document.getElementById('gu-company');
-    select.innerHTML = '<option value="">-- Sin Empresa Asignada --</option>';
-    window.empresas.forEach(emp => {
-        const opt = document.createElement('option');
-        opt.value = emp.id;
-        opt.textContent = emp.name;
-        select.appendChild(opt);
-    });
-}
-
-window.openEditUserModal = function(user) {
-    window.populateGlobalCompanySelect();
+window.openEditUserModal = function(email) {
+    window.currentGlobalUserEmail = email;
     const modal = document.getElementById('modal-global-user');
+    const title = document.getElementById('modal-gu-title');
     
-    if (user) {
-        // Edit mode
-        document.getElementById('modal-global-user-title').textContent = 'Editar Usuario';
-        document.getElementById('gu-original-email').value = user.email;
-        document.getElementById('gu-original-company').value = user.companyId || '';
+    // Selects
+    const companySelect = document.getElementById('gu-company');
+    companySelect.innerHTML = '<option value="">Sin Empresa Asignada</option>';
+    window.empresas.forEach(emp => {
+        companySelect.innerHTML += `<option value="${emp.name}">${emp.name}</option>`;
+    });
+
+    if(email) {
+        const u = window.globalUsersMap.get(email);
+        title.textContent = 'Editar Usuario';
+        document.getElementById('gu-email').value = u.email;
+        document.getElementById('gu-email').disabled = true;
+        document.getElementById('gu-name').value = u.name;
+        document.getElementById('gu-role').value = u.role;
+        document.getElementById('gu-specialty').value = u.specialty;
         
-        document.getElementById('gu-name').value = user.name;
-        document.getElementById('gu-email').value = user.email;
-        document.getElementById('gu-email').readOnly = true; // No permitir cambiar email
-        document.getElementById('gu-email').classList.add('bg-slate-100', 'cursor-not-allowed');
-        
-        document.getElementById('gu-role').value = user.role || 'INVITADO';
-        document.getElementById('gu-company').value = user.companyId || '';
-        document.getElementById('gu-specialty').value = user.specialty || '';
-        
-        window.currentGlobalUserEmail = user.email;
+        // Select matching company name
+        let matched = false;
+        for (let i = 0; i < companySelect.options.length; i++) {
+            if (companySelect.options[i].value === u.companyName) {
+                companySelect.selectedIndex = i;
+                matched = true;
+                break;
+            }
+        }
+        if(!matched && u.companyName !== 'Sin Empresa Asignada') {
+            companySelect.innerHTML += `<option value="${u.companyName}">${u.companyName} (No registrada)</option>`;
+            companySelect.value = u.companyName;
+        }
+
     } else {
-        // Create mode
-        document.getElementById('modal-global-user-title').textContent = 'Nuevo Usuario';
-        document.getElementById('gu-original-email').value = '';
-        document.getElementById('gu-original-company').value = '';
-        
-        document.getElementById('gu-name').value = '';
+        title.textContent = 'Nuevo Usuario';
         document.getElementById('gu-email').value = '';
-        document.getElementById('gu-email').readOnly = false;
-        document.getElementById('gu-email').classList.remove('bg-slate-100', 'cursor-not-allowed');
-        
+        document.getElementById('gu-email').disabled = false;
+        document.getElementById('gu-name').value = '';
         document.getElementById('gu-role').value = 'INVITADO';
-        document.getElementById('gu-company').value = '';
         document.getElementById('gu-specialty').value = '';
-        
-        window.currentGlobalUserEmail = null;
+        companySelect.value = '';
     }
 
     modal.classList.remove('hidden');
+    modal.classList.add('flex');
 }
 
-window.closeGlobalUserModal = function() {
-    document.getElementById('modal-global-user').classList.add('hidden');
+window.closeEditUserModal = function() {
+    const modal = document.getElementById('modal-global-user');
+    modal.classList.add('hidden');
+    modal.classList.remove('flex');
 }
 
-window.saveGlobalUser = function() {
+window.saveGlobalUser = async function() {
     const email = document.getElementById('gu-email').value.trim().toLowerCase();
     const name = document.getElementById('gu-name').value.trim();
     const role = document.getElementById('gu-role').value;
-    const companyId = document.getElementById('gu-company').value;
+    const companyName = document.getElementById('gu-company').value;
     const specialty = document.getElementById('gu-specialty').value.trim();
-    const originalCompanyId = document.getElementById('gu-original-company').value;
+    const saveBtn = document.getElementById('btn-save-gu');
     
     if(!email || !name) {
         alert('Nombre y Correo son obligatorios.');
         return;
     }
 
-    // UPDATE IN empresas.json MODEL (Local state array)
-    // 1. Remove from old company if changed or if removed completely
-    if (originalCompanyId && originalCompanyId !== companyId) {
-        const oldComp = window.empresas.find(e => e.id === originalCompanyId);
-        if (oldComp && oldComp.members) {
-            oldComp.members = oldComp.members.filter(m => m.email.toLowerCase() !== email);
+    saveBtn.disabled = true;
+    saveBtn.innerHTML = '<span class="material-symbols-outlined animate-spin text-sm mr-2">autorenew</span> Guardando...';
+
+    try {
+        const payload = {
+            email: email,
+            nombre: name,
+            rol: role,
+            empresa: companyName,
+            especialidad: specialty,
+            estado: 'APROBADO'
+        };
+
+        const res = await fetch(ROLES_SCRIPT_URL, {
+            method: 'POST',
+            mode: 'no-cors',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+
+        // Update local map instantly
+        window.globalUsersMap.set(email, {
+            email: email,
+            name: name,
+            role: role,
+            companyName: companyName || 'Sin Empresa Asignada',
+            specialty: specialty,
+            estado: 'APROBADO'
+        });
+
+        renderGlobalUsers();
+        closeEditUserModal();
+        alert('Usuario guardado exitosamente.');
+        
+        // Refresh pending requests if we are inside a company
+        if (window.selectedIndex !== -1 && window.empresas[window.selectedIndex]) {
+            const currentEmpName = window.empresas[window.selectedIndex].name;
+            if (window.fetchPendingRequests) window.fetchPendingRequests(currentEmpName);
         }
+
+    } catch (e) {
+        console.error(e);
+        alert('Error al guardar el usuario en la base de datos.');
+    } finally {
+        saveBtn.disabled = false;
+        saveBtn.innerHTML = 'Guardar Cambios';
     }
-
-    // 2. Add or update in new company
-    if (companyId) {
-        const newComp = window.empresas.find(e => e.id === companyId);
-        if (newComp) {
-            if (!newComp.members) newComp.members = [];
-            const existingMember = newComp.members.find(m => m.email.toLowerCase() === email);
-            if (existingMember) {
-                existingMember.name = name;
-                existingMember.role = role;
-                existingMember.especialidad = specialty;
-            } else {
-                newComp.members.push({
-                    name: name,
-                    email: email,
-                    role: role,
-                    especialidad: specialty,
-                    cargo: '',
-                    empresaUsuario: newComp.name
-                });
-            }
-        }
-    }
-
-    // UPDATE IN GLOBAL MAP
-    let compName = 'Sin Empresa Asignada';
-    if(companyId) {
-        const c = window.empresas.find(e => e.id === companyId);
-        if(c) compName = c.name;
-    }
-
-    window.globalUsersMap.set(email, {
-        email: email,
-        name: name,
-        role: role,
-        companyId: companyId,
-        companyName: compName,
-        specialty: specialty,
-        source: window.currentGlobalUserEmail ? window.globalUsersMap.get(email).source : 'manual'
-    });
-
-    closeGlobalUserModal();
-    renderGlobalUsers();
-    
-    // Auto-update the current selected company view if they are editing someone in it
-    if(window.selectedIndex !== -1) {
-        if(window.renderUsersRef) window.renderUsersRef(); 
-    }
-
-    // Trigger the save process for empresas.json
-    if(window.saveConfigRef) window.saveConfigRef(new Event('submit')); 
 }
-
-
-
 
 // ==========================================
 // MÓDULO: SOLICITUDES PENDIENTES
@@ -1565,26 +1508,17 @@ window.fetchPendingRequests = async function(companyName) {
     section.classList.remove('hidden');
 
     try {
-        if(window.globalScriptUsers.length === 0) {
-            const res = await fetch('https://script.google.com/macros/s/AKfycbx4NEpE6EyrC2ggk8To0F0TP5P9y0YnaxiWzCbcIhSR7-KRSy4Wu0PM9hYyNY5y72Q/exec');
-            window.globalScriptUsers = await res.json();
-        }
+        const res = await fetch(ROLES_SCRIPT_URL);
+        window.globalScriptUsers = await res.json();
 
-        // Find current company members
-        const currentEmp = window.empresas[window.selectedIndex];
-        const existingEmails = (currentEmp.members || []).map(m => m.email ? m.email.toLowerCase().trim() : '');
-
-        // Filter users who requested this company BUT are not in existingEmails
+        // Filter users who requested this company AND are NOT APROBADO
         const pending = window.globalScriptUsers.filter(u => {
             if(!u.email || !u.empresa) return false;
-            // Strict or loose match for company name? Let's do case-insensitive exact match
+            if(u.estado === 'APROBADO') return false;
+            
             const requestedCompany = u.empresa.toLowerCase().trim();
             const thisCompany = companyName.toLowerCase().trim();
-            
-            if(requestedCompany !== thisCompany) return false;
-            
-            const email = u.email.toLowerCase().trim();
-            return !existingEmails.includes(email);
+            return requestedCompany === thisCompany;
         });
 
         countEl.textContent = pending.length;
@@ -1602,7 +1536,7 @@ window.fetchPendingRequests = async function(companyName) {
                 <td class="py-2 px-4 text-slate-500 text-sm">${u.email}</td>
                 <td class="py-2 px-4 text-slate-500 text-sm">${u.especialidad || '-'}</td>
                 <td class="py-2 px-4 text-right">
-                    <button onclick='approvePendingUser(${JSON.stringify(u)})' class="bg-emerald-100 hover:bg-emerald-200 text-emerald-700 px-3 py-1.5 rounded-lg text-xs font-bold transition-colors">
+                    <button onclick='approvePendingUser("${u.email}", "${u.nombre}", "${u.empresa}")' class="bg-emerald-100 hover:bg-emerald-200 text-emerald-700 px-3 py-1.5 rounded-lg text-xs font-bold transition-colors">
                         Aprobar
                     </button>
                 </td>
@@ -1616,26 +1550,30 @@ window.fetchPendingRequests = async function(companyName) {
     }
 };
 
-window.approvePendingUser = function(user) {
-    if(window.selectedIndex === -1) return;
-    const emp = window.empresas[window.selectedIndex];
-    
-    if(!emp.members) emp.members = [];
-    
-    emp.members.push({
-        name: user.nombre || user.email.split('@')[0],
-        email: user.email.toLowerCase().trim(),
-        role: 'VISOR', // Default role upon approval
-        especialidad: user.especialidad || '',
-        cargo: '',
-        empresaUsuario: emp.name
-    });
+window.approvePendingUser = async function(email, nombre, empresa) {
+    try {
+        const payload = {
+            email: email,
+            estado: 'APROBADO',
+            rol: 'VISOR',
+            empresa: empresa
+        };
 
-    // Re-render
-    if(window.renderUsersRef) window.renderUsersRef();
-    window.fetchPendingRequests(emp.name);
-    
-    // Auto-save
-    if(window.saveConfigRef) window.saveConfigRef(new Event('submit'));
+        await fetch(ROLES_SCRIPT_URL, {
+            method: 'POST',
+            mode: 'no-cors',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+
+        alert(`${nombre} ha sido aprobado exitosamente.`);
+        
+        // Refresh pending requests list
+        if (window.fetchPendingRequests) window.fetchPendingRequests(empresa);
+        // Refresh global users map if it was loaded
+        if (window.globalUsersMap.size > 0) window.fetchGlobalUsers();
+
+    } catch(e) {
+        alert('Error al aprobar el usuario.');
+    }
 };
-

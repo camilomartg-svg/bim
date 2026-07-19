@@ -91,6 +91,33 @@
             transform: scale(1.05);
         }
     </style>
+
+    <script>
+        // Background validation with Single Source of Truth
+        document.addEventListener('DOMContentLoaded', async () => {
+            const ua = JSON.parse(sessionStorage.getItem('userAccount') || localStorage.getItem('userAccount'));
+            if(ua && ua.username) {
+                try {
+                    const res = await fetch('https://script.google.com/macros/s/AKfycbx266o-ea0OAT-xE_9kKSKChRk7MJo0sthjwWI7WUCbFzq3Y578sbD8HgZpWSb7v8H8Fw/exec');
+                    const users = await res.json();
+                    const dbUser = users.find(u => u.email === ua.username.toLowerCase().trim());
+                    if(!dbUser || (dbUser.estado !== 'APROBADO' && dbUser.rol !== 'SUPER_ADMINISTRADOR')) {
+                        alert('Tu acceso ha sido revocado o está pendiente. Cerrando sesión.');
+                        sessionStorage.removeItem('userAccount');
+                        localStorage.removeItem('userAccount');
+                        window.location.replace('https://norabim.com/inse.html');
+                    } else {
+                        // Update role if changed
+                        if (ua.role !== dbUser.rol) {
+                            ua.role = dbUser.rol;
+                            const cacheLocation = localStorage.getItem('userAccount') ? 'localStorage' : 'sessionStorage';
+                            window[cacheLocation].setItem('userAccount', JSON.stringify(ua));
+                        }
+                    }
+                } catch(e) {}
+            }
+        });
+    </script>
 </head>
 
 <body class="min-h-screen w-full flex flex-col relative">

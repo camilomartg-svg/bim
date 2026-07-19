@@ -452,74 +452,39 @@
                 const account = msalInstance.getAllAccounts()[0];
 
                 if (account) {
-                    const ROLES_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbx4NEpE6EyrC2ggk8To0F0TP5P9y0YnaxiWzCbcIhSR7-KRSy4Wu0PM9hYyNY5y72Q/exec';
+                    const ROLES_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbx266o-ea0OAT-xE_9kKSKChRk7MJo0sthjwWI7WUCbFzq3Y578sbD8HgZpWSb7v8H8Fw/exec';
                     let userRole = null;
                     const normalizedAccountEmail = account.username.trim().toLowerCase();
 
-                    // Check portal-config for Super Admins
+                    
                     try {
-                        const configRes = await fetch('portal-config.json');
-                        if (configRes.ok) {
-                            const portalConfig = await configRes.json();
-                            const superAdmins = portalConfig.superAdmins || ['imagina3ddesign@gmail.com', 'mcmartinezg@unal.edu.co'];
-                            if (superAdmins.some(email => email.toLowerCase() === normalizedAccountEmail)) {
-                                userRole = 'SUPER_ADMINISTRADOR';
-                            }
+                        const response = await fetch(ROLES_SCRIPT_URL);
+                        const usersList = await response.json();
+                        const dbUser = usersList.find(u => u.email === normalizedAccountEmail);
+                        
+                        if (!dbUser) {
+                            alert('Tu correo no está registrado en el sistema. Por favor, crea una cuenta primero.');
+                            sessionStorage.removeItem('userAccount');
+                            localStorage.removeItem('userAccount');
+                            return;
                         }
-                    } catch (e) {
-                        console.warn('Error checking super admins', e);
-                        const fallbackSuperAdmins = ['imagina3ddesign@gmail.com', 'mcmartinezg@unal.edu.co'];
-                        if (fallbackSuperAdmins.includes(normalizedAccountEmail)) {
-                            userRole = 'SUPER_ADMINISTRADOR';
+                        
+                        if (dbUser.estado !== 'APROBADO' && dbUser.rol !== 'SUPER_ADMINISTRADOR') {
+                            alert('Tu cuenta está en estado ' + (dbUser.estado || 'PENDIENTE') + '. Espera a que un administrador te apruebe el acceso.');
+                            sessionStorage.removeItem('userAccount');
+                            localStorage.removeItem('userAccount');
+                            return;
                         }
-                    }
-
-                    // Check empresas.json for Company Admins if not Super Admin
-                    if (!userRole) {
-                        try {
-                            const empRes = await fetch('empresas.json');
-                            if (empRes.ok) {
-                                const empresas = await empRes.json();
-                                for (const empresa of empresas) {
-                                    if (empresa.admins && empresa.admins.some(email => email.toLowerCase() === normalizedAccountEmail)) {
-                                        userRole = 'ADMINISTRADOR_EMPRESA';
-                                        window.adminEmpresaId = empresa.id; // Guardamos la empresa administrada
-                                        break;
-                                    }
-                                    if (empresa.members) {
-                                        const member = empresa.members.find(m => m.email.toLowerCase() === normalizedAccountEmail);
-                                        if (member) {
-                                            userRole = member.role || 'INVITADO';
-                                            window.adminEmpresaId = empresa.id;
-                                            break;
-                                        }
-                                    }
-                                }
-                            }
-                        } catch (e) {
-                            console.warn('Error checking company admins', e);
-                        }
-                    }
-
-                    if (!userRole) {
-                        try {
-                            const response = await fetch(ROLES_SCRIPT_URL);
-                            const rolesList = await response.json();
-                            const userData = rolesList.find(u => u.email && u.email.trim().toLowerCase() === normalizedAccountEmail);
-                            if (userData) {
-                                userRole = userData.rol;
-                            }
-                        } catch (error) {
-                            console.error("Error al obtener la lista de roles:", error);
-                        }
-                    }
-
-                    const userProfile = {
-                        name: account.name,
-                        username: account.username,
-                        role: userRole,
-                        adminEmpresaId: window.adminEmpresaId || null
-                    };                    
+                        
+                        const userProfile = {
+                            name: dbUser.nombre || account.name,
+                            username: dbUser.email,
+                            role: dbUser.rol || 'INVITADO',
+                            empresa: dbUser.empresa || '',
+                            especialidad: dbUser.especialidad || '',
+                            cargo: dbUser.cargo || '',
+                            picture: window.tempGoogleUser?.picture || ''
+                        };                    
 
                     if (keepSignedInCheckbox.checked) {
                         localStorage.setItem('userAccount', JSON.stringify(userProfile));
@@ -555,7 +520,7 @@
                         .then(async profile => {
                             const normalizedAccountEmail = profile.email.trim().toLowerCase();
                             let userRole = null;
-                            const ROLES_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbx4NEpE6EyrC2ggk8To0F0TP5P9y0YnaxiWzCbcIhSR7-KRSy4Wu0PM9hYyNY5y72Q/exec';
+                            const ROLES_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbx266o-ea0OAT-xE_9kKSKChRk7MJo0sthjwWI7WUCbFzq3Y578sbD8HgZpWSb7v8H8Fw/exec';
 
                             try {
                                 const configRes = await fetch('portal-config.json');
@@ -871,7 +836,7 @@
                 }
             }
 
-            const NEW_REGISTRATION_SCRIPT = 'https://script.google.com/macros/s/AKfycbxJgmGAtGqFD1aXS_BeBo5MIboyzt819aX8wsqAjXIzs8U6AhCbDFFWK4oSD6UxuolM9A/exec';
+            const NEW_REGISTRATION_SCRIPT = 'https://script.google.com/macros/s/AKfycbx266o-ea0OAT-xE_9kKSKChRk7MJo0sthjwWI7WUCbFzq3Y578sbD8HgZpWSb7v8H8Fw/exec';
             
             try {
                 // Post to Google Apps Script
@@ -880,10 +845,14 @@
                     mode: 'no-cors',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ 
-                        name, email, phone, country, city, 
-                        organizationId: document.getElementById('reg-organization-id').value,
-                        organizationName: document.getElementById('reg-organization-search').value,
-                        newCompanyData: window.newCompanyData
+                        nombre: name, 
+                        email: email, 
+                        telefono: phone,
+                        empresa: document.getElementById('reg-organization-search').value,
+                        especialidad: '',
+                        cargo: '',
+                        rol: 'INVITADO',
+                        estado: 'PENDIENTE'
                     })
                 });
                 
@@ -975,7 +944,7 @@
                 // --- INICIA LÓGICA DE ASIGNACIÓN DE ROLES (Idéntica a MSAL/Google) ---
                 const normalizedAccountEmail = email.toLowerCase();
                 let userRole = null;
-                const ROLES_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbx4NEpE6EyrC2ggk8To0F0TP5P9y0YnaxiWzCbcIhSR7-KRSy4Wu0PM9hYyNY5y72Q/exec';
+                const ROLES_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbx266o-ea0OAT-xE_9kKSKChRk7MJo0sthjwWI7WUCbFzq3Y578sbD8HgZpWSb7v8H8Fw/exec';
 
                 // 1. Check Super Admins
                 try {
