@@ -1233,7 +1233,7 @@ let contentBase = '';
 // ==========================================
 window.globalUsersMap = new Map();
 window.currentGlobalUserEmail = null;
-const ROLES_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbx266o-ea0OAT-xE_9kKSKChRk7MJo0sthjwWI7WUCbFzq3Y578sbD8HgZpWSb7v8H8Fw/exec';
+const ROLES_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzKsybCyugl3zhrqYkbv1IDXEUo7OMzwOxtA4sS2vMetXu8j6LECEOXqfkxtoH_m7I/exec';
 
 window.switchGlobalView = function(viewName) {
     const btnEmpresas = document.getElementById('tab-empresas');
