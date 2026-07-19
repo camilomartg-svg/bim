@@ -544,19 +544,19 @@ let contentBase = '';
           let contactsHTML = contacts.map((c, idx) => `
             <div class="grid grid-cols-12 gap-2 items-center bg-white p-3 rounded-xl border border-slate-200 shadow-sm">
                <div class="col-span-12 md:col-span-3">
-                 <input type="text" class="w-full text-xs rounded border-slate-200" placeholder="Nombre completo" value="${c.name || ''}" onchange="const proj = companyConfigs[empresas[selectedIndex].id].projects.find(x => x.slug === '${p.slug}'); proj.clientContacts[${idx}].name = this.value;" />
+                 <input type="text" class="w-full text-xs rounded border-slate-200" placeholder="Nombre completo" value="${c.name || ''}" onchange="updateClientContact('${p.slug}', ${idx}, 'name', this.value)" />
                </div>
                <div class="col-span-12 md:col-span-3">
-                 <input type="text" class="w-full text-xs rounded border-slate-200" placeholder="Cargo" value="${c.role || ''}" onchange="const proj = companyConfigs[empresas[selectedIndex].id].projects.find(x => x.slug === '${p.slug}'); proj.clientContacts[${idx}].role = this.value;" />
+                 <input type="text" class="w-full text-xs rounded border-slate-200" placeholder="Cargo" value="${c.role || ''}" onchange="updateClientContact('${p.slug}', ${idx}, 'role', this.value)" />
                </div>
                <div class="col-span-12 md:col-span-3">
-                 <input type="email" class="w-full text-xs rounded border-slate-200" placeholder="Correo electrónico" value="${c.email || ''}" onchange="const proj = companyConfigs[empresas[selectedIndex].id].projects.find(x => x.slug === '${p.slug}'); proj.clientContacts[${idx}].email = this.value;" />
+                 <input type="email" class="w-full text-xs rounded border-slate-200" placeholder="Correo electrónico" value="${c.email || ''}" onchange="updateClientContact('${p.slug}', ${idx}, 'email', this.value)" />
                </div>
                <div class="col-span-10 md:col-span-2">
-                 <input type="tel" class="w-full text-xs rounded border-slate-200" placeholder="Teléfono" value="${c.phone || ''}" onchange="const proj = companyConfigs[empresas[selectedIndex].id].projects.find(x => x.slug === '${p.slug}'); proj.clientContacts[${idx}].phone = this.value;" />
+                 <input type="tel" class="w-full text-xs rounded border-slate-200" placeholder="Teléfono" value="${c.phone || ''}" onchange="updateClientContact('${p.slug}', ${idx}, 'phone', this.value)" />
                </div>
                <div class="col-span-2 md:col-span-1 text-right">
-                 <button type="button" class="text-rose-400 hover:text-rose-600 bg-rose-50 hover:bg-rose-100 p-1.5 rounded transition-colors" onclick="const proj = companyConfigs[empresas[selectedIndex].id].projects.find(x => x.slug === '${p.slug}'); proj.clientContacts.splice(${idx}, 1); renderProjects();" title="Eliminar contacto">
+                 <button type="button" class="text-rose-400 hover:text-rose-600 bg-rose-50 hover:bg-rose-100 p-1.5 rounded transition-colors" onclick="removeClientContact('${p.slug}', ${idx})" title="Eliminar contacto">
                     <span class="material-symbols-outlined text-[16px] block">delete</span>
                  </button>
                </div>
@@ -655,7 +655,7 @@ let contentBase = '';
                 <div class="mt-6 border-t border-slate-200 pt-4">
                    <div class="flex justify-between items-center mb-4">
                        <h4 class="text-xs font-bold uppercase tracking-[0.1em] text-slate-500">Contactos del Cliente</h4>
-                       <button type="button" class="text-xs font-bold text-primary hover:underline flex items-center gap-1" onclick="const proj = companyConfigs[empresas[selectedIndex].id].projects.find(x => x.slug === '${p.slug}'); if(!proj.clientContacts) proj.clientContacts = []; proj.clientContacts.push({name:'', role:'', email:'', phone:''}); renderProjects();">
+                       <button type="button" class="text-xs font-bold text-primary hover:underline flex items-center gap-1" onclick="addClientContact('${p.slug}')">
                           <span class="material-symbols-outlined text-[14px]">add_circle</span> Agregar contacto
                        </button>
                    </div>
@@ -965,6 +965,43 @@ let contentBase = '';
     }
   };
 
+
+
+  window.addClientContact = (slug) => {
+    if (selectedIndex === -1) return;
+    const emp = empresas[selectedIndex];
+    const config = companyConfigs[emp.id];
+    if (!config || !config.projects) return;
+    const proj = config.projects.find(p => p.slug === slug);
+    if(proj) {
+      if(!proj.clientContacts) proj.clientContacts = [];
+      proj.clientContacts.push({name:'', role:'', email:'', phone:''});
+      renderProjects();
+    }
+  };
+
+  window.removeClientContact = (slug, idx) => {
+    if (selectedIndex === -1) return;
+    const emp = empresas[selectedIndex];
+    const config = companyConfigs[emp.id];
+    if (!config || !config.projects) return;
+    const proj = config.projects.find(p => p.slug === slug);
+    if(proj && proj.clientContacts) {
+      proj.clientContacts.splice(idx, 1);
+      renderProjects();
+    }
+  };
+  
+  window.updateClientContact = (slug, idx, field, val) => {
+    if (selectedIndex === -1) return;
+    const emp = empresas[selectedIndex];
+    const config = companyConfigs[emp.id];
+    if (!config || !config.projects) return;
+    const proj = config.projects.find(p => p.slug === slug);
+    if(proj && proj.clientContacts) {
+      proj.clientContacts[idx][field] = val;
+    }
+  };
 
   window.deleteProject = (slug) => {
     if (selectedIndex === -1) return;
