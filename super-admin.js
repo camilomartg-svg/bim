@@ -587,9 +587,8 @@ let contentBase = '';
                     <textarea class="w-full text-xs rounded-xl border-slate-200 h-[104px] resize-none" placeholder="Descripción general del alcance, características y propósito del proyecto." onchange="updateProject('${p.slug}', 'description', this.value)" required>${p.description || ''}</textarea>
                   </label>
                   
-                  <label class="block"><span class="mb-2 block text-sm font-semibold text-slate-700">ID Empresa (opcional)</span><input class="w-full text-xs rounded-xl border-slate-200" type="text" placeholder="nora, amarillo, etc." value="${p.empresaId || ''}" onchange="updateProject('${p.slug}', 'empresaId', this.value)" /></label>
+                  <label class="block xl:col-span-2 md:col-span-2"><span class="mb-2 block text-sm font-semibold text-slate-700">Cliente (opcional)</span><input class="w-full text-xs rounded-xl border-slate-200" type="text" placeholder="Ej. Constructora Amarillo" value="${p.client || p.empresaId || ''}" onchange="updateProject('${p.slug}', 'client', this.value)" /></label>
                   <label class="inline-flex items-center gap-2 rounded-xl border border-slate-200 px-4 py-3 text-sm font-semibold text-slate-700"><input class="rounded border-slate-300" type="checkbox" ${p.enabled!==false?'checked':''} onchange="updateProject('${p.slug}', 'enabled', this.checked)" />Proyecto activo en el portal</label>
-                  <label class="inline-flex items-center gap-2 rounded-xl border border-slate-200 px-4 py-3 text-sm font-semibold text-slate-700"><input class="rounded border-slate-300" type="checkbox" ${(!p.landing || p.landing.enabled!==false)?'checked':''} onchange="updateProjectDeep('${p.slug}', 'landing', 'enabled', this.checked)" />Usar landing tipo Green I</label>
 
                   <!-- Mapa -->
                   <div class="col-span-full border-t border-slate-100 pt-4 mt-2 mb-2">
