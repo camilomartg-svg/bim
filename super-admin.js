@@ -1251,6 +1251,7 @@ window.switchGlobalView = function(viewName) {
         btnUsuarios.classList.remove('shadow-sm');
 
         vUsuarios.classList.add('hidden');
+        vUsuarios.classList.remove('flex');
         vEmpresas.classList.remove('hidden');
     } else {
         btnUsuarios.classList.replace('text-slate-500', 'text-slate-800');
@@ -1263,6 +1264,7 @@ window.switchGlobalView = function(viewName) {
 
         vEmpresas.classList.add('hidden');
         vUsuarios.classList.remove('hidden');
+        vUsuarios.classList.add('flex');
         
         if (window.globalUsersMap.size === 0) {
             fetchGlobalUsers();
