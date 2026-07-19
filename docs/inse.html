@@ -453,10 +453,9 @@
 
                 if (account) {
                     const ROLES_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbx266o-ea0OAT-xE_9kKSKChRk7MJo0sthjwWI7WUCbFzq3Y578sbD8HgZpWSb7v8H8Fw/exec';
-                    let userRole = null;
                     const normalizedAccountEmail = account.username.trim().toLowerCase();
-
                     
+                    let userProfile = null;
                     try {
                         const response = await fetch(ROLES_SCRIPT_URL);
                         const usersList = await response.json();
@@ -476,7 +475,7 @@
                             return;
                         }
                         
-                        const userProfile = {
+                        userProfile = {
                             name: dbUser.nombre || account.name,
                             username: dbUser.email,
                             role: dbUser.rol || 'INVITADO',
@@ -484,7 +483,12 @@
                             especialidad: dbUser.especialidad || '',
                             cargo: dbUser.cargo || '',
                             picture: window.tempGoogleUser?.picture || ''
-                        };                    
+                        };
+                    } catch(e) {
+                        console.error('Error de base de datos:', e);
+                        alert('Error al conectar con la base de datos de usuarios.');
+                        return;
+                    }                    
 
                     if (keepSignedInCheckbox.checked) {
                         localStorage.setItem('userAccount', JSON.stringify(userProfile));
@@ -520,7 +524,7 @@
                         .then(async profile => {
                             const normalizedAccountEmail = profile.email.trim().toLowerCase();
                             let userRole = null;
-                            const ROLES_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbx266o-ea0OAT-xE_9kKSKChRk7MJo0sthjwWI7WUCbFzq3Y578sbD8HgZpWSb7v8H8Fw/exec';
+                            const ROLES_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbx4NEpE6EyrC2ggk8To0F0TP5P9y0YnaxiWzCbcIhSR7-KRSy4Wu0PM9hYyNY5y72Q/exec';
 
                             try {
                                 const configRes = await fetch('portal-config.json');
@@ -944,7 +948,7 @@
                 // --- INICIA LÓGICA DE ASIGNACIÓN DE ROLES (Idéntica a MSAL/Google) ---
                 const normalizedAccountEmail = email.toLowerCase();
                 let userRole = null;
-                const ROLES_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbx266o-ea0OAT-xE_9kKSKChRk7MJo0sthjwWI7WUCbFzq3Y578sbD8HgZpWSb7v8H8Fw/exec';
+                const ROLES_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbx4NEpE6EyrC2ggk8To0F0TP5P9y0YnaxiWzCbcIhSR7-KRSy4Wu0PM9hYyNY5y72Q/exec';
 
                 // 1. Check Super Admins
                 try {
