@@ -512,7 +512,7 @@ let contentBase = '';
         if (isOpen) {
           
           const citiesByCountry = {
-            "Colombia": ["Bogotá", "Medellín", "Cali", "Barranquilla", "Bucaramanga", "Cartagena", "Otro"],
+            "Colombia": ["Arauca", "Armenia", "Barranquilla", "Bogotá", "Bucaramanga", "Cali", "Cartagena", "Cúcuta", "Florencia", "Ibagué", "Inírida", "Leticia", "Manizales", "Medellín", "Mitú", "Mocoa", "Montería", "Neiva", "Pasto", "Pereira", "Popayán", "Puerto Carreño", "Quibdó", "Riohacha", "San Andrés", "San José del Guaviare", "Santa Marta", "Sincelejo", "Tunja", "Valledupar", "Villavicencio", "Yopal", "Otro"],
             "México": ["Ciudad de México", "Guadalajara", "Monterrey", "Puebla", "Tijuana", "Otro"],
             "Perú": ["Lima", "Arequipa", "Trujillo", "Chiclayo", "Piura", "Otro"],
             "Chile": ["Santiago", "Valparaíso", "Concepción", "La Serena", "Antofagasta", "Otro"],
@@ -539,6 +539,35 @@ let contentBase = '';
             cityInputHTML = `<input class="w-full text-xs rounded-xl border-slate-200" type="text" placeholder="¿Cuál?" value="${p.city || ''}" onchange="updateProject('${p.slug}', 'city', this.value)" />`;
           } else {
             cityInputHTML = `<select class="w-full text-xs rounded-xl border-slate-200" disabled><option value="">Selecciona un país primero</option></select>`;
+          }
+
+          const statesByCountry = {
+            "Colombia": [
+              "Amazonas", "Antioquia", "Arauca", "Atlántico", "Bolívar", "Boyacá", "Caldas", "Caquetá", "Casanare", "Cauca", 
+              "Cesar", "Chocó", "Córdoba", "Cundinamarca", "Guainía", "Guaviare", "Huila", "La Guajira", "Magdalena", "Meta", 
+              "Nariño", "Norte de Santander", "Putumayo", "Quindío", "Risaralda", "San Andrés y Providencia", "Santander", 
+              "Sucre", "Tolima", "Valle del Cauca", "Vaupés", "Vichada", "Otro"
+            ]
+          };
+
+          let stateInputHTML = '';
+          const currentState = p.state || p.departamento || '';
+          if (p.country && p.country !== 'Otro' && statesByCountry[p.country]) {
+            const states = statesByCountry[p.country];
+            const isCustomState = currentState && !states.includes(currentState) && currentState !== '';
+            const selectValue = isCustomState ? 'Otro' : currentState;
+
+            stateInputHTML = `
+              <select class="w-full text-xs rounded-xl border-slate-200 ${isCustomState ? 'mb-2' : ''}" onchange="if(this.value === 'Otro') { this.nextElementSibling.classList.remove('hidden'); this.classList.add('mb-2'); this.nextElementSibling.focus(); } else { this.nextElementSibling.classList.add('hidden'); this.classList.remove('mb-2'); updateProject('${p.slug}', 'state', this.value); }">
+                <option value="">Seleccionar...</option>
+                ${states.map(s => `<option value="${s}" ${selectValue === s ? 'selected' : ''}>${s}</option>`).join('')}
+              </select>
+              <input class="w-full text-xs rounded-xl border-slate-200 ${isCustomState ? '' : 'hidden'}" type="text" placeholder="¿Cuál?" value="${isCustomState ? currentState : ''}" onchange="updateProject('${p.slug}', 'state', this.value)" />
+            `;
+          } else if (p.country === 'Otro') {
+            stateInputHTML = `<input class="w-full text-xs rounded-xl border-slate-200" type="text" placeholder="Ej. Cundinamarca" value="${currentState}" onchange="updateProject('${p.slug}', 'state', this.value)" />`;
+          } else {
+            stateInputHTML = `<select class="w-full text-xs rounded-xl border-slate-200" disabled><option value="">Selecciona un país primero</option></select>`;
           }
 
           const contacts = p.clientContacts || [];
@@ -599,7 +628,9 @@ let contentBase = '';
                       <option value="Otro" ${p.country==='Otro'?'selected':''}>Otro</option>
                     </select>
                   </label>
-                  <label class="block"><span class="mb-2 block text-sm font-semibold text-slate-700">Departamento / Estado</span><input class="w-full text-xs rounded-xl border-slate-200" type="text" value="${p.state || p.departamento || ''}" placeholder="Ej. Cundinamarca" onchange="updateProject('${p.slug}', 'state', this.value)" /></label>
+                  <label class="block"><span class="mb-2 block text-sm font-semibold text-slate-700">Departamento / Estado</span>
+                    ${stateInputHTML}
+                  </label>
                   <label class="block"><span class="mb-2 block text-sm font-semibold text-slate-700">Ciudad <span class="text-rose-500">*</span></span>
                     ${cityInputHTML}
                   </label>
