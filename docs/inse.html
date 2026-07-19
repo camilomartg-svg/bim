@@ -692,12 +692,13 @@
 
         async function fetchEmpresas() {
             try {
-                const res = await fetch('empresas.json');
+                const res = await fetch(NEW_REGISTRATION_SCRIPT + '?action=getCompanies');
                 if(res.ok) {
-                    window.empresasList = await res.json();
+                    const companies = await res.json();
+                    window.empresasList = companies.map(c => ({ name: c.name || c.empresa }));
                 }
             } catch(e) {
-                console.error("Error fetching empresas", e);
+                console.error("Error fetching empresas from Apps Script", e);
             }
         }
 
@@ -810,6 +811,15 @@
             const phone = document.getElementById('reg-phone').value.trim();
             const country = document.getElementById('reg-country').value;
             const city = document.getElementById('reg-city').value.trim();
+            const orgValue = document.getElementById('reg-organization-search').value.trim();
+            
+            // Validar que la empresa exista o sea nueva
+            if (orgValue && (!window.newCompanyData || window.newCompanyData.name !== orgValue)) {
+                if (!window.empresasList.some(e => e.name.toLowerCase() === orgValue.toLowerCase())) {
+                    alert("Por favor, selecciona una empresa de la lista desplegable. Si tu empresa no existe, usa el botón 'Registrar Nueva Empresa' en la pantalla de inicio.");
+                    return;
+                }
+            }
 
             if (!name || !email || !country || !city) {
                 alert("Por favor, completa todos los campos obligatorios.");
