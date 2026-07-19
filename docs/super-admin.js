@@ -301,7 +301,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
   };
 
-  window.renderUsers = function() {
   function renderUsers() {
     window.renderUsersRef = renderUsers;
     // Reset global collapse state
