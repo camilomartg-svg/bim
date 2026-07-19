@@ -556,7 +556,7 @@ let contentBase = '';
                     <option value="Cerrado" ${p.status==='Cerrado'?'selected':''}>Cerrado</option>
                   </select>
                 </label>
-                <label class="block"><span class="mb-2 block text-sm font-semibold text-slate-700">País <span class="text-rose-500">*</span></span>
+                  <label class="block"><span class="mb-2 block text-sm font-semibold text-slate-700">País <span class="text-rose-500">*</span></span>
                     <select class="w-full text-xs rounded-xl border-slate-200" onchange="updateProject('${p.slug}', 'country', this.value)" required>
                       <option value="">Seleccionar...</option>
                       <option value="Colombia" ${p.country==='Colombia'?'selected':''}>Colombia</option>
@@ -571,6 +571,7 @@ let contentBase = '';
                       <option value="Otro" ${p.country==='Otro'?'selected':''}>Otro</option>
                     </select>
                   </label>
+                  <label class="block"><span class="mb-2 block text-sm font-semibold text-slate-700">Departamento / Estado</span><input class="w-full text-xs rounded-xl border-slate-200" type="text" value="${p.state || p.departamento || ''}" placeholder="Ej. Cundinamarca" onchange="updateProject('${p.slug}', 'state', this.value)" /></label>
                   <label class="block"><span class="mb-2 block text-sm font-semibold text-slate-700">Ciudad <span class="text-rose-500">*</span></span>
                     ${cityInputHTML}
                   </label>
