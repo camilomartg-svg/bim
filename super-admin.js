@@ -1206,3 +1206,322 @@ let contentBase = '';
   loadData();
 });
 
+
+
+
+// ==========================================
+// MÓDULO: DIRECTORIO GLOBAL DE USUARIOS
+// ==========================================
+window.globalUsersMap = new Map(); // Para almacenar los usuarios combinados y deduplicados por email
+window.currentGlobalUserEmail = null;
+const ROLES_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbx4NEpE6EyrC2ggk8To0F0TP5P9y0YnaxiWzCbcIhSR7-KRSy4Wu0PM9hYyNY5y72Q/exec';
+
+window.switchGlobalView = function(viewName) {
+    const btnEmpresas = document.getElementById('tab-empresas');
+    const btnUsuarios = document.getElementById('tab-usuarios');
+    const vEmpresas = document.getElementById('empresas-view');
+    const vUsuarios = document.getElementById('usuarios-view');
+
+    if(viewName === 'empresas') {
+        btnEmpresas.classList.replace('text-slate-500', 'text-slate-800');
+        btnEmpresas.classList.replace('bg-transparent', 'bg-white');
+        btnEmpresas.classList.add('shadow-sm');
+        
+        btnUsuarios.classList.replace('text-slate-800', 'text-slate-500');
+        btnUsuarios.classList.replace('bg-white', 'bg-transparent');
+        btnUsuarios.classList.remove('shadow-sm');
+
+        vEmpresas.classList.remove('hidden');
+        vUsuarios.classList.add('hidden');
+    } else {
+        btnUsuarios.classList.replace('text-slate-500', 'text-slate-800');
+        btnUsuarios.classList.replace('bg-transparent', 'bg-white');
+        btnUsuarios.classList.add('shadow-sm');
+        
+        btnEmpresas.classList.replace('text-slate-800', 'text-slate-500');
+        btnEmpresas.classList.replace('bg-white', 'bg-transparent');
+        btnEmpresas.classList.remove('shadow-sm');
+
+        vEmpresas.classList.add('hidden');
+        vUsuarios.classList.remove('hidden');
+        vUsuarios.classList.add('flex'); // Add flex back
+
+        // Cargar usuarios al entrar a la vista por primera vez
+        if (window.globalUsersMap.size === 0) {
+            fetchGlobalUsers();
+        } else {
+            renderGlobalUsers();
+        }
+    }
+}
+
+window.fetchGlobalUsers = async function() {
+    document.getElementById('global-users-loading').classList.remove('hidden');
+    document.getElementById('global-users-tbody').innerHTML = '';
+    
+    try {
+        // 1. Fetch from Google Script
+        const res = await fetch(ROLES_SCRIPT_URL);
+        const scriptUsers = await res.json();
+        
+        // 2. Fetch or use existing empresas.json data
+        // La variable global 'empresas' ya debería existir por la carga principal.
+        
+        window.globalUsersMap.clear();
+
+        // Add users from script
+        scriptUsers.forEach(u => {
+            if(!u.email) return;
+            const email = u.email.toLowerCase().trim();
+            window.globalUsersMap.set(email, {
+                email: email,
+                name: u.nombre || u.email.split('@')[0],
+                role: u.rol || 'INVITADO',
+                companyId: '',
+                companyName: 'Sin Empresa Asignada',
+                specialty: u.especialidad || '',
+                source: 'script'
+            });
+        });
+
+        // Add/Merge users from empresas
+        window.empresas.forEach(emp => {
+            if(emp.members) {
+                emp.members.forEach(m => {
+                    if(!m.email) return;
+                    const email = m.email.toLowerCase().trim();
+                    const existing = window.globalUsersMap.get(email);
+                    if (existing) {
+                        // Merge: give priority to local company assignment
+                        existing.companyId = emp.id;
+                        existing.companyName = emp.name;
+                        existing.role = m.role || existing.role;
+                        existing.specialty = m.especialidad || existing.specialty;
+                        existing.name = m.name || existing.name;
+                    } else {
+                        window.globalUsersMap.set(email, {
+                            email: email,
+                            name: m.name || email.split('@')[0],
+                            role: m.role || 'INVITADO',
+                            companyId: emp.id,
+                            companyName: emp.name,
+                            specialty: m.especialidad || '',
+                            source: 'empresa'
+                        });
+                    }
+                });
+            }
+        });
+
+        renderGlobalUsers();
+
+    } catch (e) {
+        console.error("Error cargando usuarios globales", e);
+        document.getElementById('global-users-tbody').innerHTML = '<tr><td colspan="5" class="p-6 text-center text-red-500">Error al cargar los usuarios. Verifica tu conexión.</td></tr>';
+    } finally {
+        document.getElementById('global-users-loading').classList.add('hidden');
+    }
+}
+
+window.renderGlobalUsers = function(searchTerm = '') {
+    const tbody = document.getElementById('global-users-tbody');
+    tbody.innerHTML = '';
+    
+    const term = searchTerm.toLowerCase();
+    
+    // Sort by name
+    const usersArr = Array.from(window.globalUsersMap.values()).sort((a, b) => a.name.localeCompare(b.name));
+
+    let count = 0;
+    usersArr.forEach(u => {
+        if(term) {
+            const matches = u.name.toLowerCase().includes(term) || u.email.toLowerCase().includes(term) || u.companyName.toLowerCase().includes(term);
+            if(!matches) return;
+        }
+
+        const tr = document.createElement('tr');
+        tr.className = "hover:bg-slate-50 transition-colors group";
+        
+        const roleColors = {
+            'SUPER_ADMINISTRADOR': 'bg-purple-100 text-purple-700 border-purple-200',
+            'ADMINISTRADOR_EMPRESA': 'bg-blue-100 text-blue-700 border-blue-200',
+            'ADMINISTRADOR': 'bg-emerald-100 text-emerald-700 border-emerald-200',
+            'EDITOR': 'bg-amber-100 text-amber-700 border-amber-200',
+            'VISOR': 'bg-slate-100 text-slate-700 border-slate-200',
+            'INVITADO': 'bg-gray-100 text-gray-500 border-gray-200'
+        };
+        const roleClass = roleColors[u.role] || roleColors['INVITADO'];
+
+        tr.innerHTML = `
+            <td class="py-3 px-6">
+                <div class="flex items-center gap-3">
+                    <div class="h-10 w-10 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 font-bold text-sm shrink-0">
+                        ${u.name.substring(0,2).toUpperCase()}
+                    </div>
+                    <div>
+                        <div class="font-bold text-slate-800 text-sm">${u.name}</div>
+                        <div class="text-xs text-slate-500">${u.email}</div>
+                    </div>
+                </div>
+            </td>
+            <td class="py-3 px-6">
+                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold border ${roleClass}">
+                    ${u.role}
+                </span>
+            </td>
+            <td class="py-3 px-6 text-sm text-slate-600 font-medium">
+                ${u.companyId ? `<span class="material-symbols-outlined text-xs align-middle mr-1 text-slate-400">domain</span> ${u.companyName}` : '<span class="text-slate-400 italic">Sin Empresa Asignada</span>'}
+            </td>
+            <td class="py-3 px-6 text-sm text-slate-600">
+                ${u.specialty || '-'}
+            </td>
+            <td class="py-3 px-6 text-right">
+                <button onclick='openEditUserModal(${JSON.stringify(u)})' class="p-2 text-slate-400 hover:text-blue-600 bg-slate-50 hover:bg-blue-50 rounded-lg transition-colors" title="Editar Usuario">
+                    <span class="material-symbols-outlined text-sm">edit</span>
+                </button>
+            </td>
+        `;
+        tbody.appendChild(tr);
+        count++;
+    });
+
+    if (count === 0) {
+        tbody.innerHTML = '<tr><td colspan="5" class="p-8 text-center text-slate-500 italic">No se encontraron usuarios coincidentes.</td></tr>';
+    }
+}
+
+// Search binding
+document.getElementById('global-user-search')?.addEventListener('input', (e) => {
+    window.renderGlobalUsers(e.target.value);
+});
+
+window.populateGlobalCompanySelect = function() {
+    const select = document.getElementById('gu-company');
+    select.innerHTML = '<option value="">-- Sin Empresa Asignada --</option>';
+    window.empresas.forEach(emp => {
+        const opt = document.createElement('option');
+        opt.value = emp.id;
+        opt.textContent = emp.name;
+        select.appendChild(opt);
+    });
+}
+
+window.openEditUserModal = function(user) {
+    window.populateGlobalCompanySelect();
+    const modal = document.getElementById('modal-global-user');
+    
+    if (user) {
+        // Edit mode
+        document.getElementById('modal-global-user-title').textContent = 'Editar Usuario';
+        document.getElementById('gu-original-email').value = user.email;
+        document.getElementById('gu-original-company').value = user.companyId || '';
+        
+        document.getElementById('gu-name').value = user.name;
+        document.getElementById('gu-email').value = user.email;
+        document.getElementById('gu-email').readOnly = true; // No permitir cambiar email
+        document.getElementById('gu-email').classList.add('bg-slate-100', 'cursor-not-allowed');
+        
+        document.getElementById('gu-role').value = user.role || 'INVITADO';
+        document.getElementById('gu-company').value = user.companyId || '';
+        document.getElementById('gu-specialty').value = user.specialty || '';
+        
+        window.currentGlobalUserEmail = user.email;
+    } else {
+        // Create mode
+        document.getElementById('modal-global-user-title').textContent = 'Nuevo Usuario';
+        document.getElementById('gu-original-email').value = '';
+        document.getElementById('gu-original-company').value = '';
+        
+        document.getElementById('gu-name').value = '';
+        document.getElementById('gu-email').value = '';
+        document.getElementById('gu-email').readOnly = false;
+        document.getElementById('gu-email').classList.remove('bg-slate-100', 'cursor-not-allowed');
+        
+        document.getElementById('gu-role').value = 'INVITADO';
+        document.getElementById('gu-company').value = '';
+        document.getElementById('gu-specialty').value = '';
+        
+        window.currentGlobalUserEmail = null;
+    }
+
+    modal.classList.remove('hidden');
+}
+
+window.closeGlobalUserModal = function() {
+    document.getElementById('modal-global-user').classList.add('hidden');
+}
+
+window.saveGlobalUser = function() {
+    const email = document.getElementById('gu-email').value.trim().toLowerCase();
+    const name = document.getElementById('gu-name').value.trim();
+    const role = document.getElementById('gu-role').value;
+    const companyId = document.getElementById('gu-company').value;
+    const specialty = document.getElementById('gu-specialty').value.trim();
+    const originalCompanyId = document.getElementById('gu-original-company').value;
+    
+    if(!email || !name) {
+        alert('Nombre y Correo son obligatorios.');
+        return;
+    }
+
+    // UPDATE IN empresas.json MODEL (Local state array)
+    // 1. Remove from old company if changed or if removed completely
+    if (originalCompanyId && originalCompanyId !== companyId) {
+        const oldComp = window.empresas.find(e => e.id === originalCompanyId);
+        if (oldComp && oldComp.members) {
+            oldComp.members = oldComp.members.filter(m => m.email.toLowerCase() !== email);
+        }
+    }
+
+    // 2. Add or update in new company
+    if (companyId) {
+        const newComp = window.empresas.find(e => e.id === companyId);
+        if (newComp) {
+            if (!newComp.members) newComp.members = [];
+            const existingMember = newComp.members.find(m => m.email.toLowerCase() === email);
+            if (existingMember) {
+                existingMember.name = name;
+                existingMember.role = role;
+                existingMember.especialidad = specialty;
+            } else {
+                newComp.members.push({
+                    name: name,
+                    email: email,
+                    role: role,
+                    especialidad: specialty,
+                    cargo: '',
+                    empresaUsuario: newComp.name
+                });
+            }
+        }
+    }
+
+    // UPDATE IN GLOBAL MAP
+    let compName = 'Sin Empresa Asignada';
+    if(companyId) {
+        const c = window.empresas.find(e => e.id === companyId);
+        if(c) compName = c.name;
+    }
+
+    window.globalUsersMap.set(email, {
+        email: email,
+        name: name,
+        role: role,
+        companyId: companyId,
+        companyName: compName,
+        specialty: specialty,
+        source: window.currentGlobalUserEmail ? window.globalUsersMap.get(email).source : 'manual'
+    });
+
+    closeGlobalUserModal();
+    renderGlobalUsers();
+    
+    // Auto-update the current selected company view if they are editing someone in it
+    if(window.selectedIndex !== -1) {
+        renderUsers(); 
+    }
+
+    // Trigger the save process for empresas.json
+    saveConfig(new Event('submit')); 
+}
+

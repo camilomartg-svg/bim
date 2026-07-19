@@ -54,11 +54,15 @@
             <h1 id="page-title" class="text-xl font-bold text-slate-900">Gestión Global de Empresas</h1>
           </div>
         </div>
+        </div>
         <button id="publish-github-btn"
           class="rounded-xl bg-blue-600 px-6 py-3 text-sm font-bold text-white hover:bg-blue-700 shadow-md">Publicar en
           la Nube</button>
       </div>
     </header>
+    <!-- CONTENEDOR PRINCIPAL -->
+    <div id="empresas-view" class="block h-[calc(100vh-80px)]">
+
     <main class="mx-auto flex w-full flex-col gap-6 px-4 py-6 md:px-8">
       <div id="status-banner" class="hidden rounded-2xl border px-4 py-3 text-sm font-medium"></div>
 
@@ -366,7 +370,111 @@
       }
     }
   </script>
-  <script src="super-admin.js?v=7"></script>
+      </div>
+    <!-- FIN CONTENEDOR PRINCIPAL -->
+
+
+    <!-- VISTA DE USUARIOS GLOBALES -->
+    <div id="usuarios-view" class="hidden h-[calc(100vh-80px)] w-full overflow-hidden bg-slate-50 p-4 md:p-8 flex flex-col">
+        
+        <!-- Controles Superiores -->
+        <div class="flex flex-col md:flex-row justify-between items-center mb-6 gap-4 bg-white p-4 rounded-2xl shadow-sm border border-slate-200 shrink-0">
+            <div class="flex items-center gap-4 w-full md:w-auto">
+                <div class="relative flex-grow md:w-96">
+                    <span class="material-symbols-outlined absolute left-3 top-2.5 text-slate-400">search</span>
+                    <input type="text" id="global-user-search" placeholder="Buscar usuario por nombre, correo o empresa..." class="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all">
+                </div>
+            </div>
+            <button onclick="openEditUserModal(null)" class="w-full md:w-auto bg-slate-900 hover:bg-slate-800 text-white px-5 py-2.5 rounded-xl font-bold text-sm shadow-md transition-all flex items-center justify-center gap-2">
+                <span class="material-symbols-outlined text-sm">person_add</span>
+                Nuevo Usuario
+            </button>
+        </div>
+
+        <!-- Tabla de Usuarios -->
+        <div class="flex-grow overflow-auto bg-white rounded-2xl shadow-sm border border-slate-200 relative">
+            <table class="w-full text-left border-collapse min-w-[800px]">
+                <thead class="bg-slate-50 sticky top-0 z-10 shadow-sm">
+                    <tr>
+                        <th class="py-4 px-6 text-xs font-bold text-slate-500 uppercase tracking-wider border-b border-slate-200">Usuario</th>
+                        <th class="py-4 px-6 text-xs font-bold text-slate-500 uppercase tracking-wider border-b border-slate-200">Rol del Sistema</th>
+                        <th class="py-4 px-6 text-xs font-bold text-slate-500 uppercase tracking-wider border-b border-slate-200">Empresa / Organización</th>
+                        <th class="py-4 px-6 text-xs font-bold text-slate-500 uppercase tracking-wider border-b border-slate-200">Especialidad</th>
+                        <th class="py-4 px-6 text-xs font-bold text-slate-500 uppercase tracking-wider border-b border-slate-200 text-right">Acciones</th>
+                    </tr>
+                </thead>
+                <tbody id="global-users-tbody" class="divide-y divide-slate-100">
+                    <!-- Rendered by JS -->
+                </tbody>
+            </table>
+            <!-- Cargando -->
+            <div id="global-users-loading" class="absolute inset-0 bg-white/90 flex flex-col items-center justify-center z-20">
+                <span class="material-symbols-outlined animate-spin text-4xl text-blue-500 mb-4">autorenew</span>
+                <span class="text-sm font-semibold text-slate-600">Cargando directorio global y roles...</span>
+            </div>
+        </div>
+    </div>
+    
+    <!-- MODAL EDITAR / CREAR USUARIO -->
+    <div id="modal-global-user" class="fixed inset-0 z-[100] flex items-center justify-center hidden">
+        <div class="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onclick="closeGlobalUserModal()"></div>
+        <div class="relative w-full max-w-lg rounded-2xl bg-white shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+            <div class="flex items-center justify-between border-b border-slate-100 px-6 py-4">
+                <h3 id="modal-global-user-title" class="text-lg font-bold text-slate-800">Editar Usuario</h3>
+                <button onclick="closeGlobalUserModal()" class="text-slate-400 hover:text-slate-600 transition-colors">
+                    <span class="material-symbols-outlined">close</span>
+                </button>
+            </div>
+            <div class="p-6 overflow-y-auto">
+                <form id="form-global-user" class="space-y-4" onsubmit="event.preventDefault(); saveGlobalUser();">
+                    <input type="hidden" id="gu-original-email">
+                    <input type="hidden" id="gu-original-company">
+                    
+                    <div class="grid grid-cols-2 gap-4">
+                        <div class="col-span-2">
+                            <label class="block text-xs font-bold text-slate-500 mb-1">Nombre Completo <span class="text-red-500">*</span></label>
+                            <input type="text" id="gu-name" required class="w-full rounded-lg border-slate-200 text-sm focus:border-blue-500 focus:ring-blue-500">
+                        </div>
+                        <div class="col-span-2">
+                            <label class="block text-xs font-bold text-slate-500 mb-1">Correo Electrónico <span class="text-red-500">*</span></label>
+                            <input type="email" id="gu-email" required class="w-full rounded-lg border-slate-200 text-sm focus:border-blue-500 focus:ring-blue-500">
+                        </div>
+                        <div class="col-span-2">
+                            <label class="block text-xs font-bold text-slate-500 mb-1">Rol del Sistema <span class="text-red-500">*</span></label>
+                            <select id="gu-role" required class="w-full rounded-lg border-slate-200 text-sm focus:border-blue-500 focus:ring-blue-500">
+                                <option value="SUPER_ADMINISTRADOR">SUPER_ADMINISTRADOR</option>
+                                <option value="ADMINISTRADOR_EMPRESA">ADMINISTRADOR_EMPRESA</option>
+                                <option value="ADMINISTRADOR">ADMINISTRADOR</option>
+                                <option value="EDITOR">EDITOR</option>
+                                <option value="VISOR">VISOR</option>
+                                <option value="INVITADO">INVITADO</option>
+                            </select>
+                            <p class="text-[10px] text-slate-500 mt-1">El rol determina los permisos en toda la plataforma nora CDE.</p>
+                        </div>
+                        <div class="col-span-2">
+                            <label class="block text-xs font-bold text-slate-500 mb-1">Asignar a Empresa / Organización</label>
+                            <select id="gu-company" class="w-full rounded-lg border-slate-200 text-sm focus:border-blue-500 focus:ring-blue-500">
+                                <option value="">-- Sin Empresa Asignada --</option>
+                                <!-- JS llenará esto -->
+                            </select>
+                        </div>
+                        <div class="col-span-2">
+                            <label class="block text-xs font-bold text-slate-500 mb-1">Especialidad</label>
+                            <input type="text" id="gu-specialty" placeholder="Ej. Diseño arquitectónico" class="w-full rounded-lg border-slate-200 text-sm focus:border-blue-500 focus:ring-blue-500">
+                        </div>
+                    </div>
+                </form>
+            </div>
+            <div class="flex items-center justify-end gap-3 border-t border-slate-100 bg-slate-50 px-6 py-4 shrink-0">
+                <button type="button" onclick="closeGlobalUserModal()" class="rounded-xl px-5 py-2.5 text-sm font-bold text-slate-600 hover:bg-slate-200 transition-colors">Cancelar</button>
+                <button type="submit" form="form-global-user" class="rounded-xl bg-blue-600 px-5 py-2.5 text-sm font-bold text-white hover:bg-blue-700 shadow-md transition-colors flex items-center gap-2">
+                    <span class="material-symbols-outlined text-sm">save</span> Guardar Usuario
+                </button>
+            </div>
+        </div>
+    </div>
+
+<script src="super-admin.js?v=7"></script>
 </body>
 
 </html>
