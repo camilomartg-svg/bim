@@ -546,10 +546,18 @@ let contentBase = '';
 
             <section>
               <h3 class="text-sm font-bold uppercase tracking-[0.2em] text-slate-500">Información base</h3>
-              <div class="mt-4 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-                <label class="block"><span class="mb-2 block text-sm font-semibold text-slate-700">Nombre</span><input class="w-full text-xs rounded-xl border-slate-200" type="text" value="${p.name || ''}" onchange="updateProject('${p.slug}', 'name', this.value)" /></label>
-<label class="block"><span class="mb-2 block text-sm font-semibold text-slate-700">País</span>
-                    <select class="w-full text-xs rounded-xl border-slate-200" onchange="updateProject('${p.slug}', 'country', this.value)">
+              <div class="mt-4 grid gap-4 md:grid-cols-3">
+                <label class="block"><span class="mb-2 block text-sm font-semibold text-slate-700">Nombre del proyecto <span class="text-rose-500">*</span></span><input class="w-full text-xs rounded-xl border-slate-200" type="text" value="${p.name || ''}" onchange="updateProject('${p.slug}', 'name', this.value)" required /></label>
+                <label class="block"><span class="mb-2 block text-sm font-semibold text-slate-700">Código o identificador</span><input class="w-full text-xs rounded-xl border-slate-200" type="text" value="${p.code || ''}" placeholder="Ej. ARB-001" onchange="updateProject('${p.slug}', 'code', this.value)" /></label>
+                <label class="block"><span class="mb-2 block text-sm font-semibold text-slate-700">Estado</span>
+                  <select class="w-full text-xs rounded-xl border-slate-200" onchange="updateProject('${p.slug}', 'status', this.value)">
+                    <option value="Planeacion" ${p.status==='Planeacion'?'selected':''}>Planeación</option>
+                    <option value="Activo" ${p.status==='Activo'?'selected':''}>Activo</option>
+                    <option value="Cerrado" ${p.status==='Cerrado'?'selected':''}>Cerrado</option>
+                  </select>
+                </label>
+                <label class="block"><span class="mb-2 block text-sm font-semibold text-slate-700">País <span class="text-rose-500">*</span></span>
+                    <select class="w-full text-xs rounded-xl border-slate-200" onchange="updateProject('${p.slug}', 'country', this.value)" required>
                       <option value="">Seleccionar...</option>
                       <option value="Colombia" ${p.country==='Colombia'?'selected':''}>Colombia</option>
                       <option value="México" ${p.country==='México'?'selected':''}>México</option>
@@ -563,11 +571,26 @@ let contentBase = '';
                       <option value="Otro" ${p.country==='Otro'?'selected':''}>Otro</option>
                     </select>
                   </label>
-                  <label class="block"><span class="mb-2 block text-sm font-semibold text-slate-700">Ciudad</span>
+                  <label class="block"><span class="mb-2 block text-sm font-semibold text-slate-700">Ciudad <span class="text-rose-500">*</span></span>
                     ${cityInputHTML}
                   </label>
                   <label class="block"><span class="mb-2 block text-sm font-semibold text-slate-700">Dirección</span><input class="w-full text-xs rounded-xl border-slate-200" type="text" value="${p.address || ''}" placeholder="Ej. Av. Siempre Viva 123" onchange="updateProject('${p.slug}', 'address', this.value)" /></label>
                   
+                  <label class="block xl:col-span-1 md:col-span-2 col-span-full"><span class="mb-2 block text-sm font-semibold text-slate-700">Tipo de proyecto <span class="text-rose-500">*</span></span>
+                    <select multiple class="w-full text-xs rounded-xl border-slate-200 h-[104px]" onchange="const vals = Array.from(this.selectedOptions).map(o => o.value); updateProject('${p.slug}', 'type', vals)" required>
+                      ${["Vivienda multifamiliar", "Vivienda unifamiliar", "Vivienda VIS", "Vivienda VIP", "Uso mixto", "Comercial", "Oficinas", "Industrial", "Institucional", "Educativo", "Hospitalario", "Infraestructura", "Urbanismo", "Otro"].map(t => `<option value="${t}" ${(Array.isArray(p.type) ? p.type : (p.type ? [p.type] : [])).includes(t) ? 'selected' : ''}>${t}</option>`).join('')}
+                    </select>
+                    <span class="text-[10px] text-slate-400 mt-1 block leading-tight">Mantén presionado Ctrl o Cmd para seleccionar varios.</span>
+                  </label>
+                  
+                  <label class="block xl:col-span-2 md:col-span-2 col-span-full"><span class="mb-2 block text-sm font-semibold text-slate-700">Descripción del proyecto <span class="text-rose-500">*</span></span>
+                    <textarea class="w-full text-xs rounded-xl border-slate-200 h-[104px] resize-none" placeholder="Descripción general del alcance, características y propósito del proyecto." onchange="updateProject('${p.slug}', 'description', this.value)" required>${p.description || ''}</textarea>
+                  </label>
+                  
+                  <label class="block"><span class="mb-2 block text-sm font-semibold text-slate-700">ID Empresa (opcional)</span><input class="w-full text-xs rounded-xl border-slate-200" type="text" placeholder="nora, amarillo, etc." value="${p.empresaId || ''}" onchange="updateProject('${p.slug}', 'empresaId', this.value)" /></label>
+                  <label class="inline-flex items-center gap-2 rounded-xl border border-slate-200 px-4 py-3 text-sm font-semibold text-slate-700"><input class="rounded border-slate-300" type="checkbox" ${p.enabled!==false?'checked':''} onchange="updateProject('${p.slug}', 'enabled', this.checked)" />Proyecto activo en el portal</label>
+                  <label class="inline-flex items-center gap-2 rounded-xl border border-slate-200 px-4 py-3 text-sm font-semibold text-slate-700"><input class="rounded border-slate-300" type="checkbox" ${(!p.landing || p.landing.enabled!==false)?'checked':''} onchange="updateProjectDeep('${p.slug}', 'landing', 'enabled', this.checked)" />Usar landing tipo Green I</label>
+
                   <!-- Mapa -->
                   <div class="col-span-full border-t border-slate-100 pt-4 mt-2 mb-2">
                     <h4 class="text-xs font-bold uppercase tracking-[0.1em] text-slate-400 mb-4">Ubicación en el Mapa</h4>
@@ -578,22 +601,8 @@ let contentBase = '';
                     </div>
                     <div id="map-preview-${p.slug}" style="height: 250px; z-index: 1;" class="w-full rounded-xl border border-slate-200 mt-4 overflow-hidden relative"></div>
                   </div>
-
-                <label class="block"><span class="mb-2 block text-sm font-semibold text-slate-700">Tipo</span><input class="w-full text-xs rounded-xl border-slate-200" type="text" value="${p.type || ''}" onchange="updateProject('${p.slug}', 'type', this.value)" /></label>
-                <label class="block"><span class="mb-2 block text-sm font-semibold text-slate-700">Estado</span>
-                  <select class="w-full text-xs rounded-xl border-slate-200" onchange="updateProject('${p.slug}', 'status', this.value)">
-                    <option value="Planeacion" ${p.status==='Planeacion'?'selected':''}>Planeación</option>
-                    <option value="Activo" ${p.status==='Activo'?'selected':''}>Activo</option>
-                    <option value="Cerrado" ${p.status==='Cerrado'?'selected':''}>Cerrado</option>
-                  </select>
-                </label>
-                <label class="block"><span class="mb-2 block text-sm font-semibold text-slate-700">ID Empresa (opcional)</span><input class="w-full text-xs rounded-xl border-slate-200" type="text" placeholder="nora, amarillo, etc." value="${p.empresaId || ''}" onchange="updateProject('${p.slug}', 'empresaId', this.value)" /></label>
-                <label class="inline-flex items-center gap-2 rounded-xl border border-slate-200 px-4 py-3 text-sm font-semibold text-slate-700"><input class="rounded border-slate-300" type="checkbox" ${p.enabled!==false?'checked':''} onchange="updateProject('${p.slug}', 'enabled', this.checked)" />Proyecto activo en el portal</label>
-                <label class="inline-flex items-center gap-2 rounded-xl border border-slate-200 px-4 py-3 text-sm font-semibold text-slate-700"><input class="rounded border-slate-300" type="checkbox" ${(!p.landing || p.landing.enabled!==false)?'checked':''} onchange="updateProjectDeep('${p.slug}', 'landing', 'enabled', this.checked)" />Usar landing tipo Green I</label>
               </div>
             </section>
-
-            
             </div>
           </div>`;
         }
