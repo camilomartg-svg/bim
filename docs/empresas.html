@@ -108,12 +108,19 @@
                         window.location.replace('https://norabim.com/inse.html');
                     } else {
                         // Update role if changed
+                        let updated = false;
                         if (ua.role !== dbUser.rol) {
                             ua.role = dbUser.rol;
+                            updated = true;
+                        }
+                        if (ua.empresa !== dbUser.empresa) {
+                            ua.empresa = dbUser.empresa;
+                            updated = true;
+                        }
+                        if (updated) {
                             const cacheLocation = localStorage.getItem('userAccount') ? 'localStorage' : 'sessionStorage';
                             window[cacheLocation].setItem('userAccount', JSON.stringify(ua));
                         }
-                    }
                 } catch(e) {}
             }
         });
@@ -237,60 +244,19 @@
                     window.location.reload();
                 });
                 if (userAccount.role === 'SUPER_ADMINISTRADOR') {
-                    const superAdminLink = document.getElementById('super-admin-link');
-                    if (superAdminLink) superAdminLink.classList.remove('hidden');
-                }
-            }
-
-            // --- THEME & BACK BUTTON ---
-            const themeToggle = document.getElementById('theme-toggle');
-            const htmlEl = document.documentElement;
-            const applyTheme = (theme) => {
-                if (theme === 'dark') {
-                    htmlEl.classList.add('dark');
-                    themeToggle.querySelector('.material-symbols-outlined').textContent = 'light_mode';
-                } else {
-                    htmlEl.classList.remove('dark');
-                    themeToggle.querySelector('.material-symbols-outlined').textContent = 'dark_mode';
-                }
-            };
-            const savedTheme = localStorage.getItem('theme') || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
-            applyTheme(savedTheme);
-            themeToggle.addEventListener('click', () => {
-                const newTheme = htmlEl.classList.contains('dark') ? 'light' : 'dark';
-                localStorage.setItem('theme', newTheme);
-                applyTheme(newTheme);
-            });
-
-            const backBtn = document.getElementById('back-btn');
-            backBtn?.addEventListener('click', () => {
-                window.location.href = 'https://norabim.com/inse.html';
-            });
-
-            // --- Cargar empresas ---
-            const defaultCompanies = [
-                { id: 'nora', name: 'nora CDE', location: 'Bogotá, Colombia', image: 'https://i.postimg.cc/fbwgkrDd/r-ciien.png', code: '001', configUrl: 'portal-config.json' }
-            ];
-
-            let companies = [];
-            try {
-                const res = await fetch(`empresas.json?t=${Date.now()}`);
-                if(res.ok) {
-                    const allCompanies = await res.json();
-                    if (userAccount) {
-                        const userEmail = userAccount.username.toLowerCase();
-                        if (userAccount.role === 'SUPER_ADMINISTRADOR') {
                             companies = allCompanies;
-                        } else if (userAccount.role === 'ADMINISTRADOR_EMPRESA') {
-                            companies = allCompanies.filter(c => 
-                                c.id === userAccount.adminEmpresaId || 
-                                (c.admins && c.admins.map(e=>e.toLowerCase()).includes(userEmail))
-                            );
                         } else {
-                            // INVITADO o cualquier otro rol
-                            companies = allCompanies.filter(c => 
-                                c.members && c.members.some(m => m.email.toLowerCase() === userEmail)
-                            );
+                            companies = allCompanies.filter(c => c.name && userAccount.empresa && c.name.toLowerCase().trim() === userAccount.empresa.toLowerCase().trim());
+                            if (userAccount.empresa && companies.length === 0) {
+                                companies.push({
+                                    id: 'dynamic-' + Date.now(),
+                                    name: userAccount.empresa,
+                                    location: 'Pendiente',
+                                    image: 'https://i.postimg.cc/fbwgkrDd/r-ciien.png',
+                                    code: 'NEW',
+                                    configUrl: 'portal-config.json'
+                                });
+                            }
                         }
                     } else {
                         companies = []; // Si no hay sesión, no ve nada

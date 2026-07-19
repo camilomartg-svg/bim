@@ -52,13 +52,7 @@
     "code": "004",
     "admins": [],
     "zonaHoraria": "America/Bogota",
-    "members": [
-      {
-        "name": "Camilo Martinez",
-        "email": "camilomartg@gmail.com",
-        "role": "ADMINISTRADOR_EMPRESA"
-      }
-    ],
+    "members": [],
     "razonSocial": "Fabrica Nacional de Arquitectura",
     "terminosAceptados": true,
     "tratamientoDatos": true,
