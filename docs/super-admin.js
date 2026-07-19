@@ -492,7 +492,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     renderProjects();
   };
 
-  function renderProjects() {
+  window.renderProjects = renderProjects;
+    function renderProjects() {
     if (selectedIndex === -1) return;
     const emp = empresas[selectedIndex];
     const config = companyConfigs[emp.id];
