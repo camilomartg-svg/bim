@@ -486,6 +486,15 @@ if (urlParams.get('empresa') === 'alcabama' || urlParams.get('empresa') === 'Alc
                         console.log('Using adminEmpresaId fallback:', empresaId);
                     }
 
+                    // Primero siempre cargamos la configuración global base
+                    let baseConfig = { ...DEFAULT_PORTAL_CONFIG };
+                    try {
+                        const globalRes = await fetch(`portal-config.json?v=${encodeURIComponent(currentVersion)}`, { cache: 'no-store' });
+                        if (globalRes.ok) {
+                            baseConfig = { ...baseConfig, ...(await globalRes.json()) };
+                        }
+                    } catch(e) { console.warn("No se pudo cargar portal-config base"); }
+
                     let configUrl = `portal-config.json?v=${encodeURIComponent(currentVersion)}`;
                     
                     if (empresaId) {
@@ -512,20 +521,31 @@ if (urlParams.get('empresa') === 'alcabama' || urlParams.get('empresa') === 'Alc
                         } catch(e) {
                             console.warn('Error cargando empresas.json', e);
                         }
-                    }
-
-                    const response = await fetch(configUrl, { cache: 'no-store' });
-                    if (!response.ok) throw new Error('No se pudo cargar la configuracion central');
-                    const config = await response.json();
-                    applyPortalConfig({ ...DEFAULT_PORTAL_CONFIG, ...config });
-                } catch (error) {
-                    console.warn('Error al cargar configuración central de red. Usando default...', error);
-                    // 2. Fallback final por defecto
-                    if (empresaId) {
-                         applyPortalConfig({ ...DEFAULT_PORTAL_CONFIG, projects: [] });
+                        
+                        // Intentamos cargar la configuración específica de la empresa
+                        try {
+                            const response = await fetch(configUrl, { cache: 'no-store' });
+                            if (response.ok) {
+                                const config = await response.json();
+                                applyPortalConfig({ ...baseConfig, ...config });
+                                return; // Éxito total
+                            } else {
+                                // No existe el archivo de empresa (ej. recién creada), limpiamos proyectos y usamos la global
+                                applyPortalConfig({ ...baseConfig, projects: [] });
+                                return;
+                            }
+                        } catch (error) {
+                            applyPortalConfig({ ...baseConfig, projects: [] });
+                            return;
+                        }
                     } else {
-                         applyPortalConfig(DEFAULT_PORTAL_CONFIG);
+                        // Sin empresa en URL
+                        applyPortalConfig(baseConfig);
+                        return;
                     }
+                } catch (error) {
+                    console.warn('Error crítico en loadPortalConfig...', error);
+                    applyPortalConfig(DEFAULT_PORTAL_CONFIG);
                 }
             };
             void loadPortalConfig();

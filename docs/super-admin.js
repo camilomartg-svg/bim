@@ -90,7 +90,7 @@ document.addEventListener('DOMContentLoaded', async () => {
            const gCompanies = await gRes.json();
            let addedNew = false;
            gCompanies.forEach(gc => {
-              if (gc.id && !empresas.find(e => e.id === gc.id)) {
+              if (gc.id && !empresas.find(e => e.id === gc.id || (e.name && gc.name && e.name.toLowerCase() === gc.name.toLowerCase()))) {
                   empresas.push({
                       id: gc.id,
                       name: gc.name || gc.legalName,
