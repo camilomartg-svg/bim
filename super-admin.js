@@ -147,6 +147,8 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   function renderList() {
     listEl.innerHTML = empresas.map((emp, i) => {
+      if (emp.deleted) return '';
+      
       const matchesSearch = searchTerm === '' || 
         (emp.name && emp.name.toLowerCase().includes(searchTerm)) || 
         (emp.razonSocial && emp.razonSocial.toLowerCase().includes(searchTerm)) || 
@@ -1160,8 +1162,8 @@ let contentBase = '';
   });
 
   document.getElementById('delete-empresa-btn').addEventListener('click', () => {
-    if(confirm('¿Está seguro de eliminar esta empresa? Esta acción no se puede deshacer.')) {
-      empresas.splice(selectedIndex, 1);
+    if(confirm('¿Está seguro de eliminar esta empresa? Para borrarla permanentemente también deberá borrarla de la hoja de cálculo de Google. ¿Desea ocultarla de esta plataforma?')) {
+      empresas[selectedIndex].deleted = true;
       selectedIndex = -1;
       editorEl.classList.add('hidden');
       renderList();

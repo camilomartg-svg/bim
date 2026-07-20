@@ -230,13 +230,12 @@
                         const newU = await uRes.json();
                         try {
                             const staticEmpresas = await staticEmpRes.json();
-                            newC.forEach(c => {
-                                if (c.name) {
-                                    const matched = staticEmpresas.find(se => se.name && se.name.toLowerCase().trim() === c.name.toLowerCase().trim());
-                                    if (matched && matched.id) {
-                                        c.id = matched.id;
-                                    }
-                                }
+                            newC = newC.filter(c => {
+                                if (!c.name) return true;
+                                const matched = staticEmpresas.find(se => se.name && se.name.toLowerCase().trim() === c.name.toLowerCase().trim());
+                                if (matched && matched.deleted) return false;
+                                if (matched && matched.id) c.id = matched.id;
+                                return true;
                             });
                         } catch(e) {}
                         sessionStorage.setItem('cachedCompanies_v2', JSON.stringify({companies: newC, users: newU}));
@@ -253,13 +252,12 @@
                     try {
                         const staticEmpresas = await staticEmpRes.json();
                         // Merge IDs from static empresas.json to avoid duplicates/mismatches with GSheets
-                        allCompanies.forEach(c => {
-                            if (c.name) {
-                                const matched = staticEmpresas.find(se => se.name && se.name.toLowerCase().trim() === c.name.toLowerCase().trim());
-                                if (matched && matched.id) {
-                                    c.id = matched.id;
-                                }
-                            }
+                        allCompanies = allCompanies.filter(c => {
+                            if (!c.name) return true;
+                            const matched = staticEmpresas.find(se => se.name && se.name.toLowerCase().trim() === c.name.toLowerCase().trim());
+                            if (matched && matched.deleted) return false;
+                            if (matched && matched.id) c.id = matched.id;
+                            return true;
                         });
                     } catch(e) { console.warn('Could not merge static empresas', e); }
                     sessionStorage.setItem('cachedCompanies_v2', JSON.stringify({companies: allCompanies, users: users}));
