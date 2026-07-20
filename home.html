@@ -527,7 +527,8 @@ if (urlParams.get('empresa') === 'alcabama' || urlParams.get('empresa') === 'Alc
                             const response = await fetch(configUrl, { cache: 'no-store' });
                             if (response.ok) {
                                 const config = await response.json();
-                                applyPortalConfig({ ...baseConfig, ...config });
+                                const mergedPortal = { ...(baseConfig.portal || {}), ...(config.portal || {}) };
+                                applyPortalConfig({ ...baseConfig, ...config, portal: mergedPortal });
                                 return; // Éxito total
                             } else {
                                 // No existe el archivo de empresa (ej. recién creada), limpiamos proyectos y usamos la global

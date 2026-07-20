@@ -1105,7 +1105,42 @@ let contentBase = '';
       slug: slug,
       status: 'Planeacion',
       enabled: true,
-      landing: { enabled: true, title: 'NUEVO PROYECTO', map: { lat: 4.60971, lng: -74.08175, zoom: 15 } }
+      landing: { 
+        enabled: true, 
+        title: 'NUEVO PROYECTO', 
+        map: { lat: 4.60971, lng: -74.08175, zoom: 15 },
+        eyebrow: "nora",
+        subtitle: "Accesos rápidos, seguimiento y contexto del proyecto.",
+        actionEyebrow: "Panel",
+        actionTitle: "Acciones",
+        actionDescription: "Atajos para publicaciones, solicitudes y equipo.",
+        logoUrl: "https://i.postimg.cc/J4Fy2Qsx/LOGO-(1).jpg",
+        portalLogoLight: "https://i.postimg.cc/tR3YSryT/LOGO-NORA-NEGRO.png",
+        portalLogoDark: "https://i.postimg.cc/SQ6JTZqj/LOGO-NORA-BLANCO.png",
+        viewerLogoLight: "https://i.postimg.cc/L4r0gSvV/LOGO-TEXTO-NORA-NEGRO.png",
+        viewerLogoDark: "https://i.postimg.cc/FFfBKzb8/LOGO-TEXTO-NORA-BLANCO.png"
+      },
+      modules: {
+        ifc: "VSR_IFCA/",
+        status: "STATUS/",
+        cantidades: "CANTIDADES/",
+        pdf: "VSR_PDFA/",
+        dwg: "VSR_DWGA/"
+      },
+      actions: {
+        publicaciones: "Publicaciones.html",
+        solicitudes: "index.html",
+        equipo: "lista_usuarios.html"
+      },
+      dataSources: {
+        driveFolderName: "Nuevo Proyecto",
+        driveFolderId: "",
+        driveScriptUrl: "",
+        statusSheetId: "",
+        statusScriptUrl: "",
+        cantidadesSheetId: "",
+        cantidadesScriptUrl: ""
+      }
     });
     renderProjects();
   });
