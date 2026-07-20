@@ -162,7 +162,7 @@
 
         <!-- Horizontal Scroll Section -->
         <div id="scroll-container" class="w-full max-w-[95%] mx-auto pb-8">
-            <div id="companies-list" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-8 px-4">
+            <div id="companies-list" class="flex flex-wrap justify-center gap-8 lg:gap-12 px-4">
                 <!-- Tarjetas inyectadas por JS -->
             </div>
         </div>
@@ -339,7 +339,7 @@
                 `;
             } else {
                 list.innerHTML = companies.map(c => `
-                    <a href="home.html?empresa=${c.id}" class="card-hover flex-none w-full group transition-transform duration-500 block">
+                    <a href="home.html?empresa=${c.id}" class="card-hover flex-none w-[260px] md:w-[320px] lg:w-[360px] group transition-transform duration-500 block">
                         <div class="flex justify-between items-end mb-4 border-b border-gray-300 pb-2">
                             <div class="flex flex-col">
                                 <span class="text-[9px] font-bold text-gray-400 mb-1">${c.code}</span>
