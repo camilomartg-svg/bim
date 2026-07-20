@@ -462,7 +462,7 @@
                 const account = msalInstance.getAllAccounts()[0];
 
                 if (account) {
-                    const ROLES_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzKsybCyugl3zhrqYkbv1IDXEUo7OMzwOxtA4sS2vMetXu8j6LECEOXqfkxtoH_m7I/exec';
+                    const ROLES_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzdclwrLaL7k30waIlgoWhQMc4toeaomWFeHBXi5HLhnfPPrpHJFIOSveGa_oavtmqV5w/exec';
                     const normalizedAccountEmail = account.username.trim().toLowerCase();
                     
                     let userProfile = null;
@@ -534,7 +534,7 @@
                         .then(async profile => {
                             const normalizedAccountEmail = profile.email.trim().toLowerCase();
                             let userRole = null;
-                            const ROLES_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzKsybCyugl3zhrqYkbv1IDXEUo7OMzwOxtA4sS2vMetXu8j6LECEOXqfkxtoH_m7I/exec';
+                            const ROLES_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzdclwrLaL7k30waIlgoWhQMc4toeaomWFeHBXi5HLhnfPPrpHJFIOSveGa_oavtmqV5w/exec';
 
                             try {
                                 const configRes = await fetch('portal-config.json');
@@ -852,7 +852,7 @@
                 }
             }
 
-            const NEW_REGISTRATION_SCRIPT = 'https://script.google.com/macros/s/AKfycbzKsybCyugl3zhrqYkbv1IDXEUo7OMzwOxtA4sS2vMetXu8j6LECEOXqfkxtoH_m7I/exec';
+            const NEW_REGISTRATION_SCRIPT = 'https://script.google.com/macros/s/AKfycbzdclwrLaL7k30waIlgoWhQMc4toeaomWFeHBXi5HLhnfPPrpHJFIOSveGa_oavtmqV5w/exec';
             
             try {
                 // Post to Google Apps Script (crear empresa y usuario en 1 paso si aplica)
@@ -987,7 +987,7 @@
                 // --- INICIA LÓGICA DE ASIGNACIÓN DE ROLES (Idéntica a MSAL/Google) ---
                 const normalizedAccountEmail = email.toLowerCase();
                 let userRole = null;
-                const ROLES_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzKsybCyugl3zhrqYkbv1IDXEUo7OMzwOxtA4sS2vMetXu8j6LECEOXqfkxtoH_m7I/exec';
+                const ROLES_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzdclwrLaL7k30waIlgoWhQMc4toeaomWFeHBXi5HLhnfPPrpHJFIOSveGa_oavtmqV5w/exec';
 
                 // 1. Check Super Admins
                 try {
