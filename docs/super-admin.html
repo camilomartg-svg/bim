@@ -395,12 +395,16 @@
       const icon = document.getElementById('sidebar-icon');
       const superAdmins = document.getElementById('super-admins-section');
       
+      const rawAccount = sessionStorage.getItem('userAccount') || localStorage.getItem('userAccount');
+      const userAccount = rawAccount ? JSON.parse(rawAccount) : null;
+      const isSuperAdmin = userAccount && userAccount.role === 'SUPER_ADMINISTRADOR';
+
       if (sidebar.classList.contains('hidden')) {
         sidebar.classList.remove('hidden');
         editor.classList.remove('lg:w-full');
         editor.classList.add('lg:w-2/3');
         icon.innerText = 'menu_open';
-        if(superAdmins) superAdmins.classList.remove('hidden');
+        if(superAdmins && isSuperAdmin) superAdmins.classList.remove('hidden');
       } else {
         sidebar.classList.add('hidden');
         editor.classList.remove('lg:w-2/3');
