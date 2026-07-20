@@ -1,0 +1,712 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <script>
+        if (!sessionStorage.getItem('userAccount') && !localStorage.getItem('userAccount')) {
+            window.location.replace('https://norabim.com/inse.html');
+        }
+    </script>
+
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Proyecto | nora CDE</title>
+  <meta name="theme-color" content="#2b2b2b" />
+  <meta name="x-app-version" data-app="project-landing" content="20260713-06" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+  <script src="https://cdn.tailwindcss.com?plugins=forms,typography"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            primary: '#171717',
+            'background-light': '#FFFFFF',
+            'background-dark': '#343434',
+            'text-light': '#111827',
+            'text-dark': '#F3F4F6',
+          },
+          fontFamily: {
+            sans: ['Inter', 'sans-serif'],
+            display: ['"Source Sans Pro"', 'sans-serif'],
+          },
+        },
+      },
+    };
+  </script>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Source+Sans+Pro:wght@700;900&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <link rel="manifest" href="portal.webmanifest" />
+  <link rel="icon" href="https://i.postimg.cc/W3trgjZX/FAVICON-NORA-NEGRO.png" type="image/png" />
+  <link rel="apple-touch-icon" href="assets/icons/portal-bim-apple-touch.png" />
+  <style>
+    body {
+      font-family: 'Inter', sans-serif;
+    }
+    .material-symbols-outlined {
+      font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+    }
+    .glass {
+      background: rgba(255, 255, 255, 0.72);
+      border: 1px solid rgba(17, 24, 39, 0.08);
+      backdrop-filter: blur(14px);
+      -webkit-backdrop-filter: blur(14px);
+    }
+    #project-map {
+      height: 100%;
+      width: 100%;
+    }
+    .leaflet-tile {
+      filter: grayscale(1) contrast(1.08);
+    }
+  </style>
+</head>
+<body class="bg-white text-text-light dark:bg-background-dark dark:text-text-dark">
+  <div id="page-shell" class="min-h-screen bg-white dark:bg-slate-900 transition-colors duration-300">
+    <div id="update-banner" class="fixed left-0 right-0 top-0 z-50 hidden">
+      <div class="mx-auto flex w-full items-center justify-between gap-4 bg-[#111827] px-4 py-3 text-sm font-semibold text-white shadow">
+        <div>Hay una nueva versión disponible.</div>
+        <button id="update-reload" class="rounded-none bg-white px-4 py-2 text-xs font-black uppercase tracking-widest text-[#111827]">Actualizar</button>
+      </div>
+    </div>
+
+    <div class="flex min-h-screen">
+      <div class="flex min-w-0 flex-1 flex-col">
+        <header class="absolute top-0 left-0 w-full z-20 px-8 py-4 bg-transparent pointer-events-none transition-colors duration-300">
+          <div class="container mx-auto flex w-full items-center justify-between pointer-events-auto relative h-full">
+            <div class="flex items-center gap-6">
+              <button id="back-btn" aria-label="Volver" class="rounded-lg border border-slate-200 bg-white/80 px-2 py-1 hover:bg-white transition-colors dark:bg-slate-800 dark:border-slate-700 dark:hover:bg-slate-700">
+                <span class="material-symbols-outlined text-[16px] text-slate-800 dark:text-slate-200">arrow_back</span>
+              </button>
+            </div>
+
+            <div class="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 hidden items-center gap-4 text-[10px] font-bold tracking-widest text-[#111827] dark:text-white uppercase sm:flex">
+              <span id="header-date">--</span>
+              <div class="h-4 w-[1px] bg-slate-300 dark:bg-slate-600"></div>
+              <span id="project-now">--:--</span>
+            </div>
+
+            <div class="flex items-center gap-8">
+              <div class="flex items-center gap-4">
+                <button id="theme-toggle" aria-label="Cambiar tema" class="text-[#111827] dark:text-white hover:text-slate-600 transition-colors">
+                  <span class="material-symbols-outlined text-[16px]">dark_mode</span>
+                </button>
+                <div id="auth-container" class="hidden items-center sm:flex">
+                  <a href="https://norabim.com/inse.html" class="text-[10px] font-bold uppercase tracking-widest text-[#111827] hover:text-slate-600 dark:text-white">Iniciar sesión</a>
+                </div>
+              </div>
+            </div>
+          </div>
+        </header>
+
+        <section class="relative flex h-[270px] pt-14 overflow-hidden w-full">
+            <!-- Panel Izquierdo (30%) con color sólido y logo -->
+            <div class="hidden md:flex w-[30%] bg-[#f6f6f6] dark:bg-background-dark h-full items-center justify-center p-8">
+                <div class="block w-full max-w-[160px]">
+                    <img id="portal-logo-light" alt="nora CDE" class="w-full h-auto object-contain dark:hidden"
+                        src="https://i.postimg.cc/tR3YSryT/LOGO-NORA-NEGRO.png" />
+                    <img id="portal-logo-dark" alt="nora CDE" class="hidden w-full h-auto object-contain dark:block"
+                        src="https://i.postimg.cc/SQ6JTZqj/LOGO-NORA-BLANCO.png" />
+                </div>
+            </div>
+            <!-- Panel Derecho (70%) con imagen -->
+            <div id="project-hero-image" class="w-full md:w-[70%] h-full bg-cover bg-center relative"
+                style="background-image: url('https://i.postimg.cc/hPxkssjB/a876e83e4696eea7592b3fef6c8275a8.jpg');">
+                <div class="absolute bottom-8 right-8 flex flex-col items-end gap-1 z-10 text-right drop-shadow-md">
+                    <h1 id="project-title" class="font-display text-4xl font-black tracking-[0.06em] text-white uppercase m-0 leading-none">PROYECTO</h1>
+                    <span id="project-company-name" class="text-[11px] font-bold uppercase tracking-widest text-white whitespace-nowrap hidden"></span>
+                </div>
+            </div>
+        </section>
+
+        <main class="w-full flex-1 bg-white dark:bg-slate-900">
+          <section id="tools-banner" class="w-full bg-white dark:bg-slate-900 pt-8 pb-4 md:pt-10 md:pb-6 relative">
+            
+            <div class="w-full px-8 md:px-12">
+              <div id="project-tools-container" class="grid gap-12 grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
+                <!-- Links injected by JS -->
+              </div>
+            </div>
+          </section>
+
+          <section id="mapa" class="bg-slate-50 dark:bg-slate-800">
+            <div class="px-0 py-16">
+              <div class="container mx-auto px-6 pb-10 text-center md:px-10">
+                <p id="project-map-eyebrow" class="text-[11px] uppercase tracking-[0.34em] text-slate-500 dark:text-slate-400">City Guide</p>
+                <h2 id="project-city" class="mt-5 font-display text-4xl font-black tracking-[0.08em] text-slate-900 dark:text-white md:text-5xl">BOGOTÁ</h2>
+                <p id="project-map-description" class="mx-auto mt-6 max-w-2xl text-sm leading-8 text-[#6f6f69] dark:text-slate-400">
+                  Portal de acceso al CDE del proyecto.
+                </p>
+                <p id="project-address" class="mx-auto mt-2 max-w-2xl text-sm leading-8 text-[#6f6f69] dark:text-slate-400"></p>
+              </div>
+              <div class="bg-white dark:bg-slate-900">
+                <div id="map-wrapper" class="relative h-[560px] w-full overflow-hidden bg-slate-200 dark:bg-slate-700 md:h-[680px]">
+                  <div id="project-map" class="h-full w-full"></div>
+                  <div id="map-ctrl-hint" class="pointer-events-none absolute left-1/2 top-6 -translate-x-1/2 rounded-none border border-slate-300 bg-white/95 px-4 py-2 text-xs font-semibold uppercase tracking-[0.18em] text-slate-800 shadow-sm dark:border-slate-600 dark:bg-slate-800/95 dark:text-white">
+                    Mantén CTRL para navegar el mapa
+                  </div>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <div class="mx-auto w-full">
+            <section id="accesos" class="mt-6">
+              <div class="bg-slate-50 rounded-none p-6 md:p-8 dark:bg-slate-800">
+                <div class="text-xs font-semibold uppercase tracking-[0.26em] text-[#6f6f69] dark:text-white/60">Atajos</div>
+                <h2 class="mt-3 text-2xl font-semibold text-[#111827] dark:text-white">Accesos del proyecto</h2>
+                <div id="project-quick-links" class="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4"></div>
+              </div>
+            </section>
+          </div>
+        </main>
+
+        <footer class="px-4 pb-10 pt-6 md:px-8">
+          <div class="mx-auto w-full text-center text-gray-600 dark:text-gray-300">
+            <div class="mb-4 flex items-center justify-center gap-4">
+              <img id="footer-logo-light" alt="Portal BIM logo" class="h-8 dark:hidden" src="https://i.postimg.cc/tR3YSryT/LOGO-NORA-NEGRO.png" />
+              <img id="footer-logo-dark" alt="Portal BIM logo" class="hidden h-8 dark:block" src="https://i.postimg.cc/SQ6JTZqj/LOGO-NORA-BLANCO.png" />
+            </div>
+            <p id="project-footer" class="text-sm">© 2026 nora CDE - Todos los derechos reservados.</p>
+          </div>
+        </footer>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script>
+    document.addEventListener('DOMContentLoaded', async () => {
+      const DEFAULT_PORTAL_CONFIG = {
+        portal: {
+          name: 'nora CDE',
+          shortName: 'Portal BIM',
+          footerText: '© 2026 nora CDE - Todos los derechos reservados.',
+        },
+      };
+
+      const DEFAULT_PROJECT = {
+        name: 'Proyecto',
+        slug: 'proyecto',
+        city: 'Bogotá',
+        type: 'Proyecto',
+        status: 'Activo',
+        enabled: true,
+        homeUrl: '',
+        modules: {},
+        actions: {},
+        dataSources: {
+          driveFolderName: '',
+          driveFolderId: '',
+          driveScriptUrl: '',
+          statusSheetId: '',
+          statusScriptUrl: '',
+          cantidadesSheetId: '',
+          cantidadesScriptUrl: '',
+        },
+        landing: {
+          enabled: true,
+          eyebrow: 'Portal BIM',
+          title: 'PROYECTO',
+          subtitle: 'Accesos rápidos, seguimiento y contexto del proyecto.',
+          actionEyebrow: 'Panel',
+          actionTitle: 'Acciones',
+          actionDescription: 'Atajos para publicaciones, solicitudes y equipo.',
+          mapEyebrow: 'City Guide',
+          cityLabel: 'BOGOTÁ',
+          mapDescription: 'Portal de acceso al CDE del proyecto.',
+          address: '',
+          logoUrl: 'https://i.postimg.cc/W3trgjZX/FAVICON-NORA-NEGRO.png',
+          portalLogoLight: 'https://i.postimg.cc/L4r0gSvV/LOGO-TEXTO-NORA-NEGRO.png',
+          portalLogoDark: 'https://i.postimg.cc/FFfBKzb8/LOGO-TEXTO-NORA-BLANCO.png',
+          map: {
+            lat: 4.711,
+            lng: -74.0721,
+            zoom: 13,
+          },
+        },
+      };
+
+      const MODULE_META = [
+        { key: 'ifc', label: 'Visor IFC', subtitle: 'Modelos', icon: 'view_in_ar', group: 'modelos', defaultHref: 'VSR_IFCA/', description: 'Acceso interactivo a los modelos BIM del proyecto.' },
+        { key: 'status', label: 'Estado', subtitle: 'Seguimiento', icon: 'query_stats', group: 'modelos', defaultHref: 'STATUS/', description: 'Seguimiento y control de avance de obra.' },
+        { key: 'cantidades', label: 'Cantidades', subtitle: 'Compras', icon: 'inventory_2', group: 'modelos', defaultHref: 'CANTIDADES/', description: 'Gestión de presupuestos y cantidades.' },
+        { key: 'pdf', label: 'Visor PDF', subtitle: 'Planos', icon: 'picture_as_pdf', group: 'planimetria', defaultHref: 'VSR_PDFA/', description: 'Planimetría 2D y documentación técnica.' },
+        { key: 'dwg', label: 'Visor DWG', subtitle: 'Planimetría', icon: 'architecture', group: 'planimetria', defaultHref: 'VSR_DWGA/', description: 'Archivos CAD y planimetría editable.' },
+      ];
+
+      const ACTION_META = [
+        { key: 'publicaciones', label: 'Publicaciones', subtitle: 'Entregables', icon: 'campaign', group: 'acciones', defaultHref: 'Publicaciones.html', description: 'Emisión de entregables y documentos oficiales.' },
+        { key: 'solicitudes', label: 'Solicitudes', subtitle: 'Accesos', icon: 'task_alt', group: 'acciones', defaultHref: 'index.html', description: 'Gestión de accesos y permisos al proyecto.' },
+        { key: 'equipo', label: 'Equipo', subtitle: 'Usuarios', icon: 'group', group: 'acciones', defaultHref: 'lista_usuarios.html', description: 'Directorio de usuarios y roles del proyecto.' },
+        { key: 'incidencias', label: 'Incidencias', subtitle: 'Reportes', icon: 'report_problem', group: 'acciones', defaultHref: 'incidencias.html', description: 'Reporte y seguimiento de problemas (RFI/BCF).' },
+      ];
+
+      const escapeHtml = (value) => String(value ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+
+      const slugify = (value) => String(value ?? '')
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-+|-+$/g, '') || 'proyecto';
+
+      const query = new URLSearchParams(window.location.search);
+      const requestedProject = slugify(query.get('project') || '');
+      const authContainer = document.getElementById('auth-container');
+
+      const userAccount = JSON.parse(sessionStorage.getItem('userAccount') || localStorage.getItem('userAccount') || 'null');
+      if (userAccount) {
+        authContainer.innerHTML = `
+          <span class="text-sm font-medium text-text-light dark:text-white">Hola, ${escapeHtml(userAccount.name.split(' ')[0])}</span>
+          <button id="logout-button" class="text-sm font-medium text-text-light dark:text-white hover:text-primary">Cerrar sesión</button>
+        `;
+        document.getElementById('logout-button').addEventListener('click', () => {
+          sessionStorage.removeItem('userAccount');
+          localStorage.removeItem('userAccount');
+          window.location.reload();
+        });
+      }
+
+      const themeToggle = document.getElementById('theme-toggle');
+      const htmlEl = document.documentElement;
+      const applyTheme = (theme) => {
+        if (theme === 'dark') {
+          htmlEl.classList.add('dark');
+          themeToggle.querySelector('.material-symbols-outlined').textContent = 'light_mode';
+        } else {
+          htmlEl.classList.remove('dark');
+          themeToggle.querySelector('.material-symbols-outlined').textContent = 'dark_mode';
+        }
+      };
+      const savedTheme = localStorage.getItem('theme') || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+      applyTheme(savedTheme);
+      themeToggle.addEventListener('click', () => {
+        const newTheme = htmlEl.classList.contains('dark') ? 'light' : 'dark';
+        localStorage.setItem('theme', newTheme);
+        applyTheme(newTheme);
+      });
+
+      const normalizeProject = (project) => {
+        const landing = project?.landing && typeof project.landing === 'object' ? project.landing : {};
+        const map = landing.map && typeof landing.map === 'object' ? landing.map : {};
+        const modules = project?.modules && typeof project.modules === 'object' ? project.modules : {};
+        const actions = project?.actions && typeof project.actions === 'object' ? project.actions : {};
+        const dataSources = project?.dataSources && typeof project.dataSources === 'object' ? project.dataSources : {};
+        return {
+          ...DEFAULT_PROJECT,
+          ...project,
+          slug: String(project?.slug || slugify(project?.name || '')).trim(),
+          modules: {
+            ifc: String(modules.ifc || '').trim(),
+            status: String(modules.status || '').trim(),
+            cantidades: String(modules.cantidades || '').trim(),
+            pdf: String(modules.pdf || '').trim(),
+            dwg: String(modules.dwg || '').trim(),
+          },
+          actions: {
+            publicaciones: String(actions.publicaciones || '').trim(),
+            solicitudes: String(actions.solicitudes || '').trim(),
+            equipo: String(actions.equipo || '').trim(),
+          },
+          dataSources: {
+            driveFolderName: String(dataSources.driveFolderName || String(project?.name || '')).trim(),
+            driveFolderId: String(dataSources.driveFolderId || '').trim(),
+            driveScriptUrl: String(dataSources.driveScriptUrl || '').trim(),
+            statusSheetId: String(dataSources.statusSheetId || '').trim(),
+            statusScriptUrl: String(dataSources.statusScriptUrl || '').trim(),
+            cantidadesSheetId: String(dataSources.cantidadesSheetId || '').trim(),
+            cantidadesScriptUrl: String(dataSources.cantidadesScriptUrl || '').trim(),
+          },
+          landing: {
+            ...DEFAULT_PROJECT.landing,
+            ...landing,
+            map: {
+              lat: Number.isFinite(Number(map.lat)) ? Number(map.lat) : DEFAULT_PROJECT.landing.map.lat,
+              lng: Number.isFinite(Number(map.lng)) ? Number(map.lng) : DEFAULT_PROJECT.landing.map.lng,
+              zoom: Number.isFinite(Number(map.zoom)) ? Number(map.zoom) : DEFAULT_PROJECT.landing.map.zoom,
+            },
+          },
+        };
+      };
+
+      const buildProjectAwareHref = (href, target) => {
+        const rawHref = String(href || '').trim();
+        if (!rawHref || rawHref === '#') return rawHref || '#';
+        try {
+          const url = new URL(rawHref, window.location.href);
+          if (url.origin !== window.location.origin) return rawHref;
+          url.searchParams.set('project', project.slug);
+          if (project.dataSources.driveFolderName) url.searchParams.set('driveFolderName', project.dataSources.driveFolderName);
+          if (project.dataSources.driveFolderId) url.searchParams.set('driveFolderId', project.dataSources.driveFolderId);
+          if (project.dataSources.driveScriptUrl) url.searchParams.set('driveScriptUrl', project.dataSources.driveScriptUrl);
+          if (target === 'status') {
+            if (project.dataSources.statusSheetId) url.searchParams.set('statusSheetId', project.dataSources.statusSheetId);
+            if (project.dataSources.statusScriptUrl) url.searchParams.set('statusScriptUrl', project.dataSources.statusScriptUrl);
+          }
+          if (target === 'cantidades') {
+            if (project.dataSources.cantidadesSheetId) url.searchParams.set('cantidadesSheetId', project.dataSources.cantidadesSheetId);
+            if (project.dataSources.cantidadesScriptUrl) url.searchParams.set('cantidadesScriptUrl', project.dataSources.cantidadesScriptUrl);
+          }
+          return url.toString();
+        } catch {
+          return rawHref;
+        }
+      };
+
+
+
+      const loadConfig = async () => {
+        try {
+          // 1. Intentar cargar de la red primero (mostrar la última versión si hay conexión)
+          const metaVersion = document.querySelector('meta[name="x-app-version"]');
+          const currentVersion = metaVersion?.getAttribute('content') || Date.now().toString();
+          
+          const urlParams = new URLSearchParams(window.location.search);
+if (urlParams.get('empresa') === atob('YWxjYWJhbWE=') || urlParams.get('empresa') === atob('QWxjYWJhbWE=') || urlParams.get('empresa') === atob('QUxDQUJBTUE=')) {
+  urlParams.set('empresa', 'amarillo');
+  window.history.replaceState({}, '', window.location.pathname + '?' + urlParams.toString());
+}
+          const empresaId = urlParams.get('empresa');
+          let configUrl = `portal-config.json?v=${encodeURIComponent(currentVersion)}`;
+          
+          if (empresaId) {
+            try {
+              const empRes = await fetch('empresas.json');
+              if (empRes.ok) {
+                const empresas = await empRes.json();
+                const emp = empresas.find(e => e.id === empresaId);
+                if (emp && emp.configUrl) {
+                  configUrl = `${emp.configUrl}?v=${encodeURIComponent(currentVersion)}`;
+                }
+              }
+            } catch(e) {
+                console.warn('Error cargando empresas.json', e);
+            }
+          }
+
+          const response = await fetch(configUrl, { cache: 'no-store' });
+          if (!response.ok) throw new Error('No se pudo cargar la configuración del portal');
+          return await response.json();
+        } catch (error) {
+          console.warn('Error al cargar configuración central de red. Intentando borrador local...', error);
+          // 2. Si no hay conexión o falla, intentar cargar el borrador local (buffer)
+          try {
+            const draft = localStorage.getItem('portal:pba-config-draft:v2');
+            if (draft) {
+              console.log('Cargando borrador local de configuración (buffer)');
+              return JSON.parse(draft);
+            }
+          } catch (e) {
+            console.warn('Error al cargar el borrador local:', e);
+          }
+          // 3. Fallback final por defecto
+          return DEFAULT_PORTAL_CONFIG;
+        }
+      };
+
+      let config = DEFAULT_PORTAL_CONFIG;
+      try {
+        config = await loadConfig();
+      } catch (error) {
+        console.warn(error);
+      }
+
+      const projects = Array.isArray(config.projects) ? config.projects.map(normalizeProject) : [];
+      const activeProject = projects.find((project) => project.slug === requestedProject) || projects.find((project) => project.slug === 'green-i') || projects[0] || DEFAULT_PROJECT;
+
+      const project = normalizeProject(activeProject);
+      const footerText = String(config.portal?.footerText || DEFAULT_PORTAL_CONFIG.portal.footerText);
+
+      document.title = `${project.name} | ${config.portal?.name || 'nora CDE'}`;
+      const setEl = (id, text) => { const el = document.getElementById(id); if (el) el.textContent = text; };
+      setEl('project-eyebrow-main', project.landing.eyebrow || 'Dashboard');
+      setEl('project-title', project.landing.title || project.name.toUpperCase());
+      setEl('project-subtitle', project.landing.subtitle || DEFAULT_PROJECT.landing.subtitle);
+      setEl('project-action-eyebrow', project.landing.actionEyebrow || 'Panel');
+      setEl('project-action-title', project.landing.actionTitle || 'Acciones');
+      setEl('project-action-description', project.landing.actionDescription || DEFAULT_PROJECT.landing.actionDescription);
+      setEl('project-map-eyebrow', project.landing.mapEyebrow || 'City Guide');
+      setEl('project-city', project.landing.cityLabel || project.city || 'BOGOTÁ');
+      setEl('project-map-description', project.landing.mapDescription || DEFAULT_PROJECT.landing.mapDescription);
+      setEl('project-address', project.landing.address || '');
+      setEl('project-footer', footerText);
+
+      const projectLogo = project.landing.logoUrl || DEFAULT_PROJECT.landing.logoUrl;
+      ['header-project-logo'].forEach((id) => {
+        const img = document.getElementById(id);
+        if (img) {
+          img.src = projectLogo;
+          img.alt = project.name;
+        }
+      });
+
+      const urlParamsProject = new URLSearchParams(window.location.search);
+      const empresaIdProject = urlParamsProject.get('empresa');
+      if (empresaIdProject) {
+        fetch('empresas.json').then(r => r.json()).then(empresas => {
+          const emp = empresas.find(e => e.id === empresaIdProject);
+          if (emp) {
+            const heroImageEl = document.getElementById('project-hero-image');
+            if (heroImageEl && emp.image) {
+              heroImageEl.style.backgroundImage = `url('${emp.image}')`;
+            }
+            const companyNameEl = document.getElementById('project-company-name');
+            if (companyNameEl) {
+              companyNameEl.textContent = emp.name;
+              companyNameEl.classList.remove('hidden');
+            }
+          }
+        }).catch(e => console.warn(e));
+      } else {
+        const heroImageEl = document.getElementById('project-hero-image');
+        if (heroImageEl && config.portal?.heroImages?.length) {
+          heroImageEl.style.backgroundImage = `url('${config.portal.heroImages[0]}')`;
+        }
+      }
+
+      const portalLogoLight = project.landing.portalLogoLight || DEFAULT_PROJECT.landing.portalLogoLight;
+      const portalLogoDark = project.landing.portalLogoDark || DEFAULT_PROJECT.landing.portalLogoDark;
+      ['project-portal-logo-light', 'header-empresa-logo-light'].forEach((id) => {
+        const img = document.getElementById(id);
+        if (img) img.src = portalLogoLight;
+      });
+      ['project-portal-logo-dark', 'header-empresa-logo-dark'].forEach((id) => {
+        const img = document.getElementById(id);
+        if (img) img.src = portalLogoDark;
+      });
+
+      const footerLogoLight = config.portal?.footerLogoLight || 'https://i.postimg.cc/tR3YSryT/LOGO-NORA-NEGRO.png';
+      const footerLogoDark = config.portal?.footerLogoDark || 'https://i.postimg.cc/SQ6JTZqj/LOGO-NORA-BLANCO.png';
+      document.getElementById('footer-logo-light').src = footerLogoLight;
+      document.getElementById('footer-logo-dark').src = footerLogoDark;
+
+      const footerLogoSecondaryLight = config.portal?.footerLogoSecondaryLight || 'https://i.postimg.cc/tR3YSryT/LOGO-NORA-NEGRO.png';
+      const footerLogoSecondaryDark = config.portal?.footerLogoSecondaryDark || 'https://i.postimg.cc/SQ6JTZqj/LOGO-NORA-BLANCO.png';
+      const imgFooterSecLight = document.getElementById('footer-logo-secondary-light');
+      if (imgFooterSecLight) imgFooterSecLight.src = footerLogoSecondaryLight;
+      const imgFooterSecDark = document.getElementById('footer-logo-secondary-dark');
+      if (imgFooterSecDark) imgFooterSecDark.src = footerLogoSecondaryDark;
+
+      const activeModules = MODULE_META
+        .map((item) => ({ ...item, groupName: item.group, href: buildProjectAwareHref(project.modules[item.key] || item.defaultHref, item.key) }));
+
+      const activeActions = ACTION_META
+        .map((item) => ({ ...item, groupName: item.group, href: buildProjectAwareHref(project.actions[item.key] || item.defaultHref, item.key) }))
+        .filter((item) => item.href);
+
+      const allTools = [...activeModules, ...activeActions];
+
+      const toolsContainer = document.getElementById('project-tools-container');
+      if (toolsContainer) {
+        if (allTools.length) {
+          const grouped = allTools.reduce((acc, tool) => {
+            acc[tool.groupName] = acc[tool.groupName] || [];
+            acc[tool.groupName].push(tool);
+            return acc;
+          }, {});
+
+          let html = '';
+          let colIndex = 1;
+          for (const groupName in grouped) {
+            html += `<div class="flex flex-col gap-4">`;
+            grouped[groupName].forEach((tool, i) => {
+              html += `
+                <a href="${escapeHtml(tool.href)}" class="flex items-center gap-4 hover:opacity-50 transition-opacity">
+                  <span class="material-symbols-outlined text-[20px] text-[#6f6f69] dark:text-gray-500">${escapeHtml(tool.icon)}</span>
+                  <span class="text-xs font-bold tracking-[0.2em] uppercase text-[#111827] dark:text-white">${escapeHtml(tool.label)}</span>
+                </a>
+              `;
+            });
+            html += `</div>`;
+            colIndex++;
+          }
+          toolsContainer.innerHTML = html;
+        } else {
+          toolsContainer.innerHTML = '<div class="text-gray-400">Sin herramientas configuradas.</div>';
+        }
+      }
+
+      const quickLinks = activeModules
+        .slice(0, 4)
+        .map((item) => ({ ...item, subtitle: item.group === 'modelos' ? 'Abrir' : 'Revisar' }));
+      const quickLinksContainer = document.getElementById('project-quick-links');
+      if (quickLinksContainer) {
+        quickLinksContainer.innerHTML = quickLinks.length
+          ? quickLinks.map((item) => `
+            <a href="${escapeHtml(item.href)}" class="rounded-none bg-white px-5 py-5 text-center transition hover:bg-slate-100 dark:bg-white/10 dark:hover:bg-white/15">
+              <div class="mx-auto flex h-11 w-11 items-center justify-center rounded-none bg-white text-[#111827] dark:bg-white/10 dark:text-white">
+                <span class="material-symbols-outlined">${item.icon}</span>
+              </div>
+              <div class="mt-4 text-sm font-semibold text-[#111827] dark:text-white">${escapeHtml(item.label)}</div>
+              <div class="mt-1 text-xs uppercase tracking-[0.22em] text-[#6f6f69] dark:text-white/60">${escapeHtml(item.subtitle)}</div>
+            </a>
+          `).join('')
+          : '<div class="rounded-none border border-dashed border-slate-300 p-4 text-sm text-slate-500 dark:border-white/15 dark:text-white/60">Sin accesos rápidos configurados.</div>';
+      }
+
+      const mapEl = document.getElementById('project-map');
+      const mapHint = document.getElementById('map-ctrl-hint');
+      let projectMap = null;
+      const setMapInteraction = (enabled) => {
+        if (!projectMap) return;
+        if (enabled) {
+          projectMap.dragging.enable();
+          projectMap.scrollWheelZoom.enable();
+          projectMap.touchZoom.enable();
+          projectMap.doubleClickZoom.enable();
+        } else {
+          projectMap.dragging.disable();
+          projectMap.scrollWheelZoom.disable();
+          projectMap.touchZoom.disable();
+          projectMap.doubleClickZoom.disable();
+        }
+        if (mapHint) mapHint.style.display = enabled ? 'none' : 'block';
+      };
+
+      if (mapEl && window.L) {
+        const lat = project.landing.map.lat;
+        const lng = project.landing.map.lng;
+        const zoom = project.landing.map.zoom;
+
+        projectMap = window.L.map(mapEl, {
+          zoomControl: false,
+          attributionControl: true,
+          dragging: false,
+          scrollWheelZoom: false,
+          touchZoom: false,
+          doubleClickZoom: false,
+          boxZoom: false,
+          keyboard: false,
+        });
+
+        window.L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+          maxZoom: 20,
+          attribution: '&copy; OpenStreetMap contributors',
+        }).addTo(projectMap);
+
+        const projectLogo = project.landing.logoUrl || DEFAULT_PROJECT.landing.logoUrl;
+        const GreenIIcon = window.L.divIcon({
+          html: `<img src="${escapeHtml(projectLogo)}" class="w-12 h-12 object-contain drop-shadow-lg pointer-events-none" />`,
+          className: 'flex items-center justify-center bg-transparent border-none',
+          iconSize: [48, 48],
+          iconAnchor: [24, 24]
+        });
+        window.L.marker([lat, lng], { icon: GreenIIcon }).addTo(projectMap).bindPopup(escapeHtml(project.name));
+
+        window.L.circle([lat, lng], {
+          radius: 140,
+          color: '#f5b700',
+          weight: 4,
+          opacity: 1,
+          fillColor: '#f5b700',
+          fillOpacity: 0.12,
+        }).addTo(projectMap);
+
+        projectMap.setView([lat, lng], zoom, { animate: false });
+        setMapInteraction(false);
+        window.addEventListener('keydown', (e) => setMapInteraction(Boolean(e.ctrlKey)));
+        window.addEventListener('keyup', (e) => setMapInteraction(Boolean(e.ctrlKey)));
+        window.addEventListener('blur', () => setMapInteraction(false));
+      } else if (mapHint) {
+        mapHint.style.display = 'none';
+      }
+
+      if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+          const meta = document.querySelector('meta[name="x-app-version"]');
+          const appVersion = meta?.getAttribute('content') || '';
+          const swUrl = appVersion ? `sw.js?v=${encodeURIComponent(appVersion)}` : 'sw.js';
+          navigator.serviceWorker.register(swUrl)
+            .then((registration) => {
+              if (!navigator.onLine) return;
+              void registration.update();
+            })
+            .catch((error) => {
+              console.log('Fallo en el registro de ServiceWorker:', error);
+            });
+        });
+      }
+
+      const backBtn = document.getElementById('back-btn');
+      backBtn?.addEventListener('click', () => {
+        if (window.history.length > 1) {
+            window.history.back();
+        } else {
+            const urlParams = new URLSearchParams(window.location.search);
+if (urlParams.get('empresa') === 'alcabama' || urlParams.get('empresa') === 'Alcabama' || urlParams.get('empresa') === 'ALCABAMA') {
+  urlParams.set('empresa', 'amarillo');
+  window.history.replaceState({}, '', window.location.pathname + '?' + urlParams.toString());
+}
+            const empresaId = urlParams.get('empresa');
+            window.location.href = 'home.html' + (empresaId ? '?empresa=' + encodeURIComponent(empresaId) : '');
+        }
+      });
+
+      const nowEl = document.getElementById('project-now');
+      const dateEl = document.getElementById('header-date');
+      const updateNow = () => {
+        const d = new Date();
+        const hh = String(d.getHours()).padStart(2, '0');
+        const mm = String(d.getMinutes()).padStart(2, '0');
+        if (nowEl) nowEl.textContent = `${hh}:${mm}`;
+        if (dateEl) {
+          const monthNames = ["ENE", "FEB", "MAR", "ABR", "MAY", "JUN", "JUL", "AGO", "SEP", "OCT", "NOV", "DIC"];
+          dateEl.textContent = `${d.getDate()} ${monthNames[d.getMonth()]}`;
+        }
+      };
+      updateNow();
+      window.setInterval(updateNow, 15000);
+
+      const metaVersion = document.querySelector('meta[name="x-app-version"]');
+      const appId = metaVersion?.getAttribute('data-app') || 'project-landing';
+      const currentVersion = metaVersion?.getAttribute('content') || '';
+      const versionKey = `${appId}:appVersion`;
+      const storedVersion = localStorage.getItem(versionKey) || '';
+      const banner = document.getElementById('update-banner');
+      const reloadBtn = document.getElementById('update-reload');
+      const showBanner = () => {
+        if (!banner) return;
+        banner.classList.remove('hidden');
+      };
+      if (currentVersion) {
+        if (!storedVersion) {
+          localStorage.setItem(versionKey, currentVersion);
+        } else if (storedVersion !== currentVersion) {
+          showBanner();
+        }
+      }
+      reloadBtn?.addEventListener('click', async () => {
+        try {
+          localStorage.setItem(versionKey, currentVersion);
+          if ('serviceWorker' in navigator) {
+            const reg = await navigator.serviceWorker.getRegistration();
+            if (reg) await reg.unregister();
+          }
+        } catch {
+        }
+        const u = new URL(window.location.href);
+        if (currentVersion) u.searchParams.set('v', currentVersion);
+        window.location.replace(u.toString());
+      });
+    });
+  </script>
+</body>
+</html>
+
+
+
+
+
+
+
+

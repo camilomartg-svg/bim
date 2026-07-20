@@ -1,0 +1,6 @@
+{
+  "name": "Mapa Interactivo de Colombia BIM",
+  "description": "Un mapa interactivo, limpio y luminoso de los departamentos de Colombia enfocado en el estado de la adopción de la metodología BIM en 2026.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

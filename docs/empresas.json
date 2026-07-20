@@ -1,0 +1,68 @@
+[
+  {
+    "id": "nora",
+    "name": "nora CDE",
+    "location": "Bogotá, Colombia",
+    "image": "https://i.postimg.cc/hPxkssjR/163e92a4bd61d937eac31bd6787d270a.jpg",
+    "configUrl": "portal-config.json",
+    "code": "001",
+    "members": []
+  },
+  {
+    "id": "amarillo",
+    "name": "Constructora Amarillo",
+    "location": "Bogotá, Colombia",
+    "image": "https://i.postimg.cc/02mTnnQv/21bd5ee9d2351270615280386caad1f3.jpg",
+    "configUrl": "config-amarillo.json",
+    "code": "002",
+    "members": [
+      {
+        "name": "Milton Guevara",
+        "email": "kamomart@hotmail.com",
+        "role": "ADMINISTRADOR_EMPRESA",
+        "empresaUsuario": "Hidráulico SAS",
+        "especialidad": "Desagües",
+        "cargo": "Diseñador Hidrosánitario"
+      },
+      {
+        "name": "alc.spk",
+        "email": "",
+        "role": "INVITADO"
+      }
+    ]
+  },
+  {
+    "id": "empresa3",
+    "name": "Arquitectura desarrollada",
+    "location": "Medellín, Colombia",
+    "image": "https://i.postimg.cc/Vk83VtS3/5609319d9744b78b1c3c28bee582e081.jpg",
+    "configUrl": "config-empresa3.json",
+    "code": "003",
+    "members": [
+      {
+        "name": "Milton Martinez",
+        "email": "alc.spk.1@gmail.com",
+        "role": "ADMINISTRADOR_EMPRESA"
+      }
+    ]
+  },
+  {
+    "id": "nueva-empresa",
+    "name": "Fabrica Nacional de Arquitectura",
+    "code": "004",
+    "admins": [],
+    "zonaHoraria": "America/Bogota",
+    "members": [
+      {
+        "name": "Camilo Martinez",
+        "email": "camilomartg@gmail.com",
+        "role": "ADMINISTRADOR_EMPRESA"
+      }
+    ],
+    "razonSocial": "Fabrica Nacional de Arquitectura",
+    "terminosAceptados": true,
+    "tratamientoDatos": true,
+    "image": "https://i.postimg.cc/SQLYGJFR/logo-negro-recortado.png",
+    "location": "Bogotá, Colombia"
+  }
+]

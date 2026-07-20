@@ -1,0 +1,139 @@
+{
+  "portal": {
+    "name": "nora CDE",
+    "shortName": "nora",
+    "footerText": "© 2026 nora CDE - Todos los derechos reservados.",
+    "heroImages": [
+      "https://i.postimg.cc/hPxkssjR/163e92a4bd61d937eac31bd6787d270a.jpg",
+      "https://i.postimg.cc/02mTnnQv/21bd5ee9d2351270615280386caad1f3.jpg",
+      "https://i.postimg.cc/Vk83VtS3/5609319d9744b78b1c3c28bee582e081.jpg",
+      "https://i.postimg.cc/hPxkssjB/a876e83e4696eea7592b3fef6c8275a8.jpg",
+      "https://i.postimg.cc/c4YphhHN/b5926b9cb52ab793f6d1b8b03e6eca35.jpg",
+      "https://i.postimg.cc/SN8Bddsq/b6d206fe73019c9da5cb76123830d937.jpg"
+    ],
+    "configPageUrl": "portal-configurator.html",
+    "logoLight": "https://i.postimg.cc/tR3YSryT/LOGO-NORA-NEGRO.png",
+    "logoDark": "https://i.postimg.cc/SQ6JTZqj/LOGO-NORA-BLANCO.png",
+    "footerLogoLight": "https://i.postimg.cc/tR3YSryT/LOGO-NORA-NEGRO.png",
+    "footerLogoDark": "https://i.postimg.cc/SQ6JTZqj/LOGO-NORA-BLANCO.png",
+    "footerLogoSecondaryLight": "https://i.postimg.cc/tR3YSryT/LOGO-NORA-NEGRO.png",
+    "footerLogoSecondaryDark": "https://i.postimg.cc/SQ6JTZqj/LOGO-NORA-BLANCO.png"
+  },
+  "projects": [
+    {
+      "name": "Esparta i",
+      "title": "Esparta i",
+      "slug": "nuevo-proyecto-1783689311063",
+      "status": "Planeacion",
+      "enabled": true,
+      "landing": {
+        "enabled": true,
+        "title": "NUEVO PROYECTO",
+        "map": {
+          "lat": 4.60971,
+          "lng": -74.08175,
+          "zoom": 15
+        },
+        "eyebrow": "nora",
+        "subtitle": "Accesos rápidos, seguimiento y contexto del proyecto.",
+        "actionEyebrow": "Panel",
+        "actionTitle": "Acciones",
+        "actionDescription": "Atajos para publicaciones, solicitudes y equipo.",
+        "logoUrl": "https://i.postimg.cc/J4Fy2Qsx/LOGO-(1).jpg",
+        "portalLogoLight": "https://i.postimg.cc/tR3YSryT/LOGO-NORA-NEGRO.png",
+        "portalLogoDark": "https://i.postimg.cc/SQ6JTZqj/LOGO-NORA-BLANCO.png",
+        "viewerLogoLight": "https://i.postimg.cc/L4r0gSvV/LOGO-TEXTO-NORA-NEGRO.png",
+        "viewerLogoDark": "https://i.postimg.cc/FFfBKzb8/LOGO-TEXTO-NORA-BLANCO.png"
+      },
+      "modules": {
+        "ifc": "VSR_IFCA/",
+        "status": "STATUS/",
+        "cantidades": "CANTIDADES/",
+        "pdf": "VSR_PDFA/",
+        "dwg": "VSR_DWGA/"
+      },
+      "actions": {
+        "publicaciones": "Publicaciones.html",
+        "solicitudes": "index.html",
+        "equipo": "lista_usuarios.html"
+      },
+      "dataSources": {
+        "driveFolderName": "Green I",
+        "driveFolderId": "",
+        "driveScriptUrl": "",
+        "statusSheetId": "",
+        "statusScriptUrl": "",
+        "cantidadesSheetId": "",
+        "cantidadesScriptUrl": ""
+      }
+    }
+  ],
+  "publicaciones": [
+    {
+      "id": "link-publicaciones",
+      "label": "Publicaciones por proyecto",
+      "href": "https://norabim.com/Publicaciones.html",
+      "allowedRoles": [
+        "COMBOS Y REFORMAS",
+        "ACÚSTICA",
+        "ADMINISTRADOR"
+      ]
+    }
+  ],
+  "solicitudes": [
+    {
+      "id": "link-solicitud-cde",
+      "label": "Solicitud de acceso a CDE",
+      "href": "https://norabim.com/index.html",
+      "allowedRoles": [
+        "EDGE",
+        "COMBOS Y REFORMAS",
+        "ARQUITECTURA",
+        "ADMINISTRADOR"
+      ]
+    },
+    {
+      "id": "link-lista-usuarios",
+      "label": "Listar Usuarios",
+      "href": "https://norabim.com/lista_usuarios.html",
+      "allowedRoles": [
+        "ADMINISTRADOR"
+      ]
+    }
+  ],
+  "metricas": [
+    {
+      "id": "item-1",
+      "label": "Auditorías",
+      "href": "#",
+      "allowedRoles": []
+    },
+    {
+      "id": "item-2",
+      "label": "Incidencias",
+      "href": "#",
+      "allowedRoles": []
+    },
+    {
+      "id": "item-3",
+      "label": "Seguimiento de proyectos",
+      "href": "#",
+      "allowedRoles": []
+    }
+  ],
+  "administracion": [
+    {
+      "id": "link-pba-config",
+      "label": "Configuración PBA",
+      "href": "portal-configurator.html",
+      "allowedRoles": [
+        "ADMINISTRADOR"
+      ]
+    }
+  ],
+  "superAdmins": [
+    "imagina3ddesign@gmail.com",
+    "mcmartinezg@unal.edu.co"
+  ],
+  "proyectos": []
+}

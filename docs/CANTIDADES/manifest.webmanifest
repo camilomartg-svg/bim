@@ -1,0 +1,23 @@
+{
+  "name": "CANTIDADES",
+  "short_name": "CANTIDADES",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#FFFFFF",
+  "theme_color": "#2b2b2b",
+  "icons": [
+    {
+      "src": "https://i.postimg.cc/W3trgjZX/FAVICON-NORA-NEGRO.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "https://i.postimg.cc/W3trgjZX/FAVICON-NORA-NEGRO.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}
+
+

@@ -1,0 +1,41 @@
+{
+  "folderId": "18gr5TvX3pYY5S3ZRfjmWagkTLhhG3B0W",
+  "generatedAt": "2026-05-27T19:19:37.492Z",
+  "models": [
+    {
+      "name": "001-DIM-ORI-SALON-SOCIAL_desenlazado.frag",
+      "fragId": "1IQ2qaBxvSAS7jcx0mi69eJPGbcGOx0Tj",
+      "fragUrl": "./drive-models/001-DIM-ORI-SALON-SOCIAL_desenlazado__1IQ2qaBxvSAS7jcx0mi69eJPGbcGOx0Tj.frag",
+      "jsonId": "1nHS5tWJnnZ7JoNikocAo2h4_m6Q9QJ36",
+      "jsonUrl": "./drive-models/001-DIM-ORI-SALON-SOCIAL_desenlazado__1nHS5tWJnnZ7JoNikocAo2h4_m6Q9QJ36.json"
+    },
+    {
+      "name": "2442602.frag",
+      "fragId": "1SrefP2RRmv9YR4-qHWtJg_pS-wSiJHUw",
+      "fragUrl": "./drive-models/2442602__1SrefP2RRmv9YR4-qHWtJg_pS-wSiJHUw.frag",
+      "jsonId": "1Ng2LaYR4qBDQw-faYxoY0TQe929JHtCt",
+      "jsonUrl": "./drive-models/2442602__1Ng2LaYR4qBDQw-faYxoY0TQe929JHtCt.json"
+    },
+    {
+      "name": "3728345.frag",
+      "fragId": "1WxsqtX7pxGWNfUvYYIe3N7QyN-xa6c7J",
+      "fragUrl": "./drive-models/3728345__1WxsqtX7pxGWNfUvYYIe3N7QyN-xa6c7J.frag",
+      "jsonId": "1G310zr1gMixGwDGwb-qhxeCds1304eae",
+      "jsonUrl": "./drive-models/3728345__1G310zr1gMixGwDGwb-qhxeCds1304eae.json"
+    },
+    {
+      "name": "46_BO_ARB_Sanitario_Torre_A.frag",
+      "fragId": "1w6eM_j26r7cGuQhv7m8AkhnxX6e2xNzv",
+      "fragUrl": "./drive-models/46_BO_ARB_Sanitario_Torre_A__1w6eM_j26r7cGuQhv7m8AkhnxX6e2xNzv.frag",
+      "jsonId": "1VD_7X5alHcrGFrbYrBqAlv_o36K8Ihzo",
+      "jsonUrl": "./drive-models/46_BO_ARB_Sanitario_Torre_A__1VD_7X5alHcrGFrbYrBqAlv_o36K8Ihzo.json"
+    },
+    {
+      "name": "54_BO_TRE_Deteccion Incendios_Torre 1.frag",
+      "fragId": "1Ia7TYAzCWaGUbJeFeyMCYtFGITifQ-QY",
+      "fragUrl": "./drive-models/54_BO_TRE_Deteccion_Incendios_Torre_1__1Ia7TYAzCWaGUbJeFeyMCYtFGITifQ-QY.frag",
+      "jsonId": "1d7c1qp6AgHRAIlCGsDZKDH67qcE7qniC",
+      "jsonUrl": "./drive-models/54_BO_TRE_Deteccion_Incendios_Torre_1__1d7c1qp6AgHRAIlCGsDZKDH67qcE7qniC.json"
+    }
+  ]
+}

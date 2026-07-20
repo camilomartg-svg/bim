@@ -1,0 +1,522 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <script>
+        if (!sessionStorage.getItem('userAccount') && !localStorage.getItem('userAccount')) {
+            window.location.replace('https://norabim.com/inse.html');
+        }
+    </script>
+
+    <meta charset="UTF-8" />
+    <meta name="version" content="v27-EventSnap" />
+    <meta name="x-app-version" data-app="vsr_ifca" content="20260420-01" />
+    <!--
+    <script>
+      // COI Service Worker Registration for SharedArrayBuffer support
+      if (!window.crossOriginIsolated && "serviceWorker" in navigator) {
+        navigator.serviceWorker.register("./coi-serviceworker.js")
+          .then((registration) => {
+            console.log("COI Service Worker registered");
+            // Reload if not already controlled to ensure headers are applied
+            registration.addEventListener("updatefound", () => {
+                window.location.reload();
+            });
+            if (registration.active && !navigator.serviceWorker.controller) {
+                window.location.reload();
+            }
+          })
+          .catch((err) => console.error("COI Registration Failed:", err));
+      }
+    </script>
+    -->
+    <link rel="icon" href="https://i.postimg.cc/W3trgjZX/FAVICON-NORA-NEGRO.png" type="image/png" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>VSR IFCA | nora</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet" />
+    <style>
+      .material-symbols-outlined {
+        font-variation-settings:
+        'FILL' 0,
+        'wght' 400,
+        'GRAD' 0,
+        'opsz' 24;
+        font-size: 20px;
+        display: inline-flex;
+        vertical-align: middle;
+      }
+    </style>
+    <style>
+        #update-banner {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            z-index: 2005;
+            display: none
+        }
+
+        #update-banner .inner {
+            margin: 0 auto;
+            max-width: 980px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 16px;
+            padding: 12px 14px;
+            background: #111827;
+            color: #fff;
+            font: 600 14px/1.2 system-ui, -apple-system, Segoe UI, Roboto, Inter, Arial, sans-serif;
+            box-shadow: 0 8px 24px rgba(0, 0, 0, .18)
+        }
+
+        #update-banner button {
+            cursor: pointer;
+            border: 0;
+            border-radius: 8px;
+            background: #fff;
+            color: #111827;
+            font-weight: 900;
+            letter-spacing: .12em;
+            text-transform: uppercase;
+            font-size: 11px;
+            padding: 10px 12px
+        }
+    </style>
+    <script type="module" src="/src/main.ts"></script>
+</head>
+
+<body>
+    <div id="update-banner">
+        <div class="inner">
+            <div>Hay una nueva versión disponible.</div><button id="update-reload" type="button">Actualizar</button>
+        </div>
+    </div>
+    <div id="app">
+        <!-- Sidebar (Left - Models) -->
+        <div id="sidebar" class="sidebar">
+
+            <div class="sidebar-tabs">
+                <button class="tab-btn active" data-tab="models" title="Modelos">
+                    <span class="material-symbols-outlined">inventory_2</span>
+                </button>
+                <button class="tab-btn" data-tab="classification" title="Clasificación">
+                    <span class="material-symbols-outlined">sell</span>
+                </button>
+                <button class="tab-btn" data-tab="viewpoints" title="Vistas">
+                    <span class="material-symbols-outlined">photo_camera</span>
+                </button>
+            </div>
+
+            <div id="tab-models" class="tab-content active">
+                <div class="sidebar-header">
+                    <h3><span class="material-symbols-outlined">inventory_2</span> Modelos IFC</h3>
+                </div>
+
+                <div class="sidebar-content" id="model-list">
+                    <!-- Populated by JS -->
+                </div>
+            </div>
+
+            <div id="tab-classification" class="tab-content" style="display: none;">
+                <div class="sidebar-header">
+                    <h3><span class="material-symbols-outlined">sell</span> Clasificación</h3>
+                </div>
+
+                <div class="sidebar-content" id="classification-controls">
+                    <div class="classification-controls">
+                        <select id="classification-field" class="classification-select"
+                            title="Parámetro de clasificación">
+                            <option value="CLASIFICACIÓN">CLASIFICACIÓN</option>
+                            <option value="NIVEL INTEGRADO">NIVEL INTEGRADO</option>
+                            <option value="MATERIAL INTEGRADO">MATERIAL INTEGRADO</option>
+                        </select>
+                        <select id="classification-mode" class="classification-select" title="Modo">
+                            <option value="filtrar">Filtrar</option>
+                            <option value="ordenar">Ordenar</option>
+                        </select>
+                        <select id="classification-order" class="classification-select" title="Orden">
+                            <option value="cantidad">Cantidad</option>
+                            <option value="az">A-Z</option>
+                        </select>
+                        <button id="classification-clear" class="classification-clear-btn" type="button"
+                            title="Limpiar filtro">
+                            Limpiar
+                        </button>
+                    </div>
+                </div>
+                <div class="sidebar-content" id="classification-list">
+                    <div style="padding: 20px; text-align: center; color: #888;">
+                        Carga un modelo para ver la clasificación
+                    </div>
+                </div>
+            </div>
+
+            <div id="tab-viewpoints" class="tab-content" style="display: none;">
+                <div class="sidebar-header" style="display: flex; justify-content: space-between; align-items: center;">
+                    <h3><span class="material-symbols-outlined">photo_camera</span> Vistas Guardadas</h3>
+                    <button id="btn-add-viewpoint" class="icon-btn" title="Guardar Vista Actual"
+                        style="background: none; border: none; color: #333; cursor: pointer;">
+                        <span class="material-symbols-outlined" style="font-size: 1.2em;">add_circle</span>
+                    </button>
+                </div>
+
+                <div class="sidebar-content" id="viewpoints-list-container">
+                    <!-- Populated by ViewpointsManager -->
+                </div>
+            </div>
+
+            <div class="sidebar-footer">
+                <!-- Carga Local button removed -->
+            </div>
+            <div class="resizer" id="sidebar-resizer"></div>
+        </div>
+
+        <!-- Properties Panel (Right) -->
+        <div id="properties-panel" class="properties-panel">
+            <div class="resizer-left" id="properties-resizer"></div>
+            <div class="properties-header">
+                <h3><span class="material-symbols-outlined">info</span> Propiedades</h3>
+            </div>
+            <div class="properties-content" id="properties-content">
+                <div class="no-selection">Selecciona un elemento para ver sus propiedades</div>
+            </div>
+        </div>
+
+        <div id="loading-overlay"
+            style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); display: none; justify-content: center; align-items: center; z-index: 1000;">
+            <div style="background: white; padding: 20px; border-radius: 8px; text-align: center;">
+                <div style="margin-bottom: 10px; font-weight: bold; color: #333;">Loading Model...</div>
+                <div id="loading-progress" style="color: #333;">0%</div>
+            </div>
+        </div>
+        <div id="debug-console"
+            style="position: fixed; bottom: 0; right: 0; width: 400px; max-height: 150px; overflow-y: auto; background: rgba(0,0,0,0.8); color: #0f0; font-family: monospace; font-size: 12px; padding: 10px; pointer-events: none; z-index: 999; display: none;">
+        </div>
+        <div id="viewer-container"></div>
+
+        <!-- Top Bar -->
+        <header class="top-bar">
+            <div class="logo-container">
+                <button id="back-btn" class="sidebar-toggle-btn" title="Volver">
+                    <span class="material-symbols-outlined">arrow_back</span>
+                </button>
+                <button id="sidebar-toggle" class="sidebar-toggle-btn" title="Mostrar/Ocultar modelos">
+                    <span class="material-symbols-outlined">menu</span>
+                </button>
+                <a href="../home.html" title="Volver al Home">
+                    <img id="logo-img" src="https://i.postimg.cc/L4r0gSvV/LOGO-TEXTO-NORA-NEGRO.png" alt="nora"
+                        class="logo-img" style="height: 65px;">
+                </a>
+            </div>
+
+            <div class="top-controls" style="display: flex; align-items: center; gap: 15px;">
+                <button id="theme-toggle" class="theme-btn" title="Cambiar Tema"
+                    style="background: none; border: none; font-size: 18px; cursor: pointer; color: var(--text-dark-gray);">
+                    <span class="material-symbols-outlined">dark_mode</span>
+                </button>
+
+                <div class="view-dropdown-container">
+                    <button id="view-dropdown-btn" class="view-dropdown-btn">
+                        <span><span class="material-symbols-outlined">view_in_ar</span> Vista axonométrica</span>
+                        <span class="material-symbols-outlined">expand_more</span>
+                    </button>
+                    <div id="view-dropdown-menu" class="view-dropdown-menu">
+                        <button class="view-dropdown-item view-btn" data-view="iso">
+                            <span class="material-symbols-outlined">view_in_ar</span> Vista axonométrica
+                        </button>
+                        <button class="view-dropdown-item view-btn" data-view="top">
+                            <span class="material-symbols-outlined">view_in_ar</span> Vista superior
+                        </button>
+                        <button class="view-dropdown-item view-btn" data-view="front">
+                            <span class="material-symbols-outlined">view_in_ar</span> Vista frontal
+                        </button>
+                        <button class="view-dropdown-item view-btn" data-view="left">
+                            <span class="material-symbols-outlined">view_in_ar</span> Vista izquierda
+                        </button>
+                        <button class="view-dropdown-item view-btn" data-view="back">
+                            <span class="material-symbols-outlined">view_in_ar</span> Vista posterior
+                        </button>
+                        <button class="view-dropdown-item view-btn" data-view="right">
+                            <span class="material-symbols-outlined">view_in_ar</span> Vista derecha
+                        </button>
+                        <button class="view-dropdown-item view-btn" data-view="bottom">
+                            <span class="material-symbols-outlined">view_in_ar</span> Vista inferior
+                        </button>
+                    </div>
+                </div>
+
+                <button id="projection-toggle" class="projection-toggle-btn"
+                    title="Cambiar proyección (Perspectiva/Ortogonal)">
+                    <span class="material-symbols-outlined">inventory_2</span>
+                    <span>Persp</span>
+                </button>
+
+                <button id="fit-model-btn" class="fit-model-btn" title="Ajustar modelo a pantalla"
+                    style="background: none; border: none; font-size: 18px; cursor: pointer; color: var(--text-dark-gray);">
+                    <span class="material-symbols-outlined">fit_screen</span>
+                </button>
+
+                <!-- Visibility Controls -->
+                <div class="toolbar-group visibility-group"
+                    style="display: flex; gap: 5px; margin: 0 10px; border-left: 1px solid #ccc; border-right: 1px solid #ccc; padding: 0 10px;">
+                    <button id="btn-hide" class="projection-toggle-btn" title="Ocultar selección">
+                        <span class="material-symbols-outlined">visibility_off</span>
+                        <span>Apagar</span>
+                    </button>
+                    <button id="btn-isolate" class="projection-toggle-btn" title="Aislar selección">
+                        <span class="material-symbols-outlined">filter_alt</span>
+                        <span>Aislar</span>
+                    </button>
+                    <button id="btn-show-all" class="projection-toggle-btn" title="Mostrar todo">
+                        <span class="material-symbols-outlined">visibility</span>
+                        <span>Todo</span>
+                    </button>
+                </div>
+
+                <div class="toolbar-group measure-group"
+                    style="display: flex; gap: 5px; margin: 0 10px; border-left: 1px solid #ccc; border-right: 1px solid #ccc; padding: 0 10px;">
+                    <button id="btn-measure-length" class="projection-toggle-btn" title="Medir Longitud">
+                        <span class="material-symbols-outlined">straighten</span>
+                    </button>
+                    <button id="btn-measure-area" class="projection-toggle-btn" title="Medir Área">
+                        <span class="material-symbols-outlined">architecture</span>
+                    </button>
+                    <button id="btn-measure-angle" class="projection-toggle-btn" title="Medir Ángulo">
+                        <span class="material-symbols-outlined">polyline</span>
+                    </button>
+                    <button id="btn-measure-slope" class="projection-toggle-btn" title="Medir Pendiente">
+                        <span class="material-symbols-outlined">trending_up</span>
+                    </button>
+
+                    <button id="btn-measure-point" class="projection-toggle-btn" title="Coordenada Punto">
+                        <span class="material-symbols-outlined">my_location</span>
+                    </button>
+                    <button id="btn-measure-delete" class="projection-toggle-btn" title="Borrar Medidas"
+                        style="color: #ff0000;">
+                        <span class="material-symbols-outlined">delete</span>
+                    </button>
+                </div>
+
+                <button id="grid-toggle" class="projection-toggle-btn active" title="Mostrar/Ocultar Rejilla">
+                    <span class="material-symbols-outlined">grid_on</span>
+                    <span>Rejilla</span>
+                </button>
+
+                <button id="clipper-toggle" class="projection-toggle-btn"
+                    title="Herramienta de recorte (doble clic para crear plano)">
+                    <span class="material-symbols-outlined">content_cut</span>
+                    <span>Recorte</span>
+                </button>
+
+                <button id="quantities-toggle" class="projection-toggle-btn"
+                    title="Mostrar/Ocultar Tabla de Cantidades">
+                    <span class="material-symbols-outlined">calculate</span>
+                    <span>Cantidades</span>
+                </button>
+
+                <button id="status-toggle" class="projection-toggle-btn"
+                    title="Mostrar/Ocultar Avance del Proyecto (STATUS)">
+                    <span class="material-symbols-outlined">task_alt</span>
+                    <span>Avance</span>
+                </button>
+
+                <div id="clipper-controls" class="clipper-controls"
+                    style="display: none; gap: 5px; align-items: center; background: rgba(0,0,0,0.2); padding: 4px; border-radius: 4px; margin-left: 10px;">
+                    <button id="clipper-delete-all" class="projection-toggle-btn" title="Borrar todos los planos"
+                        style="padding: 5px 8px;">
+                        <span class="material-symbols-outlined">delete</span>
+                    </button>
+                    <div style="width: 1px; height: 20px; background: rgba(255,255,255,0.2); margin: 0 4px;"></div>
+                    <button class="projection-toggle-btn clipper-plane-btn" data-axis="x" title="Cortar en X"
+                        style="padding: 5px 8px;">X</button>
+                    <button class="projection-toggle-btn clipper-plane-btn" data-axis="y" title="Cortar en Y"
+                        style="padding: 5px 8px;">Y</button>
+                    <button class="projection-toggle-btn clipper-plane-btn" data-axis="z" title="Cortar en Z"
+                        style="padding: 5px 8px;">Z</button>
+                </div>
+
+                <button id="properties-toggle" class="sidebar-toggle-btn" title="Mostrar/Ocultar propiedades">
+                    <span class="material-symbols-outlined">info</span>
+                </button>
+
+                <!-- User Profile Container -->
+                <div id="user-profile-container"
+                    style="display: flex; align-items: center; gap: 10px; margin-left: 10px; border-left: 1px solid #ccc; padding-left: 10px;">
+                </div>
+            </div>
+        </header>
+
+        <!-- Console Toggle (Moved to bottom left standalone) -->
+        <div class="console-toggle-container">
+            <button id="console-toggle" class="console-btn" title="Toggle Console">
+                <span class="material-symbols-outlined">terminal</span>
+            </button>
+        </div>
+
+        <div id="project-links-bar" class="project-links-bar" style="display: none;">
+            <a href="https://norabim.com/STATUS/" target="_blank" rel="noopener noreferrer"
+                class="project-link-btn">
+                ESTADO DEL PROYECTO
+            </a>
+            <a href="https://norabim.com/CANTIDADES/" target="_blank" rel="noopener noreferrer"
+                class="project-link-btn">
+                CANTIDADES Y COMPRAS
+            </a>
+        </div>
+
+        <!-- Quantities Panel (Bottom) -->
+        <div id="quantities-panel" class="quantities-panel closed">
+            <div class="resizer-top" id="quantities-resizer"></div>
+            <div class="quantities-header">
+                <h3><span class="material-symbols-outlined">calculate</span> Extractor de Cantidades</h3>
+                <div class="quantities-tabs">
+                    <button class="q-tab-btn active" data-tab="detalle">Detalle</button>
+                    <button class="q-tab-btn" data-tab="estados">Estados</button>
+                    <button class="q-tab-btn" data-tab="historial">Historial</button>
+                    <button class="q-tab-btn" data-tab="tuberias" id="q-tab-tuberias"
+                        style="display: none;">Tuberías</button>
+                    <button class="q-tab-btn" data-tab="uniones" id="q-tab-uniones"
+                        style="display: none;">Uniones</button>
+                    <button class="q-tab-btn" data-tab="cortes" id="q-tab-cortes" style="display: none;">Cortes</button>
+                </div>
+                <div id="q-header-totals" class="q-header-totals"></div>
+                <div class="quantities-actions">
+                    <button id="btn-q-csv" class="action-btn" title="Exportar CSV"><span class="material-symbols-outlined">description</span>
+                        Exportar</button>
+                    <button id="btn-q-close" class="action-btn" title="Cerrar"><i
+                            class="fa-solid fa-xmark"></i></button>
+                </div>
+            </div>
+            <div class="quantities-content" id="quantities-content-area">
+                <div class="q-empty-msg">No hay datos. Carga un modelo IFC para extraer cantidades.</div>
+            </div>
+        </div>
+
+        <!-- Status Panel (Bottom) -->
+        <div id="status-panel" class="quantities-panel closed">
+            <div class="resizer-top" id="status-resizer"></div>
+            <div class="quantities-header">
+                <h3><span class="material-symbols-outlined">task_alt</span> Control de Avance (STATUS)</h3>
+                <div class="quantities-tabs">
+                    <button class="q-tab-btn active" data-tab="detalle">Detalle</button>
+                    <button class="q-tab-btn" data-tab="estados">Estados</button>
+                    <button class="q-tab-btn" data-tab="historial">Historial</button>
+                </div>
+                <div id="s-header-totals" class="q-header-totals"></div>
+                <div class="quantities-actions">
+                    <button id="btn-s-csv" class="action-btn" title="Exportar CSV"><span class="material-symbols-outlined">description</span>
+                        Exportar</button>
+                    <button id="btn-s-close" class="action-btn" title="Cerrar"><i
+                            class="fa-solid fa-xmark"></i></button>
+                </div>
+            </div>
+            <div class="quantities-content" id="status-content-area">
+                <div class="q-empty-msg">No hay datos. Carga un modelo IFC para controlar avances.</div>
+            </div>
+        </div>
+
+
+    </div>
+    <script>
+        (function () {
+            try {
+                var meta = document.querySelector('meta[name="x-app-version"]');
+                var appId = meta && meta.getAttribute('data-app') || 'vsr_ifca';
+                var version = meta && meta.getAttribute('content') || '';
+                var key = appId + ':appVersion';
+                var stored = localStorage.getItem(key) || '';
+                var banner = document.getElementById('update-banner');
+                var btn = document.getElementById('update-reload');
+                if (version) {
+                    if (!stored) localStorage.setItem(key, version);
+                    else if (stored !== version && banner) banner.style.display = 'block';
+                }
+                if (btn) {
+                    btn.addEventListener('click', function () {
+                        try { localStorage.setItem(key, version); } catch (e) { }
+                        var u = new URL(location.href);
+                        if (version) u.searchParams.set('v', version);
+                        location.replace(u.toString());
+                    });
+                }
+            } catch (e) { }
+        })();
+    </script>
+
+    <!-- VIEWER LOGO INJECT START -->
+    <script>
+        (async function() {
+            try {
+                const logoImg = document.getElementById('logo-img');
+                if (!logoImg) return;
+                
+                const metaVersion = document.querySelector('meta[name="x-app-version"]');
+                const currentVersion = metaVersion?.getAttribute('content') || Date.now().toString();
+                
+                let config = null;
+                try {
+                    const response = await fetch(`../portal-config.json?v=${encodeURIComponent(currentVersion)}`, { cache: 'no-store' });
+                    if (response.ok) config = await response.json();
+                } catch (e) {}
+
+                if (!config) {
+                    const draft = localStorage.getItem('portal:pba-config-draft:v2');
+                    if (draft) config = JSON.parse(draft);
+                }
+
+                if (!config) return;
+
+                const params = new URLSearchParams(window.location.search);
+                const projectSlug = params.get('project');
+                
+                // Fallback a los logos del portal (estrictamente los de Nora para el visor)
+                let lightLogo = 'https://i.postimg.cc/L4r0gSvV/LOGO-TEXTO-NORA-NEGRO.png';
+                let darkLogo = 'https://i.postimg.cc/FFfBKzb8/LOGO-TEXTO-NORA-BLANCO.png';
+                
+                if (projectSlug && config.projects) {
+                    const proj = config.projects.find(p => p.slug === projectSlug);
+                    if (proj && proj.landing) {
+                        // Priorizar viewerLogo (el nuevo campo), sino mantener los fijos de Nora
+                        if (proj.landing.viewerLogoLight) lightLogo = proj.landing.viewerLogoLight;
+                        if (proj.landing.viewerLogoDark) darkLogo = proj.landing.viewerLogoDark;
+                    }
+                }
+                
+                const updateLogo = () => {
+                    const isDark = document.body.classList.contains('dark-mode') || document.documentElement.classList.contains('dark');
+                    const desiredSrc = isDark ? darkLogo : lightLogo;
+                    if (logoImg.getAttribute('src') !== desiredSrc) {
+                        logoImg.src = desiredSrc;
+                    }
+                };
+
+                const observer = new MutationObserver(() => updateLogo());
+                observer.observe(document.body, { attributes: true, attributeFilter: ['class'] });
+                observer.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
+                
+                const origSetAttribute = logoImg.setAttribute.bind(logoImg);
+                logoImg.setAttribute = function(name, value) {
+                    if (name === 'src') {
+                        const isDark = document.body.classList.contains('dark-mode') || document.documentElement.classList.contains('dark');
+                        const desiredSrc = isDark ? darkLogo : lightLogo;
+                        if (value !== desiredSrc) {
+                            origSetAttribute('src', desiredSrc);
+                            return;
+                        }
+                    }
+                    origSetAttribute(name, value);
+                };
+
+                updateLogo();
+            } catch (e) {
+                console.warn('Error loading dynamic logo', e);
+            }
+        })();
+    </script>
+    <!-- VIEWER LOGO INJECT END -->
+
+</body>
+
+</html>

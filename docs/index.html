@@ -1,0 +1,509 @@
+<!DOCTYPE html>
+<html lang="es" class="scroll-smooth">
+<head>
+    <meta charset="utf-8"/>
+    <link rel="icon" type="image/png" href="https://i.postimg.cc/W3trgjZX/FAVICON-NORA-NEGRO.png">
+    <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+    <title>nora CDE - El entorno de datos comunes definitivo</title>
+    <script src="https://cdn.tailwindcss.com?plugins=forms,typography"></script>
+    <script>
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        primary: "#171717",
+                        "background-light": "#f4f4f5", // Un gris muy sutil tipo Apple/Opal
+                        "text-light": "#111827",
+                    },
+                    fontFamily: {
+                        display: ["Inter", "sans-serif"],
+                    },
+                },
+            },
+        };
+    </script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet"/>
+    <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet" />
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js"></script>
+    <style>
+        body, html {
+            margin: 0;
+            padding: 0;
+            background-color: #ffffff; /* El fondo real de la página (para el footer) */
+        }
+        body {
+            font-family: 'Inter', sans-serif;
+            color: #111827;
+            overflow-x: hidden;
+        }
+        
+        /* Contenedor principal que se desliza por encima del footer */
+        #main-content {
+            position: relative;
+            z-index: 10;
+            background-color: #f4f4f5;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25); /* Sombra para que se note que pasa por encima */
+        }
+
+        /* Contenedor del Footer y Texto Gigante que se queda fijo al fondo */
+        #footer-reveal-container {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            z-index: 1;
+            background-color: #ffffff;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* Texto Gigante */
+        .giant-text-container {
+            width: 100%;
+            height: 26vw; /* Altura exacta para recortar todo el espacio vacío superior */
+            position: relative;
+            overflow: hidden;
+            background-color: #ffffff;
+            padding-top: 0;
+        }
+
+        .giant-text {
+            font-size: 45vw; /* Gigante, cubre el 100% o más */
+            font-weight: 700;
+            letter-spacing: -0.08em;
+            color: #111;
+            line-height: 1;
+            text-align: center;
+            white-space: nowrap;
+            margin: 0;
+            padding: 0;
+            position: absolute;
+            bottom: -5.5vw; /* Baja el texto para que la base toque el fondo del contenedor */
+            left: 50%;
+            transform: translateX(-50%);
+        }
+
+        /* Estilo para las tarjetas de producto tipo Opal */
+        .product-card {
+            background: white;
+            border: 1px solid #e5e7eb;
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+        }
+        .product-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.05), 0 10px 10px -5px rgba(0, 0, 0, 0.02);
+        }
+    </style>
+</head>
+<body class="antialiased selection:bg-black selection:text-white">
+
+    <!-- Wrapper Principal que pasa por encima -->
+    <div id="main-content">
+    <!-- Navegación -->
+    <nav class="fixed top-0 w-full bg-[#f4f4f5]/90 backdrop-blur-md z-50 border-b border-gray-200">
+        <div class="max-w-7xl mx-auto px-6 lg:px-8">
+            <div class="flex justify-between items-center h-20">
+                <div class="flex-shrink-0 flex items-center w-24">
+                    <!-- Espacio vacío donde estaba el logo para mantener el balance flex -->
+                </div>
+                <div class="hidden md:flex space-x-12 items-center">
+                    <a href="#productos" class="text-xs font-bold text-gray-900 hover:text-gray-500 uppercase tracking-widest transition">Producto</a>
+                    <a href="#precios" class="text-xs font-bold text-gray-900 hover:text-gray-500 uppercase tracking-widest transition">Precios</a>
+                    <a href="#recursos" class="text-xs font-bold text-gray-900 hover:text-gray-500 uppercase tracking-widest transition">Recursos</a>
+                </div>
+                <div class="flex items-center space-x-6">
+                    <a href="inse.html" class="text-sm font-medium text-gray-900 hover:text-gray-600 transition">Iniciar Sesión</a>
+                    <a href="#precios" class="bg-black text-white px-5 py-2.5 rounded-full text-sm font-medium hover:bg-gray-800 transition">Comprar</a>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Hero Section -->
+    <section class="relative pt-32 pb-20 lg:pt-48 lg:pb-32 overflow-hidden bg-[#f4f4f5] min-h-[85vh] flex items-center">
+        
+        <!-- Animación interactiva ANIHOME -->
+        <div id="globe-wrapper" class="absolute inset-0 z-10 opacity-0 pointer-events-auto">
+            <iframe src="ANIHOME/dist/index.html" class="w-full h-full border-none" title="Interactive Background"></iframe>
+        </div>
+
+        <div class="max-w-7xl mx-auto px-6 lg:px-8 relative z-30 grid grid-cols-1 lg:grid-cols-3 h-full w-full pointer-events-none items-center gap-8">
+            <!-- Tercio Izquierdo: Logo nora -->
+            <div class="flex justify-center lg:justify-start">
+                <img src="https://i.postimg.cc/tR3YSryT/LOGO-NORA-NEGRO.png" alt="nora" class="hero-anim h-24 md:h-32 lg:h-48 opacity-0 translate-y-8 object-contain">
+            </div>
+
+            <!-- Tercio Central: Vacío para dejar ver la animación -->
+            <div class="hidden lg:block h-full"></div>
+
+            <!-- Tercio Derecho: Frase Dinámica -->
+            <div class="flex flex-col justify-center items-center lg:items-end text-center lg:text-right">
+                <h1 id="hero-dynamic-phrase" class="hero-anim text-3xl md:text-4xl lg:text-5xl font-black tracking-tighter text-gray-900 opacity-0 translate-y-8 leading-tight">
+                    Tus modelos, vivos en la web.
+                </h1>
+                <p id="hero-dynamic-subphrase" class="hero-anim mt-4 text-sm md:text-base text-gray-600 font-medium opacity-0 translate-y-8 max-w-xs">
+                    Experimenta la arquitectura interactuando directamente en el navegador.
+                </p>
+            </div>
+        </div>
+    </section>
+
+    <!-- Productos / Features -->
+    <section id="productos" class="py-24 bg-white border-t border-gray-200">
+        <div class="max-w-7xl mx-auto px-6 lg:px-8 text-center mb-16">
+            <h2 class="text-3xl font-medium tracking-tight text-gray-900">Ecosistema nora</h2>
+            <p class="mt-4 text-lg text-gray-500 font-light">Todo lo que necesitas para gestionar tus proyectos BIM.</p>
+        </div>
+        <div class="max-w-7xl mx-auto px-6 lg:px-8">
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-0 border border-gray-200 bg-gray-200">
+                
+                <!-- Feature 1 -->
+                <div class="product-card flex flex-col items-center p-12 text-center">
+                    <h3 class="text-2xl font-bold text-gray-900 mb-2">Visor BIM</h3>
+                    <p class="text-sm text-gray-500 mb-12">Navegación 3D fluida y ligera en la nube.</p>
+                    <div class="w-48 h-48 bg-gray-100 rounded-xl flex items-center justify-center border border-gray-200">
+                        <span class="material-symbols-outlined text-6xl text-gray-300">view_in_ar</span>
+                    </div>
+                </div>
+
+                <!-- Feature 2 -->
+                <div class="product-card flex flex-col items-center p-12 text-center">
+                    <h3 class="text-2xl font-bold text-gray-900 mb-2">Gestión Documental</h3>
+                    <p class="text-sm text-gray-500 mb-12">El centro de la verdad de tu proyecto.</p>
+                    <div class="w-48 h-48 bg-gray-100 rounded-xl flex items-center justify-center border border-gray-200">
+                        <span class="material-symbols-outlined text-6xl text-gray-300">folder_open</span>
+                    </div>
+                </div>
+
+                <!-- Feature 3 -->
+                <div class="product-card flex flex-col items-center p-12 text-center">
+                    <h3 class="text-2xl font-bold text-gray-900 mb-2">Incidencias</h3>
+                    <p class="text-sm text-gray-500 mb-12">Colaboración y resolución en tiempo real.</p>
+                    <div class="w-48 h-48 bg-black rounded-3xl flex items-center justify-center shadow-lg">
+                        <img src="https://i.postimg.cc/SQ6JTZqj/LOGO-NORA-BLANCO.png" alt="Icono nora" class="w-24 h-auto opacity-80">
+                    </div>
+                </div>
+
+            </div>
+        </div>
+    </section>
+
+    <!-- Banner 3D Viewer Section -->
+    <section class="relative bg-black w-full overflow-hidden border-y border-gray-800" style="height: 60vh; min-height: 500px;">
+        <!-- Gradiente superpuesto sutil a la izquierda para el texto -->
+        <div class="absolute inset-0 z-10 bg-gradient-to-r from-black via-black/70 to-transparent pointer-events-none"></div>
+
+        <div class="max-w-7xl mx-auto px-6 lg:px-8 relative z-20 flex h-full items-center pointer-events-none">
+            <div class="w-full lg:w-1/2">
+                <h2 class="text-3xl lg:text-5xl font-medium tracking-tight text-white mb-6">
+                    Tus modelos, <br/>vivos en la web.
+                </h2>
+                <p class="text-lg text-gray-400 font-light mb-8 max-w-md">
+                    Experimenta el modelo de arquitectura interactuando directamente en el navegador. Gira, acerca y explora cada detalle sin instalar software adicional.
+                </p>
+                <a href="#precios" class="inline-flex items-center text-white border border-white/30 rounded-full px-6 py-3 text-sm font-medium hover:bg-white hover:text-black transition pointer-events-auto">
+                    Conoce nuestros planes
+                </a>
+            </div>
+        </div>
+    </section>
+
+    <!-- Pricing Section -->
+    <section id="precios" class="py-32 bg-[#f4f4f5]">
+        <div class="max-w-7xl mx-auto px-6 lg:px-8 text-center mb-16">
+            <h2 class="text-4xl lg:text-5xl font-medium tracking-tight text-gray-900">Planes simples. <br/>Sin sorpresas.</h2>
+            <p class="mt-6 text-xl text-gray-500 font-light">Adquiere tus licencias y comienza a colaborar hoy mismo.</p>
+            
+            <!-- Currency Toggle -->
+            <div class="mt-10 flex justify-center items-center space-x-4">
+                <span id="label-cop" class="text-sm font-semibold text-gray-900">COP</span>
+                <button id="currency-toggle" class="relative inline-flex h-6 w-11 items-center rounded-full bg-gray-300 transition-colors duration-200 focus:outline-none">
+                    <span class="sr-only">Cambiar moneda</span>
+                    <span id="currency-knob" class="inline-block h-4 w-4 transform rounded-full bg-white transition duration-200 translate-x-1"></span>
+                </button>
+                <span id="label-usd" class="text-sm font-medium text-gray-400">USD</span>
+            </div>
+        </div>
+        
+        <div class="max-w-6xl mx-auto px-6 lg:px-8 grid grid-cols-1 md:grid-cols-2 gap-8">
+            
+            <!-- Plan Pro -->
+            <div class="bg-white rounded-3xl p-10 border border-gray-200 shadow-sm flex flex-col h-full relative">
+                <h3 class="text-2xl font-semibold text-gray-900">Plan Pro</h3>
+                <p class="text-gray-500 text-sm mt-2 font-medium">Gratuito / Usuarios Externos Invitados</p>
+                <div class="my-8">
+                    <span class="text-5xl font-bold tracking-tight text-gray-900">$0</span>
+                    <span class="text-gray-500 font-medium ml-1">de por vida</span>
+                </div>
+                <p class="text-sm text-gray-600 mb-8 leading-relaxed">
+                    Diseñado para profesionales independientes, especialistas (estructurales, hidrosanitarios, etc.) e interventores que colaboran en proyectos de terceros.
+                </p>
+                <div class="space-y-6 flex-grow">
+                    <div>
+                        <h4 class="flex items-center text-sm font-bold text-gray-900 mb-2"><span class="material-symbols-outlined text-green-500 mr-2 text-[20px]">cloud_sync</span> Gobernanza y Almacenamiento</h4>
+                        <p class="text-sm text-gray-600 pl-7 leading-relaxed">No requiere configurar una nube propia; se adhiere a la infraestructura (BYOS) de la empresa Enterprise que lo invitó.</p>
+                    </div>
+                    <div>
+                        <h4 class="flex items-center text-sm font-bold text-gray-900 mb-2"><span class="material-symbols-outlined text-green-500 mr-2 text-[20px]">forum</span> Módulo de Incidencias (Colaborativo)</h4>
+                        <p class="text-sm text-gray-600 pl-7 leading-relaxed mb-2"><strong class="text-gray-800 font-semibold">Creación y Respuesta:</strong> Puede crear, reportar y responder incidencias técnicas, notas de cambio o RFIs sobre planos o modelos.</p>
+                        <p class="text-sm text-gray-600 pl-7 leading-relaxed"><strong class="text-gray-800 font-semibold">Gestión:</strong> Puede cambiar el estado de las incidencias que tiene asignadas (ej. pasar de Abierta a Resuelta).</p>
+                    </div>
+                    <div>
+                        <h4 class="flex items-center text-sm font-bold text-gray-900 mb-2"><span class="material-symbols-outlined text-red-500 mr-2 text-[20px]">block</span> Restricciones</h4>
+                        <p class="text-sm text-gray-600 pl-7 leading-relaxed">No puede crear proyectos propios ni conectar infraestructuras independientes; depende siempre de una invitación.</p>
+                    </div>
+                </div>
+                <div class="mt-10">
+                    <a href="inse.html" class="w-full block text-center bg-gray-100 hover:bg-gray-200 text-gray-900 font-semibold py-3.5 rounded-full transition">Crear cuenta gratis</a>
+                </div>
+            </div>
+
+            <!-- Plan Enterprise -->
+            <div class="bg-black rounded-3xl p-10 shadow-2xl flex flex-col h-full transform md:-translate-y-4 relative border border-gray-800">
+                <div class="absolute top-0 right-8 transform -translate-y-1/2">
+                    <span class="bg-white text-black text-xs font-bold px-3 py-1 uppercase tracking-widest rounded-full">Recomendado</span>
+                </div>
+                <h3 class="text-2xl font-semibold text-white">Plan Enterprise</h3>
+                <p class="text-gray-400 text-sm mt-2 font-medium">Corporativo / Para Empresas</p>
+                <div class="my-8">
+                    <span class="text-5xl font-bold tracking-tight text-white" id="price-enterprise">$57.800</span>
+                    <span class="text-gray-400 font-medium ml-1" id="price-currency-label">COP / proyecto / mes</span>
+                    <p class="text-xs text-gray-500 mt-2 font-medium">* Valor no incluye IVA</p>
+                </div>
+                <p class="text-sm text-gray-300 mb-8 leading-relaxed">
+                    Diseñado para constructoras, gerencias de proyecto y firmas de ingeniería que administran sus propios ecosistemas de trabajo. Usuarios Pro invitados ilimitados y gratuitos.
+                </p>
+                <div class="space-y-6 flex-grow">
+                    <div>
+                        <h4 class="flex items-center text-sm font-bold text-white mb-2"><span class="material-symbols-outlined text-green-400 mr-2 text-[20px]">dns</span> Gobernanza Absoluta (BYOS)</h4>
+                        <p class="text-sm text-gray-400 pl-7 leading-relaxed">Conexión y administración de infraestructura de almacenamiento propia (SharePoint, Google Drive, AWS, etc.).</p>
+                    </div>
+                    <div>
+                        <h4 class="flex items-center text-sm font-bold text-white mb-2"><span class="material-symbols-outlined text-green-400 mr-2 text-[20px]">admin_panel_settings</span> Incidencias Avanzado (Administración)</h4>
+                        <p class="text-sm text-gray-400 pl-7 leading-relaxed mb-2"><strong class="text-gray-200 font-semibold">Control Total:</strong> Creación, asignación, respuesta y cierre masivo.</p>
+                        <p class="text-sm text-gray-400 pl-7 leading-relaxed"><strong class="text-gray-200 font-semibold">Métricas:</strong> Dashboards para evaluar el rendimiento, contratistas con retrasos y tiempos de resolución.</p>
+                    </div>
+                    <div>
+                        <h4 class="flex items-center text-sm font-bold text-white mb-2"><span class="material-symbols-outlined text-green-400 mr-2 text-[20px]">school</span> Acompañamiento y Aprovechamiento</h4>
+                        <p class="text-sm text-gray-400 pl-7 leading-relaxed mb-2"><strong class="text-gray-200 font-semibold">Adopción Guiada:</strong> Apoyo para configuración técnica y conexión de nubes.</p>
+                        <p class="text-sm text-gray-400 pl-7 leading-relaxed mb-2"><strong class="text-gray-200 font-semibold">Capacitación:</strong> Sesiones formativas en metodologías de trabajo CDE (ISO 19650).</p>
+                        <p class="text-sm text-gray-400 pl-7 leading-relaxed"><strong class="text-gray-200 font-semibold">Seguimiento:</strong> Auditorías para optimizar flujos antes de obra.</p>
+                    </div>
+                    <div>
+                        <h4 class="flex items-center text-sm font-bold text-white mb-2"><span class="material-symbols-outlined text-green-400 mr-2 text-[20px]">security</span> Seguridad y Auditoría</h4>
+                        <p class="text-sm text-gray-400 pl-7 leading-relaxed">Logs de auditoría inalterables y configuración granular de permisos.</p>
+                    </div>
+                </div>
+                <div class="mt-10">
+                    <a href="inse.html" class="w-full block text-center bg-white hover:bg-gray-200 text-black font-semibold py-3.5 rounded-full transition">Contactar Ventas</a>
+                </div>
+            </div>
+
+        </div>
+    </section>
+
+    <!-- Footer tipo Opal (Ahora sin parallax) -->
+    <footer class="bg-white pt-16 pb-2 w-full border-t border-gray-200">
+        <div class="max-w-7xl mx-auto px-6 lg:px-8">
+            <div class="grid grid-cols-1 md:grid-cols-4 gap-12">
+                <!-- Newsletter -->
+                <div class="col-span-1 md:col-span-2">
+                    <h4 class="text-sm font-bold text-gray-900 mb-2 uppercase tracking-widest">Suscríbete al Newsletter</h4>
+                    <p class="text-xs text-gray-500 mb-6 max-w-sm">Noticias, actualizaciones y anuncios directamente en tu bandeja de entrada.</p>
+                    <form class="flex max-w-sm" onsubmit="event.preventDefault();">
+                        <input type="email" placeholder="Ingresa tu correo" class="w-full border-b border-gray-300 py-2 px-0 text-sm focus:outline-none focus:border-black bg-transparent">
+                        <button type="submit" class="ml-4 bg-black text-white w-10 h-10 rounded-full flex items-center justify-center hover:bg-gray-800 transition flex-shrink-0">
+                            &rarr;
+                        </button>
+                    </form>
+                    <p class="text-[10px] text-gray-400 mt-4">Al suscribirte, aceptas nuestra política de privacidad.</p>
+                </div>
+                
+                <!-- Links -->
+                <div>
+                    <h4 class="text-xs font-bold text-gray-900 mb-6 uppercase tracking-widest">Plataforma</h4>
+                    <ul class="space-y-4">
+                        <li><a href="#" class="text-xs text-gray-500 hover:text-black transition">Visor 3D</a></li>
+                        <li><a href="#" class="text-xs text-gray-500 hover:text-black transition">Gestor Documental</a></li>
+                        <li><a href="#" class="text-xs text-gray-500 hover:text-black transition">Métricas</a></li>
+                        <li><a href="inse.html" class="text-xs text-gray-500 hover:text-black transition">Iniciar Sesión</a></li>
+                    </ul>
+                </div>
+                
+                <div>
+                    <h4 class="text-xs font-bold text-gray-900 mb-6 uppercase tracking-widest">Compañía</h4>
+                    <ul class="space-y-4">
+                        <li><a href="#" class="text-xs text-gray-500 hover:text-black transition">Acerca de</a></li>
+                        <li><a href="#" class="text-xs text-gray-500 hover:text-black transition">Términos</a></li>
+                        <li><a href="#" class="text-xs text-gray-500 hover:text-black transition">Privacidad</a></li>
+                        <li><a href="#" class="text-xs text-gray-500 hover:text-black transition">Contacto</a></li>
+                    </ul>
+                </div>
+            </div>
+            
+            <div class="mt-24 pt-8 border-t border-gray-100 flex justify-between items-center">
+                <img src="https://i.postimg.cc/tR3YSryT/LOGO-NORA-NEGRO.png" alt="nora" class="h-6">
+                <p class="text-[10px] text-gray-400 font-medium tracking-wide">© 2026 nora CDE Inc. Todos los derechos reservados.</p>
+                <button onclick="window.scrollTo({top: 0, behavior: 'smooth'})" class="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center hover:bg-gray-200 transition">
+                    &uarr;
+                </button>
+            </div>
+        </div>
+    </footer>
+
+    <!-- Cierra Main Content Wrapper -->
+    </div>
+
+    <!-- Contenedor Reveal (Fijo al fondo) SOLO PARA EL TEXTO GIGANTE -->
+    <div id="footer-reveal-container">
+        <!-- Sección de Texto Gigante -->
+        <div class="giant-text-container">
+            <h1 class="giant-text">nora</h1>
+        </div>
+    </div>
+    <!-- Cierra Footer Reveal Container -->
+
+    <!-- Script para calcular altura dinámica del Reveal -->
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const mainContent = document.getElementById('main-content');
+            const footerReveal = document.getElementById('footer-reveal-container');
+            
+            function adjustMargin() {
+                // Le damos al main-content un margen inferior igual a la altura del footer
+                // para permitir scrollear hasta el final y revelarlo completamente
+                if(footerReveal && mainContent) {
+                    mainContent.style.marginBottom = `${footerReveal.offsetHeight}px`;
+                }
+            }
+
+            // Ajustar al cargar y al redimensionar la ventana
+            adjustMargin();
+            window.addEventListener('resize', adjustMargin);
+            
+            // Reajuste adicional por si las fuentes tardan en cargar y cambian el alto
+            setTimeout(adjustMargin, 500);
+        });
+    </script>
+
+    <!-- Script para GSAP y Frases Dinámicas -->
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            
+            // --- FRASES DINÁMICAS DEL HERO ---
+            const heroPhrases = [
+                { title: "Tus modelos, vivos en la web.", subtitle: "Experimenta la arquitectura interactuando directamente en el navegador." },
+                { title: "Gestión documental sin enredos.", subtitle: "Encuentra la versión correcta del plano que necesitas en segundos." },
+                { title: "Un único entorno para tu información.", subtitle: "Centraliza documentos, modelos y comunicaciones sin fricciones." },
+                { title: "Toma el control de tus obras.", subtitle: "Visualiza el avance 4D y 5D en tiempo real desde cualquier dispositivo." },
+                { title: "Interoperabilidad real.", subtitle: "Sube archivos IFC y colabora sin depender de software propietario." },
+                { title: "Adiós a los correos perdidos.", subtitle: "Centraliza las incidencias y solicitudes de información en un solo lugar." },
+                { title: "Métricas que impulsan resultados.", subtitle: "Analiza el rendimiento de tus proyectos con dashboards automatizados." },
+                { title: "La verdad única de tu proyecto.", subtitle: "Evita retrabajos trabajando siempre con la última versión aprobada." },
+                { title: "Visualización 3D al alcance de todos.", subtitle: "Navega modelos complejos sin necesidad de hardware costoso." },
+                { title: "Seguridad a nivel empresarial.", subtitle: "Tus datos protegidos con los estándares más altos de la industria." },
+                { title: "Colaboración sin límites de zona.", subtitle: "Conecta equipos de diseño, obra y cliente en tiempo real." },
+                { title: "Aprobaciones ágiles y trazables.", subtitle: "Firma y revisa documentos con flujos de trabajo automatizados." },
+                { title: "Planos y modelos, sincronizados.", subtitle: "La coordinación BIM nunca había sido tan transparente." },
+                { title: "Conecta el modelo con el presupuesto.", subtitle: "Integra modelos con costos para un control financiero preciso." },
+                { title: "Auditorías sin estrés.", subtitle: "Trazabilidad completa de quién hizo qué y cuándo en tu proyecto." },
+                { title: "De diseño a construcción fluida.", subtitle: "Reduce conflictos en obra con revisiones pre-constructivas eficientes." },
+                { title: "Accesibilidad sin compromisos.", subtitle: "Tu entorno de datos comunes disponible 24/7, donde estés." },
+                { title: "Gestión de modelos federados sencilla.", subtitle: "Combina disciplinas arquitectónicas y MEP con un solo clic." },
+                { title: "Decisiones basadas en datos.", subtitle: "Convierte la información de tus modelos BIM en conocimiento accionable." },
+                { title: "El gemelo digital de tu obra.", subtitle: "Construye virtualmente antes de mover una sola piedra." }
+            ];
+
+            const phraseEl = document.getElementById('hero-dynamic-phrase');
+            const subphraseEl = document.getElementById('hero-dynamic-subphrase');
+            
+            if (phraseEl && subphraseEl) {
+                const randomPhrase = heroPhrases[Math.floor(Math.random() * heroPhrases.length)];
+                phraseEl.textContent = randomPhrase.title;
+                subphraseEl.textContent = randomPhrase.subtitle;
+            }
+
+            // --- ANIMACIÓN DEL HERO CON GSAP ---
+            const tl = gsap.timeline({ defaults: { ease: "power3.out" } });
+            
+            tl.to(".hero-anim", {
+                y: 0,
+                opacity: 1,
+                duration: 1.2,
+                stagger: 0.15,
+                delay: 0.1
+            })
+            // Aparece la animación interactiva ANIHOME
+            .to("#globe-wrapper", {
+                opacity: 1,
+                duration: 2,
+                ease: "power2.out"
+            }, "-=2");
+            // --- LÓGICA DE MONEDA Y TRM ---
+            const toggleBtn = document.getElementById('currency-toggle');
+            const knob = document.getElementById('currency-knob');
+            const labelCop = document.getElementById('label-cop');
+            const labelUsd = document.getElementById('label-usd');
+            const priceEl = document.getElementById('price-enterprise');
+            const labelCurrencyEl = document.getElementById('price-currency-label');
+
+            let currentCurrency = 'COP';
+            const priceCOP = 57800;
+            let currentTRM = 4000; // Valor por defecto en caso de fallo de API
+
+            // Función para obtener la TRM del día
+            async function fetchTRM() {
+                try {
+                    const response = await fetch('https://open.er-api.com/v6/latest/USD');
+                    const data = await response.json();
+                    if (data && data.rates && data.rates.COP) {
+                        currentTRM = data.rates.COP;
+                    }
+                } catch (error) {
+                    console.error('Error obteniendo la TRM, usando valor por defecto:', error);
+                }
+            }
+
+            // Función para actualizar la UI según la moneda
+            function updatePricingUI() {
+                if (currentCurrency === 'COP') {
+                    // UI para COP
+                    knob.classList.remove('translate-x-6');
+                    knob.classList.add('translate-x-1');
+                    toggleBtn.classList.remove('bg-green-500');
+                    toggleBtn.classList.add('bg-gray-300');
+                    labelCop.classList.replace('text-gray-400', 'text-gray-900');
+                    labelUsd.classList.replace('text-gray-900', 'text-gray-400');
+                    
+                    priceEl.textContent = `$${priceCOP.toLocaleString('es-CO')}`;
+                    labelCurrencyEl.textContent = 'COP / proyecto / mes';
+                } else {
+                    // UI para USD
+                    knob.classList.remove('translate-x-1');
+                    knob.classList.add('translate-x-6');
+                    toggleBtn.classList.remove('bg-gray-300');
+                    toggleBtn.classList.add('bg-green-500');
+                    labelCop.classList.replace('text-gray-900', 'text-gray-400');
+                    labelUsd.classList.replace('text-gray-400', 'text-gray-900');
+                    
+                    const priceUSD = Math.round(priceCOP / currentTRM);
+                    priceEl.textContent = `$${priceUSD}`;
+                    labelCurrencyEl.textContent = 'USD / proyecto / mes';
+                }
+            }
+
+            if (toggleBtn) {
+                // Obtener TRM al cargar
+                fetchTRM();
+
+                // Evento de click en el switch
+                toggleBtn.addEventListener('click', () => {
+                    currentCurrency = currentCurrency === 'COP' ? 'USD' : 'COP';
+                    updatePricingUI();
+                });
+            }
+        });
+    </script>
+</body>
+</html>
