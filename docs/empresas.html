@@ -223,20 +223,45 @@
                     // Fire background fetch silently to update next time
                     Promise.all([
                         fetch(url + '?action=getCompanies'),
-                        fetch(url)
-                    ]).then(async ([cRes, uRes]) => {
+                        fetch(url),
+                        fetch('empresas.json?t=' + Date.now())
+                    ]).then(async ([cRes, uRes, staticEmpRes]) => {
                         const newC = await cRes.json();
                         const newU = await uRes.json();
+                        try {
+                            const staticEmpresas = await staticEmpRes.json();
+                            newC.forEach(c => {
+                                if (c.name) {
+                                    const matched = staticEmpresas.find(se => se.name && se.name.toLowerCase().trim() === c.name.toLowerCase().trim());
+                                    if (matched && matched.id) {
+                                        c.id = matched.id;
+                                    }
+                                }
+                            });
+                        } catch(e) {}
                         sessionStorage.setItem('cachedCompanies_v2', JSON.stringify({companies: newC, users: newU}));
                     }).catch(console.error);
                 } else {
                     // Fetch ALL companies and users concurrently for max speed
-                    const [compRes, userRes] = await Promise.all([
+                    const [compRes, userRes, staticEmpRes] = await Promise.all([
                         fetch(url + '?action=getCompanies'),
-                        fetch(url)
+                        fetch(url),
+                        fetch('empresas.json?t=' + Date.now())
                     ]);
                     allCompanies = await compRes.json();
                     users = await userRes.json();
+                    try {
+                        const staticEmpresas = await staticEmpRes.json();
+                        // Merge IDs from static empresas.json to avoid duplicates/mismatches with GSheets
+                        allCompanies.forEach(c => {
+                            if (c.name) {
+                                const matched = staticEmpresas.find(se => se.name && se.name.toLowerCase().trim() === c.name.toLowerCase().trim());
+                                if (matched && matched.id) {
+                                    c.id = matched.id;
+                                }
+                            }
+                        });
+                    } catch(e) { console.warn('Could not merge static empresas', e); }
                     sessionStorage.setItem('cachedCompanies_v2', JSON.stringify({companies: allCompanies, users: users}));
                 }
                 // ---------------------------------------------------
