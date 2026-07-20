@@ -262,7 +262,12 @@
                             if (!c.name) return true;
                             const matched = staticEmpresas.find(se => se.name && se.name.toLowerCase().trim() === c.name.toLowerCase().trim());
                             if (matched && matched.deleted) return false;
-                            if (matched && matched.id) c.id = matched.id;
+                            if (matched) {
+                                c.id = matched.id;
+                                c.image = matched.image;
+                                c.configUrl = matched.configUrl;
+                                c.code = matched.code;
+                            }
                             return true;
                         });
                     } catch(e) { console.warn('Could not merge static empresas', e); }
@@ -325,9 +330,9 @@
                                 id: c.id || 'company-' + Date.now(),
                                 name: c.name || c.legalName,
                                 location: c.city ? c.city + ', ' + c.country : 'Sede Principal',
-                                image: c.logoBase64 || 'https://i.postimg.cc/02mTnnQv/21bd5ee9d2351270615280386caad1f3.jpg',
-                                code: (c.name ? c.name.substring(0,3).toUpperCase() : 'BIM'),
-                                configUrl: (c.name && c.name.includes('Amarillo')) ? 'config-amarillo.json' : ((c.name && c.name.includes('desarrollada')) ? 'config-empresa3.json' : 'portal-config.json')
+                                image: c.image || c.logoBase64 || 'https://i.postimg.cc/02mTnnQv/21bd5ee9d2351270615280386caad1f3.jpg',
+                                code: c.code || (c.name ? c.name.substring(0,3).toUpperCase() : 'BIM'),
+                                configUrl: c.configUrl || 'portal-config.json'
                             }));
                         } else {
                             // Filter for user's company
@@ -337,9 +342,9 @@
                                     id: myComp.id || 'company-' + Date.now(),
                                     name: myComp.name,
                                     location: myComp.city ? myComp.city + ', ' + myComp.country : 'Sede Principal',
-                                    image: myComp.logoBase64 || 'https://i.postimg.cc/02mTnnQv/21bd5ee9d2351270615280386caad1f3.jpg',
-                                    code: (myComp.name ? myComp.name.substring(0,3).toUpperCase() : 'BIM'),
-                                    configUrl: (myComp.name && myComp.name.includes('Amarillo')) ? 'config-amarillo.json' : ((myComp.name && myComp.name.includes('desarrollada')) ? 'config-empresa3.json' : 'portal-config.json')
+                                    image: myComp.image || myComp.logoBase64 || 'https://i.postimg.cc/02mTnnQv/21bd5ee9d2351270615280386caad1f3.jpg',
+                                    code: myComp.code || (myComp.name ? myComp.name.substring(0,3).toUpperCase() : 'BIM'),
+                                    configUrl: myComp.configUrl || 'portal-config.json'
                                 });
                             } else if (userAccount.empresa) {
                                 // If company doesn't exist in DB but user has it (fallback)

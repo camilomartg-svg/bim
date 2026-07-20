@@ -77,7 +77,7 @@
             const ua = JSON.parse(sessionStorage.getItem('userAccount') || localStorage.getItem('userAccount'));
             if(ua && ua.username) {
                 try {
-                    const res = await fetch('https://script.google.com/macros/s/AKfycbx266o-ea0OAT-xE_9kKSKChRk7MJo0sthjwWI7WUCbFzq3Y578sbD8HgZpWSb7v8H8Fw/exec');
+                    const res = await fetch('https://script.google.com/macros/s/AKfycbzdclwrLaL7k30waIlgoWhQMc4toeaomWFeHBXi5HLhnfPPrpHJFIOSveGa_oavtmqV5w/exec?t=' + Date.now());
                     const users = await res.json();
                     const dbUser = users.find(u => u.email === ua.username.toLowerCase().trim());
                     if(!dbUser || (dbUser.estado !== 'APROBADO' && dbUser.rol !== 'SUPER_ADMINISTRADOR')) {
@@ -531,12 +531,12 @@ if (urlParams.get('empresa') === 'alcabama' || urlParams.get('empresa') === 'Alc
                                 applyPortalConfig({ ...baseConfig, ...config, portal: mergedPortal });
                                 return; // Éxito total
                             } else {
-                                // No existe el archivo de empresa (ej. recién creada), limpiamos proyectos y usamos la global
-                                applyPortalConfig({ ...baseConfig, projects: [] });
+                                // No existe el archivo de empresa (ej. recién creada), usamos la configuración global heredada
+                                applyPortalConfig(baseConfig);
                                 return;
                             }
                         } catch (error) {
-                            applyPortalConfig({ ...baseConfig, projects: [] });
+                            applyPortalConfig(baseConfig);
                             return;
                         }
                     } else {
