@@ -83,6 +83,37 @@ document.addEventListener('DOMContentLoaded', async () => {
       const res = await fetch(`empresas.json?t=${ts}`);
       if (res.ok) empresas = await res.json();
       
+      try {
+        const urlGoogle = 'https://script.google.com/macros/s/AKfycbzdclwrLaL7k30waIlgoWhQMc4toeaomWFeHBXi5HLhnfPPrpHJFIOSveGa_oavtmqV5w/exec';
+        const gRes = await fetch(urlGoogle + '?action=getCompanies');
+        if (gRes.ok) {
+           const gCompanies = await gRes.json();
+           let addedNew = false;
+           gCompanies.forEach(gc => {
+              if (gc.id && !empresas.find(e => e.id === gc.id)) {
+                  empresas.push({
+                      id: gc.id,
+                      name: gc.name || gc.legalName,
+                      code: (gc.name ? gc.name.substring(0,3).toUpperCase() : 'NVA'),
+                      admins: [],
+                      zonaHoraria: 'America/Bogota',
+                      members: [],
+                      razonSocial: gc.legalName || gc.name,
+                      terminosAceptados: true,
+                      tratamientoDatos: true,
+                      image: gc.logoBase64 || 'https://i.postimg.cc/02mTnnQv/21bd5ee9d2351270615280386caad1f3.jpg',
+                      location: gc.city ? (gc.city + ', ' + gc.country) : 'Bogotá, Colombia',
+                      configUrl: 'config-' + gc.id + '.json'
+                  });
+                  addedNew = true;
+              }
+           });
+           if(addedNew) showBanner('Se descubrieron nuevas empresas registradas. Haz clic en Publicar en la Nube para integrarlas permanentemente.', 'success');
+        }
+      } catch(e) {
+        console.warn('No se pudo sincronizar con Google Sheets', e);
+      }
+      
       const configRes = await fetch(`portal-config.json?t=${ts}`);
       if (configRes.ok) {
         const config = await configRes.json();
