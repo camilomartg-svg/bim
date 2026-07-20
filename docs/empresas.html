@@ -140,7 +140,7 @@
         </section>
 
         <!-- Container principal inferior -->
-        <div class="px-8 flex-1 flex flex-col justify-center py-8">
+        <div class="px-8 flex-1 flex flex-col justify-start py-8">
         
         <!-- Top Section: Title & Description -->
         <div class="flex flex-col md:flex-row justify-between items-end mb-8 w-full max-w-[95%] mx-auto gap-4">
@@ -339,7 +339,7 @@
                 `;
             } else {
                 list.innerHTML = companies.map(c => `
-                    <a href="home.html?empresa=${c.id}" class="card-hover flex-none w-[260px] md:w-[320px] lg:w-[360px] group transition-transform duration-500 block">
+                    <a href="home.html?empresa=${c.id}&v=${Date.now()}" class="card-hover flex-none w-[260px] md:w-[320px] lg:w-[360px] group transition-transform duration-500 block">
                         <div class="flex justify-between items-end mb-4 border-b border-gray-300 pb-2">
                             <div class="flex flex-col">
                                 <span class="text-[9px] font-bold text-gray-400 mb-1">${c.code}</span>
