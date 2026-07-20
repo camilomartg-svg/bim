@@ -229,7 +229,7 @@
                         fetch(url),
                         fetch('empresas.json?t=' + Date.now())
                     ]).then(async ([cRes, uRes, staticEmpRes]) => {
-                        const newC = await cRes.json();
+                        let newC = await cRes.json();
                         const newU = await uRes.json();
                         try {
                             const staticEmpresas = await staticEmpRes.json();
@@ -237,10 +237,15 @@
                                 if (!c.name) return true;
                                 const matched = staticEmpresas.find(se => se.name && se.name.toLowerCase().trim() === c.name.toLowerCase().trim());
                                 if (matched && matched.deleted) return false;
-                                if (matched && matched.id) c.id = matched.id;
+                                if (matched) {
+                                    c.id = matched.id;
+                                    c.image = matched.image;
+                                    c.configUrl = matched.configUrl;
+                                    c.code = matched.code;
+                                }
                                 return true;
                             });
-                        } catch(e) {}
+                        } catch(e) { console.warn('Background merge error', e); }
                         sessionStorage.setItem('cachedCompanies_v2', JSON.stringify({companies: newC, users: newU}));
                         allCompanies = newC;
                         users = newU;
