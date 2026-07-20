@@ -231,8 +231,23 @@
                     ]).then(async ([cRes, uRes, staticEmpRes]) => {
                         let newC = await cRes.json();
                         const newU = await uRes.json();
+                        let staticEmpresas = [];
                         try {
-                            const staticEmpresas = await staticEmpRes.json();
+                            if (staticEmpRes.ok) {
+                                staticEmpresas = await staticEmpRes.json();
+                            } else {
+                                const rawRes = await fetch('https://raw.githubusercontent.com/camilomartg-svg/bim/main/empresas.json?t=' + Date.now());
+                                if (rawRes.ok) staticEmpresas = await rawRes.json();
+                            }
+                        } catch(e) { 
+                            console.warn('Background merge error', e);
+                            try {
+                                const rawRes = await fetch('https://raw.githubusercontent.com/camilomartg-svg/bim/main/empresas.json?t=' + Date.now());
+                                if (rawRes.ok) staticEmpresas = await rawRes.json();
+                            } catch(e2) {}
+                        }
+                        
+                        if (staticEmpresas && Array.isArray(staticEmpresas)) {
                             newC = newC.filter(c => {
                                 if (!c.name) return true;
                                 const matched = staticEmpresas.find(se => se.name && se.name.toLowerCase().trim() === c.name.toLowerCase().trim());
@@ -245,7 +260,7 @@
                                 }
                                 return true;
                             });
-                        } catch(e) { console.warn('Background merge error', e); }
+                        }
                         sessionStorage.setItem('cachedCompanies_v2', JSON.stringify({companies: newC, users: newU}));
                         allCompanies = newC;
                         users = newU;
@@ -260,8 +275,23 @@
                     ]);
                     allCompanies = await compRes.json();
                     users = await userRes.json();
+                    let staticEmpresas = [];
                     try {
-                        const staticEmpresas = await staticEmpRes.json();
+                        if (staticEmpRes.ok) {
+                            staticEmpresas = await staticEmpRes.json();
+                        } else {
+                            const rawRes = await fetch('https://raw.githubusercontent.com/camilomartg-svg/bim/main/empresas.json?t=' + Date.now());
+                            if (rawRes.ok) staticEmpresas = await rawRes.json();
+                        }
+                    } catch(e) { 
+                        console.warn('Could not merge static empresas', e); 
+                        try {
+                            const rawRes = await fetch('https://raw.githubusercontent.com/camilomartg-svg/bim/main/empresas.json?t=' + Date.now());
+                            if (rawRes.ok) staticEmpresas = await rawRes.json();
+                        } catch(e2) {}
+                    }
+                    
+                    if (staticEmpresas && Array.isArray(staticEmpresas)) {
                         // Merge IDs from static empresas.json to avoid duplicates/mismatches with GSheets
                         allCompanies = allCompanies.filter(c => {
                             if (!c.name) return true;
@@ -275,7 +305,7 @@
                             }
                             return true;
                         });
-                    } catch(e) { console.warn('Could not merge static empresas', e); }
+                    }
                     sessionStorage.setItem('cachedCompanies_v2', JSON.stringify({companies: allCompanies, users: users}));
                 }
                 // ---------------------------------------------------
