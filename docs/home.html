@@ -521,7 +521,11 @@ if (urlParams.get('empresa') === 'alcabama' || urlParams.get('empresa') === 'Alc
                 } catch (error) {
                     console.warn('Error al cargar configuración central de red. Usando default...', error);
                     // 2. Fallback final por defecto
-                    applyPortalConfig(DEFAULT_PORTAL_CONFIG);
+                    if (empresaId) {
+                         applyPortalConfig({ ...DEFAULT_PORTAL_CONFIG, projects: [] });
+                    } else {
+                         applyPortalConfig(DEFAULT_PORTAL_CONFIG);
+                    }
                 }
             };
             void loadPortalConfig();
