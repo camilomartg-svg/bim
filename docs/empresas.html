@@ -97,8 +97,7 @@
 
 <body class="min-h-screen w-full flex flex-col relative">
 
-    <!-- Custom DRAG cursor -->
-    <div id="custom-cursor">DRAG</div>
+    
 
     <!-- Header -->
     <header class="absolute top-0 left-0 w-full z-10 px-8 py-4">
@@ -162,8 +161,8 @@
         </div>
 
         <!-- Horizontal Scroll Section -->
-        <div id="scroll-container" class="w-full flex overflow-x-auto no-scrollbar pb-8 cursor-grab active:cursor-grabbing px-4 max-w-[95%] mx-auto">
-            <div id="companies-list" class="flex gap-8 lg:gap-12 pl-4">
+        <div id="scroll-container" class="w-full max-w-[95%] mx-auto pb-8">
+            <div id="companies-list" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-8 px-4">
                 <!-- Tarjetas inyectadas por JS -->
             </div>
         </div>
@@ -208,14 +207,39 @@
             try {
                 const url = 'https://script.google.com/macros/s/AKfycbzdclwrLaL7k30waIlgoWhQMc4toeaomWFeHBXi5HLhnfPPrpHJFIOSveGa_oavtmqV5w/exec';
                 
-                // Fetch ALL companies and users concurrently for max speed
-                const [compRes, userRes] = await Promise.all([
-                    fetch(url + '?action=getCompanies'),
-                    fetch(url)
-                ]);
+
+                // --- ADDED CACHE LOGIC TO AVOID LOADING DELAYS ---
+                let cachedCompanies = null;
+                try {
+                    cachedCompanies = JSON.parse(sessionStorage.getItem('cachedCompanies'));
+                } catch(e) {}
                 
-                const allCompanies = await compRes.json();
-                const users = await userRes.json();
+                let allCompanies;
+                let users;
+                
+                if (cachedCompanies) {
+                    allCompanies = cachedCompanies.companies;
+                    users = cachedCompanies.users;
+                    // Fire background fetch silently to update next time
+                    Promise.all([
+                        fetch(url + '?action=getCompanies'),
+                        fetch(url)
+                    ]).then(async ([cRes, uRes]) => {
+                        const newC = await cRes.json();
+                        const newU = await uRes.json();
+                        sessionStorage.setItem('cachedCompanies', JSON.stringify({companies: newC, users: newU}));
+                    }).catch(console.error);
+                } else {
+                    // Fetch ALL companies and users concurrently for max speed
+                    const [compRes, userRes] = await Promise.all([
+                        fetch(url + '?action=getCompanies'),
+                        fetch(url)
+                    ]);
+                    allCompanies = await compRes.json();
+                    users = await userRes.json();
+                    sessionStorage.setItem('cachedCompanies', JSON.stringify({companies: allCompanies, users: users}));
+                }
+                // ---------------------------------------------------
 
                 // Validate and update User
                 if (userAccount && userAccount.username) {
@@ -270,9 +294,9 @@
                             id: c.id || 'company-' + Date.now(),
                             name: c.name || c.legalName,
                             location: c.city ? c.city + ', ' + c.country : 'Sede Principal',
-                            image: c.logoBase64 || 'https://i.postimg.cc/fbwgkrDd/r-ciien.png',
+                            image: c.logoBase64 || 'https://i.postimg.cc/02mTnnQv/21bd5ee9d2351270615280386caad1f3.jpg',
                             code: (c.name ? c.name.substring(0,3).toUpperCase() : 'BIM'),
-                            configUrl: 'portal-config.json'
+                            configUrl: (c.name && c.name.includes('Amarillo')) ? 'config-amarillo.json' : ((c.name && c.name.includes('desarrollada')) ? 'config-empresa3.json' : 'portal-config.json')
                         }));
                     } else {
                         // Filter for user's company
@@ -282,9 +306,9 @@
                                 id: myComp.id || 'company-' + Date.now(),
                                 name: myComp.name,
                                 location: myComp.city ? myComp.city + ', ' + myComp.country : 'Sede Principal',
-                                image: myComp.logoBase64 || 'https://i.postimg.cc/fbwgkrDd/r-ciien.png',
+                                image: myComp.logoBase64 || 'https://i.postimg.cc/02mTnnQv/21bd5ee9d2351270615280386caad1f3.jpg',
                                 code: (myComp.name ? myComp.name.substring(0,3).toUpperCase() : 'BIM'),
-                                configUrl: 'portal-config.json'
+                                configUrl: (myComp.name && myComp.name.includes('Amarillo')) ? 'config-amarillo.json' : ((myComp.name && myComp.name.includes('desarrollada')) ? 'config-empresa3.json' : 'portal-config.json')
                             });
                         } else if (userAccount.empresa) {
                             // If company doesn't exist in DB but user has it (fallback)
@@ -292,7 +316,7 @@
                                 id: 'dynamic-' + Date.now(),
                                 name: userAccount.empresa,
                                 location: 'Pendiente',
-                                image: 'https://i.postimg.cc/fbwgkrDd/r-ciien.png',
+                                image: 'https://i.postimg.cc/02mTnnQv/21bd5ee9d2351270615280386caad1f3.jpg',
                                 code: 'NEW',
                                 configUrl: 'portal-config.json'
                             });
@@ -315,7 +339,7 @@
                 `;
             } else {
                 list.innerHTML = companies.map(c => `
-                    <a href="home.html?empresa=${c.id}" class="card-hover flex-none w-[260px] md:w-[320px] lg:w-[360px] group transition-transform duration-500 block">
+                    <a href="home.html?empresa=${c.id}" class="card-hover flex-none w-full group transition-transform duration-500 block">
                         <div class="flex justify-between items-end mb-4 border-b border-gray-300 pb-2">
                             <div class="flex flex-col">
                                 <span class="text-[9px] font-bold text-gray-400 mb-1">${c.code}</span>
@@ -332,52 +356,7 @@
                 `).join('');
             }
 
-            let isDown = false;
-            let startX;
-            let scrollLeft;
-
-            container.addEventListener('mousedown', (e) => {
-                isDown = true;
-                startX = e.pageX - container.offsetLeft;
-                scrollLeft = container.scrollLeft;
-            });
-            container.addEventListener('mouseleave', () => {
-                isDown = false;
-                cursor.style.opacity = '0';
-            });
-            container.addEventListener('mouseup', () => {
-                isDown = false;
-            });
-            container.addEventListener('mousemove', (e) => {
-                if (!isDown) return;
-                e.preventDefault();
-                const x = e.pageX - container.offsetLeft;
-                const walk = (x - startX) * 2;
-                container.scrollLeft = scrollLeft - walk;
-            });
-
-            document.addEventListener('mousemove', (e) => {
-                const rect = container.getBoundingClientRect();
-                const isHoveringContainer = (
-                    e.clientY >= rect.top &&
-                    e.clientY <= rect.bottom
-                );
-                if (isHoveringContainer) {
-                    cursor.style.opacity = '1';
-                    cursor.style.left = e.clientX + 'px';
-                    cursor.style.top = e.clientY + 'px';
-                } else {
-                    cursor.style.opacity = '0';
-                }
-            });
-            
-            const links = document.querySelectorAll('.card-hover');
-            links.forEach(l => {
-                l.addEventListener('mouseenter', () => cursor.style.opacity = '0');
-                l.addEventListener('mouseleave', () => cursor.style.opacity = '1');
-            });
-
-        });
+                    });
     </script>
 </body>
 
