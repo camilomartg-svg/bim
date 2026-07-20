@@ -37,7 +37,6 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   // References to all inputs
   const el = {
-    superAdmins: document.getElementById('super-admins-input'),
     // Basicos
     id: document.getElementById('emp-id'),
     name: document.getElementById('emp-name'),
@@ -120,8 +119,6 @@ document.addEventListener('DOMContentLoaded', async () => {
         superAdmins = config.superAdmins || ['imagina3ddesign@gmail.com', 'mcmartinezg@unal.edu.co'];
       }
       
-      el.superAdmins.value = superAdmins.join(',\n');
-      
       if (userRole !== 'SUPER_ADMINISTRADOR') {
           const globalTabs = document.getElementById('global-tabs-container');
           if(globalTabs) globalTabs.classList.add('hidden');
@@ -129,8 +126,6 @@ document.addEventListener('DOMContentLoaded', async () => {
       }
       
       if (userRole === 'ADMINISTRADOR_EMPRESA') {
-          // Hide Super Admins section
-          document.getElementById('super-admins-input').closest('section').classList.add('hidden');
           // Hide Add/Delete Empresa buttons
           document.getElementById('add-empresa-btn').classList.add('hidden');
           document.getElementById('delete-empresa-btn').classList.add('hidden');
@@ -1193,7 +1188,7 @@ let contentBase = '';
       const res = await fetch(`portal-config.json?t=${Date.now()}`);
       if (res.ok) {
         const config = await res.json();
-        config.superAdmins = el.superAdmins.value.split(',').map(s=>s.trim()).filter(Boolean);
+        // Super Admins are now managed directly in the code/JSON, so we don't overwrite them from UI
         portalConfigStr = JSON.stringify(config, null, 2) + '\n';
       }
     } catch(e) {}
