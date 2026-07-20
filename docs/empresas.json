@@ -73,5 +73,20 @@
     "location": "Bogota DC, Colombia",
     "configUrl": "config-empresa-1784538874707.json",
     "deleted": true
+  },
+  {
+    "id": "empresa-1784555705700",
+    "name": "Nova arquitectura",
+    "code": "NOV",
+    "admins": [],
+    "zonaHoraria": "America/Bogota",
+    "members": [],
+    "razonSocial": "NOVA SAS",
+    "terminosAceptados": true,
+    "tratamientoDatos": true,
+    "image": "https://i.postimg.cc/02mTnnQv/21bd5ee9d2351270615280386caad1f3.jpg",
+    "location": "Bogota DC, Colombia",
+    "configUrl": "config-empresa-1784555705700.json",
+    "deleted": true
   }
 ]
