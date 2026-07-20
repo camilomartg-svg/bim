@@ -58,5 +58,20 @@
     "tratamientoDatos": true,
     "image": "https://i.postimg.cc/SQLYGJFR/logo-negro-recortado.png",
     "location": "Bogotá, Colombia"
+  },
+  {
+    "id": "empresa-1784538874707",
+    "name": "Constructora Horizonte",
+    "code": "CON",
+    "admins": [],
+    "zonaHoraria": "America/Bogota",
+    "members": [],
+    "razonSocial": "Constructora Horizonte SAS",
+    "terminosAceptados": true,
+    "tratamientoDatos": true,
+    "image": "https://i.postimg.cc/02mTnnQv/21bd5ee9d2351270615280386caad1f3.jpg",
+    "location": "Bogota DC, Colombia",
+    "configUrl": "config-empresa-1784538874707.json",
+    "deleted": true
   }
 ]
