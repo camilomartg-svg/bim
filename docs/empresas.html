@@ -209,17 +209,17 @@
                 
 
                 // --- ADDED CACHE LOGIC TO AVOID LOADING DELAYS ---
-                let cachedCompanies = null;
+                let cachedCompanies_v2 = null;
                 try {
-                    cachedCompanies = JSON.parse(sessionStorage.getItem('cachedCompanies'));
+                    cachedCompanies_v2 = JSON.parse(sessionStorage.getItem('cachedCompanies_v2'));
                 } catch(e) {}
                 
                 let allCompanies;
                 let users;
                 
-                if (cachedCompanies) {
-                    allCompanies = cachedCompanies.companies;
-                    users = cachedCompanies.users;
+                if (cachedCompanies_v2) {
+                    allCompanies = cachedCompanies_v2.companies;
+                    users = cachedCompanies_v2.users;
                     // Fire background fetch silently to update next time
                     Promise.all([
                         fetch(url + '?action=getCompanies'),
@@ -227,7 +227,7 @@
                     ]).then(async ([cRes, uRes]) => {
                         const newC = await cRes.json();
                         const newU = await uRes.json();
-                        sessionStorage.setItem('cachedCompanies', JSON.stringify({companies: newC, users: newU}));
+                        sessionStorage.setItem('cachedCompanies_v2', JSON.stringify({companies: newC, users: newU}));
                     }).catch(console.error);
                 } else {
                     // Fetch ALL companies and users concurrently for max speed
@@ -237,7 +237,7 @@
                     ]);
                     allCompanies = await compRes.json();
                     users = await userRes.json();
-                    sessionStorage.setItem('cachedCompanies', JSON.stringify({companies: allCompanies, users: users}));
+                    sessionStorage.setItem('cachedCompanies_v2', JSON.stringify({companies: allCompanies, users: users}));
                 }
                 // ---------------------------------------------------
 
