@@ -1278,7 +1278,8 @@ let contentBase = '';
           await pushFile(`docs/${path}`, str);
         }
       }
-
+      
+      sessionStorage.removeItem('cachedCompanies_v2');
       showBanner('✅ Todos los datos se han publicado exitosamente en la nube.', 'success');
     } catch(e) {
       showBanner('❌ ' + e.message, 'error');
