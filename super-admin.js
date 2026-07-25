@@ -520,6 +520,22 @@ document.addEventListener('DOMContentLoaded', async () => {
             </select>
           </label>` : '';
 
+        let registeredNameStr = '';
+        if (m.email && m.email.trim()) {
+            const rawEmail = m.email.trim();
+            const gu = (window.globalUsersMap && window.globalUsersMap.get(rawEmail)) 
+                        || (window.globalUsersMap && window.globalUsersMap.get(rawEmail.toLowerCase()));
+            if (gu && gu.name) {
+                registeredNameStr = gu.name;
+            }
+        }
+        
+        const nombreHtml = registeredNameStr ? `
+          <label class="block">
+            <span class="mb-1 block text-xs font-semibold text-slate-600">Nombre registrado</span>
+            <input type="text" class="w-full text-xs rounded border-slate-200 bg-slate-100 text-slate-500 font-medium cursor-not-allowed" value="${registeredNameStr}" disabled readonly>
+          </label>` : '';
+
         return `
       <div class="border rounded-xl p-4 bg-slate-50 relative group">
         <button onclick="deleteUser(${i})" class="absolute top-4 right-4 text-rose-500 hover:text-rose-700 p-1 opacity-0 group-hover:opacity-100 transition-opacity" title="Eliminar usuario"><span class="material-symbols-outlined text-sm">delete</span></button>
@@ -529,6 +545,8 @@ document.addEventListener('DOMContentLoaded', async () => {
             <span class="mb-1 block text-xs font-semibold text-slate-600">Correo Electrónico</span>
             <input type="email" class="w-full text-xs rounded border-slate-200" value="${m.email || ''}" onchange="updateUser(${i}, 'email', this.value)" placeholder="usuario@empresa.com">
           </label>
+
+          ${nombreHtml}
 
           <label class="block">
             <span class="mb-1 block text-xs font-semibold text-slate-600">Empresa (Contratista / Firma)</span>
