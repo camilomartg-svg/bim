@@ -1340,7 +1340,7 @@ let contentBase = '';
         }
       }
 
-      showBanner('✅ Todos los datos se han publicado exitosamente en la nube.', 'success');
+      showBanner('✅ Los datos se han subido a la nube. GitHub Pages tardará de 1 a 3 minutos en compilar e integrar los cambios en el sitio público.', 'success');
     } catch(e) {
       showBanner('❌ ' + e.message, 'error');
     }
