@@ -1439,7 +1439,7 @@ let contentBase = '';
       if (toApprove.length > 0) {
         showBanner(`Aprobando ${toApprove.length} usuario(s) pendiente(s)...`, 'info');
         for (const u of toApprove) {
-          const rol = u.role && u.role !== 'INVITADO' ? u.role : 'ADMINISTRADOR_EMPRESA';
+          const rol = u.role || 'INVITADO';
           await fetch(ROLES_SCRIPT_URL, {
             method: 'POST',
             mode: 'no-cors',
