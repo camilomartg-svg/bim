@@ -377,12 +377,21 @@
                                 configUrl: c.configUrl || 'portal-config.json'
                             }));
                         } else {
+                            const cleanText = (str) => {
+                                if (!str) return '';
+                                return str.toLowerCase()
+                                          .normalize("NFD")
+                                          .replace(/[\u0300-\u036f]/g, "")
+                                          .replace(/[^a-z0-9]/g, "")
+                                          .trim();
+                            };
                             const myComp = allCompanies.find(c => {
                                 if (!c.name || !userAccount.empresa) return false;
-                                const cName = c.name.toLowerCase().trim();
-                                const cRazon = c.razonSocial ? c.razonSocial.toLowerCase().trim() : '';
-                                const uEmp = userAccount.empresa.toLowerCase().trim();
-                                return cName === uEmp || cRazon === uEmp || cName.includes(uEmp) || uEmp.includes(cName);
+                                const cName = cleanText(c.name);
+                                const cRazon = cleanText(c.razonSocial);
+                                const uEmp = cleanText(userAccount.empresa);
+                                return (cName && (cName === uEmp || cName.includes(uEmp) || uEmp.includes(cName))) ||
+                                       (cRazon && (cRazon === uEmp || cRazon.includes(uEmp) || uEmp.includes(cRazon)));
                             });
                             if (myComp) {
                                 companies.push({

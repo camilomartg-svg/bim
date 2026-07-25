@@ -497,6 +497,9 @@
                         sessionStorage.setItem('userAccount', JSON.stringify(userProfile));
                     }
 
+                    sessionStorage.removeItem('cachedCompanies_v2');
+                    localStorage.removeItem('cachedCompanies_v2');
+
                     window.location.href = 'https://norabim.com/empresas.html';
                 }
             } catch (error) {

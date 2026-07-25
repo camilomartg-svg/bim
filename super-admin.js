@@ -112,18 +112,32 @@ document.addEventListener('DOMContentLoaded', async () => {
 
         // Sincronizar miembros y administradores desde la lista de usuarios en Google Sheets
         try {
-           const uRes = await fetch(urlGoogle);
+           const uRes = await fetch(urlGoogle + '?t=' + Date.now());
            if (uRes.ok) {
                const gUsers = await uRes.json();
+               
+               const cleanText = (str) => {
+                   if (!str) return '';
+                   return str.toLowerCase()
+                             .normalize("NFD")
+                             .replace(/[\u0300-\u036f]/g, "")
+                             .replace(/[^a-z0-9]/g, "")
+                             .trim();
+               };
+
                empresas.forEach(emp => {
                    if (!emp.members) emp.members = [];
                    if (!emp.admins) emp.admins = [];
-                                       gUsers.forEach(gu => {
-                        if (gu.empresa && emp.name) {
-                            const guEmp = gu.empresa.toLowerCase().trim();
-                            const empName = emp.name.toLowerCase().trim();
-                            const empRazon = emp.razonSocial ? emp.razonSocial.toLowerCase().trim() : '';
-                            if (guEmp === empName || guEmp === empRazon || empName.includes(guEmp) || guEmp.includes(empName)) {
+                   gUsers.forEach(gu => {
+                        if (gu.empresa && (emp.name || emp.razonSocial)) {
+                            const guEmp = cleanText(gu.empresa);
+                            const empName = cleanText(emp.name);
+                            const empRazon = cleanText(emp.razonSocial);
+                            
+                            const isMatch = (guEmp && empName && (guEmp === empName || empName.includes(guEmp) || guEmp.includes(empName))) ||
+                                            (guEmp && empRazon && (guEmp === empRazon || empRazon.includes(guEmp) || guEmp.includes(empRazon)));
+                            
+                            if (isMatch) {
                                 const email = gu.email ? gu.email.toLowerCase().trim() : '';
                                 if (email) {
                                     const mIdx = emp.members.findIndex(m => m.email && m.email.toLowerCase().trim() === email);
@@ -136,7 +150,6 @@ document.addEventListener('DOMContentLoaded', async () => {
                                         cargo: gu.cargo || ''
                                     };
                                     if (mIdx > -1) {
-                                        // Actualizar miembro existente si cambió su información en el sheet
                                         emp.members[mIdx] = { ...emp.members[mIdx], ...memberData };
                                     } else {
                                         emp.members.push(memberData);
@@ -151,7 +164,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                                 }
                             }
                         }
-                    });;
+                    });
                });
            }
         } catch(ue) {
@@ -1391,7 +1404,7 @@ window.fetchGlobalUsers = async function() {
     document.getElementById('global-users-tbody').innerHTML = '';
     
     try {
-        const res = await fetch(ROLES_SCRIPT_URL);
+        const res = await fetch(ROLES_SCRIPT_URL + '?t=' + Date.now());
         const scriptUsers = await res.json();
         
         window.globalUsersMap.clear();
