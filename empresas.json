@@ -6,7 +6,8 @@
     "image": "https://i.postimg.cc/hPxkssjR/163e92a4bd61d937eac31bd6787d270a.jpg",
     "configUrl": "portal-config.json",
     "code": "001",
-    "members": []
+    "members": [],
+    "admins": []
   },
   {
     "id": "amarillo",
@@ -29,7 +30,8 @@
         "email": "",
         "role": "INVITADO"
       }
-    ]
+    ],
+    "admins": []
   },
   {
     "id": "empresa3",
@@ -44,7 +46,8 @@
         "email": "alc.spk.1@gmail.com",
         "role": "ADMINISTRADOR_EMPRESA"
       }
-    ]
+    ],
+    "admins": []
   },
   {
     "id": "nueva-empresa",
@@ -63,9 +66,20 @@
     "id": "empresa-1784538874707",
     "name": "Constructora Horizonte",
     "code": "CON",
-    "admins": [],
+    "admins": [
+      "camilomartg@gmail.com"
+    ],
     "zonaHoraria": "America/Bogota",
-    "members": [],
+    "members": [
+      {
+        "name": "Camilo Martinez",
+        "email": "camilomartg@gmail.com",
+        "role": "ADMINISTRADOR_EMPRESA",
+        "empresaUsuario": "Constructora Horizonte",
+        "especialidad": "",
+        "cargo": ""
+      }
+    ],
     "razonSocial": "Constructora Horizonte SAS",
     "terminosAceptados": true,
     "tratamientoDatos": true,
@@ -78,9 +92,20 @@
     "id": "empresa-1784555705700",
     "name": "Nova arquitectura",
     "code": "NOV",
-    "admins": [],
+    "admins": [
+      "alc.spk.2@gmail.com"
+    ],
     "zonaHoraria": "America/Bogota",
-    "members": [],
+    "members": [
+      {
+        "name": "Camilo Guevara",
+        "email": "alc.spk.2@gmail.com",
+        "role": "ADMINISTRADOR_EMPRESA",
+        "empresaUsuario": "Nova arquitectura",
+        "especialidad": "",
+        "cargo": ""
+      }
+    ],
     "razonSocial": "NOVA SAS",
     "terminosAceptados": true,
     "tratamientoDatos": true,
@@ -88,5 +113,56 @@
     "location": "Bogota DC, Colombia",
     "configUrl": "config-empresa-1784555705700.json",
     "deleted": true
+  },
+  {
+    "id": "empresa-1784984661326",
+    "name": "Rojo Arquitectura",
+    "code": "ROJ",
+    "admins": [
+      "alc.spk.2@gmail.com"
+    ],
+    "zonaHoraria": "America/Bogota",
+    "members": [
+      {
+        "name": "Camilo Guevara",
+        "email": "alc.spk.2@gmail.com",
+        "role": "ADMINISTRADOR_EMPRESA",
+        "empresaUsuario": "Rojo Arquitectura",
+        "especialidad": "",
+        "cargo": ""
+      }
+    ],
+    "razonSocial": "Rojo Arquitectura SAS",
+    "terminosAceptados": true,
+    "tratamientoDatos": true,
+    "image": "https://i.postimg.cc/02mTnnQv/21bd5ee9d2351270615280386caad1f3.jpg",
+    "location": "Bogota DC, Colombia",
+    "configUrl": "config-empresa-1784984661326.json",
+    "deleted": true
+  },
+  {
+    "id": "empresa-1784985873611",
+    "name": "Verde Arquitectura",
+    "code": "VER",
+    "admins": [
+      "alc.spk.3@gmail.com"
+    ],
+    "zonaHoraria": "America/Bogota",
+    "members": [
+      {
+        "name": "Andres Martinez",
+        "email": "alc.spk.3@gmail.com",
+        "role": "ADMINISTRADOR_EMPRESA",
+        "empresaUsuario": "Verde Arquitectura",
+        "especialidad": "",
+        "cargo": ""
+      }
+    ],
+    "razonSocial": "Verde Arquitectura SAS",
+    "terminosAceptados": true,
+    "tratamientoDatos": true,
+    "image": "https://i.postimg.cc/02mTnnQv/21bd5ee9d2351270615280386caad1f3.jpg",
+    "location": "Bogota DC, Colombia",
+    "configUrl": "config-empresa-1784985873611.json"
   }
 ]
