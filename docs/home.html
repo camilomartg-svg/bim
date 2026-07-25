@@ -82,11 +82,28 @@
                     if (ua.role === 'SUPER_ADMINISTRADOR' || ua.username === 'imagina3ddesign@gmail.com') {
                         // Bypass validation for super administrators
                     } else {
-                        const dbUser = users.find(u => u.email && u.email.toLowerCase().trim() === ua.username.toLowerCase().trim());
-                        const dbEstado = dbUser && dbUser.estado ? dbUser.estado.toUpperCase().trim() : '';
-                        const dbRol = dbUser && dbUser.rol ? dbUser.rol.toUpperCase().trim() : '';
-                        if(!dbUser || (dbEstado !== 'APROBADO' && dbRol !== 'SUPER_ADMINISTRADOR' && dbRol !== 'ADMINISTRADOR_EMPRESA')) {
+                        const userEntries = users.filter(u => u.email && u.email.toLowerCase().trim() === ua.username.toLowerCase().trim());
+
+                        if (userEntries.length === 0) {
                             alert('Tu acceso ha sido revocado o está pendiente. Cerrando sesión.');
+                            sessionStorage.removeItem('userAccount');
+                            localStorage.removeItem('userAccount');
+                            window.location.replace('https://norabim.com/inse.html');
+                            return;
+                        }
+
+                        const dbUser = userEntries.find(u => {
+                            const dbEstado = u.estado ? u.estado.toUpperCase().trim() : '';
+                            const dbRol = u.rol ? u.rol.toUpperCase().trim() : '';
+                            return dbEstado === 'APROBADO' || dbRol === 'SUPER_ADMINISTRADOR' || dbRol === 'ADMINISTRADOR_EMPRESA';
+                        });
+
+                        if (!dbUser) {
+                            const anyPending = userEntries.some(u => (u.estado || '').toUpperCase().trim() === 'PENDIENTE');
+                            const msg = anyPending
+                                ? 'Tu solicitud de acceso está pendiente de aprobación.'
+                                : 'Tu acceso ha sido revocado. Contacta al administrador.';
+                            alert(msg);
                             sessionStorage.removeItem('userAccount');
                             localStorage.removeItem('userAccount');
                             window.location.replace('https://norabim.com/inse.html');

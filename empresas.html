@@ -264,27 +264,41 @@
                             // Bypass validation for the hardcoded super admin / super administrators
                         } else {
                             const userEntries = users.filter(u => u.email && u.email.toLowerCase().trim() === userAccount.username.toLowerCase().trim());
+
+                            // Block only if the user truly doesn't exist in the DB
+                            if (userEntries.length === 0) {
+                                alert('Tu acceso ha sido revocado o está pendiente. Cerrando sesión.');
+                                sessionStorage.removeItem('userAccount');
+                                localStorage.removeItem('userAccount');
+                                window.location.replace('https://norabim.com/inse.html');
+                                return;
+                            }
+
+                            // Find any approved entry (user may exist but have no company yet)
                             const activeEntry = userEntries.find(u => {
                                 const dbEstado = u.estado ? u.estado.toUpperCase().trim() : '';
                                 const dbRol = u.rol ? u.rol.toUpperCase().trim() : '';
                                 return dbEstado === 'APROBADO' || dbRol === 'SUPER_ADMINISTRADOR' || dbRol === 'ADMINISTRADOR_EMPRESA';
                             });
 
-                            if (userEntries.length === 0 || !activeEntry) {
-                                alert('Tu acceso ha sido revocado o está pendiente. Cerrando sesión.');
+                            // Block if ALL entries are explicitly denied/pending
+                            if (!activeEntry) {
+                                const anyPending = userEntries.some(u => (u.estado || '').toUpperCase().trim() === 'PENDIENTE');
+                                const msg = anyPending
+                                    ? 'Tu solicitud de acceso está pendiente de aprobación.'
+                                    : 'Tu acceso ha sido revocado. Contacta al administrador.';
+                                alert(msg);
                                 sessionStorage.removeItem('userAccount');
                                 localStorage.removeItem('userAccount');
                                 window.location.replace('https://norabim.com/inse.html');
-                                return; // Stop execution
-                            } else {
-                                // Use fresh DB user data from the active entry
-                                userAccount.role = activeEntry.rol;
-                                userAccount.empresa = activeEntry.empresa;
-                                
-                                // Update cache
-                                const cacheLocation = localStorage.getItem('userAccount') ? 'localStorage' : 'sessionStorage';
-                                window[cacheLocation].setItem('userAccount', JSON.stringify(userAccount));
+                                return;
                             }
+
+                            // User is approved — update cache with freshest role/empresa
+                            userAccount.role = activeEntry.rol;
+                            userAccount.empresa = activeEntry.empresa || '';
+                            const cacheLocation = localStorage.getItem('userAccount') ? 'localStorage' : 'sessionStorage';
+                            window[cacheLocation].setItem('userAccount', JSON.stringify(userAccount));
                         }
                     }
 
