@@ -92,7 +92,7 @@
                             return;
                         }
 
-                        const dbUser = userEntries.find(u => {
+                        const dbUser = userEntries.reverse().find(u => {
                             const dbEstado = u.estado ? u.estado.toUpperCase().trim() : '';
                             const dbRol = u.rol ? u.rol.toUpperCase().trim() : '';
                             return dbEstado === 'APROBADO' || dbRol === 'SUPER_ADMINISTRADOR' || dbRol === 'ADMINISTRADOR_EMPRESA';
