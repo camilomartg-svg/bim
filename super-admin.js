@@ -822,6 +822,18 @@ let contentBase = '';
               </div>
             </section>
             
+            <section class="mt-8 border-t border-slate-200 pt-6">
+              <div class="flex items-center justify-between mb-4">
+                  <h3 class="text-sm font-bold uppercase tracking-[0.2em] text-slate-500">Miembros del Proyecto</h3>
+                  <button type="button" class="text-xs font-bold text-primary hover:underline flex items-center gap-1" onclick="addProjectMember('${p.slug}')">
+                     <span class="material-symbols-outlined text-[14px]">person_add</span> Asignar miembro
+                  </button>
+              </div>
+              <div class="flex flex-col gap-2">
+                 ${projectMembersHTML}
+              </div>
+            </section>
+            
             </div>
           </div>`;
         }
@@ -940,18 +952,6 @@ let contentBase = '';
                 <label class="block"><span class="mb-2 block text-sm font-semibold text-slate-700">Publicaciones</span><input class="w-full text-xs rounded-xl border-slate-200" type="text" value="${p.actions?.publicaciones || ''}" onchange="updateProjectDeepAct('${p.slug}', 'publicaciones', this.value)" /></label>
                 <label class="block"><span class="mb-2 block text-sm font-semibold text-slate-700">Solicitudes</span><input class="w-full text-xs rounded-xl border-slate-200" type="text" value="${p.actions?.solicitudes || ''}" onchange="updateProjectDeepAct('${p.slug}', 'solicitudes', this.value)" /></label>
                 <label class="block"><span class="mb-2 block text-sm font-semibold text-slate-700">Equipo</span><input class="w-full text-xs rounded-xl border-slate-200" type="text" value="${p.actions?.equipo || ''}" onchange="updateProjectDeepAct('${p.slug}', 'equipo', this.value)" /></label>
-              </div>
-            </section>
-
-            <section class="mt-8 border-t border-slate-200 pt-6">
-              <div class="flex items-center justify-between mb-4">
-                  <h3 class="text-sm font-bold uppercase tracking-[0.2em] text-slate-500">Miembros del Proyecto</h3>
-                  <button type="button" class="text-xs font-bold text-primary hover:underline flex items-center gap-1" onclick="addProjectMember('${p.slug}')">
-                     <span class="material-symbols-outlined text-[14px]">person_add</span> Asignar miembro
-                  </button>
-              </div>
-              <div class="flex flex-col gap-2">
-                 ${projectMembersHTML}
               </div>
             </section>
               </div>
