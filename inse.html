@@ -601,7 +601,7 @@
                                 try {
                                     const response = await fetch(ROLES_SCRIPT_URL);
                                     const rolesList = await response.json();
-                                    const userData = rolesList.find(u => u.email && u.email.trim().toLowerCase() === normalizedAccountEmail);
+                                    const userData = rolesList.reverse().find(u => u.email && u.email.trim().toLowerCase() === normalizedAccountEmail);
                                     if (userData) {
                                         userRole = userData.rol;
                                     }
@@ -1131,7 +1131,7 @@
                     try {
                         const response = await fetch(ROLES_SCRIPT_URL);
                         const rolesList = await response.json();
-                        const userData = rolesList.find(u => u.email && u.email.trim().toLowerCase() === normalizedAccountEmail);
+                        const userData = rolesList.reverse().find(u => u.email && u.email.trim().toLowerCase() === normalizedAccountEmail);
                         if (userData) {
                             userRole = userData.rol;
                         }

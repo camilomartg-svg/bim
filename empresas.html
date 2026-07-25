@@ -274,8 +274,8 @@
                                 return;
                             }
 
-                            // Find any approved entry (user may exist but have no company yet)
-                            const activeEntry = userEntries.find(u => {
+                            // Find any approved entry (user may exist but have no company yet) - USE REVERSE TO GET NEWEST
+                            const activeEntry = userEntries.reverse().find(u => {
                                 const dbEstado = u.estado ? u.estado.toUpperCase().trim() : '';
                                 const dbRol = u.rol ? u.rol.toUpperCase().trim() : '';
                                 return dbEstado === 'APROBADO' || dbRol === 'SUPER_ADMINISTRADOR' || dbRol === 'ADMINISTRADOR_EMPRESA';
