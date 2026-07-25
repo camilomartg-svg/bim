@@ -79,20 +79,24 @@
                 try {
                     const res = await fetch('https://script.google.com/macros/s/AKfycbzdclwrLaL7k30waIlgoWhQMc4toeaomWFeHBXi5HLhnfPPrpHJFIOSveGa_oavtmqV5w/exec?t=' + Date.now());
                     const users = await res.json();
-                    const dbUser = users.find(u => u.email && u.email.toLowerCase().trim() === ua.username.toLowerCase().trim());
-                    const dbEstado = dbUser && dbUser.estado ? dbUser.estado.toUpperCase().trim() : '';
-                    const dbRol = dbUser && dbUser.rol ? dbUser.rol.toUpperCase().trim() : '';
-                    if(!dbUser || (dbEstado !== 'APROBADO' && dbRol !== 'SUPER_ADMINISTRADOR' && dbRol !== 'ADMINISTRADOR_EMPRESA')) {
-                        alert('Tu acceso ha sido revocado o está pendiente. Cerrando sesión.');
-                        sessionStorage.removeItem('userAccount');
-                        localStorage.removeItem('userAccount');
-                        window.location.replace('https://norabim.com/inse.html');
+                    if (ua.role === 'SUPER_ADMINISTRADOR' || ua.username === 'imagina3ddesign@gmail.com') {
+                        // Bypass validation for super administrators
                     } else {
-                        // Update role if changed
-                        if (ua.role !== dbUser.rol) {
-                            ua.role = dbUser.rol;
-                            const cacheLocation = localStorage.getItem('userAccount') ? 'localStorage' : 'sessionStorage';
-                            window[cacheLocation].setItem('userAccount', JSON.stringify(ua));
+                        const dbUser = users.find(u => u.email && u.email.toLowerCase().trim() === ua.username.toLowerCase().trim());
+                        const dbEstado = dbUser && dbUser.estado ? dbUser.estado.toUpperCase().trim() : '';
+                        const dbRol = dbUser && dbUser.rol ? dbUser.rol.toUpperCase().trim() : '';
+                        if(!dbUser || (dbEstado !== 'APROBADO' && dbRol !== 'SUPER_ADMINISTRADOR' && dbRol !== 'ADMINISTRADOR_EMPRESA')) {
+                            alert('Tu acceso ha sido revocado o está pendiente. Cerrando sesión.');
+                            sessionStorage.removeItem('userAccount');
+                            localStorage.removeItem('userAccount');
+                            window.location.replace('https://norabim.com/inse.html');
+                        } else {
+                            // Update role if changed
+                            if (ua.role !== dbUser.rol) {
+                                ua.role = dbUser.rol;
+                                const cacheLocation = localStorage.getItem('userAccount') ? 'localStorage' : 'sessionStorage';
+                                window[cacheLocation].setItem('userAccount', JSON.stringify(ua));
+                            }
                         }
                     }
                 } catch(e) {}

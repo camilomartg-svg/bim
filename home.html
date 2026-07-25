@@ -79,8 +79,8 @@
                 try {
                     const res = await fetch('https://script.google.com/macros/s/AKfycbzdclwrLaL7k30waIlgoWhQMc4toeaomWFeHBXi5HLhnfPPrpHJFIOSveGa_oavtmqV5w/exec?t=' + Date.now());
                     const users = await res.json();
-                    if (ua.username === 'imagina3ddesign@gmail.com' && ua.role === 'SUPER_ADMINISTRADOR') {
-                        // Bypass validation for the hardcoded super admin
+                    if (ua.role === 'SUPER_ADMINISTRADOR' || ua.username === 'imagina3ddesign@gmail.com') {
+                        // Bypass validation for super administrators
                     } else {
                         const dbUser = users.find(u => u.email && u.email.toLowerCase().trim() === ua.username.toLowerCase().trim());
                         const dbEstado = dbUser && dbUser.estado ? dbUser.estado.toUpperCase().trim() : '';

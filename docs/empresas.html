@@ -238,8 +238,8 @@
 
                 // Validate and update User
                 if (userAccount && userAccount.username) {
-                    if (userAccount.username === 'imagina3ddesign@gmail.com' && userAccount.role === 'SUPER_ADMINISTRADOR') {
-                        // Bypass validation for the hardcoded super admin
+                    if (userAccount.role === 'SUPER_ADMINISTRADOR' || userAccount.username === 'imagina3ddesign@gmail.com') {
+                        // Bypass validation for the hardcoded super admin / super administrators
                     } else {
                         const userEntries = users.filter(u => u.email && u.email.toLowerCase().trim() === userAccount.username.toLowerCase().trim());
                         const activeEntry = userEntries.find(u => {
