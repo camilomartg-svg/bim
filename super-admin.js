@@ -400,6 +400,12 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (selectedIndex === -1) return;
     const emp = empresas[selectedIndex];
     if (!emp.members) emp.members = [];
+
+    // All company names for searchable dropdown
+    const allCompanyNames = empresas
+      .filter(e => !e.deleted && e.name)
+      .map(e => e.name)
+      .sort((a, b) => a.localeCompare(b));
     
     const grouped = {};
     emp.members.forEach((m, i) => {
@@ -421,7 +427,6 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     let html = '';
     sortedGroups.forEach(g => {
-      // Use btoa to create a safe ID for the group even with spaces and special chars
       const safeGroupId = 'group-' + btoa(unescape(encodeURIComponent(g))).replace(/[^a-zA-Z0-9]/g, '');
       html += `
         <div class="mt-4 mb-2 cursor-pointer group-header flex justify-between items-center bg-slate-100 hover:bg-slate-200 px-3 py-2 rounded-lg transition-colors select-none" onclick="toggleGroup('${safeGroupId}')">
@@ -433,60 +438,30 @@ document.addEventListener('DOMContentLoaded', async () => {
       html += grouped[g].map(item => {
         const i = item.originalIndex;
         const m = item;
-        return `
-      <div class="border rounded-xl p-4 bg-slate-50 relative group">
-        <button onclick="deleteUser(${i})" class="absolute top-4 right-4 text-rose-500 hover:text-rose-700 p-1 opacity-0 group-hover:opacity-100 transition-opacity" title="Eliminar usuario"><span class="material-symbols-outlined text-sm">delete</span></button>
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-          
-          <label class="block">
-            <span class="mb-1 block text-xs font-semibold text-slate-600">Nombre Completo</span>
-            <input type="text" class="w-full text-xs rounded border-slate-200" value="${m.name || ''}" onchange="updateUser(${i}, 'name', this.value)" placeholder="Ej. Juan Pérez">
-          </label>
-          
-          <label class="block">
-            <span class="mb-1 block text-xs font-semibold text-slate-600">Correo Electrónico</span>
-            <input type="email" class="w-full text-xs rounded border-slate-200" value="${m.email || ''}" onchange="updateUser(${i}, 'email', this.value)" placeholder="usuario@empresa.com">
-          </label>
 
-          <label class="block">
-            <span class="mb-1 block text-xs font-semibold text-slate-600">Empresa (Contratista/Firma)</span>
-            <input type="text" class="w-full text-xs rounded border-slate-200" value="${m.empresaUsuario || ''}" onchange="updateUser(${i}, 'empresaUsuario', this.value)" placeholder="Ej. Constructora ABC">
-          </label>
-          
-          <label class="block">
-            <span class="mb-1 block text-xs font-semibold text-slate-600">Rol del Sistema</span>
-            <select class="w-full text-xs rounded border-slate-200" onchange="updateUser(${i}, 'role', this.value)">
-              <option value="INVITADO" ${m.role==='INVITADO'?'selected':''}>INVITADO</option>
-              <option value="ADMINISTRADOR_EMPRESA" ${m.role==='ADMINISTRADOR_EMPRESA'?'selected':''}>ADMINISTRADOR_EMPRESA</option>
-            </select>
-          </label>
+        // ── 1. Empresa: searchable datalist dropdown ────────────────────────
+        const empListId = `emp-list-${i}`;
+        const empOptions = allCompanyNames.map(n => `<option value="${n}">`).join('');
 
-          <label class="block">
-            <span class="mb-1 block text-xs font-semibold text-slate-600">Especialidad Técnica</span>
-            <select class="w-full text-xs rounded border-slate-200" onchange="updateUser(${i}, 'especialidad', this.value)">
-              <option value="">Seleccione especialidad...</option>
-              <option value="Ambiental" ${m.especialidad==='Ambiental'?'selected':''}>Ambiental</option>
-              <option value="Arquitectura" ${m.especialidad==='Arquitectura'?'selected':''}>Arquitectura</option>
-              <option value="BIM" ${m.especialidad==='BIM'?'selected':''}>BIM</option>
-              <option value="CCTV" ${m.especialidad==='CCTV'?'selected':''}>CCTV</option>
-              <option value="Estructura" ${m.especialidad==='Estructura'?'selected':''}>Estructura</option>
-              <option value="Elementos no estructurales" ${m.especialidad==='Elementos no estructurales'?'selected':''}>Elementos no estructurales</option>
-              <option value="Suministro" ${m.especialidad==='Suministro'?'selected':''}>Suministro</option>
-              <option value="Desagües" ${m.especialidad==='Desagües'?'selected':''}>Desagües</option>
-              <option value="Lluvias" ${m.especialidad==='Lluvias'?'selected':''}>Lluvias</option>
-              <option value="Gas" ${m.especialidad==='Gas'?'selected':''}>Gas</option>
-              <option value="Eléctrico" ${m.especialidad==='Eléctrico'?'selected':''}>Eléctrico</option>
-              <option value="Climatización y Ventilación (HVAC)" ${m.especialidad==='Climatización y Ventilación (HVAC)'?'selected':''}>Climatización y Ventilación (HVAC)</option>
-              <option value="Vías e Infraestructura" ${m.especialidad==='Vías e Infraestructura'?'selected':''}>Vías e Infraestructura</option>
-              <option value="Seguridad humana" ${m.especialidad==='Seguridad humana'?'selected':''}>Seguridad humana</option>
-              <option value="Presupuestos" ${m.especialidad==='Presupuestos'?'selected':''}>Presupuestos</option>
-              <option value="Propiedad horizontal" ${m.especialidad==='Propiedad horizontal'?'selected':''}>Propiedad horizontal</option>
-              <option value="Geotecnia y Suelos" ${m.especialidad==='Geotecnia y Suelos'?'selected':''}>Geotecnia y Suelos</option>
-            </select>
-          </label>
+        // ── 2. Especialidad: filtered to company's registered specialties ───
+        // emp.especialidades should be an array; fallback to full list
+        const empEsps = (emp.especialidades && emp.especialidades.length > 0)
+          ? emp.especialidades
+          : ['Ambiental','Arquitectura','BIM','CCTV','Climatización y Ventilación (HVAC)',
+             'Desagües','Eléctrico','Elementos no estructurales','Estructura',
+             'Gas','Geotecnia y Suelos','Lluvias','Presupuestos','Propiedad horizontal',
+             'Seguridad humana','Suministro','Vías e Infraestructura'];
+        const espOptions = empEsps.map(e =>
+          `<option value="${e}" ${m.especialidad === e ? 'selected' : ''}>${e}</option>`
+        ).join('');
 
-          <label class="block">
-            <span class="mb-1 block text-xs font-semibold text-slate-600">Cargo</span>
+        // ── 3. Cargo: only visible if member's company = this empresa ───────
+        const isInternal = !m.empresaUsuario || m.empresaUsuario.trim() === '' ||
+          m.empresaUsuario.trim().toLowerCase() === emp.name.trim().toLowerCase();
+
+        const cargoHtml = isInternal ? `
+          <label class="block md:col-span-2">
+            <span class="mb-1 block text-xs font-semibold text-slate-600">Cargo (empleado interno)</span>
             <select class="w-full text-xs rounded border-slate-200" onchange="updateUser(${i}, 'cargo', this.value)">
               <option value="">Seleccione cargo...</option>
               <optgroup label="Dirección y Alta Gerencia">
@@ -520,16 +495,16 @@ document.addEventListener('DOMContentLoaded', async () => {
                 <option value="Residente Estructural" ${m.cargo==='Residente Estructural'?'selected':''}>Residente Estructural</option>
                 <option value="Residente Técnico" ${m.cargo==='Residente Técnico'?'selected':''}>Residente Técnico</option>
               </optgroup>
-              <optgroup label="Ingenierias">
+              <optgroup label="Ingenierías">
                 <option value="Diseñador Eléctrico" ${m.cargo==='Diseñador Eléctrico'?'selected':''}>Diseñador Eléctrico</option>
                 <option value="Diseñador Estructural" ${m.cargo==='Diseñador Estructural'?'selected':''}>Diseñador Estructural</option>
                 <option value="Diseñador Hidrosánitario" ${m.cargo==='Diseñador Hidrosánitario'?'selected':''}>Diseñador Hidrosánitario</option>
                 <option value="Diseñador Gas" ${m.cargo==='Diseñador Gas'?'selected':''}>Diseñador Gas</option>
                 <option value="Diseñador HVAC" ${m.cargo==='Diseñador HVAC'?'selected':''}>Diseñador HVAC</option>
               </optgroup>
-              <optgroup label="Supervisión y Control (Supervisión)">
+              <optgroup label="Supervisión y Control">
                 <option value="Interventor / Supervisor Técnico" ${m.cargo==='Interventor / Supervisor Técnico'?'selected':''}>Interventor / Supervisor Técnico</option>
-                <option value="Inspector de Calidad / Aseguramiento de Calidad (QA/QC)" ${m.cargo==='Inspector de Calidad / Aseguramiento de Calidad (QA/QC)'?'selected':''}>Inspector de Calidad / Aseguramiento de Calidad (QA/QC)</option>
+                <option value="Inspector de Calidad / Aseguramiento de Calidad (QA/QC)" ${m.cargo==='Inspector de Calidad / Aseguramiento de Calidad (QA/QC)'?'selected':''}>Inspector de Calidad (QA/QC)</option>
               </optgroup>
               <optgroup label="Ingeniería, Arquitectura y Diseño">
                 <option value="Ingeniero Calculista / Estructural" ${m.cargo==='Ingeniero Calculista / Estructural'?'selected':''}>Ingeniero Calculista / Estructural</option>
@@ -547,7 +522,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 <option value="Cadenero / Auxiliar de Topografía" ${m.cargo==='Cadenero / Auxiliar de Topografía'?'selected':''}>Cadenero / Auxiliar de Topografía</option>
               </optgroup>
               <optgroup label="Seguridad, Medio Ambiente y Apoyo Operativo">
-                <option value="Residente de Seguridad y Salud en el Trabajo (SST)" ${m.cargo==='Residente de Seguridad y Salud en el Trabajo (SST)'?'selected':''}>Residente de Seguridad y Salud en el Trabajo (SST)</option>
+                <option value="Residente de Seguridad y Salud en el Trabajo (SST)" ${m.cargo==='Residente de Seguridad y Salud en el Trabajo (SST)'?'selected':''}>Residente SST</option>
                 <option value="Residente Ambiental" ${m.cargo==='Residente Ambiental'?'selected':''}>Residente Ambiental</option>
                 <option value="Almacenista de Obra" ${m.cargo==='Almacenista de Obra'?'selected':''}>Almacenista de Obra</option>
                 <option value="Administrador de Obra" ${m.cargo==='Administrador de Obra'?'selected':''}>Administrador de Obra</option>
@@ -555,7 +530,42 @@ document.addEventListener('DOMContentLoaded', async () => {
                 <option value="Asesor Jurídico / Gestor de Contratos" ${m.cargo==='Asesor Jurídico / Gestor de Contratos'?'selected':''}>Asesor Jurídico / Gestor de Contratos</option>
               </optgroup>
             </select>
+          </label>` : '';
+
+        return `
+      <div class="border rounded-xl p-4 bg-slate-50 relative group">
+        <button onclick="deleteUser(${i})" class="absolute top-4 right-4 text-rose-500 hover:text-rose-700 p-1 opacity-0 group-hover:opacity-100 transition-opacity" title="Eliminar usuario"><span class="material-symbols-outlined text-sm">delete</span></button>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          
+          <label class="block">
+            <span class="mb-1 block text-xs font-semibold text-slate-600">Correo Electrónico</span>
+            <input type="email" class="w-full text-xs rounded border-slate-200" value="${m.email || ''}" onchange="updateUser(${i}, 'email', this.value)" placeholder="usuario@empresa.com">
           </label>
+
+          <label class="block">
+            <span class="mb-1 block text-xs font-semibold text-slate-600">Empresa (Contratista / Firma)</span>
+            <input type="text" list="${empListId}" class="w-full text-xs rounded border-slate-200" value="${m.empresaUsuario || ''}"
+              onchange="updateUser(${i}, 'empresaUsuario', this.value); renderUsers();" placeholder="Busca o escribe una empresa...">
+            <datalist id="${empListId}">${empOptions}</datalist>
+          </label>
+          
+          <label class="block">
+            <span class="mb-1 block text-xs font-semibold text-slate-600">Rol del Sistema</span>
+            <select class="w-full text-xs rounded border-slate-200" onchange="updateUser(${i}, 'role', this.value)">
+              <option value="INVITADO" ${m.role==='INVITADO'?'selected':''}>INVITADO</option>
+              <option value="ADMINISTRADOR_EMPRESA" ${m.role==='ADMINISTRADOR_EMPRESA'?'selected':''}>ADMINISTRADOR_EMPRESA</option>
+            </select>
+          </label>
+
+          <label class="block">
+            <span class="mb-1 block text-xs font-semibold text-slate-600">Especialidad Técnica</span>
+            <select class="w-full text-xs rounded border-slate-200" onchange="updateUser(${i}, 'especialidad', this.value)">
+              <option value="">Seleccione especialidad...</option>
+              ${espOptions}
+            </select>
+          </label>
+
+          ${cargoHtml}
 
         </div>
       </div>
@@ -567,6 +577,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     
     usersListEl.innerHTML = html;
   }
+
 
   window.updateUser = (idx, field, val) => {
     empresas[selectedIndex].members[idx][field] = val;
