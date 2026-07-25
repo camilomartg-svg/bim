@@ -82,8 +82,10 @@
                     if (ua.username === 'imagina3ddesign@gmail.com' && ua.role === 'SUPER_ADMINISTRADOR') {
                         // Bypass validation for the hardcoded super admin
                     } else {
-                        const dbUser = users.find(u => u.email === ua.username.toLowerCase().trim());
-                        if(!dbUser || (dbUser.estado !== 'APROBADO' && dbUser.rol !== 'SUPER_ADMINISTRADOR' && dbUser.rol !== 'ADMINISTRADOR_EMPRESA')) {
+                        const dbUser = users.find(u => u.email && u.email.toLowerCase().trim() === ua.username.toLowerCase().trim());
+                        const dbEstado = dbUser && dbUser.estado ? dbUser.estado.toUpperCase().trim() : '';
+                        const dbRol = dbUser && dbUser.rol ? dbUser.rol.toUpperCase().trim() : '';
+                        if(!dbUser || (dbEstado !== 'APROBADO' && dbRol !== 'SUPER_ADMINISTRADOR' && dbRol !== 'ADMINISTRADOR_EMPRESA')) {
                             alert('Tu acceso ha sido revocado o está pendiente. Cerrando sesión.');
                             sessionStorage.removeItem('userAccount');
                             localStorage.removeItem('userAccount');
