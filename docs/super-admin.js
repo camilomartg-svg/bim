@@ -720,7 +720,18 @@ let contentBase = '';
 
           const projMembers = p.members || [];
           let projectMembersHTML = projMembers.map((memberEmail, idx) => {
-            const options = emp.members.filter(m => m.email).map(m => `<option value="${m.email}" ${m.email === memberEmail ? 'selected' : ''}>${m.name || m.email} (${m.role || 'Sin rol'})</option>`).join('');
+            const options = emp.members.filter(m => m.email).map(m => {
+                let resolvedName = m.email;
+                const rawEmail = m.email.trim();
+                const gu = (window.globalUsersMap && window.globalUsersMap.get(rawEmail)) 
+                            || (window.globalUsersMap && window.globalUsersMap.get(rawEmail.toLowerCase()));
+                if (gu && gu.name) {
+                    resolvedName = gu.name;
+                } else if (m.name && m.name !== 'Nuevo Usuario') {
+                    resolvedName = m.name;
+                }
+                return `<option value="${m.email}" ${m.email === memberEmail ? 'selected' : ''}>${resolvedName} (${m.role || 'Sin rol'})</option>`;
+            }).join('');
             return `
             <div class="grid grid-cols-12 gap-2 items-center bg-white p-3 rounded-xl border border-slate-200 shadow-sm">
                <div class="col-span-10 md:col-span-5">
