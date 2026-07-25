@@ -305,7 +305,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     el.terminosAceptados.checked = emp.terminosAceptados || false;
     el.tratamientoDatos.checked = emp.tratamientoDatos || false;
 
-    if(window.renderUsersRef) window.renderUsersRef();
+    renderUsers();
     renderProjects();
 
     editorEl.classList.remove('hidden');
@@ -342,7 +342,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       btnEspecialidad.className = 'px-3 py-1.5 rounded-md bg-white shadow-sm text-slate-800 transition-colors';
       btnEmpresa.className = 'px-3 py-1.5 rounded-md text-slate-500 hover:text-slate-800 transition-colors';
     }
-    if(window.renderUsersRef) window.renderUsersRef();
+    renderUsers();
   };
 
   window.toggleGroup = (id) => {
@@ -575,7 +575,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   window.deleteUser = (idx) => {
     if(confirm('¿Eliminar usuario?')) {
       empresas[selectedIndex].members.splice(idx, 1);
-      if(window.renderUsersRef) window.renderUsersRef();
+      renderUsers();
     }
   };
 
@@ -583,7 +583,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (selectedIndex === -1) return;
     if (!empresas[selectedIndex].members) empresas[selectedIndex].members = [];
     empresas[selectedIndex].members.push({ name: 'Nuevo Usuario', email: '', role: 'INVITADO' });
-    if(window.renderUsersRef) window.renderUsersRef();
+    renderUsers();
   });
 
   // Projects CRUD
