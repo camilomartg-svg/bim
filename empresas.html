@@ -263,19 +263,23 @@
                         if (userAccount.username === 'imagina3ddesign@gmail.com' && userAccount.role === 'SUPER_ADMINISTRADOR') {
                             // Bypass validation for the hardcoded super admin
                         } else {
-                            const dbUser = users.find(u => u.email && u.email.toLowerCase().trim() === userAccount.username.toLowerCase().trim());
-                            const dbEstado = dbUser && dbUser.estado ? dbUser.estado.toUpperCase().trim() : '';
-                            const dbRol = dbUser && dbUser.rol ? dbUser.rol.toUpperCase().trim() : '';
-                            if (!dbUser || (dbEstado !== 'APROBADO' && dbRol !== 'SUPER_ADMINISTRADOR' && dbRol !== 'ADMINISTRADOR_EMPRESA')) {
+                            const userEntries = users.filter(u => u.email && u.email.toLowerCase().trim() === userAccount.username.toLowerCase().trim());
+                            const activeEntry = userEntries.find(u => {
+                                const dbEstado = u.estado ? u.estado.toUpperCase().trim() : '';
+                                const dbRol = u.rol ? u.rol.toUpperCase().trim() : '';
+                                return dbEstado === 'APROBADO' || dbRol === 'SUPER_ADMINISTRADOR' || dbRol === 'ADMINISTRADOR_EMPRESA';
+                            });
+
+                            if (userEntries.length === 0 || !activeEntry) {
                                 alert('Tu acceso ha sido revocado o está pendiente. Cerrando sesión.');
                                 sessionStorage.removeItem('userAccount');
                                 localStorage.removeItem('userAccount');
                                 window.location.replace('https://norabim.com/inse.html');
                                 return; // Stop execution
                             } else {
-                                // Use fresh DB user data
-                                userAccount.role = dbUser.rol;
-                                userAccount.empresa = dbUser.empresa;
+                                // Use fresh DB user data from the active entry
+                                userAccount.role = activeEntry.rol;
+                                userAccount.empresa = activeEntry.empresa;
                                 
                                 // Update cache
                                 const cacheLocation = localStorage.getItem('userAccount') ? 'localStorage' : 'sessionStorage';
@@ -326,34 +330,54 @@
                                           .replace(/[^a-z0-9]/g, "")
                                           .trim();
                             };
-                            const myComp = allCompanies.find(c => {
-                                if (!c.name || !userAccount.empresa) return false;
+
+                            const userEntries = users.filter(u => u.email && u.email.toLowerCase().trim() === userAccount.username.toLowerCase().trim());
+                            const userCompaniesNames = userEntries.map(u => u.empresa).filter(Boolean);
+
+                            const matchedCompanies = allCompanies.filter(c => {
+                                if (!c.name) return false;
                                 const cName = cleanText(c.name);
                                 const cRazon = cleanText(c.razonSocial);
-                                const uEmp = cleanText(userAccount.empresa);
-                                return (cName && (cName === uEmp || cName.includes(uEmp) || uEmp.includes(cName))) ||
-                                       (cRazon && (cRazon === uEmp || cRazon.includes(uEmp) || uEmp.includes(cRazon)));
+                                return userCompaniesNames.some(uEmpRaw => {
+                                    const uEmp = cleanText(uEmpRaw);
+                                    return (cName && (cName === uEmp || cName.includes(uEmp) || uEmp.includes(cName))) ||
+                                           (cRazon && (cRazon === uEmp || cRazon.includes(uEmp) || uEmp.includes(cRazon)));
+                                });
                             });
-                            if (myComp) {
-                                companies.push({
-                                    id: myComp.id || 'company-' + Date.now(),
-                                    name: myComp.name,
-                                    location: myComp.city ? myComp.city + ', ' + myComp.country : 'Sede Principal',
-                                    image: myComp.image || myComp.logoBase64 || 'https://i.postimg.cc/02mTnnQv/21bd5ee9d2351270615280386caad1f3.jpg',
-                                    code: myComp.code || (myComp.name ? myComp.name.substring(0,3).toUpperCase() : 'BIM'),
-                                    configUrl: myComp.configUrl || 'portal-config.json'
+
+                            companies = matchedCompanies.map(myComp => ({
+                                id: myComp.id || 'company-' + Date.now(),
+                                name: myComp.name,
+                                location: myComp.city ? myComp.city + ', ' + myComp.country : 'Sede Principal',
+                                image: myComp.image || myComp.logoBase64 || 'https://i.postimg.cc/02mTnnQv/21bd5ee9d2351270615280386caad1f3.jpg',
+                                code: myComp.code || (myComp.name ? myComp.name.substring(0,3).toUpperCase() : 'BIM'),
+                                configUrl: myComp.configUrl || 'portal-config.json'
+                            }));
+
+                            // Fallback for associated companies not in DB (excluding statically deleted ones)
+                            userCompaniesNames.forEach(uEmpRaw => {
+                                const uEmpClean = cleanText(uEmpRaw);
+                                const isDeletedInStatic = staticEmpresas.some(se => se.name && cleanText(se.name) === uEmpClean && se.deleted);
+                                if (isDeletedInStatic) return;
+
+                                const alreadyMatched = matchedCompanies.some(c => {
+                                    const cName = cleanText(c.name);
+                                    const cRazon = cleanText(c.razonSocial);
+                                    return (cName && (cName === uEmpClean || cName.includes(uEmpClean) || uEmpClean.includes(cName))) ||
+                                           (cRazon && (cRazon === uEmpClean || cRazon.includes(uEmpClean) || uEmpClean.includes(cRazon)));
                                 });
-                            } else if (userAccount.empresa) {
-                                // If company doesn't exist in DB but user has it (fallback)
-                                companies.push({
-                                    id: 'dynamic-' + Date.now(),
-                                    name: userAccount.empresa,
-                                    location: 'Pendiente',
-                                    image: 'https://i.postimg.cc/02mTnnQv/21bd5ee9d2351270615280386caad1f3.jpg',
-                                    code: 'NEW',
-                                    configUrl: 'portal-config.json'
-                                });
-                            }
+
+                                if (!alreadyMatched) {
+                                    companies.push({
+                                        id: 'dynamic-' + Date.now(),
+                                        name: uEmpRaw,
+                                        location: 'Pendiente',
+                                        image: 'https://i.postimg.cc/02mTnnQv/21bd5ee9d2351270615280386caad1f3.jpg',
+                                        code: 'NEW',
+                                        configUrl: 'portal-config.json'
+                                    });
+                                }
+                            });
                         }
                     }
 
