@@ -113,6 +113,7 @@
                                 ua.role = dbUser.rol;
                                 const cacheLocation = localStorage.getItem('userAccount') ? 'localStorage' : 'sessionStorage';
                                 window[cacheLocation].setItem('userAccount', JSON.stringify(ua));
+                                window.location.reload();
                             }
                         }
                     }

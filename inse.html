@@ -486,7 +486,8 @@
                     try {
                         const response = await fetch(ROLES_SCRIPT_URL);
                         const usersList = await response.json();
-                        const dbUser = usersList.find(u => u.email === normalizedAccountEmail);
+                        const dbUserMatches = usersList.filter(u => u.email === normalizedAccountEmail);
+                        const dbUser = dbUserMatches.length > 0 ? dbUserMatches[dbUserMatches.length - 1] : null;
                         
                         if (!dbUser) {
                             alert('Tu correo no está registrado en el sistema. Por favor, crea una cuenta primero.');
