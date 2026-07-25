@@ -132,6 +132,15 @@
                 <p class="mt-8 text-center text-sm text-gray-500 dark:text-gray-400">
                     ¿No tienes una cuenta? <a href="#" id="register-link" onclick="showRegistrationForm(null); return false;" class="font-semibold text-primary dark:text-white hover:underline">Regístrate</a>
                 </p>
+                <div class="mt-6 pt-6 border-t border-gray-200 dark:border-gray-800 text-center">
+                    <p class="text-sm text-gray-500 dark:text-gray-400">
+                        ¿Quieres usar nora para tu organización?
+                    </p>
+                    <button onclick="showCreateCompanyForm('')" class="mt-4 w-full flex items-center justify-center gap-2 bg-slate-900 dark:bg-white text-white dark:text-slate-900 font-bold py-2.5 px-4 rounded-lg shadow-md hover:bg-slate-800 dark:hover:bg-gray-200 transition duration-300">
+                        <span class="material-symbols-outlined text-sm">domain_add</span>
+                        Registrar Nueva Empresa
+                    </button>
+                </div>
                 </div> <!-- Cierra Login Section -->
 
                 <!-- SECCIÓN DE REGISTRO ADICIONAL (OCULTA POR DEFECTO) -->
@@ -378,6 +387,26 @@
                             </div>
                         </div>
 
+                        <!-- 5. Asociación de Usuario Existente -->
+                        <div class="border-t border-gray-200 dark:border-gray-700 pt-6">
+                            <h3 class="text-xs font-bold uppercase tracking-widest text-gray-400 mb-3 pb-1">5. Propietario / Administrador</h3>
+                            <div class="flex items-center mb-4">
+                                <input type="checkbox" id="company-has-user" class="form-checkbox h-5 w-5 text-primary rounded border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 focus:ring-primary cursor-pointer" onchange="toggleCompanyUserFields()">
+                                <label for="company-has-user" class="ml-3 text-sm text-gray-600 dark:text-gray-300 cursor-pointer">Ya tengo una cuenta de usuario en nora</label>
+                            </div>
+                            
+                            <div id="company-user-existing-fields" class="space-y-4 hidden bg-gray-50 dark:bg-gray-800 p-4 rounded-lg border border-gray-200 dark:border-gray-700">
+                                <div>
+                                    <label class="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Nombre Completo del Usuario <span class="text-red-500">*</span></label>
+                                    <input type="text" id="company-user-name" placeholder="Ej. Juan Pérez" class="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 text-sm focus:ring-2 focus:ring-primary focus:border-primary">
+                                </div>
+                                <div>
+                                    <label class="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Correo electrónico de la cuenta existente <span class="text-red-500">*</span></label>
+                                    <input type="email" id="company-user-email" placeholder="ejemplo@correo.com" class="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 text-sm focus:ring-2 focus:ring-primary focus:border-primary">
+                                </div>
+                            </div>
+                        </div>
+
                         <button type="submit" class="w-full bg-primary hover:bg-black dark:bg-white dark:hover:bg-gray-200 dark:text-black text-white font-bold py-3 px-4 rounded-lg shadow-md transition duration-300 flex justify-center items-center mt-6">
                             Guardar y Continuar
                         </button>
@@ -389,6 +418,7 @@
     </div>
 
     <script>
+        const NEW_REGISTRATION_SCRIPT = 'https://script.google.com/macros/s/AKfycbzdclwrLaL7k30waIlgoWhQMc4toeaomWFeHBXi5HLhnfPPrpHJFIOSveGa_oavtmqV5w/exec';
         // --- ROTACIÓN DE IMAGEN DE FONDO ---
         const bgImages = [
             'https://i.postimg.cc/gjdf4ybv/1bed16470705aeff4a1bf5c9d6a4d92d.jpg',
@@ -775,6 +805,27 @@
             }
         }
 
+        window.toggleCompanyUserFields = function() {
+            const hasUserCheckbox = document.getElementById('company-has-user');
+            const existingFields = document.getElementById('company-user-existing-fields');
+            const userNameInput = document.getElementById('company-user-name');
+            const userEmailInput = document.getElementById('company-user-email');
+            
+            if (hasUserCheckbox && existingFields) {
+                if (hasUserCheckbox.checked) {
+                    existingFields.classList.remove('hidden');
+                    if (userNameInput) userNameInput.required = true;
+                    if (userEmailInput) userEmailInput.required = true;
+                } else {
+                    existingFields.classList.add('hidden');
+                    if (userNameInput) userNameInput.required = false;
+                    if (userEmailInput) userEmailInput.required = false;
+                    if (userNameInput) userNameInput.value = '';
+                    if (userEmailInput) userEmailInput.value = '';
+                }
+            }
+        }
+
         window.handleCreateCompany = async function() {
             // Get multiselect / checkbox values
             const selectedSectors = Array.from(document.querySelectorAll('input[name="org-sector"]:checked')).map(cb => cb.value);
@@ -812,12 +863,71 @@
             if(lightLogoFile) window.newCompanyData.logoLightBase64 = await toBase64(lightLogoFile);
             if(darkLogoFile) window.newCompanyData.logoDarkBase64 = await toBase64(darkLogoFile);
 
-            // Update registration form UI
-            orgSearchInput.value = window.newCompanyData.name;
-            orgIdInput.value = 'NEW_COMPANY';
-            
-            // Go back to registration
-            hideCreateCompanyForm();
+            const hasUserCheckbox = document.getElementById('company-has-user');
+            if (hasUserCheckbox && hasUserCheckbox.checked) {
+                const userName = document.getElementById('company-user-name').value.trim();
+                const userEmail = document.getElementById('company-user-email').value.trim();
+                
+                if (!userName || !userEmail) {
+                    alert("Por favor completa los campos del usuario existente.");
+                    return;
+                }
+
+                // Deshabilitar botón temporalmente
+                const submitBtn = document.querySelector('#create-company-form button[type="submit"]');
+                if (submitBtn) {
+                    submitBtn.disabled = true;
+                    submitBtn.innerText = "Registrando empresa...";
+                }
+
+                try {
+                    // Post to Google Apps Script para asociar empresa y usuario en 1 paso
+                    await fetch(NEW_REGISTRATION_SCRIPT, {
+                        method: 'POST',
+                        mode: 'no-cors',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            action: 'createUserAndCompany',
+                            companyData: window.newCompanyData,
+                            userData: {
+                                nombre: userName,
+                                email: userEmail,
+                                telefono: window.newCompanyData.phone || '',
+                                empresa: window.newCompanyData.name,
+                                especialidad: '',
+                                cargo: '',
+                                rol: 'ADMINISTRADOR_EMPRESA',
+                                estado: 'APROBADO'
+                            }
+                        })
+                    });
+
+                    alert("¡Empresa registrada con éxito! Ha sido asociada a tu usuario existente. Ahora puedes iniciar sesión con tu cuenta de siempre.");
+                    
+                    // Resetear formulario y volver al login
+                    document.getElementById('create-company-form').reset();
+                    if (hasUserCheckbox) hasUserCheckbox.checked = false;
+                    toggleCompanyUserFields();
+                    
+                    document.getElementById('create-company-section').classList.add('hidden');
+                    document.getElementById('login-section').classList.remove('hidden');
+                } catch(e) {
+                    console.error("Error al registrar empresa con usuario existente", e);
+                    alert("Hubo un error al registrar la empresa. Por favor inténtalo de nuevo.");
+                } finally {
+                    if (submitBtn) {
+                        submitBtn.disabled = false;
+                        submitBtn.innerText = "Guardar y Continuar";
+                    }
+                }
+            } else {
+                // Update registration form UI
+                orgSearchInput.value = window.newCompanyData.name;
+                orgIdInput.value = 'NEW_COMPANY';
+                
+                // Go back to registration
+                hideCreateCompanyForm();
+            }
         }
 
         window.handleCompleteRegistration = async function() {
@@ -867,8 +977,6 @@
                     return;
                 }
             }
-
-            const NEW_REGISTRATION_SCRIPT = 'https://script.google.com/macros/s/AKfycbzdclwrLaL7k30waIlgoWhQMc4toeaomWFeHBXi5HLhnfPPrpHJFIOSveGa_oavtmqV5w/exec';
             
             try {
                 // Post to Google Apps Script (crear empresa y usuario en 1 paso si aplica)
