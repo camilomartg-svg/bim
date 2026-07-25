@@ -108,68 +108,68 @@ document.addEventListener('DOMContentLoaded', async () => {
               }
            });
            if(addedNew) showBanner('Se descubrieron nuevas empresas registradas. Haz clic en Publicar en la Nube para integrarlas permanentemente.', 'success');
-         }
+        }
 
-         // Sincronizar miembros y administradores desde la lista de usuarios en Google Sheets          
-         try {
-             const uRes = await fetch(urlGoogle + '?t=' + Date.now());
-             if (uRes.ok) {
-                 const gUsers = await uRes.json();
-                 
-                 const cleanText = (str) => {
-                     if (!str) return '';
-                     return str.toLowerCase()
-                               .normalize("NFD")
-                               .replace(/[\u0300-\u036f]/g, "")
-                               .replace(/[^a-z0-9]/g, "")
-                               .trim();
-                 };
+        // Sincronizar miembros y administradores desde la lista de usuarios en Google Sheets
+        try {
+           const uRes = await fetch(urlGoogle + '?t=' + Date.now());
+           if (uRes.ok) {
+               const gUsers = await uRes.json();
+               
+               const cleanText = (str) => {
+                   if (!str) return '';
+                   return str.toLowerCase()
+                             .normalize("NFD")
+                             .replace(/[\u0300-\u036f]/g, "")
+                             .replace(/[^a-z0-9]/g, "")
+                             .trim();
+               };
 
-                 empresas.forEach(emp => {
-                     if (!emp.members) emp.members = [];
-                     if (!emp.admins) emp.admins = [];
-                     gUsers.forEach(gu => {
-                          if (gu.empresa && (emp.name || emp.razonSocial)) {
-                              const guEmp = cleanText(gu.empresa);
-                              const empName = cleanText(emp.name);
-                              const empRazon = cleanText(emp.razonSocial);
-                              
-                              const isMatch = (guEmp && empName && (guEmp === empName || empName.includes(guEmp) || guEmp.includes(empName))) ||
-                                              (guEmp && empRazon && (guEmp === empRazon || empRazon.includes(guEmp) || guEmp.includes(empRazon)));
-                              
-                              if (isMatch) {
-                                  const email = gu.email ? gu.email.toLowerCase().trim() : '';
-                                  if (email) {
-                                      const mIdx = emp.members.findIndex(m => m.email && m.email.toLowerCase().trim() === email);
-                                      const memberData = {
-                                          name: gu.nombre || email.split('@')[0],
-                                          email: email,
-                                          role: gu.rol || 'INVITADO',
-                                          empresaUsuario: gu.empresa,
-                                          especialidad: gu.especialidad || '',
-                                          cargo: gu.cargo || ''
-                                      };
-                                      if (mIdx > -1) {
-                                          emp.members[mIdx] = { ...emp.members[mIdx], ...memberData };
-                                      } else {
-                                          emp.members.push(memberData);
-                                      }
-                                      
-                                      if (gu.rol === 'ADMINISTRADOR_EMPRESA') {
-                                          const adminExists = emp.admins.some(a => a.toLowerCase().trim() === email);
-                                          if (!adminExists) {
-                                              emp.admins.push(email);
-                                          }
-                                      }
-                                  }
-                              }
-                          }
-                      });
-                 });
-             }
-          } catch(ue) {
-             console.warn('No se pudo sincronizar los miembros desde Google Sheets', ue);
-          }   
+               empresas.forEach(emp => {
+                   if (!emp.members) emp.members = [];
+                   if (!emp.admins) emp.admins = [];
+                   gUsers.forEach(gu => {
+                        if (gu.empresa && (emp.name || emp.razonSocial)) {
+                            const guEmp = cleanText(gu.empresa);
+                            const empName = cleanText(emp.name);
+                            const empRazon = cleanText(emp.razonSocial);
+                            
+                            const isMatch = (guEmp && empName && (guEmp === empName || empName.includes(guEmp) || guEmp.includes(empName))) ||
+                                            (guEmp && empRazon && (guEmp === empRazon || empRazon.includes(guEmp) || guEmp.includes(empRazon)));
+                            
+                            if (isMatch) {
+                                const email = gu.email ? gu.email.toLowerCase().trim() : '';
+                                if (email) {
+                                    const mIdx = emp.members.findIndex(m => m.email && m.email.toLowerCase().trim() === email);
+                                    const memberData = {
+                                        name: gu.nombre || email.split('@')[0],
+                                        email: email,
+                                        role: gu.rol || 'INVITADO',
+                                        empresaUsuario: gu.empresa,
+                                        especialidad: gu.especialidad || '',
+                                        cargo: gu.cargo || ''
+                                    };
+                                    if (mIdx > -1) {
+                                        emp.members[mIdx] = { ...emp.members[mIdx], ...memberData };
+                                    } else {
+                                        emp.members.push(memberData);
+                                    }
+                                    
+                                    if (gu.rol === 'ADMINISTRADOR_EMPRESA') {
+                                        const adminExists = emp.admins.some(a => a.toLowerCase().trim() === email);
+                                        if (!adminExists) {
+                                            emp.admins.push(email);
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    });
+               });
+           }
+        } catch(ue) {
+           console.warn('No se pudo sincronizar los miembros desde Google Sheets', ue);
+        }
       } catch(e) {
         console.warn('No se pudo sincronizar con Google Sheets', e);
       }
@@ -400,6 +400,183 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (selectedIndex === -1) return;
     const emp = empresas[selectedIndex];
     if (!emp.members) emp.members = [];
+
+    // All company names for searchable dropdown
+    const allCompanyNames = empresas
+      .filter(e => !e.deleted && e.name)
+      .map(e => e.name)
+      .sort((a, b) => a.localeCompare(b));
+    
+    const grouped = {};
+    emp.members.forEach((m, i) => {
+      let g = '';
+      if(window.currentGroupBy === 'empresa') {
+        g = m.empresaUsuario && m.empresaUsuario.trim() !== '' ? m.empresaUsuario.trim() : 'Sin Empresa Asignada';
+      } else {
+        g = m.especialidad && m.especialidad.trim() !== '' ? m.especialidad.trim() : 'Sin Especialidad Asignada';
+      }
+      if (!grouped[g]) grouped[g] = [];
+      grouped[g].push({ ...m, originalIndex: i });
+    });
+
+    const sortedGroups = Object.keys(grouped).sort((a, b) => {
+      if (a.startsWith('Sin ')) return 1;
+      if (b.startsWith('Sin ')) return -1;
+      return a.localeCompare(b);
+    });
+
+    let html = '';
+    sortedGroups.forEach(g => {
+      const safeGroupId = 'group-' + btoa(unescape(encodeURIComponent(g))).replace(/[^a-zA-Z0-9]/g, '');
+      html += `
+        <div class="mt-4 mb-2 cursor-pointer group-header flex justify-between items-center bg-slate-100 hover:bg-slate-200 px-3 py-2 rounded-lg transition-colors select-none" onclick="toggleGroup('${safeGroupId}')">
+          <h4 class="text-xs font-bold text-slate-600 uppercase tracking-wider">${g}</h4>
+          <span class="material-symbols-outlined text-slate-400 text-lg transition-transform" id="icon-${safeGroupId}">expand_less</span>
+        </div>
+        <div id="${safeGroupId}" class="flex flex-col gap-4">
+      `;
+      html += grouped[g].map(item => {
+        const i = item.originalIndex;
+        const m = item;
+
+        // ── 1. Empresa: searchable datalist dropdown ────────────────────────
+        const empListId = `emp-list-${i}`;
+        const empOptions = allCompanyNames.map(n => `<option value="${n}">`).join('');
+
+        // ── 2. Especialidad: filtered to company's registered specialties ───
+        // emp.especialidades should be an array; fallback to full list
+        const empEsps = (emp.especialidades && emp.especialidades.length > 0)
+          ? emp.especialidades
+          : ['Ambiental','Arquitectura','BIM','CCTV','Climatización y Ventilación (HVAC)',
+             'Desagües','Eléctrico','Elementos no estructurales','Estructura',
+             'Gas','Geotecnia y Suelos','Lluvias','Presupuestos','Propiedad horizontal',
+             'Seguridad humana','Suministro','Vías e Infraestructura'];
+        const espOptions = empEsps.map(e =>
+          `<option value="${e}" ${m.especialidad === e ? 'selected' : ''}>${e}</option>`
+        ).join('');
+
+        // ── 3. Cargo: only visible if member's company = this empresa ───────
+        const isInternal = !m.empresaUsuario || m.empresaUsuario.trim() === '' ||
+          m.empresaUsuario.trim().toLowerCase() === emp.name.trim().toLowerCase();
+
+        const cargoHtml = isInternal ? `
+          <label class="block md:col-span-2">
+            <span class="mb-1 block text-xs font-semibold text-slate-600">Cargo (empleado interno)</span>
+            <select class="w-full text-xs rounded border-slate-200" onchange="updateUser(${i}, 'cargo', this.value)">
+              <option value="">Seleccione cargo...</option>
+              <optgroup label="Dirección y Alta Gerencia">
+                <option value="Gerente General / CEO" ${m.cargo==='Gerente General / CEO'?'selected':''}>Gerente General / CEO</option>
+                <option value="Gerente de Operaciones / COO" ${m.cargo==='Gerente de Operaciones / COO'?'selected':''}>Gerente de Operaciones / COO</option>
+                <option value="Director de Proyectos / Gerente de Proyectos" ${m.cargo==='Director de Proyectos / Gerente de Proyectos'?'selected':''}>Director de Proyectos / Gerente de Proyectos</option>
+                <option value="Director de Obra / Director de Construcción" ${m.cargo==='Director de Obra / Director de Construcción'?'selected':''}>Director de Obra / Director de Construcción</option>
+                <option value="Director de Diseño / Gerencia de Diseño" ${m.cargo==='Director de Diseño / Gerencia de Diseño'?'selected':''}>Director de Diseño / Gerencia de Diseño</option>
+                <option value="Gerente de Contrataciones y Compras" ${m.cargo==='Gerente de Contrataciones y Compras'?'selected':''}>Gerente de Contrataciones y Compras</option>
+              </optgroup>
+              <optgroup label="Arquitectura">
+                <option value="Director de Arquitectura" ${m.cargo==='Director de Arquitectura'?'selected':''}>Director de Arquitectura</option>
+                <option value="Coordinador de Arquitectura" ${m.cargo==='Coordinador de Arquitectura'?'selected':''}>Coordinador de Arquitectura</option>
+                <option value="Arquitecto Senior" ${m.cargo==='Arquitecto Senior'?'selected':''}>Arquitecto Senior</option>
+                <option value="Arquitecto Junior" ${m.cargo==='Arquitecto Junior'?'selected':''}>Arquitecto Junior</option>
+                <option value="Modelador de Arquitectura" ${m.cargo==='Modelador de Arquitectura'?'selected':''}>Modelador de Arquitectura</option>
+              </optgroup>
+              <optgroup label="Estrategia y Desarrollo BIM / VDC">
+                <option value="BIM Manager" ${m.cargo==='BIM Manager'?'selected':''}>BIM Manager</option>
+                <option value="Coordinador BIM" ${m.cargo==='Coordinador BIM'?'selected':''}>Coordinador BIM</option>
+                <option value="Líder de Modelado / Diseñador Líder" ${m.cargo==='Líder de Modelado / Diseñador Líder'?'selected':''}>Líder de Modelado / Diseñador Líder</option>
+                <option value="BIM Developer / Desarrollador BIM" ${m.cargo==='BIM Developer / Desarrollador BIM'?'selected':''}>BIM Developer / Desarrollador BIM</option>
+                <option value="Residente BIM" ${m.cargo==='Residente BIM'?'selected':''}>Residente BIM</option>
+                <option value="Modelador BIM" ${m.cargo==='Modelador BIM'?'selected':''}>Modelador BIM</option>
+              </optgroup>
+              <optgroup label="Gestión y Supervisión de Campo (Obra)">
+                <option value="Director de Obra" ${m.cargo==='Director de Obra'?'selected':''}>Director de Obra</option>
+                <option value="Residente de Obra" ${m.cargo==='Residente de Obra'?'selected':''}>Residente de Obra</option>
+                <option value="Residente de Redes / Instalaciones" ${m.cargo==='Residente de Redes / Instalaciones'?'selected':''}>Residente de Redes / Instalaciones</option>
+                <option value="Residente de Acabados" ${m.cargo==='Residente de Acabados'?'selected':''}>Residente de Acabados</option>
+                <option value="Residente Estructural" ${m.cargo==='Residente Estructural'?'selected':''}>Residente Estructural</option>
+                <option value="Residente Técnico" ${m.cargo==='Residente Técnico'?'selected':''}>Residente Técnico</option>
+              </optgroup>
+              <optgroup label="Ingenierías">
+                <option value="Diseñador Eléctrico" ${m.cargo==='Diseñador Eléctrico'?'selected':''}>Diseñador Eléctrico</option>
+                <option value="Diseñador Estructural" ${m.cargo==='Diseñador Estructural'?'selected':''}>Diseñador Estructural</option>
+                <option value="Diseñador Hidrosánitario" ${m.cargo==='Diseñador Hidrosánitario'?'selected':''}>Diseñador Hidrosánitario</option>
+                <option value="Diseñador Gas" ${m.cargo==='Diseñador Gas'?'selected':''}>Diseñador Gas</option>
+                <option value="Diseñador HVAC" ${m.cargo==='Diseñador HVAC'?'selected':''}>Diseñador HVAC</option>
+              </optgroup>
+              <optgroup label="Supervisión y Control">
+                <option value="Interventor / Supervisor Técnico" ${m.cargo==='Interventor / Supervisor Técnico'?'selected':''}>Interventor / Supervisor Técnico</option>
+                <option value="Inspector de Calidad / Aseguramiento de Calidad (QA/QC)" ${m.cargo==='Inspector de Calidad / Aseguramiento de Calidad (QA/QC)'?'selected':''}>Inspector de Calidad (QA/QC)</option>
+              </optgroup>
+              <optgroup label="Ingeniería, Arquitectura y Diseño">
+                <option value="Ingeniero Calculista / Estructural" ${m.cargo==='Ingeniero Calculista / Estructural'?'selected':''}>Ingeniero Calculista / Estructural</option>
+                <option value="Ingeniero de Redes (MEP)" ${m.cargo==='Ingeniero de Redes (MEP)'?'selected':''}>Ingeniero de Redes (MEP)</option>
+                <option value="Arquitecto Diseñador" ${m.cargo==='Arquitecto Diseñador'?'selected':''}>Arquitecto Diseñador</option>
+                <option value="Modelador BIM / Dibujante" ${m.cargo==='Modelador BIM / Dibujante'?'selected':''}>Modelador BIM / Dibujante</option>
+              </optgroup>
+              <optgroup label="Control de Costos, Tiempos y Suministros">
+                <option value="Ingeniero de Presupuestos / Costos" ${m.cargo==='Ingeniero de Presupuestos / Costos'?'selected':''}>Ingeniero de Presupuestos / Costos</option>
+                <option value="Analista de Programación y Control de Obra" ${m.cargo==='Analista de Programación y Control de Obra'?'selected':''}>Analista de Programación y Control de Obra</option>
+                <option value="Analista de Compras / Suministros" ${m.cargo==='Analista de Compras / Suministros'?'selected':''}>Analista de Compras / Suministros</option>
+              </optgroup>
+              <optgroup label="Topografía y Geomática">
+                <option value="Topógrafo" ${m.cargo==='Topógrafo'?'selected':''}>Topógrafo</option>
+                <option value="Cadenero / Auxiliar de Topografía" ${m.cargo==='Cadenero / Auxiliar de Topografía'?'selected':''}>Cadenero / Auxiliar de Topografía</option>
+              </optgroup>
+              <optgroup label="Seguridad, Medio Ambiente y Apoyo Operativo">
+                <option value="Residente de Seguridad y Salud en el Trabajo (SST)" ${m.cargo==='Residente de Seguridad y Salud en el Trabajo (SST)'?'selected':''}>Residente SST</option>
+                <option value="Residente Ambiental" ${m.cargo==='Residente Ambiental'?'selected':''}>Residente Ambiental</option>
+                <option value="Almacenista de Obra" ${m.cargo==='Almacenista de Obra'?'selected':''}>Almacenista de Obra</option>
+                <option value="Administrador de Obra" ${m.cargo==='Administrador de Obra'?'selected':''}>Administrador de Obra</option>
+                <option value="Administrador de TI / Sistemas" ${m.cargo==='Administrador de TI / Sistemas'?'selected':''}>Administrador de TI / Sistemas</option>
+                <option value="Asesor Jurídico / Gestor de Contratos" ${m.cargo==='Asesor Jurídico / Gestor de Contratos'?'selected':''}>Asesor Jurídico / Gestor de Contratos</option>
+              </optgroup>
+            </select>
+          </label>` : '';
+
+        return `
+      <div class="border rounded-xl p-4 bg-slate-50 relative group">
+        <button onclick="deleteUser(${i})" class="absolute top-4 right-4 text-rose-500 hover:text-rose-700 p-1 opacity-0 group-hover:opacity-100 transition-opacity" title="Eliminar usuario"><span class="material-symbols-outlined text-sm">delete</span></button>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          
+          <label class="block">
+            <span class="mb-1 block text-xs font-semibold text-slate-600">Correo Electrónico</span>
+            <input type="email" class="w-full text-xs rounded border-slate-200" value="${m.email || ''}" onchange="updateUser(${i}, 'email', this.value)" placeholder="usuario@empresa.com">
+          </label>
+
+          <label class="block">
+            <span class="mb-1 block text-xs font-semibold text-slate-600">Empresa (Contratista / Firma)</span>
+            <input type="text" list="${empListId}" class="w-full text-xs rounded border-slate-200" value="${m.empresaUsuario || ''}"
+              onchange="updateUser(${i}, 'empresaUsuario', this.value); renderUsers();" placeholder="Busca o escribe una empresa...">
+            <datalist id="${empListId}">${empOptions}</datalist>
+          </label>
+          
+          <label class="block">
+            <span class="mb-1 block text-xs font-semibold text-slate-600">Rol del Sistema</span>
+            <select class="w-full text-xs rounded border-slate-200" onchange="updateUser(${i}, 'role', this.value)">
+              <option value="INVITADO" ${m.role==='INVITADO'?'selected':''}>INVITADO</option>
+              <option value="ADMINISTRADOR_EMPRESA" ${m.role==='ADMINISTRADOR_EMPRESA'?'selected':''}>ADMINISTRADOR_EMPRESA</option>
+            </select>
+          </label>
+
+          <label class="block">
+            <span class="mb-1 block text-xs font-semibold text-slate-600">Especialidad Técnica</span>
+            <select class="w-full text-xs rounded border-slate-200" onchange="updateUser(${i}, 'especialidad', this.value)">
+              <option value="">Seleccione especialidad...</option>
+              ${espOptions}
+            </select>
+          </label>
+
+          ${cargoHtml}
+
+        </div>
+      </div>
+        `;
+      }).join('');
+      
+      html += `</div>`; // Close group div
+    });
+    
+    usersListEl.innerHTML = html;
+  }
 
 
   window.updateUser = (idx, field, val) => {
@@ -1151,7 +1328,8 @@ let contentBase = '';
     
     try {
       // ── AUTO-APPROVE pending users that appear as members ──────────────────
-      const membersByEmail = new Map();
+      // Collect all member emails across all companies
+      const membersByEmail = new Map(); // email -> { name, empName }
       empresas.forEach(emp => {
         (emp.members || []).forEach(m => {
           if (m.email && m.email.trim()) {
@@ -1163,10 +1341,13 @@ let contentBase = '';
         });
       });
 
+      // Find which of those are currently PENDIENTE
       const toApprove = [];
       membersByEmail.forEach((data, email) => {
         const gu = window.globalUsersMap.get(email);
-        if (gu && gu.estado === 'PENDIENTE') toApprove.push({ email, ...data });
+        if (gu && gu.estado === 'PENDIENTE') {
+          toApprove.push({ email, ...data });
+        }
       });
 
       if (toApprove.length > 0) {
@@ -1179,6 +1360,7 @@ let contentBase = '';
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ email: u.email, nombre: u.name, rol: rol, empresa: u.empName, estado: 'APROBADO' })
           });
+          // Update local map
           const existing = window.globalUsersMap.get(u.email);
           if (existing) window.globalUsersMap.set(u.email, { ...existing, estado: 'APROBADO', role: rol, companyName: u.empName });
         }
@@ -1200,6 +1382,7 @@ let contentBase = '';
         const emp = empresas.find(e => e.id === empId);
         if (emp) {
           const path = emp.configUrl || `config-${empId}.json`;
+          // Mantener compatibilidad de portal si no existe
           if (!configData.portal) {
             configData.portal = { name: emp.name || "nora CDE" };
           }
@@ -1208,7 +1391,8 @@ let contentBase = '';
           await pushFile(`docs/${path}`, str);
         }
       }
-
+      
+      sessionStorage.removeItem('cachedCompanies_v2');
       showBanner('✅ Los datos se han subido a la nube. GitHub Pages tardará de 1 a 3 minutos en compilar e integrar los cambios en el sitio público.', 'success');
     } catch(e) {
       showBanner('❌ ' + e.message, 'error');
@@ -1583,24 +1767,42 @@ window.quickApproveUser = async function(email, nombre) {
     const u = window.globalUsersMap.get(email);
     if (!u) return;
 
+    // Ask for empresa if not assigned yet
     let empresa = u.companyName && u.companyName !== 'Sin Empresa Asignada' ? u.companyName : '';
     if (!empresa) {
         empresa = prompt(`Asigna una empresa a ${nombre} para aprobar su acceso (deja en blanco para aprobar sin empresa):`, '');
-        if (empresa === null) return;
+        if (empresa === null) return; // cancelled
         empresa = empresa.trim();
     }
 
+    // Default approved role: ADMINISTRADOR_EMPRESA if empresa, else INVITADO
     const rol = empresa ? 'ADMINISTRADOR_EMPRESA' : (u.role === 'INVITADO' ? 'VISOR' : u.role);
 
     try {
+        const payload = {
+            email: email,
+            nombre: u.name,
+            rol: rol,
+            empresa: empresa,
+            especialidad: u.specialty || '',
+            estado: 'APROBADO'
+        };
+
         await fetch(ROLES_SCRIPT_URL, {
             method: 'POST',
             mode: 'no-cors',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ email, nombre: u.name, rol, empresa, especialidad: u.specialty || '', estado: 'APROBADO' })
+            body: JSON.stringify(payload)
         });
 
-        window.globalUsersMap.set(email, { ...u, role: rol, companyName: empresa || 'Sin Empresa Asignada', estado: 'APROBADO' });
+        // Update local map
+        window.globalUsersMap.set(email, {
+            ...u,
+            role: rol,
+            companyName: empresa || 'Sin Empresa Asignada',
+            estado: 'APROBADO'
+        });
+
         renderGlobalUsers();
         showBanner(`✅ ${nombre} aprobado correctamente${empresa ? ' en ' + empresa : ''}.`, 'success');
     } catch(e) {
