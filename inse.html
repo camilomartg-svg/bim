@@ -397,10 +397,6 @@
                             
                             <div id="company-user-existing-fields" class="space-y-4 hidden bg-gray-50 dark:bg-gray-800 p-4 rounded-lg border border-gray-200 dark:border-gray-700">
                                 <div>
-                                    <label class="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Nombre Completo del Usuario <span class="text-red-500">*</span></label>
-                                    <input type="text" id="company-user-name" placeholder="Ej. Juan Pérez" class="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 text-sm focus:ring-2 focus:ring-primary focus:border-primary">
-                                </div>
-                                <div>
                                     <label class="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Correo electrónico de la cuenta existente <span class="text-red-500">*</span></label>
                                     <input type="email" id="company-user-email" placeholder="ejemplo@correo.com" class="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 text-sm focus:ring-2 focus:ring-primary focus:border-primary">
                                 </div>
@@ -808,19 +804,15 @@
         window.toggleCompanyUserFields = function() {
             const hasUserCheckbox = document.getElementById('company-has-user');
             const existingFields = document.getElementById('company-user-existing-fields');
-            const userNameInput = document.getElementById('company-user-name');
             const userEmailInput = document.getElementById('company-user-email');
             
             if (hasUserCheckbox && existingFields) {
                 if (hasUserCheckbox.checked) {
                     existingFields.classList.remove('hidden');
-                    if (userNameInput) userNameInput.required = true;
                     if (userEmailInput) userEmailInput.required = true;
                 } else {
                     existingFields.classList.add('hidden');
-                    if (userNameInput) userNameInput.required = false;
                     if (userEmailInput) userEmailInput.required = false;
-                    if (userNameInput) userNameInput.value = '';
                     if (userEmailInput) userEmailInput.value = '';
                 }
             }
@@ -865,11 +857,10 @@
 
             const hasUserCheckbox = document.getElementById('company-has-user');
             if (hasUserCheckbox && hasUserCheckbox.checked) {
-                const userName = document.getElementById('company-user-name').value.trim();
                 const userEmail = document.getElementById('company-user-email').value.trim();
                 
-                if (!userName || !userEmail) {
-                    alert("Por favor completa los campos del usuario existente.");
+                if (!userEmail) {
+                    alert("Por favor ingresa el correo electrónico del usuario existente.");
                     return;
                 }
 
@@ -890,7 +881,7 @@
                             action: 'createUserAndCompany',
                             companyData: window.newCompanyData,
                             userData: {
-                                nombre: userName,
+                                nombre: '', // No requerido para usuario existente
                                 email: userEmail,
                                 telefono: window.newCompanyData.phone || '',
                                 empresa: window.newCompanyData.name,

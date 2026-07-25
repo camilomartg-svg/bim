@@ -211,109 +211,50 @@
                 const url = 'https://script.google.com/macros/s/AKfycbzdclwrLaL7k30waIlgoWhQMc4toeaomWFeHBXi5HLhnfPPrpHJFIOSveGa_oavtmqV5w/exec';
                 
 
-                // --- ADDED CACHE LOGIC TO AVOID LOADING DELAYS ---
-                let cachedCompanies_v2 = null;
+                // Fetch ALL companies and users concurrently in real-time
+                const [compRes, userRes, staticEmpRes] = await Promise.all([
+                    fetch(url + '?action=getCompanies&t=' + Date.now()),
+                    fetch(url + '?t=' + Date.now()),
+                    fetch('empresas.json?t=' + Date.now())
+                ]);
+                
+                let allCompanies = await compRes.json();
+                let users = await userRes.json();
+                let staticEmpresas = [];
+                
                 try {
-                    cachedCompanies_v2 = JSON.parse(sessionStorage.getItem('cachedCompanies_v2'));
-                } catch(e) {}
-                
-                let allCompanies;
-                let users;
-                
-                let isUserInCache = false;
-                if (cachedCompanies_v2 && cachedCompanies_v2.users && userAccount && userAccount.username) {
-                    isUserInCache = cachedCompanies_v2.users.some(u => u.email === userAccount.username.toLowerCase().trim());
-                }
-
-                if (cachedCompanies_v2 && (isUserInCache || (userAccount && userAccount.username === 'imagina3ddesign@gmail.com'))) {
-                    allCompanies = cachedCompanies_v2.companies;
-                    users = cachedCompanies_v2.users;
-                    // Fire background fetch silently to update next time
-                    Promise.all([
-                        fetch(url + '?action=getCompanies'),
-                        fetch(url),
-                        fetch('empresas.json?t=' + Date.now())
-                    ]).then(async ([cRes, uRes, staticEmpRes]) => {
-                        let newC = await cRes.json();
-                        const newU = await uRes.json();
-                        let staticEmpresas = [];
-                        try {
-                            if (staticEmpRes.ok) {
-                                staticEmpresas = await staticEmpRes.json();
-                            } else {
-                                const rawRes = await fetch('https://raw.githubusercontent.com/camilomartg-svg/bim/main/empresas.json?t=' + Date.now());
-                                if (rawRes.ok) staticEmpresas = await rawRes.json();
-                            }
-                        } catch(e) { 
-                            console.warn('Background merge error', e);
-                            try {
-                                const rawRes = await fetch('https://raw.githubusercontent.com/camilomartg-svg/bim/main/empresas.json?t=' + Date.now());
-                                if (rawRes.ok) staticEmpresas = await rawRes.json();
-                            } catch(e2) {}
-                        }
-                        
-                        if (staticEmpresas && Array.isArray(staticEmpresas)) {
-                            newC = newC.filter(c => {
-                                if (!c.name) return true;
-                                const matched = staticEmpresas.find(se => se.name && se.name.toLowerCase().trim() === c.name.toLowerCase().trim());
-                                if (matched && matched.deleted) return false;
-                                if (matched) {
-                                    c.id = matched.id;
-                                    c.image = matched.image;
-                                    c.configUrl = matched.configUrl;
-                                    c.code = matched.code;
-                                }
-                                return true;
-                            });
-                        }
-                        sessionStorage.setItem('cachedCompanies_v2', JSON.stringify({companies: newC, users: newU}));
-                        allCompanies = newC;
-                        users = newU;
-                        if (typeof renderUI === 'function') renderUI();
-                    }).catch(console.error);
-                } else {
-                    // Fetch ALL companies and users concurrently for max speed
-                    const [compRes, userRes, staticEmpRes] = await Promise.all([
-                        fetch(url + '?action=getCompanies'),
-                        fetch(url),
-                        fetch('empresas.json?t=' + Date.now())
-                    ]);
-                    allCompanies = await compRes.json();
-                    users = await userRes.json();
-                    let staticEmpresas = [];
+                    if (staticEmpRes.ok) {
+                        staticEmpresas = await staticEmpRes.json();
+                    } else {
+                        const rawRes = await fetch('https://raw.githubusercontent.com/camilomartg-svg/bim/main/empresas.json?t=' + Date.now());
+                        if (rawRes.ok) staticEmpresas = await rawRes.json();
+                    }
+                } catch(e) { 
+                    console.warn('Could not merge static empresas', e); 
                     try {
-                        if (staticEmpRes.ok) {
-                            staticEmpresas = await staticEmpRes.json();
-                        } else {
-                            const rawRes = await fetch('https://raw.githubusercontent.com/camilomartg-svg/bim/main/empresas.json?t=' + Date.now());
-                            if (rawRes.ok) staticEmpresas = await rawRes.json();
-                        }
-                    } catch(e) { 
-                        console.warn('Could not merge static empresas', e); 
-                        try {
-                            const rawRes = await fetch('https://raw.githubusercontent.com/camilomartg-svg/bim/main/empresas.json?t=' + Date.now());
-                            if (rawRes.ok) staticEmpresas = await rawRes.json();
-                        } catch(e2) {}
-                    }
-                    
-                    if (staticEmpresas && Array.isArray(staticEmpresas)) {
-                        // Merge IDs from static empresas.json to avoid duplicates/mismatches with GSheets
-                        allCompanies = allCompanies.filter(c => {
-                            if (!c.name) return true;
-                            const matched = staticEmpresas.find(se => se.name && se.name.toLowerCase().trim() === c.name.toLowerCase().trim());
-                            if (matched && matched.deleted) return false;
-                            if (matched) {
-                                c.id = matched.id;
-                                c.image = matched.image;
-                                c.configUrl = matched.configUrl;
-                                c.code = matched.code;
-                            }
-                            return true;
-                        });
-                    }
-                    sessionStorage.setItem('cachedCompanies_v2', JSON.stringify({companies: allCompanies, users: users}));
+                        const rawRes = await fetch('https://raw.githubusercontent.com/camilomartg-svg/bim/main/empresas.json?t=' + Date.now());
+                        if (rawRes.ok) staticEmpresas = await rawRes.json();
+                    } catch(e2) {}
                 }
-                // ---------------------------------------------------
+                
+                if (staticEmpresas && Array.isArray(staticEmpresas)) {
+                    // Merge IDs from static empresas.json to avoid duplicates/mismatches with GSheets
+                    allCompanies = allCompanies.filter(c => {
+                        if (!c.name) return true;
+                        const matched = staticEmpresas.find(se => se.name && se.name.toLowerCase().trim() === c.name.toLowerCase().trim());
+                        if (matched && matched.deleted) return false;
+                        if (matched) {
+                            c.id = matched.id;
+                            c.image = matched.image;
+                            c.configUrl = matched.configUrl;
+                            c.code = matched.code;
+                        }
+                        return true;
+                    });
+                }
+                
+                // Guardar una versión fresca en cache para uso de otros componentes si fuera necesario
+                sessionStorage.setItem('cachedCompanies_v2', JSON.stringify({companies: allCompanies, users: users}));
 
                 const renderUI = () => {
                     let companies = [];
