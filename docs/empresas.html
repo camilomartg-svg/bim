@@ -220,190 +220,213 @@
                 
                 let allCompanies = await compRes.json();
                 let users = await userRes.json();
+                let staticEmpresas = [];
                 
                 try {
-                    const staticEmpresas = await staticEmpRes.json();
+                    if (staticEmpRes.ok) {
+                        staticEmpresas = await staticEmpRes.json();
+                    } else {
+                        const rawRes = await fetch('https://raw.githubusercontent.com/camilomartg-svg/bim/main/empresas.json?t=' + Date.now());
+                        if (rawRes.ok) staticEmpresas = await rawRes.json();
+                    }
+                } catch(e) { 
+                    console.warn('Could not merge static empresas', e); 
+                    try {
+                        const rawRes = await fetch('https://raw.githubusercontent.com/camilomartg-svg/bim/main/empresas.json?t=' + Date.now());
+                        if (rawRes.ok) staticEmpresas = await rawRes.json();
+                    } catch(e2) {}
+                }
+                
+                if (staticEmpresas && Array.isArray(staticEmpresas)) {
                     // Merge IDs from static empresas.json to avoid duplicates/mismatches with GSheets
                     allCompanies = allCompanies.filter(c => {
                         if (!c.name) return true;
                         const matched = staticEmpresas.find(se => se.name && se.name.toLowerCase().trim() === c.name.toLowerCase().trim());
                         if (matched && matched.deleted) return false;
-                        if (matched && matched.id) c.id = matched.id;
+                        if (matched) {
+                            c.id = matched.id;
+                            c.image = matched.image;
+                            c.configUrl = matched.configUrl;
+                            c.code = matched.code;
+                        }
                         return true;
                     });
-                } catch(e) { console.warn('Could not merge static empresas', e); }
+                }
                 
                 // Guardar una versión fresca en cache para uso de otros componentes si fuera necesario
                 sessionStorage.setItem('cachedCompanies_v2', JSON.stringify({companies: allCompanies, users: users}));
 
-                // Validate and update User
-                if (userAccount && userAccount.username) {
-                    if (userAccount.role === 'SUPER_ADMINISTRADOR' || userAccount.username === 'imagina3ddesign@gmail.com') {
-                        // Bypass validation for the hardcoded super admin / super administrators
-                    } else {
-                        const userEntries = users.filter(u => u.email && u.email.toLowerCase().trim() === userAccount.username.toLowerCase().trim());
+                const renderUI = () => {
+                    let companies = [];
+                    // Validate and update User
+                    if (userAccount && userAccount.username) {
+                        if (userAccount.role === 'SUPER_ADMINISTRADOR' || userAccount.username === 'imagina3ddesign@gmail.com') {
+                            // Bypass validation for the hardcoded super admin / super administrators
+                        } else {
+                            const userEntries = users.filter(u => u.email && u.email.toLowerCase().trim() === userAccount.username.toLowerCase().trim());
 
-                        // Block only if the user truly doesn't exist in the DB
-                        if (userEntries.length === 0) {
-                            alert('Tu acceso ha sido revocado o está pendiente. Cerrando sesión.');
-                            sessionStorage.removeItem('userAccount');
-                            localStorage.removeItem('userAccount');
-                            window.location.replace('https://norabim.com/inse.html');
-                            return;
-                        }
-
-                        // Find any approved entry (user may exist but have no company yet)
-                        const activeEntry = userEntries.find(u => {
-                            const dbEstado = u.estado ? u.estado.toUpperCase().trim() : '';
-                            const dbRol = u.rol ? u.rol.toUpperCase().trim() : '';
-                            return dbEstado === 'APROBADO' || dbRol === 'SUPER_ADMINISTRADOR' || dbRol === 'ADMINISTRADOR_EMPRESA';
-                        });
-
-                        // Block if ALL entries are explicitly denied/pending
-                        if (!activeEntry) {
-                            const anyPending = userEntries.some(u => (u.estado || '').toUpperCase().trim() === 'PENDIENTE');
-                            const msg = anyPending
-                                ? 'Tu solicitud de acceso está pendiente de aprobación.'
-                                : 'Tu acceso ha sido revocado. Contacta al administrador.';
-                            alert(msg);
-                            sessionStorage.removeItem('userAccount');
-                            localStorage.removeItem('userAccount');
-                            window.location.replace('https://norabim.com/inse.html');
-                            return;
-                        }
-
-                        // User is approved — update cache with freshest role/empresa
-                        userAccount.role = activeEntry.rol;
-                        userAccount.empresa = activeEntry.empresa || '';
-                        const cacheLocation = localStorage.getItem('userAccount') ? 'localStorage' : 'sessionStorage';
-                        window[cacheLocation].setItem('userAccount', JSON.stringify(userAccount));
-                    }
-                }
-
-                // Render Auth UI
-                if (userAccount) {
-                    authContainer.innerHTML = `
-                    <span class="text-[10px] uppercase tracking-wider font-medium text-text-light dark:text-white">Hola, ${userAccount.name.split(' ')[0]}</span>
-                    <button id="logout-button" class="text-text-light dark:text-white hover:text-primary text-[10px] uppercase tracking-wider font-medium">Cerrar sesión</button>
-                    `;
-                    document.getElementById('logout-button').addEventListener('click', () => {
-                        sessionStorage.removeItem('userAccount');
-                        localStorage.removeItem('userAccount');
-                        window.location.reload();
-                    });
-
-                    // UNHIDE SUPER ADMIN LINK
-                    if (userAccount.role === 'SUPER_ADMINISTRADOR') {
-                        if (superAdminLink) superAdminLink.classList.remove('hidden');
-                        
-                        // Delete duplicate companies to avoid visual spam (Group by exact name)
-                        const uniqueCompaniesMap = new Map();
-                        allCompanies.forEach(c => {
-                            if (!uniqueCompaniesMap.has(c.name)) {
-                                uniqueCompaniesMap.set(c.name, c);
+                            // Block only if the user truly doesn't exist in the DB
+                            if (userEntries.length === 0) {
+                                alert('Tu acceso ha sido revocado o está pendiente. Cerrando sesión.');
+                                sessionStorage.removeItem('userAccount');
+                                localStorage.removeItem('userAccount');
+                                window.location.replace('https://norabim.com/inse.html');
+                                return;
                             }
-                        });
-                        const uniqueCompanies = Array.from(uniqueCompaniesMap.values());
 
-                        companies = uniqueCompanies.map(c => ({
-                            id: c.id || 'company-' + Date.now(),
-                            name: c.name || c.legalName,
-                            location: c.city ? c.city + ', ' + c.country : 'Sede Principal',
-                            image: c.logoBase64 || 'https://i.postimg.cc/02mTnnQv/21bd5ee9d2351270615280386caad1f3.jpg',
-                            code: (c.name ? c.name.substring(0,3).toUpperCase() : 'BIM'),
-                            configUrl: (c.name && c.name.includes('Amarillo')) ? 'config-amarillo.json' : ((c.name && c.name.includes('desarrollada')) ? 'config-empresa3.json' : 'portal-config.json')
-                        }));
-                    } else {
-                        const cleanText = (str) => {
-                            if (!str) return '';
-                            return str.toLowerCase()
-                                      .normalize("NFD")
-                                      .replace(/[\u0300-\u036f]/g, "")
-                                      .replace(/[^a-z0-9]/g, "")
-                                      .trim();
-                        };
-
-                        const userEntries = users.filter(u => u.email && u.email.toLowerCase().trim() === userAccount.username.toLowerCase().trim());
-                        const userCompaniesNames = userEntries.map(u => u.empresa).filter(Boolean);
-
-                        const matchedCompanies = allCompanies.filter(c => {
-                            if (!c.name) return false;
-                            const cName = cleanText(c.name);
-                            const cRazon = cleanText(c.razonSocial);
-                            return userCompaniesNames.some(uEmpRaw => {
-                                const uEmp = cleanText(uEmpRaw);
-                                return (cName && (cName === uEmp || cName.includes(uEmp) || uEmp.includes(cName))) ||
-                                       (cRazon && (cRazon === uEmp || cRazon.includes(uEmp) || uEmp.includes(cRazon)));
+                            // Find any approved entry (user may exist but have no company yet) - USE REVERSE TO GET NEWEST
+                            const activeEntry = userEntries.reverse().find(u => {
+                                const dbEstado = u.estado ? u.estado.toUpperCase().trim() : '';
+                                const dbRol = u.rol ? u.rol.toUpperCase().trim() : '';
+                                return dbEstado === 'APROBADO' || dbRol === 'SUPER_ADMINISTRADOR' || dbRol === 'ADMINISTRADOR_EMPRESA';
                             });
+
+                            // Block if ALL entries are explicitly denied/pending
+                            if (!activeEntry) {
+                                const anyPending = userEntries.some(u => (u.estado || '').toUpperCase().trim() === 'PENDIENTE');
+                                const msg = anyPending
+                                    ? 'Tu solicitud de acceso está pendiente de aprobación.'
+                                    : 'Tu acceso ha sido revocado. Contacta al administrador.';
+                                alert(msg);
+                                sessionStorage.removeItem('userAccount');
+                                localStorage.removeItem('userAccount');
+                                window.location.replace('https://norabim.com/inse.html');
+                                return;
+                            }
+
+                            // User is approved — update cache with freshest role/empresa
+                            userAccount.role = activeEntry.rol;
+                            userAccount.empresa = activeEntry.empresa || '';
+                            const cacheLocation = localStorage.getItem('userAccount') ? 'localStorage' : 'sessionStorage';
+                            window[cacheLocation].setItem('userAccount', JSON.stringify(userAccount));
+                        }
+                    }
+
+                    // Render Auth UI
+                    if (userAccount) {
+                        authContainer.innerHTML = `
+                        <span class="text-[10px] uppercase tracking-wider font-medium text-text-light dark:text-white">Hola, ${userAccount.name.split(' ')[0]}</span>
+                        <button id="logout-button" class="text-text-light dark:text-white hover:text-primary text-[10px] uppercase tracking-wider font-medium">Cerrar sesión</button>
+                        `;
+                        document.getElementById('logout-button').addEventListener('click', () => {
+                            sessionStorage.removeItem('userAccount');
+                            localStorage.removeItem('userAccount');
+                            window.location.reload();
                         });
 
-                        companies = matchedCompanies.map(myComp => ({
-                            id: myComp.id || 'company-' + Date.now(),
-                            name: myComp.name,
-                            location: myComp.city ? myComp.city + ', ' + myComp.country : 'Sede Principal',
-                            image: myComp.logoBase64 || 'https://i.postimg.cc/02mTnnQv/21bd5ee9d2351270615280386caad1f3.jpg',
-                            code: (myComp.name ? myComp.name.substring(0,3).toUpperCase() : 'BIM'),
-                            configUrl: (myComp.name && myComp.name.includes('Amarillo')) ? 'config-amarillo.json' : ((myComp.name && myComp.name.includes('desarrollada')) ? 'config-empresa3.json' : 'portal-config.json')
-                        }));
+                        // UNHIDE SUPER ADMIN LINK
+                        if (userAccount.role === 'SUPER_ADMINISTRADOR') {
+                            if (superAdminLink) superAdminLink.classList.remove('hidden');
+                            
+                            // Delete duplicate companies to avoid visual spam (Group by exact name)
+                            const uniqueCompaniesMap = new Map();
+                            allCompanies.forEach(c => {
+                                if (!uniqueCompaniesMap.has(c.name)) {
+                                    uniqueCompaniesMap.set(c.name, c);
+                                }
+                            });
+                            const uniqueCompanies = Array.from(uniqueCompaniesMap.values());
 
-                        // Fallback for associated companies not in DB (excluding statically deleted ones)
-                        userCompaniesNames.forEach(uEmpRaw => {
-                            const uEmpClean = cleanText(uEmpRaw);
-                            const isDeletedInStatic = staticEmpresas.some(se => se.name && cleanText(se.name) === uEmpClean && se.deleted);
-                            if (isDeletedInStatic) return;
+                            companies = uniqueCompanies.map(c => ({
+                                id: c.id || 'company-' + Date.now(),
+                                name: c.name || c.legalName,
+                                location: c.city ? c.city + ', ' + c.country : 'Sede Principal',
+                                image: c.image || c.logoBase64 || 'https://i.postimg.cc/02mTnnQv/21bd5ee9d2351270615280386caad1f3.jpg',
+                                code: c.code || (c.name ? c.name.substring(0,3).toUpperCase() : 'BIM'),
+                                configUrl: c.configUrl || 'portal-config.json'
+                            }));
+                        } else {
+                            const cleanText = (str) => {
+                                if (!str) return '';
+                                return str.toLowerCase()
+                                          .normalize("NFD")
+                                          .replace(/[\u0300-\u036f]/g, "")
+                                          .replace(/[^a-z0-9]/g, "")
+                                          .trim();
+                            };
 
-                            const alreadyMatched = matchedCompanies.some(c => {
+                            const userEntries = users.filter(u => u.email && u.email.toLowerCase().trim() === userAccount.username.toLowerCase().trim());
+                            const userCompaniesNames = userEntries.map(u => u.empresa).filter(Boolean);
+
+                            const matchedCompanies = allCompanies.filter(c => {
+                                if (!c.name) return false;
                                 const cName = cleanText(c.name);
                                 const cRazon = cleanText(c.razonSocial);
-                                return (cName && (cName === uEmpClean || cName.includes(uEmpClean) || uEmpClean.includes(cName))) ||
-                                       (cRazon && (cRazon === uEmpClean || cRazon.includes(uEmpClean) || uEmpClean.includes(cRazon)));
+                                return userCompaniesNames.some(uEmpRaw => {
+                                    const uEmp = cleanText(uEmpRaw);
+                                    return (cName && (cName === uEmp || cName.includes(uEmp) || uEmp.includes(cName))) ||
+                                           (cRazon && (cRazon === uEmp || cRazon.includes(uEmp) || uEmp.includes(cRazon)));
+                                });
                             });
 
-                            if (!alreadyMatched) {
-                                companies.push({
-                                    id: 'dynamic-' + Date.now(),
-                                    name: uEmpRaw,
-                                    location: 'Pendiente',
-                                    image: 'https://i.postimg.cc/02mTnnQv/21bd5ee9d2351270615280386caad1f3.jpg',
-                                    code: 'NEW',
-                                    configUrl: 'portal-config.json'
+                            companies = matchedCompanies.map(myComp => ({
+                                id: myComp.id || 'company-' + Date.now(),
+                                name: myComp.name,
+                                location: myComp.city ? myComp.city + ', ' + myComp.country : 'Sede Principal',
+                                image: myComp.image || myComp.logoBase64 || 'https://i.postimg.cc/02mTnnQv/21bd5ee9d2351270615280386caad1f3.jpg',
+                                code: myComp.code || (myComp.name ? myComp.name.substring(0,3).toUpperCase() : 'BIM'),
+                                configUrl: myComp.configUrl || 'portal-config.json'
+                            }));
+
+                            // Fallback for associated companies not in DB (excluding statically deleted ones)
+                            userCompaniesNames.forEach(uEmpRaw => {
+                                const uEmpClean = cleanText(uEmpRaw);
+                                const isDeletedInStatic = staticEmpresas.some(se => se.name && cleanText(se.name) === uEmpClean && se.deleted);
+                                if (isDeletedInStatic) return;
+
+                                const alreadyMatched = matchedCompanies.some(c => {
+                                    const cName = cleanText(c.name);
+                                    const cRazon = cleanText(c.razonSocial);
+                                    return (cName && (cName === uEmpClean || cName.includes(uEmpClean) || uEmpClean.includes(cName))) ||
+                                           (cRazon && (cRazon === uEmpClean || cRazon.includes(uEmpClean) || uEmpClean.includes(cRazon)));
                                 });
-                            }
-                        });
+
+                                if (!alreadyMatched) {
+                                    companies.push({
+                                        id: 'dynamic-' + Date.now(),
+                                        name: uEmpRaw,
+                                        location: 'Pendiente',
+                                        image: 'https://i.postimg.cc/02mTnnQv/21bd5ee9d2351270615280386caad1f3.jpg',
+                                        code: 'NEW',
+                                        configUrl: 'portal-config.json'
+                                    });
+                                }
+                            });
+                        }
                     }
-                }
-            } catch(e) {
-                console.error('Failed to load companies:', e);
-            }
 
-            countEl.textContent = `(${companies.length})`;
+                    countEl.textContent = `(${companies.length})`;
 
-            if (companies.length === 0) {
-                list.innerHTML = `
-                    <div class="flex flex-col items-center justify-center w-full h-full text-center p-12 mx-auto" style="width: 100%;">
-                        <span class="material-symbols-outlined text-4xl text-gray-400 mb-4">domain_disabled</span>
-                        <h3 class="text-lg font-medium text-gray-900 mb-2">Sin Empresas Asignadas</h3>
-                        <p class="text-sm text-gray-500 max-w-sm">Tu cuenta fue creada exitosamente, pero aún no has sido asignado a ninguna empresa o proyecto. Por favor contacta al administrador.</p>
-                    </div>
-                `;
-            } else {
-                list.innerHTML = companies.map(c => `
-                    <a href="home.html?empresa=${c.id}&v=${Date.now()}" class="card-hover flex-none w-[260px] md:w-[320px] lg:w-[360px] group transition-transform duration-500 block">
-                        <div class="flex justify-between items-end mb-4 border-b border-gray-300 pb-2">
-                            <div class="flex flex-col">
-                                <span class="text-[9px] font-bold text-gray-400 mb-1">${c.code}</span>
-                                <span class="text-xs font-bold uppercase tracking-wider text-gray-800">${c.name}</span>
+                    if (companies.length === 0) {
+                        list.innerHTML = `
+                            <div class="flex flex-col items-center justify-center w-full h-full text-center p-12 mx-auto" style="width: 100%;">
+                                <span class="material-symbols-outlined text-4xl text-gray-400 mb-4">domain_disabled</span>
+                                <h3 class="text-lg font-medium text-gray-900 mb-2">Sin Empresas Asignadas</h3>
+                                <p class="text-sm text-gray-500 max-w-sm">Tu cuenta fue creada exitosamente, pero aún no has sido asignado a ninguna empresa o proyecto. Por favor contacta al administrador.</p>
                             </div>
-                            <span class="text-[9px] font-semibold text-gray-500 uppercase tracking-widest text-right">${c.location}</span>
-                        </div>
-                        <div class="w-full aspect-[4/5] bg-gray-200 overflow-hidden relative">
-                            <div class="w-full h-full card-image-wrapper">
-                                <img src="${c.image}" alt="${c.name}" class="w-full h-full object-cover filter brightness-95 contrast-105" />
-                            </div>
-                        </div>
-                    </a>
-                `).join('');
-            }
+                        `;
+                    } else {
+                        list.innerHTML = companies.map(c => `
+                            <a href="home.html?empresa=${c.id}&v=${Date.now()}" class="card-hover flex-none w-[260px] md:w-[320px] lg:w-[360px] group transition-transform duration-500 block">
+                                <div class="flex justify-between items-end mb-4 border-b border-gray-300 pb-2">
+                                    <div class="flex flex-col">
+                                        <span class="text-[9px] font-bold text-gray-400 mb-1">${c.code}</span>
+                                        <span class="text-xs font-bold uppercase tracking-wider text-gray-800">${c.name}</span>
+                                    </div>
+                                    <span class="text-[9px] font-semibold text-gray-500 uppercase tracking-widest text-right">${c.location}</span>
+                                </div>
+                                <div class="w-full aspect-[4/5] bg-gray-200 overflow-hidden relative">
+                                    <div class="w-full h-full card-image-wrapper">
+                                        <img src="${c.image}" alt="${c.name}" class="w-full h-full object-cover filter brightness-95 contrast-105" />
+                                    </div>
+                                </div>
+                            </a>
+                        `).join('');
+                    }
+                };
+                
+                // Initial render execution
+                renderUI();
 
                     });
     </script>

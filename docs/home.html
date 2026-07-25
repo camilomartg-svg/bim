@@ -92,7 +92,7 @@
                             return;
                         }
 
-                        const dbUser = userEntries.find(u => {
+                        const dbUser = userEntries.reverse().find(u => {
                             const dbEstado = u.estado ? u.estado.toUpperCase().trim() : '';
                             const dbRol = u.rol ? u.rol.toUpperCase().trim() : '';
                             return dbEstado === 'APROBADO' || dbRol === 'SUPER_ADMINISTRADOR' || dbRol === 'ADMINISTRADOR_EMPRESA';
@@ -113,6 +113,7 @@
                                 ua.role = dbUser.rol;
                                 const cacheLocation = localStorage.getItem('userAccount') ? 'localStorage' : 'sessionStorage';
                                 window[cacheLocation].setItem('userAccount', JSON.stringify(ua));
+                                window.location.reload();
                             }
                         }
                     }
@@ -554,12 +555,12 @@ if (urlParams.get('empresa') === 'alcabama' || urlParams.get('empresa') === 'Alc
                                 applyPortalConfig({ ...baseConfig, ...config, portal: mergedPortal });
                                 return; // Éxito total
                             } else {
-                                // No existe el archivo de empresa (ej. recién creada), limpiamos proyectos y usamos la global
-                                applyPortalConfig({ ...baseConfig, projects: [] });
+                                // No existe el archivo de empresa (ej. recién creada), usamos la configuración global heredada
+                                applyPortalConfig(baseConfig);
                                 return;
                             }
                         } catch (error) {
-                            applyPortalConfig({ ...baseConfig, projects: [] });
+                            applyPortalConfig(baseConfig);
                             return;
                         }
                     } else {

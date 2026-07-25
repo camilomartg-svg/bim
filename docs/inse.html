@@ -486,7 +486,8 @@
                     try {
                         const response = await fetch(ROLES_SCRIPT_URL);
                         const usersList = await response.json();
-                        const dbUser = usersList.find(u => u.email === normalizedAccountEmail);
+                        const dbUserMatches = usersList.filter(u => u.email === normalizedAccountEmail);
+                        const dbUser = dbUserMatches.length > 0 ? dbUserMatches[dbUserMatches.length - 1] : null;
                         
                         if (!dbUser) {
                             alert('Tu correo no está registrado en el sistema. Por favor, crea una cuenta primero.');
@@ -600,7 +601,7 @@
                                 try {
                                     const response = await fetch(ROLES_SCRIPT_URL);
                                     const rolesList = await response.json();
-                                    const userData = rolesList.find(u => u.email && u.email.trim().toLowerCase() === normalizedAccountEmail);
+                                    const userData = rolesList.reverse().find(u => u.email && u.email.trim().toLowerCase() === normalizedAccountEmail);
                                     if (userData) {
                                         userRole = userData.rol;
                                     }
@@ -666,6 +667,16 @@
             registrationSection.classList.remove('hidden');
             if (window.empresasList.length === 0) fetchEmpresas();
             if (errorMessage) errorMessage.textContent = "";
+            
+            // Hide organization search if coming from create company flow
+            const orgSearchContainer = document.getElementById('org-search-container');
+            if (orgSearchContainer) {
+                if (window.newCompanyData) {
+                    orgSearchContainer.classList.add('hidden');
+                } else {
+                    orgSearchContainer.classList.remove('hidden');
+                }
+            }
             
             if (googleProfile) {
                 // Registro desde Google (no requiere contraseña nueva)
@@ -779,6 +790,16 @@
         window.hideCreateCompanyForm = function() {
             document.getElementById('create-company-section').classList.add('hidden');
             document.getElementById('registration-section').classList.remove('hidden');
+            
+            // Hide organization search if coming from create company flow
+            const orgSearchContainer = document.getElementById('org-search-container');
+            if (orgSearchContainer) {
+                if (window.newCompanyData) {
+                    orgSearchContainer.classList.add('hidden');
+                } else {
+                    orgSearchContainer.classList.remove('hidden');
+                }
+            }
         }
 
         window.toggleCompanyUserFields = function() {
@@ -1110,7 +1131,7 @@
                     try {
                         const response = await fetch(ROLES_SCRIPT_URL);
                         const rolesList = await response.json();
-                        const userData = rolesList.find(u => u.email && u.email.trim().toLowerCase() === normalizedAccountEmail);
+                        const userData = rolesList.reverse().find(u => u.email && u.email.trim().toLowerCase() === normalizedAccountEmail);
                         if (userData) {
                             userRole = userData.rol;
                         }
