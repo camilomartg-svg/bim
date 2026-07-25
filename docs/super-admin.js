@@ -1316,6 +1316,42 @@ let contentBase = '';
     };
     
     try {
+      // ── AUTO-APPROVE pending users that appear as members ──────────────────
+      const membersByEmail = new Map();
+      empresas.forEach(emp => {
+        (emp.members || []).forEach(m => {
+          if (m.email && m.email.trim()) {
+            const email = m.email.toLowerCase().trim();
+            if (!membersByEmail.has(email)) {
+              membersByEmail.set(email, { name: m.name || email, empName: emp.name, role: m.role });
+            }
+          }
+        });
+      });
+
+      const toApprove = [];
+      membersByEmail.forEach((data, email) => {
+        const gu = window.globalUsersMap.get(email);
+        if (gu && gu.estado === 'PENDIENTE') toApprove.push({ email, ...data });
+      });
+
+      if (toApprove.length > 0) {
+        showBanner(`Aprobando ${toApprove.length} usuario(s) pendiente(s)...`, 'info');
+        for (const u of toApprove) {
+          const rol = u.role && u.role !== 'INVITADO' ? u.role : 'ADMINISTRADOR_EMPRESA';
+          await fetch(ROLES_SCRIPT_URL, {
+            method: 'POST',
+            mode: 'no-cors',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email: u.email, nombre: u.name, rol: rol, empresa: u.empName, estado: 'APROBADO' })
+          });
+          const existing = window.globalUsersMap.get(u.email);
+          if (existing) window.globalUsersMap.set(u.email, { ...existing, estado: 'APROBADO', role: rol, companyName: u.empName });
+        }
+        renderGlobalUsers();
+      }
+      // ───────────────────────────────────────────────────────────────────────
+
       const empJson = JSON.stringify(empresas, null, 2) + '\n';
       await pushFile('empresas.json', empJson);
       await pushFile('docs/empresas.json', empJson); // if docs exists
@@ -1330,7 +1366,6 @@ let contentBase = '';
         const emp = empresas.find(e => e.id === empId);
         if (emp) {
           const path = emp.configUrl || `config-${empId}.json`;
-          // Mantener compatibilidad de portal si no existe
           if (!configData.portal) {
             configData.portal = { name: emp.name || "nora CDE" };
           }
@@ -1480,6 +1515,9 @@ window.renderGlobalUsers = function(searchTerm = '') {
                 ${u.specialty || '-'}
             </td>
             <td class="py-3 px-6 whitespace-nowrap text-right text-sm font-medium">
+                ${u.estado === 'PENDIENTE' ? `<button onclick='quickApproveUser("${u.email}", "${u.name}")' class="mr-1 inline-flex items-center gap-1 bg-emerald-100 hover:bg-emerald-200 text-emerald-700 px-2.5 py-1 rounded-lg text-xs font-bold transition-colors">
+                    <span class="material-symbols-outlined text-[14px]">check_circle</span> Aprobar
+                </button>` : ''}
                 <button onclick='openEditUserModal("${u.email}")' class="text-slate-400 hover:text-blue-600 transition-colors p-1.5 rounded-lg hover:bg-blue-50">
                     <span class="material-symbols-outlined text-[20px]">edit</span>
                 </button>
@@ -1701,5 +1739,37 @@ window.approvePendingUser = async function(email, nombre, empresa) {
 
     } catch(e) {
         alert('Error al aprobar el usuario.');
+    }
+};
+
+// ==========================================
+// QUICK APPROVE: from the global users list
+// ==========================================
+window.quickApproveUser = async function(email, nombre) {
+    const u = window.globalUsersMap.get(email);
+    if (!u) return;
+
+    let empresa = u.companyName && u.companyName !== 'Sin Empresa Asignada' ? u.companyName : '';
+    if (!empresa) {
+        empresa = prompt(`Asigna una empresa a ${nombre} para aprobar su acceso (deja en blanco para aprobar sin empresa):`, '');
+        if (empresa === null) return;
+        empresa = empresa.trim();
+    }
+
+    const rol = empresa ? 'ADMINISTRADOR_EMPRESA' : (u.role === 'INVITADO' ? 'VISOR' : u.role);
+
+    try {
+        await fetch(ROLES_SCRIPT_URL, {
+            method: 'POST',
+            mode: 'no-cors',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email, nombre: u.name, rol, empresa, especialidad: u.specialty || '', estado: 'APROBADO' })
+        });
+
+        window.globalUsersMap.set(email, { ...u, role: rol, companyName: empresa || 'Sin Empresa Asignada', estado: 'APROBADO' });
+        renderGlobalUsers();
+        showBanner(`✅ ${nombre} aprobado correctamente${empresa ? ' en ' + empresa : ''}.`, 'success');
+    } catch(e) {
+        showBanner('❌ Error al aprobar el usuario.', 'error');
     }
 };
