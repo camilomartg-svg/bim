@@ -527,7 +527,11 @@ document.addEventListener('DOMContentLoaded', async () => {
                         || (window.globalUsersMap && window.globalUsersMap.get(rawEmail.toLowerCase()));
             if (gu && gu.name) {
                 registeredNameStr = gu.name;
+            } else if (m.name && m.name !== 'Nuevo Usuario') {
+                registeredNameStr = m.name;
             }
+        } else if (m.name && m.name !== 'Nuevo Usuario') {
+            registeredNameStr = m.name;
         }
         
         const nombreHtml = registeredNameStr ? `
@@ -1471,6 +1475,7 @@ let contentBase = '';
   });
 
   loadData();
+  window.fetchGlobalUsers();
 });
 
 
@@ -1547,6 +1552,9 @@ window.fetchGlobalUsers = async function() {
         });
 
         renderGlobalUsers();
+        if (typeof window.renderUsers === 'function') {
+            window.renderUsers();
+        }
 
     } catch (e) {
         console.error("Error cargando usuarios globales", e);
