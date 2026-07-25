@@ -10,9 +10,9 @@
         "enabled": true,
         "title": "NUEVO PROYECTO",
         "map": {
-          "lat": 4.60971,
-          "lng": -74.08175,
-          "zoom": 15
+          "lat": 4.614694644505366,
+          "lng": -74.08285226957979,
+          "zoom": 16
         },
         "eyebrow": "nora",
         "subtitle": "Accesos rápidos, seguimiento y contexto del proyecto.",
@@ -64,6 +64,11 @@
           "email": "fermar@empresamic.vom",
           "phone": "3113332525"
         }
+      ],
+      "members": [
+        "camilomartg@gmail.com",
+        "alc.spk.6@gmail.com",
+        "alc.spk.2@gmail.com"
       ]
     },
     {
