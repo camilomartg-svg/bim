@@ -108,7 +108,50 @@ document.addEventListener('DOMContentLoaded', async () => {
               }
            });
            if(addedNew) showBanner('Se descubrieron nuevas empresas registradas. Haz clic en Publicar en la Nube para integrarlas permanentemente.', 'success');
-        }
+         }
+
+         // Sincronizar miembros y administradores desde la lista de usuarios en Google Sheets
+         try {
+            const uRes = await fetch(urlGoogle);
+            if (uRes.ok) {
+                const gUsers = await uRes.json();
+                empresas.forEach(emp => {
+                    if (!emp.members) emp.members = [];
+                    if (!emp.admins) emp.admins = [];
+                    gUsers.forEach(gu => {
+                        if (gu.empresa && emp.name && gu.empresa.toLowerCase().trim() === emp.name.toLowerCase().trim()) {
+                            const email = gu.email ? gu.email.toLowerCase().trim() : '';
+                            if (email) {
+                                const mIdx = emp.members.findIndex(m => m.email && m.email.toLowerCase().trim() === email);
+                                const memberData = {
+                                    name: gu.nombre || email.split('@')[0],
+                                    email: email,
+                                    role: gu.rol || 'INVITADO',
+                                    empresaUsuario: gu.empresa,
+                                    especialidad: gu.especialidad || '',
+                                    cargo: gu.cargo || ''
+                                };
+                                if (mIdx > -1) {
+                                    // Actualizar miembro existente si cambió su información en el sheet
+                                    emp.members[mIdx] = { ...emp.members[mIdx], ...memberData };
+                                } else {
+                                    emp.members.push(memberData);
+                                }
+                                
+                                if (gu.rol === 'ADMINISTRADOR_EMPRESA') {
+                                    const adminExists = emp.admins.some(a => a.toLowerCase().trim() === email);
+                                    if (!adminExists) {
+                                        emp.admins.push(email);
+                                    }
+                                }
+                            }
+                        }
+                    });
+                });
+            }
+         } catch(ue) {
+            console.warn('No se pudo sincronizar los miembros desde Google Sheets', ue);
+         }
       } catch(e) {
         console.warn('No se pudo sincronizar con Google Sheets', e);
       }

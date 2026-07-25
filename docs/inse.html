@@ -183,7 +183,7 @@
                         <!-- Información Laboral -->
                         <div>
                             <h3 class="text-xs font-bold uppercase tracking-widest text-gray-400 mb-3 border-b border-gray-200 dark:border-gray-700 pb-1">Información Laboral (Obligatoria)</h3>
-                                <div class="mb-4 relative mt-3">
+                                <div id="org-search-container" class="mb-4 relative mt-3 hidden">
                                     <label class="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Organización a la que pertenece <span class="text-gray-400 font-normal">(Opcional)</span></label>
                                     <input type="text" id="reg-organization-search" placeholder="Busca tu empresa..." class="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-800 text-sm focus:ring-2 focus:ring-primary focus:border-primary transition duration-200" autocomplete="off">
                                     <input type="hidden" id="reg-organization-id">
@@ -899,43 +899,25 @@
                 // Esperar un segundo para asegurar que Google Sheets termine de procesar antes de recargar
                 await new Promise(resolve => setTimeout(resolve, 1500));
                 
-                // Login immediately as INVITADO
+                // Login immediately
                 const userProfile = {
                     name: name,
                     username: email,
                     role: (window.newCompanyData && document.getElementById('reg-organization-search').value === window.newCompanyData.name) ? 'ADMINISTRADOR_EMPRESA' : 'INVITADO',
+                    empresa: document.getElementById('reg-organization-search').value,
+                    phone: phone,
+                    country: country,
+                    city: city,
                     adminEmpresaId: null,
                     picture: window.tempGoogleUser?.picture || ''
                 };
                 const cacheLocation = document.getElementById('keep-signed-in').checked ? "localStorage" : "sessionStorage";
                 window[cacheLocation].setItem('userAccount', JSON.stringify(userProfile));
                 window.location.href = 'https://norabim.com/empresas.html';
-                
+                return;
             } catch (e) {
                 console.error("Error saving registration", e);
             }
-
-            const userProfile = {
-                name: name,
-                username: email,
-                role: 'INVITADO',
-                phone: phone,
-                country: country,
-                city: city,
-                organizationId: document.getElementById('reg-organization-id').value,
-                organizationName: document.getElementById('reg-organization-search').value,
-                picture: window.tempGoogleUser?.picture || ''
-            };
-
-            const cacheLocation = document.getElementById('keep-signed-in').checked ? "localStorage" : "sessionStorage";
-            if (cacheLocation === "localStorage") {
-                localStorage.setItem('userAccount', JSON.stringify(userProfile));
-            } else {
-                sessionStorage.setItem('userAccount', JSON.stringify(userProfile));
-            }
-
-            // Redirigir directamente al CDE
-            window.location.href = 'https://norabim.com/empresas.html';
         };
 
     </script>
