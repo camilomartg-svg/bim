@@ -439,28 +439,16 @@ document.addEventListener('DOMContentLoaded', async () => {
         const i = item.originalIndex;
         const m = item;
 
-        // ── 1. Empresa: searchable datalist dropdown ────────────────────────
-        const empListId = `emp-list-${i}`;
-        const empOptions = allCompanyNames.map(n => `<option value="${n}">`).join('');
+        // ── 1. Empresa: standard select dropdown ────────────────────────
+        const empOptions = `<option value="">Seleccione empresa...</option>` + 
+          allCompanyNames.map(n => `<option value="${n}" ${m.empresaUsuario === n ? 'selected' : ''}>${n}</option>`).join('');
 
-        // ── 2. Especialidad: filtered to company's registered specialties ───
-        // emp.especialidades should be an array; fallback to full list
-        const empEsps = (emp.especialidades && emp.especialidades.length > 0)
-          ? emp.especialidades
-          : ['Ambiental','Arquitectura','BIM','CCTV','Climatización y Ventilación (HVAC)',
-             'Desagües','Eléctrico','Elementos no estructurales','Estructura',
-             'Gas','Geotecnia y Suelos','Lluvias','Presupuestos','Propiedad horizontal',
-             'Seguridad humana','Suministro','Vías e Infraestructura'];
-        const espOptions = empEsps.map(e =>
-          `<option value="${e}" ${m.especialidad === e ? 'selected' : ''}>${e}</option>`
-        ).join('');
-
-        // ── 3. Cargo: only visible if member's company = this empresa ───────
+        // ── 2. Cargo: only visible if member's company = this empresa ───────
         const isInternal = !m.empresaUsuario || m.empresaUsuario.trim() === '' ||
           m.empresaUsuario.trim().toLowerCase() === emp.name.trim().toLowerCase();
 
         const cargoHtml = isInternal ? `
-          <label class="block md:col-span-2">
+          <label class="block">
             <span class="mb-1 block text-xs font-semibold text-slate-600">Cargo (empleado interno)</span>
             <select class="w-full text-xs rounded border-slate-200" onchange="updateUser(${i}, 'cargo', this.value)">
               <option value="">Seleccione cargo...</option>
@@ -544,9 +532,9 @@ document.addEventListener('DOMContentLoaded', async () => {
 
           <label class="block">
             <span class="mb-1 block text-xs font-semibold text-slate-600">Empresa (Contratista / Firma)</span>
-            <input type="text" list="${empListId}" class="w-full text-xs rounded border-slate-200" value="${m.empresaUsuario || ''}"
-              onchange="updateUser(${i}, 'empresaUsuario', this.value); renderUsers();" placeholder="Busca o escribe una empresa...">
-            <datalist id="${empListId}">${empOptions}</datalist>
+            <select class="w-full text-xs rounded border-slate-200" onchange="updateUser(${i}, 'empresaUsuario', this.value); renderUsers();">
+              ${empOptions}
+            </select>
           </label>
           
           <label class="block">
@@ -554,14 +542,6 @@ document.addEventListener('DOMContentLoaded', async () => {
             <select class="w-full text-xs rounded border-slate-200" onchange="updateUser(${i}, 'role', this.value)">
               <option value="INVITADO" ${m.role==='INVITADO'?'selected':''}>INVITADO</option>
               <option value="ADMINISTRADOR_EMPRESA" ${m.role==='ADMINISTRADOR_EMPRESA'?'selected':''}>ADMINISTRADOR_EMPRESA</option>
-            </select>
-          </label>
-
-          <label class="block">
-            <span class="mb-1 block text-xs font-semibold text-slate-600">Especialidad Técnica</span>
-            <select class="w-full text-xs rounded border-slate-200" onchange="updateUser(${i}, 'especialidad', this.value)">
-              <option value="">Seleccione especialidad...</option>
-              ${espOptions}
             </select>
           </label>
 
