@@ -180,7 +180,21 @@
         "role": "ADMINISTRADOR_EMPRESA",
         "empresaUsuario": "Morado Arquitectura",
         "especialidad": "",
-        "cargo": ""
+        "cargo": "BIM Manager"
+      },
+      {
+        "name": "Nuevo Usuario",
+        "email": "alc.spk.6@gmail.com",
+        "role": "INVITADO",
+        "empresaUsuario": "Morado Arquitectura",
+        "cargo": "Arquitecto Senior"
+      },
+      {
+        "name": "Nuevo Usuario",
+        "email": "alc.spk.2@gmail.com",
+        "role": "INVITADO",
+        "empresaUsuario": "Verde Arquitectura",
+        "cargo": "Arquitecto Senior"
       }
     ],
     "razonSocial": "Morado Arquitectura SAS",
