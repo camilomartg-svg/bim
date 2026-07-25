@@ -696,6 +696,30 @@ let contentBase = '';
             contactsHTML = `<div class="text-xs text-slate-400 italic bg-white p-4 rounded-xl border border-slate-200 text-center">No hay contactos registrados. Haz clic en "Agregar contacto" para empezar.</div>`;
           }
 
+          const projMembers = p.members || [];
+          let projectMembersHTML = projMembers.map((memberEmail, idx) => {
+            const options = emp.members.filter(m => m.email).map(m => `<option value="${m.email}" ${m.email === memberEmail ? 'selected' : ''}>${m.name || m.email} (${m.role || 'Sin rol'})</option>`).join('');
+            return `
+            <div class="grid grid-cols-12 gap-2 items-center bg-white p-3 rounded-xl border border-slate-200 shadow-sm">
+               <div class="col-span-10 md:col-span-5">
+                 <select class="w-full text-xs rounded border-slate-200" onchange="updateProjectMember('${p.slug}', ${idx}, this.value)">
+                    <option value="">Seleccione un usuario...</option>
+                    ${options}
+                 </select>
+               </div>
+               <div class="col-span-2 md:col-span-7 text-right">
+                 <button type="button" class="text-rose-400 hover:text-rose-600 bg-rose-50 hover:bg-rose-100 p-1.5 rounded transition-colors" onclick="removeProjectMember('${p.slug}', ${idx})" title="Remover miembro">
+                    <span class="material-symbols-outlined text-[16px] block">delete</span>
+                 </button>
+               </div>
+            </div>
+            `;
+          }).join('');
+          
+          if (projMembers.length === 0) {
+            projectMembersHTML = `<div class="text-xs text-slate-400 italic bg-white p-4 rounded-xl border border-slate-200 text-center">No hay miembros asignados a este proyecto. Haz clic en "Asignar miembro".</div>`;
+          }
+
           contentBase = `
           <div class="p-5 border-t border-slate-200 bg-white">
             <div class="grid gap-6">
@@ -918,6 +942,18 @@ let contentBase = '';
                 <label class="block"><span class="mb-2 block text-sm font-semibold text-slate-700">Equipo</span><input class="w-full text-xs rounded-xl border-slate-200" type="text" value="${p.actions?.equipo || ''}" onchange="updateProjectDeepAct('${p.slug}', 'equipo', this.value)" /></label>
               </div>
             </section>
+
+            <section class="mt-8 border-t border-slate-200 pt-6">
+              <div class="flex items-center justify-between mb-4">
+                  <h3 class="text-sm font-bold uppercase tracking-[0.2em] text-slate-500">Miembros del Proyecto</h3>
+                  <button type="button" class="text-xs font-bold text-primary hover:underline flex items-center gap-1" onclick="addProjectMember('${p.slug}')">
+                     <span class="material-symbols-outlined text-[14px]">person_add</span> Asignar miembro
+                  </button>
+              </div>
+              <div class="flex flex-col gap-2">
+                 ${projectMembersHTML}
+              </div>
+            </section>
               </div>
             </div>`;
           }
@@ -1131,6 +1167,43 @@ let contentBase = '';
     const proj = config.projects.find(p => p.slug === slug);
     if(proj && proj.clientContacts) {
       proj.clientContacts[idx][field] = val;
+    }
+  };
+
+  window.addProjectMember = (slug) => {
+    if (selectedIndex === -1) return;
+    const emp = empresas[selectedIndex];
+    const config = companyConfigs[emp.id];
+    if (!config || !config.projects) return;
+    const proj = config.projects.find(p => p.slug === slug);
+    if(proj) {
+      if (!proj.members) proj.members = [];
+      proj.members.push('');
+      renderProjects();
+    }
+  };
+
+  window.updateProjectMember = (slug, idx, email) => {
+    if (selectedIndex === -1) return;
+    const emp = empresas[selectedIndex];
+    const config = companyConfigs[emp.id];
+    if (!config || !config.projects) return;
+    const proj = config.projects.find(p => p.slug === slug);
+    if(proj && proj.members) {
+      proj.members[idx] = email;
+    }
+  };
+
+  window.removeProjectMember = (slug, idx) => {
+    if(!confirm('¿Remover miembro de este proyecto?')) return;
+    if (selectedIndex === -1) return;
+    const emp = empresas[selectedIndex];
+    const config = companyConfigs[emp.id];
+    if (!config || !config.projects) return;
+    const proj = config.projects.find(p => p.slug === slug);
+    if(proj && proj.members) {
+      proj.members.splice(idx, 1);
+      renderProjects();
     }
   };
 
