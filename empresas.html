@@ -318,7 +318,7 @@
                             // Bypass validation for the hardcoded super admin
                         } else {
                             const dbUser = users.find(u => u.email === userAccount.username.toLowerCase().trim());
-                            if (!dbUser || (dbUser.estado !== 'APROBADO' && dbUser.rol !== 'SUPER_ADMINISTRADOR')) {
+                            if (!dbUser || (dbUser.estado !== 'APROBADO' && dbUser.rol !== 'SUPER_ADMINISTRADOR' && dbUser.rol !== 'ADMINISTRADOR_EMPRESA')) {
                                 alert('Tu acceso ha sido revocado o está pendiente. Cerrando sesión.');
                                 sessionStorage.removeItem('userAccount');
                                 localStorage.removeItem('userAccount');
@@ -370,8 +370,13 @@
                                 configUrl: c.configUrl || 'portal-config.json'
                             }));
                         } else {
-                            // Filter for user's company
-                            const myComp = allCompanies.find(c => c.name && userAccount.empresa && c.name.toLowerCase().trim() === userAccount.empresa.toLowerCase().trim());
+                            const myComp = allCompanies.find(c => {
+                                if (!c.name || !userAccount.empresa) return false;
+                                const cName = c.name.toLowerCase().trim();
+                                const cRazon = c.razonSocial ? c.razonSocial.toLowerCase().trim() : '';
+                                const uEmp = userAccount.empresa.toLowerCase().trim();
+                                return cName === uEmp || cRazon === uEmp || cName.includes(uEmp) || uEmp.includes(cName);
+                            });
                             if (myComp) {
                                 companies.push({
                                     id: myComp.id || 'company-' + Date.now(),

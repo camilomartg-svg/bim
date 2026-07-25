@@ -118,35 +118,40 @@ document.addEventListener('DOMContentLoaded', async () => {
                empresas.forEach(emp => {
                    if (!emp.members) emp.members = [];
                    if (!emp.admins) emp.admins = [];
-                   gUsers.forEach(gu => {
-                       if (gu.empresa && emp.name && gu.empresa.toLowerCase().trim() === emp.name.toLowerCase().trim()) {
-                           const email = gu.email ? gu.email.toLowerCase().trim() : '';
-                           if (email) {
-                               const mIdx = emp.members.findIndex(m => m.email && m.email.toLowerCase().trim() === email);
-                               const memberData = {
-                                   name: gu.nombre || email.split('@')[0],
-                                   email: email,
-                                   role: gu.rol || 'INVITADO',
-                                   empresaUsuario: gu.empresa,
-                                   especialidad: gu.especialidad || '',
-                                   cargo: gu.cargo || ''
-                               };
-                               if (mIdx > -1) {
-                                   // Actualizar miembro existente si cambió su información en el sheet
-                                   emp.members[mIdx] = { ...emp.members[mIdx], ...memberData };
-                               } else {
-                                   emp.members.push(memberData);
-                               }
-                               
-                               if (gu.rol === 'ADMINISTRADOR_EMPRESA') {
-                                   const adminExists = emp.admins.some(a => a.toLowerCase().trim() === email);
-                                   if (!adminExists) {
-                                       emp.admins.push(email);
-                                   }
-                               }
-                           }
-                       }
-                   });
+                                       gUsers.forEach(gu => {
+                        if (gu.empresa && emp.name) {
+                            const guEmp = gu.empresa.toLowerCase().trim();
+                            const empName = emp.name.toLowerCase().trim();
+                            const empRazon = emp.razonSocial ? emp.razonSocial.toLowerCase().trim() : '';
+                            if (guEmp === empName || guEmp === empRazon || empName.includes(guEmp) || guEmp.includes(empName)) {
+                                const email = gu.email ? gu.email.toLowerCase().trim() : '';
+                                if (email) {
+                                    const mIdx = emp.members.findIndex(m => m.email && m.email.toLowerCase().trim() === email);
+                                    const memberData = {
+                                        name: gu.nombre || email.split('@')[0],
+                                        email: email,
+                                        role: gu.rol || 'INVITADO',
+                                        empresaUsuario: gu.empresa,
+                                        especialidad: gu.especialidad || '',
+                                        cargo: gu.cargo || ''
+                                    };
+                                    if (mIdx > -1) {
+                                        // Actualizar miembro existente si cambió su información en el sheet
+                                        emp.members[mIdx] = { ...emp.members[mIdx], ...memberData };
+                                    } else {
+                                        emp.members.push(memberData);
+                                    }
+                                    
+                                    if (gu.rol === 'ADMINISTRADOR_EMPRESA') {
+                                        const adminExists = emp.admins.some(a => a.toLowerCase().trim() === email);
+                                        if (!adminExists) {
+                                            emp.admins.push(email);
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    });;
                });
            }
         } catch(ue) {

@@ -119,7 +119,11 @@ document.addEventListener('DOMContentLoaded', async () => {
                     if (!emp.members) emp.members = [];
                     if (!emp.admins) emp.admins = [];
                     gUsers.forEach(gu => {
-                        if (gu.empresa && emp.name && gu.empresa.toLowerCase().trim() === emp.name.toLowerCase().trim()) {
+                        if (gu.empresa && emp.name) {
+                            const guEmp = gu.empresa.toLowerCase().trim();
+                            const empName = emp.name.toLowerCase().trim();
+                            const empRazon = emp.razonSocial ? emp.razonSocial.toLowerCase().trim() : '';
+                            if (guEmp === empName || guEmp === empRazon || empName.includes(guEmp) || guEmp.includes(empName)) {
                             const email = gu.email ? gu.email.toLowerCase().trim() : '';
                             if (email) {
                                 const mIdx = emp.members.findIndex(m => m.email && m.email.toLowerCase().trim() === email);
@@ -146,7 +150,8 @@ document.addEventListener('DOMContentLoaded', async () => {
                                 }
                             }
                         }
-                    });
+                    }
+                });
                 });
             }
          } catch(ue) {
