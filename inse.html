@@ -590,6 +590,8 @@
                                 };
                                 const cacheLocation = document.getElementById('keep-signed-in').checked ? "localStorage" : "sessionStorage";
                                 window[cacheLocation].setItem('userAccount', JSON.stringify(userProfile));
+                                sessionStorage.removeItem('cachedCompanies_v2');
+                                localStorage.removeItem('cachedCompanies_v2');
                                 window.location.href = 'https://norabim.com/empresas.html';
                             } else {
                                 window.showRegistrationForm({
@@ -924,6 +926,8 @@
                 };
                 const cacheLocation = document.getElementById('keep-signed-in').checked ? "localStorage" : "sessionStorage";
                 window[cacheLocation].setItem('userAccount', JSON.stringify(userProfile));
+                sessionStorage.removeItem('cachedCompanies_v2');
+                localStorage.removeItem('cachedCompanies_v2');
                 window.location.href = 'https://norabim.com/empresas.html';
                 return;
             } catch (e) {
@@ -1046,6 +1050,8 @@
                     };
                     const cacheLocation = document.getElementById('keep-signed-in').checked ? "localStorage" : "sessionStorage";
                     window[cacheLocation].setItem('userAccount', JSON.stringify(userProfile));
+                    sessionStorage.removeItem('cachedCompanies_v2');
+                    localStorage.removeItem('cachedCompanies_v2');
                     window.location.href = 'https://norabim.com/empresas.html';
                 } else {
                     document.getElementById('error-message').textContent = "Tu usuario no tiene un rol asignado en el sistema.";

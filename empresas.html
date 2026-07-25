@@ -220,7 +220,12 @@
                 let allCompanies;
                 let users;
                 
-                if (cachedCompanies_v2) {
+                let isUserInCache = false;
+                if (cachedCompanies_v2 && cachedCompanies_v2.users && userAccount && userAccount.username) {
+                    isUserInCache = cachedCompanies_v2.users.some(u => u.email === userAccount.username.toLowerCase().trim());
+                }
+
+                if (cachedCompanies_v2 && (isUserInCache || (userAccount && userAccount.username === 'imagina3ddesign@gmail.com'))) {
                     allCompanies = cachedCompanies_v2.companies;
                     users = cachedCompanies_v2.users;
                     // Fire background fetch silently to update next time
