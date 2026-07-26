@@ -1,4 +1,4 @@
-const CACHE_NAME = 'portal-bim-nora-v30';
+const CACHE_NAME = 'portal-bim-nora-v31';
 // Lista de archivos que queremos guardar en caché para que la app funcione offline.
 const urlsToCache = [
   'home.html', // Ruta relativa a la ubicación del Service Worker
@@ -71,8 +71,9 @@ self.addEventListener('fetch', event => {
         // Clonar la respuesta antes de guardarla en caché
         const responseClone = response.clone();
         caches.open(CACHE_NAME).then(cache => {
-          // Solo guardar en caché si es una petición GET válida
-          if (event.request.method === 'GET' && response.status === 200) {
+          // Solo guardar en caché si es una petición GET válida y no es un archivo de super-admin
+          const isSuperAdminFile = event.request.url.includes('super-admin');
+          if (event.request.method === 'GET' && response.status === 200 && !isSuperAdminFile) {
             cache.put(event.request, responseClone);
           }
         });
