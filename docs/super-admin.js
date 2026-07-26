@@ -19,6 +19,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   window.empresas = empresas;
   window.selectedIndex = selectedIndex;
   window.userRole = userRole;
+  window.companyConfigs = companyConfigs;
 
   const listEl = document.getElementById('empresas-list');
   const editorEl = document.getElementById('empresa-editor');
@@ -1948,7 +1949,7 @@ window.quickApproveUser = async function(email, nombre) {
 // MÓDULO: GESTIÓN GLOBAL DE PROYECTOS Y LICENCIAS
 // ==========================================
 window.toggleGlobalProjectLicense = (companyId, projectSlug, checked) => {
-    const config = companyConfigs[companyId];
+    const config = window.companyConfigs[companyId];
     if (config && config.projects) {
         const p = config.projects.find(proj => proj.slug === projectSlug);
         if (p) {
@@ -1979,12 +1980,12 @@ window.renderGlobalProjects = function() {
     let activeLicensesCount = 0;
 
     // Build list of companies with their matching projects
-    const activeCompanies = empresas.filter(e => !e.deleted);
+    const activeCompanies = window.empresas.filter(e => !e.deleted);
     
     let html = '';
 
     activeCompanies.forEach((emp, empIdx) => {
-        const config = companyConfigs[emp.id] || { projects: [] };
+        const config = window.companyConfigs[emp.id] || { projects: [] };
         const projects = config.projects || [];
         
         // Filter projects
