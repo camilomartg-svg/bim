@@ -268,8 +268,8 @@
                 <p class="text-gray-400 text-sm mt-2 font-medium">Corporativo / Para Empresas</p>
                 <div class="my-8">
                     <span class="text-5xl font-bold tracking-tight text-white" id="price-enterprise">$115.600</span>
-                    <span class="text-gray-400 font-medium ml-1" id="price-currency-label">COP / proyecto / mes</span>
-                    <p class="text-xs text-gray-500 mt-2 font-medium">* Valor no incluye IVA</p>
+                    <span class="text-gray-400 font-medium ml-1" id="price-currency-label">COP / proyecto / mes (antes de IVA)</span>
+                    <p class="text-xs text-gray-300 mt-2 font-semibold">* Valor no incluye IVA</p>
                 </div>
                 <p class="text-sm text-gray-300 mb-8 leading-relaxed">
                     Diseñado para constructoras, gerencias de proyecto y firmas de ingeniería que administran sus propios ecosistemas de trabajo. Usuarios Pro invitados ilimitados y gratuitos.
@@ -477,7 +477,7 @@
                     labelUsd.classList.replace('text-gray-900', 'text-gray-400');
                     
                     priceEl.textContent = `$${priceCOP.toLocaleString('es-CO')}`;
-                    labelCurrencyEl.textContent = 'COP / proyecto / mes';
+                    labelCurrencyEl.textContent = 'COP / proyecto / mes (antes de IVA)';
                 } else {
                     // UI para USD
                     knob.classList.remove('translate-x-1');
@@ -489,7 +489,7 @@
                     
                     const priceUSD = Math.round(priceCOP / currentTRM);
                     priceEl.textContent = `$${priceUSD}`;
-                    labelCurrencyEl.textContent = 'USD / proyecto / mes';
+                    labelCurrencyEl.textContent = 'USD / proyecto / mes (sin IVA)';
                 }
             }
 

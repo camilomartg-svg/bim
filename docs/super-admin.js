@@ -202,6 +202,10 @@ document.addEventListener('DOMContentLoaded', async () => {
           if (configTabBtn) configTabBtn.classList.add('hidden');
       }
 
+      // Pre-cargar de forma paralela los config-*.json de todas las empresas no eliminadas
+      const activeCompanies = empresas.filter(e => !e.deleted);
+      await Promise.all(activeCompanies.map(emp => loadCompanyConfig(emp)));
+
       renderList();
     } catch (e) { showBanner('Error cargando datos', 'error'); }
   }
@@ -874,7 +878,7 @@ let contentBase = '';
         return `
           <div class="border-b border-slate-100 last:border-0 bg-slate-50">
             <div class="grid grid-cols-12 gap-2 p-3 text-sm items-center hover:bg-slate-100 cursor-pointer" onclick="toggleProjectAccordion('${p.slug}')">
-              <div class="col-span-4 font-semibold text-slate-800 flex items-center gap-2">
+              <div class="col-span-3 font-semibold text-slate-800 flex items-center gap-2">
                   <span class="material-symbols-outlined text-slate-400 text-lg transition-transform ${isOpen ? 'rotate-180' : ''}">expand_more</span>
                   ${p.name || p.title || 'Proyecto'}
               </div>
@@ -882,7 +886,10 @@ let contentBase = '';
               <div class="col-span-2">
                   <span class="text-[10px] px-2 py-0.5 rounded font-bold uppercase tracking-wider ${p.status==='Activo'?'bg-emerald-100 text-emerald-700':p.status==='Cerrado'?'bg-rose-100 text-rose-700':'bg-slate-200 text-slate-700'}">${p.status}</span>
               </div>
-              <div class="col-span-3 text-right flex justify-end gap-2" onclick="event.stopPropagation()">
+              <div class="col-span-2 text-center" onclick="event.stopPropagation()">
+                  <input type="checkbox" class="rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer h-4 w-4" ${p.hasLicense !== false ? 'checked' : ''} onchange="updateProject('${p.slug}', 'hasLicense', this.checked); setTimeout(renderProjects, 10);">
+              </div>
+              <div class="col-span-2 text-right flex justify-end gap-2" onclick="event.stopPropagation()">
                 <button onclick="deleteProject('${p.slug}')" class="text-rose-500 hover:text-rose-700 p-1 bg-white border border-rose-200 rounded shadow-sm hover:shadow"><span class="material-symbols-outlined text-sm">delete</span></button>
               </div>
             </div>
@@ -1012,6 +1019,26 @@ let contentBase = '';
         }).join('');
       }
 
+      // Calculate company billing summary
+      const licensedProjects = (config.projects || []).filter(p => p.hasLicense !== false);
+      const count = licensedProjects.length;
+      const basePrice = 115600;
+      const subtotal = count * basePrice;
+      const iva = subtotal * 0.19;
+      const total = subtotal + iva;
+      
+      const countEl = document.getElementById('company-billing-count');
+      const totalEl = document.getElementById('company-billing-total');
+      if (countEl && totalEl) {
+        countEl.textContent = count;
+        totalEl.innerHTML = `
+          <div class="text-lg font-black text-blue-950">$${total.toLocaleString('es-CO')} COP</div>
+          <div class="text-[10px] text-blue-600 font-medium mt-0.5">
+            Subtotal: $${subtotal.toLocaleString('es-CO')} COP + IVA (19%): $${iva.toLocaleString('es-CO')} COP
+          </div>
+        `;
+      }
+
       // Map initialization placeholder logic wrapper end
         
 
@@ -1082,7 +1109,7 @@ let contentBase = '';
     const proj = config.projects.find(p => p.slug === slug);
     if(proj) {
       proj[field] = val;
-      if (field === 'country' || field === 'city') {
+      if (field === 'country' || field === 'city' || field === 'hasLicense') {
         setTimeout(() => {
           renderProjects();
         }, 10);
@@ -1265,6 +1292,7 @@ let contentBase = '';
       slug: slug,
       status: 'Planeacion',
       enabled: true,
+      hasLicense: true,
       landing: { 
         enabled: true, 
         title: 'NUEVO PROYECTO', 
@@ -1489,9 +1517,6 @@ let contentBase = '';
   window.fetchGlobalUsers();
 });
 
-
-
-
 // ==========================================
 // MÓDULO: DIRECTORIO GLOBAL DE USUARIOS (Google Sheets Single Source of Truth)
 // ==========================================
@@ -1502,41 +1527,60 @@ const ROLES_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzdclwrLaL7k30
 window.switchGlobalView = function(viewName) {
     const btnEmpresas = document.getElementById('tab-empresas');
     const btnUsuarios = document.getElementById('tab-usuarios');
+    const btnProyectos = document.getElementById('tab-proyectos-global');
+    
     const vEmpresas = document.getElementById('empresas-view');
     const vUsuarios = document.getElementById('usuarios-view');
+    const vProyectos = document.getElementById('proyectos-view');
 
-    if (viewName === 'empresas') {
-        btnEmpresas.classList.replace('text-slate-500', 'text-slate-800');
-        btnEmpresas.classList.replace('hover:text-slate-700', 'bg-white');
-        btnEmpresas.classList.add('shadow-sm');
+    // Helper to style active/inactive tabs
+    const setTabStyle = (btn, isActive) => {
+        if (!btn) return;
+        if (isActive) {
+            btn.classList.remove('text-slate-500', 'hover:text-slate-700');
+            btn.classList.add('bg-white', 'text-slate-800', 'shadow-sm');
+        } else {
+            btn.classList.remove('bg-white', 'text-slate-800', 'shadow-sm');
+            btn.classList.add('text-slate-500', 'hover:text-slate-700');
+        }
+    };
 
-        btnUsuarios.classList.replace('text-slate-800', 'text-slate-500');
-        btnUsuarios.classList.replace('bg-white', 'hover:text-slate-700');
-        btnUsuarios.classList.remove('shadow-sm');
+    setTabStyle(btnEmpresas, viewName === 'empresas');
+    setTabStyle(btnUsuarios, viewName === 'usuarios');
+    setTabStyle(btnProyectos, viewName === 'proyectos');
 
+    // Hide all views
+    if (vEmpresas) vEmpresas.classList.add('hidden');
+    if (vUsuarios) {
         vUsuarios.classList.add('hidden');
         vUsuarios.classList.remove('flex');
-        vEmpresas.classList.remove('hidden');
-    } else {
-        btnUsuarios.classList.replace('text-slate-500', 'text-slate-800');
-        btnUsuarios.classList.replace('hover:text-slate-700', 'bg-white');
-        btnUsuarios.classList.add('shadow-sm');
+    }
+    if (vProyectos) {
+        vProyectos.classList.add('hidden');
+        vProyectos.classList.remove('flex');
+    }
 
-        btnEmpresas.classList.replace('text-slate-800', 'text-slate-500');
-        btnEmpresas.classList.replace('bg-white', 'hover:text-slate-700');
-        btnEmpresas.classList.remove('shadow-sm');
-
-        vEmpresas.classList.add('hidden');
-        vUsuarios.classList.remove('hidden');
-        vUsuarios.classList.add('flex');
-        
+    // Show active view
+    if (viewName === 'empresas') {
+        if (vEmpresas) vEmpresas.classList.remove('hidden');
+    } else if (viewName === 'usuarios') {
+        if (vUsuarios) {
+            vUsuarios.classList.remove('hidden');
+            vUsuarios.classList.add('flex');
+        }
         if (window.globalUsersMap.size === 0) {
             fetchGlobalUsers();
         } else {
             renderGlobalUsers();
         }
+    } else if (viewName === 'proyectos') {
+        if (vProyectos) {
+            vProyectos.classList.remove('hidden');
+            vProyectos.classList.add('flex');
+        }
+        renderGlobalProjects();
     }
-}
+};
 
 window.fetchGlobalUsers = async function() {
     document.getElementById('global-users-loading').classList.remove('hidden');
@@ -1897,5 +1941,168 @@ window.quickApproveUser = async function(email, nombre) {
         showBanner(`✅ ${nombre} aprobado correctamente${empresa ? ' en ' + empresa : ''}.`, 'success');
     } catch(e) {
         showBanner('❌ Error al aprobar el usuario.', 'error');
+    }
+};
+
+// ==========================================
+// MÓDULO: GESTIÓN GLOBAL DE PROYECTOS Y LICENCIAS
+// ==========================================
+window.toggleGlobalProjectLicense = (companyId, projectSlug, checked) => {
+    const config = companyConfigs[companyId];
+    if (config && config.projects) {
+        const p = config.projects.find(proj => proj.slug === projectSlug);
+        if (p) {
+            p.hasLicense = checked;
+            renderGlobalProjects();
+        }
+    }
+};
+
+// Bind search input once
+let globalProjectSearchBound = false;
+
+window.renderGlobalProjects = function() {
+    const listEl = document.getElementById('global-projects-list');
+    if (!listEl) return;
+
+    if (!globalProjectSearchBound) {
+        const searchInput = document.getElementById('global-project-search');
+        if (searchInput) {
+            searchInput.addEventListener('input', () => renderGlobalProjects());
+            globalProjectSearchBound = true;
+        }
+    }
+
+    const searchVal = (document.getElementById('global-project-search')?.value || '').toLowerCase().trim();
+
+    let totalProjectsCount = 0;
+    let activeLicensesCount = 0;
+
+    // Build list of companies with their matching projects
+    const activeCompanies = empresas.filter(e => !e.deleted);
+    
+    let html = '';
+
+    activeCompanies.forEach((emp, empIdx) => {
+        const config = companyConfigs[emp.id] || { projects: [] };
+        const projects = config.projects || [];
+        
+        // Filter projects
+        const matchingProjects = projects.filter(p => {
+            if (!searchVal) return true;
+            const nameMatch = (p.name || '').toLowerCase().includes(searchVal);
+            const slugMatch = (p.slug || '').toLowerCase().includes(searchVal);
+            const companyMatch = (emp.name || '').toLowerCase().includes(searchVal) || (emp.razonSocial || '').toLowerCase().includes(searchVal);
+            return nameMatch || slugMatch || companyMatch;
+        });
+
+        if (searchVal && matchingProjects.length === 0) {
+            return; // Skip company if searching and no projects match
+        }
+
+        // Aggregate statistics
+        totalProjectsCount += projects.length;
+        activeLicensesCount += projects.filter(p => p.hasLicense !== false).length;
+
+        const companyLicensesCount = projects.filter(p => p.hasLicense !== false).length;
+        const basePrice = 115600;
+        const subtotal = companyLicensesCount * basePrice;
+        const iva = subtotal * 0.19;
+        const total = subtotal + iva;
+
+        // Render company card
+        html += `
+        <div class="bg-slate-50 border border-slate-200 rounded-2xl p-5 shadow-sm space-y-4">
+            <!-- Header de la Empresa -->
+            <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 pb-4 border-b border-slate-200">
+                <div class="flex items-center gap-3">
+                    <img src="${emp.image || 'https://i.postimg.cc/02mTnnQv/21bd5ee9d2351270615280386caad1f3.jpg'}" class="w-10 h-10 rounded-xl object-cover border border-slate-200" onerror="this.src='https://i.postimg.cc/02mTnnQv/21bd5ee9d2351270615280386caad1f3.jpg'">
+                    <div>
+                        <h3 class="text-sm font-bold text-slate-800">${emp.razonSocial || emp.name || 'Sin Nombre'}</h3>
+                        <p class="text-xs text-slate-500">ID: ${emp.id} &middot; Código: ${emp.code}</p>
+                    </div>
+                </div>
+                <div class="flex flex-wrap items-center gap-4 text-right">
+                    <div class="bg-blue-50 border border-blue-200 rounded-xl px-4 py-2 text-left md:text-right">
+                        <div class="text-[10px] font-bold text-blue-700 uppercase tracking-wider">Facturación Mensual</div>
+                        <div class="text-sm font-black text-blue-900">$${total.toLocaleString('es-CO')} COP</div>
+                        <div class="text-[9px] text-blue-600">Subtotal: $${subtotal.toLocaleString('es-CO')} + IVA (19%): $${iva.toLocaleString('es-CO')}</div>
+                    </div>
+                    <button onclick="switchGlobalView('empresas'); selectEmpresa(${empIdx});" class="px-3 py-1.5 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 rounded-xl text-xs font-semibold shadow-sm transition-all flex items-center gap-1">
+                        <span class="material-symbols-outlined text-sm">edit</span> Gestionar
+                    </button>
+                </div>
+            </div>
+
+            <!-- Listado de Proyectos de esta Empresa -->
+            <div class="overflow-x-auto">
+                <table class="w-full text-left text-xs">
+                    <thead>
+                        <tr class="text-slate-400 font-bold uppercase tracking-wider border-b border-slate-100">
+                            <th class="pb-2 pl-2">Proyecto</th>
+                            <th class="pb-2">Slug</th>
+                            <th class="pb-2">Estado</th>
+                            <th class="pb-2 text-center">Licencia Activa</th>
+                            <th class="pb-2 text-right pr-2">Costo (COP)</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-slate-100">
+                        ${matchingProjects.map(p => {
+                            const licensed = p.hasLicense !== false;
+                            const projectPrice = licensed ? 115600 : 0;
+                            const projectIva = projectPrice * 0.19;
+                            const projectTotal = projectPrice + projectIva;
+
+                            return `
+                            <tr class="hover:bg-white/60 transition-colors">
+                                <td class="py-3 pl-2 font-semibold text-slate-800">${p.name || 'Sin Nombre'}</td>
+                                <td class="py-3 font-mono text-[10px] text-slate-500">${p.slug}</td>
+                                <td class="py-3">
+                                    <span class="px-2 py-0.5 rounded font-bold uppercase text-[9px] tracking-wider ${p.status === 'Activo' ? 'bg-emerald-100 text-emerald-700' : p.status === 'Cerrado' ? 'bg-rose-100 text-rose-700' : 'bg-slate-200 text-slate-700'}">${p.status}</span>
+                                </td>
+                                <td class="py-3 text-center">
+                                    <input type="checkbox" class="rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer h-4 w-4" ${licensed ? 'checked' : ''} onchange="toggleGlobalProjectLicense('${emp.id}', '${p.slug}', this.checked)">
+                                </td>
+                                <td class="py-3 text-right pr-2 font-bold text-slate-800">
+                                    ${licensed ? `$137.564 <span class="text-[9px] text-slate-400 font-normal">($115.600 + IVA)</span>` : '$0'}
+                                </td>
+                            </tr>
+                            `;
+                        }).join('')}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        `;
+    });
+
+    if (!html) {
+        html = `
+        <div class="text-center py-12 text-slate-500 flex flex-col items-center justify-center">
+            <span class="material-symbols-outlined text-4xl mb-2 text-slate-300">search_off</span>
+            <p class="font-semibold">No se encontraron proyectos</p>
+            <p class="text-xs text-slate-400">Intenta buscar con otros términos o limpia el filtro.</p>
+        </div>
+        `;
+    }
+
+    listEl.innerHTML = html;
+
+    // Update global KPI stats
+    const totalProjectsEl = document.getElementById('stat-total-projects');
+    const activeLicensesEl = document.getElementById('stat-active-licenses');
+    const totalBillingEl = document.getElementById('stat-total-billing');
+
+    const totalBillingBase = activeLicensesCount * 115600;
+    const totalBillingIva = totalBillingBase * 0.19;
+    const totalBillingTotal = totalBillingBase + totalBillingIva;
+
+    if (totalProjectsEl) totalProjectsEl.textContent = totalProjectsCount;
+    if (activeLicensesEl) activeLicensesEl.textContent = activeLicensesCount;
+    if (totalBillingEl) {
+        totalBillingEl.innerHTML = `
+          <div>$${totalBillingTotal.toLocaleString('es-CO')} COP</div>
+          <div class="text-[10px] text-slate-400 font-normal mt-0.5">Subtotal: $${totalBillingBase.toLocaleString('es-CO')} + IVA (19%)</div>
+        `;
     }
 };
