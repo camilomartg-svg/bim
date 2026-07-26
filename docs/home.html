@@ -392,13 +392,28 @@ if (urlParams.get('empresa') === atob('YWxjYWJhbWE=') || urlParams.get('empresa'
                     footerText.textContent = safeConfig.portal.footerText;
                 }
 
+                const fixNoraLogo = (url, isDark = false) => {
+                    if (!url) return isDark ? 'https://i.postimg.cc/DhDLzDMQ/LOGO-NORA-BLANCO.png' : 'https://i.postimg.cc/1STwzTjp/LOGO-NORA-NEGRO.png';
+                    const oldUrls = [
+                        'L4r0gSvV/LOGO-NORA-NEGRO.png',
+                        'tR3YSryT/LOGO-NORA-NEGRO.png',
+                        'W3trgjZX/FAVICON-NORA-NEGRO.png',
+                        'FFfBKzb8/LOGO-NORA-BLANCO.png',
+                        'SQ6JTZqj/LOGO-NORA-BLANCO.png'
+                    ];
+                    if (oldUrls.some(old => url.includes(old))) {
+                        return isDark ? 'https://i.postimg.cc/DhDLzDMQ/LOGO-NORA-BLANCO.png' : 'https://i.postimg.cc/1STwzTjp/LOGO-NORA-NEGRO.png';
+                    }
+                    return url;
+                };
+
                 // Actualizar logos dinámicamente
-                const logoLight = safeConfig.portal?.logoLight || 'https://i.postimg.cc/1STwzTjp/LOGO-NORA-NEGRO.png';
-                const logoDark = safeConfig.portal?.logoDark || 'https://i.postimg.cc/DhDLzDMQ/LOGO-NORA-BLANCO.png';
-                const footerLogoLight = safeConfig.portal?.footerLogoLight || 'https://i.postimg.cc/1STwzTjp/LOGO-NORA-NEGRO.png';
-                const footerLogoDark = safeConfig.portal?.footerLogoDark || 'https://i.postimg.cc/DhDLzDMQ/LOGO-NORA-BLANCO.png';
-                const footerLogoSecondaryLight = safeConfig.portal?.footerLogoSecondaryLight || 'https://i.postimg.cc/1STwzTjp/LOGO-NORA-NEGRO.png';
-                const footerLogoSecondaryDark = safeConfig.portal?.footerLogoSecondaryDark || 'https://i.postimg.cc/DhDLzDMQ/LOGO-NORA-BLANCO.png';
+                const logoLight = fixNoraLogo(safeConfig.portal?.logoLight, false);
+                const logoDark = fixNoraLogo(safeConfig.portal?.logoDark, true);
+                const footerLogoLight = fixNoraLogo(safeConfig.portal?.footerLogoLight, false);
+                const footerLogoDark = fixNoraLogo(safeConfig.portal?.footerLogoDark, true);
+                const footerLogoSecondaryLight = fixNoraLogo(safeConfig.portal?.footerLogoSecondaryLight, false);
+                const footerLogoSecondaryDark = fixNoraLogo(safeConfig.portal?.footerLogoSecondaryDark, true);
 
                 const imgLogoLight = document.getElementById('portal-logo-light');
                 if (imgLogoLight) imgLogoLight.src = logoLight;
