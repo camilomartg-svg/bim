@@ -430,7 +430,12 @@ if (urlParams.get('empresa') === atob('YWxjYWJhbWE=') || urlParams.get('empresa'
       document.title = `${project.name} | ${config.portal?.name || 'nora CDE'}`;
       const setEl = (id, text) => { const el = document.getElementById(id); if (el) el.textContent = text; };
       setEl('project-eyebrow-main', project.landing.eyebrow || 'Dashboard');
-      setEl('project-title', project.landing.title || project.name.toUpperCase());
+      
+      const landingTitle = (project.landing?.title && project.landing.title.toUpperCase() !== 'NUEVO PROYECTO') 
+        ? project.landing.title 
+        : project.name.toUpperCase();
+      setEl('project-title', landingTitle);
+      
       setEl('project-subtitle', project.landing.subtitle || DEFAULT_PROJECT.landing.subtitle);
       setEl('project-action-eyebrow', project.landing.actionEyebrow || 'Panel');
       setEl('project-action-title', project.landing.actionTitle || 'Acciones');
