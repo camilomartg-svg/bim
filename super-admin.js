@@ -1,5 +1,5 @@
 document.addEventListener('DOMContentLoaded', async () => {
-  let userRole = 'SUPER_ADMINISTRADOR';
+  let userRole = 'INVITADO';
   let userEmail = '';
   try {
     const ua = JSON.parse(localStorage.getItem('userAccount') || sessionStorage.getItem('userAccount') || 'null');
@@ -8,6 +8,42 @@ document.addEventListener('DOMContentLoaded', async () => {
         userEmail = (ua.username || '').toLowerCase();
     }
   } catch(e) {}
+
+  // Ajustar la interfaz de forma síncrona e inmediata según el rol del usuario
+  if (userRole === 'SUPER_ADMINISTRADOR') {
+      const globalTabs = document.getElementById('global-tabs-container');
+      if (globalTabs) {
+          globalTabs.classList.remove('hidden');
+          globalTabs.classList.add('md:flex');
+      }
+      const addEmpBtn = document.getElementById('add-empresa-btn');
+      if (addEmpBtn) addEmpBtn.classList.remove('hidden');
+      
+      const deleteEmpBtn = document.getElementById('delete-empresa-btn');
+      if (deleteEmpBtn) deleteEmpBtn.classList.remove('hidden');
+      
+      const configTabBtn = document.getElementById('tab-btn-configuracion');
+      if (configTabBtn) configTabBtn.classList.remove('hidden');
+  } else {
+      const title = document.getElementById('page-title');
+      const subtitle = document.getElementById('page-subtitle');
+      if (title) title.textContent = 'Gestión de Mi Empresa';
+      if (subtitle) subtitle.textContent = 'Administración';
+      
+      const globalTabs = document.getElementById('global-tabs-container');
+      if (globalTabs) {
+          globalTabs.classList.add('hidden');
+          globalTabs.classList.remove('md:flex');
+      }
+      const addEmpBtn = document.getElementById('add-empresa-btn');
+      if (addEmpBtn) addEmpBtn.classList.add('hidden');
+      
+      const deleteEmpBtn = document.getElementById('delete-empresa-btn');
+      if (deleteEmpBtn) deleteEmpBtn.classList.add('hidden');
+      
+      const configTabBtn = document.getElementById('tab-btn-configuracion');
+      if (configTabBtn) configTabBtn.classList.add('hidden');
+  }
 
   let empresas = [];
   let superAdmins = [];
@@ -181,27 +217,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         superAdmins = config.superAdmins || ['imagina3ddesign@gmail.com', 'mcmartinezg@unal.edu.co'];
       }
       
-      if (userRole !== 'SUPER_ADMINISTRADOR') {
-          const globalTabs = document.getElementById('global-tabs-container');
-          if(globalTabs) globalTabs.classList.add('hidden');
-          if(globalTabs) globalTabs.classList.remove('md:flex');
-      }
       
-      if (userRole === 'ADMINISTRADOR_EMPRESA') {
-          // Hide Add/Delete Empresa buttons
-          document.getElementById('add-empresa-btn').classList.add('hidden');
-          document.getElementById('delete-empresa-btn').classList.add('hidden');
-          // Change Title
-          const title = document.getElementById('page-title');
-          const subtitle = document.getElementById('page-subtitle');
-          if (title) title.textContent = 'Gestión de Mi Empresa';
-          if (subtitle) subtitle.textContent = 'Administración';
-      }
-
-      if (userRole !== 'SUPER_ADMINISTRADOR') {
-          const configTabBtn = document.getElementById('tab-btn-configuracion');
-          if (configTabBtn) configTabBtn.classList.add('hidden');
-      }
 
       // Pre-cargar de forma paralela los config-*.json de todas las empresas no eliminadas
       const activeCompanies = empresas.filter(e => !e.deleted);
