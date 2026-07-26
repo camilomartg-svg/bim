@@ -428,7 +428,10 @@
                 // Initial render execution
                 renderUI();
 
-                    });
+            } catch (e) {
+                console.error("Error loading companies list:", e);
+            }
+        });
     </script>
 </body>
 
