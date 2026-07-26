@@ -15,11 +15,11 @@ document.addEventListener('DOMContentLoaded', async () => {
   let selectedIndex = -1;
   let searchTerm = '';
   
-  // Expose to global scope for our new modules
-  window.empresas = empresas;
-  window.selectedIndex = selectedIndex;
-  window.userRole = userRole;
-  window.companyConfigs = companyConfigs;
+  // Expose to global scope for our new modules using getters to stay in sync
+  Object.defineProperty(window, 'empresas', { get: () => empresas, configurable: true });
+  Object.defineProperty(window, 'selectedIndex', { get: () => selectedIndex, configurable: true });
+  Object.defineProperty(window, 'userRole', { get: () => userRole, configurable: true });
+  Object.defineProperty(window, 'companyConfigs', { get: () => companyConfigs, configurable: true });
 
   const listEl = document.getElementById('empresas-list');
   const editorEl = document.getElementById('empresa-editor');
