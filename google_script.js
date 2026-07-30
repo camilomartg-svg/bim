@@ -213,7 +213,9 @@ function doPost(e) {
         try {
           companyFolder = getOrCreateFolder(rootFolder, companyFolderName);
         } catch (e) {
-          Logger.log(`Error creating folder for company ${name}: ${e}`);
+          responseFolders[comp.id] = {
+            error: e.toString()
+          };
           return;
         }
         
@@ -258,7 +260,7 @@ function doPost(e) {
               projFolder = getOrCreateFolder(companyFolder, proj.name);
               projFolderId = projFolder.getId();
             } catch (e) {
-              Logger.log(`Error creating folder for project ${proj.name}: ${e}`);
+              responseFolders[comp.id].projects[proj.slug] = "error: " + e.toString();
             }
           }
           
@@ -357,4 +359,10 @@ function doGet(e) {
   } catch (error) {
     return ContentService.createTextOutput(JSON.stringify({ status: "error", message: error.toString() })).setMimeType(ContentService.MimeType.JSON);
   }
+}
+
+function autorizarDrive() {
+  const root = DriveApp.getFolderById("1aWUNnLgjWBkA6wdCM99XMY9SU7eSDP-H");
+  const temp = root.createFolder("TEMPORAL_BORRAR_LUEGO");
+  temp.setTrashed(true);
 }
