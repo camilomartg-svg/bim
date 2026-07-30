@@ -668,14 +668,10 @@
             if (window.empresasList.length === 0) fetchEmpresas();
             if (errorMessage) errorMessage.textContent = "";
             
-            // Hide organization search if coming from create company flow
+            // Always hide organization search container during user registration
             const orgSearchContainer = document.getElementById('org-search-container');
             if (orgSearchContainer) {
-                if (window.newCompanyData) {
-                    orgSearchContainer.classList.add('hidden');
-                } else {
-                    orgSearchContainer.classList.remove('hidden');
-                }
+                orgSearchContainer.classList.add('hidden');
             }
             
             if (googleProfile) {
@@ -791,14 +787,10 @@
             document.getElementById('create-company-section').classList.add('hidden');
             document.getElementById('registration-section').classList.remove('hidden');
             
-            // Hide organization search if coming from create company flow
+            // Always hide organization search container during user registration
             const orgSearchContainer = document.getElementById('org-search-container');
             if (orgSearchContainer) {
-                if (window.newCompanyData) {
-                    orgSearchContainer.classList.add('hidden');
-                } else {
-                    orgSearchContainer.classList.remove('hidden');
-                }
+                orgSearchContainer.classList.add('hidden');
             }
         }
 
