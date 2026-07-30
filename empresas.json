@@ -205,5 +205,30 @@
     "image": "https://i.postimg.cc/02mTnnQv/21bd5ee9d2351270615280386caad1f3.jpg",
     "location": "Bogota DC, Colombia",
     "configUrl": "config-empresa-1784990258113.json"
+  },
+  {
+    "id": "empresa-1785381842800",
+    "name": "Naranja Arquitectura",
+    "code": "NAR",
+    "admins": [
+      "alc.spk.5@gmail.com"
+    ],
+    "zonaHoraria": "America/Bogota",
+    "members": [
+      {
+        "name": "alc.spk.5",
+        "email": "alc.spk.5@gmail.com",
+        "role": "ADMINISTRADOR_EMPRESA",
+        "empresaUsuario": "Naranja Arquitectura",
+        "especialidad": "",
+        "cargo": ""
+      }
+    ],
+    "razonSocial": "Naranja Arquitectura SAS",
+    "terminosAceptados": true,
+    "tratamientoDatos": true,
+    "image": "https://i.postimg.cc/02mTnnQv/21bd5ee9d2351270615280386caad1f3.jpg",
+    "location": "Bogota DC, Colombia",
+    "configUrl": "config-empresa-1785381842800.json"
   }
 ]
