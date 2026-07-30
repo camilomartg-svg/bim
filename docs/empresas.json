@@ -170,7 +170,8 @@
     "name": "Morado Arquitectura",
     "code": "MOR",
     "admins": [
-      "camilomartg@gmail.com"
+      "camilomartg@gmail.com",
+      "alc.spk.6@gmail.com"
     ],
     "zonaHoraria": "America/Bogota",
     "members": [
@@ -183,11 +184,12 @@
         "cargo": ""
       },
       {
-        "name": "Nuevo Usuario",
+        "name": "Sof�a Martinez",
         "email": "alc.spk.6@gmail.com",
         "role": "INVITADO",
         "empresaUsuario": "Morado Arquitectura",
-        "cargo": "Arquitecto Senior"
+        "cargo": "",
+        "especialidad": ""
       },
       {
         "name": "Nuevo Usuario",
