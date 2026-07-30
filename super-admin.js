@@ -1499,6 +1499,67 @@ let contentBase = '';
       }
       // ───────────────────────────────────────────────────────────────────────
 
+      // ── SINCRONIZACIÓN DE CARPETAS EN GOOGLE DRIVE ───────────────────────
+      showBanner('Sincronizando carpetas en Google Drive...', 'info');
+      try {
+        const syncPayload = {
+          action: 'syncDriveFolders',
+          companies: empresas.filter(e => !e.deleted).map(emp => {
+            const config = companyConfigs[emp.id] || { projects: [] };
+            return {
+              id: emp.id,
+              name: emp.name,
+              code: emp.code || '000',
+              projects: (config.projects || []).map(p => ({
+                name: p.name,
+                slug: p.slug,
+                driveFolderId: (p.dataSources && p.dataSources.driveFolderId) || ''
+              }))
+            };
+          })
+        };
+
+        const syncRes = await fetch(ROLES_SCRIPT_URL, {
+          method: 'POST',
+          body: JSON.stringify(syncPayload)
+        });
+
+        if (!syncRes.ok) {
+          throw new Error('No se pudo establecer conexión con el servidor de Google Drive.');
+        }
+
+        const syncData = await syncRes.json();
+        if (syncData && syncData.status === 'success' && syncData.folders) {
+          const foldersMap = syncData.folders;
+          empresas.forEach(emp => {
+            const info = foldersMap[emp.id];
+            if (info) {
+              if (info.driveFolderId) {
+                emp.driveFolderId = info.driveFolderId;
+              }
+              const config = companyConfigs[emp.id];
+              if (config && config.projects && info.projects) {
+                config.projects.forEach(p => {
+                  const pFolderId = info.projects[p.slug];
+                  if (pFolderId) {
+                    if (!p.dataSources) p.dataSources = {};
+                    p.dataSources.driveFolderId = pFolderId;
+                    if (!p.dataSources.driveFolderName) {
+                      p.dataSources.driveFolderName = p.name || 'Sin Nombre';
+                    }
+                  }
+                });
+              }
+            }
+          });
+        } else if (syncData && syncData.status === 'error') {
+          throw new Error('Error de Apps Script: ' + syncData.message);
+        }
+      } catch (err) {
+        console.error("Error sincronizando Google Drive:", err);
+        throw new Error('Sincronización de Google Drive fallida: ' + err.message);
+      }
+
       const empJson = JSON.stringify(empresas, null, 2) + '\n';
       await pushFile('empresas.json', empJson);
       await pushFile('docs/empresas.json', empJson); // if docs exists
