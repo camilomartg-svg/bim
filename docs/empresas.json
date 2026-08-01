@@ -181,7 +181,7 @@
         "role": "ADMINISTRADOR_EMPRESA",
         "empresaUsuario": "Morado Arquitectura",
         "especialidad": "",
-        "cargo": "BIM Manager"
+        "cargo": ""
       },
       {
         "name": "Nuevo Usuario",
@@ -195,7 +195,8 @@
         "email": "dataguardar2@gmail.com",
         "role": "INVITADO",
         "empresaUsuario": "Morado Arquitectura",
-        "cargo": "Arquitecto Senior"
+        "especialidad": "",
+        "cargo": ""
       }
     ],
     "razonSocial": "Morado Arquitectura SAS",
