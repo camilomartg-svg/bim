@@ -181,21 +181,20 @@
         "role": "ADMINISTRADOR_EMPRESA",
         "empresaUsuario": "Morado Arquitectura",
         "especialidad": "",
-        "cargo": ""
-      },
-      {
-        "name": "Sof�a Martinez",
-        "email": "alc.spk.6@gmail.com",
-        "role": "INVITADO",
-        "empresaUsuario": "Morado Arquitectura",
-        "cargo": "",
-        "especialidad": ""
+        "cargo": "BIM Manager"
       },
       {
         "name": "Nuevo Usuario",
         "email": "alc.spk.2@gmail.com",
         "role": "INVITADO",
         "empresaUsuario": "Verde Arquitectura",
+        "cargo": "Arquitecto Senior"
+      },
+      {
+        "name": "Nuevo Usuario",
+        "email": "dataguardar2@gmail.com",
+        "role": "INVITADO",
+        "empresaUsuario": "Morado Arquitectura",
         "cargo": "Arquitecto Senior"
       }
     ],
