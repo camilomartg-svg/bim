@@ -88,8 +88,8 @@ function doPost(e) {
       setVal('city', data.companyData.city || '');
       setVal('zip', data.companyData.zip || '');
       setVal('address', data.companyData.address || '');
-      setVal('sectors', data.companyData.sectors || '');
-      setVal('specialties', data.companyData.specialties || '');
+      setVal('sectors', Array.isArray(data.companyData.sectors) ? data.companyData.sectors.join(', ') : (data.companyData.sectors || ''));
+      setVal('specialties', Array.isArray(data.companyData.specialties) ? data.companyData.specialties.join(', ') : (data.companyData.specialties || ''));
       setVal('logoBase64', data.companyData.logoBase64 || '');
       setVal('code', code);
       setVal('driveFolderId', driveFolderId);
@@ -172,8 +172,8 @@ function doPost(e) {
       setVal('city', data.city || '');
       setVal('zip', data.zip || '');
       setVal('address', data.address || '');
-      setVal('sectors', data.sectors || '');
-      setVal('specialties', data.specialties || '');
+      setVal('sectors', Array.isArray(data.sectors) ? data.sectors.join(', ') : (data.sectors || ''));
+      setVal('specialties', Array.isArray(data.specialties) ? data.specialties.join(', ') : (data.specialties || ''));
       setVal('logoBase64', data.logoBase64 || '');
       setVal('code', code);
       setVal('driveFolderId', driveFolderId);
