@@ -688,21 +688,28 @@
         addLog(`Archivo removido de la cola.`);
       };
 
-      // File helper conversions
+      // File helper: convert binary file to clean base64 using ArrayBuffer (more reliable than readAsDataURL)
       const fileToBase64 = (file) => new Promise((resolve, reject) => {
         const reader = new FileReader();
-        reader.readAsDataURL(file);
+        reader.readAsArrayBuffer(file);
         reader.onload = () => {
-          // Strip data URL prefix and ALL whitespace/newlines (required by Utilities.base64Decode)
-          let encoded = reader.result.toString().replace(/^data:(.*,)?base64,/, '');
-          encoded = encoded.replace(/[\s\n\r]/g, '');
-          if ((encoded.length % 4) > 0) {
-            encoded += '='.repeat(4 - (encoded.length % 4));
+          try {
+            const bytes = new Uint8Array(reader.result);
+            let binary = '';
+            // Process in chunks to avoid call stack overflow on large files
+            const chunkSize = 8192;
+            for (let i = 0; i < bytes.length; i += chunkSize) {
+              const chunk = bytes.subarray(i, Math.min(i + chunkSize, bytes.length));
+              binary += String.fromCharCode.apply(null, chunk);
+            }
+            resolve(btoa(binary));
+          } catch (err) {
+            reject(err);
           }
-          resolve(encoded);
         };
         reader.onerror = error => reject(error);
       });
+
 
       // Individual Drive Upload Action
       async function uploadToDrive(filename, base64Content, contentType, fileObj) {
