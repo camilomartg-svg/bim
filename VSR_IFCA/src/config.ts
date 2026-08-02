@@ -7,4 +7,4 @@ export const AUTHORIZED_USERS_SHEET_ID = '1Jcxc9SwtbDrExyGeS_zy0BVnEER64iEEvzCnz
 export const AUTHORIZED_USERS_SHEET_GID = '0';
 
 export const DRIVE_MODELS_FOLDER_ID = '1aWUNnLgjWBkA6wdCM99XMY9SU7eSDP-H';
-export const DRIVE_MODELS_API_URL = 'https://script.google.com/macros/s/AKfycby9jzOK9vz9OR_QTCo2MOMGAD25QlXJK1nreMGcWsR2Y2i3RNABh8BkGvBHfdO267AVgQ/exec';
+export const DRIVE_MODELS_API_URL = 'https://script.google.com/macros/s/AKfycbw37XFeNeiCs5GMYfLQEU4yAa2W4CmoDeVgsepC1JwqjhR0VNQGfFUts91lkfEylV9bMw/exec';
