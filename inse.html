@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="es" class="">
 <head>
     <meta charset="utf-8"/>
@@ -414,7 +414,7 @@
     </div>
 
     <script>
-        const NEW_REGISTRATION_SCRIPT = 'https://script.google.com/macros/s/AKfycbzmxpXA4QqoN_HbSt4LQXPTcdCVd6talWKCBb4lvL-leG5z0zCcoRVJgFF7wJgvxT4FIQ/exec';
+        const NEW_REGISTRATION_SCRIPT = 'https://script.google.com/macros/s/AKfycbx2RAQx_8K4o22xE0Mw-ETc7K_58vIoi6-PgVi64u80inuiw144ks3cgWSdCtXqIgB02g/exec';
         // --- ROTACIÓN DE IMAGEN DE FONDO ---
         const bgImages = [
             'https://i.postimg.cc/gjdf4ybv/1bed16470705aeff4a1bf5c9d6a4d92d.jpg',
@@ -479,7 +479,7 @@
                 const account = msalInstance.getAllAccounts()[0];
 
                 if (account) {
-                    const ROLES_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzmxpXA4QqoN_HbSt4LQXPTcdCVd6talWKCBb4lvL-leG5z0zCcoRVJgFF7wJgvxT4FIQ/exec';
+                    const ROLES_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbx2RAQx_8K4o22xE0Mw-ETc7K_58vIoi6-PgVi64u80inuiw144ks3cgWSdCtXqIgB02g/exec';
                     const normalizedAccountEmail = account.username.trim().toLowerCase();
                     
                     let userProfile = null;
@@ -555,7 +555,7 @@
                         .then(async profile => {
                             const normalizedAccountEmail = profile.email.trim().toLowerCase();
                             let userRole = null;
-                            const ROLES_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzmxpXA4QqoN_HbSt4LQXPTcdCVd6talWKCBb4lvL-leG5z0zCcoRVJgFF7wJgvxT4FIQ/exec';
+                            const ROLES_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbx2RAQx_8K4o22xE0Mw-ETc7K_58vIoi6-PgVi64u80inuiw144ks3cgWSdCtXqIgB02g/exec';
 
                             try {
                                 const configRes = await fetch('portal-config.json');
@@ -1079,7 +1079,7 @@
                 // --- INICIA LÓGICA DE ASIGNACIÓN DE ROLES (Idéntica a MSAL/Google) ---
                 const normalizedAccountEmail = email.toLowerCase();
                 let userRole = null;
-                const ROLES_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzmxpXA4QqoN_HbSt4LQXPTcdCVd6talWKCBb4lvL-leG5z0zCcoRVJgFF7wJgvxT4FIQ/exec';
+                const ROLES_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbx2RAQx_8K4o22xE0Mw-ETc7K_58vIoi6-PgVi64u80inuiw144ks3cgWSdCtXqIgB02g/exec';
 
                 // 1. Check Super Admins
                 try {
