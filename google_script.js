@@ -34,11 +34,35 @@ function getOrCreateFolder(parentFolder, name) {
 
 function doPost(e) {
   try {
-    const data = JSON.parse(e.postData.contents);
+    let data = null;
+    if (e && e.postData && e.postData.contents) {
+      try {
+        data = JSON.parse(e.postData.contents);
+      } catch (err) {
+        data = null;
+      }
+    }
+    
+    let action = '';
+    if (data && data.action) action = String(data.action).trim();
+    if (!action && e && e.parameter && e.parameter.action) action = String(e.parameter.action).trim();
+
+    const callback = String(e && e.parameter && e.parameter.callback || '').trim();
+
+    if (action === 'list') {
+      return output_(listModels_(e, data), callback);
+    }
+    if (action === 'chunk') {
+      return output_(chunkFile_(e, data), callback);
+    }
+    if (action === 'text') {
+      return output_(textFile_(e, data), callback);
+    }
+
     const doc = SpreadsheetApp.openById("1Jcxc9SwtbDrExyGeS_zy0BVnEER64iEEvzCnzCo5OCg");
     const fecha = new Date().toISOString();
 
-    if (data.action === 'createUserAndCompany') {
+    if (data && data.action === 'createUserAndCompany') {
       let companySheet = doc.getSheetByName('Empresas');
       if (!companySheet) {
         companySheet = doc.insertSheet('Empresas');
@@ -326,7 +350,19 @@ function doPost(e) {
 
 function doGet(e) {
   try {
-    const action = e.parameter.action;
+    const action = String(e && e.parameter && e.parameter.action || '').trim();
+    const callback = String(e && e.parameter && e.parameter.callback || '').trim();
+
+    if (action === 'list') {
+      return output_(listModels_(e, null), callback);
+    }
+    if (action === 'chunk') {
+      return output_(chunkFile_(e, null), callback);
+    }
+    if (action === 'text') {
+      return output_(textFile_(e, null), callback);
+    }
+
     const doc = SpreadsheetApp.openById("1Jcxc9SwtbDrExyGeS_zy0BVnEER64iEEvzCnzCo5OCg");
     
     if (action === 'getCompanies') {
@@ -375,4 +411,139 @@ function autorizarDrive() {
   const root = DriveApp.getFolderById("1aWUNnLgjWBkA6wdCM99XMY9SU7eSDP-H");
   const temp = root.createFolder("TEMPORAL_BORRAR_LUEGO");
   temp.setTrashed(true);
+}
+
+function output_(data, callback) {
+  const json = JSON.stringify(data);
+  if (callback) {
+    return ContentService.createTextOutput(callback + '(' + json + ');').setMimeType(ContentService.MimeType.JAVASCRIPT);
+  }
+  return ContentService.createTextOutput(json).setMimeType(ContentService.MimeType.JSON);
+}
+
+function findFolderRecursively(parentFolder, targetName) {
+  const cleanTarget = String(targetName).trim().toLowerCase();
+  
+  // Try exact/case-insensitive match in current folder
+  const subFolders = parentFolder.getFolders();
+  const list = [];
+  while (subFolders.hasNext()) {
+    const sub = subFolders.next();
+    const name = sub.getName().trim().toLowerCase();
+    if (name === cleanTarget) {
+      return sub;
+    }
+    list.push(sub);
+  }
+  
+  // Recursively search subfolders
+  for (let i = 0; i < list.length; i++) {
+    const found = findFolderRecursively(list[i], targetName);
+    if (found) return found;
+  }
+  
+  return null;
+}
+
+function listModels_(e, body) {
+  let folderId = String(((body && body.folderId) || (e && e.parameter && e.parameter.folderId) || DRIVE_ROOT_FOLDER_ID) ?? '').trim();
+  if (!folderId) return { error: 'Falta folderId' };
+  
+  let root = DriveApp.getFolderById(folderId);
+  
+  // Dynamic resolution if we are at the root level or default
+  if (folderId === '1aWUNnLgjWBkA6wdCM99XMY9SU7eSDP-H' || folderId === '1fn1umYzIYsxymmwbmap6YbjTB33XJrG8') {
+    const driveFolderName = String(((body && body.driveFolderName) || (e && e.parameter && e.parameter.driveFolderName) || '') ?? '').trim();
+    const projectSlug = String(((body && body.project) || (e && e.parameter && e.parameter.project) || '') ?? '').trim();
+    
+    let targetFolder = null;
+    if (driveFolderName) {
+      targetFolder = findFolderRecursively(root, driveFolderName);
+    }
+    if (!targetFolder && projectSlug) {
+      targetFolder = findFolderRecursively(root, projectSlug);
+    }
+    
+    if (targetFolder) {
+      root = targetFolder;
+    }
+  }
+
+  const frags = [];
+  const jsonByBase = {};
+
+  const normalizeBase_ = (name) => String(name || '').trim().toLowerCase();
+
+  const walk_ = (folder) => {
+    const it = folder.getFiles();
+    while (it.hasNext()) {
+      const f = it.next();
+      const name = f.getName();
+      const lower = String(name).toLowerCase();
+
+      if (lower.endsWith('.frag')) {
+        frags.push({ name: name, fragId: f.getId() });
+        continue;
+      }
+
+      if (lower.endsWith('.json')) {
+        const base = normalizeBase_(name.slice(0, -5));
+        jsonByBase[base] = f.getId();
+      }
+    }
+
+    const sub = folder.getFolders();
+    while (sub.hasNext()) {
+      walk_(sub.next());
+    }
+  };
+
+  walk_(root);
+
+  const models = frags
+    .map((m) => {
+      const base = normalizeBase_(m.name.slice(0, -5));
+      const jsonId = jsonByBase[base] || null;
+      return { name: m.name, fragId: m.fragId, jsonId: jsonId };
+    })
+    .sort((a, b) => String(a.name).localeCompare(String(b.name), 'es'));
+
+  return { models: models };
+}
+
+function chunkFile_(e, body) {
+  const id = String(((body && body.id) || (e && e.parameter && e.parameter.id) || '') ?? '').trim();
+  if (!id) return { error: 'Falta id' };
+
+  const offset = Math.max(0, Number(((body && body.offset) || (e && e.parameter && e.parameter.offset) || 0) ?? 0) || 0);
+  const limit = Math.min(
+    2 * 1024 * 1024,
+    Math.max(1, Number(((body && body.limit) || (e && e.parameter && e.parameter.limit) || (2 * 1024 * 1024)) ?? (2 * 1024 * 1024)) || (2 * 1024 * 1024)),
+  );
+
+  const file = DriveApp.getFileById(id);
+  const bytes = file.getBlob().getBytes();
+  const total = bytes.length;
+
+  const end = Math.min(total, offset + limit);
+  const slice = bytes.slice(offset, end);
+
+  const nextOffset = end;
+  const done = nextOffset >= total;
+
+  return {
+    total: total,
+    nextOffset: nextOffset,
+    done: done,
+    data: Utilities.base64Encode(slice)
+  };
+}
+
+function textFile_(e, body) {
+  const id = String(((body && body.id) || (e && e.parameter && e.parameter.id) || '') ?? '').trim();
+  if (!id) return { error: 'Falta id' };
+
+  const file = DriveApp.getFileById(id);
+  const text = file.getBlob().getDataAsString('UTF-8');
+  return { text: text };
 }
