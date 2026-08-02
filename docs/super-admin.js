@@ -120,7 +120,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       if (res.ok) empresas = await res.json();
       
       try {
-        const urlGoogle = 'https://script.google.com/macros/s/AKfycbzMD_Lyblji8tbD7NXTYEta7kmmGVEgd68-Vh9RopTj6B64UDzzCDxw1KC47Q6HPtrQ1Q/exec';
+        const urlGoogle = 'https://script.google.com/macros/s/AKfycbxH6wjfTioCindfsv5RiaeYoRU52dRxxd99XFkJPU4rsH4HNFdq4KICDTvv483cZEkZfA/exec';
         const gRes = await fetch(urlGoogle + '?action=getCompanies');
         if (gRes.ok) {
            const gCompanies = await gRes.json();
@@ -1338,7 +1338,7 @@ let contentBase = '';
         equipo: "lista_usuarios.html"
       },
       dataSources: {
-        driveFolderName: "Nuevo Proyecto",
+        driveFolderName: "",
         driveFolderId: "",
         driveScriptUrl: "",
         statusSheetId: "",
@@ -1545,9 +1545,8 @@ let contentBase = '';
                   if (pFolderId) {
                     if (!p.dataSources) p.dataSources = {};
                     p.dataSources.driveFolderId = pFolderId;
-                    if (!p.dataSources.driveFolderName) {
-                      p.dataSources.driveFolderName = p.name || 'Sin Nombre';
-                    }
+                    // Auto-sync folder name with the project name
+                    p.dataSources.driveFolderName = p.name || 'Sin Nombre';
                   }
                 });
               }
@@ -1601,7 +1600,7 @@ let contentBase = '';
 // ==========================================
 window.globalUsersMap = new Map();
 window.currentGlobalUserEmail = null;
-const ROLES_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzMD_Lyblji8tbD7NXTYEta7kmmGVEgd68-Vh9RopTj6B64UDzzCDxw1KC47Q6HPtrQ1Q/exec';
+const ROLES_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxH6wjfTioCindfsv5RiaeYoRU52dRxxd99XFkJPU4rsH4HNFdq4KICDTvv483cZEkZfA/exec';
 
 window.switchGlobalView = function(viewName) {
     const btnEmpresas = document.getElementById('tab-empresas');

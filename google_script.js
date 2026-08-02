@@ -32,6 +32,72 @@ function getOrCreateFolder(parentFolder, name) {
   return parentFolder.createFolder(name);
 }
 
+function findProjectFolder(parentFolder, slug, name, driveFolderName) {
+  const folders = parentFolder.getFolders();
+  const list = [];
+  while (folders.hasNext()) {
+    const f = folders.next();
+    const fName = f.getName().trim();
+    // 1. Check if name contains the unique slug in brackets/parentheses or exactly
+    if (fName.includes("[" + slug + "]") || fName.includes("(" + slug + ")") || fName === slug) {
+      return f;
+    }
+    list.push(f);
+  }
+  
+  // 2. Fallback: exact match on name or driveFolderName (case insensitive)
+  const cleanName = String(name || '').trim().toLowerCase();
+  const cleanDFN = String(driveFolderName || '').trim().toLowerCase();
+  
+  for (let i = 0; i < list.length; i++) {
+    const fName = list[i].getName().trim().toLowerCase();
+    // Do not match generic names to avoid wrong association
+    if (cleanName && fName === cleanName && cleanName !== 'nuevo proyecto' && cleanName !== 'sin nombre') {
+      return list[i];
+    }
+    if (cleanDFN && fName === cleanDFN && cleanDFN !== 'nuevo proyecto' && cleanDFN !== 'sin nombre') {
+      return list[i];
+    }
+  }
+  
+  return null;
+}
+
+function findProjectFolderRecursively(parentFolder, slug, driveFolderName) {
+  const cleanSlug = String(slug || '').trim().toLowerCase();
+  const cleanDFN = String(driveFolderName || '').trim().toLowerCase();
+  
+  // 1. First pass: try to find a folder matching/containing the slug in the current folder
+  const subFolders = parentFolder.getFolders();
+  const list = [];
+  while (subFolders.hasNext()) {
+    const sub = subFolders.next();
+    const name = sub.getName().trim().toLowerCase();
+    if (cleanSlug && (name.includes("[" + cleanSlug + "]") || name.includes("(" + cleanSlug + ")") || name === cleanSlug)) {
+      return sub;
+    }
+    list.push(sub);
+  }
+  
+  // 2. Second pass: check for exact match on driveFolderName, but IGNORE generic names like 'nuevo proyecto'
+  if (cleanDFN && cleanDFN !== 'nuevo proyecto' && cleanDFN !== 'sin nombre') {
+    for (let i = 0; i < list.length; i++) {
+      const name = list[i].getName().trim().toLowerCase();
+      if (name === cleanDFN) {
+        return list[i];
+      }
+    }
+  }
+  
+  // 3. Third pass: recurse into subfolders
+  for (let i = 0; i < list.length; i++) {
+    const found = findProjectFolderRecursively(list[i], slug, driveFolderName);
+    if (found) return found;
+  }
+  
+  return null;
+}
+
 function doPost(e) {
   try {
     let data = null;
@@ -278,12 +344,17 @@ function doPost(e) {
         const projects = comp.projects || [];
         projects.forEach(proj => {
           let projFolderId = proj.driveFolderId || "";
-          let projFolder;
+          let projFolder = null;
           
           if (projFolderId) {
             // Verify it exists, else recreate
             try {
               projFolder = DriveApp.getFolderById(projFolderId);
+              // Ensure name is correct and contains slug
+              const expectedName = proj.name + " [" + proj.slug + "]";
+              if (projFolder.getName() !== expectedName) {
+                projFolder.setName(expectedName);
+              }
             } catch (err) {
               projFolder = null;
             }
@@ -291,7 +362,18 @@ function doPost(e) {
           
           if (!projFolder) {
             try {
-              projFolder = getOrCreateFolder(companyFolder, proj.name);
+              // Try finding by slug or name in the company folder
+              projFolder = findProjectFolder(companyFolder, proj.slug, proj.name, proj.name);
+              if (projFolder) {
+                const expectedName = proj.name + " [" + proj.slug + "]";
+                if (projFolder.getName() !== expectedName) {
+                  projFolder.setName(expectedName);
+                }
+              } else {
+                // Create folder with unique format
+                const folderName = proj.name + " [" + proj.slug + "]";
+                projFolder = getOrCreateFolder(companyFolder, folderName);
+              }
               projFolderId = projFolder.getId();
             } catch (e) {
               responseFolders[comp.id].projects[proj.slug] = "error: " + e.toString();
@@ -456,13 +538,7 @@ function listModels_(e, body) {
     const driveFolderName = String(((body && body.driveFolderName) || (e && e.parameter && e.parameter.driveFolderName) || '') ?? '').trim();
     const projectSlug = String(((body && body.project) || (e && e.parameter && e.parameter.project) || '') ?? '').trim();
     
-    let targetFolder = null;
-    if (driveFolderName) {
-      targetFolder = findFolderRecursively(root, driveFolderName);
-    }
-    if (!targetFolder && projectSlug) {
-      targetFolder = findFolderRecursively(root, projectSlug);
-    }
+    let targetFolder = findProjectFolderRecursively(root, projectSlug, driveFolderName);
     
     if (targetFolder) {
       root = targetFolder;
