@@ -120,7 +120,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       if (res.ok) empresas = await res.json();
       
       try {
-        const urlGoogle = 'https://script.google.com/macros/s/AKfycbxH6wjfTioCindfsv5RiaeYoRU52dRxxd99XFkJPU4rsH4HNFdq4KICDTvv483cZEkZfA/exec';
+        const urlGoogle = 'https://script.google.com/macros/s/AKfycbzmxpXA4QqoN_HbSt4LQXPTcdCVd6talWKCBb4lvL-leG5z0zCcoRVJgFF7wJgvxT4FIQ/exec';
         const gRes = await fetch(urlGoogle + '?action=getCompanies');
         if (gRes.ok) {
            const gCompanies = await gRes.json();
@@ -1600,7 +1600,7 @@ let contentBase = '';
 // ==========================================
 window.globalUsersMap = new Map();
 window.currentGlobalUserEmail = null;
-const ROLES_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxH6wjfTioCindfsv5RiaeYoRU52dRxxd99XFkJPU4rsH4HNFdq4KICDTvv483cZEkZfA/exec';
+const ROLES_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzmxpXA4QqoN_HbSt4LQXPTcdCVd6talWKCBb4lvL-leG5z0zCcoRVJgFF7wJgvxT4FIQ/exec';
 
 window.switchGlobalView = function(viewName) {
     const btnEmpresas = document.getElementById('tab-empresas');

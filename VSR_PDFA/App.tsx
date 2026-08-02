@@ -12,7 +12,7 @@ interface DrawingItem {
 }
 
 const DRIVE_MODELS_FOLDER_ID = '1aWUNnLgjWBkA6wdCM99XMY9SU7eSDP-H';
-const DRIVE_MODELS_API_URL = 'https://script.google.com/macros/s/AKfycbxH6wjfTioCindfsv5RiaeYoRU52dRxxd99XFkJPU4rsH4HNFdq4KICDTvv483cZEkZfA/exec';
+const DRIVE_MODELS_API_URL = 'https://script.google.com/macros/s/AKfycbzmxpXA4QqoN_HbSt4LQXPTcdCVd6talWKCBb4lvL-leG5z0zCcoRVJgFF7wJgvxT4FIQ/exec';
 
 const jsonpRequest = async <T,>(url: URL, timeoutMs = 30000): Promise<T> => {
   return await new Promise<T>((resolve, reject) => {
