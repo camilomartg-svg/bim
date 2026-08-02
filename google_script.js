@@ -565,7 +565,12 @@ function listModels_(e, body) {
       const lower = String(name).toLowerCase();
 
       if (lower.endsWith('.frag')) {
-        frags.push({ name: name, fragId: f.getId(), folder: currentRelativePath || '' });
+        frags.push({ 
+          name: name, 
+          fragId: f.getId(), 
+          folder: currentRelativePath || '',
+          lastUpdated: f.getLastUpdated().toISOString()
+        });
         continue;
       }
 
@@ -576,12 +581,22 @@ function listModels_(e, body) {
       }
 
       if (lower.endsWith('.dwg') || lower.endsWith('.dxf')) {
-        dwgs.push({ name: name, fileId: f.getId(), folder: currentRelativePath || '' });
+        dwgs.push({ 
+          name: name, 
+          fileId: f.getId(), 
+          folder: currentRelativePath || '',
+          lastUpdated: f.getLastUpdated().toISOString()
+        });
         continue;
       }
 
       if (lower.endsWith('.pdf')) {
-        pdfs.push({ name: name, fileId: f.getId(), folder: currentRelativePath || '' });
+        pdfs.push({ 
+          name: name, 
+          fileId: f.getId(), 
+          folder: currentRelativePath || '',
+          lastUpdated: f.getLastUpdated().toISOString()
+        });
         continue;
       }
     }
@@ -602,7 +617,13 @@ function listModels_(e, body) {
     .map((m) => {
       const base = normalizeBase_(m.name.slice(0, -5));
       const jsonId = jsonByBase[base] || null;
-      return { name: m.name, fragId: m.fragId, jsonId: jsonId, folder: m.folder };
+      return { 
+        name: m.name, 
+        fragId: m.fragId, 
+        jsonId: jsonId, 
+        folder: m.folder,
+        lastUpdated: m.lastUpdated
+      };
     })
     .sort((a, b) => String(a.name).localeCompare(String(b.name), 'es'));
 

@@ -91,8 +91,9 @@
     </header>
 
     <!-- Main Content Area -->
-    <main class="flex-1 flex items-center justify-center p-6 sm:p-12">
-      <div class="w-full max-w-2xl glass rounded-2xl p-8 shadow-xl transition-all duration-300">
+    <main class="flex-1 container mx-auto max-w-5xl px-6 py-12 flex flex-col gap-8">
+      <!-- Upload Card -->
+      <div class="w-full glass rounded-2xl p-8 shadow-xl transition-all duration-300">
         <!-- Logo and Project name -->
         <div class="flex flex-col items-center text-center mb-8">
           <img id="portal-logo-light" alt="nora CDE" class="h-10 w-auto object-contain dark:hidden mb-4" src="https://i.postimg.cc/tR3YSryT/LOGO-NORA-NEGRO.png" />
@@ -116,7 +117,7 @@
 
         <!-- Drag and Drop Area -->
         <div id="drop-zone" class="border-2 border-dashed border-slate-300 dark:border-slate-700 rounded-xl p-8 text-center cursor-pointer hover:border-slate-400 dark:hover:border-slate-500 transition-all duration-200">
-          <input type="file" id="file-input" class="hidden" accept=".pdf,.dwg,.dxf,.ifc" />
+          <input type="file" id="file-input" class="hidden" accept=".pdf,.dwg,.dxf,.ifc" multiple />
           <div class="flex flex-col items-center">
             <span class="material-symbols-outlined text-4xl text-slate-400 dark:text-slate-500 mb-3 animate-pulse">cloud_upload</span>
             <p class="text-sm font-semibold text-slate-700 dark:text-slate-300">Arrastra tus archivos aquí o haz clic para buscarlos</p>
@@ -124,49 +125,111 @@
           </div>
         </div>
 
-        <!-- File Detail & Progress Card -->
-        <div id="file-details-card" class="mt-6 border border-slate-200 dark:border-slate-800 rounded-xl p-4 bg-white/40 dark:bg-slate-900/40 hidden">
-          <div class="flex items-start justify-between mb-3">
-            <div class="flex items-center gap-3">
-              <span id="file-icon" class="material-symbols-outlined text-2xl text-blue-500">description</span>
-              <div>
-                <p id="file-name" class="text-sm font-semibold text-slate-800 dark:text-slate-200 truncate max-w-[280px]">nombre_archivo.pdf</p>
-                <p id="file-size" class="text-xs text-slate-500 dark:text-slate-400">0.0 MB</p>
-              </div>
-            </div>
-            <button id="remove-file-btn" class="text-slate-400 hover:text-red-500 transition-colors">
-              <span class="material-symbols-outlined text-lg">close</span>
-            </button>
+        <!-- Global Status Bar (Only visible during multi-upload) -->
+        <div id="global-status-container" class="mt-6 p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-white/40 dark:bg-slate-900/40 hidden">
+          <div class="flex justify-between items-center text-xs font-bold uppercase tracking-wider text-slate-600 dark:text-slate-300 mb-2">
+            <span id="global-status-text">Subiendo archivos...</span>
+            <span id="global-status-percentage">0%</span>
           </div>
-
-          <!-- Progress Bar -->
-          <div class="w-full bg-slate-200 dark:bg-slate-800 h-2 rounded-full overflow-hidden mb-3">
-            <div id="progress-bar" class="bg-blue-600 h-full w-[0%] transition-all duration-300"></div>
+          <div class="w-full bg-slate-200 dark:bg-slate-800 h-2.5 rounded-full overflow-hidden">
+            <div id="global-progress-bar" class="bg-blue-600 h-full w-[0%] transition-all duration-300"></div>
           </div>
+        </div>
 
-          <!-- Status & Log -->
-          <div class="flex items-center justify-between text-xs font-medium mb-2">
-            <span id="status-text" class="text-slate-600 dark:text-slate-300">Listo para subir</span>
-            <span id="progress-percentage" class="text-blue-600">0%</span>
+        <!-- Selected Files List Container -->
+        <div id="files-list-container" class="mt-6 space-y-4 max-h-[300px] overflow-y-auto hidden">
+          <h3 class="text-xs font-bold uppercase tracking-widest text-slate-500 dark:text-slate-400">Cola de Carga</h3>
+          <div id="selected-files-list" class="space-y-3">
+            <!-- Selected file items injected here -->
           </div>
+        </div>
 
-          <div id="log-container" class="border border-slate-100 dark:border-slate-800 bg-slate-900/5 dark:bg-slate-950/40 rounded p-2 text-[10px] font-mono text-slate-500 dark:text-slate-400 max-h-[80px] overflow-y-auto">
-            <!-- Conversion / Upload logs -->
-            <div>Alineado y esperando acción de carga...</div>
+        <!-- Log Panel (Only visible during uploads) -->
+        <div id="log-card" class="mt-4 hidden">
+          <label class="block text-xs font-bold uppercase tracking-widest text-slate-500 dark:text-slate-400 mb-2">Consola de Eventos</label>
+          <div id="log-container" class="border border-slate-200 dark:border-slate-800 bg-slate-900 text-slate-300 dark:bg-slate-950 dark:text-slate-400 rounded-lg p-3 text-[10px] font-mono max-h-[100px] overflow-y-auto">
+            <!-- Terminal logs -->
           </div>
         </div>
 
         <!-- Action Button -->
-        <div class="mt-8 flex justify-end">
-          <button id="upload-btn" class="w-full sm:w-auto rounded-lg bg-[#111827] dark:bg-white text-white dark:text-[#111827] hover:opacity-90 font-bold text-xs uppercase tracking-widest px-8 py-3.5 shadow-md disabled:opacity-50 disabled:cursor-not-allowed transition-all" disabled>
-            Iniciar Subida
+        <div class="mt-8 flex justify-end gap-4">
+          <button id="clear-queue-btn" class="hidden rounded-lg border border-slate-200 hover:bg-slate-100 dark:border-slate-700 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 font-bold text-xs uppercase tracking-widest px-6 py-3.5 transition-all">
+            Limpiar Cola
           </button>
+          <button id="upload-btn" class="w-full sm:w-auto rounded-lg bg-[#111827] dark:bg-white text-white dark:text-[#111827] hover:opacity-90 font-bold text-xs uppercase tracking-widest px-8 py-3.5 shadow-md disabled:opacity-50 disabled:cursor-not-allowed transition-all" disabled>
+            Iniciar Subidas
+          </button>
+        </div>
+      </div>
+
+      <!-- Existing Files List Section -->
+      <div class="w-full glass rounded-2xl p-8 shadow-xl transition-all duration-300">
+        <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
+          <div>
+            <h3 class="text-lg font-bold text-slate-900 dark:text-white">Archivos en el Proyecto</h3>
+            <p class="text-xs text-slate-500 dark:text-slate-400">Listado de planos y modelos cargados en este proyecto.</p>
+          </div>
+          
+          <div class="flex items-center gap-2">
+            <!-- Search bar -->
+            <div class="relative">
+              <span class="material-symbols-outlined absolute left-2.5 top-2 text-slate-400 text-lg">search</span>
+              <input type="text" id="files-search" placeholder="Buscar por nombre..." class="w-[200px] pl-9 pr-3 py-1.5 rounded-lg border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-xs text-slate-900 dark:text-white focus:ring-blue-500 focus:border-blue-500" />
+            </div>
+            
+            <button id="refresh-list-btn" class="p-2 rounded-lg border border-slate-200 bg-white dark:bg-slate-800 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors" title="Refrescar lista">
+              <span id="refresh-icon" class="material-symbols-outlined text-[16px] text-slate-700 dark:text-slate-300 align-middle">refresh</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Category Tabs -->
+        <div class="border-b border-slate-200 dark:border-slate-800 mb-6 flex overflow-x-auto gap-6 text-sm font-semibold">
+          <button id="tab-models" class="border-b-2 border-blue-600 px-1 py-3 text-blue-600 transition-all focus:outline-none whitespace-nowrap flex items-center gap-1.5">
+            Modelos <span id="count-models" class="text-[10px] px-1.5 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 font-medium">0</span>
+          </button>
+          <button id="tab-pdfs" class="border-b-2 border-transparent px-1 py-3 text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-300 transition-all focus:outline-none whitespace-nowrap flex items-center gap-1.5">
+            Planos PDF <span id="count-pdfs" class="text-[10px] px-1.5 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 font-medium">0</span>
+          </button>
+          <button id="tab-dwgs" class="border-b-2 border-transparent px-1 py-3 text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-300 transition-all focus:outline-none whitespace-nowrap flex items-center gap-1.5">
+            Planos DWG <span id="count-dwgs" class="text-[10px] px-1.5 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 font-medium">0</span>
+          </button>
+        </div>
+
+        <!-- Files List Container -->
+        <div id="drive-files-container" class="overflow-x-auto min-h-[150px]">
+          <!-- Loading State -->
+          <div id="list-loading" class="flex flex-col items-center justify-center py-10">
+            <div class="w-8 h-8 border-4 border-slate-300 dark:border-slate-700 border-t-blue-600 rounded-full animate-spin"></div>
+            <p class="text-xs text-slate-500 dark:text-slate-400 mt-3">Obteniendo archivos del proyecto...</p>
+          </div>
+
+          <!-- Empty State -->
+          <div id="list-empty" class="hidden flex-col items-center justify-center py-10">
+            <span class="material-symbols-outlined text-4xl text-slate-300 mb-2">folder_open</span>
+            <p class="text-xs text-slate-500 dark:text-slate-400">No se encontraron archivos en esta categoría.</p>
+          </div>
+
+          <!-- Table list -->
+          <table id="files-table" class="w-full text-left border-collapse text-xs hidden">
+            <thead>
+              <tr class="border-b border-slate-200 dark:border-slate-800 text-slate-400 font-semibold">
+                <th class="py-3 px-4">Nombre del Archivo</th>
+                <th class="py-3 px-4">Especialidad</th>
+                <th class="py-3 px-4">Última Carga</th>
+              </tr>
+            </thead>
+            <tbody id="files-table-body" class="divide-y divide-slate-100 dark:divide-slate-800/50">
+              <!-- Dynamically populated files rows -->
+            </tbody>
+          </table>
         </div>
       </div>
     </main>
 
     <!-- Footer -->
-    <footer class="py-6 px-8 border-t border-slate-200 dark:border-slate-800 bg-white/40 dark:bg-slate-955/20 backdrop-blur-md">
+    <footer class="py-6 px-8 border-t border-slate-200 dark:border-slate-800 bg-white/40 dark:bg-slate-950/20 backdrop-blur-md">
       <div class="mx-auto w-full text-center text-slate-500 dark:text-slate-400 text-xs">
         <p id="project-footer">© 2026 nora CDE - Todos los derechos reservados.</p>
       </div>
@@ -198,7 +261,7 @@
         }
       };
 
-      // Selectors
+      // UI Selectors
       const backBtn = document.getElementById('back-btn');
       const themeToggle = document.getElementById('theme-toggle');
       const authContainer = document.getElementById('auth-container');
@@ -212,23 +275,46 @@
 
       const dropZone = document.getElementById('drop-zone');
       const fileInput = document.getElementById('file-input');
-      const fileDetailsCard = document.getElementById('file-details-card');
-      const fileNameEl = document.getElementById('file-name');
-      const fileSizeEl = document.getElementById('file-size');
-      const fileIconEl = document.getElementById('file-icon');
-      const removeFileBtn = document.getElementById('remove-file-btn');
-      const progressBar = document.getElementById('progress-bar');
-      const statusText = document.getElementById('status-text');
-      const progressPercentage = document.getElementById('progress-percentage');
-      const logContainer = document.getElementById('log-container');
+      const filesListContainer = document.getElementById('files-list-container');
+      const selectedFilesList = document.getElementById('selected-files-list');
+      const clearQueueBtn = document.getElementById('clear-queue-btn');
       const uploadBtn = document.getElementById('upload-btn');
+      const logCard = document.getElementById('log-card');
+      const logContainer = document.getElementById('log-container');
 
-      let selectedFile = null;
+      const globalStatusContainer = document.getElementById('global-status-container');
+      const globalStatusText = document.getElementById('global-status-text');
+      const globalStatusPercentage = document.getElementById('global-status-percentage');
+      const globalProgressBar = document.getElementById('global-progress-bar');
+
+      const refreshListBtn = document.getElementById('refresh-list-btn');
+      const refreshIcon = document.getElementById('refresh-icon');
+      const filesSearch = document.getElementById('files-search');
+      
+      const tabModels = document.getElementById('tab-models');
+      const tabPdfs = document.getElementById('tab-pdfs');
+      const tabDwgs = document.getElementById('tab-dwgs');
+      const countModels = document.getElementById('count-models');
+      const countPdfs = document.getElementById('count-pdfs');
+      const countDwgs = document.getElementById('count-dwgs');
+      
+      const driveFilesContainer = document.getElementById('drive-files-container');
+      const listLoading = document.getElementById('list-loading');
+      const listEmpty = document.getElementById('list-empty');
+      const filesTable = document.getElementById('files-table');
+      const filesTableBody = document.getElementById('files-table-body');
+
+      let selectedFiles = []; // Array of { file: File, id: number, status: string, progress: number }
+      let fileIdCounter = 0;
+      let isUploading = false;
+
       let config = DEFAULT_PORTAL_CONFIG;
       let projects = [];
       let activeProject = null;
+      let currentActiveTab = 'models'; // 'models', 'pdfs', 'dwgs'
+      let driveFilesData = { models: [], pdfs: [], dwgs: [] };
 
-      // Theme toggle
+      // Theme configuration
       const htmlEl = document.documentElement;
       const applyTheme = (theme) => {
         if (theme === 'dark') {
@@ -247,7 +333,7 @@
         applyTheme(newTheme);
       });
 
-      // User session
+      // Session load
       const userAccount = JSON.parse(sessionStorage.getItem('userAccount') || localStorage.getItem('userAccount') || 'null');
       if (userAccount) {
         authContainer.innerHTML = `
@@ -255,7 +341,7 @@
         `;
       }
 
-      // Time & Date update
+      // Time updater
       const updateNow = () => {
         const d = new Date();
         const hh = String(d.getHours()).padStart(2, '0');
@@ -269,7 +355,7 @@
       updateNow();
       window.setInterval(updateNow, 15000);
 
-      // Back navigation
+      // Routing parameters
       const query = new URLSearchParams(window.location.search);
       const companyId = query.get('empresa');
       const slugify = (value) => String(value ?? '')
@@ -290,7 +376,7 @@
         window.location.href = path;
       });
 
-      // Logging helper
+      // Terminal logs helper
       const addLog = (text) => {
         const div = document.createElement('div');
         div.textContent = `[${new Date().toLocaleTimeString()}] ${text}`;
@@ -298,16 +384,7 @@
         logContainer.scrollTop = logContainer.scrollHeight;
       };
 
-      const setProgress = (pct, text) => {
-        progressBar.style.width = `${pct}%`;
-        progressPercentage.textContent = `${pct}%`;
-        if (text) {
-          statusText.textContent = text;
-          addLog(text);
-        }
-      };
-
-      // Load config & projects
+      // Load portal configurations
       const loadConfig = async () => {
         try {
           let configUrl = `portal-config.json`;
@@ -329,7 +406,7 @@
           if (!response.ok) throw new Error('No se pudo cargar la configuración');
           return await response.json();
         } catch (error) {
-          console.warn('Error fetching config, falling back to local storage...', error);
+          console.warn('Error fetching config, using defaults...', error);
           const draft = localStorage.getItem('portal:pba-config-draft:v2');
           return draft ? JSON.parse(draft) : DEFAULT_PORTAL_CONFIG;
         }
@@ -343,7 +420,7 @@
           projects = [DEFAULT_PROJECT];
         }
 
-        // Setup Project Selector
+        // Active project selection
         if (requestedProject) {
           activeProject = projects.find(p => slugify(p.name) === requestedProject || p.slug === requestedProject);
         }
@@ -361,9 +438,11 @@
           const selectedSlug = e.target.value;
           activeProject = projects.find(p => p.slug === selectedSlug || slugify(p.name) === selectedSlug);
           updateProjectUI();
+          loadProjectFiles();
         });
 
         updateProjectUI();
+        loadProjectFiles();
 
       } catch (err) {
         console.error(err);
@@ -399,62 +478,143 @@
         const dt = e.dataTransfer;
         const files = dt.files;
         if (files.length) {
-          handleFileSelect(files[0]);
+          handleFilesSelection(files);
         }
       });
 
       dropZone.addEventListener('click', () => {
+        if (isUploading) return;
         fileInput.click();
       });
 
       fileInput.addEventListener('change', (e) => {
         if (e.target.files.length) {
-          handleFileSelect(e.target.files[0]);
+          handleFilesSelection(e.target.files);
         }
       });
 
-      removeFileBtn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        selectedFile = null;
-        fileDetailsCard.classList.add('hidden');
-        fileInput.value = '';
-        uploadBtn.disabled = true;
-        uploadBtn.textContent = 'Iniciar Subida';
-        addLog('Archivo removido.');
+      clearQueueBtn.addEventListener('click', () => {
+        if (isUploading) return;
+        selectedFiles = [];
+        renderFilesList();
+        addLog('Cola de carga limpia.');
       });
 
-      function handleFileSelect(file) {
-        const ext = file.name.split('.').pop().toLowerCase();
+      function handleFilesSelection(filesList) {
+        if (isUploading) return;
+        
         const allowed = ['pdf', 'dwg', 'dxf', 'ifc'];
-        if (!allowed.includes(ext)) {
-          alert('Por favor, selecciona un archivo válido (.pdf, .dwg, .dxf, .ifc)');
+        let addedCount = 0;
+
+        for (let i = 0; i < filesList.length; i++) {
+          const file = filesList[i];
+          const ext = file.name.split('.').pop().toLowerCase();
+          
+          if (!allowed.includes(ext)) {
+            alert(`El archivo "${file.name}" no tiene un formato válido (.pdf, .dwg, .dxf, .ifc)`);
+            continue;
+          }
+
+          // Check if file is already in queue
+          const exists = selectedFiles.some(f => f.file.name === file.name && f.file.size === file.size);
+          if (exists) continue;
+
+          selectedFiles.push({
+            id: fileIdCounter++,
+            file: file,
+            status: 'Listo',
+            progress: 0,
+            errorMsg: ''
+          });
+          addedCount++;
+        }
+
+        if (addedCount > 0) {
+          renderFilesList();
+          addLog(`Se agregaron ${addedCount} archivos a la cola.`);
+        }
+      }
+
+      function renderFilesList() {
+        if (selectedFiles.length === 0) {
+          filesListContainer.classList.add('hidden');
+          clearQueueBtn.classList.add('hidden');
+          uploadBtn.disabled = true;
+          uploadBtn.textContent = 'Iniciar Subidas';
           return;
         }
 
-        selectedFile = file;
-        fileNameEl.textContent = file.name;
-        fileSizeEl.textContent = `${(file.size / (1024 * 1024)).toFixed(2)} MB`;
-
-        // Icon configuration based on type
-        if (ext === 'pdf') {
-          fileIconEl.textContent = 'picture_as_pdf';
-          fileIconEl.className = 'material-symbols-outlined text-2xl text-red-500';
-        } else if (ext === 'dwg' || ext === 'dxf') {
-          fileIconEl.textContent = 'architecture';
-          fileIconEl.className = 'material-symbols-outlined text-2xl text-amber-500';
-        } else {
-          fileIconEl.textContent = 'view_in_ar';
-          fileIconEl.className = 'material-symbols-outlined text-2xl text-blue-500';
+        filesListContainer.classList.remove('hidden');
+        if (!isUploading) {
+          clearQueueBtn.classList.remove('hidden');
+          uploadBtn.disabled = false;
         }
 
-        setProgress(0, 'Listo para iniciar la subida');
-        fileDetailsCard.classList.remove('hidden');
-        uploadBtn.disabled = false;
-        logContainer.innerHTML = '';
-        addLog(`Archivo seleccionado: ${file.name} (${(file.size / 1024 / 1024).toFixed(2)} MB)`);
+        selectedFilesList.innerHTML = selectedFiles.map(fileObj => {
+          const ext = fileObj.file.name.split('.').pop().toLowerCase();
+          let icon = 'description';
+          let iconClass = 'text-blue-500';
+          if (ext === 'pdf') {
+            icon = 'picture_as_pdf';
+            iconClass = 'text-red-500';
+          } else if (ext === 'dwg' || ext === 'dxf') {
+            icon = 'architecture';
+            iconClass = 'text-amber-500';
+          } else {
+            icon = 'view_in_ar';
+            iconClass = 'text-blue-500';
+          }
+
+          let statusClass = 'text-slate-500 dark:text-slate-400';
+          if (fileObj.status === 'Subiendo...' || fileObj.status === 'Convirtiendo IFC...') {
+            statusClass = 'text-blue-600 font-semibold animate-pulse';
+          } else if (fileObj.status === 'Completado') {
+            statusClass = 'text-green-600 font-bold';
+          } else if (fileObj.status.startsWith('Error')) {
+            statusClass = 'text-red-600 font-bold';
+          }
+
+          const isRemoveDisabled = isUploading ? 'disabled opacity-30 cursor-not-allowed' : '';
+
+          return `
+            <div class="flex flex-col p-3 rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/60 shadow-sm" data-id="${fileObj.id}">
+              <div class="flex items-center justify-between mb-2">
+                <div class="flex items-center gap-3 truncate max-w-[85%]">
+                  <span class="material-symbols-outlined text-2xl ${iconClass}">${icon}</span>
+                  <div class="truncate">
+                    <p class="text-sm font-semibold text-slate-800 dark:text-slate-200 truncate" title="${fileObj.file.name}">${fileObj.file.name}</p>
+                    <p class="text-[10px] text-slate-500 dark:text-slate-400">${(fileObj.file.size / (1024 * 1024)).toFixed(2)} MB</p>
+                  </div>
+                </div>
+                <button onclick="window.removeQueueItem(${fileObj.id})" class="text-slate-400 hover:text-red-500 transition-colors ${isRemoveDisabled}">
+                  <span class="material-symbols-outlined text-lg">close</span>
+                </button>
+              </div>
+
+              <!-- File level progress bar -->
+              <div class="w-full bg-slate-200 dark:bg-slate-800 h-1.5 rounded-full overflow-hidden mb-1">
+                <div class="file-progress bg-blue-600 h-full w-[${fileObj.progress}%] transition-all duration-300"></div>
+              </div>
+
+              <!-- Status label -->
+              <div class="flex justify-between items-center text-[10px]">
+                <span class="file-status ${statusClass}">${fileObj.status}</span>
+                <span class="file-percentage text-blue-600 font-medium">${fileObj.progress}%</span>
+              </div>
+            </div>
+          `;
+        }).join('');
       }
 
-      // Convert local file to base64
+      // Expose globally for inline onclick
+      window.removeQueueItem = (id) => {
+        if (isUploading) return;
+        selectedFiles = selectedFiles.filter(f => f.id !== id);
+        renderFilesList();
+        addLog(`Archivo removido de la cola.`);
+      };
+
+      // File helper conversions
       const fileToBase64 = (file) => new Promise((resolve, reject) => {
         const reader = new FileReader();
         reader.readAsDataURL(file);
@@ -468,13 +628,11 @@
         reader.onerror = error => reject(error);
       });
 
-      // Upload file function
-      async function uploadToDrive(filename, base64Content, contentType) {
+      // Individual Drive Upload Action
+      async function uploadToDrive(filename, base64Content, contentType, fileObj) {
         const ds = activeProject.dataSources || {};
         const scriptUrl = ds.driveScriptUrl || DEFAULT_DRIVE_SCRIPT_URL;
         const driveFolderName = ds.driveFolderName || activeProject.name;
-        
-        addLog(`Subiendo ${filename} a Google Drive (${driveFolderName})...`);
         
         const payload = {
           action: 'uploadFile',
@@ -504,81 +662,286 @@
           throw new Error(`Google Script Error: ${data.message}`);
         }
 
-        addLog(`¡Carga exitosa! Archivo guardado con ID: ${data.fileId}`);
         return data;
       }
 
-      // Main upload action
-      uploadBtn.addEventListener('click', async () => {
-        if (!selectedFile || !activeProject) return;
+      // Update progress of a specific file in DOM and memory
+      function updateFileUI(fileObj, progress, status) {
+        fileObj.progress = progress;
+        fileObj.status = status;
+        
+        const card = document.querySelector(`[data-id="${fileObj.id}"]`);
+        if (card) {
+          const bar = card.querySelector('.file-progress');
+          const pct = card.querySelector('.file-percentage');
+          const lbl = card.querySelector('.file-status');
 
-        uploadBtn.disabled = true;
-        uploadBtn.textContent = 'Procesando...';
-        const ext = selectedFile.name.split('.').pop().toLowerCase();
+          bar.style.width = `${progress}%`;
+          pct.textContent = `${progress}%`;
+          lbl.textContent = status;
 
-        try {
-          if (ext === 'ifc') {
-            // IFC FLOW: conversion then upload of JSON and FRAG
-            setProgress(15, 'Conectando con el servidor de conversión local...');
-            
-            const formData = new FormData();
-            formData.append('ifcFile', selectedFile);
-
-            addLog('Enviando IFC al convertidor local...');
-            let convertResponse;
-            try {
-              convertResponse = await fetch('http://localhost:3000/convert-json', {
-                method: 'POST',
-                body: formData
-              });
-            } catch (err) {
-              throw new Error('No se pudo conectar con el convertidor local en http://localhost:3000. Por favor, inicia el servidor de conversión ejecutando "npm start" en la carpeta Models/ConverterApp.');
-            }
-
-            if (!convertResponse.ok) {
-              const errText = await convertResponse.text();
-              throw new Error(`Error en el convertidor: ${errText}`);
-            }
-
-            setProgress(50, 'Conversión de IFC a FRAG + JSON finalizada.');
-            const conversionResult = await convertResponse.json();
-            
-            const baseName = conversionResult.baseName;
-            
-            // Upload .frag
-            setProgress(65, 'Subiendo archivo fragmento (.frag) a Google Drive...');
-            await uploadToDrive(`${baseName}.frag`, conversionResult.fragBase64, 'application/octet-stream');
-
-            // Upload .json
-            setProgress(85, 'Subiendo archivo de propiedades (.json) a Google Drive...');
-            await uploadToDrive(`${baseName}.json`, conversionResult.jsonBase64, 'application/json');
-
-            setProgress(100, '¡Modelo IFC cargado y convertido con éxito!');
-            uploadBtn.textContent = 'Completado';
-            
+          // Apply specific status styles
+          lbl.className = 'file-status text-[10px]';
+          if (status === 'Subiendo...' || status === 'Convirtiendo IFC...') {
+            lbl.classList.add('text-blue-600', 'font-semibold', 'animate-pulse');
+          } else if (status === 'Completado') {
+            lbl.classList.add('text-green-600', 'font-bold');
+          } else if (status.startsWith('Error')) {
+            lbl.classList.add('text-red-600', 'font-bold');
           } else {
-            // PDF/DWG FLOW: direct upload
-            setProgress(30, 'Leyendo archivo local...');
-            const base64Content = await fileToBase64(selectedFile);
-            
-            setProgress(60, 'Subiendo archivo a Google Drive...');
-            let mimeType = 'application/octet-stream';
-            if (ext === 'pdf') mimeType = 'application/pdf';
-            else if (ext === 'dwg') mimeType = 'image/vnd.dwg';
-            
-            await uploadToDrive(selectedFile.name, base64Content, mimeType);
-            
-            setProgress(100, '¡Archivo subido con éxito!');
-            uploadBtn.textContent = 'Completado';
+            lbl.classList.add('text-slate-500', 'dark:text-slate-400');
           }
-        } catch (error) {
-          console.error(error);
-          setProgress(0, `Error: ${error.message}`);
-          uploadBtn.disabled = false;
-          uploadBtn.textContent = 'Reintentar Subida';
-          alert(`Error en la carga: ${error.message}`);
         }
+      }
+
+      // Upload Queue handler
+      uploadBtn.addEventListener('click', async () => {
+        if (selectedFiles.length === 0 || !activeProject || isUploading) return;
+
+        isUploading = true;
+        uploadBtn.disabled = true;
+        clearQueueBtn.classList.add('hidden');
+        logCard.classList.remove('hidden');
+        globalStatusContainer.classList.remove('hidden');
+
+        // Refresh select remove buttons in DOM
+        renderFilesList();
+
+        const totalFiles = selectedFiles.length;
+        addLog(`Iniciando la subida en cola de ${totalFiles} archivos...`);
+
+        for (let i = 0; i < totalFiles; i++) {
+          const fileObj = selectedFiles[i];
+          
+          // Skip if already uploaded in previous attempt
+          if (fileObj.status === 'Completado') continue;
+
+          // Global progress bar calculation
+          const globalProgressStart = Math.round((i / totalFiles) * 100);
+          globalStatusText.textContent = `Procesando archivo ${i + 1} de ${totalFiles}: ${fileObj.file.name}`;
+          globalStatusPercentage.textContent = `${globalProgressStart}%`;
+          globalProgressBar.style.width = `${globalProgressStart}%`;
+
+          const ext = fileObj.file.name.split('.').pop().toLowerCase();
+          
+          try {
+            if (ext === 'ifc') {
+              updateFileUI(fileObj, 10, 'Convirtiendo IFC...');
+              addLog(`[${fileObj.file.name}] Enviando al convertidor local...`);
+
+              const formData = new FormData();
+              formData.append('ifcFile', fileObj.file);
+
+              let convertResponse;
+              try {
+                convertResponse = await fetch('http://localhost:3000/convert-json', {
+                  method: 'POST',
+                  body: formData
+                });
+              } catch (err) {
+                throw new Error('No se pudo conectar con el convertidor local (Puerto 3000). Asegúrate de tenerlo iniciado en la carpeta Models/ConverterApp.');
+              }
+
+              if (!convertResponse.ok) {
+                const errText = await convertResponse.text();
+                throw new Error(`Error en el convertidor: ${errText}`);
+              }
+
+              updateFileUI(fileObj, 45, 'Subiendo fragmento...');
+              const conversionResult = await convertResponse.json();
+              const baseName = conversionResult.baseName;
+
+              addLog(`[${fileObj.file.name}] Subiendo fragmento (.frag)...`);
+              await uploadToDrive(`${baseName}.frag`, conversionResult.fragBase64, 'application/octet-stream', fileObj);
+              
+              updateFileUI(fileObj, 75, 'Subiendo propiedades...');
+              addLog(`[${fileObj.file.name}] Subiendo propiedades (.json)...`);
+              await uploadToDrive(`${baseName}.json`, conversionResult.jsonBase64, 'application/json', fileObj);
+
+              updateFileUI(fileObj, 100, 'Completado');
+              addLog(`[${fileObj.file.name}] ¡Subida e IFC procesado con éxito!`);
+            } else {
+              // Direct upload (PDF, DWG)
+              updateFileUI(fileObj, 25, 'Leyendo archivo...');
+              const base64Content = await fileToBase64(fileObj.file);
+              
+              updateFileUI(fileObj, 55, 'Subiendo...');
+              addLog(`[${fileObj.file.name}] Subiendo archivo directo...`);
+              
+              let mimeType = 'application/octet-stream';
+              if (ext === 'pdf') mimeType = 'application/pdf';
+              else if (ext === 'dwg') mimeType = 'image/vnd.dwg';
+
+              await uploadToDrive(fileObj.file.name, base64Content, mimeType, fileObj);
+              
+              updateFileUI(fileObj, 100, 'Completado');
+              addLog(`[${fileObj.file.name}] ¡Subido con éxito!`);
+            }
+          } catch (err) {
+            console.error(err);
+            updateFileUI(fileObj, 0, `Error: ${err.message}`);
+            addLog(`[${fileObj.file.name}] ERROR: ${err.message}`);
+          }
+        }
+
+        // Final completion updates
+        globalStatusText.textContent = 'Proceso de subida completado.';
+        globalStatusPercentage.textContent = '100%';
+        globalProgressBar.style.width = '100%';
+
+        isUploading = false;
+        uploadBtn.disabled = false;
+        uploadBtn.textContent = 'Completado';
+        clearQueueBtn.classList.remove('hidden');
+        
+        // Reload project files to see new files on list!
+        loadProjectFiles();
       });
+
+      // Load Drive Project Files List
+      async function loadProjectFiles() {
+        if (!activeProject) return;
+
+        listLoading.classList.remove('hidden');
+        listEmpty.classList.add('hidden');
+        filesTable.classList.add('hidden');
+        
+        // Animate refresh icon
+        refreshIcon.classList.add('animate-spin');
+
+        const ds = activeProject.dataSources || {};
+        const scriptUrl = ds.driveScriptUrl || DEFAULT_DRIVE_SCRIPT_URL;
+        
+        try {
+          const payload = {
+            action: 'list',
+            folderId: ds.driveFolderId || '',
+            driveFolderName: ds.driveFolderName || activeProject.name,
+            project: activeProject.slug || slugify(activeProject.name)
+          };
+
+          const res = await fetch(scriptUrl, {
+            method: 'POST',
+            mode: 'cors',
+            headers: {
+              'Content-Type': 'text/plain;charset=utf-8'
+            },
+            body: JSON.stringify(payload)
+          });
+
+          if (!res.ok) throw new Error('Network error listing models');
+
+          const data = await res.json();
+          
+          // Structure files
+          driveFilesData.models = data.models || [];
+          driveFilesData.dwgs = data.dwgs || [];
+          driveFilesData.pdfs = data.pdfs || [];
+
+          // Update tab badges counters
+          countModels.textContent = driveFilesData.models.length;
+          countPdfs.textContent = driveFilesData.pdfs.length;
+          countDwgs.textContent = driveFilesData.dwgs.length;
+
+          renderDriveFilesTable();
+        } catch (err) {
+          console.error(err);
+          addLog('Error cargando archivos existentes de Drive: ' + err.message);
+          listLoading.classList.add('hidden');
+          listEmpty.classList.remove('hidden');
+        } finally {
+          refreshIcon.classList.remove('animate-spin');
+        }
+      }
+
+      function renderDriveFilesTable() {
+        listLoading.classList.add('hidden');
+        
+        const filterVal = filesSearch.value.trim().toLowerCase();
+        let listToRender = [];
+
+        if (currentActiveTab === 'models') listToRender = driveFilesData.models;
+        else if (currentActiveTab === 'pdfs') listToRender = driveFilesData.pdfs;
+        else if (currentActiveTab === 'dwgs') listToRender = driveFilesData.dwgs;
+
+        if (filterVal) {
+          listToRender = listToRender.filter(f => f.name.toLowerCase().includes(filterVal));
+        }
+
+        if (listToRender.length === 0) {
+          listEmpty.classList.remove('hidden');
+          filesTable.classList.add('hidden');
+          return;
+        }
+
+        listEmpty.classList.add('hidden');
+        filesTable.classList.remove('hidden');
+
+        const formatDate = (isoString) => {
+          if (!isoString) return '--';
+          const d = new Date(isoString);
+          const dd = String(d.getDate()).padStart(2, '0');
+          const mm = String(d.getMonth() + 1).padStart(2, '0');
+          const yyyy = d.getFullYear();
+          const hh = String(d.getHours()).padStart(2, '0');
+          const min = String(d.getMinutes()).padStart(2, '0');
+          return `${dd}/${mm}/${yyyy} ${hh}:${min}`;
+        };
+
+        filesTableBody.innerHTML = listToRender.map(f => {
+          const specialty = f.folder || 'General';
+          const ext = f.name.split('.').pop().toLowerCase();
+          
+          let icon = 'description';
+          let iconClass = 'text-blue-500';
+          if (ext === 'pdf') {
+            icon = 'picture_as_pdf';
+            iconClass = 'text-red-500';
+          } else if (ext === 'dwg' || ext === 'dxf') {
+            icon = 'architecture';
+            iconClass = 'text-amber-500';
+          } else {
+            icon = 'view_in_ar';
+            iconClass = 'text-blue-500';
+          }
+
+          return `
+            <tr class="hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors">
+              <td class="py-3 px-4 font-medium text-slate-800 dark:text-slate-200">
+                <div class="flex items-center gap-2">
+                  <span class="material-symbols-outlined text-base ${iconClass}">${icon}</span>
+                  <span>${f.name}</span>
+                </div>
+              </td>
+              <td class="py-3 px-4 text-slate-500 dark:text-slate-400 capitalize">${specialty.toLowerCase()}</td>
+              <td class="py-3 px-4 text-slate-500 dark:text-slate-400">${formatDate(f.lastUpdated)}</td>
+            </tr>
+          `;
+        }).join('');
+      }
+
+      // Tabs triggers
+      const switchTab = (tabName, clickedTabBtn) => {
+        currentActiveTab = tabName;
+        
+        // Reset tabs border indicators
+        [tabModels, tabPdfs, tabDwgs].forEach(btn => {
+          btn.classList.remove('border-blue-600', 'text-blue-600');
+          btn.classList.add('border-transparent', 'text-slate-500', 'dark:text-slate-400');
+        });
+
+        clickedTabBtn.classList.add('border-blue-600', 'text-blue-600');
+        clickedTabBtn.classList.remove('border-transparent', 'text-slate-500', 'dark:text-slate-400');
+
+        renderDriveFilesTable();
+      };
+
+      tabModels.addEventListener('click', () => switchTab('models', tabModels));
+      tabPdfs.addEventListener('click', () => switchTab('pdfs', tabPdfs));
+      tabDwgs.addEventListener('click', () => switchTab('dwgs', tabDwgs));
+
+      refreshListBtn.addEventListener('click', loadProjectFiles);
+      filesSearch.addEventListener('input', renderDriveFilesTable);
     });
   </script>
 </body>
