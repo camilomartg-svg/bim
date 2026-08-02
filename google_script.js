@@ -124,6 +124,9 @@ function doPost(e) {
     if (action === 'text') {
       return output_(textFile_(e, data), callback);
     }
+    if (action === 'uploadFile') {
+      return output_(uploadFile_(e, data), callback);
+    }
 
     const doc = SpreadsheetApp.openById("1Jcxc9SwtbDrExyGeS_zy0BVnEER64iEEvzCnzCo5OCg");
     const fecha = new Date().toISOString();
@@ -648,4 +651,47 @@ function textFile_(e, body) {
   const file = DriveApp.getFileById(id);
   const text = file.getBlob().getDataAsString('UTF-8');
   return { text: text };
+}
+
+function uploadFile_(e, body) {
+  let folderId = String(((body && body.folderId) || (e && e.parameter && e.parameter.folderId) || DRIVE_ROOT_FOLDER_ID) ?? '').trim();
+  if (!folderId) return { error: 'Falta folderId' };
+  
+  let root = DriveApp.getFolderById(folderId);
+  
+  // Dynamic resolution if we are at the root level or default
+  if (folderId === '1aWUNnLgjWBkA6wdCM99XMY9SU7eSDP-H' || folderId === '1fn1umYzIYsxymmwbmap6YbjTB33XJrG8') {
+    const driveFolderName = String(((body && body.driveFolderName) || (e && e.parameter && e.parameter.driveFolderName) || '') ?? '').trim();
+    const projectSlug = String(((body && body.project) || (e && e.parameter && e.parameter.project) || '') ?? '').trim();
+    
+    let targetFolder = findProjectFolderRecursively(root, projectSlug, driveFolderName);
+    if (targetFolder) {
+      root = targetFolder;
+    }
+  }
+  
+  const filename = String(((body && body.filename) || (e && e.parameter && e.parameter.filename) || '') ?? '').trim();
+  if (!filename) return { error: 'Falta filename' };
+  
+  const content = String(((body && body.content) || (e && e.parameter && e.parameter.content) || '') ?? '').trim();
+  if (!content) return { error: 'Falta content' };
+  
+  const contentType = String(((body && body.contentType) || (e && e.parameter && e.parameter.contentType) || 'application/octet-stream') ?? '').trim();
+  
+  try {
+    // Trash existing files with the same name to avoid duplicates
+    const existingFiles = root.getFilesByName(filename);
+    while (existingFiles.hasNext()) {
+      existingFiles.next().setTrashed(true);
+    }
+    
+    // Create new file
+    const decoded = Utilities.base64Decode(content);
+    const blob = Utilities.newBlob(decoded, contentType, filename);
+    const file = root.createFile(blob);
+    
+    return { status: 'success', fileId: file.getId(), name: file.getName() };
+  } catch (err) {
+    return { status: 'error', message: err.toString() };
+  }
 }

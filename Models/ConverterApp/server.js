@@ -17,6 +17,17 @@ const app = express();
 const upload = multer({ dest: 'uploads/' });
 const PORT = 3000;
 
+// CORS middleware
+app.use((req, res, next) => {
+    res.header('Access-Control-Allow-Origin', '*');
+    res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept');
+    res.header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+    if (req.method === 'OPTIONS') {
+        return res.sendStatus(200);
+    }
+    next();
+});
+
 // Serve static files
 app.use(express.static('public'));
 
@@ -180,6 +191,37 @@ app.post('/convert', upload.single('ifcFile'), async (req, res) => {
     } catch (error) {
         console.error(error);
         res.status(500).send('Conversion failed: ' + error.message);
+    }
+});
+
+app.post('/convert-json', upload.single('ifcFile'), async (req, res) => {
+    if (!req.file) {
+        return res.status(400).json({ error: 'No file uploaded.' });
+    }
+
+    try {
+        console.log(`Processing ${req.file.originalname} for JSON response...`);
+        const result = await convertIfcToFrag(req.file.path, 'converted', req.file.originalname);
+        
+        // Read file contents as base64
+        const fragBuffer = fs.readFileSync(result.fragPath);
+        const jsonBuffer = fs.readFileSync(result.jsonPath);
+        
+        res.json({
+            status: 'success',
+            baseName: result.baseName,
+            fragBase64: fragBuffer.toString('base64'),
+            jsonBase64: jsonBuffer.toString('base64')
+        });
+        
+        // Cleanup files
+        fs.unlinkSync(req.file.path);
+        fs.unlinkSync(result.jsonPath);
+        fs.unlinkSync(result.fragPath);
+
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ error: 'Conversion failed: ' + error.message });
     }
 });
 
