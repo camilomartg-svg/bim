@@ -471,10 +471,12 @@ function listModels_(e, body) {
 
   const frags = [];
   const jsonByBase = {};
+  const dwgs = [];
+  const pdfs = [];
 
   const normalizeBase_ = (name) => String(name || '').trim().toLowerCase();
 
-  const walk_ = (folder) => {
+  const walk_ = (folder, currentRelativePath) => {
     const it = folder.getFiles();
     while (it.hasNext()) {
       const f = it.next();
@@ -482,33 +484,55 @@ function listModels_(e, body) {
       const lower = String(name).toLowerCase();
 
       if (lower.endsWith('.frag')) {
-        frags.push({ name: name, fragId: f.getId() });
+        frags.push({ name: name, fragId: f.getId(), folder: currentRelativePath || '' });
         continue;
       }
 
       if (lower.endsWith('.json')) {
         const base = normalizeBase_(name.slice(0, -5));
         jsonByBase[base] = f.getId();
+        continue;
+      }
+
+      if (lower.endsWith('.dwg') || lower.endsWith('.dxf')) {
+        dwgs.push({ name: name, fileId: f.getId(), folder: currentRelativePath || '' });
+        continue;
+      }
+
+      if (lower.endsWith('.pdf')) {
+        pdfs.push({ name: name, fileId: f.getId(), folder: currentRelativePath || '' });
+        continue;
       }
     }
 
     const sub = folder.getFolders();
     while (sub.hasNext()) {
-      walk_(sub.next());
+      const subFolder = sub.next();
+      const nextRelativePath = currentRelativePath 
+        ? currentRelativePath + '/' + subFolder.getName() 
+        : subFolder.getName();
+      walk_(subFolder, nextRelativePath);
     }
   };
 
-  walk_(root);
+  walk_(root, '');
 
   const models = frags
     .map((m) => {
       const base = normalizeBase_(m.name.slice(0, -5));
       const jsonId = jsonByBase[base] || null;
-      return { name: m.name, fragId: m.fragId, jsonId: jsonId };
+      return { name: m.name, fragId: m.fragId, jsonId: jsonId, folder: m.folder };
     })
     .sort((a, b) => String(a.name).localeCompare(String(b.name), 'es'));
 
-  return { models: models };
+  const sortedDwgs = dwgs.sort((a, b) => String(a.name).localeCompare(String(b.name), 'es'));
+  const sortedPdfs = pdfs.sort((a, b) => String(a.name).localeCompare(String(b.name), 'es'));
+
+  return { 
+    models: models,
+    dwgs: sortedDwgs,
+    pdfs: sortedPdfs
+  };
 }
 
 function chunkFile_(e, body) {

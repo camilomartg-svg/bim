@@ -41,10 +41,119 @@ class ErrorBoundary extends Component<{ children: React.ReactNode }, { hasError:
 
 interface RepoFile {
   name: string
-  filename: string
+  filename?: string
+  fileId?: string
   description?: string
   folder?: string
 }
+
+const DRIVE_MODELS_FOLDER_ID = '1aWUNnLgjWBkA6wdCM99XMY9SU7eSDP-H';
+const DRIVE_MODELS_API_URL = 'https://script.google.com/macros/s/AKfycby9jzOK9vz9OR_QTCo2MOMGAD25QlXJK1nreMGcWsR2Y2i3RNABh8BkGvBHfdO267AVgQ/exec';
+
+const jsonpRequest = async <T,>(url: URL, timeoutMs = 30000): Promise<T> => {
+  return await new Promise<T>((resolve, reject) => {
+    const cb = `__jsonp_${Date.now()}_${Math.floor(Math.random() * 1e9)}`;
+    url.searchParams.set('callback', cb);
+    const script = document.createElement('script');
+    let done = false;
+
+    const cleanup = () => {
+      if (done) return;
+      done = true;
+      try {
+        delete (window as any)[cb];
+      } catch {
+        (window as any)[cb] = undefined;
+      }
+      if (script.parentNode) script.parentNode.removeChild(script);
+    };
+
+    const timer = window.setTimeout(() => {
+      cleanup();
+      reject(new Error('Tiempo de espera agotado (JSONP)'));
+    }, timeoutMs);
+
+    (window as any)[cb] = (data: T) => {
+      window.clearTimeout(timer);
+      cleanup();
+      resolve(data);
+    };
+
+    script.onerror = () => {
+      window.clearTimeout(timer);
+      cleanup();
+      reject(new Error('No se pudo cargar el script JSONP'));
+    };
+
+    script.src = url.toString();
+    document.head.appendChild(script);
+  });
+};
+
+const base64ToBytes = (base64: string): Uint8Array => {
+  const binString = atob(base64);
+  return Uint8Array.from(binString, (m) => m.charCodeAt(0));
+};
+
+const concatBytes = (arrays: Uint8Array[], totalLength: number): Uint8Array => {
+  const result = new Uint8Array(totalLength);
+  let offset = 0;
+  for (const arr of arrays) {
+    result.set(arr, offset);
+    offset += arr.byteLength;
+  }
+  return result;
+};
+
+const fetchDriveBytes = async (id: string, onProgress?: (percent: number) => void): Promise<Uint8Array> => {
+  let limit = 2 * 1024 * 1024;
+  let offset = 0;
+  let total: number | null = null;
+  const parts: Uint8Array[] = [];
+
+  for (;;) {
+    const url = new URL(DRIVE_MODELS_API_URL);
+    url.searchParams.set('action', 'chunk');
+    url.searchParams.set('id', id);
+    url.searchParams.set('offset', String(offset));
+    url.searchParams.set('limit', String(limit));
+
+    let payload: { data?: string; total?: number; nextOffset?: number; done?: boolean } | null = null;
+    let lastErr: unknown = null;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try {
+        payload = await jsonpRequest<{ data?: string; total?: number; nextOffset?: number; done?: boolean }>(url, 45000);
+        lastErr = null;
+        break;
+      } catch (e) {
+        lastErr = e;
+        const msg = String((e as any)?.message ?? '');
+        const isTimeout = msg.includes('Tiempo de espera agotado');
+        if (isTimeout && limit > 256 * 1024) {
+          limit = Math.max(256 * 1024, Math.floor(limit / 2));
+        }
+        await new Promise((r) => setTimeout(r, 600 * (attempt + 1)));
+      }
+    }
+    if (!payload) throw (lastErr instanceof Error ? lastErr : new Error('No se pudo descargar el chunk de Drive.'));
+
+    const chunk = payload.data ? base64ToBytes(payload.data) : new Uint8Array(0);
+    parts.push(chunk);
+    if (typeof payload.total === 'number' && Number.isFinite(payload.total)) total = payload.total;
+    offset = typeof payload.nextOffset === 'number' && Number.isFinite(payload.nextOffset) ? payload.nextOffset : offset + chunk.byteLength;
+    
+    if (onProgress && total) {
+      onProgress(Math.min(100, Math.round((offset / total) * 100)));
+    }
+    
+    if (payload.done) break;
+    if (chunk.byteLength === 0) break;
+    if (total !== null && offset >= total) break;
+  }
+
+  const finalTotal = total ?? parts.reduce((a, b) => a + b.byteLength, 0);
+  return concatBytes(parts, finalTotal);
+};
 
 const App: React.FC = () => {
   const [file, setFile] = useState<File | null>(null)
@@ -118,6 +227,29 @@ const App: React.FC = () => {
   const loadRepoFiles = async () => {
     setIsLoadingRepo(true)
     try {
+      const params = new URLSearchParams(window.location.search)
+      const project = params.get('project') || ''
+      const driveFolderName = params.get('driveFolderName') || ''
+      const folderId = params.get('driveFolderId') || DRIVE_MODELS_FOLDER_ID
+      
+      if (project || driveFolderName || folderId) {
+        const url = new URL(DRIVE_MODELS_API_URL)
+        url.searchParams.set('action', 'list')
+        url.searchParams.set('folderId', folderId)
+        if (project) url.searchParams.set('project', project)
+        if (driveFolderName) url.searchParams.set('driveFolderName', driveFolderName)
+        
+        const data = await jsonpRequest<{ dwgs?: RepoFile[] }>(url, 45000)
+        const files = Array.isArray(data?.dwgs) ? data.dwgs : []
+        
+        const processedFiles = files.map(f => ({
+          ...f,
+          filename: f.filename || f.name
+        }))
+        setRepoFiles(processedFiles)
+        return
+      }
+
       const baseUrl = (import.meta as any).env?.BASE_URL || './'
       const res = await fetch(`${baseUrl}Drawing/list.json?t=${Date.now()}`)
       if (!res.ok) throw new Error('No se pudo cargar la lista de archivos')
@@ -135,22 +267,28 @@ const App: React.FC = () => {
     try {
       setIsDownloading(true)
       setDownloadError(null)
-      const baseUrl = (import.meta as any).env?.BASE_URL || './'
-      // Encode path parts to handle spaces, but keep slashes
-      const encodedPath = rf.filename.split('/').map(part => encodeURIComponent(part)).join('/')
-      const url = `${baseUrl}Drawing/${encodedPath}`
       
-      console.log('Downloading file from:', url)
-      
-      const res = await fetch(url)
-      if (!res.ok) throw new Error(`Error al descargar archivo (${res.status})`)
-      const blob = await res.blob()
+      let blob: Blob;
+      if (rf.fileId) {
+        const bytes = await fetchDriveBytes(rf.fileId)
+        blob = new Blob([bytes as any], { type: rf.name.toLowerCase().endsWith('.dwg') ? 'application/dwg' : 'application/dxf' })
+      } else {
+        const baseUrl = (import.meta as any).env?.BASE_URL || './'
+        const filename = rf.filename || rf.name
+        const encodedPath = filename.split('/').map(part => encodeURIComponent(part)).join('/')
+        const url = `${baseUrl}Drawing/${encodedPath}`
+        
+        console.log('Downloading file from:', url)
+        
+        const res = await fetch(url)
+        if (!res.ok) throw new Error(`Error al descargar archivo (${res.status})`)
+        blob = await res.blob()
+      }
       
       if (blob.size === 0) throw new Error('El archivo está vacío')
 
-      // Use only the basename for the File object to avoid issues with slashes in name
-      const simpleName = rf.filename.split('/').pop() || rf.filename
-      const newFile = new File([blob], simpleName, { type: 'application/dxf' })
+      const simpleName = rf.name || rf.filename || 'dibujo.dxf'
+      const newFile = new File([blob], simpleName, { type: simpleName.toLowerCase().endsWith('.dwg') ? 'application/dwg' : 'application/dxf' })
       
       setFile(newFile)
       setCalibration(null)
