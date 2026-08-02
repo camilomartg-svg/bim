@@ -208,15 +208,25 @@ function doPost(e) {
         let name = comp.name || 'Sin Nombre';
         
         // 1. Get or create company folder
-        const companyFolderName = `${code} - ${name}`;
-        let companyFolder;
-        try {
-          companyFolder = getOrCreateFolder(rootFolder, companyFolderName);
-        } catch (e) {
-          responseFolders[comp.id] = {
-            error: e.toString()
-          };
-          return;
+        let companyFolder = null;
+        if (comp.driveFolderId) {
+          try {
+            companyFolder = DriveApp.getFolderById(comp.driveFolderId);
+          } catch (e) {
+            Logger.log("Error getting folder by ID: " + e.toString());
+          }
+        }
+        
+        if (!companyFolder) {
+          const companyFolderName = `${code} - ${name}`;
+          try {
+            companyFolder = getOrCreateFolder(rootFolder, companyFolderName);
+          } catch (e) {
+            responseFolders[comp.id] = {
+              error: e.toString()
+            };
+            return;
+          }
         }
         
         const compFolderId = companyFolder.getId();

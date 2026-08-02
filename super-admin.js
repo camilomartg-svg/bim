@@ -1510,6 +1510,7 @@ let contentBase = '';
               id: emp.id,
               name: emp.name,
               code: emp.code || '000',
+              driveFolderId: emp.driveFolderId || '',
               projects: (config.projects || []).map(p => ({
                 name: p.name,
                 slug: p.slug,
