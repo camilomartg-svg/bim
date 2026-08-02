@@ -7,8 +7,7 @@
     "configUrl": "portal-config.json",
     "code": "001",
     "members": [],
-    "admins": [],
-    "driveFolderId": "1jZIf8b2MV0tauycjCR_Xb2k66wFPLn3R"
+    "admins": []
   },
   {
     "id": "amarillo",
@@ -32,8 +31,7 @@
         "role": "INVITADO"
       }
     ],
-    "admins": [],
-    "driveFolderId": "1wUpvnEMyd5s0hwVcKReDypbL5vF9ohib"
+    "admins": []
   },
   {
     "id": "empresa3",
@@ -49,8 +47,7 @@
         "role": "ADMINISTRADOR_EMPRESA"
       }
     ],
-    "admins": [],
-    "driveFolderId": "1nFBYgA1Bo7b3-NVjq7eJczd0etQ0COZy"
+    "admins": []
   },
   {
     "id": "nueva-empresa",
@@ -63,8 +60,7 @@
     "terminosAceptados": true,
     "tratamientoDatos": true,
     "image": "https://i.postimg.cc/SQLYGJFR/logo-negro-recortado.png",
-    "location": "Bogotá, Colombia",
-    "driveFolderId": "1ZQpl7c2bfTc167wdVVF1F9NLy16aSd-x"
+    "location": "Bogotá, Colombia"
   },
   {
     "id": "empresa-1784538874707",
@@ -167,16 +163,14 @@
     "tratamientoDatos": true,
     "image": "https://i.postimg.cc/02mTnnQv/21bd5ee9d2351270615280386caad1f3.jpg",
     "location": "Bogota DC, Colombia",
-    "configUrl": "config-empresa-1784985873611.json",
-    "driveFolderId": "1s3XJPK8XWYg7CKo7asIBP6kjGbhOUtBv"
+    "configUrl": "config-empresa-1784985873611.json"
   },
   {
     "id": "empresa-1784990258113",
     "name": "Morado Arquitectura",
     "code": "MOR",
     "admins": [
-      "camilomartg@gmail.com",
-      "alc.spk.6@gmail.com"
+      "camilomartg@gmail.com"
     ],
     "zonaHoraria": "America/Bogota",
     "members": [
@@ -194,14 +188,6 @@
         "role": "INVITADO",
         "empresaUsuario": "Verde Arquitectura",
         "cargo": "Arquitecto Senior"
-      },
-      {
-        "name": "Nuevo Usuario",
-        "email": "dataguardar2@gmail.com",
-        "role": "INVITADO",
-        "empresaUsuario": "Morado Arquitectura",
-        "especialidad": "",
-        "cargo": ""
       }
     ],
     "razonSocial": "Morado Arquitectura SAS",
@@ -209,137 +195,6 @@
     "tratamientoDatos": true,
     "image": "https://i.postimg.cc/02mTnnQv/21bd5ee9d2351270615280386caad1f3.jpg",
     "location": "Bogota DC, Colombia",
-    "configUrl": "config-empresa-1784990258113.json",
-    "driveFolderId": "1XV7TBjV6EbBiadwt8XzuQXwXJnG_yL38"
-  },
-  {
-    "id": "empresa-1785381842800",
-    "name": "Naranja Arquitectura",
-    "code": "NAR",
-    "admins": [
-      "alc.spk.5@gmail.com"
-    ],
-    "zonaHoraria": "America/Bogota",
-    "members": [
-      {
-        "name": "alc.spk.5",
-        "email": "alc.spk.5@gmail.com",
-        "role": "ADMINISTRADOR_EMPRESA",
-        "empresaUsuario": "Naranja Arquitectura",
-        "especialidad": "",
-        "cargo": ""
-      }
-    ],
-    "razonSocial": "Naranja Arquitectura SAS",
-    "terminosAceptados": true,
-    "tratamientoDatos": true,
-    "image": "https://i.postimg.cc/02mTnnQv/21bd5ee9d2351270615280386caad1f3.jpg",
-    "location": "Bogota DC, Colombia",
-    "configUrl": "config-empresa-1785381842800.json",
-    "driveFolderId": "1HCW4mKVtcMXPjfkYfUW_xS6WTi8XEJDo"
-  },
-  {
-    "id": "empresa-1785635623236",
-    "name": "Fucsia Arquitectura",
-    "code": "FUC",
-    "admins": [
-      "camilomartg@gmail.com"
-    ],
-    "zonaHoraria": "America/Bogota",
-    "members": [
-      {
-        "name": "camilomartg",
-        "email": "camilomartg@gmail.com",
-        "role": "ADMINISTRADOR_EMPRESA",
-        "empresaUsuario": "Fucsia Arquitectura",
-        "especialidad": "",
-        "cargo": ""
-      }
-    ],
-    "razonSocial": "Fucsia Arquitectura SAS",
-    "terminosAceptados": true,
-    "tratamientoDatos": true,
-    "image": "https://i.postimg.cc/02mTnnQv/21bd5ee9d2351270615280386caad1f3.jpg",
-    "location": "Bogota DC, Colombia",
-    "configUrl": "config-empresa-1785635623236.json",
-    "driveFolderId": "1lVrIegnlrnh642MTfDdtSZCsLh47PIlr"
-  },
-  {
-    "id": "empresa-1785637587277",
-    "name": "Violeta Arquitectura",
-    "code": "VIO",
-    "admins": [
-      "camilomartg@gmail.com"
-    ],
-    "zonaHoraria": "America/Bogota",
-    "members": [
-      {
-        "name": "camilomartg",
-        "email": "camilomartg@gmail.com",
-        "role": "ADMINISTRADOR_EMPRESA",
-        "empresaUsuario": "Violeta Arquitectura",
-        "especialidad": "",
-        "cargo": ""
-      }
-    ],
-    "razonSocial": "Vielote Arquitectura SAS",
-    "terminosAceptados": true,
-    "tratamientoDatos": true,
-    "image": "https://i.postimg.cc/02mTnnQv/21bd5ee9d2351270615280386caad1f3.jpg",
-    "location": "Bogota DC, Colombia",
-    "configUrl": "config-empresa-1785637587277.json",
-    "driveFolderId": "1wmHQ6BOFGOsg9VVQWIo3Lbv7ck5C6IKM"
-  },
-  {
-    "id": "empresa-1785671771601",
-    "name": "Marron Arquitectura",
-    "code": "MAR",
-    "admins": [
-      "camilomartg@gmail.com"
-    ],
-    "zonaHoraria": "America/Bogota",
-    "members": [
-      {
-        "name": "camilomartg",
-        "email": "camilomartg@gmail.com",
-        "role": "ADMINISTRADOR_EMPRESA",
-        "empresaUsuario": "Marron Arquitectura",
-        "especialidad": "",
-        "cargo": ""
-      }
-    ],
-    "razonSocial": "Marron Arquitectura SAS",
-    "terminosAceptados": true,
-    "tratamientoDatos": true,
-    "image": "https://i.postimg.cc/02mTnnQv/21bd5ee9d2351270615280386caad1f3.jpg",
-    "location": "Bogota DC, Colombia",
-    "configUrl": "config-empresa-1785671771601.json",
-    "driveFolderId": "1NNhtxviXmw-U5MqYseer50aAK45CONET"
-  },
-  {
-    "id": "empresa-1785672669360",
-    "name": "Cian Arquitectura",
-    "code": "CIA",
-    "admins": [
-      "camilomartg@gmail.com"
-    ],
-    "zonaHoraria": "America/Bogota",
-    "members": [
-      {
-        "name": "camilomartg",
-        "email": "camilomartg@gmail.com",
-        "role": "ADMINISTRADOR_EMPRESA",
-        "empresaUsuario": "Cian Arquitectura",
-        "especialidad": "",
-        "cargo": ""
-      }
-    ],
-    "razonSocial": "Cian Arquitectura SAS",
-    "terminosAceptados": true,
-    "tratamientoDatos": true,
-    "image": "https://i.postimg.cc/02mTnnQv/21bd5ee9d2351270615280386caad1f3.jpg",
-    "location": "Bogota DC, Colombia",
-    "configUrl": "config-empresa-1785672669360.json",
-    "driveFolderId": "15VVXwR8AXzG5wto_Hp665S8-nOmrD690"
+    "configUrl": "config-empresa-1784990258113.json"
   }
 ]
