@@ -466,6 +466,8 @@ function listModels_(e, body) {
     
     if (targetFolder) {
       root = targetFolder;
+    } else if (driveFolderName || projectSlug) {
+      return { models: [], dwgs: [], pdfs: [] };
     }
   }
 
