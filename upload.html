@@ -382,7 +382,10 @@
         .replace(/^-+|-+$/g, '') || 'proyecto';
       
       const requestedProject = slugify(query.get('project') || '');
-      const urlDriveFolderId = query.get('driveFolderId') || '';
+      let urlDriveFolderId = (query.get('driveFolderId') || '').trim();
+      if (urlDriveFolderId === '1u3SljQ4SaxvR4jpS2qxOviKGRoPxRelw' || urlDriveFolderId === '1u3SljQ4SaxvR4jpS2qxOviKGrOPxRelw') {
+        urlDriveFolderId = '1u3SIjQ4SaxvR4jpS2qxOviKGrOPxRelw';
+      }
       const urlDriveFolderName = query.get('driveFolderName') || '';
       const urlDriveScriptUrl = query.get('driveScriptUrl') || '';
 

@@ -11,7 +11,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Proyecto | nora CDE</title>
   <meta name="theme-color" content="#2b2b2b" />
-  <meta name="x-app-version" data-app="project-landing" content="20260713-06" />
+  <meta name="x-app-version" data-app="project-landing" content="20260802-01" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="default" />
   <script src="https://cdn.tailwindcss.com?plugins=forms,typography"></script>
@@ -353,7 +353,13 @@
           if (url.origin !== window.location.origin) return rawHref;
           url.searchParams.set('project', project.slug);
           if (project.dataSources.driveFolderName) url.searchParams.set('driveFolderName', project.dataSources.driveFolderName);
-          if (project.dataSources.driveFolderId) url.searchParams.set('driveFolderId', project.dataSources.driveFolderId);
+          if (project.dataSources.driveFolderId) {
+            let fid = project.dataSources.driveFolderId;
+            if (fid === '1u3SljQ4SaxvR4jpS2qxOviKGRoPxRelw' || fid === '1u3SljQ4SaxvR4jpS2qxOviKGrOPxRelw') {
+              fid = '1u3SIjQ4SaxvR4jpS2qxOviKGrOPxRelw';
+            }
+            url.searchParams.set('driveFolderId', fid);
+          }
           if (project.dataSources.driveScriptUrl) url.searchParams.set('driveScriptUrl', project.dataSources.driveScriptUrl);
           if (target === 'status') {
             if (project.dataSources.statusSheetId) url.searchParams.set('statusSheetId', project.dataSources.statusSheetId);
