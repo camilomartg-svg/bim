@@ -319,7 +319,14 @@
             equipo: String(actions.equipo || '').trim(),
           },
           dataSources: {
-            driveFolderName: String(dataSources.driveFolderName || String(project?.name || '')).trim(),
+            driveFolderName: (() => {
+              const dfn = String(dataSources.driveFolderName || '').trim();
+              const lowerDfn = dfn.toLowerCase();
+              if (!dfn || lowerDfn === 'nuevo proyecto' || lowerDfn === 'sin nombre') {
+                return String(project?.name || '').trim();
+              }
+              return dfn;
+            })(),
             driveFolderId: String(dataSources.driveFolderId || '').trim(),
             driveScriptUrl: String(dataSources.driveScriptUrl || '').trim(),
             statusSheetId: String(dataSources.statusSheetId || '').trim(),
