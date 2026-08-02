@@ -1,4 +1,4 @@
-const DEFAULT_MODELS_FOLDER_ID = '1fn1umYzIYsxymmwbmap6YbjTB33XJrG8';
+const DEFAULT_MODELS_FOLDER_ID = '1aWUNnLgjWBkA6wdCM99XMY9SU7eSDP-H';
 
 function doGet(e) {
   return handleRequest_(e);
@@ -54,10 +54,53 @@ function output_(data, callback) {
   return ContentService.createTextOutput(json).setMimeType(ContentService.MimeType.JSON);
 }
 
+function findFolderRecursively(parentFolder, targetName) {
+  const cleanTarget = String(targetName).trim().toLowerCase();
+  
+  // Try exact/case-insensitive match in current folder
+  const subFolders = parentFolder.getFolders();
+  const list = [];
+  while (subFolders.hasNext()) {
+    const sub = subFolders.next();
+    const name = sub.getName().trim().toLowerCase();
+    if (name === cleanTarget) {
+      return sub;
+    }
+    list.push(sub);
+  }
+  
+  // Recursively search subfolders
+  for (let i = 0; i < list.length; i++) {
+    const found = findFolderRecursively(list[i], targetName);
+    if (found) return found;
+  }
+  
+  return null;
+}
+
 function listModels_(e, body) {
-  const folderId = String(((body && body.folderId) || (e && e.parameter && e.parameter.folderId) || DEFAULT_MODELS_FOLDER_ID) ?? '').trim();
+  let folderId = String(((body && body.folderId) || (e && e.parameter && e.parameter.folderId) || DEFAULT_MODELS_FOLDER_ID) ?? '').trim();
   if (!folderId) return { error: 'Falta folderId' };
-  const root = DriveApp.getFolderById(folderId);
+  
+  let root = DriveApp.getFolderById(folderId);
+  
+  // Dynamic resolution if we are at the root level or default
+  if (folderId === '1aWUNnLgjWBkA6wdCM99XMY9SU7eSDP-H' || folderId === '1fn1umYzIYsxymmwbmap6YbjTB33XJrG8') {
+    const driveFolderName = String(((body && body.driveFolderName) || (e && e.parameter && e.parameter.driveFolderName) || '') ?? '').trim();
+    const projectSlug = String(((body && body.project) || (e && e.parameter && e.parameter.project) || '') ?? '').trim();
+    
+    let targetFolder = null;
+    if (driveFolderName) {
+      targetFolder = findFolderRecursively(root, driveFolderName);
+    }
+    if (!targetFolder && projectSlug) {
+      targetFolder = findFolderRecursively(root, projectSlug);
+    }
+    
+    if (targetFolder) {
+      root = targetFolder;
+    }
+  }
 
   const frags = [];
   const jsonByBase = {};
