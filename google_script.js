@@ -694,7 +694,9 @@ function uploadFile_(e, body) {
   const filename = String(((body && body.filename) || (e && e.parameter && e.parameter.filename) || '') ?? '').trim();
   if (!filename) return { error: 'Falta filename' };
   
-  const content = String(((body && body.content) || (e && e.parameter && e.parameter.content) || '') ?? '').trim();
+  // Strip whitespace and newlines from base64 content (browsers can inject them)
+  const rawContent = String(((body && body.content) || (e && e.parameter && e.parameter.content) || '') ?? '');
+  const content = rawContent.replace(/[\s\n\r]/g, '');
   if (!content) return { error: 'Falta content' };
   
   const contentType = String(((body && body.contentType) || (e && e.parameter && e.parameter.contentType) || 'application/octet-stream') ?? '').trim();

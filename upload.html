@@ -693,7 +693,9 @@
         const reader = new FileReader();
         reader.readAsDataURL(file);
         reader.onload = () => {
+          // Strip data URL prefix and ALL whitespace/newlines (required by Utilities.base64Decode)
           let encoded = reader.result.toString().replace(/^data:(.*,)?base64,/, '');
+          encoded = encoded.replace(/[\s\n\r]/g, '');
           if ((encoded.length % 4) > 0) {
             encoded += '='.repeat(4 - (encoded.length % 4));
           }
