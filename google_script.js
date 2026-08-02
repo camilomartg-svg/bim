@@ -35,7 +35,7 @@ function getOrCreateFolder(parentFolder, name) {
 function doPost(e) {
   try {
     const data = JSON.parse(e.postData.contents);
-    const doc = SpreadsheetApp.getActiveSpreadsheet();
+    const doc = SpreadsheetApp.openById("1Jcxc9SwtbDrExyGeS_zy0BVnEER64iEEvzCnzCo5OCg");
     const fecha = new Date().toISOString();
 
     if (data.action === 'createUserAndCompany') {
@@ -317,7 +317,7 @@ function doPost(e) {
 function doGet(e) {
   try {
     const action = e.parameter.action;
-    const doc = SpreadsheetApp.getActiveSpreadsheet();
+    const doc = SpreadsheetApp.openById("1Jcxc9SwtbDrExyGeS_zy0BVnEER64iEEvzCnzCo5OCg");
     
     if (action === 'getCompanies') {
       const sheet = doc.getSheetByName('Empresas');
