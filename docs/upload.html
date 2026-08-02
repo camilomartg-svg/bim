@@ -357,7 +357,23 @@
 
       // Routing parameters
       const query = new URLSearchParams(window.location.search);
-      const companyId = query.get('empresa');
+      
+      // Try to read companyId from URL or referrer URL or sessionStorage
+      let referrerCompanyId = '';
+      try {
+        if (document.referrer) {
+          const refUrl = new URL(document.referrer);
+          referrerCompanyId = refUrl.searchParams.get('empresa') || '';
+        }
+      } catch (e) {
+        console.warn('Error parsing referrer URL', e);
+      }
+      
+      const companyId = query.get('empresa') || referrerCompanyId || sessionStorage.getItem('empresa') || '';
+      if (companyId) {
+        sessionStorage.setItem('empresa', companyId);
+      }
+
       const slugify = (value) => String(value ?? '')
         .normalize('NFD')
         .replace(/[\u0300-\u036f]/g, '')
@@ -366,6 +382,9 @@
         .replace(/^-+|-+$/g, '') || 'proyecto';
       
       const requestedProject = slugify(query.get('project') || '');
+      const urlDriveFolderId = query.get('driveFolderId') || '';
+      const urlDriveFolderName = query.get('driveFolderName') || '';
+      const urlDriveScriptUrl = query.get('driveScriptUrl') || '';
 
       backBtn.addEventListener('click', () => {
         let path = 'project-landing.html';
@@ -421,14 +440,49 @@
         }
 
         // Active project selection
+        let matchedProject = null;
         if (requestedProject) {
-          activeProject = projects.find(p => slugify(p.name) === requestedProject || p.slug === requestedProject);
+          matchedProject = projects.find(p => p.slug === requestedProject || slugify(p.name) === requestedProject);
         }
-        
-        if (!activeProject) {
-          activeProject = projects[0];
-          if (projects.length > 1) {
-            projectSelectContainer.classList.remove('hidden');
+
+        // Initialize activeProject using URL parameters as the primary source of truth
+        if (matchedProject) {
+          activeProject = {
+            name: urlDriveFolderName || matchedProject.name,
+            slug: matchedProject.slug || slugify(matchedProject.name),
+            city: matchedProject.city || 'Bogotá',
+            dataSources: {
+              driveFolderId: urlDriveFolderId || matchedProject.dataSources?.driveFolderId || '',
+              driveFolderName: urlDriveFolderName || matchedProject.dataSources?.driveFolderName || matchedProject.name,
+              driveScriptUrl: urlDriveScriptUrl || matchedProject.dataSources?.driveScriptUrl || DEFAULT_DRIVE_SCRIPT_URL
+            }
+          };
+        } else {
+          // If no matching project was found, but we have URL parameters:
+          if (urlDriveFolderId || urlDriveFolderName) {
+            activeProject = {
+              name: urlDriveFolderName || 'Proyecto',
+              slug: requestedProject || 'proyecto',
+              city: 'Bogotá',
+              dataSources: {
+                driveFolderId: urlDriveFolderId,
+                driveFolderName: urlDriveFolderName,
+                driveScriptUrl: urlDriveScriptUrl || DEFAULT_DRIVE_SCRIPT_URL
+              }
+            };
+          } else {
+            // Fallback to first project in config
+            const firstProj = projects[0] || DEFAULT_PROJECT;
+            activeProject = {
+              name: firstProj.name,
+              slug: firstProj.slug || slugify(firstProj.name),
+              city: firstProj.city || 'Bogotá',
+              dataSources: {
+                driveFolderId: firstProj.dataSources?.driveFolderId || '',
+                driveFolderName: firstProj.dataSources?.driveFolderName || '',
+                driveScriptUrl: firstProj.dataSources?.driveScriptUrl || DEFAULT_DRIVE_SCRIPT_URL
+              }
+            };
           }
         }
 
@@ -436,10 +490,27 @@
         
         projectSelect.addEventListener('change', (e) => {
           const selectedSlug = e.target.value;
-          activeProject = projects.find(p => p.slug === selectedSlug || slugify(p.name) === selectedSlug);
-          updateProjectUI();
-          loadProjectFiles();
+          const configProject = projects.find(p => p.slug === selectedSlug || slugify(p.name) === selectedSlug);
+          if (configProject) {
+            activeProject = {
+              name: configProject.name,
+              slug: configProject.slug || slugify(configProject.name),
+              city: configProject.city || 'Bogotá',
+              dataSources: {
+                driveFolderId: configProject.dataSources?.driveFolderId || '',
+                driveFolderName: configProject.dataSources?.driveFolderName || configProject.name,
+                driveScriptUrl: configProject.dataSources?.driveScriptUrl || DEFAULT_DRIVE_SCRIPT_URL
+              }
+            };
+            updateProjectUI();
+            loadProjectFiles();
+          }
         });
+
+        // Show selector only if multiple projects exist in config
+        if (projects.length > 1) {
+          projectSelectContainer.classList.remove('hidden');
+        }
 
         updateProjectUI();
         loadProjectFiles();
