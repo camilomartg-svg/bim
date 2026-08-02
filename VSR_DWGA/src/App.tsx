@@ -48,7 +48,7 @@ interface RepoFile {
 }
 
 const DRIVE_MODELS_FOLDER_ID = '1aWUNnLgjWBkA6wdCM99XMY9SU7eSDP-H';
-const DRIVE_MODELS_API_URL = 'https://script.google.com/macros/s/AKfycbw37XFeNeiCs5GMYfLQEU4yAa2W4CmoDeVgsepC1JwqjhR0VNQGfFUts91lkfEylV9bMw/exec';
+const DRIVE_MODELS_API_URL = 'https://script.google.com/macros/s/AKfycbxH6wjfTioCindfsv5RiaeYoRU52dRxxd99XFkJPU4rsH4HNFdq4KICDTvv483cZEkZfA/exec';
 
 const jsonpRequest = async <T,>(url: URL, timeoutMs = 30000): Promise<T> => {
   return await new Promise<T>((resolve, reject) => {
