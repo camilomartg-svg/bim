@@ -1,0 +1,131 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "User profile in the BIM CDE",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "email": { "type": "string" },
+        "role": { "type": "string", "enum": ["admin", "manager", "technician", "client"] },
+        "position": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "name", "email", "role"]
+    },
+    "Issue": {
+      "title": "Issue",
+      "description": "A construction issue or finding",
+      "type": "object",
+      "properties": {
+        "code": { "type": "string" },
+        "title": { "type": "string" },
+        "type": { "type": "string" },
+        "degreeOfAction": { "type": "string" },
+        "impact": { "type": "array", "items": { "type": "string" } },
+        "description": { "type": "string" },
+        "status": { "type": "string" },
+        "specialty": { "type": "string" },
+        "assignedPosition": { "type": "string" },
+        "assignedName": { "type": "string" },
+        "assignedEmail": { "type": "string" },
+        "reviewers": { "type": "array", "items": { "type": "string" } },
+        "reviewerEmails": { "type": "array", "items": { "type": "string" } },
+        "locations": {
+          "type": "object",
+          "properties": {
+            "units": { "type": "array", "items": { "type": "string" } },
+            "levels": { "type": "array", "items": { "type": "string" } },
+            "spaces": { "type": "array", "items": { "type": "string" } }
+          }
+        },
+        "creatorId": { "type": "string" },
+        "creatorName": { "type": "string" },
+        "authorEmail": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" },
+        "attachments": { "type": "array" },
+        "dueDate": { "type": "string" },
+        "agreementDate": { "type": "string" },
+        "rejectionReason": { "type": "string" },
+        "month": { "type": "string" },
+        "responsibleCompany": { "type": "string" },
+        "economicActivity": { "type": "string" },
+        "danger": { "type": "string" },
+        "dangerDescription": { "type": "string" },
+        "issueClass": { "type": "string" },
+        "proposedActionPlan": { "type": "string" }
+      },
+      "required": ["code", "title", "status", "creatorId", "createdAt"]
+    },
+    "Comment": {
+      "title": "Comment",
+      "description": "A comment on a BIM issue",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "userName": { "type": "string" },
+        "text": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "attachments": { "type": "array" }
+      },
+      "required": ["userId", "text", "createdAt"]
+    },
+    "TeamMember": {
+      "title": "Team Member",
+      "description": "A member of the project team",
+      "type": "object",
+      "properties": {
+        "position": { "type": "string" },
+        "name": { "type": "string" },
+        "email": { "type": "string" }
+      }
+    },
+    "StructuralUnit": {
+      "title": "Structural Unit",
+      "description": "A tower or building section",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "levels": { "type": "array", "items": { "type": "string" } },
+        "spaces": { "type": "array" }
+      }
+    },
+    "ProjectConfig": {
+      "title": "Project Config",
+      "description": "Global configuration for the project",
+      "type": "object",
+      "properties": {
+        "fieldVisibility": { "type": "object" },
+        "impactOptions": { "type": "array", "items": { "type": "string" } }
+      }
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "User profiles"
+    },
+    "/issues/{issueId}": {
+      "schema": "Issue",
+      "description": "Issue tracker"
+    },
+    "/issues/{issueId}/comments/{commentId}": {
+      "schema": "Comment",
+      "description": "Issue discussion"
+    },
+    "/team/{memberId}": {
+      "schema": "TeamMember",
+      "description": "Project team members"
+    },
+    "/units/{unitId}": {
+      "schema": "StructuralUnit",
+      "description": "Structural units hierarchy"
+    },
+    "config/project": {
+      "schema": "ProjectConfig",
+      "description": "Global project settings"
+    }
+  }
+}
