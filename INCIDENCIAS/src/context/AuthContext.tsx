@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
-import { User as FirebaseUser, onAuthStateChanged, signInWithPopup, GoogleAuthProvider, signOut } from 'firebase/auth';
+import { User as FirebaseUser, onAuthStateChanged, signInWithPopup, GoogleAuthProvider, signOut, signInAnonymously } from 'firebase/auth';
 import { auth, db } from '../services/firebase';
 import { doc, getDoc, setDoc, collection, query, where, getDocs } from 'firebase/firestore';
 import { handleFirestoreError, OperationType } from '../services/firestore-errors';
@@ -35,9 +35,39 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         let assignedPosition = 'Interventor Eléctrico'; // Default
         let assignedTeam = '';
         let role: "admin" | "manager" | "technician" | "client" = 'technician';
+        let email = fbUser.email || '';
+        let displayName = fbUser.displayName || 'BIM User';
+
+        // Check if there is a noraUser we can extract info from
+        const noraUserStr = sessionStorage.getItem('userAccount') || localStorage.getItem('userAccount');
+        if (noraUserStr) {
+          try {
+            const noraUser = JSON.parse(noraUserStr);
+            email = noraUser.username || noraUser.email || email;
+            displayName = noraUser.name || displayName;
+            
+            const noraRole = (noraUser.role || '').toUpperCase();
+            if (noraRole.includes('ADMIN') || noraRole.includes('SUPER')) {
+              role = 'admin';
+            } else if (noraRole.includes('GESTOR') || noraRole.includes('MANAGER')) {
+              role = 'manager';
+            } else if (noraRole.includes('CLIENT')) {
+              role = 'client';
+            } else {
+              role = 'technician';
+            }
+            
+            assignedPosition = noraUser.cargo || noraUser.especialidad || assignedPosition;
+            if (noraUser.especialidad) {
+              assignedTeam = noraUser.especialidad;
+            }
+          } catch (e) {
+            console.error("Error parsing noraUser", e);
+          }
+        }
 
         // Set immediate admin fallback for explicit admin email to prevent security rules mismatch
-        if (fbUser.email && fbUser.email.toLowerCase() === 'imagina3ddesign@gmail.com') {
+        if (email && email.toLowerCase() === 'imagina3ddesign@gmail.com') {
           role = 'admin';
           assignedPosition = 'ADMINISTRADOR DE SISTEMA';
         }
@@ -45,8 +75,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         // 1. Immediately unblock the loading state and display screen with fallback user info
         const immediateUser: User = {
           id: fbUser.uid,
-          name: fbUser.displayName || 'BIM User',
-          email: fbUser.email || '',
+          name: displayName,
+          email: email,
           role: role,
           position: assignedPosition,
           team: assignedTeam
@@ -60,17 +90,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           let teamGroup = assignedTeam;
           let teamRole = role;
 
-          try {
-            const teamQuery = query(collection(db, 'team'), where('email', '==', fbUser.email));
-            const teamSnap = await getDocs(teamQuery);
-            if (!teamSnap.empty) {
-              const teamData = teamSnap.docs[0].data();
-              teamPosition = teamData.position || teamPosition;
-              teamGroup = teamData.team || '';
-              teamRole = teamData.role || teamRole;
+          if (email) {
+            try {
+              const teamQuery = query(collection(db, 'team'), where('email', '==', email));
+              const teamSnap = await getDocs(teamQuery);
+              if (!teamSnap.empty) {
+                const teamData = teamSnap.docs[0].data();
+                teamPosition = teamData.position || teamPosition;
+                teamGroup = teamData.team || '';
+                teamRole = teamData.role || teamRole;
+              }
+            } catch (teamErr) {
+              console.warn("Could not fetch team info, using default/email fallback", teamErr);
             }
-          } catch (teamErr) {
-            console.warn("Could not fetch team info, using default/email fallback", teamErr);
           }
 
           const userDocRef = doc(db, 'users', fbUser.uid);
@@ -87,9 +119,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           
           if (userData) {
             // Update position, team or role if it changed
-            if (userData.position !== teamPosition || userData.team !== teamGroup || userData.role !== teamRole) {
+            if (userData.position !== teamPosition || userData.team !== teamGroup || userData.role !== teamRole || userData.email !== email || userData.name !== displayName) {
               const updatedUser = { 
                 ...userData, 
+                name: displayName,
+                email: email,
                 position: teamPosition, 
                 team: teamGroup,
                 role: teamRole
@@ -107,8 +141,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             // New user registration
             const newUser: User = {
               id: fbUser.uid,
-              name: fbUser.displayName || 'BIM User',
-              email: fbUser.email || '',
+              name: displayName,
+              email: email,
               role: teamRole,
               position: teamPosition,
               team: teamGroup
@@ -124,6 +158,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           console.error("Auth sync background error:", err);
         }
       } else {
+        const noraUserStr = sessionStorage.getItem('userAccount') || localStorage.getItem('userAccount');
+        if (noraUserStr) {
+          try {
+            await signInAnonymously(auth);
+            return;
+          } catch (err) {
+            console.error("Silent anonymous sign in failed:", err);
+          }
+        } else {
+          // If they are not logged in to Nora portal, redirect to login
+          window.location.href = '../inse.html';
+        }
         setUser(null);
         setGoogleAccessToken(null);
         localStorage.removeItem('google_drive_token');

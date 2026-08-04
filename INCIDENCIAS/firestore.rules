@@ -16,7 +16,7 @@ service cloud.firestore {
     // RBAC Helpers
     function getUserData(uid) { return get(/databases/$(database)/documents/users/$(uid)).data; }
     function isAdmin() { 
-      let isExplicitAdmin = isSignedIn() && request.auth.token.email.lower() == 'imagina3ddesign@gmail.com';
+      let isExplicitAdmin = isSignedIn() && request.auth.token.keys().hasAll(['email']) && request.auth.token.email.lower() == 'imagina3ddesign@gmail.com';
       let hasAdminDoc = isSignedIn() && exists(/databases/$(database)/documents/users/$(request.auth.uid)) && (
           getUserData(request.auth.uid).get('role', 'user') == 'admin' ||
           getUserData(request.auth.uid).get('team', '').upper().matches('.*BIM.*') ||
@@ -26,14 +26,15 @@ service cloud.firestore {
     }
 
     function isAuthorizedToUpdateIssue(issue) {
+      let userEmail = (isSignedIn() && exists(/databases/$(database)/documents/users/$(request.auth.uid))) ? getUserData(request.auth.uid).get('email', '').lower() : '';
       return isAdmin() ||
              issue.creatorId == request.auth.uid ||
-             issue.get('assignedEmail', '').lower() == request.auth.token.get('email', '').lower() ||
+             issue.get('assignedEmail', '').lower() == userEmail ||
              (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
               getUserData(request.auth.uid).get('position', '').upper() == issue.get('assignedPosition', '').upper() &&
               getUserData(request.auth.uid).get('position', '') != '') ||
-             (issue.keys().hasAll(['redirectedTo']) && issue.redirectedTo.get('email', '').lower() == request.auth.token.get('email', '').lower()) ||
-             (issue.keys().hasAll(['executor']) && issue.executor.get('email', '').lower() == request.auth.token.get('email', '').lower());
+             (issue.keys().hasAll(['redirectedTo']) && issue.redirectedTo.get('email', '').lower() == userEmail) ||
+             (issue.keys().hasAll(['executor']) && issue.executor.get('email', '').lower() == userEmail);
     }
     
     // Validation Blueprints
@@ -41,7 +42,7 @@ service cloud.firestore {
       return data.keys().hasAll(['id', 'name', 'email', 'role', 'position'])
         && data.id == request.auth.uid 
         && data.name is string && data.name.size() > 0 && data.name.size() <= 100
-        && data.email == request.auth.token.email
+        && (request.auth.token.keys().hasAll(['email']) ? data.email == request.auth.token.email : true)
         && data.role in ['admin', 'manager', 'technician', 'client']
         && data.position is string && data.position.size() <= 100
         && data.keys().size() >= 5 && data.keys().size() <= 7;
@@ -168,7 +169,7 @@ service cloud.firestore {
         (incoming().status in ['RESUELTA', 'RECHAZADA', 'ACUERDO', 'ANULADA'] && existing().creatorId == request.auth.uid)
       );
       
-      allow delete: if isSignedIn() && (request.auth.token.email.lower() == 'imagina3ddesign@gmail.com' || isAdmin());
+      allow delete: if isSignedIn() && ((request.auth.token.keys().hasAll(['email']) && request.auth.token.email.lower() == 'imagina3ddesign@gmail.com') || isAdmin());
 
       // COMMENTS SUB-COLLECTION
       match /comments/{commentId} {
@@ -209,7 +210,7 @@ service cloud.firestore {
       allow get, list: if isSignedIn();
       allow create: if isSignedIn() && isValidReport(incoming());
       allow update: if isSignedIn() && (existing().creatorId == request.auth.uid || isAdmin());
-      allow delete: if isSignedIn() && (request.auth.token.email.lower() == 'imagina3ddesign@gmail.com' || isAdmin());
+      allow delete: if isSignedIn() && ((request.auth.token.keys().hasAll(['email']) && request.auth.token.email.lower() == 'imagina3ddesign@gmail.com') || isAdmin());
     }
 
     // TEST CONNECTION
