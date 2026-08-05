@@ -158,17 +158,45 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           console.error("Auth sync background error:", err);
         }
       } else {
+        // No Firebase user. Check if logged in via the Nora portal local storage/session storage.
         const noraUserStr = sessionStorage.getItem('userAccount') || localStorage.getItem('userAccount');
         if (noraUserStr) {
           try {
-            await signInAnonymously(auth);
+            const noraUser = JSON.parse(noraUserStr);
+            const email = noraUser.username || noraUser.email || '';
+            const displayName = noraUser.name || 'BIM User';
+            let role: "admin" | "manager" | "technician" | "client" = 'technician';
+            const noraRole = (noraUser.role || '').toUpperCase();
+            if (noraRole.includes('ADMIN') || noraRole.includes('SUPER')) {
+              role = 'admin';
+            } else if (noraRole.includes('GESTOR') || noraRole.includes('MANAGER')) {
+              role = 'manager';
+            } else if (noraRole.includes('CLIENT')) {
+              role = 'client';
+            } else {
+              role = 'technician';
+            }
+            const assignedPosition = noraUser.cargo || noraUser.especialidad || 'Usuario BIM';
+            const assignedTeam = noraUser.especialidad || '';
+
+            const localUser: User = {
+              id: noraUser.id || email || 'local_user',
+              name: displayName,
+              email: email,
+              role: role,
+              position: assignedPosition,
+              team: assignedTeam
+            };
+            setUser(localUser);
+            setLoading(false);
             return;
-          } catch (err) {
-            console.error("Silent anonymous sign in failed:", err);
+          } catch (e) {
+            console.error("Error setting local user from session:", e);
           }
         } else {
           // If they are not logged in to Nora portal, redirect to login
           window.location.href = '../inse.html';
+          return;
         }
         setUser(null);
         setGoogleAccessToken(null);

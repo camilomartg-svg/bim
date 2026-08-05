@@ -6,12 +6,8 @@ import firebaseConfig from '../../firebase-applet-config.json';
 
 const app = initializeApp(firebaseConfig);
 
-// Extract project from URL if available, else fallback to database ID in config
-const urlParams = new URLSearchParams(window.location.search);
-const urlProject = urlParams.get('project');
-const databaseId = urlProject || (firebaseConfig as any).firestoreDatabaseId || 'ai-studio-235d0d5f-8239-4595-8dc2-ee264a9977f9';
-
-export const db = getFirestore(app, databaseId);
+// Use the default Firestore database
+export const db = getFirestore(app);
 
 // Connect in standard live online mode (persistence is disabled to avoid iframe sandbox offline locks)
 

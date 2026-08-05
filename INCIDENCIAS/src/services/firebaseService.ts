@@ -25,9 +25,30 @@ import {
   QualityReport
 } from '../types';
 
+// Helper to get active project and company context
+const getProjectAndCompany = () => {
+  const urlParams = new URLSearchParams(window.location.search);
+  const projectId = urlParams.get('project') || 'default';
+  
+  const userAccountStr = sessionStorage.getItem('userAccount') || localStorage.getItem('userAccount');
+  let companyId = 'default';
+  if (userAccountStr) {
+    try {
+      companyId = JSON.parse(userAccountStr).empresa || 'default';
+    } catch (e) {}
+  }
+  return { projectId, companyId };
+};
+
 // Reports
 export const subscribeToReports = (callback: (reports: SiteReport[]) => void) => {
-  const q = query(collection(db, 'reports'), orderBy('createdAt', 'desc'));
+  const { projectId, companyId } = getProjectAndCompany();
+  const q = query(
+    collection(db, 'reports'),
+    where('projectId', '==', projectId),
+    where('companyId', '==', companyId),
+    orderBy('createdAt', 'desc')
+  );
   return onSnapshot(q, (snapshot) => {
     const reports = snapshot.docs
       .map(doc => ({ id: doc.id, ...doc.data() } as SiteReport))
@@ -39,7 +60,13 @@ export const subscribeToReports = (callback: (reports: SiteReport[]) => void) =>
 };
 
 export const subscribeToQualityReports = (callback: (reports: QualityReport[]) => void) => {
-  const q = query(collection(db, 'reports'), orderBy('createdAt', 'desc'));
+  const { projectId, companyId } = getProjectAndCompany();
+  const q = query(
+    collection(db, 'reports'),
+    where('projectId', '==', projectId),
+    where('companyId', '==', companyId),
+    orderBy('createdAt', 'desc')
+  );
   return onSnapshot(q, (snapshot) => {
     const reports = snapshot.docs
       .map(doc => ({ id: doc.id, ...doc.data() } as QualityReport))
@@ -51,7 +78,13 @@ export const subscribeToQualityReports = (callback: (reports: QualityReport[]) =
 };
 
 export const subscribeToEnvironmentalReports = (callback: (reports: QualityReport[]) => void) => {
-  const q = query(collection(db, 'reports'), orderBy('createdAt', 'desc'));
+  const { projectId, companyId } = getProjectAndCompany();
+  const q = query(
+    collection(db, 'reports'),
+    where('projectId', '==', projectId),
+    where('companyId', '==', companyId),
+    orderBy('createdAt', 'desc')
+  );
   return onSnapshot(q, (snapshot) => {
     const reports = snapshot.docs
       .map(doc => ({ id: doc.id, ...doc.data() } as QualityReport))
@@ -109,6 +142,7 @@ export const syncIssueStatusToParentReport = async (issue: any, newStatus: strin
 
 export const saveReport = async (report: any) => {
   const path = 'reports';
+  const { projectId, companyId } = getProjectAndCompany();
   try {
     let reportId = report.id;
     const isNew = !reportId;
@@ -119,12 +153,16 @@ export const saveReport = async (report: any) => {
       await setDoc(docRef, {
         ...report,
         id: reportId,
+        projectId,
+        companyId,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString()
       });
     } else {
       await setDoc(doc(db, path, reportId), {
         ...report,
+        projectId,
+        companyId,
         updatedAt: new Date().toISOString()
       }, { merge: true });
     }
@@ -137,6 +175,8 @@ export const saveReport = async (report: any) => {
           const issueId = `issue_q_${block.id}`;
           const issueData: any = {
             id: issueId,
+            projectId,
+            companyId,
             code: block.code?.includes('-') ? block.code : `CAL-${report.code.replace('INF-CAL-', '')}-${block.code || '0000'}`,
             title: block.title ? block.title : `HALLAZGO DE CALIDAD: ${block.type || 'S/N'} (${block.source || 'S/S'})`,
             type: block.type || 'No Conformidad',
@@ -189,6 +229,8 @@ export const saveReport = async (report: any) => {
           const issueId = `issue_e_${block.id}`;
           const issueData: any = {
             id: issueId,
+            projectId,
+            companyId,
             code: block.code?.includes('-') ? block.code : `AMB-${report.code.replace('INF-AMB-', '')}-${block.code || '0000'}`,
             title: block.title ? block.title : `HALLAZGO AMBIENTAL: ${block.type || 'S/N'} (${block.source || 'S/S'})`,
             type: block.type || 'No Conformidad Ambiental',
@@ -239,11 +281,15 @@ export const saveReport = async (report: any) => {
   }
 };
 
-
-
 // Issues
 export const subscribeToIssues = (callback: (issues: Issue[]) => void) => {
-  const q = query(collection(db, 'issues'), orderBy('createdAt', 'desc'));
+  const { projectId, companyId } = getProjectAndCompany();
+  const q = query(
+    collection(db, 'issues'),
+    where('projectId', '==', projectId),
+    where('companyId', '==', companyId),
+    orderBy('createdAt', 'desc')
+  );
   return onSnapshot(q, (snapshot) => {
     const issues = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Issue));
     callback(issues);
@@ -254,16 +300,21 @@ export const subscribeToIssues = (callback: (issues: Issue[]) => void) => {
 
 export const saveIssue = async (issue: Omit<Issue, 'id'> & { id?: string }) => {
   const path = 'issues';
+  const { projectId, companyId } = getProjectAndCompany();
   try {
     if (issue.id) {
       await setDoc(doc(db, path, issue.id), {
         ...issue,
+        projectId,
+        companyId,
         updatedAt: new Date().toISOString()
       }, { merge: true });
       return issue.id;
     } else {
       const docRef = await addDoc(collection(db, path), {
         ...issue,
+        projectId,
+        companyId,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString()
       });
@@ -301,7 +352,13 @@ export const deleteIssue = async (id: string) => {
 
 // Team
 export const subscribeToTeam = (callback: (team: any[]) => void) => {
-  return onSnapshot(collection(db, 'team'), (snapshot) => {
+  const { projectId, companyId } = getProjectAndCompany();
+  const q = query(
+    collection(db, 'team'),
+    where('projectId', '==', projectId),
+    where('companyId', '==', companyId)
+  );
+  return onSnapshot(q, (snapshot) => {
     const team = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
     callback(team);
   }, (error) => {
@@ -311,11 +368,20 @@ export const subscribeToTeam = (callback: (team: any[]) => void) => {
 
 export const saveTeamMember = async (member: any) => {
   const path = 'team';
+  const { projectId, companyId } = getProjectAndCompany();
   try {
     if (member.id) {
-      await setDoc(doc(db, path, member.id), member);
+      await setDoc(doc(db, path, member.id), {
+        ...member,
+        projectId,
+        companyId
+      }, { merge: true });
     } else {
-      await addDoc(collection(db, path), member);
+      await addDoc(collection(db, path), {
+        ...member,
+        projectId,
+        companyId
+      });
     }
   } catch (error) {
     handleFirestoreError(error, OperationType.WRITE, path);
@@ -332,8 +398,10 @@ export const deleteTeamMember = async (id: string) => {
 
 // Config
 export const getProjectConfig = async () => {
+  const { projectId, companyId } = getProjectAndCompany();
+  const configDocId = `${companyId}_${projectId}`;
   try {
-    const docSnap = await getDoc(doc(db, 'config', 'project'));
+    const docSnap = await getDoc(doc(db, 'config', configDocId));
     if (docSnap.exists()) {
       const data = docSnap.data();
       try {
@@ -354,26 +422,38 @@ export const getProjectConfig = async () => {
     } catch (cacheErr) {
       console.error("Local project config storage fallbacks failed:", cacheErr);
     }
-    return null; // Return null instead of throwing to avoid crashing pages
+    return null;
   }
 };
 
 export const saveProjectConfig = async (config: any) => {
+  const { projectId, companyId } = getProjectAndCompany();
+  const configDocId = `${companyId}_${projectId}`;
   try {
-    await setDoc(doc(db, 'config', 'project'), config);
+    await setDoc(doc(db, 'config', configDocId), {
+      ...config,
+      projectId,
+      companyId
+    }, { merge: true });
     try {
       localStorage.setItem('cached_project_config', JSON.stringify(config));
     } catch (cacheStoreErr) {
       console.warn("Could not write project config to local cache on save", cacheStoreErr);
     }
   } catch (error) {
-    handleFirestoreError(error, OperationType.WRITE, 'config/project');
+    handleFirestoreError(error, OperationType.WRITE, 'config/' + configDocId);
   }
 };
 
 // Structural Units
 export const subscribeToUnits = (callback: (units: StructuralUnit[]) => void) => {
-  return onSnapshot(collection(db, 'units'), (snapshot) => {
+  const { projectId, companyId } = getProjectAndCompany();
+  const q = query(
+    collection(db, 'units'),
+    where('projectId', '==', projectId),
+    where('companyId', '==', companyId)
+  );
+  return onSnapshot(q, (snapshot) => {
     const units = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as StructuralUnit));
     callback(units);
   }, (error) => {
@@ -383,12 +463,21 @@ export const subscribeToUnits = (callback: (units: StructuralUnit[]) => void) =>
 
 export const saveUnit = async (unit: Omit<StructuralUnit, 'id'> & { id?: string }) => {
   const path = 'units';
+  const { projectId, companyId } = getProjectAndCompany();
   try {
     if (unit.id) {
       const { id, ...rest } = unit;
-      await setDoc(doc(db, path, id), rest);
+      await setDoc(doc(db, path, id), {
+        ...rest,
+        projectId,
+        companyId
+      }, { merge: true });
     } else {
-      await addDoc(collection(db, path), unit);
+      await addDoc(collection(db, path), {
+        ...unit,
+        projectId,
+        companyId
+      });
     }
   } catch (error) {
     handleFirestoreError(error, OperationType.WRITE, path);
