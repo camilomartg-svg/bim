@@ -57,7 +57,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
               role = 'technician';
             }
             
-            assignedPosition = noraUser.cargo || noraUser.especialidad || assignedPosition;
+            const cargo = noraUser.cargo || noraUser.especialidad || 'Colaborador';
+            assignedPosition = `${cargo} (${displayName})`;
             if (noraUser.especialidad) {
               assignedTeam = noraUser.especialidad;
             }
@@ -176,7 +177,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             } else {
               role = 'technician';
             }
-            const assignedPosition = noraUser.cargo || noraUser.especialidad || 'Usuario BIM';
+            const cargo = noraUser.cargo || noraUser.especialidad || 'Colaborador';
+            const assignedPosition = `${cargo} (${displayName})`;
             const assignedTeam = noraUser.especialidad || '';
 
             const localUser: User = {

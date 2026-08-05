@@ -350,20 +350,159 @@ export const deleteIssue = async (id: string) => {
   }
 };
 
+// Platform integration helpers
+interface PlatformConfig {
+  responsibleCompanies: string[];
+  teams: string[];
+}
+
+export const getPlatformConfig = async (companyId: string): Promise<PlatformConfig | null> => {
+  try {
+    const empresasRes = await fetch(`../empresas.json?t=${Date.now()}`);
+    if (!empresasRes.ok) return null;
+    const empresas = await empresasRes.json();
+    
+    const company = empresas.find((e: any) => e && !e.deleted && (e.id === companyId || e.id?.toLowerCase() === companyId?.toLowerCase() || e.name?.toLowerCase() === companyId?.toLowerCase()));
+    if (!company) return null;
+    
+    const members = company.members || [];
+    const companiesSet = new Set<string>();
+    const teamsSet = new Set<string>();
+    
+    // Default fallback teams
+    teamsSet.add('AMBIENTAL');
+    teamsSet.add('ARQUITECTURA');
+    teamsSet.add('BIM');
+    teamsSet.add('ESTRUCTURA');
+    teamsSet.add('INSTALACIONES');
+    
+    members.forEach((m: any) => {
+      if (m.empresaUsuario && m.empresaUsuario.trim()) {
+        companiesSet.add(m.empresaUsuario.trim());
+      }
+      if (m.especialidad && m.especialidad.trim()) {
+        teamsSet.add(m.especialidad.trim().toUpperCase());
+      }
+    });
+    
+    return {
+      responsibleCompanies: Array.from(companiesSet).sort(),
+      teams: Array.from(teamsSet).sort()
+    };
+  } catch (error) {
+    console.warn("Could not load platform configuration:", error);
+    return null;
+  }
+};
+
+export const getPlatformTeam = async (companyId: string, projectId: string): Promise<any[] | null> => {
+  try {
+    // 1. Fetch empresas.json
+    const empresasRes = await fetch(`../empresas.json?t=${Date.now()}`);
+    if (!empresasRes.ok) {
+      throw new Error(`Failed to fetch empresas.json: ${empresasRes.statusText}`);
+    }
+    const empresas = await empresasRes.json();
+    
+    const company = empresas.find((e: any) => e && !e.deleted && (e.id === companyId || e.id?.toLowerCase() === companyId?.toLowerCase() || e.name?.toLowerCase() === companyId?.toLowerCase()));
+    if (!company) {
+      console.warn(`Company ${companyId} not found in empresas.json`);
+      return null;
+    }
+    
+    const companyMembers = company.members || [];
+    
+    // 2. Fetch config-<companyId>.json to see project members
+    let projectMembersEmails: string[] = [];
+    try {
+      const configRes = await fetch(`../config-${companyId}.json?t=${Date.now()}`);
+      if (configRes.ok) {
+        const configData = await configRes.json();
+        const project = configData.projects?.find((p: any) => p.slug === projectId || p.name === projectId);
+        if (project && project.members) {
+          projectMembersEmails = project.members.map((email: string) => email.toLowerCase().trim());
+        }
+      }
+    } catch (e) {
+      console.warn(`Could not load config-${companyId}.json, defaulting to all company members`, e);
+    }
+    
+    // 3. Filter company members
+    let filteredMembers = companyMembers;
+    if (projectMembersEmails.length > 0) {
+      filteredMembers = companyMembers.filter((m: any) => m.email && projectMembersEmails.includes(m.email.toLowerCase().trim()));
+    }
+    
+    // 4. Map to TeamMember format
+    return filteredMembers.map((m: any) => {
+      const displayName = m.name || m.email || 'Colaborador';
+      const cargo = m.cargo || m.especialidad || m.role || 'Colaborador';
+      const position = `${cargo} (${displayName})`;
+      const teamGroup = (m.especialidad || m.empresaUsuario || 'GENERAL').toUpperCase().trim();
+
+      return {
+        id: m.email ? m.email.toLowerCase().trim() : Math.random().toString(36).substring(2, 9),
+        name: displayName,
+        email: m.email || '',
+        position: position,
+        team: teamGroup
+      };
+    });
+  } catch (error) {
+    console.warn("Error loading platform team: ", error);
+    return null;
+  }
+};
+
 // Team
 export const subscribeToTeam = (callback: (team: any[]) => void) => {
   const { projectId, companyId } = getProjectAndCompany();
-  const q = query(
-    collection(db, 'team'),
-    where('projectId', '==', projectId),
-    where('companyId', '==', companyId)
-  );
-  return onSnapshot(q, (snapshot) => {
-    const team = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-    callback(team);
-  }, (error) => {
-    handleFirestoreError(error, OperationType.GET, 'team');
+  
+  let active = true;
+  let storedUnsubscribe: (() => void) | null = null;
+  
+  getPlatformTeam(companyId, projectId).then((platformTeam) => {
+    if (!active) return;
+    if (platformTeam && platformTeam.length > 0) {
+      callback(platformTeam);
+    } else {
+      // Fallback: use Firestore
+      const q = query(
+        collection(db, 'team'),
+        where('projectId', '==', projectId),
+        where('companyId', '==', companyId)
+      );
+      storedUnsubscribe = onSnapshot(q, (snapshot) => {
+        if (!active) return;
+        const team = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        callback(team);
+      }, (error) => {
+        handleFirestoreError(error, OperationType.GET, 'team');
+      });
+    }
+  }).catch((err) => {
+    console.warn("Error loading platform team, falling back to Firestore team collection", err);
+    if (!active) return;
+    const q = query(
+      collection(db, 'team'),
+      where('projectId', '==', projectId),
+      where('companyId', '==', companyId)
+    );
+    storedUnsubscribe = onSnapshot(q, (snapshot) => {
+      if (!active) return;
+      const team = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      callback(team);
+    }, (error) => {
+      handleFirestoreError(error, OperationType.GET, 'team');
+    });
   });
+
+  return () => {
+    active = false;
+    if (storedUnsubscribe) {
+      storedUnsubscribe();
+    }
+  };
 };
 
 export const saveTeamMember = async (member: any) => {
@@ -400,30 +539,50 @@ export const deleteTeamMember = async (id: string) => {
 export const getProjectConfig = async () => {
   const { projectId, companyId } = getProjectAndCompany();
   const configDocId = `${companyId}_${projectId}`;
+  let fbConfig: any = null;
+  
   try {
     const docSnap = await getDoc(doc(db, 'config', configDocId));
     if (docSnap.exists()) {
-      const data = docSnap.data();
-      try {
-        localStorage.setItem('cached_project_config', JSON.stringify(data));
-      } catch (cacheStoreErr) {
-        console.warn("Could not save project config to local cache", cacheStoreErr);
-      }
-      return data;
+      fbConfig = docSnap.data();
     }
-    return null;
   } catch (error) {
     console.warn("Firestore error reading config/project. Attempting local storage fallback:", error);
     try {
       const cached = localStorage.getItem('cached_project_config');
       if (cached) {
-        return JSON.parse(cached);
+        fbConfig = JSON.parse(cached);
       }
     } catch (cacheErr) {
       console.error("Local project config storage fallbacks failed:", cacheErr);
     }
-    return null;
   }
+
+  // Load platform config to merge companies and teams
+  const platformConfig = await getPlatformConfig(companyId);
+  if (platformConfig) {
+    if (!fbConfig) {
+      fbConfig = {
+        impactOptions: [],
+        issueTypes: [],
+        economicActivities: [],
+        dangers: [],
+        dangerDescriptions: {}
+      };
+    }
+    fbConfig.responsibleCompanies = platformConfig.responsibleCompanies;
+    fbConfig.teams = platformConfig.teams;
+  }
+
+  if (fbConfig) {
+    try {
+      localStorage.setItem('cached_project_config', JSON.stringify(fbConfig));
+    } catch (cacheStoreErr) {
+      console.warn("Could not save merged project config to local cache", cacheStoreErr);
+    }
+  }
+  
+  return fbConfig;
 };
 
 export const saveProjectConfig = async (config: any) => {

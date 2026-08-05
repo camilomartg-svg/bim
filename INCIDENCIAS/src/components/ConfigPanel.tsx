@@ -32,7 +32,8 @@ import {
   ShieldAlert,
   ClipboardList,
   Check,
-  Leaf
+  Leaf,
+  Info
 } from 'lucide-react';
 import { motion, AnimatePresence, Reorder } from 'motion/react';
 import { cn } from '../lib/utils';
@@ -1761,7 +1762,22 @@ const addItem = (type: 'impact' | 'type' | 'team' | 'activity' | 'danger' | 'com
                 exit={{ opacity: 0, y: -10 }}
                 className="bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800/50 p-10 rounded-[2.5rem] shadow-xl shadow-slate-200/50 dark:shadow-black/20 font-sans"
               >
-                {/* Teams List Management (Restore) */}
+                {/* Sincronización Notice Banner */}
+                {selectedConfigKey === 'GLOBAL' && (
+                  <div className="mb-8 p-6 bg-indigo-50 dark:bg-indigo-950/20 border border-indigo-100 dark:border-indigo-900/50 rounded-2xl flex items-start gap-4">
+                    <div className="text-indigo-500 mt-0.5">
+                      <Info className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <h4 className="text-xs font-bold text-indigo-900 dark:text-indigo-200 uppercase tracking-wider mb-1">Sincronización Activa</h4>
+                      <p className="text-[10px] text-indigo-700 dark:text-indigo-300 leading-relaxed font-medium">
+                        Los miembros del equipo, cargos y grupos de trabajo (especialidades/empresas) se gestionan de forma centralizada desde el portal de Súper Administración de Nora y se sincronizan automáticamente.
+                      </p>
+                    </div>
+                  </div>
+                )}
+
+                {/* Teams List Management (Restore as read-only) */}
                 {selectedConfigKey === 'GLOBAL' && (
                    <div className="mb-12 bg-slate-50 dark:bg-slate-950/30 border border-slate-100 dark:border-slate-800 p-8 rounded-[2rem]">
                     <div className="flex items-center justify-between mb-8">
@@ -1769,25 +1785,15 @@ const addItem = (type: 'impact' | 'type' | 'team' | 'activity' | 'danger' | 'com
                         <div className="w-10 h-10 rounded-2xl bg-indigo-500 flex items-center justify-center text-white shadow-lg shadow-indigo-500/10">
                           <Users className="w-5 h-5" />
                         </div>
-                        <h3 className="text-[10px] font-black text-slate-400 dark:text-slate-600 uppercase tracking-[0.3em]">Gestión de Equipos (Grupos)</h3>
+                        <h3 className="text-[10px] font-black text-slate-400 dark:text-slate-600 uppercase tracking-[0.3em]">Grupos de Trabajo Sincronizados</h3>
                       </div>
-                      <button onClick={() => addItem('team_name')} className="px-5 py-2.5 bg-slate-900 dark:bg-white text-white dark:text-slate-900 rounded-xl text-[9px] font-black uppercase tracking-widest flex items-center gap-2 hover:scale-105 transition-all shadow-lg">
-                        <Plus className="w-3.5 h-3.5" /> Agregar Equipo
-                      </button>
                     </div>
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                      {teamsList.map((tm, idx) => (
-                        <div key={tm.id} className="flex items-center gap-3 bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-100 dark:border-slate-800 group shadow-sm transition-all focus-within:ring-2 focus-within:ring-indigo-500/50">
-                          <input 
-                            type="text" 
-                            value={tm.name} 
-                            onChange={(e) => updateItem('team_name', tm.id, e.target.value.toUpperCase())}
-                            className="flex-1 bg-transparent border-none text-[10px] font-black text-slate-900 dark:text-white uppercase tracking-tight focus:ring-0 outline-none"
-                            placeholder="NOMBRE DEL EQUIPO..."
-                          />
-                          <button onClick={() => removeItem('team_name', tm.id)} className="text-slate-300 dark:text-slate-800 hover:text-red-500 transition-all opacity-0 group-hover:opacity-100">
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
+                      {teamsList.map((tm) => (
+                        <div key={tm.id} className="flex items-center gap-3 bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-100 dark:border-slate-800 shadow-sm">
+                          <span className="text-[10px] font-black text-slate-900 dark:text-white uppercase tracking-tight px-2 py-1">
+                            {tm.name}
+                          </span>
                         </div>
                       ))}
                     </div>
@@ -1810,14 +1816,7 @@ const addItem = (type: 'impact' | 'type' | 'team' | 'activity' | 'danger' | 'com
                   </div>
                   
                   <div className="flex items-center gap-4">
-                    {selectedConfigKey === 'GLOBAL' && (
-                      <button 
-                        onClick={() => addItem('team')} 
-                        className="px-5 py-2.5 bg-slate-900 dark:bg-white text-white dark:text-slate-900 rounded-xl text-[9px] font-black uppercase tracking-widest flex items-center gap-2 hover:scale-105 transition-all shadow-lg"
-                      >
-                        <Plus className="w-3.5 h-3.5" /> Agregar Miembro
-                      </button>
-                    )}
+                    {/* Manual add button hidden since it is synced from platform */}
                   </div>
                 </div>
 
@@ -2098,7 +2097,7 @@ const addItem = (type: 'impact' | 'type' | 'team' | 'activity' | 'danger' | 'com
                         <th className="text-[8px] font-black text-slate-400 uppercase tracking-[0.2em] text-left px-6 py-2 w-[25%]">Nombre</th>
                         <th className="text-[8px] font-black text-slate-400 uppercase tracking-[0.2em] text-left px-6 py-2 w-[20%]">Email de Usuario</th>
                         <th className="text-[8px] font-black text-slate-400 uppercase tracking-[0.2em] text-left px-6 py-2 w-[20%]">Equipo</th>
-                        <th className="w-12"></th>
+                        {selectedConfigKey !== 'GLOBAL' && <th className="w-12"></th>}
                       </tr>
                     </thead>
                     <tbody>
@@ -2132,94 +2131,21 @@ const addItem = (type: 'impact' | 'type' | 'team' | 'activity' | 'danger' | 'com
                               </td>
                             )}
                             <td className="px-4 py-2">
-                              {selectedConfigKey === 'GLOBAL' ? (
-                                <input 
-                                  type="text" 
-                                  value={member.position} 
-                                  onChange={(e) => updateItem('team', member.id, { position: e.target.value })}
-                                  className="w-full bg-transparent border-none text-slate-900 dark:text-white text-[10px] font-black uppercase tracking-tight focus:ring-0 outline-none"
-                                  placeholder="CARGO"
-                                />
-                              ) : (
-                                <span className="text-[10px] font-black text-slate-900 dark:text-white uppercase tracking-tight px-3">{member.position}</span>
-                              )}
+                              <span className="text-[10px] font-black text-slate-900 dark:text-white uppercase tracking-tight px-3">{member.position}</span>
                             </td>
                             <td className="px-4 py-2">
-                              {selectedConfigKey === 'GLOBAL' ? (
-                                <input 
-                                  type="text" 
-                                  value={member.name} 
-                                  onChange={(e) => updateItem('team', member.id, { name: e.target.value })}
-                                  className="w-full bg-transparent border-none text-slate-900 dark:text-white text-[10px] font-bold focus:ring-0 outline-none"
-                                  placeholder="NOMBRE"
-                                />
-                              ) : (
-                                <span className="text-[10px] font-medium text-slate-700 dark:text-slate-300 px-3">{member.name}</span>
-                              )}
+                              <span className="text-[10px] font-medium text-slate-700 dark:text-slate-300 px-3">{member.name}</span>
                             </td>
                             <td className="px-4 py-2">
-                              {selectedConfigKey === 'GLOBAL' ? (
-                                <input 
-                                  type="email" 
-                                  value={member.email || ''} 
-                                  onChange={(e) => updateItem('team', member.id, { email: e.target.value })}
-                                  className="w-full bg-transparent border-none text-slate-900 dark:text-white text-[10px] font-bold focus:ring-0 outline-none"
-                                  placeholder="EMAIL"
-                                />
-                              ) : (
-                                <span className="text-[10px] font-medium text-slate-500 px-3">{member.email}</span>
-                              )}
+                              <span className="text-[10px] font-medium text-slate-500 px-3">{member.email}</span>
                             </td>
                             <td className="px-4 py-2">
-                              {selectedConfigKey === 'GLOBAL' ? (
-                               <select 
-                                  value={member.team || ''} 
-                                  onChange={(e) => updateItem('team', member.id, { team: e.target.value })}
-                                  className="w-full bg-transparent border-none text-slate-900 dark:text-white text-[9px] font-black uppercase tracking-tight focus:ring-0 outline-none cursor-pointer"
-                                >
-                                  <option value="">SIN EQUIPO</option>
-                                  {[...globalTeams].sort((a,b) => a.localeCompare(b)).map(t => <option key={t} value={t}>{t}</option>)}
-                                </select>
-                              ) : (
-                                <span className="text-[10px] font-black text-indigo-500 uppercase px-3">{member.team || 'SIN EQUIPO'}</span>
-                              )}
+                              <span className="text-[10px] font-black text-indigo-500 uppercase px-3">{member.team || 'SIN EQUIPO'}</span>
                             </td>
-                            <td className="px-4 py-2 text-center">
-                              {selectedConfigKey === 'GLOBAL' && (
-                                <div className="flex justify-center">
-                                  {confirmDeleteId === member.id ? (
-                                    <div className="flex items-center gap-1 bg-red-500/10 p-1 rounded-lg animate-in fade-in zoom-in duration-200">
-                                      <button 
-                                        type="button"
-                                        onClick={() => setConfirmDeleteId(null)}
-                                        className="px-2 py-1 text-[8px] font-black uppercase text-slate-500 hover:text-slate-700 transition-all border-r border-slate-200 dark:border-slate-800"
-                                      >
-                                        NO
-                                      </button>
-                                      <button 
-                                        type="button"
-                                        onClick={async () => {
-                                          await removeItem('team', member.id);
-                                          setConfirmDeleteId(null);
-                                        }}
-                                        className="px-2 py-1 text-[8px] font-black uppercase text-red-500 hover:text-red-700 transition-all"
-                                      >
-                                        BORRAR
-                                      </button>
-                                    </div>
-                                  ) : (
-                                    <button 
-                                      type="button"
-                                      onClick={() => setConfirmDeleteId(member.id)} 
-                                      className="text-slate-400 dark:text-slate-700 hover:text-red-500 transition-all p-2 rounded-lg hover:bg-red-500/10"
-                                      title="Eliminar usuario"
-                                    >
-                                      <Trash2 className="w-4 h-4" />
-                                    </button>
-                                  )}
-                                </div>
-                              )}
-                            </td>
+                            {selectedConfigKey !== 'GLOBAL' && (
+                              <td className="px-4 py-2 text-center">
+                              </td>
+                            )}
                           </tr>
                         );
                       })}
