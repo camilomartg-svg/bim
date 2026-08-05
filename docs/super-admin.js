@@ -1,4 +1,4 @@
-﻿document.addEventListener('DOMContentLoaded', async () => {
+document.addEventListener('DOMContentLoaded', async () => {
   let userRole = 'INVITADO';
   let userEmail = '';
   try {
@@ -161,6 +161,14 @@
                              .replace(/[^a-z0-9]/g, "")
                              .trim();
                };
+               // Map Google Sheet users by lowercased email for quick lookup
+               const gUsersMap = new Map();
+               gUsers.forEach(gu => {
+                   if (gu.email) {
+                       const emailClean = gu.email.toLowerCase().trim();
+                       gUsersMap.set(emailClean, gu);
+                   }
+               });
 
                empresas.forEach(emp => {
                    if (!emp.members) emp.members = [];
@@ -172,7 +180,7 @@
                             const empRazon = cleanText(emp.razonSocial);
                             
                             const isMatch = (guEmp && empName && (guEmp === empName || empName.includes(guEmp) || guEmp.includes(empName))) ||
-                                            (guEmp && empRazon && (guEmp === empRazon || empRazon.includes(guEmp) || guEmp.includes(empRazon)));
+                                            (guEmp && empRazon && (guEmp === empRazon || empRazon.includes(guEmp) || empRazon.includes(empRazon)));
                             
                             if (isMatch) {
                                 const email = gu.email ? gu.email.toLowerCase().trim() : '';
@@ -201,6 +209,42 @@
                                 }
                             }
                         }
+                    });
+
+                    // Reconciliación estricta para esta empresa:
+                    // 1. Eliminar miembros que pertenecen a otra empresa en Google Sheets, o que fueron eliminados de Google Sheets
+                    emp.members = emp.members.filter(m => {
+                        if (!m.email || m.email.trim() === '') return true; // Mantener usuarios locales sin email (por ejemplo, manuales)
+                        const emailClean = m.email.toLowerCase().trim();
+                        const gu = gUsersMap.get(emailClean);
+                        if (gu) {
+                            if (gu.empresa) {
+                                const guEmp = cleanText(gu.empresa);
+                                const empName = cleanText(emp.name);
+                                const empRazon = cleanText(emp.razonSocial);
+                                const isMatch = (guEmp && empName && (guEmp === empName || empName.includes(guEmp) || guEmp.includes(empName))) ||
+                                                 (guEmp && empRazon && (guEmp === empRazon || empRazon.includes(guEmp) || empRazon.includes(empRazon)));
+                                if (!isMatch) {
+                                    // El usuario ahora pertenece a una empresa diferente en Google Sheets
+                                    return false;
+                                }
+                            }
+                        } else {
+                            // Si el correo existía pero ya no está registrado en Google Sheets, se asume que fue eliminado
+                            return false;
+                        }
+                        return true;
+                    });
+
+                    // 2. Eliminar del arreglo de administradores de la empresa si ya no tienen el rol de administrador en Google Sheets
+                    emp.admins = emp.admins.filter(adminEmail => {
+                        if (!adminEmail) return false;
+                        const emailClean = adminEmail.toLowerCase().trim();
+                        const gu = gUsersMap.get(emailClean);
+                        if (gu) {
+                            return gu.rol === 'ADMINISTRADOR_EMPRESA';
+                        }
+                        return true;
                     });
                });
            }
@@ -461,8 +505,12 @@
         const m = item;
 
         // ── 1. Empresa: standard select dropdown ────────────────────────
+        const companyOptionsList = [...allCompanyNames];
+        if (m.empresaUsuario && m.empresaUsuario.trim() !== '' && !companyOptionsList.includes(m.empresaUsuario.trim())) {
+          companyOptionsList.push(m.empresaUsuario.trim());
+        }
         const empOptions = `<option value="">Seleccione empresa...</option>` + 
-          allCompanyNames.map(n => `<option value="${n}" ${m.empresaUsuario === n ? 'selected' : ''}>${n}</option>`).join('');
+          companyOptionsList.map(n => `<option value="${n}" ${m.empresaUsuario === n ? 'selected' : ''}>${n}</option>`).join('');
 
         // ── 2. Cargo: only visible if member's company = this empresa ───────
         const isInternal = !m.empresaUsuario || m.empresaUsuario.trim() === '' ||
