@@ -660,7 +660,8 @@ document.addEventListener('DOMContentLoaded', async () => {
         let registeredNameStr = '';
         if (m.email && m.email.trim()) {
             const rawEmail = m.email.trim();
-            const gu = (window.globalUsersMap && window.globalUsersMap.get(rawEmail)) 
+            const compositeKey = rawEmail.toLowerCase() + '_' + (emp.name || '').trim().toLowerCase();
+            const gu = (window.globalUsersMap && window.globalUsersMap.get(compositeKey)) || (window.globalUsersMap && window.globalUsersMap.get(rawEmail)) 
                         || (window.globalUsersMap && window.globalUsersMap.get(rawEmail.toLowerCase()));
             if (gu && gu.name) {
                 registeredNameStr = gu.name;
@@ -860,7 +861,8 @@ let contentBase = '';
             const options = emp.members.filter(m => m.email).map(m => {
                 let resolvedName = m.email;
                 const rawEmail = m.email.trim();
-                const gu = (window.globalUsersMap && window.globalUsersMap.get(rawEmail)) 
+                const compositeKey = rawEmail.toLowerCase() + '_' + (emp.name || '').trim().toLowerCase();
+                const gu = (window.globalUsersMap && window.globalUsersMap.get(compositeKey)) || (window.globalUsersMap && window.globalUsersMap.get(rawEmail)) 
                             || (window.globalUsersMap && window.globalUsersMap.get(rawEmail.toLowerCase()));
                 if (gu && gu.name) {
                     resolvedName = gu.name;
@@ -1591,9 +1593,10 @@ let contentBase = '';
       // Find which of those are currently PENDIENTE
       const toApprove = [];
       membersByEmail.forEach((data, email) => {
-        const gu = window.globalUsersMap.get(email);
+        const key = email + '_' + (data.empName || '').toLowerCase().trim();
+        const gu = window.globalUsersMap.get(key) || window.globalUsersMap.get(email);
         if (gu && gu.estado === 'PENDIENTE') {
-          toApprove.push({ email, ...data });
+          toApprove.push({ email, key, ...data });
         }
       });
 
@@ -1608,8 +1611,8 @@ let contentBase = '';
             body: JSON.stringify({ email: u.email, nombre: u.name, rol: rol, empresa: u.empName, estado: 'APROBADO' })
           });
           // Update local map
-          const existing = window.globalUsersMap.get(u.email);
-          if (existing) window.globalUsersMap.set(u.email, { ...existing, estado: 'APROBADO', role: rol, companyName: u.empName });
+          const existing = window.globalUsersMap.get(u.key) || window.globalUsersMap.get(u.email);
+          if (existing) window.globalUsersMap.set(u.key || u.email, { ...existing, estado: 'APROBADO', role: rol, companyName: u.empName });
         }
         renderGlobalUsers();
       }
@@ -1789,7 +1792,9 @@ window.fetchGlobalUsers = async function() {
         scriptUsers.forEach(u => {
             if(!u.email) return;
             const email = u.email.toLowerCase().trim();
-            window.globalUsersMap.set(email, {
+            const company = (u.empresa || '').toLowerCase().trim();
+            const key = email + '_' + company;
+            window.globalUsersMap.set(key, {
                 email: email,
                 name: u.nombre || u.email.split('@')[0],
                 role: u.rol || 'INVITADO',
@@ -1861,10 +1866,10 @@ window.renderGlobalUsers = function(searchTerm = '') {
                 ${u.specialty || '-'}
             </td>
             <td class="py-3 px-6 whitespace-nowrap text-right text-sm font-medium">
-                ${u.estado === 'PENDIENTE' ? `<button onclick='quickApproveUser("${u.email}", "${u.name}")' class="mr-1 inline-flex items-center gap-1 bg-emerald-100 hover:bg-emerald-200 text-emerald-700 px-2.5 py-1 rounded-lg text-xs font-bold transition-colors">
+                ${u.estado === 'PENDIENTE' ? `<button onclick='quickApproveUser("${u.email}", "${u.name}", "${(u.companyName || '').replace(/'/g, "\\'")}")' class="mr-1 inline-flex items-center gap-1 bg-emerald-100 hover:bg-emerald-200 text-emerald-700 px-2.5 py-1 rounded-lg text-xs font-bold transition-colors">
                     <span class="material-symbols-outlined text-[14px]">check_circle</span> Aprobar
                 </button>` : ''}
-                <button onclick='openEditUserModal("${u.email}")' class="text-slate-400 hover:text-blue-600 transition-colors p-1.5 rounded-lg hover:bg-blue-50">
+                <button onclick='openEditUserModal("${u.email}", "${(u.companyName || '').replace(/'/g, "\\'")}")' class="text-slate-400 hover:text-blue-600 transition-colors p-1.5 rounded-lg hover:bg-blue-50">
                     <span class="material-symbols-outlined text-[20px]">edit</span>
                 </button>
             </td>
@@ -1883,8 +1888,9 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 });
 
-window.openEditUserModal = function(email) {
+window.openEditUserModal = function(email, companyName = '') {
     window.currentGlobalUserEmail = email;
+    window.currentGlobalUserCompany = companyName; // Store company name for updating the correct map key
     const modal = document.getElementById('modal-global-user');
     const title = document.getElementById('modal-gu-title');
     
@@ -1896,7 +1902,8 @@ window.openEditUserModal = function(email) {
     });
 
     if(email) {
-        const u = window.globalUsersMap.get(email);
+        const key = email + '_' + companyName.toLowerCase().trim();
+        const u = window.globalUsersMap.get(key) || window.globalUsersMap.get(email);
         title.textContent = 'Editar Usuario';
         document.getElementById('gu-email').value = u.email;
         document.getElementById('gu-email').disabled = true;
@@ -1971,8 +1978,14 @@ window.saveGlobalUser = async function() {
             body: JSON.stringify(payload)
         });
 
+        // Delete old key if it was composite and has changed
+        if (window.currentGlobalUserCompany && window.currentGlobalUserCompany !== companyName) {
+            const oldKey = email + '_' + window.currentGlobalUserCompany.toLowerCase().trim();
+            window.globalUsersMap.delete(oldKey);
+        }
         // Update local map instantly
-        window.globalUsersMap.set(email, {
+        const key = email + '_' + (companyName || '').toLowerCase().trim();
+        window.globalUsersMap.set(key, {
             email: email,
             name: name,
             role: role,
@@ -2091,8 +2104,9 @@ window.approvePendingUser = async function(email, nombre, empresa) {
 // ==========================================
 // QUICK APPROVE: from the global users list
 // ==========================================
-window.quickApproveUser = async function(email, nombre) {
-    const u = window.globalUsersMap.get(email);
+window.quickApproveUser = async function(email, nombre, companyName = '') {
+    const key = email + '_' + companyName.toLowerCase().trim();
+    const u = window.globalUsersMap.get(key) || window.globalUsersMap.get(email);
     if (!u) return;
 
     // Ask for empresa if not assigned yet
@@ -2124,7 +2138,12 @@ window.quickApproveUser = async function(email, nombre) {
         });
 
         // Update local map
-        window.globalUsersMap.set(email, {
+        // Delete old key if company name is updated
+        if (companyName && companyName !== empresa) {
+            window.globalUsersMap.delete(key);
+        }
+        const newKey = email + '_' + (empresa || '').toLowerCase().trim();
+        window.globalUsersMap.set(newKey, {
             ...u,
             role: rol,
             companyName: empresa || 'Sin Empresa Asignada',
