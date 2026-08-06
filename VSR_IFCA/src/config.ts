@@ -1,4 +1,4 @@
-﻿
+
 // Configuration for VSR_IFC
 
 // Replace this with your deployed Google Apps Script Web App URL
@@ -7,4 +7,4 @@ export const AUTHORIZED_USERS_SHEET_ID = '1Jcxc9SwtbDrExyGeS_zy0BVnEER64iEEvzCnz
 export const AUTHORIZED_USERS_SHEET_GID = '0';
 
 export const DRIVE_MODELS_FOLDER_ID = '1aWUNnLgjWBkA6wdCM99XMY9SU7eSDP-H';
-export const DRIVE_MODELS_API_URL = 'https://script.google.com/macros/s/AKfycbx2RAQx_8K4o22xE0Mw-ETc7K_58vIoi6-PgVi64u80inuiw144ks3cgWSdCtXqIgB02g/exec';
+export const DRIVE_MODELS_API_URL = 'https://script.google.com/macros/s/AKfycbzMD_Lyblji8tbD7NXTYEta7kmmGVEgd68-Vh9RopTj6B64UDzzCDxw1KC47Q6HPtrQ1Q/exec';

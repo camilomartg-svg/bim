@@ -120,7 +120,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       if (res.ok) empresas = await res.json();
       
       try {
-        const urlGoogle = 'https://script.google.com/macros/s/AKfycbx2RAQx_8K4o22xE0Mw-ETc7K_58vIoi6-PgVi64u80inuiw144ks3cgWSdCtXqIgB02g/exec';
+        const urlGoogle = 'https://script.google.com/macros/s/AKfycbzMD_Lyblji8tbD7NXTYEta7kmmGVEgd68-Vh9RopTj6B64UDzzCDxw1KC47Q6HPtrQ1Q/exec';
         const gRes = await fetch(urlGoogle + '?action=getCompanies');
         if (gRes.ok) {
            const gCompanies = await gRes.json();
