@@ -127,7 +127,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             
             // Marcar como eliminadas las empresas locales que ya no existen en Google Sheets
             empresas.forEach(emp => {
-                if (emp.id === 'nora' || emp.id === 'amarillo' || emp.deleted) return;
+                if (emp.deleted) return;
                 const exists = gCompanies.some(gc => gc.id === emp.id || (emp.name && gc.name && emp.name.toLowerCase().trim() === gc.name.toLowerCase().trim()));
                 if (!exists) {
                     emp.deleted = true;
