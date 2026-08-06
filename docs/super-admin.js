@@ -124,91 +124,151 @@ document.addEventListener('DOMContentLoaded', async () => {
         const gRes = await fetch(urlGoogle + '?action=getCompanies');
         if (gRes.ok) {
            const gCompanies = await gRes.json();
-           let addedNew = false;
-           gCompanies.forEach(gc => {
-              if (gc.id && !empresas.find(e => e.id === gc.id || (e.name && gc.name && e.name.toLowerCase() === gc.name.toLowerCase()))) {
-                  empresas.push({
-                      id: gc.id,
-                      name: gc.name || gc.legalName,
-                      code: (gc.name ? gc.name.substring(0,3).toUpperCase() : 'NVA'),
-                      admins: [],
-                      zonaHoraria: 'America/Bogota',
-                      members: [],
-                      razonSocial: gc.legalName || gc.name,
-                      terminosAceptados: true,
-                      tratamientoDatos: true,
-                      image: gc.logoBase64 || 'https://i.postimg.cc/02mTnnQv/21bd5ee9d2351270615280386caad1f3.jpg',
-                      location: gc.city ? (gc.city + ', ' + gc.country) : 'Bogotá, Colombia',
-                      configUrl: 'config-' + gc.id + '.json'
-                  });
-                  addedNew = true;
-              }
-           });
-           if(addedNew) showBanner('Se descubrieron nuevas empresas registradas. Haz clic en Publicar en la Nube para integrarlas permanentemente.', 'success');
-        }
+            
+            // Marcar como eliminadas las empresas locales que ya no existen en Google Sheets
+            empresas.forEach(emp => {
+                if (emp.id === 'nora' || emp.id === 'amarillo' || emp.deleted) return;
+                const exists = gCompanies.some(gc => gc.id === emp.id || (emp.name && gc.name && emp.name.toLowerCase().trim() === gc.name.toLowerCase().trim()));
+                if (!exists) {
+                    emp.deleted = true;
+                }
+            });
 
-        // Sincronizar miembros y administradores desde la lista de usuarios en Google Sheets
-        try {
-           const uRes = await fetch(urlGoogle + '?t=' + Date.now());
-           if (uRes.ok) {
-               const gUsers = await uRes.json();
-               
-               const cleanText = (str) => {
-                   if (!str) return '';
-                   return str.toLowerCase()
-                             .normalize("NFD")
-                             .replace(/[\u0300-\u036f]/g, "")
-                             .replace(/[^a-z0-9]/g, "")
-                             .trim();
-               };
-               // Map Google Sheet users by lowercased email for quick lookup
-               const gUsersMap = new Map();
-               gUsers.forEach(gu => {
-                   if (gu.email) {
-                       const emailClean = gu.email.toLowerCase().trim();
-                       gUsersMap.set(emailClean, gu);
-                   }
-               });
+            let addedNew = false;
+            gCompanies.forEach(gc => {
+               if (gc.id && !empresas.find(e => e.id === gc.id || (e.name && gc.name && e.name.toLowerCase() === gc.name.toLowerCase()))) {
+                   empresas.push({
+                       id: gc.id,
+                       name: gc.name || gc.legalName,
+                       code: (gc.name ? gc.name.substring(0,3).toUpperCase() : 'NVA'),
+                       admins: [],
+                       zonaHoraria: 'America/Bogota',
+                       members: [],
+                       razonSocial: gc.legalName || gc.name,
+                       terminosAceptados: true,
+                       tratamientoDatos: true,
+                       image: gc.logoBase64 || 'https://i.postimg.cc/02mTnnQv/21bd5ee9d2351270615280386caad1f3.jpg',
+                       location: gc.city ? (gc.city + ', ' + gc.country) : 'Bogotá, Colombia',
+                       configUrl: 'config-' + gc.id + '.json'
+                   });
+                   addedNew = true;
+               }
+            });
+            if(addedNew) showBanner('Se descubrieron nuevas empresas registradas. Haz clic en Publicar en la Nube para integrarlas permanentemente.', 'success');
 
-               empresas.forEach(emp => {
-                   if (!emp.members) emp.members = [];
-                   if (!emp.admins) emp.admins = [];
-                   gUsers.forEach(gu => {
-                        if (gu.empresa && (emp.name || emp.razonSocial)) {
-                            const guEmp = cleanText(gu.empresa);
+            // Reconciliar administradores principales de la hoja "Empresas"
+            empresas.forEach(emp => {
+                const gc = gCompanies.find(c => c.id === emp.id || (emp.name && c.name && emp.name.toLowerCase().trim() === c.name.toLowerCase().trim()));
+                if (gc && gc.email && gc.email.trim() !== '') {
+                    const adminEmail = gc.email.toLowerCase().trim();
+                    if (!emp.admins) emp.admins = [];
+                    if (!emp.admins.some(a => a.toLowerCase().trim() === adminEmail)) {
+                        emp.admins.push(adminEmail);
+                    }
+                    if (!emp.members) emp.members = [];
+                    const mIdx = emp.members.findIndex(m => m.email && m.email.toLowerCase().trim() === adminEmail);
+                    const memberData = {
+                        name: adminEmail.split('@')[0],
+                        email: adminEmail,
+                        role: 'ADMINISTRADOR_EMPRESA',
+                        empresaUsuario: emp.name,
+                        especialidad: '',
+                        cargo: 'Administrador de Empresa'
+                    };
+                    if (mIdx > -1) {
+                        emp.members[mIdx].role = 'ADMINISTRADOR_EMPRESA';
+                        if (!emp.members[mIdx].cargo || emp.members[mIdx].cargo === '') {
+                            emp.members[mIdx].cargo = 'Administrador de Empresa';
+                        }
+                    } else {
+                        emp.members.push(memberData);
+                    }
+                }
+            });
+         }
+
+         // Sincronizar miembros y administradores desde la lista de usuarios en Google Sheets
+         try {
+            const uRes = await fetch(urlGoogle + '?t=' + Date.now());
+            if (uRes.ok) {
+                const gUsers = await uRes.json();
+                
+                const cleanText = (str) => {
+                    if (!str) return '';
+                    return str.toLowerCase()
+                              .normalize("NFD")
+                              .replace(/[\u0300-\u036f]/g, "")
+                              .replace(/[^a-z0-9]/g, "")
+                              .trim();
+                };
+                
+                // Map Google Sheet users by lowercased email for quick lookup
+                const gUsersMap = new Map();
+                gUsers.forEach(gu => {
+                    if (gu.email) {
+                        const emailClean = gu.email.toLowerCase().trim();
+                        gUsersMap.set(emailClean, gu);
+                    }
+                });
+
+                // Encontrar la única mejor empresa para cada usuario de Google Sheets para evitar duplicación
+                const userBestCompanyMap = new Map(); // emailClean -> emp.id
+                
+                gUsers.forEach(gu => {
+                    if (!gu.email || !gu.empresa) return;
+                    const emailClean = gu.email.toLowerCase().trim();
+                    const guEmp = cleanText(gu.empresa);
+                    
+                    // 1. Coincidencia exacta primero
+                    let bestMatch = empresas.find(emp => {
+                        const empName = cleanText(emp.name);
+                        const empRazon = cleanText(emp.razonSocial);
+                        return guEmp === empName || guEmp === empRazon;
+                    });
+                    
+                    // 2. Coincidencia por inclusión si no hay exacta
+                    if (!bestMatch) {
+                        bestMatch = empresas.find(emp => {
                             const empName = cleanText(emp.name);
                             const empRazon = cleanText(emp.razonSocial);
-                            
-                            const isMatch = (guEmp && empName && (guEmp === empName || empName.includes(guEmp) || guEmp.includes(empName))) ||
-                                            (guEmp && empRazon && (guEmp === empRazon || empRazon.includes(guEmp) || empRazon.includes(empRazon)));
-                            
-                            if (isMatch) {
-                                const email = gu.email ? gu.email.toLowerCase().trim() : '';
-                                if (email) {
-                                    const mIdx = emp.members.findIndex(m => m.email && m.email.toLowerCase().trim() === email);
-                                    const memberData = {
-                                        name: gu.nombre || email.split('@')[0],
-                                        email: email,
-                                        role: gu.rol || 'INVITADO',
-                                        empresaUsuario: gu.empresa,
-                                        especialidad: gu.especialidad || '',
-                                        cargo: gu.cargo || ''
-                                    };
-                                    if (mIdx > -1) {
-                                        emp.members[mIdx] = { ...emp.members[mIdx], ...memberData };
-                                    } else {
-                                        emp.members.push(memberData);
-                                    }
-                                    
-                                    if (gu.rol === 'ADMINISTRADOR_EMPRESA') {
-                                        const adminExists = emp.admins.some(a => a.toLowerCase().trim() === email);
-                                        if (!adminExists) {
-                                            emp.admins.push(email);
-                                        }
-                                    }
-                                }
-                            }
-                        }
+                            return (empName && (empName.includes(guEmp) || guEmp.includes(empName))) ||
+                                   (empRazon && (empRazon.includes(guEmp) || guEmp.includes(empRazon)));
+                        });
+                    }
+                    
+                    if (bestMatch) {
+                        userBestCompanyMap.set(emailClean, bestMatch.id);
+                    }
+                });
+
+                empresas.forEach(emp => {
+                    if (!emp.members) emp.members = [];
+                    if (!emp.admins) emp.admins = [];
+                    gUsers.forEach(gu => {
+                         const email = gu.email ? gu.email.toLowerCase().trim() : '';
+                         if (email && userBestCompanyMap.get(email) === emp.id) {
+                             const mIdx = emp.members.findIndex(m => m.email && m.email.toLowerCase().trim() === email);
+                             const memberData = {
+                                 name: gu.nombre || email.split('@')[0],
+                                 email: email,
+                                 role: gu.rol || 'INVITADO',
+                                 empresaUsuario: gu.empresa,
+                                 especialidad: gu.especialidad || '',
+                                 cargo: gu.cargo || ''
+                             };
+                             if (mIdx > -1) {
+                                 emp.members[mIdx] = { ...emp.members[mIdx], ...memberData };
+                             } else {
+                                 emp.members.push(memberData);
+                             }
+                             
+                             if (gu.rol === 'ADMINISTRADOR_EMPRESA') {
+                                 const adminExists = emp.admins.some(a => a.toLowerCase().trim() === email);
+                                 if (!adminExists) {
+                                     emp.admins.push(email);
+                                 }
+                             }
+                         }
                     });
 
                     // Reconciliación estricta para esta empresa:
@@ -216,22 +276,23 @@ document.addEventListener('DOMContentLoaded', async () => {
                     emp.members = emp.members.filter(m => {
                         if (!m.email || m.email.trim() === '') return true; // Mantener usuarios locales sin email (por ejemplo, manuales)
                         const emailClean = m.email.toLowerCase().trim();
+                        
+                        // Si es el administrador principal configurado en "Empresas", se conserva
+                        const gc = gCompanies.find(c => c.id === emp.id || (emp.name && c.name && emp.name.toLowerCase().trim() === c.name.toLowerCase().trim()));
+                        if (gc && gc.email && gc.email.toLowerCase().trim() === emailClean) {
+                            return true;
+                        }
+
+                        // Verificar si existe en la hoja "Usuarios"
                         const gu = gUsersMap.get(emailClean);
                         if (gu) {
-                            if (gu.empresa) {
-                                const guEmp = cleanText(gu.empresa);
-                                const empName = cleanText(emp.name);
-                                const empRazon = cleanText(emp.razonSocial);
-                                const isMatch = (guEmp && empName && (guEmp === empName || empName.includes(guEmp) || guEmp.includes(empName))) ||
-                                                 (guEmp && empRazon && (guEmp === empRazon || empRazon.includes(guEmp) || empRazon.includes(empRazon)));
-                                if (!isMatch) {
-                                    // El usuario ahora pertenece a una empresa diferente en Google Sheets
-                                    return false;
-                                }
+                            // Si existe, debe coincidir con la mejor empresa asignada
+                            const matchedEmpId = userBestCompanyMap.get(emailClean);
+                            if (matchedEmpId !== emp.id) {
+                                return false; // Pertenece a otra empresa
                             }
                         } else {
-                            // Si el correo existía pero ya no está registrado en Google Sheets, se asume que fue eliminado
-                            return false;
+                            return false; // Eliminado de Google Sheets
                         }
                         return true;
                     });
@@ -240,17 +301,24 @@ document.addEventListener('DOMContentLoaded', async () => {
                     emp.admins = emp.admins.filter(adminEmail => {
                         if (!adminEmail) return false;
                         const emailClean = adminEmail.toLowerCase().trim();
+                        
+                        // Si es el administrador principal configurado en "Empresas", se conserva
+                        const gc = gCompanies.find(c => c.id === emp.id || (emp.name && c.name && emp.name.toLowerCase().trim() === c.name.toLowerCase().trim()));
+                        if (gc && gc.email && gc.email.toLowerCase().trim() === emailClean) {
+                            return true;
+                        }
+
                         const gu = gUsersMap.get(emailClean);
                         if (gu) {
-                            return gu.rol === 'ADMINISTRADOR_EMPRESA';
+                            return gu.rol === 'ADMINISTRADOR_EMPRESA' && userBestCompanyMap.get(emailClean) === emp.id;
                         }
-                        return true;
+                        return false;
                     });
-               });
-           }
-        } catch(ue) {
-           console.warn('No se pudo sincronizar los miembros desde Google Sheets', ue);
-        }
+                });
+            }
+         } catch(ue) {
+            console.warn('No se pudo sincronizar los miembros desde Google Sheets', ue);
+         }        
       } catch(e) {
         console.warn('No se pudo sincronizar con Google Sheets', e);
       }
