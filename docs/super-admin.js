@@ -1482,12 +1482,29 @@ let contentBase = '';
     selectEmpresa(empresas.length - 1);
   });
 
-  document.getElementById('delete-empresa-btn').addEventListener('click', () => {
-    if(confirm('¿Está seguro de eliminar esta empresa? Para borrarla permanentemente también deberá borrarla de la hoja de cálculo de Google. ¿Desea ocultarla de esta plataforma?')) {
-      empresas[selectedIndex].deleted = true;
-      selectedIndex = -1;
-      editorEl.classList.add('hidden');
-      renderList();
+  document.getElementById('delete-empresa-btn').addEventListener('click', async () => {
+    if(confirm('¿Está seguro de que desea eliminar permanentemente esta empresa del sistema? (Se borrará del Google Sheet y de la configuración local)')) {
+      const empId = empresas[selectedIndex].id;
+      
+      showBanner('Eliminando empresa...', 'info');
+      try {
+        await fetch(ROLES_SCRIPT_URL, {
+          method: 'POST',
+          mode: 'no-cors',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'deleteCompany', id: empId })
+        });
+        
+        empresas[selectedIndex].deleted = true;
+        selectedIndex = -1;
+        editorEl.classList.add('hidden');
+        renderList();
+        
+        showBanner('Empresa eliminada de Google Sheets. Haz clic en "Publicar en la Nube" para guardar los cambios.', 'success');
+      } catch (e) {
+        console.error(e);
+        showBanner('Error al eliminar la empresa de Google Sheets.', 'error');
+      }
     }
   });
 

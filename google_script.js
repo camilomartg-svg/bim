@@ -159,6 +159,33 @@ function doPost(e) {
       return ContentService.createTextOutput(JSON.stringify({ status: "error", message: "Usuario no encontrado" })).setMimeType(ContentService.MimeType.JSON);
     }
 
+    if (data && data.action === 'deleteCompany') {
+      const companyId = String(data.id || '').trim();
+      if (!companyId) {
+        return ContentService.createTextOutput(JSON.stringify({ status: "error", message: "El ID de la empresa es obligatorio." })).setMimeType(ContentService.MimeType.JSON);
+      }
+      
+      let companySheet = doc.getSheetByName('Empresas');
+      if (companySheet) {
+        ensureHeaders(companySheet, COMPANY_HEADERS);
+        const headers = companySheet.getRange(1, 1, 1, companySheet.getLastColumn()).getValues()[0].map(h => String(h).trim());
+        const idColIdx = headers.indexOf('id');
+        if (idColIdx !== -1) {
+          const numRows = companySheet.getLastRow();
+          if (numRows > 1) {
+            const values = companySheet.getRange(2, idColIdx + 1, numRows - 1, 1).getValues();
+            for (let i = 0; i < values.length; i++) {
+              if (String(values[i][0]).trim() === companyId) {
+                companySheet.deleteRow(i + 2);
+                return ContentService.createTextOutput(JSON.stringify({ status: "success", message: "Empresa eliminada exitosamente" })).setMimeType(ContentService.MimeType.JSON);
+              }
+            }
+          }
+        }
+      }
+      return ContentService.createTextOutput(JSON.stringify({ status: "error", message: "Empresa no encontrada" })).setMimeType(ContentService.MimeType.JSON);
+    }
+
     if (data && data.action === 'createUserAndCompany') {
       let companySheet = doc.getSheetByName('Empresas');
       if (!companySheet) {
