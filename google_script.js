@@ -129,7 +129,12 @@ function doPost(e) {
       return output_(uploadFile_(e, data), callback);
     }
 
-    const doc = SpreadsheetApp.openById(SPREADSHEET_ID);
+    let doc;
+    try {
+      doc = SpreadsheetApp.openById(SPREADSHEET_ID);
+    } catch (err) {
+      doc = SpreadsheetApp.getActiveSpreadsheet();
+    }
     const fecha = new Date().toISOString();
 
     if (data && data.action === 'deleteUser') {
@@ -579,7 +584,12 @@ function doGet(e) {
       return output_(textFile_(e, null), callback);
     }
 
-    const doc = SpreadsheetApp.openById(SPREADSHEET_ID);
+    let doc;
+    try {
+      doc = SpreadsheetApp.openById(SPREADSHEET_ID);
+    } catch (err) {
+      doc = SpreadsheetApp.getActiveSpreadsheet();
+    }
     
     if (action === 'getCompanies') {
       const sheet = doc.getSheetByName('Empresas');
@@ -851,7 +861,12 @@ function uploadFile_(e, body) {
 }
 
 function wipeAndInitDatabase() {
-  const doc = SpreadsheetApp.openById(SPREADSHEET_ID);
+  let doc;
+  try {
+    doc = SpreadsheetApp.openById(SPREADSHEET_ID);
+  } catch (err) {
+    doc = SpreadsheetApp.getActiveSpreadsheet();
+  }
   
   // Clear Empresas
   let companySheet = doc.getSheetByName('Empresas');
