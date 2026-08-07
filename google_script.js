@@ -147,11 +147,15 @@ function doPost(e) {
           const numRows = userSheet.getLastRow();
           if (numRows > 1) {
             const values = userSheet.getRange(2, emailColIdx + 1, numRows - 1, 1).getValues();
-            for (let i = 0; i < values.length; i++) {
+            let deletedAny = false;
+            for (let i = values.length - 1; i >= 0; i--) {
               if (String(values[i][0]).toLowerCase().trim() === email) {
                 userSheet.deleteRow(i + 2);
-                return ContentService.createTextOutput(JSON.stringify({ status: "success", message: "Usuario eliminado exitosamente" })).setMimeType(ContentService.MimeType.JSON);
+                deletedAny = true;
               }
+            }
+            if (deletedAny) {
+              return ContentService.createTextOutput(JSON.stringify({ status: "success", message: "Usuario eliminado exitosamente" })).setMimeType(ContentService.MimeType.JSON);
             }
           }
         }
@@ -174,11 +178,15 @@ function doPost(e) {
           const numRows = companySheet.getLastRow();
           if (numRows > 1) {
             const values = companySheet.getRange(2, idColIdx + 1, numRows - 1, 1).getValues();
-            for (let i = 0; i < values.length; i++) {
+            let deletedAny = false;
+            for (let i = values.length - 1; i >= 0; i--) {
               if (String(values[i][0]).trim() === companyId) {
                 companySheet.deleteRow(i + 2);
-                return ContentService.createTextOutput(JSON.stringify({ status: "success", message: "Empresa eliminada exitosamente" })).setMimeType(ContentService.MimeType.JSON);
+                deletedAny = true;
               }
+            }
+            if (deletedAny) {
+              return ContentService.createTextOutput(JSON.stringify({ status: "success", message: "Empresa eliminada exitosamente" })).setMimeType(ContentService.MimeType.JSON);
             }
           }
         }

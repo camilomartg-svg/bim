@@ -2076,9 +2076,12 @@ window.deleteGlobalUser = async function(email, companyName) {
             }
         });
         
-        const key = email + '_' + (companyName || '').toLowerCase().trim();
-        window.globalUsersMap.delete(key);
-        window.globalUsersMap.delete(email);
+        // Buscar y eliminar cualquier entrada de este usuario en el mapa global sin importar el formato de clave
+        for (const k of window.globalUsersMap.keys()) {
+            if (k.split('_')[0] === lowercaseEmail) {
+                window.globalUsersMap.delete(k);
+            }
+        }
         
         renderGlobalUsers();
         
