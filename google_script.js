@@ -132,6 +132,33 @@ function doPost(e) {
     const doc = SpreadsheetApp.openById(SPREADSHEET_ID);
     const fecha = new Date().toISOString();
 
+    if (data && data.action === 'deleteUser') {
+      const email = String(data.email || '').toLowerCase().trim();
+      if (!email) {
+        return ContentService.createTextOutput(JSON.stringify({ status: "error", message: "El correo es obligatorio." })).setMimeType(ContentService.MimeType.JSON);
+      }
+      
+      let userSheet = doc.getSheetByName('Usuarios');
+      if (userSheet) {
+        ensureHeaders(userSheet, USER_HEADERS);
+        const headers = userSheet.getRange(1, 1, 1, userSheet.getLastColumn()).getValues()[0].map(h => String(h).trim());
+        const emailColIdx = headers.indexOf('email');
+        if (emailColIdx !== -1) {
+          const numRows = userSheet.getLastRow();
+          if (numRows > 1) {
+            const values = userSheet.getRange(2, emailColIdx + 1, numRows - 1, 1).getValues();
+            for (let i = 0; i < values.length; i++) {
+              if (String(values[i][0]).toLowerCase().trim() === email) {
+                userSheet.deleteRow(i + 2);
+                return ContentService.createTextOutput(JSON.stringify({ status: "success", message: "Usuario eliminado exitosamente" })).setMimeType(ContentService.MimeType.JSON);
+              }
+            }
+          }
+        }
+      }
+      return ContentService.createTextOutput(JSON.stringify({ status: "error", message: "Usuario no encontrado" })).setMimeType(ContentService.MimeType.JSON);
+    }
+
     if (data && data.action === 'createUserAndCompany') {
       let companySheet = doc.getSheetByName('Empresas');
       if (!companySheet) {

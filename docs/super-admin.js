@@ -1872,6 +1872,9 @@ window.renderGlobalUsers = function(searchTerm = '') {
                 <button onclick='openEditUserModal("${u.email}", "${(u.companyName || '').replace(/'/g, "\\'")}")' class="text-slate-400 hover:text-blue-600 transition-colors p-1.5 rounded-lg hover:bg-blue-50">
                     <span class="material-symbols-outlined text-[20px]">edit</span>
                 </button>
+                <button onclick='deleteGlobalUser("${u.email}", "${(u.companyName || '').replace(/'/g, "\\'")}")' class="text-slate-400 hover:text-rose-600 transition-colors p-1.5 rounded-lg hover:bg-rose-50 ml-1">
+                    <span class="material-symbols-outlined text-[20px]">delete</span>
+                </button>
             </td>
         `;
         tbody.appendChild(tr);
@@ -2010,6 +2013,66 @@ window.saveGlobalUser = async function() {
     } finally {
         saveBtn.disabled = false;
         saveBtn.innerHTML = 'Guardar Cambios';
+    }
+}
+
+window.deleteGlobalUser = async function(email, companyName) {
+    if (!confirm(`¿Estás seguro de que deseas eliminar permanentemente al usuario con correo ${email}?`)) {
+        return;
+    }
+    
+    const lowercaseEmail = email.toLowerCase().trim();
+    if (lowercaseEmail === 'mcmartinezg@unal.edu.co' || lowercaseEmail === 'imagina3ddesign@gmail.com') {
+        alert('No se puede eliminar a un Super Administrador por motivos de seguridad.');
+        return;
+    }
+    
+    showBanner('Eliminando usuario...', 'info');
+    
+    try {
+        const payload = {
+            action: 'deleteUser',
+            email: email
+        };
+        await fetch(ROLES_SCRIPT_URL, {
+            method: 'POST',
+            mode: 'no-cors',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+        
+        let changed = false;
+        window.empresas.forEach(emp => {
+            if (emp.members) {
+                const initialLen = emp.members.length;
+                emp.members = emp.members.filter(m => !m.email || m.email.toLowerCase().trim() !== lowercaseEmail);
+                if (emp.members.length !== initialLen) {
+                    changed = true;
+                }
+            }
+            if (emp.admins) {
+                const initialLen = emp.admins.length;
+                emp.admins = emp.admins.filter(a => a.toLowerCase().trim() !== lowercaseEmail);
+                if (emp.admins.length !== initialLen) {
+                    changed = true;
+                }
+            }
+        });
+        
+        const key = email + '_' + (companyName || '').toLowerCase().trim();
+        window.globalUsersMap.delete(key);
+        window.globalUsersMap.delete(email);
+        
+        renderGlobalUsers();
+        
+        if (changed) {
+            showBanner('Usuario eliminado. Se detectaron asociaciones en empresas, haz clic en "Publicar en la Nube" para guardar los cambios.', 'success');
+        } else {
+            showBanner('Usuario eliminado exitosamente de la base de datos.', 'success');
+        }
+    } catch (e) {
+        console.error('Error al eliminar usuario:', e);
+        showBanner('Error al eliminar usuario del sistema.', 'error');
     }
 }
 
