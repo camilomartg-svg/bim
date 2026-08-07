@@ -718,3 +718,47 @@ function uploadFile_(e, body) {
     return { status: 'error', message: err.toString() };
   }
 }
+
+function wipeAndInitDatabase() {
+  const doc = SpreadsheetApp.openById("1Jcxc9SwtbDrExyGeS_zy0BVnEER64iEEvzCnzCo5OCg");
+  
+  // Clear Empresas
+  let companySheet = doc.getSheetByName('Empresas');
+  if (companySheet) {
+    companySheet.clearContents();
+    ensureHeaders(companySheet, COMPANY_HEADERS);
+  }
+  
+  // Clear Usuarios and add the two superAdmins
+  let userSheet = doc.getSheetByName('Usuarios');
+  if (userSheet) {
+    userSheet.clearContents();
+    ensureHeaders(userSheet, USER_HEADERS);
+    
+    // Append the two super admins
+    const uHeaders = userSheet.getRange(1, 1, 1, userSheet.getLastColumn()).getValues()[0].map(h => String(h).trim());
+    const fecha = new Date().toISOString();
+    
+    const admins = [
+      { nombre: "Super Administrador", email: "mcmartinezg@unal.edu.co", rol: "SUPER_ADMINISTRADOR", estado: "APROBADO" },
+      { nombre: "Super Administrador", email: "imagina3ddesign@gmail.com", rol: "SUPER_ADMINISTRADOR", estado: "APROBADO" }
+    ];
+    
+    admins.forEach(admin => {
+      const row = new Array(uHeaders.length).fill("");
+      const setVal = (headerName, value) => {
+        const idx = uHeaders.indexOf(headerName);
+        if (idx !== -1) row[idx] = value;
+      };
+      setVal('fecha', fecha);
+      setVal('nombre', admin.nombre);
+      setVal('email', admin.email);
+      setVal('rol', admin.rol);
+      setVal('estado', admin.estado);
+      userSheet.appendRow(row);
+    });
+  }
+  
+  Logger.log("Base de datos limpia e inicializada con los Super Administradores.");
+}
+
