@@ -137,8 +137,8 @@ function doPost(e) {
     }
     const fecha = new Date().toISOString();
 
-    if (data && data.action === 'deleteUser') {
-      const email = String(data.email || '').toLowerCase().trim();
+    if (action === 'deleteUser') {
+      const email = String((data && data.email) || (e && e.parameter && e.parameter.email) || '').toLowerCase().trim();
       if (!email) {
         return ContentService.createTextOutput(JSON.stringify({ status: "error", message: "El correo es obligatorio." })).setMimeType(ContentService.MimeType.JSON);
       }
@@ -147,7 +147,7 @@ function doPost(e) {
       if (userSheet) {
         ensureHeaders(userSheet, USER_HEADERS);
         const headers = userSheet.getRange(1, 1, 1, userSheet.getLastColumn()).getValues()[0].map(h => String(h).trim());
-        const emailColIdx = headers.indexOf('email');
+        const emailColIdx = headers.map(h => h.toLowerCase()).indexOf('email');
         if (emailColIdx !== -1) {
           const numRows = userSheet.getLastRow();
           if (numRows > 1) {
@@ -168,8 +168,8 @@ function doPost(e) {
       return ContentService.createTextOutput(JSON.stringify({ status: "error", message: "Usuario no encontrado" })).setMimeType(ContentService.MimeType.JSON);
     }
 
-    if (data && data.action === 'deleteCompany') {
-      const companyId = String(data.id || '').trim();
+    if (action === 'deleteCompany') {
+      const companyId = String((data && data.id) || (e && e.parameter && e.parameter.id) || '').trim();
       if (!companyId) {
         return ContentService.createTextOutput(JSON.stringify({ status: "error", message: "El ID de la empresa es obligatorio." })).setMimeType(ContentService.MimeType.JSON);
       }
@@ -178,19 +178,46 @@ function doPost(e) {
       if (companySheet) {
         ensureHeaders(companySheet, COMPANY_HEADERS);
         const headers = companySheet.getRange(1, 1, 1, companySheet.getLastColumn()).getValues()[0].map(h => String(h).trim());
-        const idColIdx = headers.indexOf('id');
+        const idColIdx = headers.map(h => h.toLowerCase()).indexOf('id');
+        const nameColIdx = headers.map(h => h.toLowerCase()).indexOf('name');
         if (idColIdx !== -1) {
           const numRows = companySheet.getLastRow();
           if (numRows > 1) {
             const values = companySheet.getRange(2, idColIdx + 1, numRows - 1, 1).getValues();
-            let deletedAny = false;
-            for (let i = values.length - 1; i >= 0; i--) {
+            let companyName = "";
+            let rowToDelete = -1;
+            for (let i = 0; i < values.length; i++) {
               if (String(values[i][0]).trim() === companyId) {
-                companySheet.deleteRow(i + 2);
-                deletedAny = true;
+                rowToDelete = i + 2;
+                if (nameColIdx !== -1) {
+                  companyName = String(companySheet.getRange(rowToDelete, nameColIdx + 1).getValue()).trim();
+                }
+                break;
               }
             }
-            if (deletedAny) {
+            if (rowToDelete !== -1) {
+              companySheet.deleteRow(rowToDelete);
+              
+              // Also update Users sheet to clear association
+              if (companyName) {
+                let userSheet = doc.getSheetByName('Usuarios');
+                if (userSheet) {
+                  ensureHeaders(userSheet, USER_HEADERS);
+                  const uHeaders = userSheet.getRange(1, 1, 1, userSheet.getLastColumn()).getValues()[0].map(h => String(h).trim());
+                  const empColIdx = uHeaders.map(h => h.toLowerCase()).indexOf('empresa');
+                  if (empColIdx !== -1) {
+                    const uNumRows = userSheet.getLastRow();
+                    if (uNumRows > 1) {
+                      const uValues = userSheet.getRange(2, empColIdx + 1, uNumRows - 1, 1).getValues();
+                      for (let j = 0; j < uValues.length; j++) {
+                        if (String(uValues[j][0]).trim().toLowerCase() === companyName.toLowerCase()) {
+                          userSheet.getRange(j + 2, empColIdx + 1).setValue("");
+                        }
+                      }
+                    }
+                  }
+                }
+              }
               return ContentService.createTextOutput(JSON.stringify({ status: "success", message: "Empresa eliminada exitosamente" })).setMimeType(ContentService.MimeType.JSON);
             }
           }
@@ -498,7 +525,8 @@ function doPost(e) {
       
     } else {
       // Guardar Usuario (Comportamiento por defecto)
-      if (!data.email) {
+      const email = String((data && data.email) || (e && e.parameter && e.parameter.email) || '').toLowerCase().trim();
+      if (!email) {
         return ContentService.createTextOutput(JSON.stringify({ status: "error", message: "El correo es obligatorio." })).setMimeType(ContentService.MimeType.JSON);
       }
       
@@ -509,16 +537,16 @@ function doPost(e) {
       ensureHeaders(userSheet, USER_HEADERS);
       
       const headers = userSheet.getRange(1, 1, 1, userSheet.getLastColumn()).getValues()[0].map(h => String(h).trim());
+      const lowerHeaders = headers.map(h => h.toLowerCase());
       
-      const emailColIdx = headers.indexOf('email');
+      const emailColIdx = lowerHeaders.indexOf('email');
       let existingRowIdx = -1;
       if (emailColIdx !== -1) {
         const numRows = userSheet.getLastRow();
         if (numRows > 1) {
           const values = userSheet.getRange(2, emailColIdx + 1, numRows - 1, 1).getValues();
-          const targetEmail = String(data.email).toLowerCase().trim();
           for (let i = 0; i < values.length; i++) {
-            if (String(values[i][0]).toLowerCase().trim() === targetEmail) {
+            if (String(values[i][0]).toLowerCase().trim() === email) {
               existingRowIdx = i + 2;
               break;
             }
@@ -526,42 +554,46 @@ function doPost(e) {
         }
       }
 
+      const getVal = (field) => {
+        return (data && data[field] !== undefined) ? data[field] : (e && e.parameter && e.parameter[field] !== undefined ? e.parameter[field] : '');
+      };
+
       if (existingRowIdx !== -1) {
         const rowRange = userSheet.getRange(existingRowIdx, 1, 1, headers.length);
         const currentRow = rowRange.getValues()[0];
         const setValExist = (headerName, value) => {
-          const idx = headers.indexOf(headerName);
+          const idx = lowerHeaders.indexOf(headerName.toLowerCase());
           if (idx !== -1 && value !== undefined && value !== null && value !== '') {
             currentRow[idx] = value;
           }
         };
-        setValExist('nombre', data.nombre);
-        setValExist('telefono', data.telefono);
-        setValExist('empresa', data.empresa);
-        setValExist('especialidad', data.especialidad);
-        setValExist('cargo', data.cargo);
-        setValExist('rol', data.rol);
-        setValExist('estado', data.estado);
+        setValExist('nombre', getVal('nombre'));
+        setValExist('telefono', getVal('telefono'));
+        setValExist('empresa', getVal('empresa'));
+        setValExist('especialidad', getVal('especialidad'));
+        setValExist('cargo', getVal('cargo'));
+        setValExist('rol', getVal('rol'));
+        setValExist('estado', getVal('estado'));
         rowRange.setValues([currentRow]);
       } else {
         const row = new Array(headers.length).fill("");
         const setVal = (headerName, value) => {
-          const idx = headers.indexOf(headerName);
+          const idx = lowerHeaders.indexOf(headerName.toLowerCase());
           if (idx !== -1) row[idx] = value;
         };
         setVal('fecha', fecha);
-        setVal('nombre', data.nombre || '');
-        setVal('email', data.email);
-        setVal('telefono', data.telefono || '');
-        setVal('empresa', data.empresa || '');
-        setVal('especialidad', data.especialidad || '');
-        setVal('cargo', data.cargo || '');
-        setVal('rol', data.rol || 'INVITADO');
-        setVal('estado', data.estado || 'PENDIENTE');
+        setVal('nombre', getVal('nombre'));
+        setVal('email', email);
+        setVal('telefono', getVal('telefono'));
+        setVal('empresa', getVal('empresa'));
+        setVal('especialidad', getVal('especialidad'));
+        setVal('cargo', getVal('cargo'));
+        setVal('rol', getVal('rol') || 'INVITADO');
+        setVal('estado', getVal('estado') || 'PENDIENTE');
         userSheet.appendRow(row);
       }
       
-      return ContentService.createTextOutput(JSON.stringify({ status: "success", message: "Usuario creado exitosamente" })).setMimeType(ContentService.MimeType.JSON);
+      return ContentService.createTextOutput(JSON.stringify({ status: "success", message: "Usuario guardado exitosamente" })).setMimeType(ContentService.MimeType.JSON);
     }
     
   } catch (error) {

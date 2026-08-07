@@ -1488,10 +1488,10 @@ let contentBase = '';
       
       showBanner('Eliminando empresa...', 'info');
       try {
-        await fetch(ROLES_SCRIPT_URL, {
+        const url = `${ROLES_SCRIPT_URL}?action=deleteCompany&id=${encodeURIComponent(empId)}`;
+        await fetch(url, {
           method: 'POST',
           mode: 'no-cors',
-          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ action: 'deleteCompany', id: empId })
         });
         
@@ -1621,11 +1621,12 @@ let contentBase = '';
         showBanner(`Aprobando ${toApprove.length} usuario(s) pendiente(s)...`, 'info');
         for (const u of toApprove) {
           const rol = u.role || 'INVITADO';
-          await fetch(ROLES_SCRIPT_URL, {
+          const payload = { action: 'saveUser', email: u.email, nombre: u.name, rol: rol, empresa: u.empName, estado: 'APROBADO' };
+          const queryParams = new URLSearchParams(payload).toString();
+          await fetch(`${ROLES_SCRIPT_URL}?${queryParams}`, {
             method: 'POST',
             mode: 'no-cors',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ email: u.email, nombre: u.name, rol: rol, empresa: u.empName, estado: 'APROBADO' })
+            body: JSON.stringify(payload)
           });
           // Update local map
           const existing = window.globalUsersMap.get(u.key) || window.globalUsersMap.get(u.email);
@@ -1981,8 +1982,8 @@ window.saveGlobalUser = async function() {
     saveBtn.disabled = true;
     saveBtn.innerHTML = '<span class="material-symbols-outlined animate-spin text-sm mr-2">autorenew</span> Guardando...';
 
-    try {
         const payload = {
+            action: 'saveUser',
             email: email,
             nombre: name,
             rol: role,
@@ -1991,10 +1992,19 @@ window.saveGlobalUser = async function() {
             estado: 'APROBADO'
         };
 
-        const res = await fetch(ROLES_SCRIPT_URL, {
+        const queryParams = new URLSearchParams({
+            action: 'saveUser',
+            email: email,
+            nombre: name,
+            rol: role,
+            empresa: companyName,
+            especialidad: specialty,
+            estado: 'APROBADO'
+        }).toString();
+
+        const res = await fetch(`${ROLES_SCRIPT_URL}?${queryParams}`, {
             method: 'POST',
             mode: 'no-cors',
-            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(payload)
         });
 
@@ -2051,10 +2061,10 @@ window.deleteGlobalUser = async function(email, companyName) {
             action: 'deleteUser',
             email: email
         };
-        await fetch(ROLES_SCRIPT_URL, {
+        const url = `${ROLES_SCRIPT_URL}?action=deleteUser&email=${encodeURIComponent(email)}`;
+        await fetch(url, {
             method: 'POST',
             mode: 'no-cors',
-            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(payload)
         });
         
@@ -2159,16 +2169,19 @@ window.fetchPendingRequests = async function(companyName) {
 window.approvePendingUser = async function(email, nombre, empresa) {
     try {
         const payload = {
+            action: 'saveUser',
             email: email,
+            nombre: nombre,
             estado: 'APROBADO',
             rol: 'VISOR',
             empresa: empresa
         };
 
-        await fetch(ROLES_SCRIPT_URL, {
+        const queryParams = new URLSearchParams(payload).toString();
+
+        await fetch(`${ROLES_SCRIPT_URL}?${queryParams}`, {
             method: 'POST',
             mode: 'no-cors',
-            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(payload)
         });
 
@@ -2205,6 +2218,7 @@ window.quickApproveUser = async function(email, nombre, companyName = '') {
 
     try {
         const payload = {
+            action: 'saveUser',
             email: email,
             nombre: u.name,
             rol: rol,
@@ -2213,10 +2227,11 @@ window.quickApproveUser = async function(email, nombre, companyName = '') {
             estado: 'APROBADO'
         };
 
-        await fetch(ROLES_SCRIPT_URL, {
+        const queryParams = new URLSearchParams(payload).toString();
+
+        await fetch(`${ROLES_SCRIPT_URL}?${queryParams}`, {
             method: 'POST',
             mode: 'no-cors',
-            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(payload)
         });
 
