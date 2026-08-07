@@ -490,7 +490,11 @@
                         const dbUser = dbUserMatches.length > 0 ? dbUserMatches[dbUserMatches.length - 1] : null;
                         
                         if (!dbUser) {
-                            alert('Tu correo no está registrado en el sistema. Por favor, crea una cuenta primero.');
+                            window.showRegistrationForm({
+                                name: account.name || '',
+                                email: normalizedAccountEmail,
+                                picture: ''
+                            });
                             sessionStorage.removeItem('userAccount');
                             localStorage.removeItem('userAccount');
                             return;
@@ -999,7 +1003,7 @@
                             especialidad: '',
                             cargo: '',
                             rol: 'INVITADO',
-                            estado: 'PENDIENTE'
+                            estado: 'APROBADO'
                         })
                     });
                 }
