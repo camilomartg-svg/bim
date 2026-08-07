@@ -1982,6 +1982,7 @@ window.saveGlobalUser = async function() {
     saveBtn.disabled = true;
     saveBtn.innerHTML = '<span class="material-symbols-outlined animate-spin text-sm mr-2">autorenew</span> Guardando...';
 
+    try {
         const payload = {
             action: 'saveUser',
             email: email,
