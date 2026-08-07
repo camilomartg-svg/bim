@@ -3,6 +3,7 @@
 // =========================================================================
 
 const DRIVE_ROOT_FOLDER_ID = "1aWUNnLgjWBkA6wdCM99XMY9SU7eSDP-H";
+const SPREADSHEET_ID = "1OczWRlaefMY5RQon8K3va91H8TInJlp9RuBJeTPLiiA";
 
 const COMPANY_HEADERS = ['fecha', 'id', 'name', 'legalName', 'type', 'website', 'email', 'phone', 'country', 'state', 'city', 'zip', 'address', 'sectors', 'specialties', 'logoBase64', 'code', 'driveFolderId'];
 const USER_HEADERS = ['fecha', 'nombre', 'email', 'telefono', 'empresa', 'especialidad', 'cargo', 'rol', 'estado'];
@@ -128,7 +129,7 @@ function doPost(e) {
       return output_(uploadFile_(e, data), callback);
     }
 
-    const doc = SpreadsheetApp.openById("1Jcxc9SwtbDrExyGeS_zy0BVnEER64iEEvzCnzCo5OCg");
+    const doc = SpreadsheetApp.openById(SPREADSHEET_ID);
     const fecha = new Date().toISOString();
 
     if (data && data.action === 'createUserAndCompany') {
@@ -448,7 +449,7 @@ function doGet(e) {
       return output_(textFile_(e, null), callback);
     }
 
-    const doc = SpreadsheetApp.openById("1Jcxc9SwtbDrExyGeS_zy0BVnEER64iEEvzCnzCo5OCg");
+    const doc = SpreadsheetApp.openById(SPREADSHEET_ID);
     
     if (action === 'getCompanies') {
       const sheet = doc.getSheetByName('Empresas');
@@ -720,7 +721,7 @@ function uploadFile_(e, body) {
 }
 
 function wipeAndInitDatabase() {
-  const doc = SpreadsheetApp.openById("1Jcxc9SwtbDrExyGeS_zy0BVnEER64iEEvzCnzCo5OCg");
+  const doc = SpreadsheetApp.openById(SPREADSHEET_ID);
   
   // Clear Empresas
   let companySheet = doc.getSheetByName('Empresas');
