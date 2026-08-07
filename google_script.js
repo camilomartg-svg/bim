@@ -197,23 +197,57 @@ function doPost(e) {
       ensureHeaders(userSheet, USER_HEADERS);
       
       const uHeaders = userSheet.getRange(1, 1, 1, userSheet.getLastColumn()).getValues()[0].map(h => String(h).trim());
-      const uRow = new Array(uHeaders.length).fill("");
-      const setUVal = (headerName, value) => {
-        const idx = uHeaders.indexOf(headerName);
-        if (idx !== -1) uRow[idx] = value;
-      };
       
-      setUVal('fecha', fecha);
-      setUVal('nombre', data.userData.nombre || '');
-      setUVal('email', data.userData.email);
-      setUVal('telefono', data.userData.telefono || '');
-      setUVal('empresa', data.userData.empresa || '');
-      setUVal('especialidad', data.userData.especialidad || '');
-      setUVal('cargo', data.userData.cargo || '');
-      setUVal('rol', data.userData.rol || 'INVITADO');
-      setUVal('estado', data.userData.estado || 'PENDIENTE');
-      
-      userSheet.appendRow(uRow);
+      const emailColIdx = uHeaders.indexOf('email');
+      let existingRowIdx = -1;
+      if (emailColIdx !== -1) {
+        const numRows = userSheet.getLastRow();
+        if (numRows > 1) {
+          const values = userSheet.getRange(2, emailColIdx + 1, numRows - 1, 1).getValues();
+          const targetEmail = String(data.userData.email).toLowerCase().trim();
+          for (let i = 0; i < values.length; i++) {
+            if (String(values[i][0]).toLowerCase().trim() === targetEmail) {
+              existingRowIdx = i + 2;
+              break;
+            }
+          }
+        }
+      }
+
+      if (existingRowIdx !== -1) {
+        const rowRange = userSheet.getRange(existingRowIdx, 1, 1, uHeaders.length);
+        const currentRow = rowRange.getValues()[0];
+        const setValExist = (headerName, value) => {
+          const idx = uHeaders.indexOf(headerName);
+          if (idx !== -1 && value !== undefined && value !== null && value !== '') {
+            currentRow[idx] = value;
+          }
+        };
+        setValExist('nombre', data.userData.nombre);
+        setValExist('telefono', data.userData.telefono);
+        setValExist('empresa', data.userData.empresa);
+        setValExist('especialidad', data.userData.especialidad);
+        setValExist('cargo', data.userData.cargo);
+        setValExist('rol', data.userData.rol);
+        setValExist('estado', data.userData.estado);
+        rowRange.setValues([currentRow]);
+      } else {
+        const uRow = new Array(uHeaders.length).fill("");
+        const setUVal = (headerName, value) => {
+          const idx = uHeaders.indexOf(headerName);
+          if (idx !== -1) uRow[idx] = value;
+        };
+        setUVal('fecha', fecha);
+        setUVal('nombre', data.userData.nombre || '');
+        setUVal('email', data.userData.email);
+        setUVal('telefono', data.userData.telefono || '');
+        setUVal('empresa', data.userData.empresa || '');
+        setUVal('especialidad', data.userData.especialidad || '');
+        setUVal('cargo', data.userData.cargo || '');
+        setUVal('rol', data.userData.rol || 'INVITADO');
+        setUVal('estado', data.userData.estado || 'PENDIENTE');
+        userSheet.appendRow(uRow);
+      }
       
       return ContentService.createTextOutput(JSON.stringify({ 
         status: "success", 
@@ -408,23 +442,57 @@ function doPost(e) {
       ensureHeaders(userSheet, USER_HEADERS);
       
       const headers = userSheet.getRange(1, 1, 1, userSheet.getLastColumn()).getValues()[0].map(h => String(h).trim());
-      const row = new Array(headers.length).fill("");
-      const setVal = (headerName, value) => {
-        const idx = headers.indexOf(headerName);
-        if (idx !== -1) row[idx] = value;
-      };
       
-      setVal('fecha', fecha);
-      setVal('nombre', data.nombre || '');
-      setVal('email', data.email);
-      setVal('telefono', data.telefono || '');
-      setVal('empresa', data.empresa || '');
-      setVal('especialidad', data.especialidad || '');
-      setVal('cargo', data.cargo || '');
-      setVal('rol', data.rol || 'INVITADO');
-      setVal('estado', data.estado || 'PENDIENTE');
-      
-      userSheet.appendRow(row);
+      const emailColIdx = headers.indexOf('email');
+      let existingRowIdx = -1;
+      if (emailColIdx !== -1) {
+        const numRows = userSheet.getLastRow();
+        if (numRows > 1) {
+          const values = userSheet.getRange(2, emailColIdx + 1, numRows - 1, 1).getValues();
+          const targetEmail = String(data.email).toLowerCase().trim();
+          for (let i = 0; i < values.length; i++) {
+            if (String(values[i][0]).toLowerCase().trim() === targetEmail) {
+              existingRowIdx = i + 2;
+              break;
+            }
+          }
+        }
+      }
+
+      if (existingRowIdx !== -1) {
+        const rowRange = userSheet.getRange(existingRowIdx, 1, 1, headers.length);
+        const currentRow = rowRange.getValues()[0];
+        const setValExist = (headerName, value) => {
+          const idx = headers.indexOf(headerName);
+          if (idx !== -1 && value !== undefined && value !== null && value !== '') {
+            currentRow[idx] = value;
+          }
+        };
+        setValExist('nombre', data.nombre);
+        setValExist('telefono', data.telefono);
+        setValExist('empresa', data.empresa);
+        setValExist('especialidad', data.especialidad);
+        setValExist('cargo', data.cargo);
+        setValExist('rol', data.rol);
+        setValExist('estado', data.estado);
+        rowRange.setValues([currentRow]);
+      } else {
+        const row = new Array(headers.length).fill("");
+        const setVal = (headerName, value) => {
+          const idx = headers.indexOf(headerName);
+          if (idx !== -1) row[idx] = value;
+        };
+        setVal('fecha', fecha);
+        setVal('nombre', data.nombre || '');
+        setVal('email', data.email);
+        setVal('telefono', data.telefono || '');
+        setVal('empresa', data.empresa || '');
+        setVal('especialidad', data.especialidad || '');
+        setVal('cargo', data.cargo || '');
+        setVal('rol', data.rol || 'INVITADO');
+        setVal('estado', data.estado || 'PENDIENTE');
+        userSheet.appendRow(row);
+      }
       
       return ContentService.createTextOutput(JSON.stringify({ status: "success", message: "Usuario creado exitosamente" })).setMimeType(ContentService.MimeType.JSON);
     }
