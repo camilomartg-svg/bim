@@ -1909,7 +1909,7 @@ export default function QualityReportList() {
               </div>
 
               <footer className="p-8 border-t border-slate-200 dark:border-slate-800 flex flex-wrap justify-end gap-3 shrink-0 bg-white/50 dark:bg-[#020617]/50">
-                {isBimTeam && (
+                {(isBimTeam || user?.role === 'admin') && (
                   <div className="flex items-center gap-2">
                     {isConfirmingDelete ? (
                       <>

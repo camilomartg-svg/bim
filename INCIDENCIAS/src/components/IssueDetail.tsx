@@ -679,7 +679,7 @@ export default function IssueDetail({ issue: initialIssue, onClose, onOpenReport
                  <span className="text-[8px] font-black text-white uppercase tracking-widest whitespace-nowrap">VIENE DE INFORME</span>
                </button>
              )}
-             {isBimTeam && (
+             {isAdminUser && (
                <div className="flex gap-2">
                  {showConfirmDelete && (
                    <button 
@@ -1470,7 +1470,7 @@ export default function IssueDetail({ issue: initialIssue, onClose, onOpenReport
                        </div>
 
                        {/* BIM ADMIN DELETE */}
-                       {isBimTeam && (
+                       {isAdminUser && (
                          <div className="pt-6 border-t border-slate-800/50">
                             {showConfirmDelete ? (
                               <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-2xl flex flex-col gap-3">

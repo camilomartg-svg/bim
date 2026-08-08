@@ -77,9 +77,9 @@ function Dashboard() {
   const qualityAllowed = projectConfig?.qualityReportsAllowedProfiles || [];
   const envAllowed = projectConfig?.environmentalReportsAllowedProfiles || [];
 
-  const canViewSite = isBimTeam || siteAllowed.length === 0 || siteAllowed.includes(user?.position || "");
-  const canViewQuality = isBimTeam || qualityAllowed.length === 0 || qualityAllowed.includes(user?.position || "");
-  const canViewEnv = isBimTeam || envAllowed.length === 0 || envAllowed.includes(user?.position || "");
+  const canViewSite = isBimTeam || user?.role === 'admin' || siteAllowed.length === 0 || siteAllowed.includes(user?.position || "");
+  const canViewQuality = isBimTeam || user?.role === 'admin' || qualityAllowed.length === 0 || qualityAllowed.includes(user?.position || "");
+  const canViewEnv = isBimTeam || user?.role === 'admin' || envAllowed.length === 0 || envAllowed.includes(user?.position || "");
 
   const handleOpenIssue = async (issueId: string) => {
     try {
@@ -166,13 +166,13 @@ function Dashboard() {
         );
       case 'issues':
       case 'anuladas':
-        if (!isBimTeam) {
+        if (!isBimTeam && user?.role !== 'admin') {
           return (
             <div className="flex-1 flex items-center justify-center bg-white dark:bg-[#020617]">
                <div className="text-center p-8 bg-slate-50 dark:bg-slate-900 shadow-2xl shadow-indigo-500/10 rounded-3xl border border-slate-200 dark:border-slate-800 animate-in fade-in zoom-in duration-500">
                   <AlertCircle className="w-16 h-16 text-indigo-500 mx-auto mb-6" />
                   <h2 className="text-2xl font-black text-slate-900 dark:text-white uppercase tracking-tight mb-4">Acceso Restringido</h2>
-                  <p className="text-slate-500 dark:text-slate-400 font-medium mb-8 max-w-sm">Esta sección es exclusiva para miembros del equipo BIM. Por favor, contacte con administración si necesita acceso.</p>
+                  <p className="text-slate-500 dark:text-slate-400 font-medium mb-8 max-w-sm">Esta sección es exclusiva para miembros del equipo BIM o administradores. Por favor, contacte con administración si necesita acceso.</p>
                   <button 
                     onClick={() => setActiveTab('dashboard')}
                     className="px-8 py-4 bg-slate-900 dark:bg-white text-white dark:text-slate-900 rounded-2xl text-[10px] font-black uppercase tracking-[0.15em] hover:scale-105 active:scale-95 transition-all shadow-xl shadow-slate-900/10"
@@ -248,7 +248,7 @@ function Dashboard() {
         }
         return <EnvironmentalReportList />;
       case 'settings':
-        if (!isBimTeam) {
+        if (user?.role !== 'admin') {
           return <RestrictedView title="Configuración" onBack={() => setActiveTab('dashboard')} />;
         }
         return <ConfigPanel />;

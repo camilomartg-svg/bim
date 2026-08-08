@@ -27,7 +27,7 @@ export default function Sidebar({
 
   const menuItems = [
     { id: 'dashboard', icon: LayoutDashboard, label: 'Dashboard' },
-    ...(isBimTeam ? [
+    ...(isBimTeam || user?.role === 'admin' ? [
       { id: 'issues', icon: ClipboardList, label: 'Incidencias' },
       { id: 'anuladas', icon: XCircle, label: 'Anuladas' },
     ] : []),
@@ -37,7 +37,7 @@ export default function Sidebar({
     { id: 'models', icon: Layers, label: 'Modelos CDE' },
     { id: 'reports', icon: FileText, label: 'Métricas' },
     { id: 'notifications', icon: Bell, label: 'Notificaciones' },
-    ...(isBimTeam ? [{ id: 'settings', icon: Settings, label: 'Configuración' }] : []),
+    ...(user?.role === 'admin' ? [{ id: 'settings', icon: Settings, label: 'Configuración' }] : []),
   ];
 
   return (

@@ -357,7 +357,7 @@ export default function SiteReportList({ initialSelectedReportId, onClearInitial
                   </div>
                 </div>
                      <div className="p-6 lg:p-8 border-t border-slate-200 dark:border-slate-800 bg-slate-100/50 dark:bg-slate-900/50 flex flex-wrap justify-end items-center gap-4">
-                 {isBimTeam && (
+                 {(isBimTeam || user?.role === 'admin') && (
                    <div className="flex items-center gap-2">
                      {isConfirmingDelete ? (
                        <>
