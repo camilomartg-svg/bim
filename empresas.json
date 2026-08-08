@@ -1,1 +1,37 @@
-[]
+[
+  {
+    "id": "empresa-1786128422720",
+    "name": "Mesh Estudio",
+    "code": "MES",
+    "admins": [
+      "info@meshestudio.com",
+      "camilo.martinez@meshestudio.com"
+    ],
+    "zonaHoraria": "America/Bogota",
+    "members": [
+      {
+        "name": "info",
+        "email": "info@meshestudio.com",
+        "role": "ADMINISTRADOR_EMPRESA",
+        "empresaUsuario": "Mesh Estudio",
+        "especialidad": "",
+        "cargo": "Administrador de Empresa"
+      },
+      {
+        "name": "Camilo Martínez Guevara",
+        "email": "camilo.martinez@meshestudio.com",
+        "role": "ADMINISTRADOR_EMPRESA",
+        "empresaUsuario": "Mesh Estudio",
+        "especialidad": "",
+        "cargo": ""
+      }
+    ],
+    "razonSocial": "Mesh Estudio SAS",
+    "terminosAceptados": true,
+    "tratamientoDatos": true,
+    "image": "https://i.postimg.cc/02mTnnQv/21bd5ee9d2351270615280386caad1f3.jpg",
+    "location": "Bogotá, Colombia",
+    "configUrl": "config-empresa-1786128422720.json",
+    "driveFolderId": "1tt4WfX9ehHQNKhV5PFrPn4NeJfInyOzh"
+  }
+]
