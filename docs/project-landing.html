@@ -384,10 +384,6 @@
           const currentVersion = metaVersion?.getAttribute('content') || Date.now().toString();
           
           const urlParams = new URLSearchParams(window.location.search);
-if (urlParams.get('empresa') === atob('YWxjYWJhbWE=') || urlParams.get('empresa') === atob('QWxjYWJhbWE=') || urlParams.get('empresa') === atob('QUxDQUJBTUE=')) {
-  urlParams.set('empresa', 'amarillo');
-  window.history.replaceState({}, '', window.location.pathname + '?' + urlParams.toString());
-}
           const empresaId = urlParams.get('empresa');
           let configUrl = `portal-config.json?v=${encodeURIComponent(currentVersion)}`;
           
@@ -660,10 +656,6 @@ if (urlParams.get('empresa') === atob('YWxjYWJhbWE=') || urlParams.get('empresa'
             window.history.back();
         } else {
             const urlParams = new URLSearchParams(window.location.search);
-if (urlParams.get('empresa') === 'alcabama' || urlParams.get('empresa') === 'Alcabama' || urlParams.get('empresa') === 'ALCABAMA') {
-  urlParams.set('empresa', 'amarillo');
-  window.history.replaceState({}, '', window.location.pathname + '?' + urlParams.toString());
-}
             const empresaId = urlParams.get('empresa');
             window.location.href = 'home.html' + (empresaId ? '?empresa=' + encodeURIComponent(empresaId) : '');
         }

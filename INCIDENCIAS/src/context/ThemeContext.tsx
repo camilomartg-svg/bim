@@ -11,7 +11,7 @@ const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
 
 export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [theme, setTheme] = useState<Theme>(() => {
-    const saved = localStorage.getItem('trevoly-theme');
+    const saved = localStorage.getItem('nora-theme');
     return (saved as Theme) || 'dark';
   });
 
@@ -19,7 +19,7 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     const root = window.document.documentElement;
     root.classList.remove('light', 'dark');
     root.classList.add(theme);
-    localStorage.setItem('trevoly-theme', theme);
+    localStorage.setItem('nora-theme', theme);
   }, [theme]);
 
   const toggleTheme = () => {

@@ -1,4 +1,4 @@
-# Security Specification - Trevoly BIM Issues
+# Security Specification - Nora BIM Issues
 
 ## Data Invariants
 1. A **User** profile must exist for any authenticated user before they can interact with the system.

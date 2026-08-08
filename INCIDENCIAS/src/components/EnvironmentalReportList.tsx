@@ -1205,7 +1205,7 @@ export default function EnvironmentalReportList() {
           setAprResponsiblePosition(anyDir.position);
         } else {
           setAprResponsibleName('DIRECTOR DE OBRA ASIGNADO');
-          setAprResponsibleEmail('director.obra@trevoly-cde.com');
+          setAprResponsibleEmail('director.obra@norabim.com');
           setAprResponsiblePosition('DIRECTOR DE OBRA');
         }
       }
@@ -2079,7 +2079,7 @@ export default function EnvironmentalReportList() {
             </h1>
             <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.4em] flex items-center gap-3">
               <span className="w-6 h-px bg-slate-200 dark:bg-slate-800" />
-              Cumplimiento y Sostenibilidad CDE Trevoly
+              Cumplimiento y Sostenibilidad Nora CDE
             </p>
           </div>
 
@@ -3786,7 +3786,7 @@ export default function EnvironmentalReportList() {
                             {selectedReport.responsiblePosition || 'DIRECTOR DE OBRA'}
                           </span>
                         </div>
-                        <span className="text-[8px] text-slate-400 font-mono font-bold block mt-0.5 truncate">{selectedReport.responsibleEmail || 'director.obra@trevoly.com'}</span>
+                        <span className="text-[8px] text-slate-400 font-mono font-bold block mt-0.5 truncate">{selectedReport.responsibleEmail || 'director.obra@norabim.com'}</span>
                       </div>
 
                       <div>
@@ -4872,7 +4872,7 @@ export default function EnvironmentalReportList() {
                           <div className="flex-1 overflow-auto p-6 space-y-3 custom-scrollbar">
                             {[
                               { id: 'cde-pdf1', name: 'PLANO_ACOPIO_ZONA_NORTE_V2.pdf', category: 'plan_pdf', url: 'https://images.unsplash.com/photo-1541888946425-d81bb19240f5?w=1000' },
-                              { id: 'cde-pdf2', name: 'PLANO_LOCALIZACION_ACOPIOS_SOSTENIBLE_TREVOLY.pdf', category: 'plan_pdf', url: 'https://images.unsplash.com/photo-1504917595217-d4dc5ebe6122?w=1000' },
+                              { id: 'cde-pdf2', name: 'PLANO_LOCALIZACION_ACOPIOS_SOSTENIBLE_NORA.pdf', category: 'plan_pdf', url: 'https://images.unsplash.com/photo-1504917595217-d4dc5ebe6122?w=1000' },
                               { id: 'cde-vi1', name: 'Inspección_Cierre_Operativo_Mayo.mp4', category: 'video', url: '#' },
                               { id: 'cde-img1', name: 'Foto_Estado_Inicial_Zona_Acopio_Norte.jpg', category: 'image', url: 'https://images.unsplash.com/photo-1581094794329-c8112a89af12?w=800' }
                             ].map(file => (

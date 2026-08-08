@@ -206,7 +206,7 @@ export async function exportAprovechamientoToPDF(report: QualityReport, googleAc
   doc.setFillColor(255, 255, 255);
   doc.rect(165, 10, 35, 13, "FD");
   doc.setFont("Helvetica", "bold"); doc.setFontSize(10); doc.setTextColor(16, 185, 129); // Modern Emerald branding
-  doc.text("TREVOLY", 170, 16.8);
+  doc.text("NORA", 170, 16.8);
   doc.setFont("Helvetica", "normal"); doc.setFontSize(5); doc.setTextColor(148, 163, 184);
   doc.text("GESTIÓN AMBIENTAL", 170, 20.2);
 
@@ -347,7 +347,7 @@ export async function exportAprovechamientoToPDF(report: QualityReport, googleAc
 
   // Footer decorative bottom page line with number
   doc.setFont("Helvetica", "normal"); doc.setFontSize(6.5); doc.setTextColor(148, 163, 184);
-  doc.text(`TREVOLY GESTIÓN AMBIENTAL  |  CÓDIGO REPORTE: ${report.code || 'INF-APR-0001'}`, 10, 287);
+  doc.text(`NORA GESTIÓN AMBIENTAL  |  CÓDIGO REPORTE: ${report.code || 'INF-APR-0001'}`, 10, 287);
   doc.text("PÁGINA 1", 200, 287, { align: "right" });
 
   // ==========================================
@@ -533,7 +533,7 @@ export async function exportAprovechamientoToPDF(report: QualityReport, googleAc
 
   // Footer decorative bottom page line with number
   doc.setFont("Helvetica", "normal"); doc.setFontSize(6.5); doc.setTextColor(148, 163, 184);
-  doc.text(`TREVOLY GESTIÓN AMBIENTAL  |  CÓDIGO REPORTE: ${report.code || 'INF-APR-0001'}`, 10, 287);
+  doc.text(`NORA GESTIÓN AMBIENTAL  |  CÓDIGO REPORTE: ${report.code || 'INF-APR-0001'}`, 10, 287);
   doc.text("PÁGINA 2", 200, 287, { align: "right" });
 
   // Save the constructed client-side PDF file instantly
@@ -555,7 +555,7 @@ export function exportAprovechamientoToExcel(report: QualityReport) {
   dataRows.push(["TÍTULO DEL REPORTE", report.title.toUpperCase()]);
   dataRows.push(["PERIODO DE VIGENCIA", `${report.startDate || '01-01'} AL ${report.endDate || '30-06'}`]);
   dataRows.push(["RESPONSABLE ASIGNADO", `${report.responsibleName || 'ROBERTO GÓMEZ'} (${report.responsiblePosition || 'DIRECTOR DE OBRA'})`]);
-  dataRows.push(["EMAIL CONTACTO RESPONSABLE", report.responsibleEmail || 'director.obra@trevoly.com']);
+  dataRows.push(["EMAIL CONTACTO RESPONSABLE", report.responsibleEmail || 'director.obra@norabim.com']);
   dataRows.push(["DESCRIPCIÓN DEL PROCESO", report.processDescription || 'N/A']);
   dataRows.push([]); // blank separator row
 

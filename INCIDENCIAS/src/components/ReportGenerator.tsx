@@ -226,7 +226,7 @@ export default function ReportGenerator() {
               Rendimiento y Métricas
             </h1>
             <p className="text-[10px] font-black text-slate-400 dark:text-slate-500 mt-1 uppercase tracking-[0.3em]">
-              Tablero Analítico Inteligente Trevoly CDE
+              Tablero Analítico Inteligente Nora CDE
             </p>
           </div>
 

@@ -324,10 +324,6 @@
                 const landingEnabled = !project.landing || project.landing.enabled !== false;
                 
                 const urlParams = new URLSearchParams(window.location.search);
-if (urlParams.get('empresa') === atob('YWxjYWJhbWE=') || urlParams.get('empresa') === atob('QWxjYWJhbWE=') || urlParams.get('empresa') === atob('QUxDQUJBTUE=')) {
-  urlParams.set('empresa', 'amarillo');
-  window.history.replaceState({}, '', window.location.pathname + '?' + urlParams.toString());
-}
                 const empresaId = urlParams.get('empresa');
                 const empresaParam = empresaId ? `&empresa=${encodeURIComponent(empresaId)}` : '';
 
@@ -444,10 +440,6 @@ if (urlParams.get('empresa') === atob('YWxjYWJhbWE=') || urlParams.get('empresa'
                 if (imgFooterSecondaryDark) imgFooterSecondaryDark.src = footerLogoSecondaryDark;
 
                 const urlParams = new URLSearchParams(window.location.search);
-if (urlParams.get('empresa') === 'alcabama' || urlParams.get('empresa') === 'Alcabama' || urlParams.get('empresa') === 'ALCABAMA') {
-  urlParams.set('empresa', 'amarillo');
-  window.history.replaceState({}, '', window.location.pathname + '?' + urlParams.toString());
-}
                 const currentEmpresaId = urlParams.get('empresa');
                 
                 let filteredProjects = safeConfig.projects || [];
@@ -513,10 +505,6 @@ if (urlParams.get('empresa') === 'alcabama' || urlParams.get('empresa') === 'Alc
                     const currentVersion = metaVersion?.getAttribute('content') || Date.now().toString();
                     
                     const urlParams = new URLSearchParams(window.location.search);
-if (urlParams.get('empresa') === 'alcabama' || urlParams.get('empresa') === 'Alcabama' || urlParams.get('empresa') === 'ALCABAMA') {
-  urlParams.set('empresa', 'amarillo');
-  window.history.replaceState({}, '', window.location.pathname + '?' + urlParams.toString());
-}
                     let empresaId = urlParams.get('empresa');
                     
                     // Fallback a adminEmpresaId si no hay empresa en la URL

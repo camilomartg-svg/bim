@@ -53,7 +53,7 @@ export default function Sidebar({
             />
           </div>
           <div className="hidden lg:flex flex-col">
-            <span className="font-display font-black text-sm tracking-tight text-slate-900 dark:text-white leading-none">TREVOLY</span>
+            <span className="font-display font-black text-sm tracking-tight text-slate-900 dark:text-white leading-none">NORA</span>
             <span className="text-[7px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-[0.2em] mt-1">Ecosystem CDE</span>
           </div>
         </div>
@@ -87,18 +87,7 @@ export default function Sidebar({
       </nav>
 
       <div className="p-5 space-y-5">
-        <div className="hidden lg:block p-4 bg-slate-50 dark:bg-[#0a0a0a] rounded-xl border border-slate-100 dark:border-[#1a1a1a] relative overflow-hidden group transition-all duration-500">
-          <div className="absolute top-0 right-0 p-3 opacity-[0.03] dark:opacity-5 translate-x-2 -translate-y-2 group-hover:translate-x-1 transition-transform">
-             <Package className="w-8 h-8 text-slate-900 dark:text-white" />
-          </div>
-          <p className="text-[6.5px] font-black text-slate-300 dark:text-slate-600 uppercase tracking-widest mb-2">Partner Oficial</p>
-          <img 
-            src="https://i.postimg.cc/3xdLSg9g/artis-urbano2-(1).png" 
-            alt="Artis Logo" 
-            className="h-3.5 object-contain grayscale opacity-40 group-hover:grayscale-0 group-hover:opacity-100 transition-all duration-500"
-            referrerPolicy="no-referrer"
-          />
-        </div>
+
 
         <button 
           onClick={logout}

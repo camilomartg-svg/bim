@@ -258,7 +258,7 @@ function Dashboard() {
              <div className="text-center">
                <Layers className="w-20 h-20 text-slate-200 mx-auto mb-6" />
                <h2 className="text-sm font-black text-slate-900 uppercase tracking-[0.3em]">Módulo Vanguardista</h2>
-               <p className="text-xs text-slate-400 mt-3 font-medium">Esta capacidad está siendo optimizada para Trevoly.</p>
+               <p className="text-xs text-slate-400 mt-3 font-medium">Esta capacidad está siendo optimizada para Nora.</p>
              </div>
           </div>
         );
@@ -280,7 +280,7 @@ function Dashboard() {
           <div className="flex items-center gap-2.5">
              <span className="text-[8px] font-black text-slate-400 dark:text-slate-600 uppercase tracking-[0.2em]">Portal BIM</span>
              <ChevronRight className="w-2 h-2 text-slate-300 dark:text-slate-700" />
-             <span className="text-[8px] font-black text-slate-900 dark:text-white uppercase tracking-[0.2em]">Trevoly</span>
+             <span className="text-[8px] font-black text-slate-900 dark:text-white uppercase tracking-[0.2em]">Nora</span>
              {activeTab !== 'dashboard' && (
                <>
                  <ChevronRight className="w-2 h-2 text-slate-300 dark:text-slate-700" />
@@ -418,20 +418,20 @@ function LoginScreen() {
           
           <div className="relative z-10 flex items-center gap-5 mt-16 opacity-30">
             <img 
-              src="https://i.postimg.cc/3xdLSg9g/artis-urbano2-(1).png" 
-              alt="Artis Logo" 
+              src="https://i.postimg.cc/DhDLzDMQ/LOGO-NORA-BLANCO.png" 
+              alt="Nora Logo" 
               className="h-5 object-contain"
               referrerPolicy="no-referrer"
             />
             <div className="h-3 w-px bg-white/20" />
-            <span className="text-[8px] font-black uppercase tracking-[0.4em]">Powered by Artis</span>
+            <span className="text-[8px] font-black uppercase tracking-[0.4em]">nora CDE</span>
           </div>
         </div>
 
         {/* Right Side: Auth Form */}
         <div className="p-12 lg:p-20 flex flex-col justify-center bg-white dark:bg-slate-900 transition-colors duration-300">
           <div className="mb-10">
-            <h1 className="text-2xl font-display font-black text-slate-900 dark:text-white tracking-tightest uppercase mb-3 leading-none">TREVOLY</h1>
+            <h1 className="text-2xl font-display font-black text-slate-900 dark:text-white tracking-tightest uppercase mb-3 leading-none">NORA</h1>
             <div className="flex items-center gap-3">
               <div className="h-0.5 w-10 bg-amber-500 rounded-full" />
               <span className="text-[9px] font-black text-slate-400 dark:text-slate-600 uppercase tracking-[0.4em]">Common Data Environment</span>
@@ -485,7 +485,7 @@ function Main() {
             />
          </div>
          <div className="space-y-2">
-            <p className="text-[8px] font-black uppercase tracking-[0.6em] text-slate-900 dark:text-white">TREVOLY ECOSYSTEM</p>
+            <p className="text-[8px] font-black uppercase tracking-[0.6em] text-slate-900 dark:text-white">NORA ECOSYSTEM</p>
             <p className="text-[7px] font-bold uppercase tracking-[0.3em] text-slate-400 dark:text-slate-600">Sincronizando Common Data Environment...</p>
          </div>
        </div>
