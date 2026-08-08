@@ -325,25 +325,59 @@
 
                 <!-- Tab: Equipos de Tarea (ISO 19650) -->
                 <div id="tab-content-teams" class="tab-panel hidden space-y-6">
-                    <div class="bg-white dark:bg-card-dark rounded-3xl border border-border-light dark:border-border-dark p-6 shadow-sm">
-                        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
-                            <div>
-                                <h2 class="text-lg font-bold tracking-tight">Equipos de Tarea (ISO 19650)</h2>
-                                <p class="text-xs text-gray-500">Crea los equipos de trabajo del proyecto y asigna sus miembros.</p>
+                    <!-- Notice Banner -->
+                    <div class="bg-indigo-50 dark:bg-slate-800/40 border border-indigo-100 dark:border-border-dark p-6 rounded-3xl flex items-start gap-4 shadow-sm">
+                        <span class="material-symbols-outlined text-indigo-500 mt-0.5">info</span>
+                        <div>
+                            <h4 class="text-xs font-bold text-indigo-900 dark:text-indigo-200 uppercase tracking-wider mb-1">Configuración de Equipos de Tarea</h4>
+                            <p class="text-[10px] text-indigo-700 dark:text-gray-300 leading-relaxed font-medium">
+                                Los miembros del equipo y sus correspondientes Equipos de Tarea (bajo el estándar ISO 19650) se configuran para cada proyecto y se guardan de forma centralizada.
+                            </p>
+                        </div>
+                    </div>
+
+                    <!-- Teams List Management -->
+                    <div class="bg-white dark:bg-card-dark border border-border-light dark:border-border-dark p-6 rounded-3xl shadow-sm space-y-6">
+                        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-border-light dark:border-border-dark pb-4">
+                            <div class="flex items-center gap-3">
+                                <span class="material-symbols-outlined text-primary dark:text-white">groups</span>
+                                <h3 class="text-xs font-black uppercase tracking-[0.2em]">Equipos de Tarea del Proyecto</h3>
                             </div>
-                            <!-- Form to Add Team -->
                             <div class="flex items-center gap-2">
-                                <input id="new-team-name" type="text" placeholder="Ej: BIM, ESTRUCTURA" class="rounded-xl border-slate-200 dark:border-border-dark dark:bg-slate-800 px-3 py-2 text-xs font-semibold w-48" />
+                                <input id="new-team-name" type="text" placeholder="Ej: BIM, ESTRUCTURA" class="rounded-xl border-slate-200 dark:border-border-dark dark:bg-slate-800 px-3 py-1.5 text-xs font-semibold w-48" />
                                 <button id="add-team-btn" class="flex items-center gap-1 bg-primary hover:bg-black dark:bg-white dark:hover:bg-gray-100 text-white dark:text-black px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-wider transition-colors shadow-sm">
                                     <span class="material-symbols-outlined text-[16px]">add</span>
                                     <span>Crear</span>
                                 </button>
                             </div>
                         </div>
+                        <div id="teams-list-container" class="flex flex-wrap gap-3">
+                            <!-- Pills created dynamically -->
+                        </div>
+                    </div>
 
-                        <!-- Teams List -->
-                        <div id="teams-container" class="grid gap-6 grid-cols-1 md:grid-cols-2">
-                            <!-- Injected dynamically -->
+                    <!-- Project Members Team Assignment Table -->
+                    <div class="bg-white dark:bg-card-dark border border-border-light dark:border-border-dark p-6 rounded-3xl shadow-sm space-y-6">
+                        <div class="flex items-center gap-3 border-b border-border-light dark:border-border-dark pb-4">
+                            <span class="material-symbols-outlined text-primary dark:text-white">person</span>
+                            <h3 class="text-xs font-black uppercase tracking-[0.2em]">Personal del Proyecto</h3>
+                        </div>
+                        <div class="overflow-hidden rounded-2xl border border-border-light dark:border-border-dark shadow-sm">
+                            <div class="overflow-x-auto">
+                                <table class="w-full text-left border-collapse text-sm">
+                                    <thead class="bg-gray-50 dark:bg-slate-800/50 text-gray-500 uppercase text-[10px] tracking-wider font-bold border-b border-border-light dark:border-border-dark">
+                                        <tr>
+                                            <th class="py-3 px-4">Cargo / Rol</th>
+                                            <th class="py-3 px-4">Nombre</th>
+                                            <th class="py-3 px-4">Email de Usuario</th>
+                                            <th class="py-3 px-4 w-48">Equipo de Tarea</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="teams-members-table-body" class="divide-y divide-border-light dark:divide-border-dark">
+                                        <!-- Injected dynamically -->
+                                    </tbody>
+                                </table>
+                            </div>
                         </div>
                     </div>
                 </div>

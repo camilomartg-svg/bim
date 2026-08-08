@@ -62,7 +62,8 @@
         // Tab Teams
         newTeamName: document.getElementById('new-team-name'),
         addTeamBtn: document.getElementById('add-team-btn'),
-        teamsContainer: document.getElementById('teams-container')
+        teamsListContainer: document.getElementById('teams-list-container'),
+        teamsMembersTableBody: document.getElementById('teams-members-table-body')
     };
 
     // --- ALERTS DE INTERFAZ ---
@@ -413,79 +414,75 @@
             activeProject.equiposDeTarea = [];
         }
 
+        // Render teams list pills
         if (activeProject.equiposDeTarea.length === 0) {
-            el.teamsContainer.innerHTML = `
-                <div class="col-span-full flex flex-col items-center justify-center p-12 text-center border border-dashed border-border-light dark:border-border-dark rounded-3xl">
-                    <span class="material-symbols-outlined text-4xl text-gray-400 mb-2">groups_3</span>
-                    <h3 class="font-bold text-gray-700 dark:text-gray-300">Sin Equipos de Tarea</h3>
-                    <p class="text-xs text-gray-500 mt-1">Crea tu primer equipo de tarea (Ej: ESTRUCTURAS, ARQUITECTURA) usando el formulario de arriba.</p>
-                </div>
-            `;
-            return;
-        }
-
-        el.teamsContainer.innerHTML = activeProject.equiposDeTarea.map((team, tIndex) => {
-            const teamName = team.name.toUpperCase().trim();
-            const membersList = team.members || [];
-            
-            // Options to add: project members who are NOT already in this team
-            const assignableMembers = activeProject.members.filter(mEmail => {
-                return !membersList.some(tmEmail => tmEmail.toLowerCase().trim() === mEmail.toLowerCase().trim());
-            });
-
-            const membersHtml = membersList.map(mEmail => {
-                const cleanEmail = mEmail.toLowerCase().trim();
-                const matchedDirUser = allDirectoryUsers.find(du => du.email && du.email.toLowerCase().trim() === cleanEmail);
-                const displayName = matchedDirUser ? matchedDirUser.nombre : cleanEmail.split('@')[0];
+            el.teamsListContainer.innerHTML = `<div class="text-xs text-gray-400 italic py-2">Sin equipos de tarea creados.</div>`;
+        } else {
+            el.teamsListContainer.innerHTML = activeProject.equiposDeTarea.map((team, tIndex) => {
                 return `
-                    <div class="flex items-center justify-between bg-gray-50 dark:bg-slate-800/40 border border-border-light dark:border-border-dark rounded-xl px-3 py-2 text-xs">
-                        <div class="flex flex-col">
-                            <span class="font-bold text-gray-900 dark:text-white">${escapeHtml(displayName)}</span>
-                            <span class="text-[10px] text-gray-500 font-mono">${escapeHtml(cleanEmail)}</span>
-                        </div>
-                        <button onclick="removeTeamMember(${tIndex}, '${cleanEmail}')" class="text-gray-400 hover:text-rose-600 transition-colors">
-                            <span class="material-symbols-outlined text-[16px] block">close</span>
+                    <div class="flex items-center gap-2 bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-200 border border-indigo-100 dark:border-indigo-900/50 px-3 py-1.5 rounded-2xl text-[10px] font-black uppercase tracking-wider">
+                        <span>${escapeHtml(team.name)}</span>
+                        <button onclick="deleteTeam(${tIndex})" class="text-indigo-400 hover:text-indigo-600 transition-colors flex items-center">
+                            <span class="material-symbols-outlined text-[14px]">close</span>
                         </button>
                     </div>
                 `;
             }).join('');
+        }
 
-            const selectOptions = assignableMembers.map(email => {
-                const cleanEmail = email.toLowerCase().trim();
-                const matchedDirUser = allDirectoryUsers.find(du => du.email && du.email.toLowerCase().trim() === cleanEmail);
-                const label = matchedDirUser ? `${matchedDirUser.nombre} (${cleanEmail})` : cleanEmail;
-                return `<option value="${cleanEmail}">${escapeHtml(label)}</option>`;
+        // Render project members team assignment table
+        if (activeProject.members.length === 0) {
+            el.teamsMembersTableBody.innerHTML = `
+                <tr>
+                    <td colspan="4" class="py-8 px-4 text-center text-xs text-gray-400 italic">
+                        No hay personal asignado al proyecto. Asígnalos en la pestaña "Personal Proyecto".
+                    </td>
+                </tr>
+            `;
+            return;
+        }
+
+        el.teamsMembersTableBody.innerHTML = activeProject.members.map(email => {
+            const cleanEmail = email.toLowerCase().trim();
+            const matchedDirUser = allDirectoryUsers.find(du => du.email && du.email.toLowerCase().trim() === cleanEmail);
+            
+            const displayName = matchedDirUser ? matchedDirUser.nombre : cleanEmail.split('@')[0];
+            const displayRole = matchedDirUser ? (matchedDirUser.especialidad || matchedDirUser.rol || 'Colaborador') : 'Colaborador';
+            const displayCompany = matchedDirUser ? matchedDirUser.empresa : 'Empresa no definida';
+
+            // Find which team this user is currently in (if any)
+            let assignedTeamName = '';
+            if (activeProject.equiposDeTarea) {
+                const userTeam = activeProject.equiposDeTarea.find(team => 
+                    team.members && team.members.some(m => m.toLowerCase().trim() === cleanEmail)
+                );
+                if (userTeam) {
+                    assignedTeamName = userTeam.name.toUpperCase().trim();
+                }
+            }
+
+            // Create team options
+            const teamOptions = activeProject.equiposDeTarea.map(team => {
+                const name = team.name.toUpperCase().trim();
+                const isSelected = (name === assignedTeamName);
+                return `<option value="${escapeHtml(name)}" ${isSelected ? 'selected' : ''}>${escapeHtml(name)}</option>`;
             }).join('');
 
             return `
-                <div class="bg-white dark:bg-slate-900 border border-border-light dark:border-border-dark rounded-3xl p-5 shadow-sm flex flex-col gap-4">
-                    <div class="flex items-center justify-between border-b border-border-light dark:border-border-dark pb-3">
-                        <div class="flex flex-col">
-                            <span class="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Equipo de Tarea</span>
-                            <span class="text-sm font-bold text-gray-900 dark:text-white uppercase tracking-wider">${escapeHtml(teamName)}</span>
-                        </div>
-                        <button onclick="deleteTeam(${tIndex})" class="text-gray-400 hover:text-rose-600 border border-transparent hover:border-rose-100 hover:bg-rose-50 dark:hover:bg-rose-950/20 p-2 rounded-xl transition-all">
-                            <span class="material-symbols-outlined text-[20px] block">delete</span>
-                        </button>
-                    </div>
-
-                    <div class="space-y-2 flex-grow overflow-y-auto max-h-48 pr-1">
-                        ${membersHtml || `<div class="text-xs text-gray-400 italic text-center py-4">Sin colaboradores asignados</div>`}
-                    </div>
-
-                    ${selectOptions.length > 0 
-                        ? `
-                        <div class="flex gap-2">
-                            <select id="team-select-${tIndex}" class="flex-1 rounded-xl border-slate-200 dark:border-border-dark dark:bg-slate-800 text-xs py-2">
-                                <option value="">-- Seleccionar Colaborador --</option>
-                                ${selectOptions}
-                            </select>
-                            <button onclick="addTeamMember(${tIndex})" class="bg-gray-100 dark:bg-slate-800 hover:bg-gray-200 dark:hover:bg-slate-700 text-gray-800 dark:text-white px-3 py-2 rounded-xl text-xs font-bold uppercase tracking-wider transition-colors shadow-sm">Agregar</button>
-                        </div>
-                        `
-                        : `<p class="text-[10px] text-gray-400 text-center font-semibold uppercase tracking-wider">Todos los miembros del proyecto han sido asignados</p>`
-                    }
-                </div>
+                <tr class="hover:bg-gray-50 dark:hover:bg-slate-800/40 transition-colors">
+                    <td class="py-3 px-4">
+                        <div class="text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wider">${escapeHtml(displayRole)}</div>
+                        <div class="text-[10px] text-gray-400">${escapeHtml(displayCompany)}</div>
+                    </td>
+                    <td class="py-3 px-4 font-bold text-gray-900 dark:text-white">${escapeHtml(displayName)}</td>
+                    <td class="py-3 px-4 text-xs font-mono text-gray-500">${escapeHtml(cleanEmail)}</td>
+                    <td class="py-3 px-4">
+                        <select onchange="changeUserTeam('${cleanEmail}', this.value)" class="w-full rounded-xl border-slate-200 dark:border-border-dark dark:bg-slate-800 text-xs py-1.5 font-semibold">
+                            <option value="">-- SIN EQUIPO --</option>
+                            ${teamOptions}
+                        </select>
+                    </td>
+                </tr>
             `;
         }).join('');
     }
@@ -524,30 +521,32 @@
         window.showAlert('Equipo de Tarea eliminado.', 'info');
     };
 
-    window.addTeamMember = function (teamIndex) {
-        const select = document.getElementById(`team-select-${teamIndex}`);
-        const email = select ? select.value : '';
-        if (!email) return;
-
-        const team = activeProject.equiposDeTarea[teamIndex];
-        if (!team) return;
-
-        if (!team.members) team.members = [];
-        if (!team.members.some(m => m.toLowerCase().trim() === email.toLowerCase().trim())) {
-            team.members.push(email.toLowerCase().trim());
+    window.changeUserTeam = function (email, teamName) {
+        const cleanEmail = email.toLowerCase().trim();
+        const cleanTeamName = teamName.toUpperCase().trim();
+        
+        // Remove from all teams
+        if (activeProject.equiposDeTarea) {
+            activeProject.equiposDeTarea.forEach(team => {
+                if (team.members) {
+                    team.members = team.members.filter(m => m.toLowerCase().trim() !== cleanEmail);
+                }
+            });
+            
+            // Add to selected team if not empty
+            if (cleanTeamName) {
+                const targetTeam = activeProject.equiposDeTarea.find(t => t.name.toUpperCase().trim() === cleanTeamName);
+                if (targetTeam) {
+                    if (!targetTeam.members) targetTeam.members = [];
+                    if (!targetTeam.members.includes(cleanEmail)) {
+                        targetTeam.members.push(cleanEmail);
+                    }
+                }
+            }
         }
-
+        
         renderTeamsTab();
-        window.showAlert('Colaborador asignado al equipo.', 'success');
-    };
-
-    window.removeTeamMember = function (teamIndex, email) {
-        const team = activeProject.equiposDeTarea[teamIndex];
-        if (!team) return;
-
-        team.members = team.members.filter(m => m.toLowerCase().trim() !== email.toLowerCase().trim());
-        renderTeamsTab();
-        window.showAlert('Colaborador removido del equipo.', 'info');
+        window.showAlert('Asignación de equipo de tarea actualizada.', 'success');
     };
 
     // --- ACCIONES DE GUARDADO / SERIALIZACIÓN ---
