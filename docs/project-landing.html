@@ -244,6 +244,7 @@
         { key: 'solicitudes', label: 'Solicitudes', subtitle: 'Accesos', icon: 'task_alt', group: 'acciones', defaultHref: 'index.html', description: 'Gestión de accesos y permisos al proyecto.' },
         { key: 'equipo', label: 'Equipo', subtitle: 'Usuarios', icon: 'group', group: 'acciones', defaultHref: 'lista_usuarios.html', description: 'Directorio de usuarios y roles del proyecto.' },
         { key: 'incidencias', label: 'Incidencias', subtitle: 'Reportes', icon: 'report_problem', group: 'acciones', defaultHref: 'INCIDENCIAS/', description: 'Reporte y seguimiento de problemas (RFI/BCF).' },
+        { key: 'configuracion', label: 'Ajustes Proyecto', subtitle: 'Personalización', icon: 'settings', group: 'acciones', defaultHref: 'project-settings.html', description: 'Configurar parámetros y equipos de tarea del proyecto.' },
       ];
 
       const escapeHtml = (value) => String(value ?? '')
@@ -513,9 +514,14 @@
       const activeModules = MODULE_META
         .map((item) => ({ ...item, groupName: item.group, href: buildProjectAwareHref(project.modules[item.key] || item.defaultHref, item.key) }));
 
+      const isAdmin = Boolean(userAccount && (userAccount.role === 'ADMINISTRADOR' || userAccount.role === 'SUPER_ADMINISTRADOR' || userAccount.role === 'ADMINISTRADOR_EMPRESA'));
+
       const activeActions = ACTION_META
         .map((item) => ({ ...item, groupName: item.group, href: buildProjectAwareHref(project.actions[item.key] || item.defaultHref, item.key) }))
-        .filter((item) => item.href);
+        .filter((item) => {
+          if (item.key === 'configuracion') return isAdmin;
+          return item.href;
+        });
 
       const allTools = [...activeModules, ...activeActions];
 

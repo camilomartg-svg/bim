@@ -384,6 +384,26 @@ export const getPlatformConfig = async (companyId: string): Promise<PlatformConf
         teamsSet.add(m.especialidad.trim().toUpperCase());
       }
     });
+
+    const { projectId } = getProjectAndCompany();
+    if (projectId && projectId !== 'default') {
+      try {
+        const configRes = await fetch(`../config-${companyId}.json?t=${Date.now()}`);
+        if (configRes.ok) {
+          const configData = await configRes.json();
+          const project = configData.projects?.find((p: any) => p.slug === projectId || p.name === projectId);
+          if (project && project.equiposDeTarea) {
+            project.equiposDeTarea.forEach((team: any) => {
+              if (team.name && team.name.trim()) {
+                teamsSet.add(team.name.trim().toUpperCase());
+              }
+            });
+          }
+        }
+      } catch (e) {
+        console.warn("Could not load project settings to append custom teams in getPlatformConfig:", e);
+      }
+    }
     
     return {
       responsibleCompanies: Array.from(companiesSet).sort(),
@@ -412,15 +432,21 @@ export const getPlatformTeam = async (companyId: string, projectId: string): Pro
     
     const companyMembers = company.members || [];
     
-    // 2. Fetch config-<companyId>.json to see project members
+    // 2. Fetch config-<companyId>.json to see project members and task teams
     let projectMembersEmails: string[] = [];
+    let equiposDeTarea: any[] = [];
     try {
       const configRes = await fetch(`../config-${companyId}.json?t=${Date.now()}`);
       if (configRes.ok) {
         const configData = await configRes.json();
         const project = configData.projects?.find((p: any) => p.slug === projectId || p.name === projectId);
-        if (project && project.members) {
-          projectMembersEmails = project.members.map((email: string) => email.toLowerCase().trim());
+        if (project) {
+          if (project.members) {
+            projectMembersEmails = project.members.map((email: string) => email.toLowerCase().trim());
+          }
+          if (project.equiposDeTarea) {
+            equiposDeTarea = project.equiposDeTarea;
+          }
         }
       }
     } catch (e) {
@@ -438,10 +464,25 @@ export const getPlatformTeam = async (companyId: string, projectId: string): Pro
       const displayName = m.name || m.email || 'Colaborador';
       const cargo = m.cargo || m.especialidad || m.role || 'Colaborador';
       const position = `${cargo} (${displayName})`;
-      const teamGroup = (m.especialidad || m.empresaUsuario || 'GENERAL').toUpperCase().trim();
+      
+      let teamGroup = 'GENERAL';
+      const userEmail = m.email ? m.email.toLowerCase().trim() : '';
+      if (equiposDeTarea && equiposDeTarea.length > 0) {
+        const foundTeam = equiposDeTarea.find((t: any) => 
+          t.members && t.members.some((email: string) => email.toLowerCase().trim() === userEmail)
+        );
+        if (foundTeam) {
+          teamGroup = foundTeam.name;
+        } else {
+          teamGroup = (m.especialidad || m.empresaUsuario || 'GENERAL');
+        }
+      } else {
+        teamGroup = (m.especialidad || m.empresaUsuario || 'GENERAL');
+      }
+      teamGroup = teamGroup.toUpperCase().trim();
 
       return {
-        id: m.email ? m.email.toLowerCase().trim() : Math.random().toString(36).substring(2, 9),
+        id: userEmail || Math.random().toString(36).substring(2, 9),
         name: displayName,
         email: m.email || '',
         position: position,
