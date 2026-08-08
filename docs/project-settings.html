@@ -139,6 +139,10 @@
                     <span class="material-symbols-outlined">groups</span>
                     <span>Equipos de Tarea</span>
                 </button>
+                <button data-tab="grupos" class="tab-btn flex items-center gap-3 px-4 py-3 rounded-2xl text-sm font-semibold tracking-wide transition-all w-full text-left text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-slate-800/50">
+                    <span class="material-symbols-outlined">hub</span>
+                    <span>Grupos</span>
+                </button>
             </aside>
 
             <!-- Notification Banner -->
@@ -380,6 +384,88 @@
                             </div>
                         </div>
                     </div>
+                </div>
+
+                <!-- Tab: Grupos (Google Sheets) -->
+                <div id="tab-content-grupos" class="tab-panel hidden space-y-6">
+
+                    <!-- Info Banner -->
+                    <div class="bg-violet-50 dark:bg-slate-800/40 border border-violet-100 dark:border-border-dark p-6 rounded-3xl flex items-start gap-4 shadow-sm">
+                        <span class="material-symbols-outlined text-violet-500 mt-0.5">hub</span>
+                        <div>
+                            <h4 class="text-xs font-bold text-violet-900 dark:text-violet-200 uppercase tracking-wider mb-1">Gestión de Grupos del Proyecto</h4>
+                            <p class="text-[10px] text-violet-700 dark:text-gray-300 leading-relaxed font-medium">
+                                Los grupos se sincronizan con Google Sheets. Configura el Sheet ID y el script de tu hoja de cálculo y haz clic en <strong>Sincronizar</strong> para cargar los grupos actuales. Los cambios locales se guardan con <em>Publicar</em>.
+                            </p>
+                        </div>
+                    </div>
+
+                    <!-- Google Sheet Config -->
+                    <div class="bg-white dark:bg-card-dark rounded-3xl border border-border-light dark:border-border-dark p-6 shadow-sm">
+                        <div class="flex items-center gap-3 mb-4">
+                            <span class="material-symbols-outlined text-violet-500">table_chart</span>
+                            <h2 class="text-lg font-bold tracking-tight">Conexión con Google Sheets</h2>
+                        </div>
+                        <div class="grid gap-4 sm:grid-cols-2">
+                            <label class="block">
+                                <span class="mb-2 block text-xs font-bold uppercase tracking-widest text-gray-500">Sheet ID de Grupos</span>
+                                <input id="grupos-sheet-id" class="w-full rounded-xl border-slate-200 dark:border-border-dark dark:bg-slate-800" type="text" placeholder="1OczWRlaefMY5RQon8K3va91H8TInJlp9RuBJeTPLiiA" />
+                            </label>
+                            <label class="block">
+                                <span class="mb-2 block text-xs font-bold uppercase tracking-widest text-gray-500">Script URL (Apps Script)</span>
+                                <input id="grupos-script-url" class="w-full rounded-xl border-slate-200 dark:border-border-dark dark:bg-slate-800" type="text" placeholder="https://script.google.com/macros/s/..." />
+                            </label>
+                        </div>
+                        <div class="flex gap-3 mt-4">
+                            <button id="sync-grupos-btn" class="flex items-center gap-2 bg-violet-600 hover:bg-violet-700 text-white px-5 py-2.5 rounded-xl text-xs font-bold uppercase tracking-widest transition-all shadow-sm">
+                                <span class="material-symbols-outlined text-[16px]">sync</span>
+                                Sincronizar desde Sheets
+                            </button>
+                            <a id="grupos-sheet-link" href="#" target="_blank" class="flex items-center gap-2 border border-violet-200 dark:border-violet-800 text-violet-700 dark:text-violet-300 px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-widest hover:bg-violet-50 dark:hover:bg-violet-900/20 transition-all">
+                                <span class="material-symbols-outlined text-[16px]">open_in_new</span>
+                                Abrir Sheet
+                            </a>
+                        </div>
+                    </div>
+
+                    <!-- Grupos Table -->
+                    <div class="bg-white dark:bg-card-dark rounded-3xl border border-border-light dark:border-border-dark p-6 shadow-sm">
+                        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-border-light dark:border-border-dark pb-4 mb-4">
+                            <div class="flex items-center gap-3">
+                                <span class="material-symbols-outlined text-primary dark:text-white">hub</span>
+                                <h3 class="text-xs font-black uppercase tracking-[0.2em]">Grupos del Proyecto</h3>
+                            </div>
+                            <div class="flex items-center gap-2">
+                                <button id="add-grupo-btn" class="flex items-center gap-1 bg-primary hover:bg-black dark:bg-white dark:hover:bg-gray-100 text-white dark:text-black px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-wider transition-colors shadow-sm">
+                                    <span class="material-symbols-outlined text-[16px]">add</span>
+                                    <span>Agregar Grupo</span>
+                                </button>
+                            </div>
+                        </div>
+                        <div class="overflow-hidden rounded-2xl border border-border-light dark:border-border-dark shadow-sm">
+                            <div class="overflow-x-auto">
+                                <table class="w-full text-left border-collapse text-sm">
+                                    <thead class="bg-gray-50 dark:bg-slate-800/50 text-gray-500 uppercase text-[10px] tracking-wider font-bold border-b border-border-light dark:border-border-dark">
+                                        <tr>
+                                            <th class="py-3 px-4">Nombre del Grupo</th>
+                                            <th class="py-3 px-4">Descripción</th>
+                                            <th class="py-3 px-4">Miembros</th>
+                                            <th class="py-3 px-4">Estado</th>
+                                            <th class="py-3 px-4 text-center w-28">Acciones</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="grupos-table-body" class="divide-y divide-border-light dark:divide-border-dark">
+                                        <tr>
+                                            <td colspan="5" class="py-12 text-center text-xs text-gray-400 italic">
+                                                Configura el Sheet ID y haz clic en <strong>Sincronizar</strong> para cargar los grupos, o agrega uno manualmente.
+                                            </td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+
                 </div>
             </main>
         </div>
