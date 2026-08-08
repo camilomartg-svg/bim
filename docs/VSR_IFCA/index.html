@@ -1,4 +1,4 @@
-<!doctype html>
+﻿<!doctype html>
 <html lang="en">
 
 <head>
@@ -518,6 +518,29 @@
         })();
     </script>
     <!-- VIEWER LOGO INJECT END -->
+
+
+    <!-- BACK BUTTON NAVIGATION -->
+    <script>
+        (function() {
+            var backBtn = document.getElementById('back-btn');
+            if (!backBtn) return;
+            backBtn.addEventListener('click', function() {
+                var params = new URLSearchParams(window.location.search);
+                var empresaId = params.get('empresa');
+                var projectSlug = params.get('project');
+                if (window.history.length > 1) {
+                    window.history.back();
+                } else {
+                    var parts = [];
+                    if (projectSlug) parts.push('project=' + encodeURIComponent(projectSlug));
+                    if (empresaId) parts.push('empresa=' + encodeURIComponent(empresaId));
+                    var qs = parts.length ? '?' + parts.join('&') : '';
+                    window.location.href = '../project-landing.html' + qs;
+                }
+            });
+        })();
+    <\/script>
 
 </body>
 

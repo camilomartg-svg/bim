@@ -223,6 +223,33 @@
         } catch (e) {
             console.warn('No se pudo cargar el directorio de usuarios de Nora.', e);
         }
+
+        // Register add-team button listener here, after activeProject is guaranteed to be loaded
+        if (el.addTeamBtn) {
+            el.addTeamBtn.addEventListener('click', () => {
+                if (!activeProject) {
+                    window.showAlert('El proyecto no está cargado. Recarga la página.', 'error');
+                    return;
+                }
+                const name = (el.newTeamName.value || '').toUpperCase().trim();
+                if (!name) {
+                    window.showAlert('Por favor escribe un nombre para el Equipo de Tarea.', 'error');
+                    return;
+                }
+
+                if (!activeProject.equiposDeTarea) activeProject.equiposDeTarea = [];
+
+                if (activeProject.equiposDeTarea.some(t => t.name.toUpperCase().trim() === name)) {
+                    window.showAlert(`El Equipo de Tarea "${name}" ya existe.`, 'error');
+                    return;
+                }
+
+                activeProject.equiposDeTarea.push({ name: name, members: [] });
+                el.newTeamName.value = '';
+                renderTeamsTab();
+                window.showAlert(`Equipo de Tarea "${name}" creado exitosamente.`, 'success');
+            });
+        }
     }
 
     // --- LLENAR INPUTS ---
@@ -487,29 +514,7 @@
         }).join('');
     }
 
-    el.addTeamBtn.addEventListener('click', () => {
-        const name = el.newTeamName.value.toUpperCase().trim();
-        if (!name) {
-            window.showAlert('Por favor escribe un nombre para el Equipo de Tarea.', 'error');
-            return;
-        }
-
-        if (!activeProject.equiposDeTarea) activeProject.equiposDeTarea = [];
-        
-        if (activeProject.equiposDeTarea.some(t => t.name.toUpperCase().trim() === name)) {
-            window.showAlert(`El Equipo de Tarea "${name}" ya existe.`, 'error');
-            return;
-        }
-
-        activeProject.equiposDeTarea.push({
-            name: name,
-            members: []
-        });
-
-        el.newTeamName.value = '';
-        renderTeamsTab();
-        window.showAlert(`Equipo de Tarea "${name}" creado exitosamente.`, 'success');
-    });
+    // NOTE: addTeamBtn listener is registered inside init() after activeProject is loaded.
 
     window.deleteTeam = function (index) {
         const team = activeProject.equiposDeTarea[index];
