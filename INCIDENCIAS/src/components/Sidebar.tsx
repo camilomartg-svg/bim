@@ -25,9 +25,11 @@ export default function Sidebar({
                     user?.position?.toUpperCase().includes('BIM') ||
                     user?.email?.toLowerCase() === 'imagina3ddesign@gmail.com';
 
+  const isAdmin = user?.role === 'admin' || user?.role === 'super admin' || Boolean((user as any)?.isSuperAdmin);
+
   const menuItems = [
     { id: 'dashboard', icon: LayoutDashboard, label: 'Dashboard' },
-    ...(isBimTeam || user?.role === 'admin' ? [
+    ...(isBimTeam || isAdmin ? [
       { id: 'issues', icon: ClipboardList, label: 'Incidencias' },
       { id: 'anuladas', icon: XCircle, label: 'Anuladas' },
     ] : []),
@@ -37,7 +39,7 @@ export default function Sidebar({
     { id: 'models', icon: Layers, label: 'Modelos CDE' },
     { id: 'reports', icon: FileText, label: 'Métricas' },
     { id: 'notifications', icon: Bell, label: 'Notificaciones' },
-    ...(user?.role === 'admin' ? [{ id: 'settings', icon: Settings, label: 'Configuración' }] : []),
+    ...(isAdmin ? [{ id: 'settings', icon: Settings, label: 'Configuración' }] : []),
   ];
 
   return (

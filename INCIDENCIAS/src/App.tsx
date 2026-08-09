@@ -73,13 +73,17 @@ function Dashboard() {
     return () => unsub();
   }, []);
 
-  const siteAllowed = projectConfig?.siteReportsAllowedProfiles || [];
-  const qualityAllowed = projectConfig?.qualityReportsAllowedProfiles || [];
-  const envAllowed = projectConfig?.environmentalReportsAllowedProfiles || [];
+  const userTeam = (user?.team || "").toUpperCase().trim();
+  const userPosition = user?.position || "";
+  const isAdmin = user?.role === 'admin' || user?.role === 'super admin' || Boolean((user as any)?.isSuperAdmin);
 
-  const canViewSite = isBimTeam || user?.role === 'admin' || siteAllowed.length === 0 || siteAllowed.includes(user?.position || "");
-  const canViewQuality = isBimTeam || user?.role === 'admin' || qualityAllowed.length === 0 || qualityAllowed.includes(user?.position || "");
-  const canViewEnv = isBimTeam || user?.role === 'admin' || envAllowed.length === 0 || envAllowed.includes(user?.position || "");
+  const siteAllowed: string[] = projectConfig?.siteReportsAllowedTeams || projectConfig?.siteReportsAllowedProfiles || [];
+  const qualityAllowed: string[] = projectConfig?.qualityReportsAllowedTeams || projectConfig?.qualityReportsAllowedProfiles || [];
+  const envAllowed: string[] = projectConfig?.environmentalReportsAllowedTeams || projectConfig?.environmentalReportsAllowedProfiles || [];
+
+  const canViewSite = isBimTeam || isAdmin || siteAllowed.length === 0 || siteAllowed.includes(userTeam) || siteAllowed.includes(userPosition);
+  const canViewQuality = isBimTeam || isAdmin || qualityAllowed.length === 0 || qualityAllowed.includes(userTeam) || qualityAllowed.includes(userPosition);
+  const canViewEnv = isBimTeam || isAdmin || envAllowed.length === 0 || envAllowed.includes(userTeam) || envAllowed.includes(userPosition);
 
   const handleOpenIssue = async (issueId: string) => {
     try {

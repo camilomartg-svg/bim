@@ -375,10 +375,15 @@ export const getPlatformConfig = async (companyId: string): Promise<PlatformConf
     teamsSet.add('BIM');
     teamsSet.add('ESTRUCTURA');
     teamsSet.add('INSTALACIONES');
+    teamsSet.add('CALIDAD');
+    teamsSet.add('SST');
     
     members.forEach((m: any) => {
       if (m.empresaUsuario && m.empresaUsuario.trim()) {
         companiesSet.add(m.empresaUsuario.trim());
+      }
+      if (m.empresa && m.empresa.trim()) {
+        companiesSet.add(m.empresa.trim());
       }
       if (m.especialidad && m.especialidad.trim()) {
         teamsSet.add(m.especialidad.trim().toUpperCase());
@@ -392,16 +397,18 @@ export const getPlatformConfig = async (companyId: string): Promise<PlatformConf
         if (configRes.ok) {
           const configData = await configRes.json();
           const project = configData.projects?.find((p: any) => p.slug === projectId || p.name === projectId);
-          if (project && project.equiposDeTarea) {
-            project.equiposDeTarea.forEach((team: any) => {
-              if (team.name && team.name.trim()) {
-                teamsSet.add(team.name.trim().toUpperCase());
-              }
-            });
+          if (project && project.equiposDeTarea && project.equiposDeTarea.length > 0) {
+            const projectTaskTeams = project.equiposDeTarea
+              .map((t: any) => t.name?.trim().toUpperCase())
+              .filter(Boolean);
+            if (projectTaskTeams.length > 0) {
+              teamsSet.clear();
+              projectTaskTeams.forEach((t: string) => teamsSet.add(t));
+            }
           }
         }
       } catch (e) {
-        console.warn("Could not load project settings to append custom teams in getPlatformConfig:", e);
+        console.warn("Could not load project settings in getPlatformConfig:", e);
       }
     }
     

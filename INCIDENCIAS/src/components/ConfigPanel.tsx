@@ -82,7 +82,7 @@ const MOCK_TEAM = [
   { id: '5', position: "Director de Obra", name: "Roberto Gómez", email: "rgomez@bim.com" },
 ];
 
-type ConfigTab = 'fields' | 'types' | 'impacts' | 'team' | 'units' | 'activities' | 'dangers' | 'companies' | 'qualityReportConfig' | 'reportPermissions';
+type ConfigTab = 'fields' | 'types' | 'impacts' | 'units' | 'activities' | 'dangers' | 'companies' | 'qualityReportConfig' | 'reportPermissions';
 
 // Sub-component for a Structural Unit Row to handle local state and avoid re-render performance issues
 function UnitRow({ 
@@ -552,10 +552,10 @@ export default function ConfigPanel() {
   const [qualityTypes, setQualityTypes] = useState<{id: string, name: string, abbreviation?: string}[]>([]);
   const [qualityCodeStart, setQualityCodeStart] = useState<string>("0001");
   
-  // Report tab view permissions
-  const [siteReportsAllowedProfiles, setSiteReportsAllowedProfiles] = useState<string[]>([]);
-  const [qualityReportsAllowedProfiles, setQualityReportsAllowedProfiles] = useState<string[]>([]);
-  const [environmentalReportsAllowedProfiles, setEnvironmentalReportsAllowedProfiles] = useState<string[]>([]);
+  // Report tab view permissions by task teams
+  const [siteReportsAllowedTeams, setSiteReportsAllowedTeams] = useState<string[]>([]);
+  const [qualityReportsAllowedTeams, setQualityReportsAllowedTeams] = useState<string[]>([]);
+  const [environmentalReportsAllowedTeams, setEnvironmentalReportsAllowedTeams] = useState<string[]>([]);
   
   // States for bulk generation
   const [bulkTargetUnit, setBulkTargetUnit] = useState<number | null>(null);
@@ -668,9 +668,9 @@ export default function ConfigPanel() {
           }));
           setQualityCodeStart(qCodeStart);
 
-          setSiteReportsAllowedProfiles(fbConfig.siteReportsAllowedProfiles || []);
-          setQualityReportsAllowedProfiles(fbConfig.qualityReportsAllowedProfiles || []);
-          setEnvironmentalReportsAllowedProfiles(fbConfig.environmentalReportsAllowedProfiles || []);
+          setSiteReportsAllowedTeams(fbConfig.siteReportsAllowedTeams || fbConfig.siteReportsAllowedProfiles || []);
+          setQualityReportsAllowedTeams(fbConfig.qualityReportsAllowedTeams || fbConfig.qualityReportsAllowedProfiles || []);
+          setEnvironmentalReportsAllowedTeams(fbConfig.environmentalReportsAllowedTeams || fbConfig.environmentalReportsAllowedProfiles || []);
 
           // Fallback for types and impacts if explicitly set on root (legacy/shared)
           if (selectedConfigKey === 'GLOBAL') {
@@ -877,9 +877,12 @@ export default function ConfigPanel() {
       qualityHitos: qualityHitosData,
       qualityTypes: qualityTypesData,
       qualityCodeStart: qualityCodeStart,
-      siteReportsAllowedProfiles: siteReportsAllowedProfiles,
-      qualityReportsAllowedProfiles: qualityReportsAllowedProfiles,
-      environmentalReportsAllowedProfiles: environmentalReportsAllowedProfiles
+      siteReportsAllowedTeams: siteReportsAllowedTeams,
+      qualityReportsAllowedTeams: qualityReportsAllowedTeams,
+      environmentalReportsAllowedTeams: environmentalReportsAllowedTeams,
+      siteReportsAllowedProfiles: siteReportsAllowedTeams,
+      qualityReportsAllowedProfiles: qualityReportsAllowedTeams,
+      environmentalReportsAllowedProfiles: environmentalReportsAllowedTeams
     });
 
     // Note: team members saved above in the GLOBAL check or if needed individually
@@ -1096,7 +1099,6 @@ const addItem = (type: 'impact' | 'type' | 'team' | 'activity' | 'danger' | 'com
             { id: 'fields', label: 'Campos', icon: Settings },
             { id: 'types', label: 'Tipos', icon: FileText },
             { id: 'impacts', label: 'Afectaciones', icon: Layout },
-            { id: 'team', label: 'Designar Equipo', icon: Users },
             { id: 'units', label: 'Ubicaciones', icon: MapPin },
             { id: 'activities', label: 'Actividades', icon: Briefcase },
             { id: 'dangers', label: 'Peligros', icon: AlertTriangle },
@@ -1553,25 +1555,30 @@ const addItem = (type: 'impact' | 'type' | 'team' | 'activity' | 'danger' | 'com
                 className="bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800/50 p-10 rounded-[2.5rem] shadow-xl shadow-slate-200/50 dark:shadow-black/20"
               >
                 {/* Visual Header */}
-                <div className="mb-10 flex items-start gap-4 p-8 bg-slate-50 dark:bg-slate-950/20 border border-slate-100 dark:border-slate-800 rounded-[2rem]">
-                  <div className="w-12 h-12 bg-amber-500 rounded-2xl flex items-center justify-center text-white shadow-lg shrink-0 w-[48px] h-[48px]">
+                <div className="mb-10 flex flex-col md:flex-row items-start gap-4 p-8 bg-slate-50 dark:bg-slate-950/20 border border-slate-100 dark:border-slate-800 rounded-[2rem]">
+                  <div className="w-12 h-12 bg-amber-500 rounded-2xl flex items-center justify-center text-white shadow-lg shrink-0">
                     <Eye className="w-6 h-6" />
                   </div>
-                  <div>
-                    <h3 className="text-base font-black text-slate-900 dark:text-white uppercase tracking-tight">Visibilidad de Informes</h3>
-                    <p className="text-xs text-slate-500 font-medium tracking-tight mt-1 leading-relaxed">
-                      Configura qué perfiles (cargos) tienen permitido visualizar cada módulo de informe en el panel de navegación. 
-                      Los miembros del equipo BIM tienen acceso administrativo completo a todos los informes.
+                  <div className="flex-1 space-y-2">
+                    <h3 className="text-base font-black text-slate-900 dark:text-white uppercase tracking-tight">Visibilidad de Informes por Equipos de Tarea</h3>
+                    <p className="text-xs text-slate-500 font-medium tracking-tight leading-relaxed">
+                      Determina qué <strong>Equipos de Tarea</strong> del proyecto tienen permiso para visualizar cada módulo de informe.
+                      Los equipos y miembros se sincronizan automáticamente con la configuración del proyecto y la estructura de personal.
                     </p>
-                    <p className="text-[10px] text-amber-500 font-bold uppercase tracking-widest mt-2">
-                      NOTA: Si no seleccionas ningún perfil para un informe, este quedará público y visible para todos los usuarios de la obra.
-                    </p>
+                    <div className="flex flex-wrap items-center gap-2 pt-2">
+                      <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-amber-500/10 text-amber-600 dark:text-amber-400 rounded-lg text-[9px] font-black uppercase tracking-wider">
+                        👑 Super Administradores y Administradores de Empresa: Acceso Total Incondicional
+                      </span>
+                      <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 rounded-lg text-[9px] font-black uppercase tracking-wider">
+                        ℹ️ Si no seleccionas ningún equipo, el informe será público para todo el personal
+                      </span>
+                    </div>
                   </div>
                 </div>
 
                 {/* Main Cards Grid */}
                 <div className="space-y-8">
-                  {/* Site Reports Allowed Profiles */}
+                  {/* Site Reports Allowed Teams */}
                   <div className="bg-slate-50 dark:bg-slate-950/20 border border-slate-100 dark:border-slate-800 p-8 rounded-[2rem]">
                     <div className="flex items-center justify-between mb-6 flex-wrap gap-4">
                       <div className="flex items-center gap-3">
@@ -1580,40 +1587,39 @@ const addItem = (type: 'impact' | 'type' | 'team' | 'activity' | 'danger' | 'com
                         </div>
                         <div>
                           <h4 className="text-sm font-black text-slate-900 dark:text-white uppercase tracking-tight font-sans">Informes de Obra</h4>
-                          <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-0.5">Control de visibilidad del módulo de Obra</p>
+                          <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-0.5">Visibilidad por Equipos de Tarea asignados</p>
                         </div>
                       </div>
                       <span className={cn(
                         "px-3 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-widest",
-                        siteReportsAllowedProfiles.length === 0 
+                        siteReportsAllowedTeams.length === 0 
                           ? "bg-emerald-500/15 text-emerald-500" 
                           : "bg-blue-500/15 text-blue-500"
                       )}>
-                        {siteReportsAllowedProfiles.length === 0 ? "PÚBLICO: TODOS TIENEN ACCESO" : `RESTRINGIDO: ${siteReportsAllowedProfiles.length} PERFIL(ES)`}
+                        {siteReportsAllowedTeams.length === 0 ? "PÚBLICO: TODOS LOS EQUIPOS" : `RESTRINGIDO: ${siteReportsAllowedTeams.length} EQUIPO(S)`}
                       </span>
                     </div>
 
                     <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
                       {Array.from(new Set([
-                        ...globalTeam.map(m => m.position), 
-                        "Director de Obra", 
-                        "Arquitecto Residente", 
-                        "Residente SST", 
-                        "Interventor Eléctrico", 
-                        "Ingeniero Hidráulico", 
-                        "Gestor Ambiental", 
-                        "Gerente de Proyecto", 
-                        "BIM Manager", 
-                        "Coordinador BIM"
-                      ])).filter(Boolean).sort().map((profile) => {
-                        const isSelected = siteReportsAllowedProfiles.includes(profile);
+                        ...globalTeams,
+                        'AMBIENTAL',
+                        'ARQUITECTURA',
+                        'BIM',
+                        'CALIDAD',
+                        'COORDINACIÓN TÉCNICA',
+                        'ESTRUCTURA',
+                        'INSTALACIONES',
+                        'SST'
+                      ])).filter(Boolean).sort().map((teamName) => {
+                        const isSelected = siteReportsAllowedTeams.includes(teamName);
                         return (
                           <button
-                            key={profile}
+                            key={teamName}
                             type="button"
                             onClick={() => {
-                              setSiteReportsAllowedProfiles(prev => 
-                                prev.includes(profile) ? prev.filter(p => p !== profile) : [...prev, profile]
+                              setSiteReportsAllowedTeams(prev => 
+                                prev.includes(teamName) ? prev.filter(t => t !== teamName) : [...prev, teamName]
                               );
                             }}
                             className={cn(
@@ -1623,7 +1629,7 @@ const addItem = (type: 'impact' | 'type' | 'team' | 'activity' | 'danger' | 'com
                                 : "bg-white border-slate-200 text-slate-500 hover:border-slate-400 dark:bg-[#0c0f1d] dark:border-slate-800 dark:text-slate-400 dark:hover:border-slate-600 font-sans"
                             )}
                           >
-                            <span>{profile}</span>
+                            <span>{teamName}</span>
                             {isSelected && <Check className="w-3.5 h-3.5 shrink-0 ml-2 animate-in fade-in zoom-in" />}
                           </button>
                         );
@@ -1631,59 +1637,58 @@ const addItem = (type: 'impact' | 'type' | 'team' | 'activity' | 'danger' | 'com
                     </div>
                   </div>
 
-                  {/* Quality Reports Allowed Profiles */}
+                  {/* Quality Reports Allowed Teams */}
                   <div className="bg-slate-50 dark:bg-slate-950/20 border border-slate-100 dark:border-slate-800 p-8 rounded-[2rem]">
                     <div className="flex items-center justify-between mb-6 flex-wrap gap-4">
                       <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-2xl bg-indigo-505 bg-indigo-500 flex items-center justify-center text-white shadow-lg shrink-0">
+                        <div className="w-10 h-10 rounded-2xl bg-indigo-500 flex items-center justify-center text-white shadow-lg shrink-0">
                           <Check className="w-5 h-5 font-sans" />
                         </div>
                         <div>
                           <h4 className="text-sm font-black text-slate-900 dark:text-white uppercase tracking-tight font-sans">Informes de Calidad</h4>
-                          <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-0.5">Control de visibilidad del módulo de Calidad</p>
+                          <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-0.5">Visibilidad por Equipos de Tarea asignados</p>
                         </div>
                       </div>
                       <span className={cn(
                         "px-3 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-widest",
-                        qualityReportsAllowedProfiles.length === 0 
+                        qualityReportsAllowedTeams.length === 0 
                           ? "bg-emerald-500/15 text-emerald-500" 
-                          : "bg-blue-500/15 text-blue-500"
+                          : "bg-indigo-500/15 text-indigo-500"
                       )}>
-                        {qualityReportsAllowedProfiles.length === 0 ? "PÚBLICO: TODOS TIENEN ACCESO" : `RESTRINGIDO: ${qualityReportsAllowedProfiles.length} PERFIL(ES)`}
+                        {qualityReportsAllowedTeams.length === 0 ? "PÚBLICO: TODOS LOS EQUIPOS" : `RESTRINGIDO: ${qualityReportsAllowedTeams.length} EQUIPO(S)`}
                       </span>
                     </div>
 
                     <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
                       {Array.from(new Set([
-                        ...globalTeam.map(m => m.position), 
-                        "Director de Obra", 
-                        "Arquitecto Residente", 
-                        "Residente SST", 
-                        "Interventor Eléctrico", 
-                        "Ingeniero Hidráulico", 
-                        "Gestor Ambiental", 
-                        "Gerente de Proyecto", 
-                        "BIM Manager", 
-                        "Coordinador BIM"
-                      ])).filter(Boolean).sort().map((profile) => {
-                        const isSelected = qualityReportsAllowedProfiles.includes(profile);
+                        ...globalTeams,
+                        'AMBIENTAL',
+                        'ARQUITECTURA',
+                        'BIM',
+                        'CALIDAD',
+                        'COORDINACIÓN TÉCNICA',
+                        'ESTRUCTURA',
+                        'INSTALACIONES',
+                        'SST'
+                      ])).filter(Boolean).sort().map((teamName) => {
+                        const isSelected = qualityReportsAllowedTeams.includes(teamName);
                         return (
                           <button
-                            key={profile}
+                            key={teamName}
                             type="button"
                             onClick={() => {
-                              setQualityReportsAllowedProfiles(prev => 
-                                prev.includes(profile) ? prev.filter(p => p !== profile) : [...prev, profile]
+                              setQualityReportsAllowedTeams(prev => 
+                                prev.includes(teamName) ? prev.filter(t => t !== teamName) : [...prev, teamName]
                               );
                             }}
                             className={cn(
                               "px-4 py-3 rounded-xl border text-[11px] font-bold text-left transition-all uppercase tracking-wider flex items-center justify-between",
                               isSelected 
-                                ? "bg-[#4338ca] border-[#4338ca] text-white shadow-lg shadow-indigo-500/20 font-sans" 
+                                ? "bg-indigo-600 border-indigo-600 text-white shadow-lg shadow-indigo-500/20 font-sans" 
                                 : "bg-white border-slate-200 text-slate-500 hover:border-slate-400 dark:bg-[#0c0f1d] dark:border-slate-800 dark:text-slate-400 dark:hover:border-slate-600 font-sans"
                             )}
                           >
-                            <span>{profile}</span>
+                            <span>{teamName}</span>
                             {isSelected && <Check className="w-3.5 h-3.5 shrink-0 ml-2 animate-in fade-in zoom-in" />}
                           </button>
                         );
@@ -1691,7 +1696,7 @@ const addItem = (type: 'impact' | 'type' | 'team' | 'activity' | 'danger' | 'com
                     </div>
                   </div>
 
-                  {/* Environmental Reports Allowed Profiles */}
+                  {/* Environmental Reports Allowed Teams */}
                   <div className="bg-slate-50 dark:bg-slate-950/20 border border-slate-100 dark:border-slate-800 p-8 rounded-[2rem]">
                     <div className="flex items-center justify-between mb-6 flex-wrap gap-4">
                       <div className="flex items-center gap-3">
@@ -1700,40 +1705,39 @@ const addItem = (type: 'impact' | 'type' | 'team' | 'activity' | 'danger' | 'com
                         </div>
                         <div>
                           <h4 className="text-sm font-black text-slate-900 dark:text-white uppercase tracking-tight font-sans">Informes Ambientales</h4>
-                          <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-0.5">Control de visibilidad del módulo Ambiental</p>
+                          <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-0.5">Visibilidad por Equipos de Tarea asignados</p>
                         </div>
                       </div>
                       <span className={cn(
                         "px-3 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-widest",
-                        environmentalReportsAllowedProfiles.length === 0 
+                        environmentalReportsAllowedTeams.length === 0 
                           ? "bg-emerald-500/15 text-emerald-500" 
-                          : "bg-blue-500/15 text-blue-500"
+                          : "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400"
                       )}>
-                        {environmentalReportsAllowedProfiles.length === 0 ? "PÚBLICO: TODOS TIENEN ACCESO" : `RESTRINGIDO: ${environmentalReportsAllowedProfiles.length} PERFIL(ES)`}
+                        {environmentalReportsAllowedTeams.length === 0 ? "PÚBLICO: TODOS LOS EQUIPOS" : `RESTRINGIDO: ${environmentalReportsAllowedTeams.length} EQUIPO(S)`}
                       </span>
                     </div>
 
                     <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
                       {Array.from(new Set([
-                        ...globalTeam.map(m => m.position), 
-                        "Director de Obra", 
-                        "Arquitecto Residente", 
-                        "Residente SST", 
-                        "Interventor Eléctrico", 
-                        "Ingeniero Hidráulico", 
-                        "Gestor Ambiental", 
-                        "Gerente de Proyecto", 
-                        "BIM Manager", 
-                        "Coordinador BIM"
-                      ])).filter(Boolean).sort().map((profile) => {
-                        const isSelected = environmentalReportsAllowedProfiles.includes(profile);
+                        ...globalTeams,
+                        'AMBIENTAL',
+                        'ARQUITECTURA',
+                        'BIM',
+                        'CALIDAD',
+                        'COORDINACIÓN TÉCNICA',
+                        'ESTRUCTURA',
+                        'INSTALACIONES',
+                        'SST'
+                      ])).filter(Boolean).sort().map((teamName) => {
+                        const isSelected = environmentalReportsAllowedTeams.includes(teamName);
                         return (
                           <button
-                            key={profile}
+                            key={teamName}
                             type="button"
                             onClick={() => {
-                              setEnvironmentalReportsAllowedProfiles(prev => 
-                                prev.includes(profile) ? prev.filter(p => p !== profile) : [...prev, profile]
+                              setEnvironmentalReportsAllowedTeams(prev => 
+                                prev.includes(teamName) ? prev.filter(t => t !== teamName) : [...prev, teamName]
                               );
                             }}
                             className={cn(
@@ -1743,457 +1747,11 @@ const addItem = (type: 'impact' | 'type' | 'team' | 'activity' | 'danger' | 'com
                                 : "bg-white border-slate-200 text-slate-500 hover:border-slate-400 dark:bg-[#0c0f1d] dark:border-slate-800 dark:text-slate-400 dark:hover:border-slate-600 font-sans"
                             )}
                           >
-                            <span>{profile}</span>
+                            <span>{teamName}</span>
                             {isSelected && <Check className="w-3.5 h-3.5 shrink-0 ml-2 animate-in fade-in zoom-in" />}
                           </button>
                         );
                       })}
-                    </div>
-                  </div>
-                </div>
-              </motion.section>
-            )}
-
-            {activeTab === 'team' && (
-              <motion.section 
-                key="team"
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -10 }}
-                className="bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800/50 p-10 rounded-[2.5rem] shadow-xl shadow-slate-200/50 dark:shadow-black/20 font-sans"
-              >
-                {/* Sincronización Notice Banner */}
-                {selectedConfigKey === 'GLOBAL' && (
-                  <div className="mb-8 p-6 bg-indigo-50 dark:bg-indigo-950/20 border border-indigo-100 dark:border-indigo-900/50 rounded-2xl flex items-start gap-4">
-                    <div className="text-indigo-500 mt-0.5">
-                      <Info className="w-5 h-5" />
-                    </div>
-                    <div>
-                      <h4 className="text-xs font-bold text-indigo-900 dark:text-indigo-200 uppercase tracking-wider mb-1">Sincronización Activa</h4>
-                      <p className="text-[10px] text-indigo-700 dark:text-indigo-300 leading-relaxed font-medium">
-                        Los miembros del equipo, cargos y grupos de trabajo (especialidades/empresas) se gestionan de forma centralizada desde el portal de Súper Administración de Nora y se sincronizan automáticamente.
-                      </p>
-                    </div>
-                  </div>
-                )}
-
-                {/* Teams List Management (Restore as read-only) */}
-                {selectedConfigKey === 'GLOBAL' && (
-                   <div className="mb-12 bg-slate-50 dark:bg-slate-950/30 border border-slate-100 dark:border-slate-800 p-8 rounded-[2rem]">
-                    <div className="flex items-center justify-between mb-8">
-                      <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-2xl bg-indigo-500 flex items-center justify-center text-white shadow-lg shadow-indigo-500/10">
-                          <Users className="w-5 h-5" />
-                        </div>
-                        <h3 className="text-[10px] font-black text-slate-400 dark:text-slate-600 uppercase tracking-[0.3em]">Grupos de Trabajo Sincronizados</h3>
-                      </div>
-                    </div>
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                      {teamsList.map((tm) => (
-                        <div key={tm.id} className="flex items-center gap-3 bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-100 dark:border-slate-800 shadow-sm">
-                          <span className="text-[10px] font-black text-slate-900 dark:text-white uppercase tracking-tight px-2 py-1">
-                            {tm.name}
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                <div className="flex items-center justify-between mb-8 px-4">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-2xl bg-indigo-500 flex items-center justify-center text-white shadow-lg shadow-indigo-500/10">
-                      <User className="w-5 h-5" />
-                    </div>
-                    <div>
-                      <h3 className="text-[10px] font-black text-slate-400 dark:text-slate-600 uppercase tracking-[0.3em]">
-                        {selectedConfigKey === 'GLOBAL' ? 'Personal del Proyecto' : `Asignar Permisos para ${selectedConfigKey}`}
-                      </h3>
-                      {selectedConfigKey !== 'GLOBAL' && (
-                        <p className="text-[8px] font-bold text-indigo-500 uppercase mt-1">Activa por Equipo, Rol o Usuario Individual</p>
-                      )}
-                    </div>
-                  </div>
-                  
-                  <div className="flex items-center gap-4">
-                    {/* Manual add button hidden since it is synced from platform */}
-                  </div>
-                </div>
-
-                {selectedConfigKey !== 'GLOBAL' ? (
-                  <div className="space-y-12 animate-in fade-in duration-300">
-                    {/* PermSubTab selector */}
-                    <div className="flex bg-slate-100 dark:bg-slate-950 p-1.5 rounded-[1.25rem] gap-2 max-w-lg">
-                      <button
-                        type="button"
-                        onClick={() => setPermSubTab('creator')}
-                        className={cn(
-                          "flex-1 py-3 px-4 text-center rounded-xl text-[10px] font-black uppercase tracking-wider transition-all flex items-center justify-center gap-1.5",
-                          permSubTab === 'creator'
-                            ? "bg-white dark:bg-slate-900 text-indigo-500 shadow-md font-extrabold"
-                            : "text-slate-500 hover:text-slate-800 dark:hover:text-slate-200"
-                        )}
-                      >
-                        ✍️ Quién puede Poner / Registrar
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setPermSubTab('receiver')}
-                        className={cn(
-                          "flex-1 py-3 px-4 text-center rounded-xl text-[10px] font-black uppercase tracking-wider transition-all flex items-center justify-center gap-1.5",
-                          permSubTab === 'receiver'
-                            ? "bg-white dark:bg-slate-900 text-indigo-500 shadow-md font-extrabold"
-                            : "text-slate-500 hover:text-slate-800 dark:hover:text-slate-200"
-                        )}
-                      >
-                        📥 Quién puede Recibir o ser Asignado
-                      </button>
-                    </div>
-
-                    {/* TODOS option toggle */}
-                    <div className="bg-slate-50 dark:bg-slate-950/30 p-8 rounded-[2rem] border border-slate-100 dark:border-slate-800">
-                      <label className="flex items-center gap-4 cursor-pointer">
-                        <div className="relative">
-                          <input
-                            type="checkbox"
-                            checked={permSubTab === 'creator' ? allowedCreatorAll : allowedReceiverAll}
-                            onChange={(e) => {
-                              if (permSubTab === 'creator') {
-                                setAllowedCreatorAll(e.target.checked);
-                              } else {
-                                setAllowedReceiverAll(e.target.checked);
-                              }
-                            }}
-                            className="rounded border-slate-300 dark:border-slate-800 text-indigo-600 focus:ring-indigo-500 w-5 h-5 cursor-pointer"
-                          />
-                        </div>
-                        <div>
-                          <p className="text-[10px] font-black uppercase tracking-wider text-slate-800 dark:text-slate-200">
-                            HABILITAR PARA "TODOS" LOS USUARIOS DEL PROYECTO
-                          </p>
-                          <p className="text-[8px] font-bold text-slate-400 uppercase mt-0.5">
-                            {permSubTab === 'creator' 
-                              ? "Cualquier persona del equipo del proyecto podrá registrar esta incidencia" 
-                              : "Cualquier persona del equipo del proyecto podrá ser asignada como responsable"}
-                          </p>
-                        </div>
-                      </label>
-                    </div>
-
-                    {/* Specific permissions (only if "TODOS" is unchecked) */}
-                    {!(permSubTab === 'creator' ? allowedCreatorAll : allowedReceiverAll) ? (
-                      <div className="space-y-12 animate-in fade-in duration-300">
-                        {/* Groups/Teams Section */}
-                        <div className="bg-slate-50 dark:bg-slate-950/30 p-8 rounded-[2rem] border border-slate-100 dark:border-slate-800">
-                          <h4 className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-6 flex items-center gap-2">
-                            <Users className="w-3.5 h-3.5" /> 1. Activar por Equipos (Grupos)
-                          </h4>
-                          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                            {globalTeams.map(t => {
-                              const isChecked = permSubTab === 'creator' ? allowedCreatorTeams.includes(t) : allowedReceiverTeams.includes(t);
-                              return (
-                                <button
-                                  key={t}
-                                  onClick={() => {
-                                    if (permSubTab === 'creator') {
-                                      if (allowedCreatorTeams.includes(t)) {
-                                        setAllowedCreatorTeams(allowedCreatorTeams.filter(tm => tm !== t));
-                                      } else {
-                                        setAllowedCreatorTeams([...allowedCreatorTeams, t]);
-                                      }
-                                    } else {
-                                      if (allowedReceiverTeams.includes(t)) {
-                                        setAllowedReceiverTeams(allowedReceiverTeams.filter(tm => tm !== t));
-                                      } else {
-                                        setAllowedReceiverTeams([...allowedReceiverTeams, t]);
-                                      }
-                                    }
-                                  }}
-                                  className={cn(
-                                    "flex items-center gap-3 p-4 rounded-2xl border transition-all text-left",
-                                    isChecked
-                                      ? "bg-indigo-500 border-indigo-500 text-white shadow-lg shadow-indigo-500/20"
-                                      : "bg-white dark:bg-slate-900 border-slate-100 dark:border-slate-800 text-slate-600 dark:text-slate-400"
-                                  )}
-                                >
-                                  <div className={cn(
-                                    "w-5 h-5 rounded-lg border-2 flex items-center justify-center transition-all",
-                                    isChecked ? "bg-white text-indigo-500 border-white" : "border-slate-200 dark:border-slate-800 text-transparent"
-                                  )}>
-                                    <Check className="w-3.5 h-3.5" />
-                                  </div>
-                                  <span className="text-[10px] font-black uppercase">{t}</span>
-                                </button>
-                              );
-                            })}
-                          </div>
-                        </div>
-
-                        {/* Roles Section */}
-                        <div className="bg-slate-50 dark:bg-slate-950/30 p-8 rounded-[2rem] border border-slate-100 dark:border-slate-800">
-                          <h4 className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-6 flex items-center gap-2">
-                            <Briefcase className="w-3.5 h-3.5" /> 2. Activar por Cargos / Roles
-                          </h4>
-                          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                            {Array.from(new Set(globalTeam.map(m => m.position).filter(Boolean))).sort().map(role => {
-                              const isChecked = permSubTab === 'creator' ? allowedCreatorRoles.includes(role) : allowedReceiverRoles.includes(role);
-                              return (
-                                <button
-                                  key={role}
-                                  onClick={() => {
-                                    if (permSubTab === 'creator') {
-                                      if (allowedCreatorRoles.includes(role)) {
-                                        setAllowedCreatorRoles(allowedCreatorRoles.filter(r => r !== role));
-                                      } else {
-                                        setAllowedCreatorRoles([...allowedCreatorRoles, role]);
-                                      }
-                                    } else {
-                                      if (allowedReceiverRoles.includes(role)) {
-                                        setAllowedReceiverRoles(allowedReceiverRoles.filter(r => r !== role));
-                                      } else {
-                                        setAllowedReceiverRoles([...allowedReceiverRoles, role]);
-                                      }
-                                    }
-                                  }}
-                                  className={cn(
-                                    "flex items-center gap-3 p-4 rounded-2xl border transition-all text-left",
-                                    isChecked
-                                      ? "bg-emerald-500 border-emerald-500 text-white shadow-lg shadow-emerald-500/20"
-                                      : "bg-white dark:bg-slate-900 border-slate-100 dark:border-slate-800 text-slate-600 dark:text-slate-400"
-                                  )}
-                                >
-                                  <div className={cn(
-                                    "w-5 h-5 rounded-lg border-2 flex items-center justify-center transition-all",
-                                    isChecked ? "bg-white text-emerald-500 border-white" : "border-slate-200 dark:border-slate-800 text-transparent"
-                                  )}>
-                                    <Check className="w-3.5 h-3.5" />
-                                  </div>
-                                  <span className="text-[10px] font-black uppercase">{role}</span>
-                                </button>
-                              );
-                            })}
-                          </div>
-                        </div>
-
-                        {/* Individual Users Section */}
-                        <div className="bg-slate-50 dark:bg-slate-950/30 p-8 rounded-[2rem] border border-slate-100 dark:border-slate-800">
-                          <h4 className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-6 flex items-center gap-2">
-                            <User className="w-3.5 h-3.5" /> 3. Activar por Usuario Individual
-                          </h4>
-                          <div className="overflow-x-auto">
-                            <table className="w-full">
-                              <thead>
-                                <tr>
-                                  <th className="w-12"></th>
-                                  <th className="text-[8px] font-black text-slate-400 uppercase tracking-[0.2em] text-left px-6 py-2 w-[30%]">Nombre</th>
-                                  <th className="text-[8px] font-black text-slate-400 uppercase tracking-[0.2em] text-left px-6 py-2 w-[30%]">Cargo / Rol</th>
-                                  <th className="text-[8px] font-black text-slate-400 uppercase tracking-[0.2em] text-left px-6 py-2 w-[25%]">Email</th>
-                                  <th className="text-[8px] font-black text-slate-400 uppercase tracking-[0.2em] text-left px-6 py-2 w-[15%]">Equipo</th>
-                                </tr>
-                              </thead>
-                              <tbody>
-                                {globalTeam.sort((a,b) => a.name.localeCompare(b.name)).map(member => {
-                                  const isIdActive = permSubTab === 'creator' ? allowedCreatorUserIds.includes(member.id) : allowedReceiverUserIds.includes(member.id);
-                                  const isEmailActive = member.email && (permSubTab === 'creator' ? allowedCreatorUserEmails.includes(member.email) : allowedReceiverUserEmails.includes(member.email));
-                                  const isRoleActive = permSubTab === 'creator' ? allowedCreatorRoles.includes(member.position) : allowedReceiverRoles.includes(member.position);
-                                  const isTeamActive = member.team && (permSubTab === 'creator' ? allowedCreatorTeams.includes(member.team) : allowedReceiverTeams.includes(member.team));
-                                  const isIndividuallyActive = isIdActive || isEmailActive;
-                                  const isActuallyActive = isIndividuallyActive || isRoleActive || isTeamActive;
-
-                                  return (
-                                    <tr key={member.id} className={cn(
-                                      "group bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 transition-all",
-                                      !isActuallyActive ? "opacity-40" : "opacity-100"
-                                    )}>
-                                      <td className="px-4 py-3 text-center">
-                                        <button 
-                                          onClick={() => {
-                                            if (permSubTab === 'creator') {
-                                              if (isIdActive) {
-                                                setAllowedCreatorUserIds(allowedCreatorUserIds.filter(id => id !== member.id));
-                                                if (member.email) setAllowedCreatorUserEmails(allowedCreatorUserEmails.filter(e => e !== member.email));
-                                              } else {
-                                                setAllowedCreatorUserIds([...allowedCreatorUserIds, member.id]);
-                                                if (member.email && !allowedCreatorUserEmails.includes(member.email)) {
-                                                   setAllowedCreatorUserEmails([...allowedCreatorUserEmails, member.email]);
-                                                }
-                                              }
-                                            } else {
-                                              if (isIdActive) {
-                                                setAllowedReceiverUserIds(allowedReceiverUserIds.filter(id => id !== member.id));
-                                                if (member.email) setAllowedReceiverUserEmails(allowedReceiverUserEmails.filter(e => e !== member.email));
-                                              } else {
-                                                setAllowedReceiverUserIds([...allowedReceiverUserIds, member.id]);
-                                                if (member.email && !allowedReceiverUserEmails.includes(member.email)) {
-                                                   setAllowedReceiverUserEmails([...allowedReceiverUserEmails, member.email]);
-                                                }
-                                              }
-                                            }
-                                          }}
-                                          className={cn(
-                                            "w-6 h-6 rounded-lg border-2 flex items-center justify-center transition-all",
-                                            isIdActive 
-                                              ? "bg-slate-900 dark:bg-white text-white dark:text-slate-900 border-slate-900 dark:border-white shadow-lg" 
-                                              : "border-slate-200 dark:border-slate-800 text-transparent"
-                                          )}
-                                        >
-                                          <Check className="w-3.5 h-3.5" />
-                                        </button>
-                                      </td>
-                                      <td className="px-4 py-3 text-[10px] font-bold text-slate-900 dark:text-white uppercase">
-                                        {member.name}
-                                        <div className="flex flex-wrap gap-1 mt-1">
-                                          {isIdActive && <span className="text-[7px] bg-slate-900 dark:bg-white text-white dark:text-slate-900 px-1.5 py-0.5 rounded font-black tracking-widest uppercase">DIRECTO</span>}
-                                          {isRoleActive && <span className="text-[7px] bg-emerald-500 text-white px-1.5 py-0.5 rounded font-black tracking-widest uppercase">POR ROL</span>}
-                                          {isTeamActive && <span className="text-[7px] bg-indigo-500 text-white px-1.5 py-0.5 rounded font-black tracking-widest uppercase">POR EQUIPO</span>}
-                                        </div>
-                                      </td>
-                                      <td className="px-4 py-3">
-                                        <span className={cn(
-                                          "text-[10px] font-black uppercase tracking-tight px-3 py-1 rounded-lg",
-                                          isRoleActive ? "bg-emerald-500 text-white" : "text-slate-400"
-                                        )}>
-                                          {member.position}
-                                        </span>
-                                      </td>
-                                      <td className="px-4 py-3 text-[10px] font-medium text-slate-500">{member.email}</td>
-                                      <td className="px-4 py-3">
-                                        <span className={cn(
-                                          "text-[10px] font-black uppercase px-3 py-1 rounded-lg",
-                                          isTeamActive ? "bg-indigo-500 text-white" : "text-slate-400"
-                                        )}>
-                                          {member.team || 'SIN EQUIPO'}
-                                        </span>
-                                      </td>
-                                    </tr>
-                                  );
-                                })}
-                              </tbody>
-                            </table>
-                          </div>
-                        </div>
-                      </div>
-                    ) : (
-                      <div className="p-12 text-center bg-indigo-500/5 rounded-3xl border border-indigo-100 dark:border-indigo-900/50">
-                        <Check className="w-8 h-8 text-indigo-500 mx-auto mb-3 animate-bounce" />
-                        <p className="text-[11px] font-black text-indigo-600 dark:text-indigo-400 uppercase tracking-widest">
-                          LA OPCIÓN "TODOS" ESTÁ ACTIVADA
-                        </p>
-                        <p className="text-[9px] font-medium text-slate-500 dark:text-slate-400 mt-1 max-w-sm mx-auto">
-                          {permSubTab === 'creator' 
-                            ? "Cualquier persona dentro de este proyecto puede registrar incidencias de este tipo sin restricciones de equipo, rol o individuales." 
-                            : "Cualquier persona dentro de este proyecto puede ser seleccionada como responsable de incidencias de este tipo."}
-                        </p>
-                      </div>
-                    )}
-                  </div>
-                ) : (
-                  <div className="overflow-x-auto">
-                  <table className="w-full border-separate border-spacing-y-2.5">
-                    <thead>
-                      <tr>
-                        {selectedConfigKey !== 'GLOBAL' && <th className="w-12"></th>}
-                        <th className="text-[8px] font-black text-slate-400 uppercase tracking-[0.2em] text-left px-6 py-2 w-[25%]">Cargo / Rol</th>
-                        <th className="text-[8px] font-black text-slate-400 uppercase tracking-[0.2em] text-left px-6 py-2 w-[25%]">Nombre</th>
-                        <th className="text-[8px] font-black text-slate-400 uppercase tracking-[0.2em] text-left px-6 py-2 w-[20%]">Email de Usuario</th>
-                        <th className="text-[8px] font-black text-slate-400 uppercase tracking-[0.2em] text-left px-6 py-2 w-[20%]">Equipo</th>
-                        {selectedConfigKey !== 'GLOBAL' && <th className="w-12"></th>}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {(selectedConfigKey === 'GLOBAL' ? team : globalTeam).slice().sort((a, b) => a.name.localeCompare(b.name)).map((member) => {
-                        const isActive = selectedConfigKey === 'GLOBAL' ? true : team.some(m => m.id === member.id);
-                        
-                        return (
-                          <tr key={member.id} className={cn(
-                            "group bg-slate-50 dark:bg-slate-950/50 hover:bg-white dark:hover:bg-slate-900 border border-slate-100 dark:border-slate-800 transition-all",
-                            !isActive && selectedConfigKey !== 'GLOBAL' && "opacity-40"
-                          )}>
-                            {selectedConfigKey !== 'GLOBAL' && (
-                              <td className="px-4 py-2 text-center">
-                                <button 
-                                  onClick={() => {
-                                    if (isActive) {
-                                      setTeam(prev => prev.filter(m => m.id !== member.id));
-                                    } else {
-                                      setTeam(prev => [...prev, member]);
-                                    }
-                                  }}
-                                  className={cn(
-                                    "w-6 h-6 rounded-lg border-2 flex items-center justify-center transition-all",
-                                    isActive 
-                                      ? "bg-indigo-500 border-indigo-500 text-white shadow-lg shadow-indigo-500/20" 
-                                      : "border-slate-200 dark:border-slate-800 text-transparent"
-                                  )}
-                                >
-                                  <Check className="w-3.5 h-3.5" />
-                                </button>
-                              </td>
-                            )}
-                            <td className="px-4 py-2">
-                              <span className="text-[10px] font-black text-slate-900 dark:text-white uppercase tracking-tight px-3">{member.position}</span>
-                            </td>
-                            <td className="px-4 py-2">
-                              <span className="text-[10px] font-medium text-slate-700 dark:text-slate-300 px-3">{member.name}</span>
-                            </td>
-                            <td className="px-4 py-2">
-                              <span className="text-[10px] font-medium text-slate-500 px-3">{member.email}</span>
-                            </td>
-                            <td className="px-4 py-2">
-                              <span className="text-[10px] font-black text-indigo-500 uppercase px-3">{member.team || 'SIN EQUIPO'}</span>
-                            </td>
-                            {selectedConfigKey !== 'GLOBAL' && (
-                              <td className="px-4 py-2 text-center">
-                              </td>
-                            )}
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                  {(selectedConfigKey === 'GLOBAL' ? team : globalTeam).length === 0 && (
-                    <div className="p-12 text-center border-2 border-dashed border-slate-100 dark:border-slate-900 rounded-3xl">
-                      <p className="text-[10px] font-black text-slate-300 uppercase tracking-widest">Sin equipo designado</p>
-                    </div>
-                  )}
-                </div>
-                )}
-
-                <div className="mt-10">
-                  <div className="bg-slate-50 dark:bg-slate-950/30 border border-slate-100 dark:border-slate-800 p-8 rounded-[2rem]">
-                    <div className="flex items-center justify-between mb-8">
-                      <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-2xl bg-blue-500 flex items-center justify-center text-white shadow-lg shadow-blue-500/10">
-                          <Building2 className="w-5 h-5" />
-                        </div>
-                        <h3 className="text-[10px] font-black text-slate-400 dark:text-slate-600 uppercase tracking-[0.3em]">Empresas Corresponsables</h3>
-                      </div>
-                      <button onClick={() => addItem('company')} className="px-5 py-2.5 bg-slate-900 dark:bg-white text-white dark:text-slate-900 rounded-xl text-[9px] font-black uppercase tracking-widest flex items-center gap-2 hover:scale-105 transition-all shadow-lg">
-                        <Plus className="w-3.5 h-3.5" /> Agregar Empresa
-                      </button>
-                    </div>
-
-                    <div className="grid grid-cols-1 gap-3">
-                      {companies.slice().sort((a, b) => a.name.localeCompare(b.name)).map((company) => (
-                        <div key={company.id} className="flex items-center gap-3 bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-100 dark:border-slate-800 group shadow-sm transition-all focus-within:ring-2 focus-within:ring-blue-500/50">
-                          <Building2 className="w-4 h-4 text-slate-400" />
-                          <input 
-                            type="text" 
-                            value={company.name} 
-                            onChange={(e) => updateItem('company', company.id, e.target.value.toUpperCase())}
-                            className="flex-1 bg-transparent border-none text-[10px] font-black text-slate-900 dark:text-white uppercase tracking-tight focus:ring-0 outline-none"
-                            placeholder="NOMBRE DE EMPRESA..."
-                          />
-                          <button onClick={() => removeItem('company', company.id)} className="text-slate-300 dark:text-slate-800 hover:text-red-500 transition-all opacity-0 group-hover:opacity-100">
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
-                        </div>
-                      ))}
-                      {companies.length === 0 && (
-                        <div className="py-8 text-center border-2 border-dashed border-slate-100 dark:border-slate-800 rounded-2xl">
-                          <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest leading-loose">No hay empresas configuradas.</p>
-                        </div>
-                      )}
                     </div>
                   </div>
                 </div>
