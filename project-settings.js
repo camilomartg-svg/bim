@@ -66,6 +66,7 @@
         newTeamName: document.getElementById('new-team-name'),
         addTeamBtn: document.getElementById('add-team-btn'),
         teamsListContainer: document.getElementById('teams-list-container'),
+        teamsMembersSearch: document.getElementById('teams-members-search'),
         teamsMembersTableBody: document.getElementById('teams-members-table-body')
     };
 
@@ -653,6 +654,35 @@
     }
 
     // --- TAB: EQUIPOS DE TAREA ---
+    let currentTeamsGroupBy = 'none';
+
+    window.setTeamsGroupBy = function(groupType) {
+        currentTeamsGroupBy = groupType;
+        
+        const btns = {
+            none: document.getElementById('btn-tgroup-none'),
+            team: document.getElementById('btn-tgroup-team'),
+            role: document.getElementById('btn-tgroup-role'),
+            company: document.getElementById('btn-tgroup-company')
+        };
+        
+        Object.keys(btns).forEach(key => {
+            const btn = btns[key];
+            if (!btn) return;
+            if (key === groupType) {
+                btn.className = 'px-2.5 py-1 rounded-lg bg-white dark:bg-slate-700 shadow-sm text-gray-900 dark:text-white transition-all font-bold';
+            } else {
+                btn.className = 'px-2.5 py-1 rounded-lg text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-all';
+            }
+        });
+
+        renderTeamsTab();
+    };
+
+    if (el.teamsMembersSearch) {
+        el.teamsMembersSearch.addEventListener('input', renderTeamsTab);
+    }
+
     function renderTeamsTab() {
         if (!activeProject) return;
         if (!activeProject.equiposDeTarea) {
@@ -666,9 +696,9 @@
             } else {
                 el.teamsListContainer.innerHTML = activeProject.equiposDeTarea.map((team, tIndex) => {
                     return `
-                        <div class="flex items-center gap-2 bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-200 border border-indigo-100 dark:border-indigo-900/50 px-3 py-1.5 rounded-2xl text-[10px] font-black uppercase tracking-wider">
+                        <div class="flex items-center gap-2 bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-200 border border-indigo-100 dark:border-indigo-900/50 px-3 py-1.5 rounded-2xl text-[10px] font-black uppercase tracking-wider shadow-sm">
                             <span>${escapeHtml(team.name)}</span>
-                            <button onclick="deleteTeam(${tIndex})" class="text-indigo-400 hover:text-indigo-600 transition-colors flex items-center">
+                            <button onclick="deleteTeam(${tIndex})" class="text-indigo-400 hover:text-rose-600 transition-colors flex items-center" title="Eliminar equipo">
                                 <span class="material-symbols-outlined text-[14px]">close</span>
                             </button>
                         </div>
@@ -690,15 +720,23 @@
             return;
         }
 
-        el.teamsMembersTableBody.innerHTML = activeProject.members.map(email => {
-            const cleanEmail = email.toLowerCase().trim();
-            const matchedDirUser = allDirectoryUsers.find(du => du.email && du.email.toLowerCase().trim() === cleanEmail);
-            
-            const displayName = matchedDirUser ? matchedDirUser.nombre : cleanEmail.split('@')[0];
-            const displayRole = matchedDirUser ? (matchedDirUser.especialidad || matchedDirUser.rol || 'Colaborador') : 'Colaborador';
-            const displayCompany = matchedDirUser ? matchedDirUser.empresa : 'Empresa no definida';
+        const query = (el.teamsMembersSearch ? el.teamsMembersSearch.value : (document.getElementById('teams-members-search')?.value || '')).toLowerCase().trim();
+        const companyMembers = Array.isArray(currentCompany?.members) ? currentCompany.members : [];
 
-            // Find which team this user is currently in (if any)
+        // Build member objects
+        const memberList = activeProject.members.map(email => {
+            const cleanEmail = email.toLowerCase().trim();
+            
+            // Check company members first for rich metadata
+            const compMember = companyMembers.find(cm => cm.email && cm.email.toLowerCase().trim() === cleanEmail);
+            // Then directory users
+            const dirUser = allDirectoryUsers.find(du => du.email && du.email.toLowerCase().trim() === cleanEmail);
+
+            const displayName = compMember?.name || dirUser?.nombre || cleanEmail.split('@')[0];
+            const displayRole = compMember?.cargo || compMember?.role || dirUser?.cargo || dirUser?.especialidad || dirUser?.rol || 'Colaborador';
+            const displayCompany = compMember?.empresaUsuario || dirUser?.empresa || currentCompany?.name || 'Empresa';
+
+            // Find assigned team
             let assignedTeamName = '';
             if (activeProject.equiposDeTarea) {
                 const userTeam = activeProject.equiposDeTarea.find(team => 
@@ -709,30 +747,105 @@
                 }
             }
 
-            // Create team options
-            const teamOptions = activeProject.equiposDeTarea.map(team => {
+            return {
+                email: cleanEmail,
+                name: displayName,
+                role: displayRole,
+                company: displayCompany,
+                teamName: assignedTeamName
+            };
+        });
+
+        // Filter by search query
+        const filteredMembers = memberList.filter(m => {
+            const matchName = (m.name || '').toLowerCase().includes(query);
+            const matchEmail = (m.email || '').toLowerCase().includes(query);
+            const matchRole = (m.role || '').toLowerCase().includes(query);
+            const matchCompany = (m.company || '').toLowerCase().includes(query);
+            const matchTeam = (m.teamName || '').toLowerCase().includes(query);
+            return matchName || matchEmail || matchRole || matchCompany || matchTeam;
+        });
+
+        if (filteredMembers.length === 0) {
+            el.teamsMembersTableBody.innerHTML = `
+                <tr>
+                    <td colspan="4" class="py-8 px-4 text-center text-xs text-gray-400 italic">
+                        No se encontraron miembros que coincidan con la búsqueda.
+                    </td>
+                </tr>
+            `;
+            return;
+        }
+
+        // Helper to render a member row
+        const renderRow = (m) => {
+            const teamOptions = (activeProject.equiposDeTarea || []).map(team => {
                 const name = team.name.toUpperCase().trim();
-                const isSelected = (name === assignedTeamName);
+                const isSelected = (name === m.teamName);
                 return `<option value="${escapeHtml(name)}" ${isSelected ? 'selected' : ''}>${escapeHtml(name)}</option>`;
             }).join('');
 
             return `
                 <tr class="hover:bg-gray-50 dark:hover:bg-slate-800/40 transition-colors">
                     <td class="py-3 px-4">
-                        <div class="text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wider">${escapeHtml(displayRole)}</div>
-                        <div class="text-[10px] text-gray-400">${escapeHtml(displayCompany)}</div>
+                        <div class="text-xs font-semibold text-gray-800 dark:text-gray-200 uppercase tracking-wider">${escapeHtml(m.role)}</div>
+                        <div class="text-[10px] text-gray-400 font-medium">${escapeHtml(m.company)}</div>
                     </td>
-                    <td class="py-3 px-4 font-bold text-gray-900 dark:text-white">${escapeHtml(displayName)}</td>
-                    <td class="py-3 px-4 text-xs font-mono text-gray-500">${escapeHtml(cleanEmail)}</td>
+                    <td class="py-3 px-4 font-bold text-gray-900 dark:text-white">${escapeHtml(m.name)}</td>
+                    <td class="py-3 px-4 text-xs font-mono text-gray-500 dark:text-gray-400">${escapeHtml(m.email)}</td>
                     <td class="py-3 px-4">
-                        <select onchange="changeUserTeam('${cleanEmail}', this.value)" class="w-full rounded-xl border-slate-200 dark:border-border-dark dark:bg-slate-800 text-xs py-1.5 font-semibold">
+                        <select onchange="changeUserTeam('${m.email}', this.value)" class="w-full rounded-xl border-slate-200 dark:border-border-dark dark:bg-slate-800 text-xs py-1.5 font-semibold focus:ring-2 focus:ring-primary">
                             <option value="">-- SIN EQUIPO --</option>
                             ${teamOptions}
                         </select>
                     </td>
                 </tr>
             `;
-        }).join('');
+        };
+
+        // Render according to grouping
+        if (currentTeamsGroupBy === 'none') {
+            el.teamsMembersTableBody.innerHTML = filteredMembers.map(renderRow).join('');
+        } else {
+            // Grouping logic
+            const groups = {};
+            filteredMembers.forEach(m => {
+                let g = 'Otros';
+                if (currentTeamsGroupBy === 'team') {
+                    g = m.teamName ? m.teamName : 'SIN EQUIPO DE TAREA';
+                } else if (currentTeamsGroupBy === 'role') {
+                    g = m.role ? m.role.toUpperCase() : 'SIN CARGO / ROL';
+                } else if (currentTeamsGroupBy === 'company') {
+                    g = m.company ? m.company.toUpperCase() : 'SIN EMPRESA';
+                }
+                if (!groups[g]) groups[g] = [];
+                groups[g].push(m);
+            });
+
+            const sortedGroupKeys = Object.keys(groups).sort((a, b) => {
+                if (a.startsWith('SIN ')) return 1;
+                if (b.startsWith('SIN ')) return -1;
+                return a.localeCompare(b);
+            });
+
+            let html = '';
+            sortedGroupKeys.forEach(g => {
+                const count = groups[g].length;
+                html += `
+                    <tr class="bg-gray-100/90 dark:bg-slate-800/90 border-y border-border-light dark:border-border-dark">
+                        <td colspan="4" class="py-2 px-4">
+                            <div class="flex items-center justify-between text-xs font-black uppercase tracking-wider text-slate-700 dark:text-slate-300">
+                                <span>${escapeHtml(g)}</span>
+                                <span class="text-[10px] px-2 py-0.5 rounded-full bg-white dark:bg-slate-700 text-gray-500 dark:text-gray-300 font-semibold shadow-sm">${count} ${count === 1 ? 'persona' : 'personas'}</span>
+                            </div>
+                        </td>
+                    </tr>
+                `;
+                html += groups[g].map(renderRow).join('');
+            });
+
+            el.teamsMembersTableBody.innerHTML = html;
+        }
     }
 
     window.deleteTeam = function (index) {

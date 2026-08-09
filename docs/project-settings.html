@@ -358,9 +358,29 @@
 
                     <!-- Project Members Team Assignment Table -->
                     <div class="bg-white dark:bg-card-dark border border-border-light dark:border-border-dark p-6 rounded-3xl shadow-sm space-y-6">
-                        <div class="flex items-center gap-3 border-b border-border-light dark:border-border-dark pb-4">
-                            <span class="material-symbols-outlined text-primary dark:text-white">person</span>
-                            <h3 class="text-xs font-black uppercase tracking-[0.2em]">Personal del Proyecto</h3>
+                        <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-border-light dark:border-border-dark pb-4">
+                            <div class="flex items-center gap-3">
+                                <span class="material-symbols-outlined text-primary dark:text-white">person</span>
+                                <h3 class="text-xs font-black uppercase tracking-[0.2em]">Personal del Proyecto</h3>
+                            </div>
+                            
+                            <!-- Search & Group Controls -->
+                            <div class="flex flex-wrap items-center gap-3">
+                                <!-- Search Input -->
+                                <div class="relative min-w-[220px]">
+                                    <span class="material-symbols-outlined absolute left-3 top-2 text-gray-400 text-[16px]">search</span>
+                                    <input id="teams-members-search" type="text" placeholder="Buscar personal..." class="w-full pl-8 pr-3 py-1.5 text-xs rounded-xl border-border-light dark:border-border-dark dark:bg-slate-800 bg-gray-50 focus:bg-white transition-all shadow-sm" />
+                                </div>
+                                
+                                <!-- Grouping options -->
+                                <div class="flex items-center bg-gray-100 dark:bg-slate-800 p-1 rounded-xl text-[11px] font-semibold">
+                                    <span class="text-gray-400 dark:text-gray-500 px-2 uppercase text-[9px] tracking-wider hidden sm:inline">Organizar:</span>
+                                    <button type="button" id="btn-tgroup-none" onclick="setTeamsGroupBy('none')" class="px-2.5 py-1 rounded-lg bg-white dark:bg-slate-700 shadow-sm text-gray-900 dark:text-white transition-all">Todos</button>
+                                    <button type="button" id="btn-tgroup-team" onclick="setTeamsGroupBy('team')" class="px-2.5 py-1 rounded-lg text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-all">Equipo</button>
+                                    <button type="button" id="btn-tgroup-role" onclick="setTeamsGroupBy('role')" class="px-2.5 py-1 rounded-lg text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-all">Cargo / Rol</button>
+                                    <button type="button" id="btn-tgroup-company" onclick="setTeamsGroupBy('company')" class="px-2.5 py-1 rounded-lg text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-all">Empresa</button>
+                                </div>
+                            </div>
                         </div>
                         <div class="overflow-hidden rounded-2xl border border-border-light dark:border-border-dark shadow-sm">
                             <div class="overflow-x-auto">
@@ -402,6 +422,6 @@
     </div>
 
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-    <script src="project-settings.js?v=1786128422730"></script>
+    <script src="project-settings.js?v=1786128422740"></script>
 </body>
 </html>
