@@ -337,9 +337,12 @@
                             return;
                         }
 
-                        // User is approved — update cache with freshest role/empresa
+                        // User is approved — update cache with freshest role/empresa/name
                         userAccount.role = activeEntry.rol;
                         userAccount.empresa = activeEntry.empresa || '';
+                        if (activeEntry.nombre && activeEntry.nombre.trim() !== '') {
+                            userAccount.name = activeEntry.nombre.trim();
+                        }
                         const cacheLocation = localStorage.getItem('userAccount') ? 'localStorage' : 'sessionStorage';
                         window[cacheLocation].setItem('userAccount', JSON.stringify(userAccount));
                     }

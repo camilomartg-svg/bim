@@ -61,6 +61,43 @@
         return 'Sin Empresa Asignada';
     }
 
+    // Helper: Resuelve el nombre exacto registrado por el usuario (Directorio Google Sheets / Super Admin)
+    function getUserRegisteredName(email) {
+        if (!email) return '';
+        const cleanEmail = email.toLowerCase().trim();
+
+        // 1. Prioridad: Nombre registrado por el usuario en el Directorio Global (Google Sheets)
+        if (Array.isArray(allDirectoryUsers)) {
+            const dirUser = allDirectoryUsers.find(du => du.email && du.email.toLowerCase().trim() === cleanEmail);
+            if (dirUser && dirUser.nombre && dirUser.nombre.trim() !== '' && dirUser.nombre.trim().toLowerCase() !== 'nuevo usuario') {
+                return dirUser.nombre.trim();
+            }
+        }
+
+        // 2. Prioridad: Nombre configurado en la empresa actual si no es genérico
+        const companyMembers = Array.isArray(currentCompany?.members) ? currentCompany.members : [];
+        const curCompMember = companyMembers.find(cm => cm.email && cm.email.toLowerCase().trim() === cleanEmail);
+        if (curCompMember && curCompMember.name && curCompMember.name.trim() !== '' && curCompMember.name.trim().toLowerCase() !== 'nuevo usuario') {
+            return curCompMember.name.trim();
+        }
+
+        // 3. Prioridad: Nombre configurado en cualquier otra empresa de Super Admin
+        if (Array.isArray(allCompaniesList)) {
+            for (const comp of allCompaniesList) {
+                if (comp.deleted) continue;
+                if (Array.isArray(comp.members)) {
+                    const found = comp.members.find(m => m.email && m.email.toLowerCase().trim() === cleanEmail);
+                    if (found && found.name && found.name.trim() !== '' && found.name.trim().toLowerCase() !== 'nuevo usuario') {
+                        return found.name.trim();
+                    }
+                }
+            }
+        }
+
+        // 4. Fallback: Nombre derivado del correo
+        return cleanEmail.split('@')[0];
+    }
+
     // Leaflet map vars
     let leafletMap = null;
     let mapMarker = null;
@@ -604,7 +641,7 @@
             if (!m.email) return;
             const email = m.email.toLowerCase().trim();
             userMap.set(email, {
-                nombre: m.name || email.split('@')[0],
+                nombre: getUserRegisteredName(email),
                 email: email,
                 empresa: getUserRegisteredCompany(email),
                 rol: m.role || 'INVITADO',
@@ -622,7 +659,7 @@
                     const existing = userMap.get(email);
                     userMap.set(email, {
                         ...existing,
-                        nombre: du.nombre || existing.nombre,
+                        nombre: getUserRegisteredName(email),
                         empresa: getUserRegisteredCompany(email),
                         rol: du.rol || existing.rol,
                         especialidad: du.especialidad || existing.especialidad,
@@ -631,7 +668,7 @@
                 } else if ((activeProject.members || []).some(pm => pm.toLowerCase().trim() === email)) {
                     // Only include if already explicitly assigned to this project
                     userMap.set(email, {
-                        nombre: du.nombre || email.split('@')[0],
+                        nombre: getUserRegisteredName(email),
                         email: email,
                         empresa: getUserRegisteredCompany(email),
                         rol: du.rol || 'INVITADO',
@@ -647,7 +684,7 @@
             const email = pm.toLowerCase().trim();
             if (!userMap.has(email)) {
                 userMap.set(email, {
-                    nombre: email.split('@')[0],
+                    nombre: getUserRegisteredName(email),
                     email: email,
                     empresa: getUserRegisteredCompany(email),
                     rol: 'Colaborador',
@@ -817,7 +854,7 @@
             // Then directory users
             const dirUser = allDirectoryUsers.find(du => du.email && du.email.toLowerCase().trim() === cleanEmail);
 
-            const displayName = compMember?.name || dirUser?.nombre || cleanEmail.split('@')[0];
+            const displayName = getUserRegisteredName(cleanEmail);
             const displayRole = compMember?.cargo || compMember?.role || dirUser?.cargo || dirUser?.especialidad || dirUser?.rol || 'Colaborador';
             const displayCompany = getUserRegisteredCompany(cleanEmail);
 

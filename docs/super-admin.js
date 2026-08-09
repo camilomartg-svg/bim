@@ -659,17 +659,19 @@ document.addEventListener('DOMContentLoaded', async () => {
 
         let registeredNameStr = '';
         if (m.email && m.email.trim()) {
-            const rawEmail = m.email.trim();
-            const compositeKey = rawEmail.toLowerCase() + '_' + (emp.name || '').trim().toLowerCase();
-            const gu = (window.globalUsersMap && window.globalUsersMap.get(compositeKey)) || (window.globalUsersMap && window.globalUsersMap.get(rawEmail)) 
-                        || (window.globalUsersMap && window.globalUsersMap.get(rawEmail.toLowerCase()));
-            if (gu && gu.name) {
-                registeredNameStr = gu.name;
-            } else if (m.name && m.name !== 'Nuevo Usuario') {
-                registeredNameStr = m.name;
+            const rawEmail = m.email.trim().toLowerCase();
+            const compositeKey = rawEmail + '_' + (emp.name || '').trim().toLowerCase();
+            const gu = (window.globalUsersMap && window.globalUsersMap.get(compositeKey)) 
+                    || (window.globalUsersMap && window.globalUsersMap.get(rawEmail))
+                    || (window.globalUsersMap && Array.from(window.globalUsersMap.values()).find(u => u.email === rawEmail));
+            if (gu && gu.name && gu.name.trim() !== '' && gu.name.trim().toLowerCase() !== 'nuevo usuario') {
+                registeredNameStr = gu.name.trim();
+                m.name = gu.name.trim();
+            } else if (m.name && m.name.trim() !== '' && m.name.trim().toLowerCase() !== 'nuevo usuario') {
+                registeredNameStr = m.name.trim();
             }
-        } else if (m.name && m.name !== 'Nuevo Usuario') {
-            registeredNameStr = m.name;
+        } else if (m.name && m.name.trim() !== '' && m.name.trim().toLowerCase() !== 'nuevo usuario') {
+            registeredNameStr = m.name.trim();
         }
         
         const nombreHtml = registeredNameStr ? `
@@ -1812,7 +1814,7 @@ window.fetchGlobalUsers = async function() {
             const email = u.email.toLowerCase().trim();
             const company = (u.empresa || '').toLowerCase().trim();
             const key = email + '_' + company;
-            window.globalUsersMap.set(key, {
+            const userObj = {
                 email: email,
                 name: u.nombre || u.email.split('@')[0],
                 role: u.rol || 'INVITADO',
@@ -1820,7 +1822,11 @@ window.fetchGlobalUsers = async function() {
                 specialty: u.especialidad || '',
                 cargo: u.cargo || '',
                 estado: u.estado || 'PENDIENTE'
-            });
+            };
+            window.globalUsersMap.set(key, userObj);
+            if (!window.globalUsersMap.has(email) || userObj.estado === 'APROBADO') {
+                window.globalUsersMap.set(email, userObj);
+            }
         });
 
         renderGlobalUsers();
