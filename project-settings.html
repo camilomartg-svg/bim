@@ -71,6 +71,30 @@
         .dark ::-webkit-scrollbar-thumb {
             background: #4b5563;
         }
+        /* Sidebar Collapsed Mode */
+        @media (min-width: 768px) {
+            #sidebar-menu.collapsed {
+                width: 4.5rem !important;
+                padding-right: 0 !important;
+                align-items: center !important;
+            }
+            #sidebar-menu.collapsed .sidebar-text {
+                display: none !important;
+            }
+            #sidebar-menu.collapsed .tab-btn {
+                justify-content: center !important;
+                padding-left: 0 !important;
+                padding-right: 0 !important;
+                width: 3rem !important;
+                height: 3rem !important;
+                border-radius: 1rem !important;
+            }
+            #sidebar-menu.collapsed #sidebar-header {
+                justify-content: center !important;
+                padding-left: 0 !important;
+                padding-right: 0 !important;
+            }
+        }
     </style>
 </head>
 <body class="h-full bg-background-light dark:bg-background-dark text-gray-900 dark:text-gray-100 transition-colors duration-300">
@@ -122,22 +146,24 @@
         <!-- Main Body Grid -->
         <div class="flex-1 max-w-7xl w-full mx-auto p-6 flex flex-col md:flex-row gap-6 overflow-hidden">
             <!-- Sidebar Navigation (Tabs) -->
-            <aside class="w-full md:w-64 flex-shrink-0 flex flex-row md:flex-col gap-1 overflow-x-auto md:overflow-x-visible pb-2 md:pb-0 border-b md:border-b-0 md:border-r border-border-light dark:border-border-dark pr-0 md:pr-4">
-                <button data-tab="general" class="tab-btn active flex items-center gap-3 px-4 py-3 rounded-2xl text-sm font-semibold tracking-wide transition-all w-full text-left bg-primary text-white dark:bg-white dark:text-black shadow-sm">
-                    <span class="material-symbols-outlined">info</span>
-                    <span>Generalidades</span>
+            <aside id="sidebar-menu" class="w-full md:w-64 flex-shrink-0 flex flex-row md:flex-col gap-1.5 overflow-x-auto md:overflow-x-visible pb-2 md:pb-0 border-b md:border-b-0 md:border-r border-border-light dark:border-border-dark pr-0 md:pr-4 transition-all duration-300">
+                <div id="sidebar-header" class="hidden md:flex items-center justify-between px-2 mb-2">
+                    <span class="sidebar-text text-[10px] font-black uppercase tracking-widest text-gray-400 dark:text-gray-500">Secciones</span>
+                    <button id="toggle-sidebar-btn" type="button" title="Recoger / Expandir Menú" class="p-1.5 text-gray-400 hover:text-gray-700 dark:hover:text-white rounded-xl hover:bg-gray-100 dark:hover:bg-slate-800 transition-colors">
+                        <span id="toggle-sidebar-icon" class="material-symbols-outlined text-[18px] block">menu_open</span>
+                    </button>
+                </div>
+                <button data-tab="general" title="Generalidades" class="tab-btn active flex items-center gap-3 px-4 py-3 rounded-2xl text-sm font-semibold tracking-wide transition-all w-full text-left bg-primary text-white dark:bg-white dark:text-black shadow-sm">
+                    <span class="material-symbols-outlined shrink-0">info</span>
+                    <span class="sidebar-text truncate">Generalidades</span>
                 </button>
-                <button data-tab="datasources" class="tab-btn flex items-center gap-3 px-4 py-3 rounded-2xl text-sm font-semibold tracking-wide transition-all w-full text-left text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-slate-800/50">
-                    <span class="material-symbols-outlined">database</span>
-                    <span>Fuentes de Datos</span>
+                <button data-tab="members" title="Personal Proyecto" class="tab-btn flex items-center gap-3 px-4 py-3 rounded-2xl text-sm font-semibold tracking-wide transition-all w-full text-left text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-slate-800/50">
+                    <span class="material-symbols-outlined shrink-0">group</span>
+                    <span class="sidebar-text truncate">Personal Proyecto</span>
                 </button>
-                <button data-tab="members" class="tab-btn flex items-center gap-3 px-4 py-3 rounded-2xl text-sm font-semibold tracking-wide transition-all w-full text-left text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-slate-800/50">
-                    <span class="material-symbols-outlined">group</span>
-                    <span>Personal Proyecto</span>
-                </button>
-                <button data-tab="teams" class="tab-btn flex items-center gap-3 px-4 py-3 rounded-2xl text-sm font-semibold tracking-wide transition-all w-full text-left text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-slate-800/50">
-                    <span class="material-symbols-outlined">groups</span>
-                    <span>Equipos de Tarea</span>
+                <button data-tab="teams" title="Equipos de Tarea" class="tab-btn flex items-center gap-3 px-4 py-3 rounded-2xl text-sm font-semibold tracking-wide transition-all w-full text-left text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-slate-800/50">
+                    <span class="material-symbols-outlined shrink-0">groups</span>
+                    <span class="sidebar-text truncate">Equipos de Tarea</span>
                 </button>
             </aside>
 
@@ -220,62 +246,6 @@
                         </div>
                         <div class="overflow-hidden rounded-2xl border border-border-light dark:border-border-dark shadow-inner">
                             <div id="settings-map"></div>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Tab: Fuentes de Datos -->
-                <div id="tab-content-datasources" class="tab-panel hidden space-y-6">
-                    <div class="bg-white dark:bg-card-dark rounded-3xl border border-border-light dark:border-border-dark p-6 shadow-sm">
-                        <div class="flex items-center gap-3 mb-2">
-                            <span class="material-symbols-outlined text-amber-500">cloud_done</span>
-                            <h2 class="text-lg font-bold tracking-tight">Modelos IFC y Google Drive</h2>
-                        </div>
-                        <p class="text-xs text-gray-500 mb-4">Permite enlazar el visor IFC con la carpeta compartida correspondiente en Google Drive.</p>
-                        <div class="grid gap-4 sm:grid-cols-2">
-                            <label class="block">
-                                <span class="mb-2 block text-xs font-bold uppercase tracking-widest text-gray-500">Nombre Carpeta Drive</span>
-                                <input id="ds-drive-folder-name" class="w-full rounded-xl border-slate-200 dark:border-border-dark dark:bg-slate-800" type="text" />
-                            </label>
-                            <label class="block">
-                                <span class="mb-2 block text-xs font-bold uppercase tracking-widest text-gray-500">ID Carpeta Drive</span>
-                                <input id="ds-drive-folder-id" class="w-full rounded-xl border-slate-200 dark:border-border-dark dark:bg-slate-800" type="text" />
-                            </label>
-                            <label class="block sm:col-span-2">
-                                <span class="mb-2 block text-xs font-bold uppercase tracking-widest text-gray-500">Script de Modelos (Drive)</span>
-                                <input id="ds-drive-script-url" class="w-full rounded-xl border-slate-200 dark:border-border-dark dark:bg-slate-800" type="text" placeholder="https://script.google.com/..." />
-                            </label>
-                        </div>
-                    </div>
-
-                    <div class="bg-white dark:bg-card-dark rounded-3xl border border-border-light dark:border-border-dark p-6 shadow-sm">
-                        <div class="flex items-center gap-3 mb-2">
-                            <span class="material-symbols-outlined text-blue-500">table_chart</span>
-                            <h2 class="text-lg font-bold tracking-tight">Hojas de Cálculo y Scripts de Automatización</h2>
-                        </div>
-                        <p class="text-xs text-gray-500 mb-4">Configura las hojas de cálculo base para el estado de elementos (STATUS) y reportes de cantidades (CANTIDADES).</p>
-                        <div class="grid gap-4">
-                            <div class="grid gap-4 sm:grid-cols-2">
-                                <label class="block">
-                                    <span class="mb-2 block text-xs font-bold uppercase tracking-widest text-gray-500">Sheet ID STATUS</span>
-                                    <input id="ds-status-sheet-id" class="w-full rounded-xl border-slate-200 dark:border-border-dark dark:bg-slate-800" type="text" />
-                                </label>
-                                <label class="block">
-                                    <span class="mb-2 block text-xs font-bold uppercase tracking-widest text-gray-500">Script STATUS (URL)</span>
-                                    <input id="ds-status-script-url" class="w-full rounded-xl border-slate-200 dark:border-border-dark dark:bg-slate-800" type="text" placeholder="https://script.google.com/..." />
-                                </label>
-                            </div>
-                            <hr class="border-border-light dark:border-border-dark" />
-                            <div class="grid gap-4 sm:grid-cols-2">
-                                <label class="block">
-                                    <span class="mb-2 block text-xs font-bold uppercase tracking-widest text-gray-500">Sheet ID CANTIDADES</span>
-                                    <input id="ds-cantidades-sheet-id" class="w-full rounded-xl border-slate-200 dark:border-border-dark dark:bg-slate-800" type="text" />
-                                </label>
-                                <label class="block">
-                                    <span class="mb-2 block text-xs font-bold uppercase tracking-widest text-gray-500">Script CANTIDADES (URL)</span>
-                                    <input id="ds-cantidades-script-url" class="w-full rounded-xl border-slate-200 dark:border-border-dark dark:bg-slate-800" type="text" placeholder="https://script.google.com/..." />
-                                </label>
-                            </div>
                         </div>
                     </div>
                 </div>
@@ -388,6 +358,7 @@
                                     <thead class="bg-gray-50 dark:bg-slate-800/50 text-gray-500 uppercase text-[10px] tracking-wider font-bold border-b border-border-light dark:border-border-dark">
                                         <tr>
                                             <th class="py-3 px-4">Cargo / Rol</th>
+                                            <th class="py-3 px-4">Empresa</th>
                                             <th class="py-3 px-4">Nombre</th>
                                             <th class="py-3 px-4">Email de Usuario</th>
                                             <th class="py-3 px-4 w-48">Equipo de Tarea</th>

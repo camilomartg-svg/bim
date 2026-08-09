@@ -158,9 +158,11 @@
     document.querySelectorAll('.tab-btn').forEach(btn => {
         btn.addEventListener('click', () => {
             document.querySelectorAll('.tab-btn').forEach(b => {
-                b.className = "tab-btn flex items-center gap-3 px-4 py-3 rounded-2xl text-sm font-semibold tracking-wide transition-all w-full text-left text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-slate-800/50";
+                b.classList.remove('active', 'bg-primary', 'text-white', 'dark:bg-white', 'dark:text-black', 'shadow-sm');
+                b.classList.add('text-gray-600', 'dark:text-gray-400', 'hover:bg-gray-100', 'dark:hover:bg-slate-800/50');
             });
-            btn.className = "tab-btn active flex items-center gap-3 px-4 py-3 rounded-2xl text-sm font-semibold tracking-wide transition-all w-full text-left bg-primary text-white dark:bg-white dark:text-black shadow-sm";
+            btn.classList.add('active', 'bg-primary', 'text-white', 'dark:bg-white', 'dark:text-black', 'shadow-sm');
+            btn.classList.remove('text-gray-600', 'dark:text-gray-400', 'hover:bg-gray-100', 'dark:hover:bg-slate-800/50');
             
             const targetTab = btn.getAttribute('data-tab');
             document.querySelectorAll('.tab-panel').forEach(p => p.classList.add('hidden'));
@@ -172,6 +174,38 @@
             }
         });
     });
+
+    // --- RECOGER / EXPANDIR MENÚ LATERAL ---
+    const sidebarMenu = document.getElementById('sidebar-menu');
+    const toggleSidebarBtn = document.getElementById('toggle-sidebar-btn');
+    const toggleSidebarIcon = document.getElementById('toggle-sidebar-icon');
+
+    function applySidebarState(isCollapsed) {
+        if (!sidebarMenu) return;
+        if (isCollapsed) {
+            sidebarMenu.classList.add('collapsed');
+            if (toggleSidebarIcon) toggleSidebarIcon.textContent = 'menu';
+        } else {
+            sidebarMenu.classList.remove('collapsed');
+            if (toggleSidebarIcon) toggleSidebarIcon.textContent = 'menu_open';
+        }
+    }
+
+    if (toggleSidebarBtn) {
+        toggleSidebarBtn.addEventListener('click', () => {
+            const isCollapsed = sidebarMenu && sidebarMenu.classList.contains('collapsed');
+            const newState = !isCollapsed;
+            localStorage.setItem('sidebar_collapsed', newState ? 'true' : 'false');
+            applySidebarState(newState);
+            if (leafletMap) setTimeout(() => leafletMap.invalidateSize(), 200);
+        });
+
+        // Initialize state from localStorage
+        const savedCollapsed = localStorage.getItem('sidebar_collapsed') === 'true';
+        if (savedCollapsed) {
+            applySidebarState(true);
+        }
+    }
 
     // --- SINCRONIZACIÓN AUTOMÁTICA CON GOOGLE SHEETS (APPS SCRIPT) ---
     async function syncTeamsToGoogle(silent = false) {
@@ -769,7 +803,7 @@
         if (filteredMembers.length === 0) {
             el.teamsMembersTableBody.innerHTML = `
                 <tr>
-                    <td colspan="4" class="py-8 px-4 text-center text-xs text-gray-400 italic">
+                    <td colspan="5" class="py-8 px-4 text-center text-xs text-gray-400 italic">
                         No se encontraron miembros que coincidan con la búsqueda.
                     </td>
                 </tr>
@@ -787,10 +821,8 @@
 
             return `
                 <tr class="hover:bg-gray-50 dark:hover:bg-slate-800/40 transition-colors">
-                    <td class="py-3 px-4">
-                        <div class="text-xs font-semibold text-gray-800 dark:text-gray-200 uppercase tracking-wider">${escapeHtml(m.role)}</div>
-                        <div class="text-[10px] text-gray-400 font-medium">${escapeHtml(m.company)}</div>
-                    </td>
+                    <td class="py-3 px-4 text-xs font-bold text-gray-800 dark:text-gray-200 uppercase tracking-wider">${escapeHtml(m.role)}</td>
+                    <td class="py-3 px-4 text-xs font-semibold text-gray-600 dark:text-gray-400">${escapeHtml(m.company)}</td>
                     <td class="py-3 px-4 font-bold text-gray-900 dark:text-white">${escapeHtml(m.name)}</td>
                     <td class="py-3 px-4 text-xs font-mono text-gray-500 dark:text-gray-400">${escapeHtml(m.email)}</td>
                     <td class="py-3 px-4">
@@ -833,7 +865,7 @@
                 const count = groups[g].length;
                 html += `
                     <tr class="bg-gray-100/90 dark:bg-slate-800/90 border-y border-border-light dark:border-border-dark">
-                        <td colspan="4" class="py-2 px-4">
+                        <td colspan="5" class="py-2 px-4">
                             <div class="flex items-center justify-between text-xs font-black uppercase tracking-wider text-slate-700 dark:text-slate-300">
                                 <span>${escapeHtml(g)}</span>
                                 <span class="text-[10px] px-2 py-0.5 rounded-full bg-white dark:bg-slate-700 text-gray-500 dark:text-gray-300 font-semibold shadow-sm">${count} ${count === 1 ? 'persona' : 'personas'}</span>
