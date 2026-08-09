@@ -604,7 +604,7 @@
                     </td>
                     <td class="py-3 px-4 text-xs font-mono">
                         <div class="text-gray-700 dark:text-gray-300">${escapeHtml(email)}</div>
-                        <span class="inline-block mt-1 px-2 py-0.5 rounded bg-gray-100 dark:bg-slate-700 font-sans font-semibold text-gray-600 dark:text-gray-300 text-[10px] uppercase tracking-wider">${escapeHtml(u.especialidad || 'Sin Especialidad')}</span>
+                        <span class="inline-block mt-1 px-2 py-0.5 rounded bg-gray-100 dark:bg-slate-700 font-sans font-semibold text-gray-600 dark:text-gray-300 text-[10px] uppercase tracking-wider">${escapeHtml(u.cargo || u.especialidad || 'Sin Cargo')}</span>
                     </td>
                     <td class="py-3 px-4 text-xs text-gray-500 font-semibold uppercase tracking-wider">${escapeHtml(u.rol || 'Colaborador')}</td>
                     <td class="py-3 px-4 text-center">
