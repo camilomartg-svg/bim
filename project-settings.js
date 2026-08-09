@@ -7,9 +7,66 @@
     let fullConfig = { portal: { name: 'nora CDE' }, projects: [] };
     let activeProject = { slug: '', name: 'Proyecto', equiposDeTarea: [], members: [], dataSources: {}, landing: { map: { lat: 4.711, lng: -74.0721, zoom: 13 } } };
     let allDirectoryUsers = []; // Users loaded from Google Sheets (Nora Directory)
+    let allCompaniesList = []; // All companies loaded from empresas.json (Super Admin)
     
     // Central Google Apps Script Endpoint for Nora (Users, Companies, Teams & Drive)
     const GOOGLE_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbx2RAQx_8K4o22xE0Mw-ETc7K_58vIoi6-PgVi64u80inuiw144ks3cgWSdCtXqIgB02g/exec';
+
+    // Helper: Resuelve la empresa exacta registrada para un usuario en el panel Super Admin
+    function getUserRegisteredCompany(email) {
+        if (!email) return 'Empresa';
+        const cleanEmail = email.toLowerCase().trim();
+
+        // 1. Prioridad: Empresa configurada explícitamente para este miembro en la empresa actual
+        const companyMembers = Array.isArray(currentCompany?.members) ? currentCompany.members : [];
+        const curCompMember = companyMembers.find(cm => cm.email && cm.email.toLowerCase().trim() === cleanEmail);
+        if (curCompMember && curCompMember.empresaUsuario && curCompMember.empresaUsuario.trim() !== '') {
+            return curCompMember.empresaUsuario.trim();
+        }
+
+        // 2. Prioridad: Buscar en todas las empresas de Super Admin (empresas.json)
+        if (Array.isArray(allCompaniesList)) {
+            // 2a. Buscar asignación explícita de 'empresaUsuario' en cualquier empresa
+            for (const comp of allCompaniesList) {
+                if (comp.deleted) continue;
+                if (Array.isArray(comp.members)) {
+                    const found = comp.members.find(m => m.email && m.email.toLowerCase().trim() === cleanEmail);
+                    if (found && found.empresaUsuario && found.empresaUsuario.trim() !== '') {
+                        return found.empresaUsuario.trim();
+                    }
+                }
+            }
+
+            // 2b. Buscar si es administrador o empleado interno en alguna empresa
+            for (const comp of allCompaniesList) {
+                if (comp.deleted) continue;
+                if (Array.isArray(comp.admins) && comp.admins.some(a => a.toLowerCase().trim() === cleanEmail)) {
+                    return comp.name;
+                }
+                if (Array.isArray(comp.members)) {
+                    const found = comp.members.find(m => m.email && m.email.toLowerCase().trim() === cleanEmail && (m.role === 'ADMINISTRADOR_EMPRESA' || !m.empresaUsuario || m.empresaUsuario.trim() === comp.name.trim()));
+                    if (found) {
+                        return comp.name;
+                    }
+                }
+            }
+        }
+
+        // 3. Prioridad: Directorio maestro de usuarios en Google Sheets (sincronizado con Super Admin)
+        if (Array.isArray(allDirectoryUsers)) {
+            const dirUser = allDirectoryUsers.find(du => du.email && du.email.toLowerCase().trim() === cleanEmail);
+            if (dirUser && dirUser.empresa && dirUser.empresa.trim() !== '') {
+                return dirUser.empresa.trim();
+            }
+        }
+
+        // 4. Fallback: Empresa actual
+        if (curCompMember) {
+            return currentCompany?.name || 'Empresa';
+        }
+
+        return currentCompany?.name || 'Empresa';
+    }
 
     // Leaflet map vars
     let leafletMap = null;
@@ -282,9 +339,10 @@
         // 1. Cargar Empresas y resolver Empresa si no está presente
         let companies = [];
         try {
-            const empRes = await fetch('empresas.json');
+            const empRes = await fetch('empresas.json?t=' + Date.now());
             if (empRes.ok) {
                 companies = await empRes.json();
+                allCompaniesList = companies;
             }
         } catch (e) {
             console.warn('Error al cargar empresas.json:', e);
@@ -555,7 +613,7 @@
             userMap.set(email, {
                 nombre: m.name || email.split('@')[0],
                 email: email,
-                empresa: m.empresaUsuario || currentCompany?.name || 'Empresa',
+                empresa: getUserRegisteredCompany(email),
                 rol: m.role || 'INVITADO',
                 especialidad: m.especialidad || '',
                 cargo: m.cargo || ''
@@ -572,7 +630,7 @@
                     userMap.set(email, {
                         ...existing,
                         nombre: du.nombre || existing.nombre,
-                        empresa: du.empresa || existing.empresa,
+                        empresa: getUserRegisteredCompany(email),
                         rol: du.rol || existing.rol,
                         especialidad: du.especialidad || existing.especialidad,
                         cargo: du.cargo || existing.cargo
@@ -582,7 +640,7 @@
                     userMap.set(email, {
                         nombre: du.nombre || email.split('@')[0],
                         email: email,
-                        empresa: du.empresa || 'Empresa Externa',
+                        empresa: getUserRegisteredCompany(email),
                         rol: du.rol || 'INVITADO',
                         especialidad: du.especialidad || '',
                         cargo: du.cargo || ''
@@ -598,7 +656,7 @@
                 userMap.set(email, {
                     nombre: email.split('@')[0],
                     email: email,
-                    empresa: currentCompany?.name || 'Empresa',
+                    empresa: getUserRegisteredCompany(email),
                     rol: 'Colaborador',
                     especialidad: '',
                     cargo: ''
@@ -768,7 +826,7 @@
 
             const displayName = compMember?.name || dirUser?.nombre || cleanEmail.split('@')[0];
             const displayRole = compMember?.cargo || compMember?.role || dirUser?.cargo || dirUser?.especialidad || dirUser?.rol || 'Colaborador';
-            const displayCompany = compMember?.empresaUsuario || dirUser?.empresa || currentCompany?.name || 'Empresa';
+            const displayCompany = getUserRegisteredCompany(cleanEmail);
 
             // Find assigned team
             let assignedTeamName = '';

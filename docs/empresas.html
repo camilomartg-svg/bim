@@ -194,7 +194,6 @@
             const container = document.getElementById('scroll-container');
             const list = document.getElementById('companies-list');
             const countEl = document.getElementById('company-count');
-            const cursor = document.getElementById('custom-cursor');
             const authContainer = document.getElementById('auth-container');
             const superAdminLink = document.getElementById('super-admin-link');
 
@@ -205,11 +204,8 @@
                 console.error('Error parsing user account:', e);
             }
 
-            let companies = [];
-            
             try {
                 const url = 'https://script.google.com/macros/s/AKfycbx2RAQx_8K4o22xE0Mw-ETc7K_58vIoi6-PgVi64u80inuiw144ks3cgWSdCtXqIgB02g/exec';
-                
 
                 // Fetch ALL companies and users concurrently in real-time
                 const [compRes, userRes, staticEmpRes] = await Promise.all([
@@ -231,202 +227,313 @@
                     }
                 } catch(e) { 
                     console.warn('Could not merge static empresas', e); 
-                    try {
-                        const rawRes = await fetch('https://raw.githubusercontent.com/camilomartg-svg/bim/main/empresas.json?t=' + Date.now());
-                        if (rawRes.ok) staticEmpresas = await rawRes.json();
-                    } catch(e2) {}
                 }
-                
-                if (staticEmpresas && Array.isArray(staticEmpresas)) {
-                    // Merge IDs from static empresas.json to avoid duplicates/mismatches with GSheets
-                    allCompanies = allCompanies.filter(c => {
-                        if (!c.name) return true;
-                        const matched = staticEmpresas.find(se => se.name && se.name.toLowerCase().trim() === c.name.toLowerCase().trim());
-                        if (matched && matched.deleted) return false;
-                        if (matched) {
-                            c.id = matched.id;
-                            c.image = matched.image;
-                            c.configUrl = matched.configUrl;
-                            c.code = matched.code;
-                        }
-                        return true;
+
+                // Normalize text helper
+                const cleanText = (str) => {
+                    if (!str) return '';
+                    return str.toLowerCase()
+                              .normalize("NFD")
+                              .replace(/[\u0300-\u036f]/g, "")
+                              .replace(/[^a-z0-9]/g, "")
+                              .trim();
+                };
+
+                // Merge static empresas into allCompanies
+                const mergedCompaniesMap = new Map();
+
+                // 1. Add static empresas first (contains rich members & admin configuration from Super Admin)
+                if (Array.isArray(staticEmpresas)) {
+                    staticEmpresas.forEach(se => {
+                        if (se.deleted) return;
+                        mergedCompaniesMap.set(se.id, {
+                            id: se.id,
+                            name: se.name,
+                            code: se.code || (se.name ? se.name.substring(0,3).toUpperCase() : 'BIM'),
+                            location: se.location || se.city || 'Sede Principal',
+                            image: se.image || 'https://i.postimg.cc/02mTnnQv/21bd5ee9d2351270615280386caad1f3.jpg',
+                            configUrl: se.configUrl || `config-${se.id}.json`,
+                            admins: se.admins || [],
+                            members: se.members || []
+                        });
                     });
                 }
-                
-                // Guardar una versión fresca en cache para uso de otros componentes si fuera necesario
-                sessionStorage.setItem('cachedCompanies_v2', JSON.stringify({companies: allCompanies, users: users}));
 
-                const renderUI = () => {
-                    let companies = [];
-                    // Validate and update User
-                    if (userAccount && userAccount.username) {
-                        if (userAccount.role === 'SUPER_ADMINISTRADOR' || userAccount.username === 'imagina3ddesign@gmail.com') {
-                            // Bypass validation for the hardcoded super admin / super administrators
-                        } else {
-                            const userEntries = users.filter(u => u.email && u.email.toLowerCase().trim() === userAccount.username.toLowerCase().trim());
+                // 2. Merge Google Sheets companies
+                if (Array.isArray(allCompanies)) {
+                    allCompanies.forEach(c => {
+                        if (!c.name) return;
+                        const cNameClean = cleanText(c.name);
+                        const cRazonClean = cleanText(c.razonSocial);
 
-                            // Block only if the user truly doesn't exist in the DB
-                            if (userEntries.length === 0) {
-                                alert('Tu acceso ha sido revocado o está pendiente. Cerrando sesión.');
-                                sessionStorage.removeItem('userAccount');
-                                localStorage.removeItem('userAccount');
-                                window.location.replace('https://norabim.com/inse.html');
-                                return;
+                        // Find matching static empresa by id or name
+                        let foundKey = null;
+                        for (const [key, existing] of mergedCompaniesMap.entries()) {
+                            if (existing.id === c.id || cleanText(existing.name) === cNameClean || (cRazonClean && cleanText(existing.name) === cRazonClean)) {
+                                foundKey = key;
+                                break;
                             }
-
-                            // Find any approved entry (user may exist but have no company yet) - USE REVERSE TO GET NEWEST
-                            const activeEntry = userEntries.reverse().find(u => {
-                                const dbEstado = u.estado ? u.estado.toUpperCase().trim() : '';
-                                const dbRol = u.rol ? u.rol.toUpperCase().trim() : '';
-                                return dbEstado === 'APROBADO' || dbRol === 'SUPER_ADMINISTRADOR' || dbRol === 'ADMINISTRADOR_EMPRESA';
-                            });
-
-                            // Block if ALL entries are explicitly denied/pending
-                            if (!activeEntry) {
-                                const anyPending = userEntries.some(u => (u.estado || '').toUpperCase().trim() === 'PENDIENTE');
-                                const msg = anyPending
-                                    ? 'Tu solicitud de acceso está pendiente de aprobación.'
-                                    : 'Tu acceso ha sido revocado. Contacta al administrador.';
-                                alert(msg);
-                                sessionStorage.removeItem('userAccount');
-                                localStorage.removeItem('userAccount');
-                                window.location.replace('https://norabim.com/inse.html');
-                                return;
-                            }
-
-                            // User is approved — update cache with freshest role/empresa
-                            userAccount.role = activeEntry.rol;
-                            userAccount.empresa = activeEntry.empresa || '';
-                            const cacheLocation = localStorage.getItem('userAccount') ? 'localStorage' : 'sessionStorage';
-                            window[cacheLocation].setItem('userAccount', JSON.stringify(userAccount));
                         }
-                    }
 
-                    // Render Auth UI
-                    if (userAccount) {
-                        authContainer.innerHTML = `
-                        <span class="text-[10px] uppercase tracking-wider font-medium text-text-light dark:text-white">Hola, ${userAccount.name.split(' ')[0]}</span>
-                        <button id="logout-button" class="text-text-light dark:text-white hover:text-primary text-[10px] uppercase tracking-wider font-medium">Cerrar sesión</button>
-                        `;
-                        document.getElementById('logout-button').addEventListener('click', () => {
+                        if (foundKey) {
+                            const existing = mergedCompaniesMap.get(foundKey);
+                            mergedCompaniesMap.set(foundKey, {
+                                ...existing,
+                                location: c.city ? `${c.city}, ${c.country || 'Colombia'}` : existing.location,
+                                image: existing.image || c.image || c.logoBase64 || 'https://i.postimg.cc/02mTnnQv/21bd5ee9d2351270615280386caad1f3.jpg'
+                            });
+                        } else {
+                            const id = c.id || 'company-' + Date.now();
+                            mergedCompaniesMap.set(id, {
+                                id: id,
+                                name: c.name || c.legalName,
+                                code: c.code || (c.name ? c.name.substring(0,3).toUpperCase() : 'BIM'),
+                                location: c.city ? `${c.city}, ${c.country || 'Colombia'}` : 'Sede Principal',
+                                image: c.image || c.logoBase64 || 'https://i.postimg.cc/02mTnnQv/21bd5ee9d2351270615280386caad1f3.jpg',
+                                configUrl: c.configUrl || 'portal-config.json',
+                                admins: [],
+                                members: []
+                            });
+                        }
+                    });
+                }
+
+                const consolidatedCompanies = Array.from(mergedCompaniesMap.values());
+
+                // Validate and update User
+                let userEmail = '';
+                if (userAccount && userAccount.username) {
+                    userEmail = userAccount.username.toLowerCase().trim();
+                    if (userAccount.role === 'SUPER_ADMINISTRADOR' || userEmail === 'imagina3ddesign@gmail.com') {
+                        // Bypass validation for super administrators
+                    } else {
+                        const userEntries = users.filter(u => u.email && u.email.toLowerCase().trim() === userEmail);
+
+                        // Block only if the user truly doesn't exist in the DB
+                        if (userEntries.length === 0) {
+                            alert('Tu acceso ha sido revocado o está pendiente. Cerrando sesión.');
                             sessionStorage.removeItem('userAccount');
                             localStorage.removeItem('userAccount');
-                            window.location.reload();
+                            window.location.replace('https://norabim.com/inse.html');
+                            return;
+                        }
+
+                        // Find any approved entry - USE REVERSE TO GET NEWEST
+                        const activeEntry = userEntries.reverse().find(u => {
+                            const dbEstado = u.estado ? u.estado.toUpperCase().trim() : '';
+                            const dbRol = u.rol ? u.rol.toUpperCase().trim() : '';
+                            return dbEstado === 'APROBADO' || dbRol === 'SUPER_ADMINISTRADOR' || dbRol === 'ADMINISTRADOR_EMPRESA';
                         });
 
-                        // UNHIDE SUPER ADMIN LINK
-                        if (userAccount.role === 'SUPER_ADMINISTRADOR') {
-                            if (superAdminLink) superAdminLink.classList.remove('hidden');
-                            
-                            // Delete duplicate companies to avoid visual spam (Group by exact name)
-                            const uniqueCompaniesMap = new Map();
-                            allCompanies.forEach(c => {
-                                if (!uniqueCompaniesMap.has(c.name)) {
-                                    uniqueCompaniesMap.set(c.name, c);
+                        if (!activeEntry) {
+                            const anyPending = userEntries.some(u => (u.estado || '').toUpperCase().trim() === 'PENDIENTE');
+                            const msg = anyPending
+                                ? 'Tu solicitud de acceso está pendiente de aprobación.'
+                                : 'Tu acceso ha sido revocado. Contacta al administrador.';
+                            alert(msg);
+                            sessionStorage.removeItem('userAccount');
+                            localStorage.removeItem('userAccount');
+                            window.location.replace('https://norabim.com/inse.html');
+                            return;
+                        }
+
+                        // User is approved — update cache with freshest role/empresa
+                        userAccount.role = activeEntry.rol;
+                        userAccount.empresa = activeEntry.empresa || '';
+                        const cacheLocation = localStorage.getItem('userAccount') ? 'localStorage' : 'sessionStorage';
+                        window[cacheLocation].setItem('userAccount', JSON.stringify(userAccount));
+                    }
+                }
+
+                // Render Auth UI
+                if (userAccount) {
+                    authContainer.innerHTML = `
+                    <span class="text-[10px] uppercase tracking-wider font-medium text-text-light dark:text-white">Hola, ${userAccount.name.split(' ')[0]}</span>
+                    <button id="logout-button" class="text-text-light dark:text-white hover:text-primary text-[10px] uppercase tracking-wider font-medium">Cerrar sesión</button>
+                    `;
+                    document.getElementById('logout-button').addEventListener('click', () => {
+                        sessionStorage.removeItem('userAccount');
+                        localStorage.removeItem('userAccount');
+                        window.location.reload();
+                    });
+                }
+
+                // Pre-check project configs to discover project-level invitations
+                const projectAccessCompanyIds = new Set();
+                if (userEmail && userAccount && userAccount.role !== 'SUPER_ADMINISTRADOR') {
+                    await Promise.allSettled(
+                        consolidatedCompanies.filter(c => c.configUrl).map(async c => {
+                            try {
+                                const res = await fetch(`${c.configUrl}?t=${Date.now()}`);
+                                if (res.ok) {
+                                    const conf = await res.json();
+                                    const hasProject = Array.isArray(conf.projects) && conf.projects.some(p =>
+                                        Array.isArray(p.members) && p.members.some(pm => pm.toLowerCase().trim() === userEmail)
+                                    );
+                                    if (hasProject) {
+                                        projectAccessCompanyIds.add(c.id);
+                                    }
                                 }
-                            });
-                            const uniqueCompanies = Array.from(uniqueCompaniesMap.values());
+                            } catch(err) {}
+                        })
+                    );
+                }
 
-                            companies = uniqueCompanies.map(c => ({
-                                id: c.id || 'company-' + Date.now(),
-                                name: c.name || c.legalName,
-                                location: c.city ? c.city + ', ' + c.country : 'Sede Principal',
-                                image: c.image || c.logoBase64 || 'https://i.postimg.cc/02mTnnQv/21bd5ee9d2351270615280386caad1f3.jpg',
-                                code: c.code || (c.name ? c.name.substring(0,3).toUpperCase() : 'BIM'),
-                                configUrl: c.configUrl || 'portal-config.json'
-                            }));
-                        } else {
-                            const cleanText = (str) => {
-                                if (!str) return '';
-                                return str.toLowerCase()
-                                          .normalize("NFD")
-                                          .replace(/[\u0300-\u036f]/g, "")
-                                          .replace(/[^a-z0-9]/g, "")
-                                          .trim();
-                            };
+                // Helper to render individual company card
+                const renderCard = (c, isGuest = false) => `
+                    <a href="home.html?empresa=${c.id}&v=${Date.now()}" class="card-hover flex-none w-[260px] md:w-[320px] lg:w-[360px] group transition-transform duration-500 block">
+                        <div class="flex justify-between items-end mb-4 border-b border-gray-300 dark:border-gray-700 pb-2">
+                            <div class="flex flex-col min-w-0 pr-2">
+                                <div class="flex items-center gap-2 mb-1">
+                                    <span class="text-[9px] font-bold text-gray-400 uppercase tracking-widest">${c.code || 'BIM'}</span>
+                                    ${isGuest ? `
+                                        <span class="text-[8px] font-black uppercase tracking-wider bg-indigo-100 text-indigo-800 dark:bg-indigo-950/70 dark:text-indigo-300 px-2 py-0.5 rounded-md border border-indigo-200 dark:border-indigo-800 flex items-center gap-1">
+                                            <span class="material-symbols-outlined text-[10px]">badge</span>
+                                            Invitado
+                                        </span>
+                                    ` : `
+                                        <span class="text-[8px] font-black uppercase tracking-wider bg-emerald-100 text-emerald-800 dark:bg-emerald-950/70 dark:text-emerald-300 px-2 py-0.5 rounded-md border border-emerald-200 dark:border-emerald-800 flex items-center gap-1">
+                                            <span class="material-symbols-outlined text-[10px]">home_work</span>
+                                            Mi Empresa
+                                        </span>
+                                    `}
+                                </div>
+                                <span class="text-xs font-bold uppercase tracking-wider text-gray-800 dark:text-gray-200 truncate">${c.name}</span>
+                            </div>
+                            <span class="text-[9px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-widest text-right flex-shrink-0">${c.location}</span>
+                        </div>
+                        <div class="w-full aspect-[4/5] bg-gray-200 dark:bg-gray-800 overflow-hidden relative rounded-xl shadow-sm group-hover:shadow-md transition-shadow">
+                            <div class="w-full h-full card-image-wrapper">
+                                <img src="${c.image}" alt="${c.name}" class="w-full h-full object-cover filter brightness-95 contrast-105" />
+                            </div>
+                            ${isGuest ? `
+                                <div class="absolute bottom-3 left-3 bg-white/95 dark:bg-gray-900/95 backdrop-blur-md px-3 py-1.5 rounded-lg text-[9px] font-bold uppercase tracking-widest text-indigo-700 dark:text-indigo-300 shadow-md flex items-center gap-1.5 border border-indigo-100 dark:border-indigo-900">
+                                    <span class="material-symbols-outlined text-[14px]">sensor_occupied</span>
+                                    <span>Acceso Invitado</span>
+                                </div>
+                            ` : `
+                                <div class="absolute bottom-3 left-3 bg-white/95 dark:bg-gray-900/95 backdrop-blur-md px-3 py-1.5 rounded-lg text-[9px] font-bold uppercase tracking-widest text-emerald-700 dark:text-emerald-300 shadow-md flex items-center gap-1.5 border border-emerald-100 dark:border-emerald-900">
+                                    <span class="material-symbols-outlined text-[14px]">corporate_fare</span>
+                                    <span>Miembro Corporativo</span>
+                                </div>
+                            `}
+                        </div>
+                    </a>
+                `;
 
-                            const userEntries = users.filter(u => u.email && u.email.toLowerCase().trim() === userAccount.username.toLowerCase().trim());
-                            const userCompaniesNames = userEntries.map(u => u.empresa).filter(Boolean);
+                if (userAccount && userAccount.role === 'SUPER_ADMINISTRADOR') {
+                    if (superAdminLink) superAdminLink.classList.remove('hidden');
+                    countEl.textContent = `(${consolidatedCompanies.length})`;
 
-                            const matchedCompanies = allCompanies.filter(c => {
-                                if (!c.name) return false;
-                                const cName = cleanText(c.name);
-                                const cRazon = cleanText(c.razonSocial);
-                                return userCompaniesNames.some(uEmpRaw => {
-                                    const uEmp = cleanText(uEmpRaw);
-                                    return (cName && (cName === uEmp || cName.includes(uEmp) || uEmp.includes(cName))) ||
-                                           (cRazon && (cRazon === uEmp || cRazon.includes(uEmp) || uEmp.includes(cRazon)));
-                                });
-                            });
+                    list.innerHTML = `
+                        <div class="w-full flex flex-col gap-6">
+                            <div class="flex items-center gap-2 text-xs font-black uppercase tracking-wider text-gray-500">
+                                <span class="material-symbols-outlined text-[16px] text-primary">admin_panel_settings</span>
+                                <span>Todas las Empresas Registradas (Vista Super Administrador)</span>
+                            </div>
+                            <div class="flex flex-wrap justify-start gap-8 lg:gap-12">
+                                ${consolidatedCompanies.map(c => renderCard(c, false)).join('')}
+                            </div>
+                        </div>
+                    `;
+                    return;
+                }
 
-                            companies = matchedCompanies.map(myComp => ({
-                                id: myComp.id || 'company-' + Date.now(),
-                                name: myComp.name,
-                                location: myComp.city ? myComp.city + ', ' + myComp.country : 'Sede Principal',
-                                image: myComp.image || myComp.logoBase64 || 'https://i.postimg.cc/02mTnnQv/21bd5ee9d2351270615280386caad1f3.jpg',
-                                code: myComp.code || (myComp.name ? myComp.name.substring(0,3).toUpperCase() : 'BIM'),
-                                configUrl: myComp.configUrl || 'portal-config.json'
-                            }));
+                // Segregate into Belonging vs Guest companies
+                const userEntries = users.filter(u => u.email && u.email.toLowerCase().trim() === userEmail);
+                const userCompaniesNames = userEntries.map(u => u.empresa).filter(Boolean);
+                if (userAccount && userAccount.empresa && !userCompaniesNames.includes(userAccount.empresa)) {
+                    userCompaniesNames.push(userAccount.empresa);
+                }
 
-                            // Fallback for associated companies not in DB (excluding statically deleted ones)
-                            userCompaniesNames.forEach(uEmpRaw => {
-                                const uEmpClean = cleanText(uEmpRaw);
-                                const isDeletedInStatic = staticEmpresas.some(se => se.name && cleanText(se.name) === uEmpClean && se.deleted);
-                                if (isDeletedInStatic) return;
+                const belongingCompanies = [];
+                const guestCompanies = [];
 
-                                const alreadyMatched = matchedCompanies.some(c => {
-                                    const cName = cleanText(c.name);
-                                    const cRazon = cleanText(c.razonSocial);
-                                    return (cName && (cName === uEmpClean || cName.includes(uEmpClean) || uEmpClean.includes(cName))) ||
-                                           (cRazon && (cRazon === uEmpClean || cRazon.includes(uEmpClean) || uEmpClean.includes(cRazon)));
-                                });
+                consolidatedCompanies.forEach(c => {
+                    const cNameClean = cleanText(c.name);
+                    
+                    // Check if user belongs primarily to this company
+                    const isMatchByName = userCompaniesNames.some(uEmp => {
+                        const uEmpClean = cleanText(uEmp);
+                        return (cNameClean && (cNameClean === uEmpClean || cNameClean.includes(uEmpClean) || uEmpClean.includes(cNameClean)));
+                    });
+                    const isAdminOfCompany = Array.isArray(c.admins) && c.admins.some(a => a.toLowerCase().trim() === userEmail);
+                    const isInternalMember = Array.isArray(c.members) && c.members.some(m => 
+                        m.email && m.email.toLowerCase().trim() === userEmail && 
+                        (m.role === 'ADMINISTRADOR_EMPRESA' || (!m.empresaUsuario || cleanText(m.empresaUsuario) === cNameClean))
+                    );
 
-                                if (!alreadyMatched) {
-                                    companies.push({
-                                        id: 'dynamic-' + Date.now(),
-                                        name: uEmpRaw,
-                                        location: 'Pendiente',
-                                        image: 'https://i.postimg.cc/02mTnnQv/21bd5ee9d2351270615280386caad1f3.jpg',
-                                        code: 'NEW',
-                                        configUrl: 'portal-config.json'
-                                    });
-                                }
-                            });
+                    if (isMatchByName || isAdminOfCompany || isInternalMember) {
+                        belongingCompanies.push(c);
+                    } else {
+                        // Check if user is an invited member / guest in this company
+                        const isExplicitGuestMember = Array.isArray(c.members) && c.members.some(m => 
+                            m.email && m.email.toLowerCase().trim() === userEmail
+                        );
+                        const hasProjectGuestAccess = projectAccessCompanyIds.has(c.id);
+
+                        if (isExplicitGuestMember || hasProjectGuestAccess) {
+                            guestCompanies.push(c);
                         }
                     }
+                });
 
-                    countEl.textContent = `(${companies.length})`;
+                const totalCount = belongingCompanies.length + guestCompanies.length;
+                countEl.textContent = `(${totalCount})`;
 
-                    if (companies.length === 0) {
-                        list.innerHTML = `
-                            <div class="flex flex-col items-center justify-center w-full h-full text-center p-12 mx-auto" style="width: 100%;">
-                                <span class="material-symbols-outlined text-4xl text-gray-400 mb-4">domain_disabled</span>
-                                <h3 class="text-lg font-medium text-gray-900 mb-2">Sin Empresas Asignadas</h3>
-                                <p class="text-sm text-gray-500 max-w-sm">Tu cuenta fue creada exitosamente, pero aún no has sido asignado a ninguna empresa o proyecto. Por favor contacta al administrador.</p>
+                if (totalCount === 0) {
+                    list.innerHTML = `
+                        <div class="flex flex-col items-center justify-center w-full h-full text-center p-12 mx-auto" style="width: 100%;">
+                            <span class="material-symbols-outlined text-4xl text-gray-400 mb-4">domain_disabled</span>
+                            <h3 class="text-lg font-medium text-gray-900 dark:text-white mb-2">Sin Empresas Asignadas</h3>
+                            <p class="text-sm text-gray-500 max-w-sm">Tu cuenta no tiene empresas asociadas ni invitaciones activas en este momento. Por favor contacta al administrador.</p>
+                        </div>
+                    `;
+                    return;
+                }
+
+                let html = '<div class="w-full flex flex-col gap-10">';
+
+                // 1. Sección: Mi Empresa
+                if (belongingCompanies.length > 0) {
+                    html += `
+                        <div class="w-full">
+                            <div class="mb-5 flex flex-col gap-1">
+                                <div class="flex items-center gap-2">
+                                    <span class="h-2.5 w-2.5 rounded-full bg-emerald-500 inline-block shadow-sm"></span>
+                                    <h2 class="text-xs font-black tracking-widest uppercase text-gray-800 dark:text-gray-200">Mi Empresa</h2>
+                                    <span class="text-[9px] font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-950/80 dark:text-emerald-300 px-2 py-0.5 rounded-full">Sede Principal</span>
+                                </div>
+                                <p class="text-xs text-gray-500 dark:text-gray-400">Espacio de trabajo corporativo al que perteneces directamente.</p>
                             </div>
-                        `;
-                    } else {
-                        list.innerHTML = companies.map(c => `
-                            <a href="home.html?empresa=${c.id}&v=${Date.now()}" class="card-hover flex-none w-[260px] md:w-[320px] lg:w-[360px] group transition-transform duration-500 block">
-                                <div class="flex justify-between items-end mb-4 border-b border-gray-300 pb-2">
-                                    <div class="flex flex-col">
-                                        <span class="text-[9px] font-bold text-gray-400 mb-1">${c.code}</span>
-                                        <span class="text-xs font-bold uppercase tracking-wider text-gray-800">${c.name}</span>
-                                    </div>
-                                    <span class="text-[9px] font-semibold text-gray-500 uppercase tracking-widest text-right">${c.location}</span>
+                            <div class="flex flex-wrap justify-start gap-8 lg:gap-12">
+                                ${belongingCompanies.map(c => renderCard(c, false)).join('')}
+                            </div>
+                        </div>
+                    `;
+                }
+
+                // 2. Sección: Empresas como Invitado
+                if (guestCompanies.length > 0) {
+                    html += `
+                        <div class="w-full ${belongingCompanies.length > 0 ? 'pt-8 border-t border-gray-200 dark:border-gray-800' : ''}">
+                            <div class="mb-5 flex flex-col gap-1">
+                                <div class="flex items-center gap-2">
+                                    <span class="h-2.5 w-2.5 rounded-full bg-indigo-500 inline-block shadow-sm"></span>
+                                    <h2 class="text-xs font-black tracking-widest uppercase text-gray-800 dark:text-gray-200">Empresas como Invitado</h2>
+                                    <span class="text-[9px] font-bold bg-indigo-100 text-indigo-800 dark:bg-indigo-950/80 dark:text-indigo-300 px-2 py-0.5 rounded-full">Colaboraciones Externas</span>
                                 </div>
-                                <div class="w-full aspect-[4/5] bg-gray-200 overflow-hidden relative">
-                                    <div class="w-full h-full card-image-wrapper">
-                                        <img src="${c.image}" alt="${c.name}" class="w-full h-full object-cover filter brightness-95 contrast-105" />
-                                    </div>
-                                </div>
-                            </a>
-                        `).join('');
-                    }
-                };
-                
-                // Initial render execution
-                renderUI();
+                                <p class="text-xs text-gray-500 dark:text-gray-400">Organizaciones y proyectos donde has sido invitado a colaborar.</p>
+                            </div>
+                            <div class="flex flex-wrap justify-start gap-8 lg:gap-12">
+                                ${guestCompanies.map(c => renderCard(c, true)).join('')}
+                            </div>
+                        </div>
+                    `;
+                }
+
+                html += '</div>';
+                list.innerHTML = html;
 
             } catch (e) {
                 console.error("Error loading companies list:", e);

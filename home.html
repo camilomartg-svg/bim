@@ -444,11 +444,21 @@
                 
                 let filteredProjects = safeConfig.projects || [];
                 
+                const currentEmpresaData = window.currentEmpresaData;
+                let isCompanyAdminForCurrent = false;
+                if (userAccount && currentEmpresaData) {
+                    const userEmail = userAccount.username.toLowerCase().trim();
+                    const inAdmins = Array.isArray(currentEmpresaData.admins) && currentEmpresaData.admins.some(a => a.toLowerCase().trim() === userEmail);
+                    const inMembersAdmin = Array.isArray(currentEmpresaData.members) && currentEmpresaData.members.some(m => m.email && m.email.toLowerCase().trim() === userEmail && (m.role === 'ADMINISTRADOR_EMPRESA' || m.role === 'ADMINISTRADOR'));
+                    isCompanyAdminForCurrent = inAdmins || inMembersAdmin;
+                }
+
                 if (userAccount) {
-                    const userEmail = userAccount.username.toLowerCase();
-                    if (userAccount.role !== 'SUPER_ADMINISTRADOR' && userAccount.role !== 'ADMINISTRADOR_EMPRESA' && userAccount.role !== 'ADMINISTRADOR') {
+                    const userEmail = userAccount.username.toLowerCase().trim();
+                    const isGlobalSuperAdmin = userAccount.role === 'SUPER_ADMINISTRADOR' || userEmail === 'imagina3ddesign@gmail.com';
+                    if (!isGlobalSuperAdmin && !isCompanyAdminForCurrent) {
                         filteredProjects = filteredProjects.filter(p => 
-                            p.members && p.members.some(m => m.toLowerCase() === userEmail)
+                            p.members && p.members.some(m => (typeof m === 'string' ? m : m.email || '').toLowerCase().trim() === userEmail)
                         );
                     }
                 } else {
@@ -537,6 +547,7 @@
                                         configUrl = `${emp.configUrl}?v=${encodeURIComponent(currentVersion)}`;
                                     }
                                     window.currentEmpresaName = emp.name;
+                                    window.currentEmpresaData = emp;
                                     document.title = `${emp.name} - nora CDE`;
                                     
                                     const breadcrumbTitle = document.querySelector('.bg-gray-800 .font-semibold.text-gray-900');
