@@ -9,7 +9,7 @@
 
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Cargar Archivos | nora CDE</title>
+  <title>Administrar Información | nora CDE</title>
   <meta name="theme-color" content="#2b2b2b" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="default" />
@@ -70,7 +70,7 @@
           <button id="back-btn" aria-label="Volver" class="rounded-lg border border-slate-200 bg-white/80 px-2 py-1 hover:bg-slate-100 transition-colors dark:bg-slate-800 dark:border-slate-700 dark:hover:bg-slate-700">
             <span class="material-symbols-outlined text-[16px] text-slate-800 dark:text-slate-200 align-middle">arrow_back</span>
           </button>
-          <span class="text-xs font-bold tracking-[0.2em] uppercase text-slate-500 dark:text-slate-400">Portal de Carga</span>
+          <span class="text-xs font-bold tracking-[0.2em] uppercase text-slate-500 dark:text-slate-400">Administrar Información</span>
         </div>
 
         <div class="hidden items-center gap-4 text-[10px] font-bold tracking-widest text-[#111827] dark:text-white uppercase sm:flex">
@@ -100,7 +100,7 @@
           <img id="portal-logo-dark" alt="nora CDE" class="hidden h-10 w-auto object-contain dark:block mb-4" src="https://i.postimg.cc/SQ6JTZqj/LOGO-NORA-BLANCO.png" />
           
           <h2 id="project-title" class="text-2xl font-extrabold tracking-tight text-slate-900 dark:text-white sm:text-3xl">
-            Cargar Archivos al Proyecto
+            Administrar Archivos del Proyecto
           </h2>
           <p id="project-subtitle" class="mt-2 text-sm text-slate-500 dark:text-slate-400">
             Cargando detalles del proyecto...
@@ -218,6 +218,7 @@
                 <th class="py-3 px-4">Nombre del Archivo</th>
                 <th class="py-3 px-4">Especialidad</th>
                 <th class="py-3 px-4">Última Carga</th>
+                <th class="py-3 px-4 text-right">Acción</th>
               </tr>
             </thead>
             <tbody id="files-table-body" class="divide-y divide-slate-100 dark:divide-slate-800/50">
@@ -525,7 +526,7 @@
 
       function updateProjectUI() {
         if (!activeProject) return;
-        projectTitle.textContent = `Subir a ${activeProject.name}`;
+        projectTitle.textContent = `Administrar ${activeProject.name}`;
         projectSubtitle.textContent = `${activeProject.city || 'Bogotá'} | CDE NORA`;
         projectFooter.textContent = config.portal?.footerText || DEFAULT_PORTAL_CONFIG.portal.footerText;
         addLog(`Proyecto activo cambiado a: ${activeProject.name}`);
@@ -1002,20 +1003,99 @@
             iconClass = 'text-blue-500';
           }
 
+          const fileDataStr = encodeURIComponent(JSON.stringify(f));
+          const isModel = currentActiveTab === 'models';
+          const deleteTitle = isModel ? 'Eliminar modelo (.frag + .json)' : 'Eliminar archivo';
+
           return `
             <tr class="hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors">
               <td class="py-3 px-4 font-medium text-slate-800 dark:text-slate-200">
                 <div class="flex items-center gap-2">
                   <span class="material-symbols-outlined text-base ${iconClass}">${icon}</span>
                   <span>${f.name}</span>
+                  ${isModel && f.jsonId ? '<span class="text-[9px] px-1.5 py-0.5 rounded bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 font-mono font-medium">+json</span>' : ''}
                 </div>
               </td>
               <td class="py-3 px-4 text-slate-500 dark:text-slate-400 capitalize">${specialty.toLowerCase()}</td>
               <td class="py-3 px-4 text-slate-500 dark:text-slate-400">${formatDate(f.lastUpdated)}</td>
+              <td class="py-3 px-4 text-right">
+                <button 
+                  onclick="window.deleteProjectFile(this, '${fileDataStr}')" 
+                  class="inline-flex items-center justify-center p-1.5 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors" 
+                  title="${deleteTitle}"
+                >
+                  <span class="material-symbols-outlined text-[18px]">delete</span>
+                </button>
+              </td>
             </tr>
           `;
         }).join('');
       }
+
+      window.deleteProjectFile = async (btn, encodedData) => {
+        let f;
+        try {
+          f = JSON.parse(decodeURIComponent(encodedData));
+        } catch (e) {
+          console.error(e);
+          return;
+        }
+
+        if (!f || !activeProject) return;
+
+        const isModel = currentActiveTab === 'models';
+        const fileDesc = isModel && f.jsonId ? `"${f.name}" y sus datos asociados (.json)` : `"${f.name}"`;
+
+        if (!confirm(`¿Estás seguro de que deseas eliminar ${fileDesc} de Google Drive?`)) {
+          return;
+        }
+
+        const originalBtnHtml = btn.innerHTML;
+        btn.disabled = true;
+        btn.innerHTML = `<span class="inline-block w-4 h-4 border-2 border-red-500 border-t-transparent rounded-full animate-spin"></span>`;
+
+        try {
+          const ds = activeProject.dataSources || {};
+          const scriptUrl = ds.driveScriptUrl || DEFAULT_DRIVE_SCRIPT_URL;
+
+          const fileIds = isModel ? [f.fragId, f.jsonId].filter(Boolean) : [f.fileId].filter(Boolean);
+
+          const payload = {
+            action: 'deleteFiles',
+            fileIds: fileIds,
+            folderId: ds.driveFolderId || '',
+            driveFolderName: ds.driveFolderName || activeProject.name,
+            project: activeProject.slug || slugify(activeProject.name),
+            filename: f.name
+          };
+
+          const res = await fetch(scriptUrl, {
+            method: 'POST',
+            mode: 'cors',
+            headers: {
+              'Content-Type': 'text/plain;charset=utf-8'
+            },
+            body: JSON.stringify(payload)
+          });
+
+          if (!res.ok) {
+            throw new Error(`Error en el servidor: ${res.statusText}`);
+          }
+
+          const data = await res.json();
+          if (data.status === 'error') {
+            throw new Error(data.message || 'Error al eliminar');
+          }
+
+          addLog(`[ELIMINADO] ${fileDesc} eliminado correctamente.`);
+          await loadProjectFiles();
+        } catch (err) {
+          console.error(err);
+          alert(`No se pudo eliminar el archivo: ${err.message}`);
+          btn.disabled = false;
+          btn.innerHTML = originalBtnHtml;
+        }
+      };
 
       // Tabs triggers
       const switchTab = (tabName, clickedTabBtn) => {

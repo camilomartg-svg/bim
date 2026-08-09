@@ -129,6 +129,9 @@ function doPost(e) {
     if (action === 'uploadFile') {
       return output_(uploadFile_(e, data), callback);
     }
+    if (action === 'deleteFile' || action === 'deleteFiles') {
+      return output_(deleteFile_(e, data), callback);
+    }
 
     let doc;
     try {
@@ -663,6 +666,9 @@ function doGet(e) {
     if (action === 'text') {
       return output_(textFile_(e, null), callback);
     }
+    if (action === 'deleteFile' || action === 'deleteFiles') {
+      return output_(deleteFile_(e, null), callback);
+    }
 
     let doc;
     try {
@@ -973,6 +979,48 @@ function uploadFile_(e, body) {
     return { status: 'success', fileId: file.getId(), name: file.getName() };
   } catch (err) {
     return { status: 'error', message: err.toString() };
+  }
+}
+
+function deleteFile_(e, body) {
+  let fileIds = [];
+  if (body && Array.isArray(body.fileIds)) {
+    fileIds = body.fileIds.map(function(id) { return String(id || '').trim(); }).filter(Boolean);
+  }
+  
+  const singleId = String(((body && (body.fileId || body.id)) || (e && e.parameter && (e.parameter.fileId || e.parameter.id))) ?? '').trim();
+  if (singleId && fileIds.indexOf(singleId) === -1) {
+    fileIds.push(singleId);
+  }
+
+  const fragId = String(((body && body.fragId) || (e && e.parameter && e.parameter.fragId)) ?? '').trim();
+  const jsonId = String(((body && body.jsonId) || (e && e.parameter && e.parameter.jsonId)) ?? '').trim();
+  if (fragId && fileIds.indexOf(fragId) === -1) fileIds.push(fragId);
+  if (jsonId && fileIds.indexOf(jsonId) === -1) fileIds.push(jsonId);
+
+  if (fileIds.length === 0) {
+    return { status: 'error', message: 'Faltan IDs de archivo para eliminar.' };
+  }
+
+  const deleted = [];
+  const errors = [];
+
+  for (let i = 0; i < fileIds.length; i++) {
+    const id = fileIds[i];
+    try {
+      const file = DriveApp.getFileById(id);
+      const name = file.getName();
+      file.setTrashed(true);
+      deleted.push({ id: id, name: name });
+    } catch (err) {
+      errors.push({ id: id, error: err.toString() });
+    }
+  }
+
+  if (deleted.length > 0) {
+    return { status: 'success', message: 'Archivo(s) eliminado(s) exitosamente.', deleted: deleted, errors: errors };
+  } else {
+    return { status: 'error', message: 'No se pudo eliminar el archivo.', errors: errors };
   }
 }
 
