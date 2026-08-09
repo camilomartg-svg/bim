@@ -1601,17 +1601,10 @@ const addItem = (type: 'impact' | 'type' | 'team' | 'activity' | 'danger' | 'com
                     </div>
 
                     <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
-                      {Array.from(new Set([
-                        ...globalTeams,
-                        'AMBIENTAL',
-                        'ARQUITECTURA',
-                        'BIM',
-                        'CALIDAD',
-                        'COORDINACIÓN TÉCNICA',
-                        'ESTRUCTURA',
-                        'INSTALACIONES',
-                        'SST'
-                      ])).filter(Boolean).sort().map((teamName) => {
+                      {(globalTeams && globalTeams.length > 0 
+                        ? globalTeams 
+                        : ['AMBIENTAL', 'ARQUITECTURA', 'BIM', 'CALIDAD', 'COORDINACIÓN TÉCNICA', 'ESTRUCTURA', 'INSTALACIONES', 'SST']
+                      ).filter(Boolean).sort().map((teamName) => {
                         const isSelected = siteReportsAllowedTeams.includes(teamName);
                         return (
                           <button
@@ -1660,17 +1653,10 @@ const addItem = (type: 'impact' | 'type' | 'team' | 'activity' | 'danger' | 'com
                     </div>
 
                     <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
-                      {Array.from(new Set([
-                        ...globalTeams,
-                        'AMBIENTAL',
-                        'ARQUITECTURA',
-                        'BIM',
-                        'CALIDAD',
-                        'COORDINACIÓN TÉCNICA',
-                        'ESTRUCTURA',
-                        'INSTALACIONES',
-                        'SST'
-                      ])).filter(Boolean).sort().map((teamName) => {
+                      {(globalTeams && globalTeams.length > 0 
+                        ? globalTeams 
+                        : ['AMBIENTAL', 'ARQUITECTURA', 'BIM', 'CALIDAD', 'COORDINACIÓN TÉCNICA', 'ESTRUCTURA', 'INSTALACIONES', 'SST']
+                      ).filter(Boolean).sort().map((teamName) => {
                         const isSelected = qualityReportsAllowedTeams.includes(teamName);
                         return (
                           <button
@@ -1719,17 +1705,10 @@ const addItem = (type: 'impact' | 'type' | 'team' | 'activity' | 'danger' | 'com
                     </div>
 
                     <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
-                      {Array.from(new Set([
-                        ...globalTeams,
-                        'AMBIENTAL',
-                        'ARQUITECTURA',
-                        'BIM',
-                        'CALIDAD',
-                        'COORDINACIÓN TÉCNICA',
-                        'ESTRUCTURA',
-                        'INSTALACIONES',
-                        'SST'
-                      ])).filter(Boolean).sort().map((teamName) => {
+                      {(globalTeams && globalTeams.length > 0 
+                        ? globalTeams 
+                        : ['AMBIENTAL', 'ARQUITECTURA', 'BIM', 'CALIDAD', 'COORDINACIÓN TÉCNICA', 'ESTRUCTURA', 'INSTALACIONES', 'SST']
+                      ).filter(Boolean).sort().map((teamName) => {
                         const isSelected = environmentalReportsAllowedTeams.includes(teamName);
                         return (
                           <button

@@ -30,12 +30,14 @@ const getProjectAndCompany = () => {
   const urlParams = new URLSearchParams(window.location.search);
   const projectId = urlParams.get('project') || 'default';
   
-  const userAccountStr = sessionStorage.getItem('userAccount') || localStorage.getItem('userAccount');
-  let companyId = 'default';
-  if (userAccountStr) {
-    try {
-      companyId = JSON.parse(userAccountStr).empresa || 'default';
-    } catch (e) {}
+  let companyId = urlParams.get('empresa') || 'default';
+  if (companyId === 'default') {
+    const userAccountStr = sessionStorage.getItem('userAccount') || localStorage.getItem('userAccount');
+    if (userAccountStr) {
+      try {
+        companyId = JSON.parse(userAccountStr).empresa || 'default';
+      } catch (e) {}
+    }
   }
   return { projectId, companyId };
 };
@@ -356,60 +358,81 @@ interface PlatformConfig {
   teams: string[];
 }
 
+const GOOGLE_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbx2RAQx_8K4o22xE0Mw-ETc7K_58vIoi6-PgVi64u80inuiw144ks3cgWSdCtXqIgB02g/exec';
+
 export const getPlatformConfig = async (companyId: string): Promise<PlatformConfig | null> => {
   try {
-    const empresasRes = await fetch(`../empresas.json?t=${Date.now()}`);
-    if (!empresasRes.ok) return null;
-    const empresas = await empresasRes.json();
-    
-    const company = empresas.find((e: any) => e && !e.deleted && (e.id === companyId || e.id?.toLowerCase() === companyId?.toLowerCase() || e.name?.toLowerCase() === companyId?.toLowerCase()));
-    if (!company) return null;
-    
-    const members = company.members || [];
+    const { projectId } = getProjectAndCompany();
     const companiesSet = new Set<string>();
     const teamsSet = new Set<string>();
     
-    // Default fallback teams
-    teamsSet.add('AMBIENTAL');
-    teamsSet.add('ARQUITECTURA');
-    teamsSet.add('BIM');
-    teamsSet.add('ESTRUCTURA');
-    teamsSet.add('INSTALACIONES');
-    teamsSet.add('CALIDAD');
-    teamsSet.add('SST');
-    
-    members.forEach((m: any) => {
-      if (m.empresaUsuario && m.empresaUsuario.trim()) {
-        companiesSet.add(m.empresaUsuario.trim());
+    // 1. Fetch empresas.json
+    try {
+      const empresasRes = await fetch(`../empresas.json?t=${Date.now()}`);
+      if (empresasRes.ok) {
+        const empresas = await empresasRes.json();
+        const company = empresas.find((e: any) => e && !e.deleted && (e.id === companyId || e.id?.toLowerCase() === companyId?.toLowerCase() || e.name?.toLowerCase() === companyId?.toLowerCase()));
+        if (company) {
+          const members = company.members || [];
+          members.forEach((m: any) => {
+            if (m.empresaUsuario && m.empresaUsuario.trim()) {
+              companiesSet.add(m.empresaUsuario.trim());
+            }
+            if (m.empresa && m.empresa.trim()) {
+              companiesSet.add(m.empresa.trim());
+            }
+          });
+        }
       }
-      if (m.empresa && m.empresa.trim()) {
-        companiesSet.add(m.empresa.trim());
-      }
-      if (m.especialidad && m.especialidad.trim()) {
-        teamsSet.add(m.especialidad.trim().toUpperCase());
-      }
-    });
+    } catch (e) {
+      console.warn("Could not load empresas.json in getPlatformConfig:", e);
+    }
 
-    const { projectId } = getProjectAndCompany();
-    if (projectId && projectId !== 'default') {
+    // 2. Fetch project task teams from config-<companyId>.json
+    let hasProjectTeams = false;
+    if (projectId && projectId !== 'default' && companyId && companyId !== 'default') {
       try {
         const configRes = await fetch(`../config-${companyId}.json?t=${Date.now()}`);
         if (configRes.ok) {
           const configData = await configRes.json();
-          const project = configData.projects?.find((p: any) => p.slug === projectId || p.name === projectId);
-          if (project && project.equiposDeTarea && project.equiposDeTarea.length > 0) {
-            const projectTaskTeams = project.equiposDeTarea
-              .map((t: any) => t.name?.trim().toUpperCase())
-              .filter(Boolean);
-            if (projectTaskTeams.length > 0) {
-              teamsSet.clear();
-              projectTaskTeams.forEach((t: string) => teamsSet.add(t));
-            }
+          const project = configData.projects?.find((p: any) => p.slug === projectId || p.name === projectId || p.id === projectId);
+          if (project && Array.isArray(project.equiposDeTarea) && project.equiposDeTarea.length > 0) {
+            project.equiposDeTarea.forEach((t: any) => {
+              const name = typeof t === 'string' ? t.trim().toUpperCase() : t.name?.trim().toUpperCase();
+              if (name) {
+                teamsSet.add(name);
+                hasProjectTeams = true;
+              }
+            });
           }
         }
       } catch (e) {
-        console.warn("Could not load project settings in getPlatformConfig:", e);
+        console.warn("Could not load config-<companyId>.json in getPlatformConfig:", e);
       }
+      
+      // Also query Google Sheets endpoint if needed
+      try {
+        const teamsRes = await fetch(`${GOOGLE_SCRIPT_URL}?action=getTeams&empresa=${encodeURIComponent(companyId)}&proyecto=${encodeURIComponent(projectId)}&t=${Date.now()}`);
+        if (teamsRes.ok) {
+          const remoteTeams = await teamsRes.json();
+          if (Array.isArray(remoteTeams) && remoteTeams.length > 0) {
+            remoteTeams.forEach((rt: any) => {
+              const name = typeof rt === 'string' ? rt.trim().toUpperCase() : rt.name?.trim().toUpperCase();
+              if (name) {
+                teamsSet.add(name);
+                hasProjectTeams = true;
+              }
+            });
+          }
+        }
+      } catch (e) {
+        console.warn("Could not fetch remote teams in getPlatformConfig:", e);
+      }
+    }
+
+    // 3. Fallback to default teams ONLY if no project task teams exist at all
+    if (!hasProjectTeams || teamsSet.size === 0) {
+      ['AMBIENTAL', 'ARQUITECTURA', 'BIM', 'CALIDAD', 'COORDINACIÓN TÉCNICA', 'ESTRUCTURA', 'INSTALACIONES', 'SST'].forEach(t => teamsSet.add(t));
     }
     
     return {
