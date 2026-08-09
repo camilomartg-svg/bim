@@ -14,14 +14,19 @@
 
     // Helper: Resuelve la empresa exacta registrada para un usuario en el panel Super Admin
     function getUserRegisteredCompany(email) {
-        if (!email) return 'Empresa';
+        if (!email) return 'Sin Empresa Asignada';
         const cleanEmail = email.toLowerCase().trim();
 
         // 1. Prioridad: Empresa configurada explícitamente para este miembro en la empresa actual
         const companyMembers = Array.isArray(currentCompany?.members) ? currentCompany.members : [];
         const curCompMember = companyMembers.find(cm => cm.email && cm.email.toLowerCase().trim() === cleanEmail);
-        if (curCompMember && curCompMember.empresaUsuario && curCompMember.empresaUsuario.trim() !== '') {
-            return curCompMember.empresaUsuario.trim();
+        if (curCompMember) {
+            if (curCompMember.empresaUsuario && curCompMember.empresaUsuario.trim() !== '') {
+                return curCompMember.empresaUsuario.trim();
+            }
+            if (curCompMember.role === 'ADMINISTRADOR_EMPRESA') {
+                return currentCompany?.name || 'Empresa';
+            }
         }
 
         // 2. Prioridad: Buscar en todas las empresas de Super Admin (empresas.json)
@@ -37,14 +42,14 @@
                 }
             }
 
-            // 2b. Buscar si es administrador o empleado interno en alguna empresa
+            // 2b. Buscar si es administrador de alguna empresa
             for (const comp of allCompaniesList) {
                 if (comp.deleted) continue;
                 if (Array.isArray(comp.admins) && comp.admins.some(a => a.toLowerCase().trim() === cleanEmail)) {
                     return comp.name;
                 }
                 if (Array.isArray(comp.members)) {
-                    const found = comp.members.find(m => m.email && m.email.toLowerCase().trim() === cleanEmail && (m.role === 'ADMINISTRADOR_EMPRESA' || !m.empresaUsuario || m.empresaUsuario.trim() === comp.name.trim()));
+                    const found = comp.members.find(m => m.email && m.email.toLowerCase().trim() === cleanEmail && m.role === 'ADMINISTRADOR_EMPRESA');
                     if (found) {
                         return comp.name;
                     }
@@ -52,20 +57,8 @@
             }
         }
 
-        // 3. Prioridad: Directorio maestro de usuarios en Google Sheets (sincronizado con Super Admin)
-        if (Array.isArray(allDirectoryUsers)) {
-            const dirUser = allDirectoryUsers.find(du => du.email && du.email.toLowerCase().trim() === cleanEmail);
-            if (dirUser && dirUser.empresa && dirUser.empresa.trim() !== '') {
-                return dirUser.empresa.trim();
-            }
-        }
-
-        // 4. Fallback: Empresa actual
-        if (curCompMember) {
-            return currentCompany?.name || 'Empresa';
-        }
-
-        return currentCompany?.name || 'Empresa';
+        // 3. Fallback: Sin empresa asignada
+        return 'Sin Empresa Asignada';
     }
 
     // Leaflet map vars

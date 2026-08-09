@@ -439,31 +439,28 @@
                     return;
                 }
 
-                // Segregate into Belonging vs Guest companies
-                const userEntries = users.filter(u => u.email && u.email.toLowerCase().trim() === userEmail);
-                const userCompaniesNames = userEntries.map(u => u.empresa).filter(Boolean);
-                if (userAccount && userAccount.empresa && !userCompaniesNames.includes(userAccount.empresa)) {
-                    userCompaniesNames.push(userAccount.empresa);
-                }
-
+                // Segregate into Belonging ("Mi Empresa") vs Guest companies ("Empresas como Invitado")
+                // Guided strictly by Super Admin configuration (empresas.json & consolidatedCompanies)
                 const belongingCompanies = [];
                 const guestCompanies = [];
 
                 consolidatedCompanies.forEach(c => {
                     const cNameClean = cleanText(c.name);
+                    const cRazonClean = cleanText(c.razonSocial);
                     
-                    // Check if user belongs primarily to this company
-                    const isMatchByName = userCompaniesNames.some(uEmp => {
-                        const uEmpClean = cleanText(uEmp);
-                        return (cNameClean && (cNameClean === uEmpClean || cNameClean.includes(uEmpClean) || uEmpClean.includes(cNameClean)));
-                    });
+                    // 1. Is user an administrator of this company?
                     const isAdminOfCompany = Array.isArray(c.admins) && c.admins.some(a => a.toLowerCase().trim() === userEmail);
-                    const isInternalMember = Array.isArray(c.members) && c.members.some(m => 
-                        m.email && m.email.toLowerCase().trim() === userEmail && 
-                        (m.role === 'ADMINISTRADOR_EMPRESA' || (!m.empresaUsuario || cleanText(m.empresaUsuario) === cNameClean))
-                    );
+                    
+                    // 2. Is user an internal corporate employee of this company in Super Admin?
+                    // Internal corporate members must have role 'ADMINISTRADOR_EMPRESA' OR have empresaUsuario matching the company name AND role is not 'INVITADO'
+                    const isInternalMember = Array.isArray(c.members) && c.members.some(m => {
+                        if (!m.email || m.email.toLowerCase().trim() !== userEmail) return false;
+                        if (m.role === 'ADMINISTRADOR_EMPRESA' || m.role === 'ADMINISTRADOR') return true;
+                        if (m.empresaUsuario && (cleanText(m.empresaUsuario) === cNameClean || (cRazonClean && cleanText(m.empresaUsuario) === cRazonClean)) && m.role !== 'INVITADO') return true;
+                        return false;
+                    });
 
-                    if (isMatchByName || isAdminOfCompany || isInternalMember) {
+                    if (isAdminOfCompany || isInternalMember) {
                         belongingCompanies.push(c);
                     } else {
                         // Check if user is an invited member / guest in this company
