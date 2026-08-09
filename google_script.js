@@ -7,6 +7,7 @@ const SPREADSHEET_ID = "1OczWRlaefMY5RQon8K3va91H8TInJlp9RuBJeTPLiiA";
 
 const COMPANY_HEADERS = ['fecha', 'id', 'name', 'legalName', 'type', 'website', 'email', 'phone', 'country', 'state', 'city', 'zip', 'address', 'sectors', 'specialties', 'logoBase64', 'code', 'driveFolderId'];
 const USER_HEADERS = ['fecha', 'nombre', 'email', 'telefono', 'empresa', 'especialidad', 'cargo', 'rol', 'estado'];
+const TEAM_HEADERS = ['fecha', 'empresa', 'proyecto', 'nombreEquipo', 'miembros'];
 
 function ensureHeaders(sheet, expectedHeaders) {
   if (sheet.getLastRow() === 0) {
@@ -523,6 +524,53 @@ function doPost(e) {
         folders: responseFolders 
       })).setMimeType(ContentService.MimeType.JSON);
       
+    } else if (data && data.action === 'saveTeams') {
+      let teamSheet = doc.getSheetByName('EquiposDeTarea');
+      if (!teamSheet) {
+        teamSheet = doc.insertSheet('EquiposDeTarea');
+      }
+      ensureHeaders(teamSheet, TEAM_HEADERS);
+      
+      const targetEmpresa = String(data.empresa || '').trim();
+      const targetProyecto = String(data.proyecto || '').trim();
+      const teams = Array.isArray(data.teams) ? data.teams : [];
+      
+      const tHeaders = teamSheet.getRange(1, 1, 1, teamSheet.getLastColumn()).getValues()[0].map(h => String(h).trim().toLowerCase());
+      const empCol = tHeaders.indexOf('empresa');
+      const projCol = tHeaders.indexOf('proyecto');
+      
+      const numRows = teamSheet.getLastRow();
+      if (numRows > 1 && empCol !== -1 && projCol !== -1) {
+        const values = teamSheet.getRange(2, 1, numRows - 1, tHeaders.length).getValues();
+        for (let i = values.length - 1; i >= 0; i--) {
+          const rowEmp = String(values[i][empCol]).trim();
+          const rowProj = String(values[i][projCol]).trim();
+          if (rowEmp.toLowerCase() === targetEmpresa.toLowerCase() && rowProj.toLowerCase() === targetProyecto.toLowerCase()) {
+            teamSheet.deleteRow(i + 2);
+          }
+        }
+      }
+      
+      teams.forEach(team => {
+        const row = new Array(tHeaders.length).fill("");
+        const setTVal = (headerName, value) => {
+          const idx = tHeaders.indexOf(headerName.toLowerCase());
+          if (idx !== -1) row[idx] = value;
+        };
+        setTVal('fecha', fecha);
+        setTVal('empresa', targetEmpresa);
+        setTVal('proyecto', targetProyecto);
+        setTVal('nombreequipo', team.name || '');
+        setTVal('miembros', Array.isArray(team.members) ? team.members.join(', ') : String(team.members || ''));
+        teamSheet.appendRow(row);
+      });
+      
+      return ContentService.createTextOutput(JSON.stringify({ 
+        status: "success", 
+        message: "Equipos de tarea guardados exitosamente",
+        count: teams.length 
+      })).setMimeType(ContentService.MimeType.JSON);
+      
     } else {
       // Guardar Usuario (Comportamiento por defecto)
       const email = String((data && data.email) || (e && e.parameter && e.parameter.email) || '').toLowerCase().trim();
@@ -640,6 +688,42 @@ function doGet(e) {
         empresas.push(obj);
       }
       return ContentService.createTextOutput(JSON.stringify(empresas)).setMimeType(ContentService.MimeType.JSON);
+      
+    } else if (action === 'getTeams') {
+      const sheet = doc.getSheetByName('EquiposDeTarea');
+      if (!sheet) return ContentService.createTextOutput("[]").setMimeType(ContentService.MimeType.JSON);
+      ensureHeaders(sheet, TEAM_HEADERS);
+      
+      const targetEmpresa = String(e && e.parameter && (e.parameter.empresa || e.parameter.companyId) || '').trim();
+      const targetProyecto = String(e && e.parameter && (e.parameter.proyecto || e.parameter.project) || '').trim();
+      
+      const data = sheet.getDataRange().getValues();
+      const headers = data[0].map(h => String(h).trim().toLowerCase());
+      const teams = [];
+      
+      for (let i = 1; i < data.length; i++) {
+        let obj = {};
+        for (let j = 0; j < headers.length; j++) {
+          obj[headers[j]] = data[i][j];
+        }
+        const rowEmp = String(obj.empresa || '').trim();
+        const rowProj = String(obj.proyecto || '').trim();
+        
+        if ((!targetEmpresa || rowEmp.toLowerCase() === targetEmpresa.toLowerCase()) && (!targetProyecto || rowProj.toLowerCase() === targetProyecto.toLowerCase())) {
+          let membersList = [];
+          if (obj.miembros) {
+            membersList = String(obj.miembros).split(',').map(m => m.trim()).filter(Boolean);
+          }
+          teams.push({
+            name: obj.nombreequipo || '',
+            empresa: rowEmp,
+            proyecto: rowProj,
+            members: membersList,
+            fecha: obj.fecha || ''
+          });
+        }
+      }
+      return ContentService.createTextOutput(JSON.stringify(teams)).setMimeType(ContentService.MimeType.JSON);
       
     } else {
       const sheet = doc.getSheetByName('Usuarios');

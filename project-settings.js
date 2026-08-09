@@ -8,6 +8,9 @@
     let activeProject = null;
     let allDirectoryUsers = []; // Users loaded from Google Sheets (Nora Directory)
     
+    // Central Google Apps Script Endpoint for Nora (Users, Companies, Teams & Drive)
+    const GOOGLE_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbx2RAQx_8K4o22xE0Mw-ETc7K_58vIoi6-PgVi64u80inuiw144ks3cgWSdCtXqIgB02g/exec';
+
     // Leaflet map vars
     let leafletMap = null;
     let mapMarker = null;
@@ -65,6 +68,21 @@
         teamsListContainer: document.getElementById('teams-list-container'),
         teamsMembersTableBody: document.getElementById('teams-members-table-body')
     };
+
+    // --- BACK BUTTON: Register immediately (outside async init) ---
+    (function() {
+        const _params = new URLSearchParams(window.location.search);
+        const _empresa = _params.get('empresa') || '';
+        const _project = _params.get('project') || '';
+        if (el.backBtn) {
+            el.backBtn.addEventListener('click', () => {
+                const dest = 'project-landing.html'
+                    + '?project=' + encodeURIComponent(_project)
+                    + '&empresa=' + encodeURIComponent(_empresa);
+                window.location.href = dest;
+            });
+        }
+    })();
 
     // --- ALERTS DE INTERFAZ ---
     window.showAlert = function (message, type = 'info') {
@@ -148,6 +166,29 @@
         });
     });
 
+    // --- SINCRONIZACIÓN AUTOMÁTICA CON GOOGLE SHEETS (APPS SCRIPT) ---
+    async function syncTeamsToGoogle(silent = false) {
+        if (!companyId || !projectSlug || !activeProject) return;
+        try {
+            const payload = {
+                action: 'saveTeams',
+                empresa: companyId,
+                proyecto: projectSlug,
+                teams: activeProject.equiposDeTarea || []
+            };
+            const res = await fetch(GOOGLE_SCRIPT_URL, {
+                method: 'POST',
+                headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+                body: JSON.stringify(payload)
+            });
+            if (res.ok && !silent) {
+                console.log('Equipos de tarea sincronizados automáticamente con Google Sheets');
+            }
+        } catch (e) {
+            console.warn('Error al sincronizar equipos con Google Sheets:', e);
+        }
+    }
+
     // --- INICIALIZACIÓN ---
     async function init() {
         const urlParams = new URLSearchParams(window.location.search);
@@ -158,11 +199,6 @@
             window.showAlert('Faltan parámetros empresa/project en la URL.', 'error');
             return;
         }
-
-        // Setup back button redirection
-        el.backBtn.addEventListener('click', () => {
-            window.location.href = `project-landing.html?project=${projectSlug}&empresa=${companyId}`;
-        });
 
         // 1. Cargar Empresas
         try {
@@ -212,16 +248,69 @@
             return;
         }
 
-        // 3. Cargar Directorio de Usuarios de Nora
+        // 3. Cargar Directorio de Usuarios de Nora desde Google Sheets
         try {
-            const usersRes = await fetch('https://script.google.com/macros/s/AKfycbx4NEpE6EyrC2ggk8To0F0TP5P9y0YnaxiWzCbcIhSR7-KRSy4Wu0PM9hYyNY5y72Q/exec');
+            const usersRes = await fetch(GOOGLE_SCRIPT_URL);
             if (usersRes.ok) {
                 allDirectoryUsers = await usersRes.json();
-                renderMembersTab();
-                renderTeamsTab();
             }
         } catch (e) {
             console.warn('No se pudo cargar el directorio de usuarios de Nora.', e);
+        }
+
+        // 4. Cargar Equipos de Tarea desde Google Sheets automáticamente
+        try {
+            const teamsRes = await fetch(`${GOOGLE_SCRIPT_URL}?action=getTeams&empresa=${encodeURIComponent(companyId)}&proyecto=${encodeURIComponent(projectSlug)}&t=${Date.now()}`);
+            if (teamsRes.ok) {
+                const remoteTeams = await teamsRes.json();
+                if (Array.isArray(remoteTeams) && remoteTeams.length > 0) {
+                    remoteTeams.forEach(rt => {
+                        const existing = activeProject.equiposDeTarea.find(lt => lt.name.toUpperCase().trim() === rt.name.toUpperCase().trim());
+                        if (existing) {
+                            const memberSet = new Set([...(existing.members || []), ...(rt.members || [])]);
+                            existing.members = Array.from(memberSet);
+                        } else {
+                            activeProject.equiposDeTarea.push({
+                                name: rt.name.toUpperCase().trim(),
+                                members: rt.members || []
+                            });
+                        }
+                    });
+                }
+            }
+        } catch (err) {
+            console.warn('No se pudieron obtener equipos desde Google Sheets:', err);
+        }
+
+        renderMembersTab();
+        renderTeamsTab();
+
+        // Register add-team button listener here, after activeProject is guaranteed to be loaded
+        if (el.addTeamBtn) {
+            el.addTeamBtn.addEventListener('click', () => {
+                if (!activeProject) {
+                    window.showAlert('El proyecto no está cargado. Recarga la página.', 'error');
+                    return;
+                }
+                const name = (el.newTeamName.value || '').toUpperCase().trim();
+                if (!name) {
+                    window.showAlert('Por favor escribe un nombre para el Equipo de Tarea.', 'error');
+                    return;
+                }
+
+                if (!activeProject.equiposDeTarea) activeProject.equiposDeTarea = [];
+
+                if (activeProject.equiposDeTarea.some(t => t.name.toUpperCase().trim() === name)) {
+                    window.showAlert(`El Equipo de Tarea "${name}" ya existe.`, 'error');
+                    return;
+                }
+
+                activeProject.equiposDeTarea.push({ name: name, members: [] });
+                el.newTeamName.value = '';
+                renderTeamsTab();
+                syncTeamsToGoogle();
+                window.showAlert(`Equipo de Tarea "${name}" creado exitosamente.`, 'success');
+            });
         }
     }
 
@@ -234,12 +323,12 @@
         el.projStatus.value = activeProject.status || '';
 
         // Branding
-        el.projLogo.value = activeProject.landing.logoUrl || '';
+        el.projLogo.value = activeProject.landing.logo || '';
         el.projEyebrow.value = activeProject.landing.eyebrow || '';
         el.projTitle.value = activeProject.landing.title || '';
         el.projSubtitle.value = activeProject.landing.subtitle || '';
 
-        // Location
+        // Map
         el.projAddress.value = activeProject.landing.address || '';
         el.projLat.value = activeProject.landing.map.lat || 4.711;
         el.projLng.value = activeProject.landing.map.lng || -74.0721;
@@ -253,80 +342,86 @@
         el.dsCantidadesSheetId.value = activeProject.dataSources.cantidadesSheetId || '';
         el.dsCantidadesScriptUrl.value = activeProject.dataSources.cantidadesScriptUrl || '';
 
-        // Setup input change synchronization
-        bindInputSync();
-    }
-
-    function bindInputSync() {
-        const bind = (inputEl, updater) => {
-            inputEl.addEventListener('input', (e) => {
-                updater(e.target.value);
+        // Listeners for live update of activeProject
+        const bindInput = (domEl, setter) => {
+            domEl.addEventListener('input', (e) => {
+                setter(e.target.value);
             });
         };
 
-        bind(el.projName, (v) => { activeProject.name = v; });
-        bind(el.projCity, (v) => { activeProject.city = v; });
-        bind(el.projStatus, (v) => { activeProject.status = v; });
-        bind(el.projLogo, (v) => { activeProject.landing.logoUrl = v; });
-        bind(el.projEyebrow, (v) => { activeProject.landing.eyebrow = v; });
-        bind(el.projTitle, (v) => { activeProject.landing.title = v; });
-        bind(el.projSubtitle, (v) => { activeProject.landing.subtitle = v; });
-        bind(el.projAddress, (v) => { activeProject.landing.address = v; });
+        bindInput(el.projName, v => activeProject.name = v);
+        bindInput(el.projCity, v => activeProject.city = v);
+        bindInput(el.projStatus, v => activeProject.status = v);
+        bindInput(el.projLogo, v => activeProject.landing.logo = v);
+        bindInput(el.projEyebrow, v => activeProject.landing.eyebrow = v);
+        bindInput(el.projTitle, v => activeProject.landing.title = v);
+        bindInput(el.projSubtitle, v => activeProject.landing.subtitle = v);
+        bindInput(el.projAddress, v => activeProject.landing.address = v);
 
-        bind(el.dsDriveFolderName, (v) => { activeProject.dataSources.driveFolderName = v; });
-        bind(el.dsDriveFolderId, (v) => { activeProject.dataSources.driveFolderId = v; });
-        bind(el.dsDriveScriptUrl, (v) => { activeProject.dataSources.driveScriptUrl = v; });
-        bind(el.dsStatusSheetId, (v) => { activeProject.dataSources.statusSheetId = v; });
-        bind(el.dsStatusScriptUrl, (v) => { activeProject.dataSources.statusScriptUrl = v; });
-        bind(el.dsCantidadesSheetId, (v) => { activeProject.dataSources.cantidadesSheetId = v; });
-        bind(el.dsCantidadesScriptUrl, (v) => { activeProject.dataSources.cantidadesScriptUrl = v; });
+        bindInput(el.dsDriveFolderName, v => activeProject.dataSources.driveFolderName = v);
+        bindInput(el.dsDriveFolderId, v => activeProject.dataSources.driveFolderId = v);
+        bindInput(el.dsDriveScriptUrl, v => activeProject.dataSources.driveScriptUrl = v);
+        bindInput(el.dsStatusSheetId, v => activeProject.dataSources.statusSheetId = v);
+        bindInput(el.dsStatusScriptUrl, v => activeProject.dataSources.statusScriptUrl = v);
+        bindInput(el.dsCantidadesSheetId, v => activeProject.dataSources.cantidadesSheetId = v);
+        bindInput(el.dsCantidadesScriptUrl, v => activeProject.dataSources.cantidadesScriptUrl = v);
 
-        // Lat & Lng input sync
-        const updateCoords = () => {
-            const lat = Number(el.projLat.value) || 4.711;
-            const lng = Number(el.projLng.value) || -74.0721;
-            activeProject.landing.map.lat = lat;
-            activeProject.landing.map.lng = lng;
-            if (leafletMap && mapMarker) {
-                mapMarker.setLatLng([lat, lng]);
-                leafletMap.setView([lat, lng], leafletMap.getZoom());
+        // Update map on lat/lng text input change
+        const updateMapFromInputs = () => {
+            const lat = parseFloat(el.projLat.value);
+            const lng = parseFloat(el.projLng.value);
+            if (!isNaN(lat) && !isNaN(lng) && leafletMap && mapMarker) {
+                const newPos = [lat, lng];
+                leafletMap.setView(newPos, leafletMap.getZoom());
+                mapMarker.setLatLng(newPos);
+                activeProject.landing.map.lat = lat;
+                activeProject.landing.map.lng = lng;
             }
         };
-        el.projLat.addEventListener('change', updateCoords);
-        el.projLng.addEventListener('change', updateCoords);
+
+        el.projLat.addEventListener('change', updateMapFromInputs);
+        el.projLng.addEventListener('change', updateMapFromInputs);
     }
 
-    // --- INICIALIZAR MAPA ---
+    // --- MAPA LEAFLET ---
     function initMap() {
-        if (!window.L) return;
-        const lat = activeProject.landing.map.lat || 4.711;
-        const lng = activeProject.landing.map.lng || -74.0721;
+        if (typeof L === 'undefined') return;
+
+        const coords = [activeProject.landing.map.lat, activeProject.landing.map.lng];
         const zoom = activeProject.landing.map.zoom || 13;
 
-        leafletMap = window.L.map('settings-map').setView([lat, lng], zoom);
-        window.L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
-            maxZoom: 20,
-            attribution: '&copy; OpenStreetMap contributors',
+        leafletMap = L.map('settings-map').setView(coords, zoom);
+
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            maxZoom: 19,
+            attribution: '© OpenStreetMap contributors'
         }).addTo(leafletMap);
 
-        mapMarker = window.L.marker([lat, lng], { draggable: true }).addTo(leafletMap);
+        const customIcon = L.divIcon({
+            className: 'custom-pin',
+            html: `<div style="background-color:#171717; width:28px; height:28px; border-radius:50%; border:3px solid white; display:flex; align-items:center; justify-content:center; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.3);">
+                    <span class="material-symbols-outlined" style="font-size:16px; color:white;">apartment</span>
+                   </div>`,
+            iconSize: [28, 28],
+            iconAnchor: [14, 14]
+        });
 
-        // Marker dragend
+        mapMarker = L.marker(coords, { draggable: true, icon: customIcon }).addTo(leafletMap);
+
         mapMarker.on('dragend', (e) => {
             const pos = e.target.getLatLng();
-            const fixedLat = Number(pos.lat.toFixed(6));
-            const fixedLng = Number(pos.lng.toFixed(6));
+            const fixedLat = parseFloat(pos.lat.toFixed(6));
+            const fixedLng = parseFloat(pos.lng.toFixed(6));
             el.projLat.value = fixedLat;
             el.projLng.value = fixedLng;
             activeProject.landing.map.lat = fixedLat;
             activeProject.landing.map.lng = fixedLng;
         });
 
-        // Click map
         leafletMap.on('click', (e) => {
-            const fixedLat = Number(e.latlng.lat.toFixed(6));
-            const fixedLng = Number(e.latlng.lng.toFixed(6));
-            mapMarker.setLatLng([fixedLat, fixedLng]);
+            const fixedLat = parseFloat(e.latlng.lat.toFixed(6));
+            const fixedLng = parseFloat(e.latlng.lng.toFixed(6));
+            mapMarker.setLatLng(e.latlng);
             el.projLat.value = fixedLat;
             el.projLng.value = fixedLng;
             activeProject.landing.map.lat = fixedLat;
@@ -401,6 +496,7 @@
                     }
                 });
             }
+            syncTeamsToGoogle();
         }
         renderMembersTab();
         renderTeamsTab();
@@ -487,30 +583,6 @@
         }).join('');
     }
 
-    el.addTeamBtn.addEventListener('click', () => {
-        const name = el.newTeamName.value.toUpperCase().trim();
-        if (!name) {
-            window.showAlert('Por favor escribe un nombre para el Equipo de Tarea.', 'error');
-            return;
-        }
-
-        if (!activeProject.equiposDeTarea) activeProject.equiposDeTarea = [];
-        
-        if (activeProject.equiposDeTarea.some(t => t.name.toUpperCase().trim() === name)) {
-            window.showAlert(`El Equipo de Tarea "${name}" ya existe.`, 'error');
-            return;
-        }
-
-        activeProject.equiposDeTarea.push({
-            name: name,
-            members: []
-        });
-
-        el.newTeamName.value = '';
-        renderTeamsTab();
-        window.showAlert(`Equipo de Tarea "${name}" creado exitosamente.`, 'success');
-    });
-
     window.deleteTeam = function (index) {
         const team = activeProject.equiposDeTarea[index];
         if (!team) return;
@@ -518,6 +590,7 @@
 
         activeProject.equiposDeTarea.splice(index, 1);
         renderTeamsTab();
+        syncTeamsToGoogle();
         window.showAlert('Equipo de Tarea eliminado.', 'info');
     };
 
@@ -546,6 +619,7 @@
         }
         
         renderTeamsTab();
+        syncTeamsToGoogle();
         window.showAlert('Asignación de equipo de tarea actualizada.', 'success');
     };
 
@@ -590,7 +664,10 @@
         const files = [configUrl, `docs/${configUrl}`];
         const content = JSON.stringify(fullConfig, null, 2);
 
-        window.showAlert('Publicando cambios en GitHub... Por favor espera.', 'info');
+        window.showAlert('Publicando cambios en GitHub y Google Sheets... Por favor espera.', 'info');
+
+        // Sync teams with Google Sheets as well
+        syncTeamsToGoogle();
 
         try {
             for (const path of files) {
@@ -612,7 +689,7 @@
                 }
 
                 const body = {
-                    message: `Update project ${activeProject.name} settings from settings panel`,
+                    message: `Update project ${activeProject.name} settings and task teams`,
                     content: btoa(unescape(encodeURIComponent(content))),
                     branch: branch
                 };
@@ -637,7 +714,7 @@
                 }
             }
 
-            window.showAlert('Configuración publicada exitosamente en GitHub. Los cambios se aplicarán en un minuto.', 'success');
+            window.showAlert('Configuración publicada exitosamente en GitHub y Google Sheets.', 'success');
         } catch (err) {
             window.showAlert(err.message, 'error');
         }
