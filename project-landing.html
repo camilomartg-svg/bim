@@ -352,6 +352,8 @@
         try {
           const url = new URL(rawHref, window.location.href);
           if (url.origin !== window.location.origin) return rawHref;
+          const currentEmpresa = query.get('empresa');
+          if (currentEmpresa) url.searchParams.set('empresa', currentEmpresa);
           url.searchParams.set('project', project.slug);
           if (project.dataSources.driveFolderName) url.searchParams.set('driveFolderName', project.dataSources.driveFolderName);
           if (project.dataSources.driveFolderId) {

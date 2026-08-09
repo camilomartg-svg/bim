@@ -4,8 +4,8 @@
     let projectSlug = '';
     let currentCompany = null;
     let configUrl = '';
-    let fullConfig = null;
-    let activeProject = null;
+    let fullConfig = { portal: { name: 'nora CDE' }, projects: [] };
+    let activeProject = { slug: '', name: 'Proyecto', equiposDeTarea: [], members: [], dataSources: {}, landing: { map: { lat: 4.711, lng: -74.0721, zoom: 13 } } };
     let allDirectoryUsers = []; // Users loaded from Google Sheets (Nora Directory)
     
     // Central Google Apps Script Endpoint for Nora (Users, Companies, Teams & Drive)
@@ -78,7 +78,7 @@
             el.backBtn.addEventListener('click', () => {
                 const dest = 'project-landing.html'
                     + '?project=' + encodeURIComponent(_project)
-                    + '&empresa=' + encodeURIComponent(_empresa);
+                    + (_empresa ? '&empresa=' + encodeURIComponent(_empresa) : '');
                 window.location.href = dest;
             });
         }
@@ -86,6 +86,7 @@
 
     // --- ALERTS DE INTERFAZ ---
     window.showAlert = function (message, type = 'info') {
+        if (!el.alertBanner || !el.alertMessage) return;
         el.alertMessage.textContent = message;
         el.alertBanner.className = "fixed bottom-6 right-6 z-50 rounded-2xl p-4 shadow-xl flex items-start gap-3 transition-all duration-300 transform translate-y-0 opacity-100 max-w-md w-full border";
         
@@ -104,16 +105,17 @@
     };
 
     window.hideAlert = function () {
+        if (!el.alertBanner) return;
         el.alertBanner.className = "fixed bottom-6 right-6 z-50 transform translate-y-20 opacity-0 transition-all duration-300 max-w-md w-full rounded-2xl p-4 shadow-xl flex items-start gap-3";
     };
 
     // --- MODAL DE GITHUB TOKEN ---
     window.closeTokenModal = function () {
-        el.tokenModal.classList.add('hidden');
+        if (el.tokenModal) el.tokenModal.classList.add('hidden');
     };
 
     window.saveGithubToken = function () {
-        const val = el.githubPatInput.value.trim();
+        const val = el.githubPatInput ? el.githubPatInput.value.trim() : '';
         if (val) {
             localStorage.setItem('github_pat', val);
             window.showAlert('Token de GitHub guardado localmente.', 'success');
@@ -124,28 +126,32 @@
         window.closeTokenModal();
     };
 
-    el.githubTokenBtn.addEventListener('click', () => {
-        el.githubPatInput.value = localStorage.getItem('github_pat') || '';
-        el.tokenModal.classList.remove('hidden');
-    });
+    if (el.githubTokenBtn) {
+        el.githubTokenBtn.addEventListener('click', () => {
+            if (el.githubPatInput) el.githubPatInput.value = localStorage.getItem('github_pat') || '';
+            if (el.tokenModal) el.tokenModal.classList.remove('hidden');
+        });
+    }
 
     // --- MANEJO DE TEMA ---
     const applyTheme = (theme) => {
         if (theme === 'dark') {
             document.documentElement.classList.add('dark');
-            el.themeToggle.querySelector('.material-symbols-outlined').textContent = 'light_mode';
+            if (el.themeToggle) el.themeToggle.querySelector('.material-symbols-outlined').textContent = 'light_mode';
         } else {
             document.documentElement.classList.remove('dark');
-            el.themeToggle.querySelector('.material-symbols-outlined').textContent = 'dark_mode';
+            if (el.themeToggle) el.themeToggle.querySelector('.material-symbols-outlined').textContent = 'dark_mode';
         }
     };
     const savedTheme = localStorage.getItem('theme') || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
     applyTheme(savedTheme);
-    el.themeToggle.addEventListener('click', () => {
-        const newTheme = document.documentElement.classList.contains('dark') ? 'light' : 'dark';
-        localStorage.setItem('theme', newTheme);
-        applyTheme(newTheme);
-    });
+    if (el.themeToggle) {
+        el.themeToggle.addEventListener('click', () => {
+            const newTheme = document.documentElement.classList.contains('dark') ? 'light' : 'dark';
+            localStorage.setItem('theme', newTheme);
+            applyTheme(newTheme);
+        });
+    }
 
     // --- MANEJO DE TABS ---
     document.querySelectorAll('.tab-btn').forEach(btn => {
@@ -168,12 +174,14 @@
 
     // --- SINCRONIZACIÓN AUTOMÁTICA CON GOOGLE SHEETS (APPS SCRIPT) ---
     async function syncTeamsToGoogle(silent = false) {
-        if (!companyId || !projectSlug || !activeProject) return;
+        const emp = companyId || 'general';
+        const proj = projectSlug || (activeProject && activeProject.slug) || 'general';
+        if (!activeProject) return;
         try {
             const payload = {
                 action: 'saveTeams',
-                empresa: companyId,
-                proyecto: projectSlug,
+                empresa: emp,
+                proyecto: proj,
                 teams: activeProject.equiposDeTarea || []
             };
             const res = await fetch(GOOGLE_SCRIPT_URL, {
@@ -189,64 +197,146 @@
         }
     }
 
+    // --- CREAR EQUIPO DE TAREA (GLOBAL Y DISPONIBLE DE INMEDIATO) ---
+    window.addTeam = function () {
+        if (!activeProject) {
+            activeProject = { slug: projectSlug || 'proyecto', name: 'Proyecto', equiposDeTarea: [], members: [] };
+        }
+        if (!activeProject.equiposDeTarea) {
+            activeProject.equiposDeTarea = [];
+        }
+
+        const input = document.getElementById('new-team-name') || el.newTeamName;
+        const name = (input ? input.value : '').toUpperCase().trim();
+        if (!name) {
+            window.showAlert('Por favor escribe un nombre para el Equipo de Tarea.', 'error');
+            return;
+        }
+
+        if (activeProject.equiposDeTarea.some(t => (t.name || '').toUpperCase().trim() === name)) {
+            window.showAlert(`El Equipo de Tarea "${name}" ya existe.`, 'error');
+            return;
+        }
+
+        activeProject.equiposDeTarea.push({ name: name, members: [] });
+        if (input) input.value = '';
+        renderTeamsTab();
+        syncTeamsToGoogle();
+        window.showAlert(`Equipo de Tarea "${name}" creado exitosamente.`, 'success');
+    };
+
+    // Bind add team button & Enter key immediately
+    if (el.addTeamBtn) {
+        el.addTeamBtn.addEventListener('click', window.addTeam);
+    }
+    if (el.newTeamName) {
+        el.newTeamName.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                window.addTeam();
+            }
+        });
+    }
+
     // --- INICIALIZACIÓN ---
     async function init() {
         const urlParams = new URLSearchParams(window.location.search);
         companyId = urlParams.get('empresa') || '';
         projectSlug = urlParams.get('project') || '';
 
-        if (!companyId || !projectSlug) {
-            window.showAlert('Faltan parámetros empresa/project en la URL.', 'error');
-            return;
-        }
-
-        // 1. Cargar Empresas
+        // 1. Cargar Empresas y resolver Empresa si no está presente
+        let companies = [];
         try {
             const empRes = await fetch('empresas.json');
-            if (!empRes.ok) throw new Error('No se pudo leer empresas.json');
-            const companies = await empRes.json();
-            currentCompany = companies.find(c => c.id === companyId);
-            if (!currentCompany) {
-                window.showAlert('Empresa no encontrada en empresas.json', 'error');
-                return;
+            if (empRes.ok) {
+                companies = await empRes.json();
             }
-            el.breadcrumbEmpresa.textContent = currentCompany.name.toUpperCase();
-            el.breadcrumbEmpresa.parentElement.setAttribute('href', `home.html?empresa=${companyId}`);
-            configUrl = currentCompany.configUrl || 'portal-config.json';
         } catch (e) {
-            console.error(e);
-            window.showAlert('Error al cargar metadatos de empresa.', 'error');
-            return;
+            console.warn('Error al cargar empresas.json:', e);
         }
+
+        // Si no viene empresa en la URL, intentar resolverla por slug o por usuario autenticado
+        if (!companyId && projectSlug) {
+            const ua = JSON.parse(sessionStorage.getItem('userAccount') || localStorage.getItem('userAccount') || 'null');
+            if (ua && ua.adminEmpresaId) {
+                companyId = ua.adminEmpresaId;
+            } else {
+                for (const c of companies) {
+                    if (!c.deleted && c.configUrl) {
+                        try {
+                            const testRes = await fetch(c.configUrl + '?t=' + Date.now());
+                            if (testRes.ok) {
+                                const testConf = await testRes.json();
+                                if (testConf.projects && testConf.projects.some(p => p.slug === projectSlug)) {
+                                    companyId = c.id;
+                                    break;
+                                }
+                            }
+                        } catch (err) {}
+                    }
+                }
+            }
+            if (!companyId) {
+                const firstActive = companies.find(c => !c.deleted) || companies[0];
+                companyId = firstActive ? firstActive.id : 'empresa3';
+            }
+        }
+
+        currentCompany = companies.find(c => c.id === companyId) || { id: companyId || 'nora', name: 'Nora CDE', configUrl: 'portal-config.json' };
+        if (el.breadcrumbEmpresa) {
+            el.breadcrumbEmpresa.textContent = (currentCompany.name || 'EMPRESA').toUpperCase();
+            el.breadcrumbEmpresa.parentElement.setAttribute('href', `home.html?empresa=${companyId}`);
+        }
+        configUrl = currentCompany.configUrl || 'portal-config.json';
 
         // 2. Cargar Configuración de Empresa
         try {
             const confRes = await fetch(configUrl + '?t=' + Date.now());
-            if (!confRes.ok) throw new Error(`No se pudo leer ${configUrl}`);
-            fullConfig = await confRes.json();
-            activeProject = fullConfig.projects.find(p => p.slug === projectSlug);
-            if (!activeProject) {
-                window.showAlert('Proyecto no encontrado en la configuración de la empresa.', 'error');
-                return;
+            if (confRes.ok) {
+                fullConfig = await confRes.json();
             }
-            el.breadcrumbProyecto.textContent = activeProject.name.toUpperCase();
-            
-            // Inicializar arreglos si no existen
-            if (!activeProject.members) activeProject.members = [];
-            if (!activeProject.equiposDeTarea) activeProject.equiposDeTarea = [];
-            if (!activeProject.dataSources) activeProject.dataSources = {};
-            if (!activeProject.landing) activeProject.landing = {};
-            if (!activeProject.landing.map) {
-                activeProject.landing.map = { lat: 4.711, lng: -74.0721, zoom: 13 };
-            }
-
-            fillInputs();
-            initMap();
         } catch (e) {
-            console.error(e);
-            window.showAlert('Error al cargar la configuración del proyecto.', 'error');
-            return;
+            console.warn('Error al cargar configuración de empresa, usando estructura por defecto.', e);
         }
+
+        if (!fullConfig || typeof fullConfig !== 'object') {
+            fullConfig = { portal: { name: 'nora CDE' }, projects: [] };
+        }
+        if (!Array.isArray(fullConfig.projects)) {
+            fullConfig.projects = [];
+        }
+
+        activeProject = fullConfig.projects.find(p => p.slug === projectSlug);
+        if (!activeProject) {
+            // Inicializar proyecto nuevo si no existe todavía en el archivo
+            activeProject = {
+                name: (projectSlug ? projectSlug.replace(/[-_]/g, ' ') : 'Proyecto').toUpperCase(),
+                slug: projectSlug || 'nuevo-proyecto',
+                city: 'Bogotá',
+                status: 'Activo',
+                equiposDeTarea: [],
+                members: [],
+                dataSources: {},
+                landing: { map: { lat: 4.711, lng: -74.0721, zoom: 13 } }
+            };
+            fullConfig.projects.push(activeProject);
+        }
+
+        if (el.breadcrumbProyecto) {
+            el.breadcrumbProyecto.textContent = (activeProject.name || projectSlug || 'PROYECTO').toUpperCase();
+        }
+        
+        // Inicializar arreglos si no existen
+        if (!activeProject.members) activeProject.members = [];
+        if (!activeProject.equiposDeTarea) activeProject.equiposDeTarea = [];
+        if (!activeProject.dataSources) activeProject.dataSources = {};
+        if (!activeProject.landing) activeProject.landing = {};
+        if (!activeProject.landing.map) {
+            activeProject.landing.map = { lat: 4.711, lng: -74.0721, zoom: 13 };
+        }
+
+        fillInputs();
+        initMap();
 
         // 3. Cargar Directorio de Usuarios de Nora desde Google Sheets
         try {
@@ -284,66 +374,41 @@
 
         renderMembersTab();
         renderTeamsTab();
-
-        // Register add-team button listener here, after activeProject is guaranteed to be loaded
-        if (el.addTeamBtn) {
-            el.addTeamBtn.addEventListener('click', () => {
-                if (!activeProject) {
-                    window.showAlert('El proyecto no está cargado. Recarga la página.', 'error');
-                    return;
-                }
-                const name = (el.newTeamName.value || '').toUpperCase().trim();
-                if (!name) {
-                    window.showAlert('Por favor escribe un nombre para el Equipo de Tarea.', 'error');
-                    return;
-                }
-
-                if (!activeProject.equiposDeTarea) activeProject.equiposDeTarea = [];
-
-                if (activeProject.equiposDeTarea.some(t => t.name.toUpperCase().trim() === name)) {
-                    window.showAlert(`El Equipo de Tarea "${name}" ya existe.`, 'error');
-                    return;
-                }
-
-                activeProject.equiposDeTarea.push({ name: name, members: [] });
-                el.newTeamName.value = '';
-                renderTeamsTab();
-                syncTeamsToGoogle();
-                window.showAlert(`Equipo de Tarea "${name}" creado exitosamente.`, 'success');
-            });
-        }
     }
 
     // --- LLENAR INPUTS ---
     function fillInputs() {
+        if (!activeProject) return;
+
         // General info
-        el.projName.value = activeProject.name || '';
-        el.projSlug.value = activeProject.slug || '';
-        el.projCity.value = activeProject.city || '';
-        el.projStatus.value = activeProject.status || '';
+        if (el.projName) el.projName.value = activeProject.name || '';
+        if (el.projSlug) el.projSlug.value = activeProject.slug || '';
+        if (el.projCity) el.projCity.value = activeProject.city || '';
+        if (el.projStatus) el.projStatus.value = activeProject.status || '';
 
         // Branding
-        el.projLogo.value = activeProject.landing.logo || '';
-        el.projEyebrow.value = activeProject.landing.eyebrow || '';
-        el.projTitle.value = activeProject.landing.title || '';
-        el.projSubtitle.value = activeProject.landing.subtitle || '';
+        if (el.projLogo) el.projLogo.value = activeProject.landing.logo || '';
+        if (el.projEyebrow) el.projEyebrow.value = activeProject.landing.eyebrow || '';
+        if (el.projTitle) el.projTitle.value = activeProject.landing.title || '';
+        if (el.projSubtitle) el.projSubtitle.value = activeProject.landing.subtitle || '';
 
         // Map
-        el.projAddress.value = activeProject.landing.address || '';
-        el.projLat.value = activeProject.landing.map.lat || 4.711;
-        el.projLng.value = activeProject.landing.map.lng || -74.0721;
+        if (el.projAddress) el.projAddress.value = activeProject.landing.address || '';
+        if (el.projLat) el.projLat.value = activeProject.landing.map.lat || 4.711;
+        if (el.projLng) el.projLng.value = activeProject.landing.map.lng || -74.0721;
 
         // Datasources
-        el.dsDriveFolderName.value = activeProject.dataSources.driveFolderName || '';
-        el.dsDriveFolderId.value = activeProject.dataSources.driveFolderId || '';
-        el.dsDriveScriptUrl.value = activeProject.dataSources.driveScriptUrl || '';
-        el.dsStatusSheetId.value = activeProject.dataSources.statusSheetId || '';
-        el.dsStatusScriptUrl.value = activeProject.dataSources.statusScriptUrl || '';
-        el.dsCantidadesSheetId.value = activeProject.dataSources.cantidadesSheetId || '';
-        el.dsCantidadesScriptUrl.value = activeProject.dataSources.cantidadesScriptUrl || '';
+        if (el.dsDriveFolderName) el.dsDriveFolderName.value = activeProject.dataSources.driveFolderName || '';
+        if (el.dsDriveFolderId) el.dsDriveFolderId.value = activeProject.dataSources.driveFolderId || '';
+        if (el.dsDriveScriptUrl) el.dsDriveScriptUrl.value = activeProject.dataSources.driveScriptUrl || '';
+        if (el.dsStatusSheetId) el.dsStatusSheetId.value = activeProject.dataSources.statusSheetId || '';
+        if (el.dsStatusScriptUrl) el.dsStatusScriptUrl.value = activeProject.dataSources.statusScriptUrl || '';
+        if (el.dsCantidadesSheetId) el.dsCantidadesSheetId.value = activeProject.dataSources.cantidadesSheetId || '';
+        if (el.dsCantidadesScriptUrl) el.dsCantidadesScriptUrl.value = activeProject.dataSources.cantidadesScriptUrl || '';
 
         // Listeners for live update of activeProject
         const bindInput = (domEl, setter) => {
+            if (!domEl) return;
             domEl.addEventListener('input', (e) => {
                 setter(e.target.value);
             });
@@ -379,64 +444,70 @@
             }
         };
 
-        el.projLat.addEventListener('change', updateMapFromInputs);
-        el.projLng.addEventListener('change', updateMapFromInputs);
+        if (el.projLat) el.projLat.addEventListener('change', updateMapFromInputs);
+        if (el.projLng) el.projLng.addEventListener('change', updateMapFromInputs);
     }
 
     // --- MAPA LEAFLET ---
     function initMap() {
-        if (typeof L === 'undefined') return;
+        const mapContainer = document.getElementById('settings-map');
+        if (typeof L === 'undefined' || !mapContainer) return;
 
         const coords = [activeProject.landing.map.lat, activeProject.landing.map.lng];
         const zoom = activeProject.landing.map.zoom || 13;
 
-        leafletMap = L.map('settings-map').setView(coords, zoom);
+        try {
+            leafletMap = L.map('settings-map').setView(coords, zoom);
 
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-            maxZoom: 19,
-            attribution: '© OpenStreetMap contributors'
-        }).addTo(leafletMap);
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                maxZoom: 19,
+                attribution: '© OpenStreetMap contributors'
+            }).addTo(leafletMap);
 
-        const customIcon = L.divIcon({
-            className: 'custom-pin',
-            html: `<div style="background-color:#171717; width:28px; height:28px; border-radius:50%; border:3px solid white; display:flex; align-items:center; justify-content:center; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.3);">
-                    <span class="material-symbols-outlined" style="font-size:16px; color:white;">apartment</span>
-                   </div>`,
-            iconSize: [28, 28],
-            iconAnchor: [14, 14]
-        });
+            const customIcon = L.divIcon({
+                className: 'custom-pin',
+                html: `<div style="background-color:#171717; width:28px; height:28px; border-radius:50%; border:3px solid white; display:flex; align-items:center; justify-content:center; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.3);">
+                        <span class="material-symbols-outlined" style="font-size:16px; color:white;">apartment</span>
+                       </div>`,
+                iconSize: [28, 28],
+                iconAnchor: [14, 14]
+            });
 
-        mapMarker = L.marker(coords, { draggable: true, icon: customIcon }).addTo(leafletMap);
+            mapMarker = L.marker(coords, { draggable: true, icon: customIcon }).addTo(leafletMap);
 
-        mapMarker.on('dragend', (e) => {
-            const pos = e.target.getLatLng();
-            const fixedLat = parseFloat(pos.lat.toFixed(6));
-            const fixedLng = parseFloat(pos.lng.toFixed(6));
-            el.projLat.value = fixedLat;
-            el.projLng.value = fixedLng;
-            activeProject.landing.map.lat = fixedLat;
-            activeProject.landing.map.lng = fixedLng;
-        });
+            mapMarker.on('dragend', (e) => {
+                const pos = e.target.getLatLng();
+                const fixedLat = parseFloat(pos.lat.toFixed(6));
+                const fixedLng = parseFloat(pos.lng.toFixed(6));
+                if (el.projLat) el.projLat.value = fixedLat;
+                if (el.projLng) el.projLng.value = fixedLng;
+                activeProject.landing.map.lat = fixedLat;
+                activeProject.landing.map.lng = fixedLng;
+            });
 
-        leafletMap.on('click', (e) => {
-            const fixedLat = parseFloat(e.latlng.lat.toFixed(6));
-            const fixedLng = parseFloat(e.latlng.lng.toFixed(6));
-            mapMarker.setLatLng(e.latlng);
-            el.projLat.value = fixedLat;
-            el.projLng.value = fixedLng;
-            activeProject.landing.map.lat = fixedLat;
-            activeProject.landing.map.lng = fixedLng;
-        });
+            leafletMap.on('click', (e) => {
+                const fixedLat = parseFloat(e.latlng.lat.toFixed(6));
+                const fixedLng = parseFloat(e.latlng.lng.toFixed(6));
+                mapMarker.setLatLng(e.latlng);
+                if (el.projLat) el.projLat.value = fixedLat;
+                if (el.projLng) el.projLng.value = fixedLng;
+                activeProject.landing.map.lat = fixedLat;
+                activeProject.landing.map.lng = fixedLng;
+            });
 
-        leafletMap.on('zoomend', () => {
-            activeProject.landing.map.zoom = leafletMap.getZoom();
-        });
+            leafletMap.on('zoomend', () => {
+                activeProject.landing.map.zoom = leafletMap.getZoom();
+            });
+        } catch (e) {
+            console.warn('Leaflet map error:', e);
+        }
     }
 
     // --- TAB: GESTIÓN DE MIEMBROS ---
     function renderMembersTab() {
-        el.projectMembersCount.textContent = `${activeProject.members.length} Miembros Asignados`;
-        const query = el.directorySearch.value.toLowerCase().trim();
+        if (!el.projectMembersCount || !el.directoryTableBody) return;
+        el.projectMembersCount.textContent = `${(activeProject.members || []).length} Miembros Asignados`;
+        const query = (el.directorySearch ? el.directorySearch.value : '').toLowerCase().trim();
         
         // Filter users
         const filtered = allDirectoryUsers.filter(u => {
@@ -449,7 +520,7 @@
 
         el.directoryTableBody.innerHTML = filtered.map(u => {
             const email = u.email.toLowerCase().trim();
-            const isAssigned = activeProject.members.some(m => m.toLowerCase().trim() === email);
+            const isAssigned = (activeProject.members || []).some(m => m.toLowerCase().trim() === email);
 
             return `
                 <tr class="hover:bg-gray-50 dark:hover:bg-slate-800/40 transition-colors">
@@ -481,6 +552,7 @@
 
     window.toggleMember = function (email, assign) {
         const cleanEmail = email.toLowerCase().trim();
+        if (!activeProject.members) activeProject.members = [];
         if (assign) {
             if (!activeProject.members.some(m => m.toLowerCase().trim() === cleanEmail)) {
                 activeProject.members.push(cleanEmail);
@@ -502,32 +574,38 @@
         renderTeamsTab();
     };
 
-    el.directorySearch.addEventListener('input', renderMembersTab);
+    if (el.directorySearch) {
+        el.directorySearch.addEventListener('input', renderMembersTab);
+    }
 
     // --- TAB: EQUIPOS DE TAREA ---
     function renderTeamsTab() {
+        if (!activeProject) return;
         if (!activeProject.equiposDeTarea) {
             activeProject.equiposDeTarea = [];
         }
 
         // Render teams list pills
-        if (activeProject.equiposDeTarea.length === 0) {
-            el.teamsListContainer.innerHTML = `<div class="text-xs text-gray-400 italic py-2">Sin equipos de tarea creados.</div>`;
-        } else {
-            el.teamsListContainer.innerHTML = activeProject.equiposDeTarea.map((team, tIndex) => {
-                return `
-                    <div class="flex items-center gap-2 bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-200 border border-indigo-100 dark:border-indigo-900/50 px-3 py-1.5 rounded-2xl text-[10px] font-black uppercase tracking-wider">
-                        <span>${escapeHtml(team.name)}</span>
-                        <button onclick="deleteTeam(${tIndex})" class="text-indigo-400 hover:text-indigo-600 transition-colors flex items-center">
-                            <span class="material-symbols-outlined text-[14px]">close</span>
-                        </button>
-                    </div>
-                `;
-            }).join('');
+        if (el.teamsListContainer) {
+            if (activeProject.equiposDeTarea.length === 0) {
+                el.teamsListContainer.innerHTML = `<div class="text-xs text-gray-400 italic py-2">Sin equipos de tarea creados.</div>`;
+            } else {
+                el.teamsListContainer.innerHTML = activeProject.equiposDeTarea.map((team, tIndex) => {
+                    return `
+                        <div class="flex items-center gap-2 bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-200 border border-indigo-100 dark:border-indigo-900/50 px-3 py-1.5 rounded-2xl text-[10px] font-black uppercase tracking-wider">
+                            <span>${escapeHtml(team.name)}</span>
+                            <button onclick="deleteTeam(${tIndex})" class="text-indigo-400 hover:text-indigo-600 transition-colors flex items-center">
+                                <span class="material-symbols-outlined text-[14px]">close</span>
+                            </button>
+                        </div>
+                    `;
+                }).join('');
+            }
         }
 
         // Render project members team assignment table
-        if (activeProject.members.length === 0) {
+        if (!el.teamsMembersTableBody) return;
+        if (!activeProject.members || activeProject.members.length === 0) {
             el.teamsMembersTableBody.innerHTML = `
                 <tr>
                     <td colspan="4" class="py-8 px-4 text-center text-xs text-gray-400 italic">
@@ -584,6 +662,7 @@
     }
 
     window.deleteTeam = function (index) {
+        if (!activeProject || !activeProject.equiposDeTarea) return;
         const team = activeProject.equiposDeTarea[index];
         if (!team) return;
         if (!confirm(`¿Estás seguro de que deseas eliminar el equipo de tarea "${team.name}"?`)) return;
@@ -624,101 +703,108 @@
     };
 
     // --- ACCIONES DE GUARDADO / SERIALIZACIÓN ---
-    el.copyJsonBtn.addEventListener('click', () => {
-        try {
-            const dataStr = JSON.stringify(fullConfig, null, 2);
-            navigator.clipboard.writeText(dataStr).then(() => {
-                window.showAlert('Configuración JSON copiada al portapapeles.', 'success');
-            });
-        } catch (e) {
-            window.showAlert('Error al copiar JSON: ' + e.message, 'error');
-        }
-    });
-
-    el.downloadJsonBtn.addEventListener('click', () => {
-        try {
-            const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(fullConfig, null, 2));
-            const downloadAnchor = document.createElement('a');
-            downloadAnchor.setAttribute("href", dataStr);
-            downloadAnchor.setAttribute("download", configUrl);
-            document.body.appendChild(downloadAnchor);
-            downloadAnchor.click();
-            downloadAnchor.remove();
-            window.showAlert('Configuración descargada localmente.', 'success');
-        } catch (e) {
-            window.showAlert('Error al descargar JSON: ' + e.message, 'error');
-        }
-    });
-
-    el.saveGithubBtn.addEventListener('click', async () => {
-        let token = localStorage.getItem('github_pat');
-        if (!token) {
-            el.githubPatInput.value = '';
-            el.tokenModal.classList.remove('hidden');
-            window.showAlert('Se requiere un token de GitHub para publicar cambios en la nube.', 'error');
-            return;
-        }
-
-        const repo = 'camilomartg-svg/bim';
-        const branch = 'main';
-        const files = [configUrl, `docs/${configUrl}`];
-        const content = JSON.stringify(fullConfig, null, 2);
-
-        window.showAlert('Publicando cambios en GitHub y Google Sheets... Por favor espera.', 'info');
-
-        // Sync teams with Google Sheets as well
-        syncTeamsToGoogle();
-
-        try {
-            for (const path of files) {
-                let sha = null;
-                // Intentar leer el SHA existente
-                try {
-                    const getRes = await fetch(`https://api.github.com/repos/${repo}/contents/${path}?ref=${branch}`, {
-                        headers: {
-                            'Authorization': `token ${token}`,
-                            'Accept': 'application/vnd.github.v3+json'
-                        }
-                    });
-                    if (getRes.ok) {
-                        const data = await getRes.json();
-                        sha = data.sha;
-                    }
-                } catch (e) {
-                    console.warn(`File ${path} not found or api error:`, e);
-                }
-
-                const body = {
-                    message: `Update project ${activeProject.name} settings and task teams`,
-                    content: btoa(unescape(encodeURIComponent(content))),
-                    branch: branch
-                };
-                if (sha) body.sha = sha;
-
-                const putRes = await fetch(`https://api.github.com/repos/${repo}/contents/${path}`, {
-                    method: 'PUT',
-                    headers: {
-                        'Authorization': `token ${token}`,
-                        'Accept': 'application/vnd.github.v3+json',
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify(body)
+    if (el.copyJsonBtn) {
+        el.copyJsonBtn.addEventListener('click', () => {
+            try {
+                const dataStr = JSON.stringify(fullConfig, null, 2);
+                navigator.clipboard.writeText(dataStr).then(() => {
+                    window.showAlert('Configuración JSON copiada al portapapeles.', 'success');
                 });
+            } catch (e) {
+                window.showAlert('Error al copiar JSON: ' + e.message, 'error');
+            }
+        });
+    }
 
-                if (!putRes.ok) {
-                    if (putRes.status === 401) {
-                        localStorage.removeItem('github_pat');
-                        throw new Error('Token de GitHub inválido o expirado. Ingrésalo nuevamente.');
-                    }
-                    throw new Error(`Error actualizando ${path}: ${putRes.statusText}`);
-                }
+    if (el.downloadJsonBtn) {
+        el.downloadJsonBtn.addEventListener('click', () => {
+            try {
+                const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(fullConfig, null, 2));
+                const downloadAnchor = document.createElement('a');
+                downloadAnchor.setAttribute("href", dataStr);
+                downloadAnchor.setAttribute("download", configUrl || 'portal-config.json');
+                document.body.appendChild(downloadAnchor);
+                downloadAnchor.click();
+                downloadAnchor.remove();
+                window.showAlert('Configuración descargada localmente.', 'success');
+            } catch (e) {
+                window.showAlert('Error al descargar JSON: ' + e.message, 'error');
+            }
+        });
+    }
+
+    if (el.saveGithubBtn) {
+        el.saveGithubBtn.addEventListener('click', async () => {
+            let token = localStorage.getItem('github_pat');
+            if (!token) {
+                if (el.githubPatInput) el.githubPatInput.value = '';
+                if (el.tokenModal) el.tokenModal.classList.remove('hidden');
+                window.showAlert('Se requiere un token de GitHub para publicar cambios en la nube.', 'error');
+                return;
             }
 
-            window.showAlert('Configuración publicada exitosamente en GitHub y Google Sheets.', 'success');
-        } catch (err) {
-            window.showAlert(err.message, 'error');
-        }
-    });
+            const repo = 'camilomartg-svg/bim';
+            const branch = 'main';
+            const fileTarget = configUrl || 'portal-config.json';
+            const files = [fileTarget, `docs/${fileTarget}`];
+            const content = JSON.stringify(fullConfig, null, 2);
+
+            window.showAlert('Publicando cambios en GitHub y Google Sheets... Por favor espera.', 'info');
+
+            // Sync teams with Google Sheets as well
+            syncTeamsToGoogle();
+
+            try {
+                for (const path of files) {
+                    let sha = null;
+                    // Intentar leer el SHA existente
+                    try {
+                        const getRes = await fetch(`https://api.github.com/repos/${repo}/contents/${path}?ref=${branch}`, {
+                            headers: {
+                                'Authorization': `token ${token}`,
+                                'Accept': 'application/vnd.github.v3+json'
+                            }
+                        });
+                        if (getRes.ok) {
+                            const data = await getRes.json();
+                            sha = data.sha;
+                        }
+                    } catch (e) {
+                        console.warn(`File ${path} not found or api error:`, e);
+                    }
+
+                    const body = {
+                        message: `Update project ${activeProject.name} settings and task teams`,
+                        content: btoa(unescape(encodeURIComponent(content))),
+                        branch: branch
+                    };
+                    if (sha) body.sha = sha;
+
+                    const putRes = await fetch(`https://api.github.com/repos/${repo}/contents/${path}`, {
+                        method: 'PUT',
+                        headers: {
+                            'Authorization': `token ${token}`,
+                            'Accept': 'application/vnd.github.v3+json',
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify(body)
+                    });
+
+                    if (!putRes.ok) {
+                        if (putRes.status === 401) {
+                            localStorage.removeItem('github_pat');
+                            throw new Error('Token de GitHub inválido o expirado. Ingrésalo nuevamente.');
+                        }
+                        throw new Error(`Error actualizando ${path}: ${putRes.statusText}`);
+                    }
+                }
+
+                window.showAlert('Configuración publicada exitosamente en GitHub y Google Sheets.', 'success');
+            } catch (err) {
+                window.showAlert(err.message, 'error');
+            }
+        });
+    }
 
     // --- AUXILIARES ---
     function escapeHtml(value) {
