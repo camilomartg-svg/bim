@@ -509,31 +509,75 @@
         el.projectMembersCount.textContent = `${(activeProject.members || []).length} Miembros Asignados`;
         const query = (el.directorySearch ? el.directorySearch.value : '').toLowerCase().trim();
         
-        const compName = (currentCompany && currentCompany.name ? currentCompany.name : '').toLowerCase().trim();
-        const compId = (currentCompany && currentCompany.id ? currentCompany.id : (companyId || '')).toLowerCase().trim();
+        // Build list of users strictly belonging to this company from currentCompany.members
+        const companyMembers = Array.isArray(currentCompany?.members) ? currentCompany.members : [];
+        const userMap = new Map();
 
-        // Filter users strictly by current company or project assignment or Super Admin
-        const filtered = allDirectoryUsers.filter(u => {
-            if (!u.email) return false;
-            const email = u.email.toLowerCase().trim();
-            const uEmpresa = (u.empresa || '').toLowerCase().trim();
-            const isAssigned = (activeProject.members || []).some(m => m.toLowerCase().trim() === email);
-            const isSuperAdmin = (u.rol === 'SUPER_ADMINISTRADOR');
-            
-            // Check if user belongs to this company (by company name or company id)
-            const belongsToCompany = Boolean(
-                (compName && (uEmpresa === compName || uEmpresa.includes(compName) || compName.includes(uEmpresa))) ||
-                (compId && uEmpresa === compId)
-            );
+        // 1. Add all members configured in the company
+        companyMembers.forEach(m => {
+            if (!m.email) return;
+            const email = m.email.toLowerCase().trim();
+            userMap.set(email, {
+                nombre: m.name || email.split('@')[0],
+                email: email,
+                empresa: m.empresaUsuario || currentCompany?.name || 'Empresa',
+                rol: m.role || 'INVITADO',
+                especialidad: m.especialidad || '',
+                cargo: m.cargo || ''
+            });
+        });
 
-            // Hide users from other companies or undefined companies if they are not assigned and not super admins
-            if (!belongsToCompany && !isAssigned && !isSuperAdmin) {
-                return false;
+        // 2. Enrich with allDirectoryUsers metadata if available, OR if activeProject.members has an already assigned user
+        if (Array.isArray(allDirectoryUsers)) {
+            allDirectoryUsers.forEach(du => {
+                if (!du.email) return;
+                const email = du.email.toLowerCase().trim();
+                if (userMap.has(email)) {
+                    const existing = userMap.get(email);
+                    userMap.set(email, {
+                        ...existing,
+                        nombre: du.nombre || existing.nombre,
+                        empresa: du.empresa || existing.empresa,
+                        rol: du.rol || existing.rol,
+                        especialidad: du.especialidad || existing.especialidad,
+                        cargo: du.cargo || existing.cargo
+                    });
+                } else if ((activeProject.members || []).some(pm => pm.toLowerCase().trim() === email)) {
+                    // Only include if already explicitly assigned to this project
+                    userMap.set(email, {
+                        nombre: du.nombre || email.split('@')[0],
+                        email: email,
+                        empresa: du.empresa || 'Empresa Externa',
+                        rol: du.rol || 'INVITADO',
+                        especialidad: du.especialidad || '',
+                        cargo: du.cargo || ''
+                    });
+                }
+            });
+        }
+
+        // 3. Ensure any member in activeProject.members has an entry even if not in directory
+        (activeProject.members || []).forEach(pm => {
+            const email = pm.toLowerCase().trim();
+            if (!userMap.has(email)) {
+                userMap.set(email, {
+                    nombre: email.split('@')[0],
+                    email: email,
+                    empresa: currentCompany?.name || 'Empresa',
+                    rol: 'Colaborador',
+                    especialidad: '',
+                    cargo: ''
+                });
             }
+        });
 
+        const availableUsers = Array.from(userMap.values());
+
+        // Filter users by search query
+        const filtered = availableUsers.filter(u => {
             const matchName = (u.nombre || '').toLowerCase().includes(query);
-            const matchEmail = email.includes(query);
-            const matchEmpresa = uEmpresa.includes(query);
+            const matchEmail = (u.email || '').toLowerCase().includes(query);
+            const matchEmpresa = (u.empresa || '').toLowerCase().includes(query);
             return matchName || matchEmail || matchEmpresa;
         });
 
@@ -556,7 +600,7 @@
                 <tr class="hover:bg-gray-50 dark:hover:bg-slate-800/40 transition-colors">
                     <td class="py-3 px-4">
                         <div class="font-bold text-gray-900 dark:text-white">${escapeHtml(u.nombre || 'Sin Nombre')}</div>
-                        <div class="text-xs text-gray-500">${escapeHtml(u.empresa || 'Empresa No Definida')}</div>
+                        <div class="text-xs text-gray-500">${escapeHtml(u.empresa || currentCompany?.name || 'Empresa')}</div>
                     </td>
                     <td class="py-3 px-4 text-xs font-mono">
                         <div class="text-gray-700 dark:text-gray-300">${escapeHtml(email)}</div>
