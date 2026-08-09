@@ -24,6 +24,12 @@
         "empresaUsuario": "Mesh Estudio",
         "especialidad": "",
         "cargo": ""
+      },
+      {
+        "name": "Nuevo Usuario",
+        "email": "camilomartg@gmail.com",
+        "role": "INVITADO",
+        "cargo": "Diseñador Hidrosánitario"
       }
     ],
     "razonSocial": "Mesh Estudio SAS",
