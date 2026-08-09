@@ -509,14 +509,44 @@
         el.projectMembersCount.textContent = `${(activeProject.members || []).length} Miembros Asignados`;
         const query = (el.directorySearch ? el.directorySearch.value : '').toLowerCase().trim();
         
-        // Filter users
+        const compName = (currentCompany && currentCompany.name ? currentCompany.name : '').toLowerCase().trim();
+        const compId = (currentCompany && currentCompany.id ? currentCompany.id : (companyId || '')).toLowerCase().trim();
+
+        // Filter users strictly by current company or project assignment or Super Admin
         const filtered = allDirectoryUsers.filter(u => {
             if (!u.email) return false;
+            const email = u.email.toLowerCase().trim();
+            const uEmpresa = (u.empresa || '').toLowerCase().trim();
+            const isAssigned = (activeProject.members || []).some(m => m.toLowerCase().trim() === email);
+            const isSuperAdmin = (u.rol === 'SUPER_ADMINISTRADOR');
+            
+            // Check if user belongs to this company (by company name or company id)
+            const belongsToCompany = Boolean(
+                (compName && (uEmpresa === compName || uEmpresa.includes(compName) || compName.includes(uEmpresa))) ||
+                (compId && uEmpresa === compId)
+            );
+
+            // Hide users from other companies or undefined companies if they are not assigned and not super admins
+            if (!belongsToCompany && !isAssigned && !isSuperAdmin) {
+                return false;
+            }
+
             const matchName = (u.nombre || '').toLowerCase().includes(query);
-            const matchEmail = (u.email || '').toLowerCase().includes(query);
-            const matchEmpresa = (u.empresa || '').toLowerCase().includes(query);
+            const matchEmail = email.includes(query);
+            const matchEmpresa = uEmpresa.includes(query);
             return matchName || matchEmail || matchEmpresa;
         });
+
+        if (filtered.length === 0) {
+            el.directoryTableBody.innerHTML = `
+                <tr>
+                    <td colspan="4" class="py-8 px-4 text-center text-xs text-gray-400 italic">
+                        No se encontraron usuarios de ${escapeHtml(currentCompany ? currentCompany.name : 'la empresa')} en el directorio.
+                    </td>
+                </tr>
+            `;
+            return;
+        }
 
         el.directoryTableBody.innerHTML = filtered.map(u => {
             const email = u.email.toLowerCase().trim();
