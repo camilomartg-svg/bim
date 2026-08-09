@@ -56,7 +56,27 @@
       "description": "Vivienda multifamiliar en la ciudad de Bogotá",
       "client": "SONA",
       "clientName": "SONA",
-      "clientType": "Propietario"
+      "clientType": "Propietario",
+      "members": [
+        "info@meshestudio.com",
+        "camilo.martinez@meshestudio.com",
+        "camilomartg@gmail.com"
+      ],
+      "equiposDeTarea": [
+        {
+          "name": "HIDROSANITÁRIO",
+          "members": [
+            "camilomartg@gmail.com"
+          ]
+        },
+        {
+          "name": "ARQUITECTURA",
+          "members": [
+            "info@meshestudio.com",
+            "camilo.martinez@meshestudio.com"
+          ]
+        }
+      ]
     }
   ],
   "portal": {
