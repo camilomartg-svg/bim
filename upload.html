@@ -226,6 +226,60 @@
             </tbody>
           </table>
         </div>
+      <!-- ============================================================ -->
+      <!-- STATUS WORKFLOW CARD                                          -->
+      <!-- ============================================================ -->
+      <div class="w-full glass rounded-2xl p-8 shadow-xl transition-all duration-300">
+        <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
+          <div>
+            <h3 class="text-lg font-bold text-slate-900 dark:text-white">Flujo de Trabajo</h3>
+            <p class="text-xs text-slate-500 dark:text-slate-400">Ciclo de vida de los archivos: En Progreso → Compartido → Publicado.</p>
+          </div>
+          <button id="refresh-status-btn" class="p-2 rounded-lg border border-slate-200 bg-white dark:bg-slate-800 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors" title="Refrescar">
+            <span id="refresh-status-icon" class="material-symbols-outlined text-[16px] text-slate-700 dark:text-slate-300 align-middle">refresh</span>
+          </button>
+        </div>
+
+        <!-- Status Tabs -->
+        <div class="border-b border-slate-200 dark:border-slate-800 mb-6 flex gap-0 text-sm font-semibold overflow-x-auto">
+          <button id="stab-progreso" class="border-b-2 border-amber-500 px-4 py-3 text-amber-600 dark:text-amber-400 transition-all focus:outline-none whitespace-nowrap flex items-center gap-2">
+            <span class="w-2 h-2 rounded-full bg-amber-400 inline-block"></span>
+            En Progreso <span id="scount-progreso" class="text-[10px] px-1.5 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 font-medium ml-1">0</span>
+          </button>
+          <button id="stab-compartido" class="border-b-2 border-transparent px-4 py-3 text-slate-500 hover:text-blue-600 dark:text-slate-400 transition-all focus:outline-none whitespace-nowrap flex items-center gap-2">
+            <span class="w-2 h-2 rounded-full bg-blue-400 inline-block"></span>
+            Compartido <span id="scount-compartido" class="text-[10px] px-1.5 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 font-medium ml-1">0</span>
+          </button>
+          <button id="stab-publicado" class="border-b-2 border-transparent px-4 py-3 text-slate-500 hover:text-green-600 dark:text-slate-400 transition-all focus:outline-none whitespace-nowrap flex items-center gap-2">
+            <span class="w-2 h-2 rounded-full bg-green-400 inline-block"></span>
+            Publicado <span id="scount-publicado" class="text-[10px] px-1.5 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 font-medium ml-1">0</span>
+          </button>
+        </div>
+
+        <!-- Status Table Container -->
+        <div id="status-files-container" class="overflow-x-auto min-h-[120px]">
+          <div id="status-loading" class="flex flex-col items-center justify-center py-10">
+            <div class="w-8 h-8 border-4 border-slate-300 dark:border-slate-700 border-t-amber-500 rounded-full animate-spin"></div>
+            <p class="text-xs text-slate-500 dark:text-slate-400 mt-3">Cargando flujo de trabajo...</p>
+          </div>
+          <div id="status-empty" class="hidden flex-col items-center justify-center py-10">
+            <span class="material-symbols-outlined text-4xl text-slate-300 mb-2">inbox</span>
+            <p class="text-xs text-slate-500 dark:text-slate-400">No hay archivos en este estado.</p>
+          </div>
+          <table id="status-table" class="w-full text-left border-collapse text-xs hidden">
+            <thead>
+              <tr class="border-b border-slate-200 dark:border-slate-800 text-slate-400 font-semibold">
+                <th class="py-3 px-4">Archivo</th>
+                <th class="py-3 px-4">Tipo</th>
+                <th class="py-3 px-4">Fecha</th>
+                <th class="py-3 px-4">Responsable</th>
+                <th class="py-3 px-4 text-right">Acción</th>
+              </tr>
+            </thead>
+            <tbody id="status-table-body" class="divide-y divide-slate-100 dark:divide-slate-800/50">
+            </tbody>
+          </table>
+        </div>
       </div>
     </main>
 
@@ -723,7 +777,13 @@
         const ds = activeProject.dataSources || {};
         const scriptUrl = ds.driveScriptUrl || DEFAULT_DRIVE_SCRIPT_URL;
         const driveFolderName = ds.driveFolderName || activeProject.name;
-        
+        const ext = filename.split('.').pop().toLowerCase();
+        let fileType = 'other';
+        if (ext === 'frag' || ext === 'ifc') fileType = 'model';
+        else if (ext === 'pdf') fileType = 'pdf';
+        else if (ext === 'dwg' || ext === 'dxf') fileType = 'dwg';
+        else if (ext === 'json') fileType = 'json';
+
         const payload = {
           action: 'uploadFile',
           folderId: ds.driveFolderId || '',
@@ -731,7 +791,10 @@
           project: activeProject.slug || slugify(activeProject.name),
           filename: filename,
           contentType: contentType,
-          content: base64Content
+          content: base64Content,
+          fileType: fileType,
+          changedBy: userAccount ? (userAccount.name || '') : '',
+          changedByEmail: userAccount ? (userAccount.email || '') : ''
         };
 
         const res = await fetch(scriptUrl, {
@@ -1119,6 +1182,213 @@
 
       refreshListBtn.addEventListener('click', loadProjectFiles);
       filesSearch.addEventListener('input', renderDriveFilesTable);
+
+      // ============================================================
+      // STATUS WORKFLOW
+      // ============================================================
+      let statusEntries = []; // all entries from server
+      let currentStatusTab = 'EN_PROGRESO'; // EN_PROGRESO | COMPARTIDO | PUBLICADO
+
+      const stabProgreso   = document.getElementById('stab-progreso');
+      const stabCompartido = document.getElementById('stab-compartido');
+      const stabPublicado  = document.getElementById('stab-publicado');
+      const scountProgreso   = document.getElementById('scount-progreso');
+      const scountCompartido = document.getElementById('scount-compartido');
+      const scountPublicado  = document.getElementById('scount-publicado');
+      const statusLoading   = document.getElementById('status-loading');
+      const statusEmpty     = document.getElementById('status-empty');
+      const statusTable     = document.getElementById('status-table');
+      const statusTableBody = document.getElementById('status-table-body');
+      const refreshStatusBtn  = document.getElementById('refresh-status-btn');
+      const refreshStatusIcon = document.getElementById('refresh-status-icon');
+
+      const STATUS_ORDER = { 'EN_PROGRESO': 0, 'COMPARTIDO': 1, 'PUBLICADO': 2 };
+
+      // Group entries by originalFileId, keep only the highest status per file
+      function resolveCurrentStatuses(entries) {
+        const map = {};
+        entries.forEach(e => {
+          const key = e.originalFileId || e.fileId;
+          if (!key) return;
+          const prev = map[key];
+          if (!prev || (STATUS_ORDER[e.status] || 0) > (STATUS_ORDER[prev.status] || 0)) {
+            map[key] = e;
+          }
+        });
+        return Object.values(map);
+      }
+
+      async function loadStatusFiles() {
+        if (!activeProject) return;
+        statusLoading.classList.remove('hidden');
+        statusEmpty.classList.add('hidden');
+        statusTable.classList.add('hidden');
+        refreshStatusIcon.classList.add('animate-spin');
+
+        const ds = activeProject.dataSources || {};
+        const scriptUrl = ds.driveScriptUrl || DEFAULT_DRIVE_SCRIPT_URL;
+        try {
+          const res = await fetch(scriptUrl, {
+            method: 'POST', mode: 'cors',
+            headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+            body: JSON.stringify({
+              action: 'listStatus',
+              project: activeProject.slug || slugify(activeProject.name)
+            })
+          });
+          if (!res.ok) throw new Error('Network error');
+          const data = await res.json();
+          statusEntries = Array.isArray(data.entries) ? data.entries : [];
+
+          const resolved = resolveCurrentStatuses(statusEntries);
+          scountProgreso.textContent   = resolved.filter(e => e.status === 'EN_PROGRESO').length;
+          scountCompartido.textContent = resolved.filter(e => e.status === 'COMPARTIDO').length;
+          scountPublicado.textContent  = resolved.filter(e => e.status === 'PUBLICADO').length;
+
+          renderStatusTable();
+        } catch(err) {
+          console.error('Error loading status:', err);
+          statusLoading.classList.add('hidden');
+          statusEmpty.classList.remove('hidden');
+        } finally {
+          refreshStatusIcon.classList.remove('animate-spin');
+        }
+      }
+
+      function renderStatusTable() {
+        statusLoading.classList.add('hidden');
+        const resolved = resolveCurrentStatuses(statusEntries);
+        const list = resolved.filter(e => e.status === currentStatusTab);
+
+        if (list.length === 0) {
+          statusEmpty.classList.remove('hidden');
+          statusTable.classList.add('hidden');
+          return;
+        }
+        statusEmpty.classList.add('hidden');
+        statusTable.classList.remove('hidden');
+
+        statusTableBody.innerHTML = list.map(entry => {
+          const ext = (entry.filename || '').split('.').pop().toLowerCase();
+          let icon = 'description', iconClass = 'text-blue-500';
+          if (ext === 'pdf') { icon = 'picture_as_pdf'; iconClass = 'text-red-500'; }
+          else if (ext === 'dwg' || ext === 'dxf') { icon = 'architecture'; iconClass = 'text-amber-500'; }
+          else if (ext === 'frag' || ext === 'ifc') { icon = 'view_in_ar'; iconClass = 'text-indigo-500'; }
+          else if (ext === 'json') { icon = 'data_object'; iconClass = 'text-emerald-500'; }
+
+          const typeLabel = { model: 'Modelo', pdf: 'PDF', dwg: 'CAD', json: 'JSON', other: 'Archivo' }[entry.type] || entry.type || '--';
+
+          const dateStr = (() => {
+            if (!entry.changedAt) return '--';
+            const d = new Date(entry.changedAt);
+            return `${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}/${d.getFullYear()} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+          })();
+
+          let actionBtn = '';
+          const enc = encodeURIComponent(JSON.stringify(entry));
+          if (currentStatusTab === 'EN_PROGRESO') {
+            actionBtn = `<button onclick="window.promoteFile(this, '${enc}', 'COMPARTIDO')" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 font-semibold text-[10px] uppercase tracking-wider hover:bg-blue-100 dark:hover:bg-blue-900/40 transition-colors" title="Mover a Compartido"><span class="material-symbols-outlined text-[14px]">share</span> Compartir</button>`;
+          } else if (currentStatusTab === 'COMPARTIDO') {
+            actionBtn = `<button onclick="window.promoteFile(this, '${enc}', 'PUBLICADO')" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-green-50 dark:bg-green-950/40 text-green-700 dark:text-green-300 font-semibold text-[10px] uppercase tracking-wider hover:bg-green-100 dark:hover:bg-green-900/40 transition-colors" title="Mover a Publicado"><span class="material-symbols-outlined text-[14px]">publish</span> Publicar</button>`;
+          } else {
+            actionBtn = `<span class="inline-flex items-center gap-1 text-green-600 dark:text-green-400 font-semibold text-[10px] uppercase tracking-wider"><span class="material-symbols-outlined text-[14px]">verified</span> Publicado</span>`;
+          }
+
+          return `
+            <tr class="hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors">
+              <td class="py-3 px-4 font-medium text-slate-800 dark:text-slate-200 max-w-[220px] truncate">
+                <div class="flex items-center gap-2">
+                  <span class="material-symbols-outlined text-base ${iconClass} shrink-0">${icon}</span>
+                  <span class="truncate" title="${entry.filename}">${entry.filename || '--'}</span>
+                </div>
+              </td>
+              <td class="py-3 px-4 text-slate-500 dark:text-slate-400">${typeLabel}</td>
+              <td class="py-3 px-4 text-slate-500 dark:text-slate-400 whitespace-nowrap">${dateStr}</td>
+              <td class="py-3 px-4">
+                <div class="flex flex-col">
+                  <span class="text-slate-700 dark:text-slate-300 font-medium">${entry.changedBy || '—'}</span>
+                  ${entry.changedByEmail ? `<span class="text-slate-400 dark:text-slate-500 text-[10px]">${entry.changedByEmail}</span>` : ''}
+                </div>
+              </td>
+              <td class="py-3 px-4 text-right">${actionBtn}</td>
+            </tr>
+          `;
+        }).join('');
+      }
+
+      window.promoteFile = async (btn, encodedEntry, newStatus) => {
+        let entry;
+        try { entry = JSON.parse(decodeURIComponent(encodedEntry)); } catch(e) { return; }
+        if (!entry || !activeProject) return;
+
+        const labels = { COMPARTIDO: 'Compartido', PUBLICADO: 'Publicado' };
+        if (!confirm(`¿Mover "${entry.filename}" a ${labels[newStatus]}?\nEsto creará una copia del archivo en ese estado.`)) return;
+
+        const origHtml = btn.innerHTML;
+        btn.disabled = true;
+        btn.innerHTML = `<span class="inline-block w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin"></span>`;
+
+        try {
+          const ds = activeProject.dataSources || {};
+          const scriptUrl = ds.driveScriptUrl || DEFAULT_DRIVE_SCRIPT_URL;
+          const payload = {
+            action: 'changeFileStatus',
+            fileId: entry.fileId,
+            jsonId: entry.jsonId || '',
+            filename: entry.filename,
+            newStatus: newStatus,
+            project: activeProject.slug || slugify(activeProject.name),
+            folderId: ds.driveFolderId || '',
+            driveFolderName: ds.driveFolderName || activeProject.name,
+            originalFileId: entry.originalFileId || entry.fileId,
+            type: entry.type || '',
+            changedBy: userAccount ? (userAccount.name || '') : '',
+            changedByEmail: userAccount ? (userAccount.email || '') : ''
+          };
+          const res = await fetch(scriptUrl, {
+            method: 'POST', mode: 'cors',
+            headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+            body: JSON.stringify(payload)
+          });
+          if (!res.ok) throw new Error(`Error del servidor: ${res.statusText}`);
+          const data = await res.json();
+          if (data.status === 'error') throw new Error(data.message || 'Error al cambiar estado');
+
+          addLog(`[${entry.filename}] → ${labels[newStatus]} por ${data.changedBy || 'usuario'}.`);
+          await loadStatusFiles();
+        } catch(err) {
+          console.error(err);
+          alert(`No se pudo cambiar el estado: ${err.message}`);
+          btn.disabled = false;
+          btn.innerHTML = origHtml;
+        }
+      };
+
+      // Status tab switching
+      function switchStatusTab(tab, activeBtn) {
+        currentStatusTab = tab;
+        [stabProgreso, stabCompartido, stabPublicado].forEach(b => {
+          b.classList.remove('border-amber-500','text-amber-600','dark:text-amber-400','border-blue-500','text-blue-600','dark:text-blue-400','border-green-500','text-green-600','dark:text-green-400');
+          b.classList.add('border-transparent','text-slate-500','dark:text-slate-400');
+        });
+        if (tab === 'EN_PROGRESO') {
+          activeBtn.classList.add('border-amber-500','text-amber-600','dark:text-amber-400');
+        } else if (tab === 'COMPARTIDO') {
+          activeBtn.classList.add('border-blue-500','text-blue-600','dark:text-blue-400');
+        } else {
+          activeBtn.classList.add('border-green-500','text-green-600','dark:text-green-400');
+        }
+        activeBtn.classList.remove('border-transparent','text-slate-500','dark:text-slate-400');
+        renderStatusTable();
+      }
+
+      stabProgreso.addEventListener('click',   () => switchStatusTab('EN_PROGRESO', stabProgreso));
+      stabCompartido.addEventListener('click', () => switchStatusTab('COMPARTIDO',  stabCompartido));
+      stabPublicado.addEventListener('click',  () => switchStatusTab('PUBLICADO',   stabPublicado));
+      refreshStatusBtn.addEventListener('click', loadStatusFiles);
+
+      // Load status on init
+      loadStatusFiles();
     });
   </script>
 </body>

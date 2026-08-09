@@ -8,6 +8,7 @@ const SPREADSHEET_ID = "1OczWRlaefMY5RQon8K3va91H8TInJlp9RuBJeTPLiiA";
 const COMPANY_HEADERS = ['fecha', 'id', 'name', 'legalName', 'type', 'website', 'email', 'phone', 'country', 'state', 'city', 'zip', 'address', 'sectors', 'specialties', 'logoBase64', 'code', 'driveFolderId'];
 const USER_HEADERS = ['fecha', 'nombre', 'email', 'telefono', 'empresa', 'especialidad', 'cargo', 'rol', 'estado'];
 const TEAM_HEADERS = ['fecha', 'empresa', 'proyecto', 'nombreEquipo', 'miembros'];
+const FILE_STATUS_HEADERS = ['rowId', 'fecha', 'fileId', 'jsonId', 'filename', 'project', 'status', 'changedAt', 'changedBy', 'changedByEmail', 'originalFileId', 'type'];
 
 function ensureHeaders(sheet, expectedHeaders) {
   if (sheet.getLastRow() === 0) {
@@ -131,6 +132,12 @@ function doPost(e) {
     }
     if (action === 'deleteFile' || action === 'deleteFiles') {
       return output_(deleteFile_(e, data), callback);
+    }
+    if (action === 'changeFileStatus') {
+      return output_(changeFileStatus_(e, data), callback);
+    }
+    if (action === 'listStatus') {
+      return output_(listStatus_(e, data), callback);
     }
 
     let doc;
@@ -669,6 +676,12 @@ function doGet(e) {
     if (action === 'deleteFile' || action === 'deleteFiles') {
       return output_(deleteFile_(e, null), callback);
     }
+    if (action === 'changeFileStatus') {
+      return output_(changeFileStatus_(e, null), callback);
+    }
+    if (action === 'listStatus') {
+      return output_(listStatus_(e, null), callback);
+    }
 
     let doc;
     try {
@@ -975,8 +988,132 @@ function uploadFile_(e, body) {
     const decoded = Utilities.base64Decode(content);
     const blob = Utilities.newBlob(decoded, contentType, filename);
     const file = root.createFile(blob);
-    
-    return { status: 'success', fileId: file.getId(), name: file.getName() };
+    const newFileId = file.getId();
+
+    // Auto-register EN_PROGRESO status (non-fatal)
+    try {
+      const project = String(((body && body.project) || (e && e.parameter && e.parameter.project) || '') ?? '').trim();
+      const changedBy = String(((body && body.changedBy) || (e && e.parameter && e.parameter.changedBy) || '') ?? '').trim();
+      const changedByEmail = String(((body && body.changedByEmail) || (e && e.parameter && e.parameter.changedByEmail) || '') ?? '').trim();
+      const fileType = String(((body && body.fileType) || (e && e.parameter && e.parameter.fileType) || '') ?? '').trim();
+      const jsonId = String(((body && body.jsonId) || (e && e.parameter && e.parameter.jsonId) || '') ?? '').trim();
+      if (project) {
+        registerFileStatus_(newFileId, jsonId, filename, project, 'EN_PROGRESO', changedBy, changedByEmail, newFileId, fileType);
+      }
+    } catch(statusErr) { /* non-fatal */ }
+
+    return { status: 'success', fileId: newFileId, name: file.getName() };
+  } catch (err) {
+    return { status: 'error', message: err.toString() };
+  }
+}
+
+function registerFileStatus_(fileId, jsonId, filename, project, status, changedBy, changedByEmail, originalFileId, type) {
+  let doc;
+  try { doc = SpreadsheetApp.openById(SPREADSHEET_ID); } catch (err) { doc = SpreadsheetApp.getActiveSpreadsheet(); }
+  let sheet = doc.getSheetByName('EstadosArchivos');
+  if (!sheet) sheet = doc.insertSheet('EstadosArchivos');
+  ensureHeaders(sheet, FILE_STATUS_HEADERS);
+  const rowId = 'sr-' + Date.now() + '-' + Math.floor(Math.random() * 9999);
+  const now = new Date().toISOString();
+  const rowData = FILE_STATUS_HEADERS.map(function(h) {
+    if (h === 'rowId') return rowId;
+    if (h === 'fecha') return now;
+    if (h === 'fileId') return fileId || '';
+    if (h === 'jsonId') return jsonId || '';
+    if (h === 'filename') return filename || '';
+    if (h === 'project') return project || '';
+    if (h === 'status') return status || 'EN_PROGRESO';
+    if (h === 'changedAt') return now;
+    if (h === 'changedBy') return changedBy || '';
+    if (h === 'changedByEmail') return changedByEmail || '';
+    if (h === 'originalFileId') return originalFileId || fileId || '';
+    if (h === 'type') return type || '';
+    return '';
+  });
+  sheet.appendRow(rowData);
+  return rowId;
+}
+
+function listStatus_(e, body) {
+  const project = String(((body && body.project) || (e && e.parameter && e.parameter.project) || '') ?? '').trim();
+  let doc;
+  try { doc = SpreadsheetApp.openById(SPREADSHEET_ID); } catch (err) { doc = SpreadsheetApp.getActiveSpreadsheet(); }
+  const sheet = doc.getSheetByName('EstadosArchivos');
+  if (!sheet || sheet.getLastRow() <= 1) return { entries: [] };
+  ensureHeaders(sheet, FILE_STATUS_HEADERS);
+  const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0].map(function(h) { return String(h).trim(); });
+  const rows = sheet.getRange(2, 1, sheet.getLastRow() - 1, sheet.getLastColumn()).getValues();
+  const idx = {};
+  FILE_STATUS_HEADERS.forEach(function(h) { idx[h] = headers.indexOf(h); });
+  const entries = [];
+  for (var i = 0; i < rows.length; i++) {
+    var row = rows[i];
+    var rowProject = String(row[idx['project']] || '').trim();
+    if (project && rowProject !== project) continue;
+    var changedAt = row[idx['changedAt']];
+    entries.push({
+      rowId: String(row[idx['rowId']] || '').trim(),
+      fileId: String(row[idx['fileId']] || '').trim(),
+      jsonId: String(row[idx['jsonId']] || '').trim(),
+      filename: String(row[idx['filename']] || '').trim(),
+      project: rowProject,
+      status: String(row[idx['status']] || 'EN_PROGRESO').trim(),
+      changedAt: (changedAt instanceof Date) ? changedAt.toISOString() : String(changedAt || ''),
+      changedBy: String(row[idx['changedBy']] || '').trim(),
+      changedByEmail: String(row[idx['changedByEmail']] || '').trim(),
+      originalFileId: String(row[idx['originalFileId']] || '').trim(),
+      type: String(row[idx['type']] || '').trim()
+    });
+  }
+  return { entries: entries };
+}
+
+function changeFileStatus_(e, body) {
+  const fileId = String(((body && body.fileId) || (e && e.parameter && e.parameter.fileId) || '') ?? '').trim();
+  const jsonId = String(((body && body.jsonId) || (e && e.parameter && e.parameter.jsonId) || '') ?? '').trim();
+  const filename = String(((body && body.filename) || (e && e.parameter && e.parameter.filename) || '') ?? '').trim();
+  const newStatus = String(((body && body.newStatus) || (e && e.parameter && e.parameter.newStatus) || '') ?? '').trim().toUpperCase();
+  const project = String(((body && body.project) || (e && e.parameter && e.parameter.project) || '') ?? '').trim();
+  var folderId = String(((body && body.folderId) || (e && e.parameter && e.parameter.folderId) || DRIVE_ROOT_FOLDER_ID) ?? '').trim();
+  const driveFolderName = String(((body && body.driveFolderName) || (e && e.parameter && e.parameter.driveFolderName) || '') ?? '').trim();
+  const originalFileId = String(((body && body.originalFileId) || (e && e.parameter && e.parameter.originalFileId) || fileId) ?? '').trim();
+  const type = String(((body && body.type) || (e && e.parameter && e.parameter.type) || '') ?? '').trim();
+  const changedBy = String(((body && body.changedBy) || (e && e.parameter && e.parameter.changedBy) || '') ?? '').trim();
+  const changedByEmail = String(((body && body.changedByEmail) || (e && e.parameter && e.parameter.changedByEmail) || '') ?? '').trim();
+
+  if (!fileId) return { status: 'error', message: 'Falta fileId' };
+  if (['COMPARTIDO', 'PUBLICADO'].indexOf(newStatus) === -1) return { status: 'error', message: 'Estado invalido' };
+
+  try {
+    var root = DriveApp.getFolderById(folderId);
+    if (folderId === DRIVE_ROOT_FOLDER_ID || folderId === '1fn1umYzIYsxymmwbmap6YbjTB33XJrG8') {
+      var targetFolder = findProjectFolderRecursively(root, project, driveFolderName);
+      if (targetFolder) root = targetFolder;
+    }
+    // Get/create .estados/{status} subfolder
+    var estadosFolder;
+    var ef = root.getFoldersByName('.estados');
+    estadosFolder = ef.hasNext() ? ef.next() : root.createFolder('.estados');
+    var subFolderName = newStatus.toLowerCase();
+    var sf = estadosFolder.getFoldersByName(subFolderName);
+    var subFolder = sf.hasNext() ? sf.next() : estadosFolder.createFolder(subFolderName);
+    // Copy main file
+    var sourceFile = DriveApp.getFileById(fileId);
+    var copiedFile = sourceFile.makeCopy(filename, subFolder);
+    var copiedFileId = copiedFile.getId();
+    // Copy json if present
+    var copiedJsonId = '';
+    if (jsonId) {
+      try {
+        var sourceJson = DriveApp.getFileById(jsonId);
+        var jsonFilename = filename.replace(/\.frag$/i, '.json');
+        copiedJsonId = sourceJson.makeCopy(jsonFilename, subFolder).getId();
+      } catch(je) { /* non-fatal */ }
+    }
+    var now = new Date().toISOString();
+    registerFileStatus_(copiedFileId, copiedJsonId, filename, project, newStatus, changedBy, changedByEmail, originalFileId, type);
+    return { status: 'success', newStatus: newStatus, copiedFileId: copiedFileId, copiedJsonId: copiedJsonId, filename: filename, changedAt: now, changedBy: changedBy };
   } catch (err) {
     return { status: 'error', message: err.toString() };
   }
