@@ -93,10 +93,10 @@
                 </div>
 
                 <div class="flex items-center gap-4">
-                    <!-- GitHub Token Setup Button -->
+                    <!-- Token Setup Button -->
                     <button id="github-token-btn" class="flex items-center gap-2 rounded-xl border border-border-light dark:border-border-dark bg-white dark:bg-slate-800 px-4 py-2 text-xs font-bold tracking-wider uppercase shadow-sm hover:bg-gray-50 dark:hover:bg-slate-700 transition-colors">
                         <span class="material-symbols-outlined text-[16px]">key</span>
-                        <span>Token GitHub</span>
+                        <span>Token</span>
                     </button>
                     <!-- Theme Toggle -->
                     <button id="theme-toggle" aria-label="Cambiar tema" class="rounded-xl border border-border-light dark:border-border-dark bg-white dark:bg-slate-800 p-2 hover:bg-gray-50 dark:hover:bg-slate-700 transition-all shadow-sm">
@@ -111,8 +111,8 @@
                             <span class="material-symbols-outlined block">content_copy</span>
                         </button>
                         <button id="save-github-btn" class="flex items-center gap-2 rounded-xl bg-primary hover:bg-black dark:bg-white dark:hover:bg-gray-100 text-white dark:text-black px-5 py-2.5 text-xs font-bold tracking-widest uppercase transition-all shadow-sm">
-                            <span class="material-symbols-outlined text-[16px]">cloud_upload</span>
-                            <span>Publicar</span>
+                            <span class="material-symbols-outlined text-[16px]">save</span>
+                            <span>Guardar</span>
                         </button>
                     </div>
                 </div>
@@ -405,14 +405,14 @@
         </div>
     </div>
 
-    <!-- GitHub Token Modal -->
+    <!-- Token Modal -->
     <div id="token-modal" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center hidden">
         <div class="bg-white dark:bg-card-dark border border-border-light dark:border-border-dark rounded-3xl p-6 max-w-md w-full mx-4 shadow-2xl relative">
             <button onclick="closeTokenModal()" class="absolute top-4 right-4 text-gray-400 hover:text-gray-600 dark:hover:text-white">
                 <span class="material-symbols-outlined">close</span>
             </button>
-            <h3 class="text-lg font-bold mb-2">Token de Acceso Personal de GitHub</h3>
-            <p class="text-xs text-gray-500 mb-4">El token es guardado localmente en tu navegador y es necesario para publicar los cambios en la nube.</p>
+            <h3 class="text-lg font-bold mb-2">Token de Acceso</h3>
+            <p class="text-xs text-gray-500 mb-4">El token es guardado localmente en tu navegador y es necesario para guardar los cambios en la nube.</p>
             <input id="github-pat-input" type="password" placeholder="ghp_..." class="w-full rounded-xl border-slate-200 dark:border-border-dark dark:bg-slate-800 px-4 py-2.5 mb-4 text-sm font-mono" />
             <div class="flex justify-end gap-2">
                 <button onclick="closeTokenModal()" class="px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-wider text-gray-500 hover:bg-gray-100 dark:hover:bg-slate-800">Cancelar</button>
@@ -422,6 +422,6 @@
     </div>
 
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-    <script src="project-settings.js?v=1786128422740"></script>
+    <script src="project-settings.js?v=1786128422750"></script>
 </body>
 </html>

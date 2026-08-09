@@ -926,7 +926,7 @@
             if (!token) {
                 if (el.githubPatInput) el.githubPatInput.value = '';
                 if (el.tokenModal) el.tokenModal.classList.remove('hidden');
-                window.showAlert('Se requiere un token de GitHub para publicar cambios en la nube.', 'error');
+                window.showAlert('Se requiere un Token de acceso para guardar cambios en la nube.', 'error');
                 return;
             }
 
@@ -936,7 +936,7 @@
             const files = [fileTarget, `docs/${fileTarget}`];
             const content = JSON.stringify(fullConfig, null, 2);
 
-            window.showAlert('Publicando cambios en GitHub y Google Sheets... Por favor espera.', 'info');
+            window.showAlert('Guardando cambios en la nube... Por favor espera.', 'info');
 
             // Sync teams with Google Sheets as well
             syncTeamsToGoogle();
@@ -980,13 +980,13 @@
                     if (!putRes.ok) {
                         if (putRes.status === 401) {
                             localStorage.removeItem('github_pat');
-                            throw new Error('Token de GitHub inválido o expirado. Ingrésalo nuevamente.');
+                            throw new Error('Token inválido o expirado. Ingrésalo nuevamente.');
                         }
                         throw new Error(`Error actualizando ${path}: ${putRes.statusText}`);
                     }
                 }
 
-                window.showAlert('Configuración publicada exitosamente en GitHub y Google Sheets.', 'success');
+                window.showAlert('Configuración guardada exitosamente.', 'success');
             } catch (err) {
                 window.showAlert(err.message, 'error');
             }
