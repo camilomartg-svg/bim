@@ -251,6 +251,12 @@
             Publicado <span id="scount-publicado" class="text-[10px] px-1.5 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 font-medium ml-1">0</span>
           </button>
         </div>
+        <!-- Sub-type Tabs -->
+        <div class="flex gap-4 mb-5 text-xs font-semibold border-b border-slate-100 dark:border-slate-800/60">
+          <button id="sstab-models" class="pb-2 border-b-2 border-slate-700 dark:border-white text-slate-800 dark:text-white transition-all focus:outline-none">Modelos</button>
+          <button id="sstab-pdfs"   class="pb-2 border-b-2 border-transparent text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-all focus:outline-none">Planos PDF</button>
+          <button id="sstab-dwgs"   class="pb-2 border-b-2 border-transparent text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-all focus:outline-none">Planos DWG</button>
+        </div>
         <div id="status-files-container" class="overflow-x-auto min-h-[120px]">
           <div id="status-loading" class="flex flex-col items-center justify-center py-10">
             <div class="w-8 h-8 border-4 border-slate-300 dark:border-slate-700 border-t-amber-500 rounded-full animate-spin"></div>
@@ -1175,11 +1181,14 @@
       // STATUS WORKFLOW
       let statusEntries = [];
       let currentStatusTab = 'EN_PROGRESO';
+      let currentStatusSubTab = 'models';
       const stabProgreso=document.getElementById('stab-progreso'), stabCompartido=document.getElementById('stab-compartido'), stabPublicado=document.getElementById('stab-publicado');
+      const sstabModels=document.getElementById('sstab-models'), sstabPdfs=document.getElementById('sstab-pdfs'), sstabDwgs=document.getElementById('sstab-dwgs');
       const scountProgreso=document.getElementById('scount-progreso'), scountCompartido=document.getElementById('scount-compartido'), scountPublicado=document.getElementById('scount-publicado');
       const statusLoading=document.getElementById('status-loading'), statusEmpty=document.getElementById('status-empty'), statusTable=document.getElementById('status-table'), statusTableBody=document.getElementById('status-table-body');
       const refreshStatusBtn=document.getElementById('refresh-status-btn'), refreshStatusIcon=document.getElementById('refresh-status-icon');
       const STATUS_ORDER={'EN_PROGRESO':0,'COMPARTIDO':1,'PUBLICADO':2};
+      const SUBTYPE_MAP={models:'model',pdfs:'pdf',dwgs:'dwg'};
 
       function resolveCurrentStatuses(entries){
         const map={};
@@ -1213,7 +1222,8 @@
       function renderStatusTable(){
         statusLoading.classList.add('hidden');
         const resolved=resolveCurrentStatuses(statusEntries);
-        const list=resolved.filter(e=>e.status===currentStatusTab);
+        const typeFilter=SUBTYPE_MAP[currentStatusSubTab];
+        const list=resolved.filter(e=>e.status===currentStatusTab && e.type===typeFilter);
         if(list.length===0){statusEmpty.classList.remove('hidden');statusTable.classList.add('hidden');return;}
         statusEmpty.classList.add('hidden');statusTable.classList.remove('hidden');
         statusTableBody.innerHTML=list.map(entry=>{
@@ -1227,7 +1237,7 @@
           const dateStr=(()=>{if(!entry.changedAt)return'--';const d=new Date(entry.changedAt);return`${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}/${d.getFullYear()} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;})();
           let actionBtn='';
           const enc=encodeURIComponent(JSON.stringify(entry));
-          if(currentStatusTab==='EN_PROGRESO')actionBtn=`<button onclick="window.promoteFile(this,'${enc}','COMPARTIDO')" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 font-semibold text-[10px] uppercase tracking-wider hover:bg-blue-100 transition-colors"><span class="material-symbols-outlined text-[14px]">share</span> Compartir</button>`;
+          if(currentStatusTab==='EN_PROGRESO')actionBtn=`<div class="flex items-center justify-end gap-2"><button onclick="window.promoteFile(this,'${enc}','COMPARTIDO')" class="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 font-semibold text-[10px] uppercase tracking-wider hover:bg-blue-100 transition-colors"><span class="material-symbols-outlined text-[13px]">share</span> Compartir</button><button onclick="window.promoteFile(this,'${enc}','PUBLICADO')" class="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-green-50 dark:bg-green-950/40 text-green-700 dark:text-green-300 font-semibold text-[10px] uppercase tracking-wider hover:bg-green-100 transition-colors"><span class="material-symbols-outlined text-[13px]">publish</span> Publicar</button></div>`;
           else if(currentStatusTab==='COMPARTIDO')actionBtn=`<button onclick="window.promoteFile(this,'${enc}','PUBLICADO')" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-green-50 dark:bg-green-950/40 text-green-700 dark:text-green-300 font-semibold text-[10px] uppercase tracking-wider hover:bg-green-100 transition-colors"><span class="material-symbols-outlined text-[14px]">publish</span> Publicar</button>`;
           else actionBtn=`<span class="inline-flex items-center gap-1 text-green-600 dark:text-green-400 font-semibold text-[10px] uppercase"><span class="material-symbols-outlined text-[14px]">verified</span> Publicado</span>`;
           return`<tr class="hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors"><td class="py-3 px-4 font-medium text-slate-800 dark:text-slate-200"><div class="flex items-center gap-2"><span class="material-symbols-outlined text-base ${iconClass} shrink-0">${icon}</span><span class="truncate" title="${entry.filename}">${entry.filename||'--'}</span></div></td><td class="py-3 px-4 text-slate-500 dark:text-slate-400">${typeLabel}</td><td class="py-3 px-4 text-slate-500 dark:text-slate-400 whitespace-nowrap">${dateStr}</td><td class="py-3 px-4"><div class="flex flex-col"><span class="text-slate-700 dark:text-slate-300 font-medium">${entry.changedBy||'—'}</span>${entry.changedByEmail?`<span class="text-slate-400 text-[10px]">${entry.changedByEmail}</span>`:''}</div></td><td class="py-3 px-4 text-right">${actionBtn}</td></tr>`;
@@ -1262,9 +1272,19 @@
         activeBtn.classList.remove('border-transparent','text-slate-500','dark:text-slate-400');
         renderStatusTable();
       }
+      function switchStatusSubTab(subTab,activeBtn){
+        currentStatusSubTab=subTab;
+        [sstabModels,sstabPdfs,sstabDwgs].forEach(b=>{b.classList.remove('border-slate-700','dark:border-white','text-slate-800','dark:text-white');b.classList.add('border-transparent','text-slate-400');});
+        activeBtn.classList.add('border-slate-700','dark:border-white','text-slate-800','dark:text-white');
+        activeBtn.classList.remove('border-transparent','text-slate-400');
+        renderStatusTable();
+      }
       stabProgreso.addEventListener('click',()=>switchStatusTab('EN_PROGRESO',stabProgreso));
       stabCompartido.addEventListener('click',()=>switchStatusTab('COMPARTIDO',stabCompartido));
       stabPublicado.addEventListener('click',()=>switchStatusTab('PUBLICADO',stabPublicado));
+      sstabModels.addEventListener('click',()=>switchStatusSubTab('models',sstabModels));
+      sstabPdfs.addEventListener('click',()=>switchStatusSubTab('pdfs',sstabPdfs));
+      sstabDwgs.addEventListener('click',()=>switchStatusSubTab('dwgs',sstabDwgs));
       refreshStatusBtn.addEventListener('click',loadStatusFiles);
       loadStatusFiles();
     });

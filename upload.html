@@ -256,7 +256,12 @@
           </button>
         </div>
 
-        <!-- Status Table Container -->
+        <!-- Sub-type Tabs -->
+        <div class="flex gap-4 mb-5 text-xs font-semibold border-b border-slate-100 dark:border-slate-800/60">
+          <button id="sstab-models" class="pb-2 border-b-2 border-slate-700 dark:border-white text-slate-800 dark:text-white transition-all focus:outline-none">Modelos</button>
+          <button id="sstab-pdfs"   class="pb-2 border-b-2 border-transparent text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-all focus:outline-none">Planos PDF</button>
+          <button id="sstab-dwgs"   class="pb-2 border-b-2 border-transparent text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-all focus:outline-none">Planos DWG</button>
+        </div>
         <div id="status-files-container" class="overflow-x-auto min-h-[120px]">
           <div id="status-loading" class="flex flex-col items-center justify-center py-10">
             <div class="w-8 h-8 border-4 border-slate-300 dark:border-slate-700 border-t-amber-500 rounded-full animate-spin"></div>
@@ -1183,15 +1188,17 @@
       refreshListBtn.addEventListener('click', loadProjectFiles);
       filesSearch.addEventListener('input', renderDriveFilesTable);
 
-      // ============================================================
       // STATUS WORKFLOW
-      // ============================================================
-      let statusEntries = []; // all entries from server
-      let currentStatusTab = 'EN_PROGRESO'; // EN_PROGRESO | COMPARTIDO | PUBLICADO
+      let statusEntries = [];
+      let currentStatusTab = 'EN_PROGRESO';
+      let currentStatusSubTab = 'models'; // models | pdfs | dwgs
 
       const stabProgreso   = document.getElementById('stab-progreso');
       const stabCompartido = document.getElementById('stab-compartido');
       const stabPublicado  = document.getElementById('stab-publicado');
+      const sstabModels = document.getElementById('sstab-models');
+      const sstabPdfs   = document.getElementById('sstab-pdfs');
+      const sstabDwgs   = document.getElementById('sstab-dwgs');
       const scountProgreso   = document.getElementById('scount-progreso');
       const scountCompartido = document.getElementById('scount-compartido');
       const scountPublicado  = document.getElementById('scount-publicado');
@@ -1203,6 +1210,7 @@
       const refreshStatusIcon = document.getElementById('refresh-status-icon');
 
       const STATUS_ORDER = { 'EN_PROGRESO': 0, 'COMPARTIDO': 1, 'PUBLICADO': 2 };
+      const SUBTYPE_MAP  = { models: 'model', pdfs: 'pdf', dwgs: 'dwg' };
 
       // Group entries by originalFileId, keep only the highest status per file
       function resolveCurrentStatuses(entries) {
@@ -1258,7 +1266,8 @@
       function renderStatusTable() {
         statusLoading.classList.add('hidden');
         const resolved = resolveCurrentStatuses(statusEntries);
-        const list = resolved.filter(e => e.status === currentStatusTab);
+        const typeFilter = SUBTYPE_MAP[currentStatusSubTab];
+        const list = resolved.filter(e => e.status === currentStatusTab && e.type === typeFilter);
 
         if (list.length === 0) {
           statusEmpty.classList.remove('hidden');
@@ -1287,9 +1296,17 @@
           let actionBtn = '';
           const enc = encodeURIComponent(JSON.stringify(entry));
           if (currentStatusTab === 'EN_PROGRESO') {
-            actionBtn = `<button onclick="window.promoteFile(this, '${enc}', 'COMPARTIDO')" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 font-semibold text-[10px] uppercase tracking-wider hover:bg-blue-100 dark:hover:bg-blue-900/40 transition-colors" title="Mover a Compartido"><span class="material-symbols-outlined text-[14px]">share</span> Compartir</button>`;
+            actionBtn = `
+              <div class="flex items-center justify-end gap-2">
+                <button onclick="window.promoteFile(this, '${enc}', 'COMPARTIDO')" class="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 font-semibold text-[10px] uppercase tracking-wider hover:bg-blue-100 dark:hover:bg-blue-900/40 transition-colors">
+                  <span class="material-symbols-outlined text-[13px]">share</span> Compartir
+                </button>
+                <button onclick="window.promoteFile(this, '${enc}', 'PUBLICADO')" class="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-green-50 dark:bg-green-950/40 text-green-700 dark:text-green-300 font-semibold text-[10px] uppercase tracking-wider hover:bg-green-100 dark:hover:bg-green-900/40 transition-colors">
+                  <span class="material-symbols-outlined text-[13px]">publish</span> Publicar
+                </button>
+              </div>`;
           } else if (currentStatusTab === 'COMPARTIDO') {
-            actionBtn = `<button onclick="window.promoteFile(this, '${enc}', 'PUBLICADO')" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-green-50 dark:bg-green-950/40 text-green-700 dark:text-green-300 font-semibold text-[10px] uppercase tracking-wider hover:bg-green-100 dark:hover:bg-green-900/40 transition-colors" title="Mover a Publicado"><span class="material-symbols-outlined text-[14px]">publish</span> Publicar</button>`;
+            actionBtn = `<button onclick="window.promoteFile(this, '${enc}', 'PUBLICADO')" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-green-50 dark:bg-green-950/40 text-green-700 dark:text-green-300 font-semibold text-[10px] uppercase tracking-wider hover:bg-green-100 dark:hover:bg-green-900/40 transition-colors"><span class="material-symbols-outlined text-[14px]">publish</span> Publicar</button>`;
           } else {
             actionBtn = `<span class="inline-flex items-center gap-1 text-green-600 dark:text-green-400 font-semibold text-[10px] uppercase tracking-wider"><span class="material-symbols-outlined text-[14px]">verified</span> Publicado</span>`;
           }
@@ -1371,20 +1388,33 @@
           b.classList.remove('border-amber-500','text-amber-600','dark:text-amber-400','border-blue-500','text-blue-600','dark:text-blue-400','border-green-500','text-green-600','dark:text-green-400');
           b.classList.add('border-transparent','text-slate-500','dark:text-slate-400');
         });
-        if (tab === 'EN_PROGRESO') {
-          activeBtn.classList.add('border-amber-500','text-amber-600','dark:text-amber-400');
-        } else if (tab === 'COMPARTIDO') {
-          activeBtn.classList.add('border-blue-500','text-blue-600','dark:text-blue-400');
-        } else {
-          activeBtn.classList.add('border-green-500','text-green-600','dark:text-green-400');
-        }
+        if (tab === 'EN_PROGRESO') activeBtn.classList.add('border-amber-500','text-amber-600','dark:text-amber-400');
+        else if (tab === 'COMPARTIDO') activeBtn.classList.add('border-blue-500','text-blue-600','dark:text-blue-400');
+        else activeBtn.classList.add('border-green-500','text-green-600','dark:text-green-400');
         activeBtn.classList.remove('border-transparent','text-slate-500','dark:text-slate-400');
+        renderStatusTable();
+      }
+
+      // Sub-type tab switching
+      function switchStatusSubTab(subTab, activeBtn) {
+        currentStatusSubTab = subTab;
+        [sstabModels, sstabPdfs, sstabDwgs].forEach(b => {
+          b.classList.remove('border-slate-700','dark:border-white','text-slate-800','dark:text-white');
+          b.classList.add('border-transparent','text-slate-400');
+        });
+        activeBtn.classList.add('border-slate-700','dark:border-white','text-slate-800','dark:text-white');
+        activeBtn.classList.remove('border-transparent','text-slate-400');
         renderStatusTable();
       }
 
       stabProgreso.addEventListener('click',   () => switchStatusTab('EN_PROGRESO', stabProgreso));
       stabCompartido.addEventListener('click', () => switchStatusTab('COMPARTIDO',  stabCompartido));
       stabPublicado.addEventListener('click',  () => switchStatusTab('PUBLICADO',   stabPublicado));
+
+      sstabModels.addEventListener('click', () => switchStatusSubTab('models', sstabModels));
+      sstabPdfs.addEventListener('click',   () => switchStatusSubTab('pdfs',   sstabPdfs));
+      sstabDwgs.addEventListener('click',   () => switchStatusSubTab('dwgs',   sstabDwgs));
+
       refreshStatusBtn.addEventListener('click', loadStatusFiles);
 
       // Load status on init
