@@ -117,11 +117,11 @@
 
         <!-- Drag and Drop Area -->
         <div id="drop-zone" class="border-2 border-dashed border-slate-300 dark:border-slate-700 rounded-xl p-8 text-center cursor-pointer hover:border-slate-400 dark:hover:border-slate-500 transition-all duration-200">
-          <input type="file" id="file-input" class="hidden" accept=".pdf,.dwg,.dxf,.ifc" multiple />
+          <input type="file" id="file-input" class="hidden" accept=".frag,.json,.ifc,.pdf,.dwg,.dxf" multiple />
           <div class="flex flex-col items-center">
             <span class="material-symbols-outlined text-4xl text-slate-400 dark:text-slate-500 mb-3 animate-pulse">cloud_upload</span>
             <p class="text-sm font-semibold text-slate-700 dark:text-slate-300">Arrastra tus archivos aquí o haz clic para buscarlos</p>
-            <p class="text-xs text-slate-400 dark:text-slate-500 mt-1">Formatos admitidos: PDF, DWG, IFC (Conversión automática a FRAG)</p>
+            <p class="text-xs text-slate-400 dark:text-slate-500 mt-1">Formatos admitidos: FRAG, JSON, IFC, PDF, DWG, DXF</p>
           </div>
         </div>
 
@@ -577,7 +577,7 @@
       function handleFilesSelection(filesList) {
         if (isUploading) return;
         
-        const allowed = ['pdf', 'dwg', 'dxf', 'ifc'];
+        const allowed = ['pdf', 'dwg', 'dxf', 'ifc', 'frag', 'json'];
         let addedCount = 0;
 
         for (let i = 0; i < filesList.length; i++) {
@@ -585,7 +585,7 @@
           const ext = file.name.split('.').pop().toLowerCase();
           
           if (!allowed.includes(ext)) {
-            alert(`El archivo "${file.name}" no tiene un formato válido (.pdf, .dwg, .dxf, .ifc)`);
+            alert(`El archivo "${file.name}" no tiene un formato válido (.frag, .json, .ifc, .pdf, .dwg, .dxf)`);
             continue;
           }
 
@@ -634,6 +634,12 @@
           } else if (ext === 'dwg' || ext === 'dxf') {
             icon = 'architecture';
             iconClass = 'text-amber-500';
+          } else if (ext === 'frag') {
+            icon = 'view_in_ar';
+            iconClass = 'text-indigo-500';
+          } else if (ext === 'json') {
+            icon = 'data_object';
+            iconClass = 'text-emerald-500';
           } else {
             icon = 'view_in_ar';
             iconClass = 'text-blue-500';
@@ -844,7 +850,7 @@
               updateFileUI(fileObj, 100, 'Completado');
               addLog(`[${fileObj.file.name}] ¡Subida e IFC procesado con éxito!`);
             } else {
-              // Direct upload (PDF, DWG)
+              // Direct upload (FRAG, JSON, PDF, DWG, DXF)
               updateFileUI(fileObj, 25, 'Leyendo archivo...');
               const base64Content = await fileToBase64(fileObj.file);
               
@@ -854,6 +860,8 @@
               let mimeType = 'application/octet-stream';
               if (ext === 'pdf') mimeType = 'application/pdf';
               else if (ext === 'dwg') mimeType = 'image/vnd.dwg';
+              else if (ext === 'json') mimeType = 'application/json';
+              else if (ext === 'frag') mimeType = 'application/octet-stream';
 
               await uploadToDrive(fileObj.file.name, base64Content, mimeType, fileObj);
               
@@ -983,6 +991,12 @@
           } else if (ext === 'dwg' || ext === 'dxf') {
             icon = 'architecture';
             iconClass = 'text-amber-500';
+          } else if (ext === 'frag') {
+            icon = 'view_in_ar';
+            iconClass = 'text-indigo-500';
+          } else if (ext === 'json') {
+            icon = 'data_object';
+            iconClass = 'text-emerald-500';
           } else {
             icon = 'view_in_ar';
             iconClass = 'text-blue-500';
