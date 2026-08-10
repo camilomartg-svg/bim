@@ -8,7 +8,8 @@ const SPREADSHEET_ID = "1OczWRlaefMY5RQon8K3va91H8TInJlp9RuBJeTPLiiA";
 const COMPANY_HEADERS = ['fecha', 'id', 'name', 'legalName', 'type', 'website', 'email', 'phone', 'country', 'state', 'city', 'zip', 'address', 'sectors', 'specialties', 'logoBase64', 'code', 'driveFolderId'];
 const USER_HEADERS = ['fecha', 'nombre', 'email', 'telefono', 'empresa', 'especialidad', 'cargo', 'rol', 'estado'];
 const TEAM_HEADERS = ['fecha', 'empresa', 'proyecto', 'nombreEquipo', 'miembros'];
-const FILE_STATUS_HEADERS = ['rowId', 'fecha', 'fileId', 'jsonId', 'filename', 'project', 'status', 'changedAt', 'changedBy', 'changedByEmail', 'originalFileId', 'type'];
+const FILE_STATUS_HEADERS = ['rowId', 'fecha', 'fileId', 'jsonId', 'filename', 'project', 'status', 'changedAt', 'changedBy', 'changedByEmail', 'originalFileId', 'type', 'version', 'comments'];
+const FILE_VERSION_HEADERS = ['versionId', 'fecha', 'fileId', 'jsonId', 'filename', 'project', 'status', 'version', 'comments', 'createdBy', 'createdByEmail', 'originalFileId', 'type', 'isCurrent', 'backupFileId'];
 
 function ensureHeaders(sheet, expectedHeaders) {
   if (sheet.getLastRow() === 0) {
@@ -138,6 +139,15 @@ function doPost(e) {
     }
     if (action === 'listStatus') {
       return output_(listStatus_(e, data), callback);
+    }
+    if (action === 'createVersion') {
+      return output_(createVersion_(e, data), callback);
+    }
+    if (action === 'listVersions') {
+      return output_(listVersions_(e, data), callback);
+    }
+    if (action === 'restoreVersion') {
+      return output_(restoreVersion_(e, data), callback);
     }
 
     let doc;
@@ -880,9 +890,14 @@ function listModels_(e, body) {
     const sub = folder.getFolders();
     while (sub.hasNext()) {
       const subFolder = sub.next();
+      const sName = subFolder.getName();
+      // Skip hidden / internal system directories like .estados, .versiones
+      if (sName.startsWith('.')) {
+        continue;
+      }
       const nextRelativePath = currentRelativePath 
-        ? currentRelativePath + '/' + subFolder.getName() 
-        : subFolder.getName();
+        ? currentRelativePath + '/' + sName 
+        : sName;
       walk_(subFolder, nextRelativePath);
     }
   };
@@ -1008,7 +1023,7 @@ function uploadFile_(e, body) {
   }
 }
 
-function registerFileStatus_(fileId, jsonId, filename, project, status, changedBy, changedByEmail, originalFileId, type) {
+function registerFileStatus_(fileId, jsonId, filename, project, status, changedBy, changedByEmail, originalFileId, type, version, comments) {
   let doc;
   try { doc = SpreadsheetApp.openById(SPREADSHEET_ID); } catch (err) { doc = SpreadsheetApp.getActiveSpreadsheet(); }
   let sheet = doc.getSheetByName('EstadosArchivos');
@@ -1029,6 +1044,8 @@ function registerFileStatus_(fileId, jsonId, filename, project, status, changedB
     if (h === 'changedByEmail') return changedByEmail || '';
     if (h === 'originalFileId') return originalFileId || fileId || '';
     if (h === 'type') return type || '';
+    if (h === 'version') return version || 'v1.0';
+    if (h === 'comments') return comments || '';
     return '';
   });
   sheet.appendRow(rowData);
@@ -1063,7 +1080,9 @@ function listStatus_(e, body) {
       changedBy: String(row[idx['changedBy']] || '').trim(),
       changedByEmail: String(row[idx['changedByEmail']] || '').trim(),
       originalFileId: String(row[idx['originalFileId']] || '').trim(),
-      type: String(row[idx['type']] || '').trim()
+      type: String(row[idx['type']] || '').trim(),
+      version: String(row[idx['version']] || 'v1.0').trim(),
+      comments: String(row[idx['comments']] || '').trim()
     });
   }
   return { entries: entries };
@@ -1081,6 +1100,8 @@ function changeFileStatus_(e, body) {
   const type = String(((body && body.type) || (e && e.parameter && e.parameter.type) || '') ?? '').trim();
   const changedBy = String(((body && body.changedBy) || (e && e.parameter && e.parameter.changedBy) || '') ?? '').trim();
   const changedByEmail = String(((body && body.changedByEmail) || (e && e.parameter && e.parameter.changedByEmail) || '') ?? '').trim();
+  const version = String(((body && body.version) || (e && e.parameter && e.parameter.version) || 'v1.0') ?? '').trim();
+  const comments = String(((body && body.comments) || (e && e.parameter && e.parameter.comments) || ('Promovido a ' + newStatus)) ?? '').trim();
 
   if (!fileId) return { status: 'error', message: 'Falta fileId' };
   if (['COMPARTIDO', 'PUBLICADO'].indexOf(newStatus) === -1) return { status: 'error', message: 'Estado invalido' };
@@ -1112,8 +1133,286 @@ function changeFileStatus_(e, body) {
       } catch(je) { /* non-fatal */ }
     }
     var now = new Date().toISOString();
-    registerFileStatus_(copiedFileId, copiedJsonId, filename, project, newStatus, changedBy, changedByEmail, originalFileId, type);
-    return { status: 'success', newStatus: newStatus, copiedFileId: copiedFileId, copiedJsonId: copiedJsonId, filename: filename, changedAt: now, changedBy: changedBy };
+    registerFileStatus_(copiedFileId, copiedJsonId, filename, project, newStatus, changedBy, changedByEmail, originalFileId, type, version, comments);
+    
+    // Also record in VersionesArchivos
+    try {
+      let doc;
+      try { doc = SpreadsheetApp.openById(SPREADSHEET_ID); } catch (err) { doc = SpreadsheetApp.getActiveSpreadsheet(); }
+      let vSheet = doc.getSheetByName('VersionesArchivos');
+      if (!vSheet) vSheet = doc.insertSheet('VersionesArchivos');
+      ensureHeaders(vSheet, FILE_VERSION_HEADERS);
+      const vId = 'ver-' + Date.now() + '-' + Math.floor(Math.random() * 9999);
+      const vRow = FILE_VERSION_HEADERS.map(function(h) {
+        if (h === 'versionId') return vId;
+        if (h === 'fecha') return now;
+        if (h === 'fileId') return copiedFileId;
+        if (h === 'jsonId') return copiedJsonId;
+        if (h === 'filename') return filename;
+        if (h === 'project') return project;
+        if (h === 'status') return newStatus;
+        if (h === 'version') return version;
+        if (h === 'comments') return comments;
+        if (h === 'createdBy') return changedBy;
+        if (h === 'createdByEmail') return changedByEmail;
+        if (h === 'originalFileId') return originalFileId;
+        if (h === 'type') return type;
+        if (h === 'isCurrent') return 'true';
+        if (h === 'backupFileId') return copiedFileId;
+        return '';
+      });
+      vSheet.appendRow(vRow);
+    } catch(vErr) { /* non-fatal */ }
+
+    return { status: 'success', newStatus: newStatus, copiedFileId: copiedFileId, copiedJsonId: copiedJsonId, filename: filename, changedAt: now, changedBy: changedBy, version: version };
+  } catch (err) {
+    return { status: 'error', message: err.toString() };
+  }
+}
+
+function createVersion_(e, body) {
+  const fileId = String(((body && body.fileId) || (e && e.parameter && e.parameter.fileId) || '') ?? '').trim();
+  const jsonId = String(((body && body.jsonId) || (e && e.parameter && e.parameter.jsonId) || '') ?? '').trim();
+  const filename = String(((body && body.filename) || (e && e.parameter && e.parameter.filename) || '') ?? '').trim();
+  const project = String(((body && body.project) || (e && e.parameter && e.parameter.project) || '') ?? '').trim();
+  const status = String(((body && body.status) || (e && e.parameter && e.parameter.status) || 'EN_PROGRESO') ?? '').trim().toUpperCase();
+  const version = String(((body && body.version) || (e && e.parameter && e.parameter.version) || 'v1.0') ?? '').trim();
+  const comments = String(((body && body.comments) || (e && e.parameter && e.parameter.comments) || '') ?? '').trim();
+  const createdBy = String(((body && body.changedBy) || (body && body.createdBy) || (e && e.parameter && e.parameter.changedBy) || '') ?? '').trim();
+  const createdByEmail = String(((body && body.changedByEmail) || (body && body.createdByEmail) || (e && e.parameter && e.parameter.changedByEmail) || '') ?? '').trim();
+  const originalFileId = String(((body && body.originalFileId) || (e && e.parameter && e.parameter.originalFileId) || fileId) ?? '').trim();
+  const type = String(((body && body.type) || (e && e.parameter && e.parameter.type) || '') ?? '').trim();
+  var folderId = String(((body && body.folderId) || (e && e.parameter && e.parameter.folderId) || DRIVE_ROOT_FOLDER_ID) ?? '').trim();
+  const driveFolderName = String(((body && body.driveFolderName) || (e && e.parameter && e.parameter.driveFolderName) || '') ?? '').trim();
+  
+  // Optional new file upload content
+  const content = String(((body && body.content) || (e && e.parameter && e.parameter.content) || '') ?? '').trim();
+  const contentType = String(((body && body.contentType) || (e && e.parameter && e.parameter.contentType) || 'application/octet-stream') ?? '').trim();
+
+  if (!fileId && !content) return { status: 'error', message: 'Falta fileId o contenido del archivo' };
+
+  try {
+    var root = DriveApp.getFolderById(folderId);
+    if (folderId === DRIVE_ROOT_FOLDER_ID || folderId === '1fn1umYzIYsxymmwbmap6YbjTB33XJrG8') {
+      var targetFolder = findProjectFolderRecursively(root, project, driveFolderName);
+      if (targetFolder) root = targetFolder;
+    }
+
+    // Destination for backup: root/.versiones/{cleanFilename}/
+    var cleanBaseName = filename.replace(/\.[^/.]+$/, "");
+    var versionesFolder;
+    var vf = root.getFoldersByName('.versiones');
+    versionesFolder = vf.hasNext() ? vf.next() : root.createFolder('.versiones');
+    
+    var fileVersFolder;
+    var fvf = versionesFolder.getFoldersByName(cleanBaseName);
+    fileVersFolder = fvf.hasNext() ? fvf.next() : versionesFolder.createFolder(cleanBaseName);
+
+    var backupFileId = '';
+    var activeFileId = fileId;
+
+    // 1. Copy the current file into the backup version folder
+    if (fileId) {
+      try {
+        var sourceFile = DriveApp.getFileById(fileId);
+        var backupName = version + '_' + filename;
+        var backupFile = sourceFile.makeCopy(backupName, fileVersFolder);
+        backupFileId = backupFile.getId();
+      } catch (be) { /* non-fatal */ }
+    }
+
+    // 2. If new file content was uploaded, create replacement in target folder
+    if (content) {
+      var destFolder = root;
+      if (status === 'COMPARTIDO' || status === 'PUBLICADO') {
+        var ef = root.getFoldersByName('.estados');
+        var estadosFolder = ef.hasNext() ? ef.next() : root.createFolder('.estados');
+        var sf = estadosFolder.getFoldersByName(status.toLowerCase());
+        destFolder = sf.hasNext() ? sf.next() : estadosFolder.createFolder(status.toLowerCase());
+      }
+      const decoded = Utilities.base64Decode(content);
+      const blob = Utilities.newBlob(decoded, contentType, filename);
+      const newActive = destFolder.createFile(blob);
+      activeFileId = newActive.getId();
+    }
+
+    // 3. Register in VersionesArchivos
+    let doc;
+    try { doc = SpreadsheetApp.openById(SPREADSHEET_ID); } catch (err) { doc = SpreadsheetApp.getActiveSpreadsheet(); }
+    let vSheet = doc.getSheetByName('VersionesArchivos');
+    if (!vSheet) vSheet = doc.insertSheet('VersionesArchivos');
+    ensureHeaders(vSheet, FILE_VERSION_HEADERS);
+
+    const versionId = 'ver-' + Date.now() + '-' + Math.floor(Math.random() * 9999);
+    const now = new Date().toISOString();
+
+    const rowData = FILE_VERSION_HEADERS.map(function(h) {
+      if (h === 'versionId') return versionId;
+      if (h === 'fecha') return now;
+      if (h === 'fileId') return activeFileId || '';
+      if (h === 'jsonId') return jsonId || '';
+      if (h === 'filename') return filename || '';
+      if (h === 'project') return project || '';
+      if (h === 'status') return status || 'EN_PROGRESO';
+      if (h === 'version') return version || 'v1.0';
+      if (h === 'comments') return comments || '';
+      if (h === 'createdBy') return createdBy || '';
+      if (h === 'createdByEmail') return createdByEmail || '';
+      if (h === 'originalFileId') return originalFileId || activeFileId || '';
+      if (h === 'type') return type || '';
+      if (h === 'isCurrent') return 'true';
+      if (h === 'backupFileId') return backupFileId || activeFileId || '';
+      return '';
+    });
+    vSheet.appendRow(rowData);
+
+    // Also register state in EstadosArchivos
+    registerFileStatus_(activeFileId, jsonId, filename, project, status, createdBy, createdByEmail, originalFileId, type, version, comments);
+
+    return {
+      status: 'success',
+      versionId: versionId,
+      version: version,
+      fileId: activeFileId,
+      backupFileId: backupFileId,
+      comments: comments,
+      createdAt: now
+    };
+  } catch (err) {
+    return { status: 'error', message: err.toString() };
+  }
+}
+
+function listVersions_(e, body) {
+  const project = String(((body && body.project) || (e && e.parameter && e.parameter.project) || '') ?? '').trim();
+  const filename = String(((body && body.filename) || (e && e.parameter && e.parameter.filename) || '') ?? '').trim();
+  const originalFileId = String(((body && body.originalFileId) || (e && e.parameter && e.parameter.originalFileId) || '') ?? '').trim();
+
+  let doc;
+  try { doc = SpreadsheetApp.openById(SPREADSHEET_ID); } catch (err) { doc = SpreadsheetApp.getActiveSpreadsheet(); }
+  const sheet = doc.getSheetByName('VersionesArchivos');
+  if (!sheet || sheet.getLastRow() <= 1) return { versions: [] };
+  ensureHeaders(sheet, FILE_VERSION_HEADERS);
+  const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0].map(function(h) { return String(h).trim(); });
+  const rows = sheet.getRange(2, 1, sheet.getLastRow() - 1, sheet.getLastColumn()).getValues();
+  const idx = {};
+  FILE_VERSION_HEADERS.forEach(function(h) { idx[h] = headers.indexOf(h); });
+
+  const versions = [];
+  for (var i = 0; i < rows.length; i++) {
+    var row = rows[i];
+    var rowProject = String(row[idx['project']] || '').trim();
+    if (project && rowProject !== project) continue;
+
+    var rowFilename = String(row[idx['filename']] || '').trim();
+    var rowOrigId = String(row[idx['originalFileId']] || '').trim();
+    var rowFileId = String(row[idx['fileId']] || '').trim();
+
+    if (filename && rowFilename !== filename && rowOrigId !== originalFileId && rowFileId !== originalFileId) {
+      continue;
+    }
+
+    var fecha = row[idx['fecha']];
+    versions.push({
+      versionId: String(row[idx['versionId']] || '').trim(),
+      fecha: (fecha instanceof Date) ? fecha.toISOString() : String(fecha || ''),
+      fileId: rowFileId,
+      jsonId: String(row[idx['jsonId']] || '').trim(),
+      filename: rowFilename,
+      project: rowProject,
+      status: String(row[idx['status']] || 'EN_PROGRESO').trim(),
+      version: String(row[idx['version']] || 'v1.0').trim(),
+      comments: String(row[idx['comments']] || '').trim(),
+      createdBy: String(row[idx['createdBy']] || '').trim(),
+      createdByEmail: String(row[idx['createdByEmail']] || '').trim(),
+      originalFileId: rowOrigId,
+      type: String(row[idx['type']] || '').trim(),
+      isCurrent: String(row[idx['isCurrent']] || '').trim() === 'true',
+      backupFileId: String(row[idx['backupFileId']] || rowFileId || '').trim()
+    });
+  }
+
+  versions.sort(function(a, b) {
+    return new Date(b.fecha) - new Date(a.fecha);
+  });
+
+  return { versions: versions };
+}
+
+function restoreVersion_(e, body) {
+  const backupFileId = String(((body && body.backupFileId) || (e && e.parameter && e.parameter.backupFileId) || '') ?? '').trim();
+  const filename = String(((body && body.filename) || (e && e.parameter && e.parameter.filename) || '') ?? '').trim();
+  const targetVersion = String(((body && body.version) || (e && e.parameter && e.parameter.version) || '') ?? '').trim();
+  const project = String(((body && body.project) || (e && e.parameter && e.parameter.project) || '') ?? '').trim();
+  const status = String(((body && body.status) || (e && e.parameter && e.parameter.status) || 'EN_PROGRESO') ?? '').trim().toUpperCase();
+  var folderId = String(((body && body.folderId) || (e && e.parameter && e.parameter.folderId) || DRIVE_ROOT_FOLDER_ID) ?? '').trim();
+  const driveFolderName = String(((body && body.driveFolderName) || (e && e.parameter && e.parameter.driveFolderName) || '') ?? '').trim();
+  const originalFileId = String(((body && body.originalFileId) || (e && e.parameter && e.parameter.originalFileId) || '') ?? '').trim();
+  const changedBy = String(((body && body.changedBy) || (e && e.parameter && e.parameter.changedBy) || '') ?? '').trim();
+  const changedByEmail = String(((body && body.changedByEmail) || (e && e.parameter && e.parameter.changedByEmail) || '') ?? '').trim();
+  const type = String(((body && body.type) || (e && e.parameter && e.parameter.type) || '') ?? '').trim();
+
+  if (!backupFileId) return { status: 'error', message: 'Falta backupFileId para restaurar' };
+
+  try {
+    var root = DriveApp.getFolderById(folderId);
+    if (folderId === DRIVE_ROOT_FOLDER_ID || folderId === '1fn1umYzIYsxymmwbmap6YbjTB33XJrG8') {
+      var targetFolder = findProjectFolderRecursively(root, project, driveFolderName);
+      if (targetFolder) root = targetFolder;
+    }
+
+    var destFolder = root;
+    if (status === 'COMPARTIDO' || status === 'PUBLICADO') {
+      var ef = root.getFoldersByName('.estados');
+      var estadosFolder = ef.hasNext() ? ef.next() : root.createFolder('.estados');
+      var sf = estadosFolder.getFoldersByName(status.toLowerCase());
+      destFolder = sf.hasNext() ? sf.next() : estadosFolder.createFolder(status.toLowerCase());
+    }
+
+    var backupFile = DriveApp.getFileById(backupFileId);
+    var restoredCopy = backupFile.makeCopy(filename, destFolder);
+    var newActiveFileId = restoredCopy.getId();
+
+    var restoredVersionLabel = targetVersion ? (targetVersion + ' (Restaurada)') : 'Restaurada';
+    var comment = 'Versión restaurada desde ' + targetVersion;
+
+    let doc;
+    try { doc = SpreadsheetApp.openById(SPREADSHEET_ID); } catch (err) { doc = SpreadsheetApp.getActiveSpreadsheet(); }
+    let vSheet = doc.getSheetByName('VersionesArchivos');
+    if (!vSheet) vSheet = doc.insertSheet('VersionesArchivos');
+    ensureHeaders(vSheet, FILE_VERSION_HEADERS);
+
+    const newVersionId = 'ver-' + Date.now() + '-' + Math.floor(Math.random() * 9999);
+    const now = new Date().toISOString();
+
+    const rowData = FILE_VERSION_HEADERS.map(function(h) {
+      if (h === 'versionId') return newVersionId;
+      if (h === 'fecha') return now;
+      if (h === 'fileId') return newActiveFileId || '';
+      if (h === 'jsonId') return '';
+      if (h === 'filename') return filename || '';
+      if (h === 'project') return project || '';
+      if (h === 'status') return status || 'EN_PROGRESO';
+      if (h === 'version') return restoredVersionLabel;
+      if (h === 'comments') return comment;
+      if (h === 'createdBy') return changedBy || '';
+      if (h === 'createdByEmail') return changedByEmail || '';
+      if (h === 'originalFileId') return originalFileId || newActiveFileId;
+      if (h === 'type') return type || '';
+      if (h === 'isCurrent') return 'true';
+      if (h === 'backupFileId') return backupFileId;
+      return '';
+    });
+    vSheet.appendRow(rowData);
+
+    registerFileStatus_(newActiveFileId, '', filename, project, status, changedBy, changedByEmail, originalFileId || newActiveFileId, type, restoredVersionLabel, comment);
+
+    return {
+      status: 'success',
+      restoredFileId: newActiveFileId,
+      version: restoredVersionLabel,
+      message: 'Versión restaurada con éxito.'
+    };
   } catch (err) {
     return { status: 'error', message: err.toString() };
   }

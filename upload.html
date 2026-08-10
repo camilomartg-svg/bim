@@ -234,10 +234,12 @@
             <thead>
               <tr class="border-b border-slate-200 dark:border-slate-800 text-slate-400 font-semibold">
                 <th class="py-3 px-4">Nombre del Archivo</th>
+                <th class="py-3 px-3 text-center w-24">Versión</th>
                 <th class="py-3 px-4">Especialidad</th>
+                <th class="py-3 px-4">Estado</th>
                 <th class="py-3 px-4">Fecha</th>
                 <th class="py-3 px-4">Responsable</th>
-                <th class="py-3 px-4 text-right">Acción</th>
+                <th class="py-3 px-4 text-right">Acciones</th>
               </tr>
             </thead>
             <tbody id="files-table-body" class="divide-y divide-slate-100 dark:divide-slate-800/50">
@@ -254,6 +256,125 @@
         <p id="project-footer">© 2026 nora CDE - Todos los derechos reservados.</p>
       </div>
     </footer>
+
+    <!-- MODAL: Guardar Nueva Versión -->
+    <div id="modal-new-version" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-sm hidden transition-opacity duration-200">
+      <div class="w-full max-w-lg glass rounded-2xl p-6 shadow-2xl border border-slate-200 dark:border-slate-800 bg-white/95 dark:bg-slate-900/95 transform transition-all">
+        <div class="flex items-center justify-between pb-4 mb-4 border-b border-slate-200 dark:border-slate-800">
+          <div class="flex items-center gap-2.5">
+            <span class="material-symbols-outlined text-indigo-600 dark:text-indigo-400 text-2xl">history_edu</span>
+            <div>
+              <h3 class="text-base font-bold text-slate-900 dark:text-white">Guardar Nueva Versión</h3>
+              <p class="text-xs text-slate-500 dark:text-slate-400">Versionamiento manual con respaldo automático en <code class="font-mono text-[10px] bg-slate-100 dark:bg-slate-800 px-1 py-0.5 rounded">.versiones/</code>.</p>
+            </div>
+          </div>
+          <button id="btn-close-ver-modal" class="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors p-1 rounded-lg">
+            <span class="material-symbols-outlined text-lg">close</span>
+          </button>
+        </div>
+
+        <div class="space-y-4">
+          <!-- File info summary card -->
+          <div class="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700/60 flex items-center justify-between">
+            <div class="flex items-center gap-3 truncate max-w-[70%]">
+              <span id="ver-modal-file-icon" class="material-symbols-outlined text-2xl text-blue-500">description</span>
+              <div class="truncate">
+                <p id="ver-modal-filename" class="text-xs font-bold text-slate-800 dark:text-slate-200 truncate">archivo.ext</p>
+                <p id="ver-modal-specialty" class="text-[10px] text-slate-500 dark:text-slate-400">Especialidad: General</p>
+              </div>
+            </div>
+            <div class="text-right shrink-0">
+              <span id="ver-modal-current-state" class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-amber-100 dark:bg-amber-950 text-amber-700 dark:text-amber-300">En Progreso</span>
+              <p id="ver-modal-current-ver" class="text-[10px] text-slate-400 mt-0.5 font-mono">Actual: v1.0</p>
+            </div>
+          </div>
+
+          <!-- Version identifier -->
+          <div>
+            <label for="ver-input-tag" class="block text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300 mb-1.5">
+              Identificador de Versión <span class="text-red-500">*</span>
+            </label>
+            <div class="relative">
+              <span class="material-symbols-outlined absolute left-3 top-2 text-slate-400 text-base">tag</span>
+              <input type="text" id="ver-input-tag" placeholder="ej. v1.1, v2.0" class="w-full pl-9 pr-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-xs font-semibold text-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500" />
+            </div>
+            <p class="text-[10px] text-slate-400 mt-1">Escribe la nueva versión o mantén la sugerida automáticamente.</p>
+          </div>
+
+          <!-- Version comments -->
+          <div>
+            <label for="ver-input-comments" class="block text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300 mb-1.5">
+              Comentarios y Cambios de la Versión <span class="text-red-500">*</span>
+            </label>
+            <textarea id="ver-input-comments" rows="3" placeholder="Describe los ajustes realizados en esta versión (ej: Ajuste de ejes estructurales y cotas de nivel)..." class="w-full p-3 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-xs text-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 resize-none"></textarea>
+          </div>
+
+          <!-- Optional updated file upload -->
+          <div>
+            <label class="block text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300 mb-1.5">
+              Cargar Archivo Actualizado <span class="text-[10px] font-normal text-slate-400">(Opcional)</span>
+            </label>
+            <input type="file" id="ver-input-file" class="w-full text-xs text-slate-500 dark:text-slate-400 file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-slate-100 file:text-slate-700 hover:file:bg-slate-200 dark:file:bg-slate-800 dark:file:text-slate-300 cursor-pointer" />
+            <p class="text-[10px] text-slate-400 mt-1">Si seleccionas un archivo nuevo, actualizará el archivo activo y respaldará el anterior en la carpeta de versiones.</p>
+          </div>
+        </div>
+
+        <div class="mt-6 flex justify-end gap-3 pt-4 border-t border-slate-200 dark:border-slate-800">
+          <button id="btn-cancel-ver-modal" class="px-4 py-2 rounded-lg border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-xs font-bold text-slate-700 dark:text-slate-300 transition-colors">
+            Cancelar
+          </button>
+          <button id="btn-submit-ver-modal" class="inline-flex items-center gap-1.5 px-5 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs shadow-md transition-all">
+            <span class="material-symbols-outlined text-base">save</span> Guardar Versión
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- MODAL: Historial de Versiones -->
+    <div id="modal-version-history" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-sm hidden transition-opacity duration-200">
+      <div class="w-full max-w-3xl glass rounded-2xl p-6 shadow-2xl border border-slate-200 dark:border-slate-800 bg-white/95 dark:bg-slate-900/95 max-h-[90vh] flex flex-col transform transition-all">
+        <div class="flex items-center justify-between pb-4 mb-4 border-b border-slate-200 dark:border-slate-800">
+          <div class="flex items-center gap-2.5">
+            <span class="material-symbols-outlined text-blue-600 dark:text-blue-400 text-2xl">history</span>
+            <div>
+              <h3 id="history-modal-title" class="text-base font-bold text-slate-900 dark:text-white">Historial de Versiones</h3>
+              <p id="history-modal-subtitle" class="text-xs text-slate-500 dark:text-slate-400">Consulta de versiones anteriores, descargas y restauración.</p>
+            </div>
+          </div>
+          <button id="btn-close-history-modal" class="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors p-1 rounded-lg">
+            <span class="material-symbols-outlined text-lg">close</span>
+          </button>
+        </div>
+
+        <!-- History Content Area -->
+        <div id="history-modal-content" class="flex-1 overflow-y-auto min-h-[240px] pr-1">
+          <!-- Loading state -->
+          <div id="history-loading" class="flex flex-col items-center justify-center py-12">
+            <div class="w-8 h-8 border-3 border-slate-300 dark:border-slate-700 border-t-blue-600 rounded-full animate-spin"></div>
+            <p class="text-xs text-slate-500 dark:text-slate-400 mt-3">Cargando historial de versiones...</p>
+          </div>
+
+          <!-- Empty state -->
+          <div id="history-empty" class="hidden flex-col items-center justify-center py-12 text-center">
+            <span class="material-symbols-outlined text-4xl text-slate-300 dark:text-slate-600 mb-2">manage_history</span>
+            <p class="text-xs font-semibold text-slate-600 dark:text-slate-300">No hay versiones previas registradas</p>
+            <p class="text-[11px] text-slate-400 max-w-sm mt-1">Este archivo se encuentra en su versión inicial (v1.0). Puedes guardar una nueva versión usando el botón "+ Versión".</p>
+          </div>
+
+          <!-- Version list container -->
+          <div id="history-list" class="space-y-3 hidden">
+            <!-- Dynamically injected version entries -->
+          </div>
+        </div>
+
+        <div class="mt-4 pt-4 border-t border-slate-200 dark:border-slate-800 flex justify-between items-center text-xs">
+          <span class="text-slate-400 text-[11px]">Las versiones anteriores se respaldan en la subcarpeta <code class="font-mono text-[10px] bg-slate-100 dark:bg-slate-800 px-1 py-0.5 rounded">.versiones/</code> en Drive.</span>
+          <button id="btn-done-history-modal" class="px-4 py-2 rounded-lg bg-slate-900 dark:bg-white text-white dark:text-slate-900 font-bold hover:opacity-90 transition-opacity">
+            Cerrar
+          </button>
+        </div>
+      </div>
+    </div>
   </div>
 
   <script>
@@ -331,16 +452,40 @@
       const filesTable = document.getElementById('files-table');
       const filesTableBody = document.getElementById('files-table-body');
 
+      // Version Modals Selectors
+      const modalNewVersion = document.getElementById('modal-new-version');
+      const btnCloseVerModal = document.getElementById('btn-close-ver-modal');
+      const btnCancelVerModal = document.getElementById('btn-cancel-ver-modal');
+      const btnSubmitVerModal = document.getElementById('btn-submit-ver-modal');
+      const verModalFileIcon = document.getElementById('ver-modal-file-icon');
+      const verModalFilename = document.getElementById('ver-modal-filename');
+      const verModalSpecialty = document.getElementById('ver-modal-specialty');
+      const verModalCurrentState = document.getElementById('ver-modal-current-state');
+      const verModalCurrentVer = document.getElementById('ver-modal-current-ver');
+      const verInputTag = document.getElementById('ver-input-tag');
+      const verInputComments = document.getElementById('ver-input-comments');
+      const verInputFile = document.getElementById('ver-input-file');
+
+      const modalVersionHistory = document.getElementById('modal-version-history');
+      const btnCloseHistoryModal = document.getElementById('btn-close-history-modal');
+      const btnDoneHistoryModal = document.getElementById('btn-done-history-modal');
+      const historyModalTitle = document.getElementById('history-modal-title');
+      const historyModalSubtitle = document.getElementById('history-modal-subtitle');
+      const historyLoading = document.getElementById('history-loading');
+      const historyEmpty = document.getElementById('history-empty');
+      const historyList = document.getElementById('history-list');
+
       let selectedFiles = []; // Array of { file: File, id: number, status: string, progress: number }
       let fileIdCounter = 0;
       let isUploading = false;
+      let targetVersionFile = null; // Currently selected file for new version
 
       let config = DEFAULT_PORTAL_CONFIG;
       let projects = [];
       let activeProject = null;
       let currentStatusTab = 'EN_PROGRESO'; // 'EN_PROGRESO', 'COMPARTIDO', 'PUBLICADO'
       let currentStatusSubTab = 'models';   // 'models', 'pdfs', 'dwgs'
-      let allProjectFiles = [];             // Combined & resolved list of all files with status
+      let allProjectFiles = [];             // Combined & resolved list of all files with status and version
       const STATUS_ORDER = { 'EN_PROGRESO': 0, 'COMPARTIDO': 1, 'PUBLICADO': 2 };
       const SUBTYPE_MAP = { models: 'model', pdfs: 'pdf', dwgs: 'dwg' };
 
@@ -388,7 +533,6 @@
       // Routing parameters
       const query = new URLSearchParams(window.location.search);
       
-      // Try to read companyId from URL or referrer URL or sessionStorage
       let referrerCompanyId = '';
       try {
         if (document.referrer) {
@@ -478,7 +622,6 @@
           matchedProject = projects.find(p => p.slug === requestedProject || slugify(p.name) === requestedProject);
         }
 
-        // Initialize activeProject using URL parameters as the primary source of truth
         if (matchedProject) {
           activeProject = {
             name: urlDriveFolderName || matchedProject.name,
@@ -491,7 +634,6 @@
             }
           };
         } else {
-          // If no matching project was found, but we have URL parameters:
           if (urlDriveFolderId || urlDriveFolderName) {
             activeProject = {
               name: urlDriveFolderName || 'Proyecto',
@@ -504,7 +646,6 @@
               }
             };
           } else {
-            // Fallback to first project in config
             const firstProj = projects[0] || DEFAULT_PROJECT;
             activeProject = {
               name: firstProj.name,
@@ -540,7 +681,6 @@
           }
         });
 
-        // Show selector only if multiple projects exist in config
         if (projects.length > 1) {
           projectSelectContainer.classList.remove('hidden');
         }
@@ -619,7 +759,6 @@
             continue;
           }
 
-          // Check if file is already in queue
           const exists = selectedFiles.some(f => f.file.name === file.name && f.file.size === file.size);
           if (exists) continue;
 
@@ -716,7 +855,6 @@
         }).join('');
       }
 
-      // Expose globally for inline onclick
       window.removeQueueItem = (id) => {
         if (isUploading) return;
         selectedFiles = selectedFiles.filter(f => f.id !== id);
@@ -724,7 +862,6 @@
         addLog(`Archivo removido de la cola.`);
       };
 
-      // File helper: convert binary file to clean base64 using ArrayBuffer (more reliable than readAsDataURL)
       const fileToBase64 = (file) => new Promise((resolve, reject) => {
         const reader = new FileReader();
         reader.readAsArrayBuffer(file);
@@ -732,7 +869,6 @@
           try {
             const bytes = new Uint8Array(reader.result);
             let binary = '';
-            // Process in chunks to avoid call stack overflow on large files
             const chunkSize = 8192;
             for (let i = 0; i < bytes.length; i += chunkSize) {
               const chunk = bytes.subarray(i, Math.min(i + chunkSize, bytes.length));
@@ -746,8 +882,6 @@
         reader.onerror = error => reject(error);
       });
 
-
-      // Individual Drive Upload Action
       async function uploadToDrive(filename, base64Content, contentType, fileObj) {
         const ds = activeProject.dataSources || {};
         const scriptUrl = ds.driveScriptUrl || DEFAULT_DRIVE_SCRIPT_URL;
@@ -793,7 +927,6 @@
         return data;
       }
 
-      // Update progress of a specific file in DOM and memory
       function updateFileUI(fileObj, progress, status) {
         fileObj.progress = progress;
         fileObj.status = status;
@@ -808,7 +941,6 @@
           pct.textContent = `${progress}%`;
           lbl.textContent = status;
 
-          // Apply specific status styles
           lbl.className = 'file-status text-[10px]';
           if (status === 'Subiendo...' || status === 'Convirtiendo IFC...') {
             lbl.classList.add('text-blue-600', 'font-semibold', 'animate-pulse');
@@ -822,7 +954,6 @@
         }
       }
 
-      // Upload Queue handler
       uploadBtn.addEventListener('click', async () => {
         if (selectedFiles.length === 0 || !activeProject || isUploading) return;
 
@@ -832,7 +963,6 @@
         logCard.classList.remove('hidden');
         globalStatusContainer.classList.remove('hidden');
 
-        // Refresh select remove buttons in DOM
         renderFilesList();
 
         const totalFiles = selectedFiles.length;
@@ -840,11 +970,8 @@
 
         for (let i = 0; i < totalFiles; i++) {
           const fileObj = selectedFiles[i];
-          
-          // Skip if already uploaded in previous attempt
           if (fileObj.status === 'Completado') continue;
 
-          // Global progress bar calculation
           const globalProgressStart = Math.round((i / totalFiles) * 100);
           globalStatusText.textContent = `Procesando archivo ${i + 1} de ${totalFiles}: ${fileObj.file.name}`;
           globalStatusPercentage.textContent = `${globalProgressStart}%`;
@@ -889,7 +1016,6 @@
               updateFileUI(fileObj, 100, 'Completado');
               addLog(`[${fileObj.file.name}] ¡Subida e IFC procesado con éxito!`);
             } else {
-              // Direct upload (FRAG, JSON, PDF, DWG, DXF)
               updateFileUI(fileObj, 25, 'Leyendo archivo...');
               const base64Content = await fileToBase64(fileObj.file);
               
@@ -914,7 +1040,6 @@
           }
         }
 
-        // Final completion updates
         globalStatusText.textContent = 'Proceso de subida completado.';
         globalStatusPercentage.textContent = '100%';
         globalProgressBar.style.width = '100%';
@@ -924,11 +1049,36 @@
         uploadBtn.textContent = 'Completado';
         clearQueueBtn.classList.remove('hidden');
         
-        // Reload project files to see new files on list!
         loadProjectFiles();
       });
 
-      // Load Drive Project Files List with Workflow Status Resolution
+      // Helper: clean specialty folder string
+      const cleanSpecialty = (folder) => {
+        if (!folder) return 'General';
+        const str = String(folder).replace(/^\.?estados\/?/i, '').replace(/^\.?versiones\/?/i, '').trim();
+        if (!str || str.startsWith('.')) return 'General';
+        const parts = str.split('/').filter(Boolean);
+        if (parts.length === 0) return 'General';
+        const last = parts[parts.length - 1];
+        if (last.toLowerCase() === 'compartido' || last.toLowerCase() === 'publicado' || last.toLowerCase() === 'en_progreso') {
+          return parts.length > 1 ? parts[0] : 'General';
+        }
+        return last.charAt(0).toUpperCase() + last.slice(1);
+      };
+
+      // Helper: auto calculate next version
+      const calculateNextVersion = (verStr) => {
+        if (!verStr) return 'v1.1';
+        const match = verStr.match(/^v?(\d+)\.(\d+)$/i);
+        if (match) {
+          const major = parseInt(match[1], 10);
+          const minor = parseInt(match[2], 10);
+          return `v${major}.${minor + 1}`;
+        }
+        return 'v1.1';
+      };
+
+      // Load Drive Project Files List with Workflow Status and Version Resolution
       async function loadProjectFiles() {
         if (!activeProject) return;
 
@@ -956,7 +1106,7 @@
           });
           const listData = listRes.ok ? await listRes.json() : { models: [], dwgs: [], pdfs: [] };
 
-          // 2. Fetch Status History from Sheets
+          // 2. Fetch Status & Version History from Sheets
           let statusEntries = [];
           try {
             const statusRes = await fetch(scriptUrl, {
@@ -976,7 +1126,7 @@
             console.warn('Status history fetch error:', se);
           }
 
-          // Build a map of latest status for each file by originalFileId or filename
+          // Build a map of latest status & version for each file by originalFileId or filename
           const statusMap = {};
           statusEntries.forEach(entry => {
             const key = entry.originalFileId || entry.filename;
@@ -988,7 +1138,6 @@
           });
 
           // Consolidate Drive files into allProjectFiles.
-          // ALL files default to EN_PROGRESO if not yet promoted!
           const normalized = [];
 
           (listData.models || []).forEach(m => {
@@ -1003,6 +1152,8 @@
               folder: m.folder || 'General',
               lastUpdated: match?.changedAt || m.lastUpdated,
               status: match?.status || 'EN_PROGRESO',
+              version: match?.version || 'v1.0',
+              comments: match?.comments || '',
               changedBy: match?.changedBy || (userAccount ? userAccount.name : 'CDE NORA'),
               changedByEmail: match?.changedByEmail || (userAccount ? userAccount.email : '')
             });
@@ -1020,6 +1171,8 @@
               folder: p.folder || 'General',
               lastUpdated: match?.changedAt || p.lastUpdated,
               status: match?.status || 'EN_PROGRESO',
+              version: match?.version || 'v1.0',
+              comments: match?.comments || '',
               changedBy: match?.changedBy || (userAccount ? userAccount.name : 'CDE NORA'),
               changedByEmail: match?.changedByEmail || (userAccount ? userAccount.email : '')
             });
@@ -1037,6 +1190,8 @@
               folder: d.folder || 'General',
               lastUpdated: match?.changedAt || d.lastUpdated,
               status: match?.status || 'EN_PROGRESO',
+              version: match?.version || 'v1.0',
+              comments: match?.comments || '',
               changedBy: match?.changedBy || (userAccount ? userAccount.name : 'CDE NORA'),
               changedByEmail: match?.changedByEmail || (userAccount ? userAccount.email : '')
             });
@@ -1057,12 +1212,10 @@
 
       function updateTabCounts() {
         if (!scountProgreso) return;
-        // Main state tabs counts
         scountProgreso.textContent = allProjectFiles.filter(f => f.status === 'EN_PROGRESO').length;
         scountCompartido.textContent = allProjectFiles.filter(f => f.status === 'COMPARTIDO').length;
         scountPublicado.textContent = allProjectFiles.filter(f => f.status === 'PUBLICADO').length;
 
-        // Sub-type counts for the currently active state tab
         const currentInState = allProjectFiles.filter(f => f.status === currentStatusTab);
         scountSubModels.textContent = currentInState.filter(f => f.type === 'model').length;
         scountSubPdfs.textContent = currentInState.filter(f => f.type === 'pdf').length;
@@ -1103,7 +1256,7 @@
         };
 
         filesTableBody.innerHTML = listToRender.map(f => {
-          const specialty = f.folder || 'General';
+          const specialty = cleanSpecialty(f.folder);
           const ext = f.name.split('.').pop().toLowerCase();
           
           let icon = 'description';
@@ -1125,16 +1278,43 @@
           const fileDataStr = encodeURIComponent(JSON.stringify(f));
           const isModel = f.type === 'model';
           const deleteTitle = isModel ? 'Eliminar modelo (.frag + .json)' : 'Eliminar archivo';
+          const currentVer = f.version || 'v1.0';
 
+          // Status Badge Pill
+          let statusBadge = '';
+          if (f.status === 'EN_PROGRESO') {
+            statusBadge = `
+              <span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-amber-50 dark:bg-amber-950/50 text-amber-700 dark:text-amber-300 font-semibold text-[11px] border border-amber-200 dark:border-amber-800/40">
+                <span class="w-1.5 h-1.5 rounded-full bg-amber-500"></span> En Progreso
+              </span>`;
+          } else if (f.status === 'COMPARTIDO') {
+            statusBadge = `
+              <span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-blue-50 dark:bg-blue-950/50 text-blue-700 dark:text-blue-300 font-semibold text-[11px] border border-blue-200 dark:border-blue-800/40">
+                <span class="w-1.5 h-1.5 rounded-full bg-blue-500"></span> Compartido
+              </span>`;
+          } else {
+            statusBadge = `
+              <span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-green-50 dark:bg-green-950/50 text-green-700 dark:text-green-300 font-semibold text-[11px] border border-green-200 dark:border-green-800/40">
+                <span class="w-1.5 h-1.5 rounded-full bg-green-500"></span> Publicado
+              </span>`;
+          }
+
+          // Action buttons depending on state
           let actionButtons = '';
           if (currentStatusTab === 'EN_PROGRESO') {
             actionButtons = `
-              <div class="flex items-center justify-end gap-1.5">
-                <button onclick="window.promoteFile(this, '${fileDataStr}', 'COMPARTIDO')" class="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 font-semibold text-[10px] uppercase tracking-wider hover:bg-blue-100 dark:hover:bg-blue-900/40 transition-colors" title="Pasar a Compartido">
-                  <span class="material-symbols-outlined text-[13px]">share</span> Compartir
+              <div class="flex items-center justify-end gap-1.5 flex-wrap sm:flex-nowrap">
+                <button onclick="window.promoteFile(this, '${fileDataStr}', 'COMPARTIDO')" class="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-bold text-[10px] uppercase tracking-wider shadow-sm transition-all whitespace-nowrap" title="Pasar a Compartido">
+                  <span class="material-symbols-outlined text-[13px]">share</span> COMPARTIDO
                 </button>
-                <button onclick="window.promoteFile(this, '${fileDataStr}', 'PUBLICADO')" class="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-green-50 dark:bg-green-950/40 text-green-700 dark:text-green-300 font-semibold text-[10px] uppercase tracking-wider hover:bg-green-100 dark:hover:bg-green-900/40 transition-colors" title="Pasar a Publicado">
-                  <span class="material-symbols-outlined text-[13px]">publish</span> Publicar
+                <button onclick="window.promoteFile(this, '${fileDataStr}', 'PUBLICADO')" class="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-green-600 hover:bg-green-700 text-white font-bold text-[10px] uppercase tracking-wider shadow-sm transition-all whitespace-nowrap" title="Pasar a Publicado">
+                  <span class="material-symbols-outlined text-[13px]">publish</span> PUBLICADO
+                </button>
+                <button onclick="window.openNewVersionModal('${fileDataStr}')" class="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 font-semibold text-[10px] uppercase tracking-wider hover:bg-indigo-100 dark:hover:bg-indigo-900/40 transition-colors whitespace-nowrap" title="Guardar Nueva Versión">
+                  <span class="material-symbols-outlined text-[13px]">history_edu</span> + Versión
+                </button>
+                <button onclick="window.openVersionHistoryModal('${fileDataStr}')" class="inline-flex items-center justify-center p-1.5 rounded-lg text-slate-500 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950/30 transition-colors" title="Historial de Versiones">
+                  <span class="material-symbols-outlined text-[16px]">history</span>
                 </button>
                 <button onclick="window.deleteProjectFile(this, '${fileDataStr}')" class="inline-flex items-center justify-center p-1.5 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors" title="${deleteTitle}">
                   <span class="material-symbols-outlined text-[16px]">delete</span>
@@ -1142,9 +1322,15 @@
               </div>`;
           } else if (currentStatusTab === 'COMPARTIDO') {
             actionButtons = `
-              <div class="flex items-center justify-end gap-1.5">
-                <button onclick="window.promoteFile(this, '${fileDataStr}', 'PUBLICADO')" class="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-green-50 dark:bg-green-950/40 text-green-700 dark:text-green-300 font-semibold text-[10px] uppercase tracking-wider hover:bg-green-100 dark:hover:bg-green-900/40 transition-colors" title="Pasar a Publicado">
-                  <span class="material-symbols-outlined text-[13px]">publish</span> Publicar
+              <div class="flex items-center justify-end gap-1.5 flex-wrap sm:flex-nowrap">
+                <button onclick="window.promoteFile(this, '${fileDataStr}', 'PUBLICADO')" class="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-green-600 hover:bg-green-700 text-white font-bold text-[10px] uppercase tracking-wider shadow-sm transition-all whitespace-nowrap" title="Pasar a Publicado">
+                  <span class="material-symbols-outlined text-[13px]">publish</span> PUBLICADO
+                </button>
+                <button onclick="window.openNewVersionModal('${fileDataStr}')" class="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 font-semibold text-[10px] uppercase tracking-wider hover:bg-indigo-100 dark:hover:bg-indigo-900/40 transition-colors whitespace-nowrap" title="Guardar Nueva Versión">
+                  <span class="material-symbols-outlined text-[13px]">history_edu</span> + Versión
+                </button>
+                <button onclick="window.openVersionHistoryModal('${fileDataStr}')" class="inline-flex items-center justify-center p-1.5 rounded-lg text-slate-500 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950/30 transition-colors" title="Historial de Versiones">
+                  <span class="material-symbols-outlined text-[16px]">history</span>
                 </button>
                 <button onclick="window.deleteProjectFile(this, '${fileDataStr}')" class="inline-flex items-center justify-center p-1.5 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors" title="${deleteTitle}">
                   <span class="material-symbols-outlined text-[16px]">delete</span>
@@ -1152,10 +1338,16 @@
               </div>`;
           } else {
             actionButtons = `
-              <div class="flex items-center justify-end gap-2">
-                <span class="inline-flex items-center gap-1 text-green-600 dark:text-green-400 font-semibold text-[10px] uppercase tracking-wider">
-                  <span class="material-symbols-outlined text-[14px]">verified</span> Publicado
+              <div class="flex items-center justify-end gap-1.5 flex-wrap sm:flex-nowrap">
+                <span class="inline-flex items-center gap-1 text-green-600 dark:text-green-400 font-bold text-[10px] uppercase tracking-wider mr-1">
+                  <span class="material-symbols-outlined text-[14px]">verified</span> PUBLICADO
                 </span>
+                <button onclick="window.openNewVersionModal('${fileDataStr}')" class="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 font-semibold text-[10px] uppercase tracking-wider hover:bg-indigo-100 dark:hover:bg-indigo-900/40 transition-colors whitespace-nowrap" title="Guardar Nueva Versión">
+                  <span class="material-symbols-outlined text-[13px]">history_edu</span> + Versión
+                </button>
+                <button onclick="window.openVersionHistoryModal('${fileDataStr}')" class="inline-flex items-center justify-center p-1.5 rounded-lg text-slate-500 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950/30 transition-colors" title="Historial de Versiones">
+                  <span class="material-symbols-outlined text-[16px]">history</span>
+                </button>
                 <button onclick="window.deleteProjectFile(this, '${fileDataStr}')" class="inline-flex items-center justify-center p-1.5 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors" title="${deleteTitle}">
                   <span class="material-symbols-outlined text-[16px]">delete</span>
                 </button>
@@ -1167,11 +1359,17 @@
               <td class="py-3 px-4 font-medium text-slate-800 dark:text-slate-200">
                 <div class="flex items-center gap-2">
                   <span class="material-symbols-outlined text-base ${iconClass} shrink-0">${icon}</span>
-                  <span class="truncate max-w-[260px]" title="${f.name}">${f.name}</span>
+                  <span class="truncate max-w-[240px]" title="${f.name}">${f.name}</span>
                   ${isModel && f.jsonId ? '<span class="text-[9px] px-1.5 py-0.5 rounded bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 font-mono font-medium shrink-0">+json</span>' : ''}
                 </div>
               </td>
-              <td class="py-3 px-4 text-slate-500 dark:text-slate-400 capitalize">${specialty.toLowerCase()}</td>
+              <td class="py-3 px-3 text-center">
+                <button onclick="window.openVersionHistoryModal('${fileDataStr}')" class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-slate-100 hover:bg-indigo-50 text-slate-700 hover:text-indigo-700 dark:bg-slate-800 dark:hover:bg-indigo-950/60 dark:text-slate-300 dark:hover:text-indigo-300 font-mono text-[10px] font-bold transition-colors" title="Ver historial de versiones">
+                  <span class="material-symbols-outlined text-[12px] text-indigo-500">history</span> ${currentVer}
+                </button>
+              </td>
+              <td class="py-3 px-4 text-slate-600 dark:text-slate-300 font-medium">${specialty}</td>
+              <td class="py-3 px-4">${statusBadge}</td>
               <td class="py-3 px-4 text-slate-500 dark:text-slate-400 whitespace-nowrap">${formatDate(f.lastUpdated)}</td>
               <td class="py-3 px-4">
                 <div class="flex flex-col">
@@ -1184,6 +1382,299 @@
           `;
         }).join('');
       }
+
+      // ==========================================
+      // VERSION MANAGEMENT MODALS & HANDLERS
+      // ==========================================
+      window.openNewVersionModal = (encodedData) => {
+        let f;
+        try { f = JSON.parse(decodeURIComponent(encodedData)); } catch(e) { return; }
+        if (!f) return;
+        targetVersionFile = f;
+
+        const specialty = cleanSpecialty(f.folder);
+        const currentVer = f.version || 'v1.0';
+        const nextVer = calculateNextVersion(currentVer);
+
+        verModalFilename.textContent = f.name;
+        verModalSpecialty.textContent = `Especialidad: ${specialty}`;
+        verModalCurrentVer.textContent = `Actual: ${currentVer}`;
+        verModalCurrentState.textContent = f.status === 'EN_PROGRESO' ? 'En Progreso' : (f.status === 'COMPARTIDO' ? 'Compartido' : 'Publicado');
+
+        const ext = f.name.split('.').pop().toLowerCase();
+        let icon = 'description';
+        let iconClass = 'text-blue-500';
+        if (ext === 'pdf') { icon = 'picture_as_pdf'; iconClass = 'text-red-500'; }
+        else if (ext === 'dwg' || ext === 'dxf') { icon = 'architecture'; iconClass = 'text-amber-500'; }
+        else if (ext === 'frag') { icon = 'view_in_ar'; iconClass = 'text-indigo-500'; }
+        else if (ext === 'json') { icon = 'data_object'; iconClass = 'text-emerald-500'; }
+        verModalFileIcon.textContent = icon;
+        verModalFileIcon.className = `material-symbols-outlined text-2xl ${iconClass}`;
+
+        verInputTag.value = nextVer;
+        verInputComments.value = '';
+        verInputFile.value = '';
+
+        modalNewVersion.classList.remove('hidden');
+      };
+
+      const closeNewVersionModal = () => {
+        modalNewVersion.classList.add('hidden');
+        targetVersionFile = null;
+      };
+      btnCloseVerModal.addEventListener('click', closeNewVersionModal);
+      btnCancelVerModal.addEventListener('click', closeNewVersionModal);
+
+      btnSubmitVerModal.addEventListener('click', async () => {
+        if (!targetVersionFile || !activeProject) return;
+        const versionTag = verInputTag.value.trim();
+        const comments = verInputComments.value.trim();
+
+        if (!versionTag) {
+          alert('Por favor especifica un identificador de versión (ej. v1.1)');
+          verInputTag.focus();
+          return;
+        }
+
+        if (!comments) {
+          alert('Por favor describe los comentarios o cambios de esta versión.');
+          verInputComments.focus();
+          return;
+        }
+
+        const origBtnHtml = btnSubmitVerModal.innerHTML;
+        btnSubmitVerModal.disabled = true;
+        btnSubmitVerModal.innerHTML = `<span class="inline-block w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-1"></span> Guardando...`;
+
+        try {
+          const ds = activeProject.dataSources || {};
+          const scriptUrl = ds.driveScriptUrl || DEFAULT_DRIVE_SCRIPT_URL;
+
+          let base64Content = '';
+          let contentType = 'application/octet-stream';
+          if (verInputFile.files && verInputFile.files.length > 0) {
+            const uploadedFile = verInputFile.files[0];
+            base64Content = await fileToBase64(uploadedFile);
+            const ext = uploadedFile.name.split('.').pop().toLowerCase();
+            if (ext === 'pdf') contentType = 'application/pdf';
+            else if (ext === 'dwg') contentType = 'image/vnd.dwg';
+            else if (ext === 'json') contentType = 'application/json';
+          }
+
+          const payload = {
+            action: 'createVersion',
+            fileId: targetVersionFile.fileId || targetVersionFile.originalFileId,
+            jsonId: targetVersionFile.jsonId || '',
+            filename: targetVersionFile.name,
+            project: activeProject.slug || slugify(activeProject.name),
+            status: targetVersionFile.status || 'EN_PROGRESO',
+            version: versionTag,
+            comments: comments,
+            changedBy: userAccount ? (userAccount.name || '') : '',
+            changedByEmail: userAccount ? (userAccount.email || '') : '',
+            originalFileId: targetVersionFile.originalFileId || targetVersionFile.fileId,
+            type: targetVersionFile.type || '',
+            folderId: ds.driveFolderId || '',
+            driveFolderName: ds.driveFolderName || activeProject.name,
+            content: base64Content,
+            contentType: contentType
+          };
+
+          const res = await fetch(scriptUrl, {
+            method: 'POST',
+            mode: 'cors',
+            headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+            body: JSON.stringify(payload)
+          });
+
+          if (!res.ok) throw new Error(`Error en el servidor: ${res.statusText}`);
+          const data = await res.json();
+          if (data.status === 'error') throw new Error(data.message || 'Error al guardar la versión');
+
+          addLog(`[VERSIÓN] ${targetVersionFile.name} actualizada a ${versionTag} con respaldo en .versiones/`);
+          closeNewVersionModal();
+          await loadProjectFiles();
+        } catch(err) {
+          console.error(err);
+          alert(`Error guardando versión: ${err.message}`);
+        } finally {
+          btnSubmitVerModal.disabled = false;
+          btnSubmitVerModal.innerHTML = origBtnHtml;
+        }
+      });
+
+      // ==========================================
+      // VERSION HISTORY MODAL & RESTORE
+      // ==========================================
+      window.openVersionHistoryModal = async (encodedData) => {
+        let f;
+        try { f = JSON.parse(decodeURIComponent(encodedData)); } catch(e) { return; }
+        if (!f || !activeProject) return;
+
+        historyModalTitle.textContent = `Historial: ${f.name}`;
+        historyModalSubtitle.textContent = `Especialidad: ${cleanSpecialty(f.folder)} | Estado actual: ${f.status}`;
+        modalVersionHistory.classList.remove('hidden');
+
+        historyLoading.classList.remove('hidden');
+        historyEmpty.classList.add('hidden');
+        historyList.classList.add('hidden');
+        historyList.innerHTML = '';
+
+        try {
+          const ds = activeProject.dataSources || {};
+          const scriptUrl = ds.driveScriptUrl || DEFAULT_DRIVE_SCRIPT_URL;
+
+          const res = await fetch(scriptUrl, {
+            method: 'POST',
+            mode: 'cors',
+            headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+            body: JSON.stringify({
+              action: 'listVersions',
+              project: activeProject.slug || slugify(activeProject.name),
+              filename: f.name,
+              originalFileId: f.originalFileId || f.fileId
+            })
+          });
+
+          const data = res.ok ? await res.json() : { versions: [] };
+          let versions = Array.isArray(data.versions) ? data.versions : [];
+
+          historyLoading.classList.add('hidden');
+
+          if (versions.length === 0) {
+            historyEmpty.classList.remove('hidden');
+            return;
+          }
+
+          historyList.classList.remove('hidden');
+
+          const formatDate = (isoString) => {
+            if (!isoString) return '--';
+            const d = new Date(isoString);
+            return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+          };
+
+          historyList.innerHTML = versions.map((ver, idx) => {
+            const isLatest = idx === 0;
+            const stateLabels = { EN_PROGRESO: 'En Progreso', COMPARTIDO: 'Compartido', PUBLICADO: 'Publicado' };
+            const stateLabel = stateLabels[ver.status] || ver.status;
+
+            let stateBadgeClass = 'bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300';
+            if (ver.status === 'COMPARTIDO') stateBadgeClass = 'bg-blue-100 text-blue-800 dark:bg-blue-950/60 dark:text-blue-300';
+            else if (ver.status === 'PUBLICADO') stateBadgeClass = 'bg-green-100 text-green-800 dark:bg-green-950/60 dark:text-green-300';
+
+            const verJsonStr = encodeURIComponent(JSON.stringify({
+              versionId: ver.versionId,
+              backupFileId: ver.backupFileId || ver.fileId,
+              filename: ver.filename,
+              version: ver.version,
+              status: f.status || ver.status,
+              originalFileId: f.originalFileId || f.fileId,
+              type: f.type || ''
+            }));
+
+            const downloadUrl = `https://drive.google.com/uc?export=download&id=${ver.backupFileId || ver.fileId}`;
+
+            return `
+              <div class="p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-white/60 dark:bg-slate-900/60 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div class="flex items-start gap-3">
+                  <div class="flex flex-col items-center">
+                    <span class="px-2.5 py-1 rounded-lg bg-indigo-100 dark:bg-indigo-950/80 text-indigo-700 dark:text-indigo-300 font-mono font-bold text-xs">
+                      ${ver.version || 'v1.0'}
+                    </span>
+                    ${isLatest ? '<span class="text-[9px] font-bold text-green-600 dark:text-green-400 mt-1 uppercase tracking-wider">Actual</span>' : ''}
+                  </div>
+                  <div>
+                    <div class="flex items-center gap-2">
+                      <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold ${stateBadgeClass}">${stateLabel}</span>
+                      <span class="text-xs text-slate-400 font-medium">${formatDate(ver.fecha)}</span>
+                    </div>
+                    <p class="text-xs font-semibold text-slate-800 dark:text-slate-200 mt-1">${ver.comments || 'Sin comentarios registrados.'}</p>
+                    <p class="text-[10px] text-slate-400 mt-0.5">Por: ${ver.createdBy || 'CDE NORA'} ${ver.createdByEmail ? `(${ver.createdByEmail})` : ''}</p>
+                  </div>
+                </div>
+
+                <div class="flex items-center gap-2 self-end sm:self-center shrink-0">
+                  <a href="${downloadUrl}" target="_blank" rel="noopener noreferrer" class="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 font-semibold text-xs transition-colors" title="Descargar archivo de esta versión">
+                    <span class="material-symbols-outlined text-[14px]">download</span> Descargar
+                  </a>
+                  ${!isLatest ? `
+                    <button onclick="window.restoreVersionItem(this, '${verJsonStr}')" class="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-600 text-white font-bold text-xs transition-colors" title="Restablecer como versión activa">
+                      <span class="material-symbols-outlined text-[14px]">restore</span> Restablecer
+                    </button>
+                  ` : ''}
+                </div>
+              </div>
+            `;
+          }).join('');
+
+        } catch(err) {
+          console.error(err);
+          historyLoading.classList.add('hidden');
+          historyEmpty.classList.remove('hidden');
+        }
+      };
+
+      window.restoreVersionItem = async (btn, encodedData) => {
+        let v;
+        try { v = JSON.parse(decodeURIComponent(encodedData)); } catch(e) { return; }
+        if (!v || !activeProject) return;
+
+        if (!confirm(`¿Deseas restablecer la versión ${v.version} de "${v.filename}" como la versión activa actual?\nSe creará un registro de restauración.`)) {
+          return;
+        }
+
+        const origHtml = btn.innerHTML;
+        btn.disabled = true;
+        btn.innerHTML = `<span class="inline-block w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin"></span>`;
+
+        try {
+          const ds = activeProject.dataSources || {};
+          const scriptUrl = ds.driveScriptUrl || DEFAULT_DRIVE_SCRIPT_URL;
+
+          const payload = {
+            action: 'restoreVersion',
+            backupFileId: v.backupFileId,
+            filename: v.filename,
+            version: v.version,
+            project: activeProject.slug || slugify(activeProject.name),
+            status: v.status || 'EN_PROGRESO',
+            originalFileId: v.originalFileId,
+            type: v.type || '',
+            folderId: ds.driveFolderId || '',
+            driveFolderName: ds.driveFolderName || activeProject.name,
+            changedBy: userAccount ? (userAccount.name || '') : '',
+            changedByEmail: userAccount ? (userAccount.email || '') : ''
+          };
+
+          const res = await fetch(scriptUrl, {
+            method: 'POST',
+            mode: 'cors',
+            headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+            body: JSON.stringify(payload)
+          });
+
+          if (!res.ok) throw new Error(`Error del servidor: ${res.statusText}`);
+          const data = await res.json();
+          if (data.status === 'error') throw new Error(data.message || 'Error al restaurar');
+
+          addLog(`[RESTAURACIÓN] ${v.filename} restablecido a partir de versión ${v.version}`);
+          modalVersionHistory.classList.add('hidden');
+          await loadProjectFiles();
+          alert(`Versión ${v.version} restablecida con éxito.`);
+        } catch(err) {
+          console.error(err);
+          alert(`Error al restablecer: ${err.message}`);
+          btn.disabled = false;
+          btn.innerHTML = origHtml;
+        }
+      };
+
+      const closeHistoryModal = () => {
+        modalVersionHistory.classList.add('hidden');
+      };
+      btnCloseHistoryModal.addEventListener('click', closeHistoryModal);
+      btnDoneHistoryModal.addEventListener('click', closeHistoryModal);
 
       window.promoteFile = async (btn, encodedData, newStatus) => {
         let f;
@@ -1211,6 +1702,8 @@
             driveFolderName: ds.driveFolderName || activeProject.name,
             originalFileId: f.originalFileId || f.fileId,
             type: f.type || '',
+            version: f.version || 'v1.0',
+            comments: `Promovido a ${labels[newStatus]}`,
             changedBy: userAccount ? (userAccount.name || '') : '',
             changedByEmail: userAccount ? (userAccount.email || '') : ''
           };
