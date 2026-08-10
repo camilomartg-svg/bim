@@ -904,7 +904,30 @@ function listModels_(e, body) {
 
   walk_(root, '');
 
-  const models = frags
+  // Helper to deduplicate files by path + name so only the latest/current active version is returned
+  const dedupeByLatest_ = function(list) {
+    const map = {};
+    for (let i = 0; i < list.length; i++) {
+      const item = list[i];
+      const key = ((item.folder ? item.folder + '/' : '') + String(item.name || '').toLowerCase()).trim();
+      if (!map[key] || new Date(item.lastUpdated).getTime() > new Date(map[key].lastUpdated).getTime()) {
+        map[key] = item;
+      }
+    }
+    const result = [];
+    for (let k in map) {
+      if (map.hasOwnProperty(k)) {
+        result.push(map[k]);
+      }
+    }
+    return result;
+  };
+
+  const uniqueFrags = dedupeByLatest_(frags);
+  const uniqueDwgs = dedupeByLatest_(dwgs);
+  const uniquePdfs = dedupeByLatest_(pdfs);
+
+  const models = uniqueFrags
     .map((m) => {
       const base = normalizeBase_(m.name.slice(0, -5));
       const jsonId = jsonByBase[base] || null;
@@ -918,8 +941,8 @@ function listModels_(e, body) {
     })
     .sort((a, b) => String(a.name).localeCompare(String(b.name), 'es'));
 
-  const sortedDwgs = dwgs.sort((a, b) => String(a.name).localeCompare(String(b.name), 'es'));
-  const sortedPdfs = pdfs.sort((a, b) => String(a.name).localeCompare(String(b.name), 'es'));
+  const sortedDwgs = uniqueDwgs.sort((a, b) => String(a.name).localeCompare(String(b.name), 'es'));
+  const sortedPdfs = uniquePdfs.sort((a, b) => String(a.name).localeCompare(String(b.name), 'es'));
 
   return { 
     models: models,
@@ -1135,13 +1158,15 @@ function changeFileStatus_(e, body) {
     var now = new Date().toISOString();
     registerFileStatus_(copiedFileId, copiedJsonId, filename, project, newStatus, changedBy, changedByEmail, originalFileId, type, version, comments);
     
-    // Also record in VersionesArchivos
+    // Mark previous versions as not current in VersionesArchivos
     try {
       let doc;
       try { doc = SpreadsheetApp.openById(SPREADSHEET_ID); } catch (err) { doc = SpreadsheetApp.getActiveSpreadsheet(); }
       let vSheet = doc.getSheetByName('VersionesArchivos');
       if (!vSheet) vSheet = doc.insertSheet('VersionesArchivos');
       ensureHeaders(vSheet, FILE_VERSION_HEADERS);
+      markPreviousVersionsNotCurrent_(vSheet, project, filename, originalFileId);
+
       const vId = 'ver-' + Date.now() + '-' + Math.floor(Math.random() * 9999);
       const vRow = FILE_VERSION_HEADERS.map(function(h) {
         if (h === 'versionId') return vId;
@@ -1167,6 +1192,40 @@ function changeFileStatus_(e, body) {
     return { status: 'success', newStatus: newStatus, copiedFileId: copiedFileId, copiedJsonId: copiedJsonId, filename: filename, changedAt: now, changedBy: changedBy, version: version };
   } catch (err) {
     return { status: 'error', message: err.toString() };
+  }
+}
+
+function markPreviousVersionsNotCurrent_(vSheet, project, filename, originalFileId) {
+  if (!vSheet || vSheet.getLastRow() <= 1) return;
+  ensureHeaders(vSheet, FILE_VERSION_HEADERS);
+  const headers = vSheet.getRange(1, 1, 1, vSheet.getLastColumn()).getValues()[0].map(function(h) { return String(h).trim(); });
+  const isCurrentIdx = headers.indexOf('isCurrent');
+  const projectIdx = headers.indexOf('project');
+  const filenameIdx = headers.indexOf('filename');
+  const origIdIdx = headers.indexOf('originalFileId');
+  if (isCurrentIdx === -1) return;
+
+  const numRows = vSheet.getLastRow() - 1;
+  const range = vSheet.getRange(2, 1, numRows, vSheet.getLastColumn());
+  const values = range.getValues();
+  let modified = false;
+
+  for (let i = 0; i < values.length; i++) {
+    const row = values[i];
+    const rowProj = String(row[projectIdx] || '').trim();
+    const rowFile = String(row[filenameIdx] || '').trim();
+    const rowOrig = String(row[origIdIdx] || '').trim();
+
+    if ((!project || rowProj === project) && (rowFile === filename || (originalFileId && rowOrig === originalFileId))) {
+      if (String(row[isCurrentIdx]).trim() === 'true') {
+        values[i][isCurrentIdx] = 'false';
+        modified = true;
+      }
+    }
+  }
+
+  if (modified) {
+    range.setValues(values);
   }
 }
 
@@ -1221,7 +1280,7 @@ function createVersion_(e, body) {
       } catch (be) { /* non-fatal */ }
     }
 
-    // 2. If new file content was uploaded, create replacement in target folder
+    // 2. If new file content was uploaded, create replacement in target folder (trashing older copies in that folder)
     if (content) {
       var destFolder = root;
       if (status === 'COMPARTIDO' || status === 'PUBLICADO') {
@@ -1230,6 +1289,15 @@ function createVersion_(e, body) {
         var sf = estadosFolder.getFoldersByName(status.toLowerCase());
         destFolder = sf.hasNext() ? sf.next() : estadosFolder.createFolder(status.toLowerCase());
       }
+
+      var existing = destFolder.getFilesByName(filename);
+      while (existing.hasNext()) {
+        var oldF = existing.next();
+        if (oldF.getId() !== backupFileId) {
+          oldF.setTrashed(true);
+        }
+      }
+
       const decoded = Utilities.base64Decode(content);
       const blob = Utilities.newBlob(decoded, contentType, filename);
       const newActive = destFolder.createFile(blob);
@@ -1242,6 +1310,8 @@ function createVersion_(e, body) {
     let vSheet = doc.getSheetByName('VersionesArchivos');
     if (!vSheet) vSheet = doc.insertSheet('VersionesArchivos');
     ensureHeaders(vSheet, FILE_VERSION_HEADERS);
+
+    markPreviousVersionsNotCurrent_(vSheet, project, filename, originalFileId);
 
     const versionId = 'ver-' + Date.now() + '-' + Math.floor(Math.random() * 9999);
     const now = new Date().toISOString();
@@ -1369,6 +1439,15 @@ function restoreVersion_(e, body) {
       destFolder = sf.hasNext() ? sf.next() : estadosFolder.createFolder(status.toLowerCase());
     }
 
+    // Trash any existing active files with same name in destFolder to avoid duplicate file items in Drive
+    var existing = destFolder.getFilesByName(filename);
+    while (existing.hasNext()) {
+      var oldF = existing.next();
+      if (oldF.getId() !== backupFileId) {
+        oldF.setTrashed(true);
+      }
+    }
+
     var backupFile = DriveApp.getFileById(backupFileId);
     var restoredCopy = backupFile.makeCopy(filename, destFolder);
     var newActiveFileId = restoredCopy.getId();
@@ -1381,6 +1460,8 @@ function restoreVersion_(e, body) {
     let vSheet = doc.getSheetByName('VersionesArchivos');
     if (!vSheet) vSheet = doc.insertSheet('VersionesArchivos');
     ensureHeaders(vSheet, FILE_VERSION_HEADERS);
+
+    markPreviousVersionsNotCurrent_(vSheet, project, filename, originalFileId);
 
     const newVersionId = 'ver-' + Date.now() + '-' + Math.floor(Math.random() * 9999);
     const now = new Date().toISOString();

@@ -1126,78 +1126,57 @@
             console.warn('Status history fetch error:', se);
           }
 
-          // Build a map of latest status & version for each file by originalFileId or filename
+          // Sort statusEntries chronologically so most recent statuses take precedence
+          statusEntries.sort((a, b) => new Date(a.changedAt || 0) - new Date(b.changedAt || 0));
+
+          // Build a map of latest status & version for each file by originalFileId, fileId, or filename
           const statusMap = {};
           statusEntries.forEach(entry => {
-            const key = entry.originalFileId || entry.filename;
-            if (!key) return;
-            const prev = statusMap[key];
-            if (!prev || (STATUS_ORDER[entry.status] || 0) >= (STATUS_ORDER[prev.status] || 0)) {
-              statusMap[key] = entry;
-            }
+            if (entry.originalFileId) statusMap[entry.originalFileId] = entry;
+            if (entry.fileId) statusMap[entry.fileId] = entry;
+            if (entry.filename) statusMap[entry.filename.toLowerCase()] = entry;
           });
 
           // Consolidate Drive files into allProjectFiles.
-          const normalized = [];
+          // Deduplicate so that ONLY the current / active version of each file is present!
+          const filesByPath = new Map();
 
-          (listData.models || []).forEach(m => {
-            const match = statusMap[m.fragId] || statusMap[m.name];
-            normalized.push({
-              fileId: match ? match.fileId : m.fragId,
-              originalFileId: m.fragId,
-              jsonId: m.jsonId || (match ? match.jsonId : ''),
-              name: m.name,
-              filename: m.name,
-              type: 'model',
-              folder: m.folder || 'General',
-              lastUpdated: match?.changedAt || m.lastUpdated,
-              status: match?.status || 'EN_PROGRESO',
-              version: match?.version || 'v1.0',
-              comments: match?.comments || '',
-              changedBy: match?.changedBy || (userAccount ? userAccount.name : 'CDE NORA'),
-              changedByEmail: match?.changedByEmail || (userAccount ? userAccount.email : '')
+          const addFiles = (list, type) => {
+            (list || []).forEach(item => {
+              const fname = item.name || item.filename;
+              const fld = item.folder || 'General';
+              const fileKey = (fld + '/' + fname).toLowerCase();
+              const fid = type === 'model' ? item.fragId : item.fileId;
+              const match = statusMap[fid] || statusMap[fname.toLowerCase()] || null;
+
+              const fileObj = {
+                fileId: match?.fileId || fid,
+                originalFileId: fid,
+                jsonId: type === 'model' ? (item.jsonId || (match ? match.jsonId : '')) : '',
+                name: fname,
+                filename: fname,
+                type: type,
+                folder: fld,
+                lastUpdated: match?.changedAt || item.lastUpdated,
+                status: match?.status || 'EN_PROGRESO',
+                version: match?.version || 'v1.0',
+                comments: match?.comments || '',
+                changedBy: match?.changedBy || (userAccount ? userAccount.name : 'CDE NORA'),
+                changedByEmail: match?.changedByEmail || (userAccount ? userAccount.email : '')
+              };
+
+              const prev = filesByPath.get(fileKey);
+              if (!prev || new Date(fileObj.lastUpdated).getTime() >= new Date(prev.lastUpdated).getTime()) {
+                filesByPath.set(fileKey, fileObj);
+              }
             });
-          });
+          };
 
-          (listData.pdfs || []).forEach(p => {
-            const match = statusMap[p.fileId] || statusMap[p.name];
-            normalized.push({
-              fileId: match ? match.fileId : p.fileId,
-              originalFileId: p.fileId,
-              jsonId: '',
-              name: p.name,
-              filename: p.name,
-              type: 'pdf',
-              folder: p.folder || 'General',
-              lastUpdated: match?.changedAt || p.lastUpdated,
-              status: match?.status || 'EN_PROGRESO',
-              version: match?.version || 'v1.0',
-              comments: match?.comments || '',
-              changedBy: match?.changedBy || (userAccount ? userAccount.name : 'CDE NORA'),
-              changedByEmail: match?.changedByEmail || (userAccount ? userAccount.email : '')
-            });
-          });
+          addFiles(listData.models, 'model');
+          addFiles(listData.pdfs, 'pdf');
+          addFiles(listData.dwgs, 'dwg');
 
-          (listData.dwgs || []).forEach(d => {
-            const match = statusMap[d.fileId] || statusMap[d.name];
-            normalized.push({
-              fileId: match ? match.fileId : d.fileId,
-              originalFileId: d.fileId,
-              jsonId: '',
-              name: d.name,
-              filename: d.name,
-              type: 'dwg',
-              folder: d.folder || 'General',
-              lastUpdated: match?.changedAt || d.lastUpdated,
-              status: match?.status || 'EN_PROGRESO',
-              version: match?.version || 'v1.0',
-              comments: match?.comments || '',
-              changedBy: match?.changedBy || (userAccount ? userAccount.name : 'CDE NORA'),
-              changedByEmail: match?.changedByEmail || (userAccount ? userAccount.email : '')
-            });
-          });
-
-          allProjectFiles = normalized;
+          allProjectFiles = Array.from(filesByPath.values());
           updateTabCounts();
           renderDriveFilesTable();
         } catch (err) {
