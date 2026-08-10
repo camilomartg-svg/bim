@@ -35,7 +35,7 @@
       "actions": {
         "publicaciones": "Publicaciones.html",
         "solicitudes": "index.html",
-        "equipo": "lista_usuarios.html"
+        "equipo": "equipo.html"
       },
       "dataSources": {
         "driveFolderName": "Miconos I",
@@ -106,7 +106,7 @@
       "actions": {
         "publicaciones": "Publicaciones.html",
         "solicitudes": "index.html",
-        "equipo": "lista_usuarios.html"
+        "equipo": "equipo.html"
       },
       "dataSources": {
         "driveFolderName": "Miconos II",
@@ -174,7 +174,7 @@
       "actions": {
         "publicaciones": "Publicaciones.html",
         "solicitudes": "index.html",
-        "equipo": "lista_usuarios.html"
+        "equipo": "equipo.html"
       },
       "dataSources": {
         "driveFolderName": "Miconos III",

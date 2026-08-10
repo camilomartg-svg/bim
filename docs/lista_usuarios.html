@@ -32,18 +32,10 @@
         .loader { border-top-color: #374151; }
     </style>
     <script>
-        // --- SCRIPT DE SEGURIDAD ---
+        // Redirección al nuevo módulo ISO 19650 de Equipos
         (function() {
-            const userAccount = JSON.parse(sessionStorage.getItem('userAccount') || localStorage.getItem('userAccount'));
-            if (!userAccount) {
-                alert('Acceso denegado. Por favor, inicie sesión.');
-                window.location.href = 'https://norabim.com/inse.html';
-                return;
-            }
-            if (userAccount.role !== 'ADMINISTRADOR') {
-                alert('Acceso denegado. No tiene permisos para ver esta página.');
-                window.location.href = 'https://norabim.com/home.html';
-            }
+            const params = window.location.search;
+            window.location.replace('equipo.html' + params);
         })();
     </script>
 </head>
@@ -128,7 +120,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     <td class="py-3 px-6">${user.rol || ''}</td>
                     <td class="py-3 px-6">${user.especialidad || ''}</td>
                     <td class="py-3 px-6 text-center">
-                        <a href="addusuarios.html?email=${encodeURIComponent(user.email)}" class="bg-blue-600 text-white py-1 px-3 rounded-md hover:bg-blue-700 text-xs mr-2">Editar</a>
+                        <a href="formulario_usuarios.html?email=${encodeURIComponent(user.email)}" class="bg-blue-600 text-white py-1 px-3 rounded-md hover:bg-blue-700 text-xs mr-2">Editar</a>
                         <button onclick="deleteUser('${user.email}')" class="bg-red-600 text-white py-1 px-3 rounded-md hover:bg-red-700 text-xs">Eliminar</button>
                     </td>
                 `;

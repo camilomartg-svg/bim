@@ -80,7 +80,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     actions: {
       publicaciones: 'Publicaciones.html',
       solicitudes: 'index.html',
-      equipo: 'lista_usuarios.html',
+      equipo: 'equipo.html',
     },
     dataSources: {
       driveFolderName: 'Nuevo proyecto',

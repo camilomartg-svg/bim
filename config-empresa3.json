@@ -55,7 +55,7 @@
       "actions": {
         "publicaciones": "Publicaciones.html",
         "solicitudes": "index.html",
-        "equipo": "lista_usuarios.html"
+        "equipo": "equipo.html"
       },
       "dataSources": {
         "driveFolderName": "Green I",
@@ -95,7 +95,7 @@
     {
       "id": "link-lista-usuarios",
       "label": "Listar Usuarios",
-      "href": "https://norabim.com/lista_usuarios.html",
+      "href": "https://norabim.com/equipo.html",
       "allowedRoles": [
         "ADMINISTRADOR"
       ]

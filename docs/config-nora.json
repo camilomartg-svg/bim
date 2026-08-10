@@ -46,7 +46,7 @@
     {
       "id": "link-lista-usuarios",
       "label": "Listar Usuarios",
-      "href": "https://norabim.com/lista_usuarios.html",
+      "href": "https://norabim.com/equipo.html",
       "allowedRoles": [
         "ADMINISTRADOR"
       ]

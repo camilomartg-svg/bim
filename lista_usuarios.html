@@ -32,18 +32,10 @@
         .loader { border-top-color: #374151; }
     </style>
     <script>
-        // --- SCRIPT DE SEGURIDAD ---
+        // Redirección al nuevo módulo ISO 19650 de Equipos
         (function() {
-            const userAccount = JSON.parse(sessionStorage.getItem('userAccount') || localStorage.getItem('userAccount'));
-            if (!userAccount) {
-                alert('Acceso denegado. Por favor, inicie sesión.');
-                window.location.href = 'https://norabim.com/inse.html';
-                return;
-            }
-            if (userAccount.role !== 'ADMINISTRADOR') {
-                alert('Acceso denegado. No tiene permisos para ver esta página.');
-                window.location.href = 'https://norabim.com/home.html';
-            }
+            const params = window.location.search;
+            window.location.replace('equipo.html' + params);
         })();
     </script>
 </head>

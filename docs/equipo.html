@@ -22,10 +22,10 @@
             'bg-dark': '#0F172A',
             'card-light': '#FFFFFF',
             'card-dark': '#1E293B',
-            'iso-proj': '#0284C7',
-            'iso-lead': '#2563EB',
-            'iso-member': '#7C3AED',
-            'iso-task': '#059669',
+            'iso-proj': '#0284C7',      // Azul Adjudicador / Proyecto
+            'iso-lead': '#2563EB',      // Azul Intenso Adjudicatario Principal
+            'iso-member': '#7C3AED',    // Púrpura Otros Adjudicatarios
+            'iso-task': '#059669',      // Verde Equipos de Tarea
           },
           fontFamily: {
             sans: ['Inter', 'sans-serif'],
@@ -60,6 +60,7 @@
     .iso-bubble:hover {
       transform: translateY(-4px) scale(1.02);
     }
+    /* Custom Scrollbars */
     ::-webkit-scrollbar { width: 6px; height: 6px; }
     ::-webkit-scrollbar-track { background: transparent; }
     ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 9999px; }
@@ -93,15 +94,18 @@
 
       <!-- Right: User info, Role Badge & Cloud Actions -->
       <div class="flex items-center gap-2 sm:gap-3">
+        <!-- User Role Indicator -->
         <div id="user-role-badge" class="hidden sm:flex flex-col text-right">
           <span id="user-display-name" class="text-xs font-bold text-slate-800 dark:text-slate-200">Usuario</span>
           <span id="user-display-role" class="text-[10px] font-semibold tracking-wider uppercase text-slate-400 dark:text-slate-500">Rol</span>
         </div>
 
+        <!-- Theme Toggle -->
         <button id="theme-toggle" class="p-2 rounded-xl text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors" title="Cambiar tema">
           <span class="material-symbols-outlined text-[20px]">dark_mode</span>
         </button>
 
+        <!-- Save Button (Cloud / GitHub) -->
         <div class="flex items-center gap-1.5">
           <button id="save-btn" class="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-slate-900 hover:bg-black text-white dark:bg-white dark:text-slate-900 dark:hover:bg-slate-100 text-xs font-bold uppercase tracking-wider shadow-sm transition-all">
             <span class="material-symbols-outlined text-[16px]">cloud_sync</span>
@@ -188,7 +192,7 @@
 
     </div>
 
-    <!-- ISO 19650 Governance Permission Notice -->
+    <!-- ISO 19650 Governance Permission Notice (Role-based banner) -->
     <div id="governance-banner" class="rounded-2xl p-4 border bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white shadow-md flex items-start justify-between gap-4">
       <div class="flex items-start gap-3">
         <span class="material-symbols-outlined text-indigo-400 text-2xl mt-0.5 shrink-0">verified_user</span>
@@ -235,6 +239,7 @@
     <!-- TAB PANEL 1: DIAGRAMA INTERACTIVO ISO 19650 -->
     <div id="tab-content-diagram" class="tab-panel space-y-6">
       
+      <!-- Visual Interactive ISO 19650 Stage -->
       <div class="glass-card rounded-3xl border border-slate-200/80 dark:border-slate-800 p-6 sm:p-8 relative shadow-sm overflow-hidden">
         
         <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-200/60 dark:border-slate-800 pb-5">
@@ -264,8 +269,10 @@
           </div>
         </div>
 
+        <!-- Interactive Diagram Container (Concentric Visual Stage) -->
         <div class="mt-8 relative min-h-[520px] rounded-2xl bg-gradient-to-b from-slate-50/80 to-slate-100/60 dark:from-slate-900/60 dark:to-slate-950/80 border border-slate-200 dark:border-slate-800 p-6 flex flex-col items-center justify-center">
           
+          <!-- Outer Circle Boundary: 1. Equipo de Proyecto -->
           <div class="w-full max-w-4xl border-2 border-dashed border-sky-400/60 dark:border-sky-500/40 rounded-3xl p-6 sm:p-8 relative bg-white/40 dark:bg-slate-900/40 shadow-inner">
             
             <div class="absolute -top-3 left-6 px-3 py-0.5 rounded-full bg-sky-600 text-white font-mono text-[10px] font-black uppercase tracking-wider shadow-sm flex items-center gap-1.5">
@@ -273,6 +280,7 @@
               <span>1. Equipo de Proyecto</span>
             </div>
 
+            <!-- Central Hub: A. Adjudicador (Administrador de Proyecto) -->
             <div class="flex flex-col items-center justify-center my-4">
               <div class="relative group">
                 <div class="flex items-center gap-3 px-5 py-3 rounded-2xl bg-sky-600 hover:bg-sky-700 text-white shadow-lg shadow-sky-500/20 border-2 border-white dark:border-slate-800 transition-all cursor-pointer" onclick="switchTab('admins')">
@@ -287,7 +295,9 @@
               </div>
             </div>
 
+            <!-- Radial Connectors & Delivery Team Clusters -->
             <div id="diagram-delivery-clusters" class="mt-8 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              <!-- Dynamically rendered delivery team bubbles -->
             </div>
 
           </div>
@@ -322,7 +332,9 @@
           </div>
         </div>
 
+        <!-- Active Project Admins List -->
         <div id="project-admins-container" class="mt-6 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          <!-- Populated by JS -->
         </div>
 
       </div>
@@ -353,7 +365,9 @@
           </div>
         </div>
 
+        <!-- Delivery Teams Container -->
         <div id="delivery-teams-container" class="mt-6 space-y-6">
+          <!-- Populated by JS -->
         </div>
 
       </div>
@@ -384,7 +398,9 @@
           </div>
         </div>
 
+        <!-- Task Teams Container -->
         <div id="task-teams-container" class="mt-6 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          <!-- Populated by JS -->
         </div>
 
       </div>
@@ -414,6 +430,7 @@
           </div>
         </div>
 
+        <!-- Search & Filter Row -->
         <div class="mt-6 grid grid-cols-1 sm:grid-cols-3 gap-3">
           <div class="relative sm:col-span-2">
             <span class="material-symbols-outlined absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-[18px]">search</span>
@@ -430,6 +447,7 @@
           </div>
         </div>
 
+        <!-- Directory Table -->
         <div class="mt-4 overflow-x-auto rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm">
           <table class="w-full text-left border-collapse text-xs">
             <thead class="bg-slate-50 dark:bg-slate-800/80 border-b border-slate-200 dark:border-slate-800 text-slate-400 uppercase text-[10px] font-bold tracking-wider">
@@ -443,6 +461,7 @@
               </tr>
             </thead>
             <tbody id="directory-table-body" class="divide-y divide-slate-100 dark:divide-slate-800/60 bg-white dark:bg-slate-900">
+              <!-- Dynamically populated -->
             </tbody>
           </table>
         </div>
@@ -458,7 +477,11 @@
     <p>© 2026 nora CDE - Gestión de Información BIM bajo estándar ISO 19650-2.</p>
   </footer>
 
-  <!-- MODALES -->
+  <!-- ========================================================================= -->
+  <!-- MODALES DE GESTIÓN (ISO 19650) -->
+  <!-- ========================================================================= -->
+
+  <!-- Modal 1: Designar Administrador de Proyecto (Adjudicador A) -->
   <div id="modal-project-admin" class="fixed inset-0 z-50 hidden bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
     <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-6 max-w-lg w-full shadow-2xl space-y-4">
       <div class="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
@@ -479,6 +502,7 @@
       <div class="space-y-3 text-xs">
         <label class="block font-bold text-slate-700 dark:text-slate-300">Seleccionar usuario de la empresa:</label>
         <select id="select-project-admin-user" class="w-full py-2 px-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 dark:text-white font-medium focus:ring-2 focus:ring-blue-500">
+          <!-- Populated by JS -->
         </select>
         <p class="text-[11px] text-slate-400 leading-normal">
           Nota: El Administrador de Proyecto podrá crear equipos de entrega, nombrar líderes de entrega y organizar a los miembros del proyecto.
@@ -492,6 +516,7 @@
     </div>
   </div>
 
+  <!-- Modal 2: Crear / Editar Equipo de Entrega -->
   <div id="modal-delivery-team" class="fixed inset-0 z-50 hidden bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
     <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-6 max-w-lg w-full shadow-2xl space-y-4">
       <div class="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
@@ -537,6 +562,7 @@
     </div>
   </div>
 
+  <!-- Modal 3: Crear / Editar Equipo de Tarea -->
   <div id="modal-task-team" class="fixed inset-0 z-50 hidden bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
     <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-6 max-w-lg w-full shadow-2xl space-y-4">
       <div class="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
@@ -565,6 +591,7 @@
         <div>
           <label class="block font-bold text-slate-700 dark:text-slate-300 mb-1">Equipo de Entrega Perteneciente:</label>
           <select id="task-team-delivery-select" class="w-full py-2 px-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 dark:text-white font-medium focus:ring-2 focus:ring-emerald-500">
+            <!-- Populated by JS -->
           </select>
         </div>
 
@@ -581,6 +608,7 @@
     </div>
   </div>
 
+  <!-- Modal 4: Integrar Miembro al Proyecto -->
   <div id="modal-add-member" class="fixed inset-0 z-50 hidden bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
     <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-6 max-w-lg w-full shadow-2xl space-y-4">
       <div class="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
@@ -602,6 +630,7 @@
         <div>
           <label class="block font-bold text-slate-700 dark:text-slate-300 mb-1">Seleccionar Usuario Disponible:</label>
           <select id="select-available-user" class="w-full py-2 px-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 dark:text-white font-medium focus:ring-2 focus:ring-indigo-500">
+            <!-- Populated by JS -->
           </select>
         </div>
 
@@ -620,6 +649,7 @@
     </div>
   </div>
 
+  <!-- Modal 5: PAT GitHub Token -->
   <div id="modal-token" class="fixed inset-0 z-50 hidden bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
     <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-6 max-w-md w-full shadow-2xl space-y-4">
       <div class="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
@@ -642,11 +672,13 @@
     </div>
   </div>
 
+  <!-- Notification Toast -->
   <div id="toast-banner" class="fixed bottom-6 right-6 z-50 transform translate-y-20 opacity-0 transition-all duration-300 max-w-md w-full rounded-2xl p-4 shadow-xl flex items-start gap-3 border">
     <span id="toast-icon" class="material-symbols-outlined text-[20px] mt-0.5">info</span>
     <div id="toast-message" class="text-xs font-medium flex-1"></div>
   </div>
 
+  <!-- Application Logic -->
   <script src="equipo.js"></script>
 </body>
 </html>
