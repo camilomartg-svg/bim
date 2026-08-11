@@ -31,6 +31,13 @@
         "role": "INVITADO",
         "empresaUsuario": "HIDROSANITARIO SAS",
         "cargo": "Diseñador Hidrosánitario"
+      },
+      {
+        "name": "Nuevo Usuario",
+        "email": "alc.spk.2@gmail.com",
+        "role": "MIEMBRO",
+        "empresaUsuario": "Mesh Estudio",
+        "cargo": "Modelador BIM"
       }
     ],
     "razonSocial": "Mesh Estudio SAS",
