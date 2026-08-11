@@ -318,7 +318,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             }
          } catch(ue) {
             console.warn('No se pudo sincronizar los miembros desde Google Sheets', ue);
-         }        
+        }
       } catch(e) {
         console.warn('No se pudo sincronizar con Google Sheets', e);
       }
@@ -1812,8 +1812,6 @@ window.fetchGlobalUsers = async function() {
         scriptUsers.forEach(u => {
             if(!u.email) return;
             const email = u.email.toLowerCase().trim();
-            const company = (u.empresa || '').toLowerCase().trim();
-            const key = email + '_' + company;
             const userObj = {
                 email: email,
                 name: u.nombre || u.email.split('@')[0],
@@ -1823,10 +1821,7 @@ window.fetchGlobalUsers = async function() {
                 cargo: u.cargo || '',
                 estado: u.estado || 'PENDIENTE'
             };
-            window.globalUsersMap.set(key, userObj);
-            if (!window.globalUsersMap.has(email) || userObj.estado === 'APROBADO') {
-                window.globalUsersMap.set(email, userObj);
-            }
+            window.globalUsersMap.set(email, userObj);
         });
 
         renderGlobalUsers();
@@ -1929,8 +1924,7 @@ window.openEditUserModal = function(email, companyName = '') {
     });
 
     if(email) {
-        const key = email + '_' + companyName.toLowerCase().trim();
-        const u = window.globalUsersMap.get(key) || window.globalUsersMap.get(email);
+        const u = window.globalUsersMap.get(email);
         title.textContent = 'Editar Usuario';
         document.getElementById('gu-email').value = u.email;
         document.getElementById('gu-email').disabled = true;
@@ -2015,14 +2009,8 @@ window.saveGlobalUser = async function() {
             body: JSON.stringify(payload)
         });
 
-        // Delete old key if it was composite and has changed
-        if (window.currentGlobalUserCompany && window.currentGlobalUserCompany !== companyName) {
-            const oldKey = email + '_' + window.currentGlobalUserCompany.toLowerCase().trim();
-            window.globalUsersMap.delete(oldKey);
-        }
         // Update local map instantly
-        const key = email + '_' + (companyName || '').toLowerCase().trim();
-        window.globalUsersMap.set(key, {
+        window.globalUsersMap.set(email, {
             email: email,
             name: name,
             role: role,
@@ -2208,8 +2196,7 @@ window.approvePendingUser = async function(email, nombre, empresa) {
 // QUICK APPROVE: from the global users list
 // ==========================================
 window.quickApproveUser = async function(email, nombre, companyName = '') {
-    const key = email + '_' + companyName.toLowerCase().trim();
-    const u = window.globalUsersMap.get(key) || window.globalUsersMap.get(email);
+    const u = window.globalUsersMap.get(email);
     if (!u) return;
 
     // Ask for empresa if not assigned yet
@@ -2242,13 +2229,7 @@ window.quickApproveUser = async function(email, nombre, companyName = '') {
             body: JSON.stringify(payload)
         });
 
-        // Update local map
-        // Delete old key if company name is updated
-        if (companyName && companyName !== empresa) {
-            window.globalUsersMap.delete(key);
-        }
-        const newKey = email + '_' + (empresa || '').toLowerCase().trim();
-        window.globalUsersMap.set(newKey, {
+        window.globalUsersMap.set(email, {
             ...u,
             role: rol,
             companyName: empresa || 'Sin Empresa Asignada',
