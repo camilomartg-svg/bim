@@ -154,7 +154,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                    addedNew = true;
                }
             });
-            if(addedNew) showBanner('Se descubrieron nuevas empresas registradas. Haz clic en Publicar en la Nube para integrarlas permanentemente.', 'success');
+            if(addedNew) showBanner('Se descubrieron nuevas empresas registradas. Haz clic en Guardar para integrarlas permanentemente.', 'success');
 
             // Reconciliar administradores principales de la hoja "Empresas"
             empresas.forEach(emp => {
@@ -538,7 +538,11 @@ document.addEventListener('DOMContentLoaded', async () => {
     emp.members.forEach((m, i) => {
       let g = '';
       if(window.currentGroupBy === 'empresa') {
-        g = m.empresaUsuario && m.empresaUsuario.trim() !== '' ? m.empresaUsuario.trim() : 'Sin Empresa Asignada';
+        if (m.role === 'ADMINISTRADOR_EMPRESA' || m.role === 'MIEMBRO' || !m.role) {
+          g = emp.name || 'Mi Empresa';
+        } else {
+          g = m.empresaUsuario && m.empresaUsuario.trim() !== '' ? m.empresaUsuario.trim() : 'Invitados / Externos';
+        }
       } else {
         g = m.especialidad && m.especialidad.trim() !== '' ? m.especialidad.trim() : 'Sin Especialidad Asignada';
       }
@@ -547,8 +551,10 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
 
     const sortedGroups = Object.keys(grouped).sort((a, b) => {
-      if (a.startsWith('Sin ')) return 1;
-      if (b.startsWith('Sin ')) return -1;
+      if (a === emp.name) return -1;
+      if (b === emp.name) return 1;
+      if (a.startsWith('Sin ') || a.startsWith('Invitados')) return 1;
+      if (b.startsWith('Sin ') || b.startsWith('Invitados')) return -1;
       return a.localeCompare(b);
     });
 
@@ -566,23 +572,8 @@ document.addEventListener('DOMContentLoaded', async () => {
         const i = item.originalIndex;
         const m = item;
 
-        // ── 1. Empresa: restricted strictly to this company or external contractor ──
-        let empOptions = '';
-        const isCurrentCompanySelected = (!m.empresaUsuario || m.empresaUsuario === emp.name || m.role === 'ADMINISTRADOR_EMPRESA' || m.role === 'MIEMBRO');
-        
-        empOptions = `
-          <option value="${emp.name}" ${isCurrentCompanySelected ? 'selected' : ''}>${emp.name} (Mi Empresa)</option>
-          <option value="" ${(!isCurrentCompanySelected && (!m.empresaUsuario || m.empresaUsuario === '')) ? 'selected' : ''}>Sin Empresa Asignada / Externo</option>
-        `;
-        
-        // If an external contractor or third-party name is already typed/assigned, keep it as an option
-        if (m.empresaUsuario && m.empresaUsuario !== emp.name && m.empresaUsuario.trim() !== '') {
-          empOptions += `<option value="${m.empresaUsuario}" ${!isCurrentCompanySelected ? 'selected' : ''}>${m.empresaUsuario} (Contratista Externo)</option>`;
-        }
-
-        // ── 2. Cargo: visible for internal members (ADMINISTRADOR_EMPRESA, MIEMBRO or belonging to this empresa) ──
-        const isInternal = m.role === 'ADMINISTRADOR_EMPRESA' || m.role === 'MIEMBRO' || !m.empresaUsuario || m.empresaUsuario.trim() === '' ||
-          m.empresaUsuario.trim().toLowerCase() === emp.name.trim().toLowerCase();
+        // ── Cargo: visible ONLY for internal members (ADMINISTRADOR_EMPRESA, MIEMBRO, ADMINISTRADOR). Guests (INVITADO) do NOT have cargo here. ──
+        const isInternal = m.role === 'ADMINISTRADOR_EMPRESA' || m.role === 'MIEMBRO' || m.role === 'ADMINISTRADOR' || (!m.role);
 
         const cargoHtml = isInternal ? `
           <label class="block">
@@ -693,13 +684,6 @@ document.addEventListener('DOMContentLoaded', async () => {
           ${nombreHtml}
 
           <label class="block">
-            <span class="mb-1 block text-xs font-semibold text-slate-600">Empresa (Contratista / Firma)</span>
-            <select class="w-full text-xs rounded border-slate-200" onchange="updateUser(${i}, 'empresaUsuario', this.value); renderUsers();">
-              ${empOptions}
-            </select>
-          </label>
-          
-          <label class="block">
             <span class="mb-1 block text-xs font-semibold text-slate-600">Rol del Sistema</span>
             <select class="w-full text-xs rounded border-slate-200" onchange="updateUser(${i}, 'role', this.value)">
               <option value="MIEMBRO" ${m.role==='MIEMBRO' || (!m.role && isInternal) ? 'selected' : ''}>MIEMBRO</option>
@@ -730,9 +714,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     m[field] = val;
     if (field === 'role') {
       if (val === 'MIEMBRO' || val === 'ADMINISTRADOR_EMPRESA') {
-        if (!m.empresaUsuario || m.empresaUsuario.trim() === '') {
-          m.empresaUsuario = emp.name;
-        }
+        m.empresaUsuario = emp.name;
+      } else if (val === 'INVITADO') {
+        m.cargo = '';
       }
       renderUsers();
     }
@@ -753,7 +737,8 @@ document.addEventListener('DOMContentLoaded', async () => {
       name: 'Nuevo Usuario', 
       email: '', 
       role: 'MIEMBRO', 
-      empresaUsuario: emp.name 
+      empresaUsuario: emp.name,
+      cargo: ''
     });
     renderUsers();
   });
@@ -1521,7 +1506,7 @@ let contentBase = '';
         editorEl.classList.add('hidden');
         renderList();
         
-        showBanner('Empresa eliminada de Google Sheets. Haz clic en "Publicar en la Nube" para guardar los cambios.', 'success');
+        showBanner('Empresa eliminada de Google Sheets. Haz clic en "Guardar" para guardar los cambios.', 'success');
       } catch (e) {
         console.error(e);
         showBanner('Error al eliminar la empresa de Google Sheets.', 'error');
@@ -1563,7 +1548,7 @@ let contentBase = '';
   document.getElementById('publish-github-btn').addEventListener('click', async () => {
     let token = localStorage.getItem('github_pat');
     if (!token) {
-      token = prompt('Ingresa tu Personal Access Token (PAT) de GitHub para publicar directamente en el repositorio:');
+      token = prompt('Ingresa tu Personal Access Token (PAT) de GitHub para guardar directamente en el repositorio:');
       if (!token) { showBanner('Se requiere el token de GitHub.', 'error'); return; }
       localStorage.setItem('github_pat', token);
     }
@@ -1743,7 +1728,7 @@ let contentBase = '';
       }
       
       sessionStorage.removeItem('cachedCompanies_v2');
-      showBanner('✅ Los datos se han subido a la nube. GitHub Pages tardará de 1 a 3 minutos en compilar e integrar los cambios en el sitio público.', 'success');
+      showBanner('✅ Los datos se han guardado exitosamente en la nube. GitHub Pages tardará de 1 a 3 minutos en compilar e integrar los cambios en el sitio público.', 'success');
     } catch(e) {
       showBanner('❌ ' + e.message, 'error');
     }
@@ -2112,7 +2097,7 @@ window.deleteGlobalUser = async function(email, companyName) {
         renderGlobalUsers();
         
         if (changed) {
-            showBanner('Usuario eliminado. Se detectaron asociaciones en empresas, haz clic en "Publicar en la Nube" para guardar los cambios.', 'success');
+            showBanner('Usuario eliminado. Se detectaron asociaciones en empresas, haz clic en "Guardar" para guardar los cambios.', 'success');
         } else {
             showBanner('Usuario eliminado exitosamente de la base de datos.', 'success');
         }
