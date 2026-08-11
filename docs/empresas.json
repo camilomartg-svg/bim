@@ -64,13 +64,6 @@
         "empresaUsuario": "HIDROSANITARIO SAS",
         "especialidad": "Hidrosanitaria y gas",
         "cargo": "Administrador de Empresa"
-      },
-      {
-        "name": "Nuevo Usuario",
-        "email": "alc.spk.3@gmail.com",
-        "role": "MIEMBRO",
-        "empresaUsuario": "HIDROSANITARIO SAS",
-        "cargo": "Diseñador Hidrosánitario"
       }
     ],
     "razonSocial": "HIDROSANITARIO SAS",
@@ -97,6 +90,13 @@
         "empresaUsuario": "ELECTRICOS SAS",
         "especialidad": "CCTV, Eléctrica, Obras industriales",
         "cargo": "Administrador de Empresa"
+      },
+      {
+        "name": "Nuevo Usuario",
+        "email": "alc.spk.5@gmail.com",
+        "role": "MIEMBRO",
+        "empresaUsuario": "ELECTRICOS SAS",
+        "cargo": "Diseñador Eléctrico"
       }
     ],
     "razonSocial": "ELECTRICOS SAS",
