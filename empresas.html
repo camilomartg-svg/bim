@@ -265,6 +265,7 @@
                         if (!c.name) return;
                         const cNameClean = cleanText(c.name);
                         const cRazonClean = cleanText(c.razonSocial);
+                        const adminEmail = c.email ? c.email.toLowerCase().trim() : '';
 
                         // Find matching static empresa by id or name
                         let foundKey = null;
@@ -277,6 +278,9 @@
 
                         if (foundKey) {
                             const existing = mergedCompaniesMap.get(foundKey);
+                            if (adminEmail && !existing.admins.some(a => a.toLowerCase().trim() === adminEmail)) {
+                                existing.admins.push(adminEmail);
+                            }
                             mergedCompaniesMap.set(foundKey, {
                                 ...existing,
                                 location: c.city ? `${c.city}, ${c.country || 'Colombia'}` : existing.location,
@@ -284,16 +288,57 @@
                             });
                         } else {
                             const id = c.id || 'company-' + Date.now();
+                            const initialAdmins = adminEmail ? [adminEmail] : [];
+                            const initialMembers = adminEmail ? [{
+                                name: adminEmail.split('@')[0],
+                                email: adminEmail,
+                                role: 'ADMINISTRADOR_EMPRESA',
+                                empresaUsuario: c.name || c.legalName,
+                                cargo: 'Administrador de Empresa'
+                            }] : [];
+
                             mergedCompaniesMap.set(id, {
                                 id: id,
                                 name: c.name || c.legalName,
                                 code: c.code || (c.name ? c.name.substring(0,3).toUpperCase() : 'BIM'),
                                 location: c.city ? `${c.city}, ${c.country || 'Colombia'}` : 'Sede Principal',
                                 image: c.image || c.logoBase64 || 'https://i.postimg.cc/02mTnnQv/21bd5ee9d2351270615280386caad1f3.jpg',
-                                configUrl: c.configUrl || 'portal-config.json',
-                                admins: [],
-                                members: []
+                                configUrl: c.configUrl || `config-${id}.json`,
+                                admins: initialAdmins,
+                                members: initialMembers
                             });
+                        }
+                    });
+                }
+
+                // 3. Enrich companies with users registered in Google Sheets
+                if (Array.isArray(users)) {
+                    users.forEach(u => {
+                        if (!u.email || !u.empresa) return;
+                        const uEmailClean = u.email.toLowerCase().trim();
+                        const uEmpClean = cleanText(u.empresa);
+
+                        for (const [key, comp] of mergedCompaniesMap.entries()) {
+                            if (cleanText(comp.name) === uEmpClean || cleanText(comp.razonSocial) === uEmpClean) {
+                                if (u.rol === 'ADMINISTRADOR_EMPRESA') {
+                                    if (!comp.admins.some(a => a.toLowerCase().trim() === uEmailClean)) {
+                                        comp.admins.push(uEmailClean);
+                                    }
+                                }
+                                const mIdx = comp.members.findIndex(m => m.email && m.email.toLowerCase().trim() === uEmailClean);
+                                const memberObj = {
+                                    name: u.nombre || uEmailClean.split('@')[0],
+                                    email: uEmailClean,
+                                    role: u.rol || 'INVITADO',
+                                    empresaUsuario: u.empresa,
+                                    cargo: u.cargo || (u.rol === 'ADMINISTRADOR_EMPRESA' ? 'Administrador de Empresa' : '')
+                                };
+                                if (mIdx > -1) {
+                                    comp.members[mIdx] = { ...comp.members[mIdx], ...memberObj };
+                                } else {
+                                    comp.members.push(memberObj);
+                                }
+                            }
                         }
                     });
                 }
@@ -452,7 +497,8 @@
                     const cRazonClean = cleanText(c.razonSocial);
                     
                     // 1. Is user an administrator of this company?
-                    const isAdminOfCompany = Array.isArray(c.admins) && c.admins.some(a => a.toLowerCase().trim() === userEmail);
+                    const isAdminOfCompany = (Array.isArray(c.admins) && c.admins.some(a => a.toLowerCase().trim() === userEmail)) ||
+                                            (c.email && c.email.toLowerCase().trim() === userEmail);
                     
                     // 2. Is user an internal corporate employee of this company in Super Admin?
                     // Internal corporate members must have role 'ADMINISTRADOR_EMPRESA' OR have empresaUsuario matching the company name AND role is not 'INVITADO'
@@ -463,7 +509,12 @@
                         return false;
                     });
 
-                    if (isAdminOfCompany || isInternalMember) {
+                    // 3. Is this company assigned to the user in their account / live DB as company admin?
+                    const isAssignedCompany = userAccount && userAccount.empresa && 
+                        (cleanText(userAccount.empresa) === cNameClean || (cRazonClean && cleanText(userAccount.empresa) === cRazonClean)) && 
+                        (userAccount.role === 'ADMINISTRADOR_EMPRESA' || userAccount.role === 'ADMINISTRADOR');
+
+                    if (isAdminOfCompany || isInternalMember || isAssignedCompany) {
                         belongingCompanies.push(c);
                     } else {
                         // Check if user is an invited member / guest in this company
