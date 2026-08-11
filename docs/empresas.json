@@ -64,6 +64,13 @@
         "empresaUsuario": "HIDROSANITARIO SAS",
         "especialidad": "Hidrosanitaria y gas",
         "cargo": "Administrador de Empresa"
+      },
+      {
+        "name": "Nuevo Usuario",
+        "email": "alc.spk.3@gmail.com",
+        "role": "MIEMBRO",
+        "empresaUsuario": "HIDROSANITARIO SAS",
+        "cargo": "Diseñador Hidrosánitario"
       }
     ],
     "razonSocial": "HIDROSANITARIO SAS",
