@@ -82,7 +82,7 @@
     const curCompMember = companyMembers.find(cm => cm.email && cm.email.toLowerCase().trim() === clean);
     if (curCompMember) {
       if (curCompMember.empresaUsuario && curCompMember.empresaUsuario.trim()) return curCompMember.empresaUsuario.trim();
-      if (curCompMember.role === 'ADMINISTRADOR_EMPRESA') return currentCompany?.name || 'Empresa';
+      if (curCompMember.role === 'ADMINISTRADOR_EMPRESA' || curCompMember.role === 'MIEMBRO') return currentCompany?.name || 'Empresa';
     }
 
     if (Array.isArray(allCompaniesList)) {

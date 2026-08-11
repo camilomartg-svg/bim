@@ -533,12 +533,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (selectedIndex === -1) return;
     const emp = empresas[selectedIndex];
     if (!emp.members) emp.members = [];
-
-    // All company names for searchable dropdown
-    const allCompanyNames = empresas
-      .filter(e => !e.deleted && e.name)
-      .map(e => e.name)
-      .sort((a, b) => a.localeCompare(b));
     
     const grouped = {};
     emp.members.forEach((m, i) => {
@@ -572,16 +566,22 @@ document.addEventListener('DOMContentLoaded', async () => {
         const i = item.originalIndex;
         const m = item;
 
-        // ── 1. Empresa: standard select dropdown ────────────────────────
-        const companyOptionsList = [...allCompanyNames];
-        if (m.empresaUsuario && m.empresaUsuario.trim() !== '' && !companyOptionsList.includes(m.empresaUsuario.trim())) {
-          companyOptionsList.push(m.empresaUsuario.trim());
+        // ── 1. Empresa: restricted strictly to this company or external contractor ──
+        let empOptions = '';
+        const isCurrentCompanySelected = (!m.empresaUsuario || m.empresaUsuario === emp.name || m.role === 'ADMINISTRADOR_EMPRESA' || m.role === 'MIEMBRO');
+        
+        empOptions = `
+          <option value="${emp.name}" ${isCurrentCompanySelected ? 'selected' : ''}>${emp.name} (Mi Empresa)</option>
+          <option value="" ${(!isCurrentCompanySelected && (!m.empresaUsuario || m.empresaUsuario === '')) ? 'selected' : ''}>Sin Empresa Asignada / Externo</option>
+        `;
+        
+        // If an external contractor or third-party name is already typed/assigned, keep it as an option
+        if (m.empresaUsuario && m.empresaUsuario !== emp.name && m.empresaUsuario.trim() !== '') {
+          empOptions += `<option value="${m.empresaUsuario}" ${!isCurrentCompanySelected ? 'selected' : ''}>${m.empresaUsuario} (Contratista Externo)</option>`;
         }
-        const empOptions = `<option value="">Seleccione empresa...</option>` + 
-          companyOptionsList.map(n => `<option value="${n}" ${m.empresaUsuario === n ? 'selected' : ''}>${n}</option>`).join('');
 
-        // ── 2. Cargo: only visible if member's company = this empresa ───────
-        const isInternal = !m.empresaUsuario || m.empresaUsuario.trim() === '' ||
+        // ── 2. Cargo: visible for internal members (ADMINISTRADOR_EMPRESA, MIEMBRO or belonging to this empresa) ──
+        const isInternal = m.role === 'ADMINISTRADOR_EMPRESA' || m.role === 'MIEMBRO' || !m.empresaUsuario || m.empresaUsuario.trim() === '' ||
           m.empresaUsuario.trim().toLowerCase() === emp.name.trim().toLowerCase();
 
         const cargoHtml = isInternal ? `
@@ -702,8 +702,9 @@ document.addEventListener('DOMContentLoaded', async () => {
           <label class="block">
             <span class="mb-1 block text-xs font-semibold text-slate-600">Rol del Sistema</span>
             <select class="w-full text-xs rounded border-slate-200" onchange="updateUser(${i}, 'role', this.value)">
-              <option value="INVITADO" ${m.role==='INVITADO'?'selected':''}>INVITADO</option>
+              <option value="MIEMBRO" ${m.role==='MIEMBRO' || (!m.role && isInternal) ? 'selected' : ''}>MIEMBRO</option>
               <option value="ADMINISTRADOR_EMPRESA" ${m.role==='ADMINISTRADOR_EMPRESA'?'selected':''}>ADMINISTRADOR_EMPRESA</option>
+              <option value="INVITADO" ${m.role==='INVITADO'?'selected':''}>INVITADO</option>
             </select>
           </label>
 
@@ -722,7 +723,19 @@ document.addEventListener('DOMContentLoaded', async () => {
 
 
   window.updateUser = (idx, field, val) => {
-    empresas[selectedIndex].members[idx][field] = val;
+    if (selectedIndex === -1 || !empresas[selectedIndex] || !empresas[selectedIndex].members) return;
+    const emp = empresas[selectedIndex];
+    const m = emp.members[idx];
+    if (!m) return;
+    m[field] = val;
+    if (field === 'role') {
+      if (val === 'MIEMBRO' || val === 'ADMINISTRADOR_EMPRESA') {
+        if (!m.empresaUsuario || m.empresaUsuario.trim() === '') {
+          m.empresaUsuario = emp.name;
+        }
+      }
+      renderUsers();
+    }
   };
   
   window.deleteUser = (idx) => {
@@ -734,8 +747,14 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   document.getElementById('add-usuario-btn').addEventListener('click', () => {
     if (selectedIndex === -1) return;
-    if (!empresas[selectedIndex].members) empresas[selectedIndex].members = [];
-    empresas[selectedIndex].members.push({ name: 'Nuevo Usuario', email: '', role: 'INVITADO' });
+    const emp = empresas[selectedIndex];
+    if (!emp.members) emp.members = [];
+    emp.members.push({ 
+      name: 'Nuevo Usuario', 
+      email: '', 
+      role: 'MIEMBRO', 
+      empresaUsuario: emp.name 
+    });
     renderUsers();
   });
 
@@ -1855,8 +1874,10 @@ window.renderGlobalUsers = function(searchTerm = '') {
         
         let roleStyle = 'bg-slate-100 text-slate-600';
         if(u.role === 'SUPER_ADMINISTRADOR') roleStyle = 'bg-purple-100 text-purple-700';
-        else if(u.role === 'ADMINISTRADOR_EMPRESA') roleStyle = 'bg-blue-100 text-blue-700';
-        else if(u.role === 'EDITOR') roleStyle = 'bg-emerald-100 text-emerald-700';
+        else if(u.role === 'ADMINISTRADOR_EMPRESA' || u.role === 'ADMINISTRADOR') roleStyle = 'bg-blue-100 text-blue-700';
+        else if(u.role === 'MIEMBRO') roleStyle = 'bg-emerald-100 text-emerald-700';
+        else if(u.role === 'EDITOR') roleStyle = 'bg-teal-100 text-teal-700';
+        else if(u.role === 'INVITADO') roleStyle = 'bg-amber-100 text-amber-700';
         
         let statusBadge = '';
         if(u.estado === 'PENDIENTE') statusBadge = '<span class="ml-2 inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-amber-100 text-amber-800">Pendiente</span>';
@@ -2168,7 +2189,7 @@ window.approvePendingUser = async function(email, nombre, empresa) {
             email: email,
             nombre: nombre,
             estado: 'APROBADO',
-            rol: 'VISOR',
+            rol: 'MIEMBRO',
             empresa: empresa
         };
 
@@ -2180,7 +2201,7 @@ window.approvePendingUser = async function(email, nombre, empresa) {
             body: JSON.stringify(payload)
         });
 
-        alert(`${nombre} ha sido aprobado exitosamente.`);
+        alert(`${nombre} ha sido aprobado exitosamente como MIEMBRO de ${empresa}.`);
         
         // Refresh pending requests list
         if (window.fetchPendingRequests) window.fetchPendingRequests(empresa);
@@ -2207,8 +2228,8 @@ window.quickApproveUser = async function(email, nombre, companyName = '') {
         empresa = empresa.trim();
     }
 
-    // Default approved role: ADMINISTRADOR_EMPRESA if empresa, else INVITADO
-    const rol = empresa ? 'ADMINISTRADOR_EMPRESA' : (u.role === 'INVITADO' ? 'VISOR' : u.role);
+    // Default approved role: MIEMBRO if empresa and not already specified as admin, else INVITADO
+    const rol = empresa ? (u.role === 'ADMINISTRADOR_EMPRESA' ? 'ADMINISTRADOR_EMPRESA' : 'MIEMBRO') : (u.role === 'INVITADO' ? 'INVITADO' : (u.role || 'INVITADO'));
 
     try {
         const payload = {

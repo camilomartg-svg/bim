@@ -367,7 +367,7 @@
                         const activeEntry = userEntries.reverse().find(u => {
                             const dbEstado = u.estado ? u.estado.toUpperCase().trim() : '';
                             const dbRol = u.rol ? u.rol.toUpperCase().trim() : '';
-                            return dbEstado === 'APROBADO' || dbRol === 'SUPER_ADMINISTRADOR' || dbRol === 'ADMINISTRADOR_EMPRESA';
+                            return dbEstado === 'APROBADO' || dbRol === 'SUPER_ADMINISTRADOR' || dbRol === 'ADMINISTRADOR_EMPRESA' || dbRol === 'MIEMBRO';
                         });
 
                         if (!activeEntry) {
@@ -428,23 +428,41 @@
                 }
 
                 // Helper to render individual company card
-                const renderCard = (c, isGuest = false) => `
+                const renderCard = (c, isGuest = false) => {
+                    const isAdminOfCompany = (Array.isArray(c.admins) && c.admins.some(a => a.toLowerCase().trim() === userEmail)) ||
+                                            (c.email && c.email.toLowerCase().trim() === userEmail) ||
+                                            (Array.isArray(c.members) && c.members.some(m => m.email && m.email.toLowerCase().trim() === userEmail && (m.role === 'ADMINISTRADOR_EMPRESA' || m.role === 'ADMINISTRADOR')));
+
+                    let badgeLabel = 'Miembro Corporativo';
+                    let badgeIcon = 'corporate_fare';
+                    let badgeColor = 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/70 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800';
+                    let bottomBadgeColor = 'text-emerald-700 dark:text-emerald-300 border-emerald-100 dark:border-emerald-900';
+                    let bottomBadgeText = 'Miembro Corporativo';
+
+                    if (isGuest) {
+                        badgeLabel = 'Invitado';
+                        badgeIcon = 'badge';
+                        badgeColor = 'bg-indigo-100 text-indigo-800 dark:bg-indigo-950/70 dark:text-indigo-300 border-indigo-200 dark:border-indigo-800';
+                        bottomBadgeColor = 'text-indigo-700 dark:text-indigo-300 border-indigo-100 dark:border-indigo-900';
+                        bottomBadgeText = 'Acceso Invitado';
+                    } else if (isAdminOfCompany) {
+                        badgeLabel = 'Administrador';
+                        badgeIcon = 'admin_panel_settings';
+                        badgeColor = 'bg-blue-100 text-blue-800 dark:bg-blue-950/70 dark:text-blue-300 border-blue-200 dark:border-blue-800';
+                        bottomBadgeColor = 'text-blue-700 dark:text-blue-300 border-blue-100 dark:border-blue-900';
+                        bottomBadgeText = 'Administrador de Empresa';
+                    }
+
+                    return `
                     <a href="home.html?empresa=${c.id}&v=${Date.now()}" class="card-hover flex-none w-[260px] md:w-[320px] lg:w-[360px] group transition-transform duration-500 block">
                         <div class="flex justify-between items-end mb-4 border-b border-gray-300 dark:border-gray-700 pb-2">
                             <div class="flex flex-col min-w-0 pr-2">
                                 <div class="flex items-center gap-2 mb-1">
                                     <span class="text-[9px] font-bold text-gray-400 uppercase tracking-widest">${c.code || 'BIM'}</span>
-                                    ${isGuest ? `
-                                        <span class="text-[8px] font-black uppercase tracking-wider bg-indigo-100 text-indigo-800 dark:bg-indigo-950/70 dark:text-indigo-300 px-2 py-0.5 rounded-md border border-indigo-200 dark:border-indigo-800 flex items-center gap-1">
-                                            <span class="material-symbols-outlined text-[10px]">badge</span>
-                                            Invitado
-                                        </span>
-                                    ` : `
-                                        <span class="text-[8px] font-black uppercase tracking-wider bg-emerald-100 text-emerald-800 dark:bg-emerald-950/70 dark:text-emerald-300 px-2 py-0.5 rounded-md border border-emerald-200 dark:border-emerald-800 flex items-center gap-1">
-                                            <span class="material-symbols-outlined text-[10px]">home_work</span>
-                                            Mi Empresa
-                                        </span>
-                                    `}
+                                    <span class="text-[8px] font-black uppercase tracking-wider ${badgeColor} px-2 py-0.5 rounded-md border flex items-center gap-1">
+                                        <span class="material-symbols-outlined text-[10px]">${badgeIcon}</span>
+                                        ${badgeLabel}
+                                    </span>
                                 </div>
                                 <span class="text-xs font-bold uppercase tracking-wider text-gray-800 dark:text-gray-200 truncate">${c.name}</span>
                             </div>
@@ -454,20 +472,14 @@
                             <div class="w-full h-full card-image-wrapper">
                                 <img src="${c.image}" alt="${c.name}" class="w-full h-full object-cover filter brightness-95 contrast-105" />
                             </div>
-                            ${isGuest ? `
-                                <div class="absolute bottom-3 left-3 bg-white/95 dark:bg-gray-900/95 backdrop-blur-md px-3 py-1.5 rounded-lg text-[9px] font-bold uppercase tracking-widest text-indigo-700 dark:text-indigo-300 shadow-md flex items-center gap-1.5 border border-indigo-100 dark:border-indigo-900">
-                                    <span class="material-symbols-outlined text-[14px]">sensor_occupied</span>
-                                    <span>Acceso Invitado</span>
-                                </div>
-                            ` : `
-                                <div class="absolute bottom-3 left-3 bg-white/95 dark:bg-gray-900/95 backdrop-blur-md px-3 py-1.5 rounded-lg text-[9px] font-bold uppercase tracking-widest text-emerald-700 dark:text-emerald-300 shadow-md flex items-center gap-1.5 border border-emerald-100 dark:border-emerald-900">
-                                    <span class="material-symbols-outlined text-[14px]">corporate_fare</span>
-                                    <span>Miembro Corporativo</span>
-                                </div>
-                            `}
+                            <div class="absolute bottom-3 left-3 bg-white/95 dark:bg-gray-900/95 backdrop-blur-md px-3 py-1.5 rounded-lg text-[9px] font-bold uppercase tracking-widest ${bottomBadgeColor} shadow-md flex items-center gap-1.5 border">
+                                <span class="material-symbols-outlined text-[14px]">${badgeIcon}</span>
+                                <span>${bottomBadgeText}</span>
+                            </div>
                         </div>
                     </a>
                 `;
+                };
 
                 if (userAccount && userAccount.role === 'SUPER_ADMINISTRADOR') {
                     if (superAdminLink) superAdminLink.classList.remove('hidden');
@@ -501,18 +513,18 @@
                                             (c.email && c.email.toLowerCase().trim() === userEmail);
                     
                     // 2. Is user an internal corporate employee of this company in Super Admin?
-                    // Internal corporate members must have role 'ADMINISTRADOR_EMPRESA' OR have empresaUsuario matching the company name AND role is not 'INVITADO'
+                    // Internal corporate members must have role 'ADMINISTRADOR_EMPRESA', 'ADMINISTRADOR', or 'MIEMBRO' OR have empresaUsuario matching the company name AND role is not 'INVITADO'
                     const isInternalMember = Array.isArray(c.members) && c.members.some(m => {
                         if (!m.email || m.email.toLowerCase().trim() !== userEmail) return false;
-                        if (m.role === 'ADMINISTRADOR_EMPRESA' || m.role === 'ADMINISTRADOR') return true;
+                        if (m.role === 'ADMINISTRADOR_EMPRESA' || m.role === 'ADMINISTRADOR' || m.role === 'MIEMBRO') return true;
                         if (m.empresaUsuario && (cleanText(m.empresaUsuario) === cNameClean || (cRazonClean && cleanText(m.empresaUsuario) === cRazonClean)) && m.role !== 'INVITADO') return true;
                         return false;
                     });
 
-                    // 3. Is this company assigned to the user in their account / live DB as company admin?
+                    // 3. Is this company assigned to the user in their account / live DB as company admin or member?
                     const isAssignedCompany = userAccount && userAccount.empresa && 
                         (cleanText(userAccount.empresa) === cNameClean || (cRazonClean && cleanText(userAccount.empresa) === cRazonClean)) && 
-                        (userAccount.role === 'ADMINISTRADOR_EMPRESA' || userAccount.role === 'ADMINISTRADOR');
+                        (userAccount.role === 'ADMINISTRADOR_EMPRESA' || userAccount.role === 'ADMINISTRADOR' || userAccount.role === 'MIEMBRO');
 
                     if (isAdminOfCompany || isInternalMember || isAssignedCompany) {
                         belongingCompanies.push(c);
