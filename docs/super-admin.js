@@ -1561,7 +1561,7 @@ let contentBase = '';
         }
     }
 
-    showBanner('Sincronizando con GitHub, por favor espere...', 'info');
+    showBanner('Guardando cambios...', 'info');
     
     // Save super admins to portal-config
     let portalConfigStr = '';
@@ -1624,7 +1624,6 @@ let contentBase = '';
       });
 
       if (toApprove.length > 0) {
-        showBanner(`Aprobando ${toApprove.length} usuario(s) pendiente(s)...`, 'info');
         for (const u of toApprove) {
           const rol = u.role || 'INVITADO';
           const payload = { action: 'saveUser', email: u.email, nombre: u.name, rol: rol, empresa: u.empName, estado: 'APROBADO' };
@@ -1643,7 +1642,7 @@ let contentBase = '';
       // ───────────────────────────────────────────────────────────────────────
 
       // ── SINCRONIZACIÓN DE CARPETAS EN GOOGLE DRIVE ───────────────────────
-      showBanner('Sincronizando carpetas en Google Drive...', 'info');
+      showBanner('Guardando cambios...', 'info');
       try {
         const syncPayload = {
           action: 'syncDriveFolders',
@@ -1728,7 +1727,7 @@ let contentBase = '';
       }
       
       sessionStorage.removeItem('cachedCompanies_v2');
-      showBanner('✅ Los datos se han guardado exitosamente en la nube. GitHub Pages tardará de 1 a 3 minutos en compilar e integrar los cambios en el sitio público.', 'success');
+      showBanner('✅ Los datos se han guardado exitosamente, tardará de 1 a 3 minutos en integrar los cambios.', 'success');
     } catch(e) {
       showBanner('❌ ' + e.message, 'error');
     }
