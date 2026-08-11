@@ -523,8 +523,47 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
   };
 
+  function resolveMemberCompany(m, emp) {
+    if (m.role === 'ADMINISTRADOR_EMPRESA' || m.role === 'MIEMBRO' || (!m.role)) {
+      return emp.name || 'Mi Empresa';
+    }
+
+    // Role is INVITADO:
+    const emailClean = (m.email || '').toLowerCase().trim();
+
+    // 1. Check if m.empresaUsuario is defined and different from current company
+    if (m.empresaUsuario && m.empresaUsuario.trim() !== '' && m.empresaUsuario.trim().toLowerCase() !== (emp.name || '').trim().toLowerCase()) {
+      return m.empresaUsuario.trim();
+    }
+
+    // 2. Check window.globalUsersMap (Google Sheet database)
+    if (emailClean && window.globalUsersMap) {
+      const gu = window.globalUsersMap.get(emailClean);
+      if (gu && gu.companyName && gu.companyName.trim() !== '' && 
+          gu.companyName.trim().toLowerCase() !== (emp.name || '').trim().toLowerCase() && 
+          gu.companyName.trim().toLowerCase() !== 'sin empresa asignada' &&
+          gu.companyName.trim().toLowerCase() !== 'invitados / externos') {
+        return gu.companyName.trim();
+      }
+    }
+
+    // 3. Search other companies in `empresas` where this user is MIEMBRO or ADMINISTRADOR_EMPRESA
+    if (emailClean && Array.isArray(empresas)) {
+      const homeEmp = empresas.find(e => e.id !== emp.id && (e.members || []).some(otherM => 
+        otherM.email && otherM.email.toLowerCase().trim() === emailClean && 
+        (otherM.role === 'MIEMBRO' || otherM.role === 'ADMINISTRADOR_EMPRESA')
+      ));
+      if (homeEmp && homeEmp.name) {
+        return homeEmp.name.trim();
+      }
+    }
+
+    return 'Invitados / Externos';
+  }
+
   function renderUsers() {
     window.renderUsersRef = renderUsers;
+    window.renderUsers = renderUsers;
     // Reset global collapse state
     window.allGroupsCollapsed = false;
     const iconAll = document.getElementById('icon-toggle-all');
@@ -538,10 +577,16 @@ document.addEventListener('DOMContentLoaded', async () => {
     emp.members.forEach((m, i) => {
       let g = '';
       if(window.currentGroupBy === 'empresa') {
-        if (m.role === 'ADMINISTRADOR_EMPRESA' || m.role === 'MIEMBRO' || !m.role) {
-          g = emp.name || 'Mi Empresa';
+        g = resolveMemberCompany(m, emp);
+        // Synchronize m.empresaUsuario in memory
+        if (m.role === 'INVITADO') {
+          if (g !== 'Invitados / Externos') {
+            m.empresaUsuario = g;
+          } else if (m.empresaUsuario && m.empresaUsuario.trim().toLowerCase() === (emp.name || '').trim().toLowerCase()) {
+            m.empresaUsuario = '';
+          }
         } else {
-          g = m.empresaUsuario && m.empresaUsuario.trim() !== '' ? m.empresaUsuario.trim() : 'Invitados / Externos';
+          m.empresaUsuario = emp.name;
         }
       } else {
         g = m.especialidad && m.especialidad.trim() !== '' ? m.especialidad.trim() : 'Sin Especialidad Asignada';
@@ -717,6 +762,21 @@ document.addEventListener('DOMContentLoaded', async () => {
         m.empresaUsuario = emp.name;
       } else if (val === 'INVITADO') {
         m.cargo = '';
+        const extEmp = resolveMemberCompany(m, emp);
+        m.empresaUsuario = extEmp !== 'Invitados / Externos' ? extEmp : '';
+      }
+      renderUsers();
+    } else if (field === 'email') {
+      const emailClean = (val || '').toLowerCase().trim();
+      if (emailClean && window.globalUsersMap) {
+        const gu = window.globalUsersMap.get(emailClean);
+        if (gu && gu.name && gu.name.trim() !== '' && gu.name.trim().toLowerCase() !== 'nuevo usuario') {
+          m.name = gu.name.trim();
+        }
+      }
+      if (m.role === 'INVITADO') {
+        const extEmp = resolveMemberCompany(m, emp);
+        m.empresaUsuario = extEmp !== 'Invitados / Externos' ? extEmp : '';
       }
       renderUsers();
     }

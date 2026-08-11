@@ -43,14 +43,14 @@
         "name": "Nuevo Usuario",
         "email": "alc.spk.3@gmail.com",
         "role": "INVITADO",
-        "empresaUsuario": "Mesh Estudio",
+        "empresaUsuario": "HIDROSANITARIO SAS",
         "cargo": ""
       },
       {
         "name": "Nuevo Usuario",
         "email": "alc.spk.5@gmail.com",
         "role": "INVITADO",
-        "empresaUsuario": "Mesh Estudio",
+        "empresaUsuario": "",
         "cargo": ""
       }
     ],
