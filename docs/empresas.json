@@ -38,6 +38,20 @@
         "role": "MIEMBRO",
         "empresaUsuario": "Mesh Estudio",
         "cargo": "Modelador BIM"
+      },
+      {
+        "name": "Nuevo Usuario",
+        "email": "alc.spk.3@gmail.com",
+        "role": "INVITADO",
+        "empresaUsuario": "Mesh Estudio",
+        "cargo": ""
+      },
+      {
+        "name": "Nuevo Usuario",
+        "email": "alc.spk.5@gmail.com",
+        "role": "INVITADO",
+        "empresaUsuario": "Mesh Estudio",
+        "cargo": ""
       }
     ],
     "razonSocial": "Mesh Estudio SAS",
@@ -90,13 +104,6 @@
         "empresaUsuario": "ELECTRICOS SAS",
         "especialidad": "CCTV, Eléctrica, Obras industriales",
         "cargo": "Administrador de Empresa"
-      },
-      {
-        "name": "Nuevo Usuario",
-        "email": "alc.spk.5@gmail.com",
-        "role": "MIEMBRO",
-        "empresaUsuario": "ELECTRICOS SAS",
-        "cargo": "Diseñador Eléctrico"
       }
     ],
     "razonSocial": "ELECTRICOS SAS",
