@@ -4,7 +4,8 @@ const path = require('path');
 const filesToSync = [
   'super-admin.js',
   'portal-configurator.js',
-  'project-settings.js'
+  'project-settings.js',
+  'home.html'
 ];
 
 filesToSync.forEach(file => {

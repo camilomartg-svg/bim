@@ -314,9 +314,33 @@
                 .replace(/[^a-z0-9]+/g, '-')
                 .replace(/^-+|-+$/g, '') || 'proyecto';
             const canAccess = (item) => {
-                if (userRole === 'ADMINISTRADOR' || userRole === 'SUPER_ADMINISTRADOR' || userRole === 'ADMINISTRADOR_EMPRESA') return true;
+                const currentEmpresaData = window.currentEmpresaData;
+                let effectiveRole = 'INVITADO';
+                const userEmail = (userAccount?.username || '').toLowerCase().trim();
+                const superAdminEmails = ['imagina3ddesign@gmail.com', 'mcmartinezg@unal.edu.co'];
+                const isGlobalSuperAdmin = userRole === 'SUPER_ADMINISTRADOR' || superAdminEmails.includes(userEmail);
+                
+                if (isGlobalSuperAdmin) {
+                    effectiveRole = 'SUPER_ADMINISTRADOR';
+                } else if (currentEmpresaData) {
+                    const inAdmins = Array.isArray(currentEmpresaData.admins) && currentEmpresaData.admins.some(a => a.toLowerCase().trim() === userEmail);
+                    const memberMatch = Array.isArray(currentEmpresaData.members) && currentEmpresaData.members.find(m => m.email && m.email.toLowerCase().trim() === userEmail);
+                    const isMemberAdmin = memberMatch && (memberMatch.role === 'ADMINISTRADOR_EMPRESA' || memberMatch.role === 'ADMINISTRADOR');
+                    
+                    if (inAdmins || isMemberAdmin) {
+                        effectiveRole = 'ADMINISTRADOR_EMPRESA';
+                    } else if (memberMatch) {
+                        effectiveRole = memberMatch.role || 'INVITADO';
+                    } else {
+                        effectiveRole = 'INVITADO';
+                    }
+                } else {
+                    effectiveRole = userRole || 'INVITADO';
+                }
+
+                if (effectiveRole === 'ADMINISTRADOR' || effectiveRole === 'SUPER_ADMINISTRADOR' || effectiveRole === 'ADMINISTRADOR_EMPRESA') return true;
                 const roles = Array.isArray(item?.allowedRoles) ? item.allowedRoles : [];
-                return roles.length === 0 || (userRole && roles.includes(userRole));
+                return roles.length === 0 || (effectiveRole && roles.includes(effectiveRole));
             };
             const resolveProjectHref = (project) => {
                 if (!project || project.enabled === false) return '#';
@@ -467,14 +491,40 @@
                 
                 renderProjects(filteredProjects);
                 renderLinkItems(publicacionesList, safeConfig.publicaciones);
-                if (userRole === 'ADMINISTRADOR_EMPRESA') {
+                // Determinar rol efectivo para agregar botones administrativos locales
+                let effectiveRole = 'INVITADO';
+                const userEmail = (userAccount?.username || '').toLowerCase().trim();
+                const superAdminEmails = ['imagina3ddesign@gmail.com', 'mcmartinezg@unal.edu.co'];
+                const isGlobalSuperAdmin = userRole === 'SUPER_ADMINISTRADOR' || superAdminEmails.includes(userEmail);
+                
+                if (isGlobalSuperAdmin) {
+                    effectiveRole = 'SUPER_ADMINISTRADOR';
+                } else if (currentEmpresaData) {
+                    const inAdmins = Array.isArray(currentEmpresaData.admins) && currentEmpresaData.admins.some(a => a.toLowerCase().trim() === userEmail);
+                    const memberMatch = Array.isArray(currentEmpresaData.members) && currentEmpresaData.members.find(m => m.email && m.email.toLowerCase().trim() === userEmail);
+                    const isMemberAdmin = memberMatch && (memberMatch.role === 'ADMINISTRADOR_EMPRESA' || memberMatch.role === 'ADMINISTRADOR');
+                    
+                    if (inAdmins || isMemberAdmin) {
+                        effectiveRole = 'ADMINISTRADOR_EMPRESA';
+                    } else if (memberMatch) {
+                        effectiveRole = memberMatch.role || 'INVITADO';
+                    } else {
+                        effectiveRole = 'INVITADO';
+                    }
+                } else {
+                    effectiveRole = userRole || 'INVITADO';
+                }
+
+                if (effectiveRole === 'ADMINISTRADOR_EMPRESA' || effectiveRole === 'SUPER_ADMINISTRADOR') {
                     if (!safeConfig.solicitudes) safeConfig.solicitudes = [];
-                    safeConfig.solicitudes.push({
-                        id: 'link-admin-empresa',
-                        label: 'Administrar CDE',
-                        href: 'super-admin.html',
-                        allowedRoles: ['ADMINISTRADOR_EMPRESA']
-                    });
+                    if (!safeConfig.solicitudes.some(s => s.id === 'link-admin-empresa')) {
+                        safeConfig.solicitudes.push({
+                            id: 'link-admin-empresa',
+                            label: 'Administrar CDE',
+                            href: 'super-admin.html',
+                            allowedRoles: ['ADMINISTRADOR_EMPRESA']
+                        });
+                    }
                 }
                 
                 renderLinkItems(solicitudesList, safeConfig.solicitudes);
