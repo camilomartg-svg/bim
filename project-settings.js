@@ -448,6 +448,44 @@
         if (el.breadcrumbProyecto) {
             el.breadcrumbProyecto.textContent = (activeProject.name || projectSlug || 'PROYECTO').toUpperCase();
         }
+
+        // --- AUTHORIZATION SECURITY CHECK ---
+        const userAccount = JSON.parse(sessionStorage.getItem('userAccount') || localStorage.getItem('userAccount') || 'null');
+        const userEmail = (userAccount?.username || '').toLowerCase().trim();
+        const userRole = userAccount?.role || 'INVITADO';
+
+        // 1. Super Admin check
+        const superAdminEmails = ['imagina3ddesign@gmail.com', 'mcmartinezg@unal.edu.co'];
+        const isSuperAdmin = userRole === 'SUPER_ADMINISTRADOR' || superAdminEmails.includes(userEmail);
+
+        // 2. Company Admin check
+        let isCompanyAdmin = isSuperAdmin;
+        if (!isCompanyAdmin && userRole === 'ADMINISTRADOR_EMPRESA' && currentCompany) {
+            const isAdminEmail = (currentCompany.admins || []).some(
+                (a) => a.toLowerCase().trim() === userEmail
+            );
+            const isMemberAdmin = (currentCompany.members || []).some(
+                (m) =>
+                    m.email &&
+                    m.email.toLowerCase().trim() === userEmail &&
+                    (m.role === 'ADMINISTRADOR_EMPRESA' || m.role === 'ADMINISTRADOR')
+            );
+            if (isAdminEmail || isMemberAdmin) {
+                isCompanyAdmin = true;
+            }
+        }
+
+        // 3. Project Admin check
+        const projectAdmins = Array.isArray(activeProject?.iso19650?.projectAdmins)
+            ? activeProject.iso19650.projectAdmins.map(a => a.toLowerCase().trim())
+            : [];
+        const isProjectAdmin = isCompanyAdmin || projectAdmins.includes(userEmail);
+
+        if (!isProjectAdmin) {
+            alert('Acceso denegado. No tienes permisos para gestionar la configuración de este proyecto.');
+            window.location.replace('home.html');
+            return;
+        }
         
         // Inicializar arreglos si no existen
         if (!activeProject.members) activeProject.members = [];

@@ -17,6 +17,36 @@ document.addEventListener('DOMContentLoaded', async () => {
     } catch(e) { console.error("Error loading empresas", e); }
   }
 
+  // --- VERIFICACIÓN DE PERMISOS MULTI-TENANT ---
+  const userAccount = JSON.parse(sessionStorage.getItem('userAccount') || localStorage.getItem('userAccount') || 'null');
+  const userEmail = (userAccount?.username || '').toLowerCase().trim();
+  const userRole = userAccount?.role || 'INVITADO';
+  
+  const superAdminEmails = ['imagina3ddesign@gmail.com', 'mcmartinezg@unal.edu.co'];
+  const isSuperAdmin = userRole === 'SUPER_ADMINISTRADOR' || superAdminEmails.includes(userEmail);
+
+  if (!CURRENT_EMPRESA) {
+    // Si no hay empresa especificada en la URL, se está editando la configuración global.
+    // Solo un SUPER_ADMINISTRADOR puede editar la configuración global.
+    if (!isSuperAdmin) {
+      alert('Acceso denegado. Solo los Súper Administradores pueden editar la configuración global.');
+      window.location.replace('home.html');
+      return;
+    }
+  } else {
+    // Si hay una empresa especificada, verificamos si el usuario tiene acceso administrativo a ella.
+    let hasAccess = isSuperAdmin;
+    if (!hasAccess && userRole === 'ADMINISTRADOR_EMPRESA') {
+      hasAccess = (CURRENT_EMPRESA.admins || []).some(email => email.toLowerCase().trim() === userEmail) ||
+                  (CURRENT_EMPRESA.members || []).some(m => m.email && m.email.toLowerCase().trim() === userEmail && (m.role === 'ADMINISTRADOR_EMPRESA' || m.role === 'ADMINISTRADOR'));
+    }
+    if (!hasAccess) {
+      alert('Acceso denegado. No tienes permisos de administrador para la empresa ' + CURRENT_EMPRESA.name + '.');
+      window.location.replace('home.html');
+      return;
+    }
+  }
+
   const GreenI_TEMPLATE = {
     eyebrow: 'Portal BIM',
     title: 'Green I',
@@ -189,7 +219,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     applyGreenIBtn: document.getElementById('apply-GreenI-btn'),
   };
 
-  const userAccount = JSON.parse(sessionStorage.getItem('userAccount') || localStorage.getItem('userAccount') || 'null');
+  // Using userAccount from top-level declaration
   if (userAccount?.name) {
     el.sessionUser.textContent = `Hola, ${userAccount.name.split(' ')[0]}`;
   }
@@ -527,6 +557,24 @@ document.addEventListener('DOMContentLoaded', async () => {
   }
 
   async function pushToGitHub(content) {
+    // Defense-in-depth: Re-verify access right before pushing!
+    let hasAccess = isSuperAdmin;
+    if (!CURRENT_EMPRESA) {
+      if (!hasAccess) {
+        alert('Acceso denegado. No tienes permisos para publicar la configuración global.');
+        return;
+      }
+    } else {
+      if (!hasAccess && userRole === 'ADMINISTRADOR_EMPRESA') {
+        hasAccess = (CURRENT_EMPRESA.admins || []).some(email => email.toLowerCase().trim() === userEmail) ||
+                    (CURRENT_EMPRESA.members || []).some(m => m.email && m.email.toLowerCase().trim() === userEmail && (m.role === 'ADMINISTRADOR_EMPRESA' || m.role === 'ADMINISTRADOR'));
+      }
+      if (!hasAccess) {
+        alert('Acceso denegado. No tienes permisos de administrador para la empresa ' + CURRENT_EMPRESA.name + '.');
+        return;
+      }
+    }
+
     let token = localStorage.getItem('github_pat');
     if (!token) {
       token = prompt('Ingresa tu Personal Access Token (PAT) de GitHub para publicar directamente en el repositorio:');

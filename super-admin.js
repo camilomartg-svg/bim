@@ -396,9 +396,21 @@ document.addEventListener('DOMContentLoaded', async () => {
   }
 
   window.selectEmpresa = async (index) => {
-    selectedIndex = index;
-      window.selectedIndex = index;
     const emp = empresas[index];
+    if (!emp) return;
+
+    // Security context validation
+    let hasAccess = userRole === 'SUPER_ADMINISTRADOR';
+    if (!hasAccess && userRole === 'ADMINISTRADOR_EMPRESA') {
+      hasAccess = emp.members && emp.members.some(m => m.email && m.email.toLowerCase() === userEmail && (m.role === 'ADMINISTRADOR_EMPRESA' || m.role === 'ADMINISTRADOR'));
+    }
+    if (!hasAccess) {
+      alert('Acceso denegado. No tienes permisos para gestionar esta empresa.');
+      return;
+    }
+
+    selectedIndex = index;
+    window.selectedIndex = index;
     
     // Load projects for this company
     await loadCompanyConfig(emp);
@@ -1766,7 +1778,7 @@ let contentBase = '';
       await pushFile('empresas.json', empJson);
       await pushFile('docs/empresas.json', empJson); // if docs exists
       
-      if (portalConfigStr) {
+      if (portalConfigStr && userRole === 'SUPER_ADMINISTRADOR') {
         await pushFile('portal-config.json', portalConfigStr);
         await pushFile('docs/portal-config.json', portalConfigStr);
       }
@@ -1775,6 +1787,16 @@ let contentBase = '';
       for (const [empId, configData] of Object.entries(companyConfigs)) {
         const emp = empresas.find(e => e.id === empId);
         if (emp) {
+          // Security filter: check if user has write permissions for this company config
+          let hasAccess = userRole === 'SUPER_ADMINISTRADOR';
+          if (!hasAccess && userRole === 'ADMINISTRADOR_EMPRESA') {
+            hasAccess = emp.members && emp.members.some(m => m.email && m.email.toLowerCase() === userEmail && (m.role === 'ADMINISTRADOR_EMPRESA' || m.role === 'ADMINISTRADOR'));
+          }
+          if (!hasAccess) {
+            console.log(`Skipping sync of config file for company ${empId} due to lack of administrative permissions.`);
+            continue;
+          }
+
           const path = emp.configUrl || `config-${empId}.json`;
           // Mantener compatibilidad de portal si no existe
           if (!configData.portal) {
