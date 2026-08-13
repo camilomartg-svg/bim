@@ -52,6 +52,13 @@
         "role": "INVITADO",
         "empresaUsuario": "",
         "cargo": ""
+      },
+      {
+        "name": "Cuenta1",
+        "email": "alc.spk.1@gmail.com",
+        "role": "INVITADO",
+        "empresaUsuario": "ELECTRICOS SAS",
+        "cargo": ""
       }
     ],
     "razonSocial": "Mesh Estudio SAS",
@@ -110,14 +117,7 @@
         "role": "ADMINISTRADOR_EMPRESA",
         "empresaUsuario": "ELECTRICOS SAS",
         "especialidad": "CCTV, Eléctrica, Obras industriales",
-        "cargo": "BIM Manager"
-      },
-      {
-        "name": "Cuenta5",
-        "email": "alc.spk.5@gmail.com",
-        "role": "MIEMBRO",
-        "empresaUsuario": "ELECTRICOS SAS",
-        "cargo": "Diseñador Eléctrico"
+        "cargo": "Administrador de Empresa"
       }
     ],
     "razonSocial": "ELECTRICOS SAS",
