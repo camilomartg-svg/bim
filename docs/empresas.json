@@ -52,6 +52,13 @@
         "role": "INVITADO",
         "empresaUsuario": "",
         "cargo": ""
+      },
+      {
+        "name": "Cuenta1",
+        "email": "alc.spk.1@gmail.com",
+        "role": "INVITADO",
+        "empresaUsuario": "ELECTRICOS SAS",
+        "cargo": ""
       }
     ],
     "razonSocial": "Mesh Estudio SAS",
