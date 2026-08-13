@@ -118,6 +118,13 @@
         "empresaUsuario": "ELECTRICOS SAS",
         "especialidad": "CCTV, Eléctrica, Obras industriales",
         "cargo": "Administrador de Empresa"
+      },
+      {
+        "name": "Cuenta5",
+        "email": "alc.spk.5@gmail.com",
+        "role": "MIEMBRO",
+        "empresaUsuario": "ELECTRICOS SAS",
+        "cargo": "Diseñador Eléctrico"
       }
     ],
     "razonSocial": "ELECTRICOS SAS",
