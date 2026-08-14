@@ -760,6 +760,9 @@
       const taskTeams = dt.taskTeams || [];
 
       // Render members rows
+      const userEmail = (currentUser?.username || currentUser?.email || currentUser?.userAccount || '').toLowerCase().trim();
+      const isCurrentLeader = (dt.leadEmail || '').toLowerCase().trim() === userEmail;
+
       const membersListHtml = members.map(mEmail => {
         const mMeta = getUserMetadata(mEmail);
         const isLead = (mEmail.toLowerCase().trim() === (dt.leadEmail || '').toLowerCase().trim());
@@ -774,16 +777,18 @@
                 <div class="text-[10px] text-slate-400 font-mono">${escapeHtml(mEmail)} • ${escapeHtml(mMeta.company)}</div>
               </div>
             </div>
-            ${canManageProjectStructure ? `
+            ${(canManageProjectStructure || isCurrentLeader) ? `
               <div class="flex items-center gap-1">
-                ${!isLead ? `
+                ${(!isLead && (canManageProjectStructure || isCurrentLeader)) ? `
                   <button onclick="setDeliveryTeamLead('${dt.id}', '${mEmail}')" class="px-2 py-1 rounded-lg text-[10px] font-bold text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950 transition-colors" title="Nombrar como Líder de Entrega (B)">
                     Nombrar Líder
                   </button>
                 ` : ''}
-                <button onclick="removeDeliveryTeamMember('${dt.id}', '${mEmail}')" class="p-1 text-slate-400 hover:text-rose-600 transition-colors" title="Remover de este equipo">
-                  <span class="material-symbols-outlined text-[16px]">close</span>
-                </button>
+                ${canManageProjectStructure ? `
+                  <button onclick="removeDeliveryTeamMember('${dt.id}', '${mEmail}')" class="p-1 text-slate-400 hover:text-rose-600 transition-colors" title="Remover de este equipo">
+                    <span class="material-symbols-outlined text-[16px]">close</span>
+                  </button>
+                ` : ''}
               </div>
             ` : ''}
           </div>
@@ -909,7 +914,7 @@
       const isSel = (m.toLowerCase().trim() === (dt.leadEmail || '').toLowerCase().trim()) ? 'selected' : '';
       return `<option value="${escapeHtml(m)}" ${isSel}>${escapeHtml(name)} (${escapeHtml(m)})</option>`;
     });
-    leadSelect.innerHTML = '<option value="">-- Sin Líder Asignado --</option>' + memberOptions.join('');
+    leadSelect.innerHTML = '<option value="">-- Seleccionar Líder de Entrega (B) --</option>' + memberOptions.join('');
 
     window.openModal('modal-delivery-team');
   };
@@ -922,6 +927,11 @@
 
     if (!name) {
       window.showToast('Por favor escribe un nombre para el equipo de entrega.', 'error');
+      return;
+    }
+
+    if (!leadEmail) {
+      window.showToast('Debe asignarse un Líder de Entrega (B).', 'error');
       return;
     }
 
@@ -970,15 +980,28 @@
   };
 
   window.setDeliveryTeamLead = function (deliveryId, email) {
-    if (!canManageProjectStructure) return;
     const dt = (activeProject.iso19650?.deliveryTeams || []).find(d => d.id === deliveryId);
     if (!dt) return;
+
+    const userEmail = (currentUser?.username || currentUser?.email || currentUser?.userAccount || '').toLowerCase().trim();
+    const isCurrentLeader = (dt.leadEmail || '').toLowerCase().trim() === userEmail;
+
+    if (!canManageProjectStructure && !isCurrentLeader) {
+      window.showToast('No tienes permisos para cambiar el líder de este equipo.', 'error');
+      return;
+    }
+
+    if (!email) {
+      window.showToast('Debe asignarse un Líder de Entrega (B).', 'error');
+      return;
+    }
 
     dt.leadEmail = email.toLowerCase().trim();
     if (!dt.members.includes(dt.leadEmail)) {
       dt.members.push(dt.leadEmail);
     }
 
+    evaluatePermissions();
     renderAllViews();
     syncTeams();
     window.showToast(`Nuevo Líder de Entrega asignado: ${getUserRegisteredName(email)}`, 'success');
@@ -990,10 +1013,12 @@
     if (!dt) return;
 
     const clean = email.toLowerCase().trim();
-    dt.members = dt.members.filter(m => m.toLowerCase().trim() !== clean);
     if (dt.leadEmail && dt.leadEmail.toLowerCase().trim() === clean) {
-      dt.leadEmail = '';
+      window.showToast('No es posible remover al líder de entrega. Primero asigna un nuevo líder.', 'error');
+      return;
     }
+
+    dt.members = dt.members.filter(m => m.toLowerCase().trim() !== clean);
 
     // Also remove from task teams inside this delivery team
     (dt.taskTeams || []).forEach(tt => {
@@ -1347,6 +1372,16 @@
   window.removeProjectMember = function (email) {
     if (!canManageProjectStructure) return;
     const clean = email.toLowerCase().trim();
+
+    // Prevent removing a leader of any delivery team
+    const deliveryTeams = activeProject.iso19650?.deliveryTeams || [];
+    const leadInTeams = deliveryTeams.filter(dt => (dt.leadEmail || '').toLowerCase().trim() === clean);
+    if (leadInTeams.length > 0) {
+      const teamNames = leadInTeams.map(t => `"${t.name}"`).join(', ');
+      window.showToast(`No es posible remover a este participante porque es el líder de los siguientes equipos: ${teamNames}. Primero asigna otro líder a esos equipos.`, 'error');
+      return;
+    }
+
     if (!confirm(`¿Remover a ${clean} del proyecto y de todos sus equipos asignados?`)) return;
 
     activeProject.members = (activeProject.members || []).filter(m => m.toLowerCase().trim() !== clean);
