@@ -482,45 +482,109 @@
                     const ROLES_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbx2RAQx_8K4o22xE0Mw-ETc7K_58vIoi6-PgVi64u80inuiw144ks3cgWSdCtXqIgB02g/exec';
                     const normalizedAccountEmail = account.username.trim().toLowerCase();
                     
-                    let userProfile = null;
+                    let dbUser = null;
+
+                    // 1. Check Super Admins in portal-config.json
                     try {
-                        const response = await fetch(ROLES_SCRIPT_URL);
-                        const usersList = await response.json();
-                        const dbUserMatches = usersList.filter(u => u.email === normalizedAccountEmail);
-                        const dbUser = dbUserMatches.length > 0 ? dbUserMatches[dbUserMatches.length - 1] : null;
-                        
-                        if (!dbUser) {
-                            window.showRegistrationForm({
-                                name: account.name || '',
-                                email: normalizedAccountEmail,
-                                picture: ''
-                            });
-                            sessionStorage.removeItem('userAccount');
-                            localStorage.removeItem('userAccount');
-                            return;
+                        const configRes = await fetch('portal-config.json');
+                        if (configRes.ok) {
+                            const portalConfig = await configRes.json();
+                            const superAdmins = portalConfig.superAdmins || ['imagina3ddesign@gmail.com', 'mcmartinezg@unal.edu.co'];
+                            if (superAdmins.some(e => e.toLowerCase() === normalizedAccountEmail)) {
+                                dbUser = {
+                                    nombre: account.name || 'Super Admin',
+                                    email: normalizedAccountEmail,
+                                    rol: 'SUPER_ADMINISTRADOR',
+                                    estado: 'APROBADO',
+                                    empresa: 'nora CDE',
+                                    especialidad: '',
+                                    cargo: 'Super Administrador'
+                                };
+                            }
                         }
-                        
-                        if (dbUser.estado !== 'APROBADO' && dbUser.rol !== 'SUPER_ADMINISTRADOR') {
-                            alert('Tu cuenta está en estado ' + (dbUser.estado || 'PENDIENTE') + '. Espera a que un administrador te apruebe el acceso.');
-                            sessionStorage.removeItem('userAccount');
-                            localStorage.removeItem('userAccount');
-                            return;
+                    } catch (err) {}
+
+                    // 2. Check Company Admins/Members in empresas.json
+                    if (!dbUser) {
+                        try {
+                            const empRes = await fetch('empresas.json');
+                            if (empRes.ok) {
+                                const empresas = await empRes.json();
+                                for (const empresa of empresas) {
+                                    if (empresa.admins && empresa.admins.some(e => e.toLowerCase() === normalizedAccountEmail)) {
+                                        dbUser = {
+                                            nombre: account.name || 'Admin',
+                                            email: normalizedAccountEmail,
+                                            rol: 'ADMINISTRADOR_EMPRESA',
+                                            estado: 'APROBADO',
+                                            empresa: empresa.name,
+                                            especialidad: '',
+                                            cargo: 'Administrador de Empresa'
+                                        };
+                                        window.adminEmpresaId = empresa.id;
+                                        break;
+                                    }
+                                    if (empresa.members) {
+                                        const member = empresa.members.find(m => m.email.toLowerCase() === normalizedAccountEmail);
+                                        if (member) {
+                                            dbUser = {
+                                                nombre: member.name || account.name,
+                                                email: normalizedAccountEmail,
+                                                rol: member.role || 'INVITADO',
+                                                estado: 'APROBADO',
+                                                empresa: member.empresaUsuario || empresa.name,
+                                                especialidad: member.especialidad || '',
+                                                cargo: member.cargo || ''
+                                            };
+                                            window.adminEmpresaId = empresa.id;
+                                            break;
+                                        }
+                                    }
+                                }
+                            }
+                        } catch (err) {}
+                    }
+
+                    // 3. Fallback to Remote Google Sheets Database
+                    if (!dbUser) {
+                        try {
+                            const response = await fetch(ROLES_SCRIPT_URL);
+                            const usersList = await response.json();
+                            const dbUserMatches = usersList.filter(u => u.email === normalizedAccountEmail);
+                            dbUser = dbUserMatches.length > 0 ? dbUserMatches[dbUserMatches.length - 1] : null;
+                        } catch (e) {
+                            console.error('Remote DB connection timed out/failed. Proceeding with registration fallback.', e);
                         }
-                        
-                        userProfile = {
-                            name: dbUser.nombre || account.name,
-                            username: dbUser.email,
-                            role: dbUser.rol || 'INVITADO',
-                            empresa: dbUser.empresa || '',
-                            especialidad: dbUser.especialidad || '',
-                            cargo: dbUser.cargo || '',
-                            picture: window.tempGoogleUser?.picture || ''
-                        };
-                    } catch(e) {
-                        console.error('Error de base de datos:', e);
-                        alert('Error al conectar con la base de datos de usuarios.');
+                    }
+
+                    if (!dbUser) {
+                        window.showRegistrationForm({
+                            name: account.name || '',
+                            email: normalizedAccountEmail,
+                            picture: ''
+                        });
+                        sessionStorage.removeItem('userAccount');
+                        localStorage.removeItem('userAccount');
                         return;
-                    }                    
+                    }
+                    
+                    if (dbUser.estado !== 'APROBADO' && dbUser.rol !== 'SUPER_ADMINISTRADOR') {
+                        alert('Tu cuenta está en estado ' + (dbUser.estado || 'PENDIENTE') + '. Espera a que un administrador te apruebe el acceso.');
+                        sessionStorage.removeItem('userAccount');
+                        localStorage.removeItem('userAccount');
+                        return;
+                    }
+                    
+                    userProfile = {
+                        name: dbUser.nombre || account.name,
+                        username: dbUser.email,
+                        role: dbUser.rol || 'INVITADO',
+                        empresa: dbUser.empresa || '',
+                        especialidad: dbUser.especialidad || '',
+                        cargo: dbUser.cargo || '',
+                        adminEmpresaId: window.adminEmpresaId || null,
+                        picture: window.tempGoogleUser?.picture || ''
+                    };
 
                     if (keepSignedInCheckbox.checked) {
                         localStorage.setItem('userAccount', JSON.stringify(userProfile));
