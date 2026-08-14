@@ -322,23 +322,58 @@
       activeProject.iso19650.deliveryTeams = [];
     }
 
-    // Compatibility check: migrate old `equiposDeTarea` if present and empty in `deliveryTeams`
-    if (Array.isArray(activeProject.equiposDeTarea) && activeProject.equiposDeTarea.length > 0 && activeProject.iso19650.deliveryTeams.length === 0) {
-      const defaultDelivery = {
-        id: 'deliv-default-' + Date.now(),
-        name: 'Equipo Principal de Entrega',
-        leadEmail: activeProject.iso19650.projectAdmins[0] || (activeProject.members[0] || ''),
-        description: 'Equipo de entrega general del proyecto.',
-        members: [...activeProject.members],
-        taskTeams: activeProject.equiposDeTarea.map((t, idx) => ({
-          id: 'task-' + idx + '-' + Date.now(),
-          name: t.name || `Equipo de Tarea ${idx + 1}`,
-          discipline: t.discipline || 'General',
-          members: Array.isArray(t.members) ? t.members : []
-        }))
-      };
-      activeProject.iso19650.deliveryTeams.push(defaultDelivery);
+    // Sincronizar/migrar desde activeProject.equiposDeTarea (creados en Configuración del Proyecto)
+    if (Array.isArray(activeProject.equiposDeTarea) && activeProject.equiposDeTarea.length > 0) {
+      activeProject.equiposDeTarea.forEach((t, idx) => {
+        if (!t.name) return;
+        const nameUpper = t.name.toUpperCase().trim();
+        const tMembers = Array.isArray(t.members) ? t.members.map(m => m.toLowerCase().trim()) : [];
+
+        // Buscar si ya existe un Equipo de Entrega con este nombre
+        const normalizeName = str => str.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase().trim();
+        const normTarget = normalizeName(nameUpper);
+
+        let dt = activeProject.iso19650.deliveryTeams.find(d => normalizeName(d.name || '') === normTarget);
+        if (!dt) {
+          dt = {
+            id: 'deliv-' + idx + '-' + Date.now(),
+            name: t.name.trim(),
+            leadEmail: tMembers[0] || '',
+            description: 'Equipo de entrega asignado a la producción de información.',
+            members: [...tMembers],
+            taskTeams: []
+          };
+          activeProject.iso19650.deliveryTeams.push(dt);
+        } else {
+          // Si ya existe, aseguramos que contenga todos los miembros asignados en la configuración
+          tMembers.forEach(m => {
+            if (!dt.members.map(dm => dm.toLowerCase().trim()).includes(m)) {
+              dt.members.push(m);
+            }
+          });
+          if (!dt.leadEmail && tMembers.length > 0) {
+            dt.leadEmail = tMembers[0];
+          }
+        }
+
+        // Asegurar que los miembros estén agregados a activeProject.members para evitar inconsistencias
+        tMembers.forEach(m => {
+          if (!activeProject.members.map(pm => pm.toLowerCase().trim()).includes(m)) {
+            activeProject.members.push(m);
+          }
+        });
+      });
     }
+  }
+
+  // Mantener equiposDeTarea sincronizado de vuelta para compatibilidad con la configuración del proyecto
+  function syncBackToEquiposDeTarea() {
+    if (!activeProject || !activeProject.iso19650 || !Array.isArray(activeProject.iso19650.deliveryTeams)) return;
+    
+    activeProject.equiposDeTarea = activeProject.iso19650.deliveryTeams.map(dt => ({
+      name: dt.name,
+      members: [...(dt.members || [])]
+    }));
   }
 
   // --- CARGA DE DATOS ---
@@ -431,6 +466,33 @@
       }
     } catch (e) {
       console.warn('Directorio Nora no disponible:', e);
+    }
+
+    // 5. Cargar Equipos de Tarea desde Google Sheets automáticamente
+    try {
+      const teamsRes = await fetch(`${GOOGLE_SCRIPT_URL}?action=getTeams&empresa=${encodeURIComponent(companyId)}&proyecto=${encodeURIComponent(projectSlug)}&t=${Date.now()}`);
+      if (teamsRes.ok) {
+        const remoteTeams = await teamsRes.json();
+        if (Array.isArray(remoteTeams) && remoteTeams.length > 0) {
+          if (!Array.isArray(activeProject.equiposDeTarea)) {
+            activeProject.equiposDeTarea = [];
+          }
+          remoteTeams.forEach(rt => {
+            const existing = activeProject.equiposDeTarea.find(lt => lt.name.toUpperCase().trim() === rt.name.toUpperCase().trim());
+            if (existing) {
+              const memberSet = new Set([...(existing.members || []), ...(rt.members || [])]);
+              existing.members = Array.from(memberSet);
+            } else {
+              activeProject.equiposDeTarea.push({
+                name: rt.name.toUpperCase().trim(),
+                members: rt.members || []
+              });
+            }
+          });
+        }
+      }
+    } catch (err) {
+      console.warn('No se pudieron obtener equipos desde Google Sheets:', err);
     }
 
     normalizeProjectIsoStructure();
@@ -1352,13 +1414,16 @@
   // --- 8. SINCRONIZACIÓN Y GUARDADO ---
   async function syncTeams() {
     if (!activeProject) return;
+    
+    // Sincronizar de vuelta a la estructura simplificada equiposDeTarea
+    syncBackToEquiposDeTarea();
+    
     try {
       const payload = {
-        action: 'saveProjectTeamsIso',
+        action: 'saveTeams',
         empresa: companyId || 'general',
         proyecto: projectSlug || activeProject.slug || 'general',
-        iso19650: activeProject.iso19650 || {},
-        members: activeProject.members || []
+        teams: activeProject.equiposDeTarea || []
       };
       await fetch(GOOGLE_SCRIPT_URL, {
         method: 'POST',
@@ -1405,6 +1470,7 @@
       const branch = 'main';
       const fileTarget = configUrl || 'portal-config.json';
       const files = [fileTarget, `docs/${fileTarget}`];
+      syncBackToEquiposDeTarea();
       const content = JSON.stringify(fullConfig, null, 2);
 
       window.showToast('Guardando configuración de equipos en la nube...', 'info');
