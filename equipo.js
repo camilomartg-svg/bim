@@ -290,13 +290,12 @@
         el.userPermissionPill.className = 'shrink-0 px-3 py-1 rounded-xl text-[10px] font-black uppercase tracking-widest bg-white/10 text-slate-300 border border-white/10';
       }
     }
-
     // Toggle Action Controls visibility
     if (el.adminActionControls) el.adminActionControls.style.display = canManageProjectAdmins ? 'flex' : 'none';
     if (el.deliveryActionControls) el.deliveryActionControls.style.display = canManageProjectStructure ? 'flex' : 'none';
-    if (el.taskActionControls) el.taskActionControls.style.display = canManageProjectStructure ? 'flex' : 'none';
+    if (el.taskActionControls) el.taskActionControls.style.display = (canManageProjectStructure || isDeliveryLead) ? 'flex' : 'none';
     if (el.addMemberBtn) el.addMemberBtn.style.display = canManageProjectStructure ? 'inline-flex' : 'none';
-    if (el.saveBtn) el.saveBtn.style.display = canManageProjectStructure ? 'inline-flex' : 'none';
+    if (el.saveBtn) el.saveBtn.style.display = (canManageProjectStructure || isDeliveryLead) ? 'inline-flex' : 'none';
   }
 
   // --- INICIALIZACIÓN DE LA ESTRUCTURA ISO 19650 ---
@@ -364,6 +363,15 @@
         });
       });
     }
+
+    // Automate Task Team members (all delivery team members except the leader)
+    (activeProject.iso19650.deliveryTeams || []).forEach(dt => {
+      const lead = (dt.leadEmail || '').toLowerCase().trim();
+      const ttMembers = (dt.members || []).filter(m => m.toLowerCase().trim() !== lead);
+      (dt.taskTeams || []).forEach(tt => {
+        tt.members = [...ttMembers];
+      });
+    });
   }
 
   // Mantener equiposDeTarea sincronizado de vuelta para compatibilidad con la configuración del proyecto
@@ -502,6 +510,7 @@
 
   // --- RENDERIZADO GENERAL ---
   function renderAllViews() {
+    normalizeProjectIsoStructure();
     updateMetrics();
     renderDiagramStage();
     renderProjectAdminsTab();
@@ -784,7 +793,7 @@
                     Nombrar Líder
                   </button>
                 ` : ''}
-                ${canManageProjectStructure ? `
+                ${(canManageProjectStructure || isCurrentLeader) ? `
                   <button onclick="removeDeliveryTeamMember('${dt.id}', '${mEmail}')" class="p-1 text-slate-400 hover:text-rose-600 transition-colors" title="Remover de este equipo">
                     <span class="material-symbols-outlined text-[16px]">close</span>
                   </button>
@@ -810,14 +819,16 @@
               </div>
             </div>
 
-            ${canManageProjectStructure ? `
+            ${(canManageProjectStructure || isCurrentLeader) ? `
               <div class="flex items-center gap-2">
                 <button onclick="openEditDeliveryTeamModal('${dt.id}')" class="px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors">
                   Editar
                 </button>
-                <button onclick="deleteDeliveryTeam('${dt.id}')" class="px-3 py-1.5 rounded-xl border border-rose-200 dark:border-rose-800 text-xs font-bold text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950 transition-colors">
-                  Eliminar
-                </button>
+                ${canManageProjectStructure ? `
+                  <button onclick="deleteDeliveryTeam('${dt.id}')" class="px-3 py-1.5 rounded-xl border border-rose-200 dark:border-rose-800 text-xs font-bold text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950 transition-colors">
+                    Eliminar
+                  </button>
+                ` : ''}
               </div>
             ` : ''}
           </div>
@@ -843,7 +854,7 @@
                 <span class="flex items-center gap-1.5">
                   <span class="material-symbols-outlined text-[16px]">task_alt</span> 3. Equipos de Tarea (${taskTeams.length})
                 </span>
-                ${canManageProjectStructure ? `
+                ${(canManageProjectStructure || isCurrentLeader) ? `
                   <button onclick="openCreateTaskTeamModal('${dt.id}')" class="text-[10px] font-bold text-emerald-600 hover:underline">
                     + Añadir Tarea
                   </button>
@@ -864,7 +875,7 @@
           <div class="space-y-3 pt-2">
             <div class="flex items-center justify-between text-xs font-bold text-slate-700 dark:text-slate-300">
               <span>Otros Adjudicatarios / Miembros del Equipo de Entrega (${members.length})</span>
-              ${canManageProjectStructure ? `
+              ${(canManageProjectStructure || isCurrentLeader) ? `
                 <button onclick="openAddMemberToDeliveryTeamModal('${dt.id}')" class="text-xs font-bold text-purple-600 hover:underline flex items-center gap-1">
                   <span class="material-symbols-outlined text-[14px]">person_add</span> Añadir Miembro
                 </button>
@@ -899,9 +910,16 @@
   };
 
   window.openEditDeliveryTeamModal = function (deliveryId) {
-    if (!canManageProjectStructure) return;
     const dt = (activeProject.iso19650?.deliveryTeams || []).find(d => d.id === deliveryId);
     if (!dt) return;
+
+    const userEmail = (currentUser?.username || currentUser?.email || currentUser?.userAccount || '').toLowerCase().trim();
+    const isCurrentLeader = (dt.leadEmail || '').toLowerCase().trim() === userEmail;
+
+    if (!canManageProjectStructure && !isCurrentLeader) {
+      window.showToast('No tienes permisos para editar este equipo.', 'error');
+      return;
+    }
 
     document.getElementById('modal-delivery-title').textContent = 'Editar Equipo de Entrega';
     document.getElementById('delivery-team-edit-id').value = dt.id;
@@ -925,11 +943,26 @@
     const leadEmail = document.getElementById('delivery-team-lead-select').value.toLowerCase().trim();
     const desc = document.getElementById('delivery-team-desc').value.trim();
 
+    if (editId) {
+      const dt = activeProject.iso19650.deliveryTeams.find(d => d.id === editId);
+      if (!dt) return;
+      const userEmail = (currentUser?.username || currentUser?.email || currentUser?.userAccount || '').toLowerCase().trim();
+      const isCurrentLeader = (dt.leadEmail || '').toLowerCase().trim() === userEmail;
+      if (!canManageProjectStructure && !isCurrentLeader) {
+        window.showToast('No tienes permisos para guardar cambios en este equipo.', 'error');
+        return;
+      }
+    } else {
+      if (!canManageProjectStructure) {
+        window.showToast('No tienes permisos para crear equipos de entrega.', 'error');
+        return;
+      }
+    }
+
     if (!name) {
       window.showToast('Por favor escribe un nombre para el equipo de entrega.', 'error');
       return;
     }
-
     if (!leadEmail) {
       window.showToast('Debe asignarse un Líder de Entrega (B).', 'error');
       return;
@@ -1008,9 +1041,16 @@
   };
 
   window.removeDeliveryTeamMember = function (deliveryId, email) {
-    if (!canManageProjectStructure) return;
     const dt = (activeProject.iso19650?.deliveryTeams || []).find(d => d.id === deliveryId);
     if (!dt) return;
+
+    const userEmail = (currentUser?.username || currentUser?.email || currentUser?.userAccount || '').toLowerCase().trim();
+    const isCurrentLeader = (dt.leadEmail || '').toLowerCase().trim() === userEmail;
+
+    if (!canManageProjectStructure && !isCurrentLeader) {
+      window.showToast('No tienes permisos para remover miembros de este equipo.', 'error');
+      return;
+    }
 
     const clean = email.toLowerCase().trim();
     if (dt.leadEmail && dt.leadEmail.toLowerCase().trim() === clean) {
@@ -1033,9 +1073,16 @@
   };
 
   window.openAddMemberToDeliveryTeamModal = function (deliveryId) {
-    if (!canManageProjectStructure) return;
     const dt = (activeProject.iso19650?.deliveryTeams || []).find(d => d.id === deliveryId);
     if (!dt) return;
+
+    const userEmail = (currentUser?.username || currentUser?.email || currentUser?.userAccount || '').toLowerCase().trim();
+    const isCurrentLeader = (dt.leadEmail || '').toLowerCase().trim() === userEmail;
+
+    if (!canManageProjectStructure && !isCurrentLeader) {
+      window.showToast('No tienes permisos para añadir miembros a este equipo.', 'error');
+      return;
+    }
 
     const availableMembers = (activeProject.members || []).filter(m => !dt.members.includes(m.toLowerCase().trim()));
     if (availableMembers.length === 0) {
@@ -1079,9 +1126,15 @@
       `;
       return;
     }
-
     el.taskTeamsContainer.innerHTML = allTasks.map(tt => {
-      const membersCount = (tt.members || []).length;
+      const dt = deliveryTeams.find(d => d.id === tt.deliveryTeamId);
+      const ttMembers = dt ? (dt.members || []).filter(m => m.toLowerCase().trim() !== (dt.leadEmail || '').toLowerCase().trim()) : [];
+      const membersCount = ttMembers.length;
+      const memberNames = ttMembers.map(m => getUserRegisteredName(m)).join(', ') || 'Ninguno';
+
+      const userEmail = (currentUser?.username || currentUser?.email || currentUser?.userAccount || '').toLowerCase().trim();
+      const isCurrentLeader = dt && (dt.leadEmail || '').toLowerCase().trim() === userEmail;
+
       return `
         <div class="rounded-2xl p-5 border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 shadow-sm space-y-4 hover:border-emerald-400 transition-all flex flex-col justify-between">
           <div class="space-y-3">
@@ -1089,7 +1142,7 @@
               <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-emerald-50 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 font-mono text-[10px] font-bold uppercase">
                 <span class="material-symbols-outlined text-[13px]">task_alt</span> Tarea
               </span>
-              ${canManageProjectStructure ? `
+              ${(canManageProjectStructure || isCurrentLeader) ? `
                 <div class="flex items-center gap-1">
                   <button onclick="deleteTaskTeam('${tt.deliveryTeamId}', '${tt.id}')" class="text-slate-400 hover:text-rose-600 transition-colors p-1" title="Eliminar equipo de tarea">
                     <span class="material-symbols-outlined text-[18px]">delete</span>
@@ -1105,7 +1158,7 @@
 
             <div class="text-xs text-slate-600 dark:text-slate-300 space-y-1">
               <div><strong class="text-slate-400 text-[10px] uppercase">Disciplina:</strong> ${escapeHtml(tt.discipline || 'General')}</div>
-              <div><strong class="text-slate-400 text-[10px] uppercase">Integrantes:</strong> ${membersCount} Miembros asignados</div>
+              <div><strong class="text-slate-400 text-[10px] uppercase">Integrantes (${membersCount}):</strong> ${escapeHtml(memberNames)}</div>
             </div>
           </div>
         </div>
@@ -1114,11 +1167,23 @@
   }
 
   window.openCreateTaskTeamModal = function (preselectedDeliveryId = '') {
-    if (!canManageProjectStructure) return;
     const deliveryTeams = activeProject.iso19650?.deliveryTeams || [];
     if (deliveryTeams.length === 0) {
       window.showToast('Primero debes crear al menos un Equipo de Entrega.', 'error');
       window.switchTab('delivery');
+      return;
+    }
+
+    const userEmail = (currentUser?.username || currentUser?.email || currentUser?.userAccount || '').toLowerCase().trim();
+    
+    // Filter delivery teams that this user has permission to manage
+    const manageableTeams = deliveryTeams.filter(d => {
+      const isCurrentLeader = (d.leadEmail || '').toLowerCase().trim() === userEmail;
+      return canManageProjectStructure || isCurrentLeader;
+    });
+
+    if (manageableTeams.length === 0) {
+      window.showToast('No tienes permisos para crear equipos de tarea.', 'error');
       return;
     }
 
@@ -1128,7 +1193,7 @@
     document.getElementById('task-team-discipline').value = '';
 
     const delivSelect = document.getElementById('task-team-delivery-select');
-    delivSelect.innerHTML = deliveryTeams.map(d => {
+    delivSelect.innerHTML = manageableTeams.map(d => {
       const isSel = (d.id === preselectedDeliveryId) ? 'selected' : '';
       return `<option value="${escapeHtml(d.id)}" ${isSel}>${escapeHtml(d.name)}</option>`;
     }).join('');
@@ -1152,6 +1217,14 @@
       return;
     }
 
+    const userEmail = (currentUser?.username || currentUser?.email || currentUser?.userAccount || '').toLowerCase().trim();
+    const isCurrentLeader = (dt.leadEmail || '').toLowerCase().trim() === userEmail;
+
+    if (!canManageProjectStructure && !isCurrentLeader) {
+      window.showToast('No tienes permisos para crear equipos de tarea en este equipo.', 'error');
+      return;
+    }
+
     if (!Array.isArray(dt.taskTeams)) dt.taskTeams = [];
     dt.taskTeams.push({
       id: 'task-' + Date.now(),
@@ -1167,13 +1240,20 @@
   };
 
   window.deleteTaskTeam = function (deliveryId, taskId) {
-    if (!canManageProjectStructure) return;
+    const dt = (activeProject.iso19650?.deliveryTeams || []).find(d => d.id === deliveryId);
+    if (!dt) return;
+
+    const userEmail = (currentUser?.username || currentUser?.email || currentUser?.userAccount || '').toLowerCase().trim();
+    const isCurrentLeader = (dt.leadEmail || '').toLowerCase().trim() === userEmail;
+
+    if (!canManageProjectStructure && !isCurrentLeader) {
+      window.showToast('No tienes permisos para eliminar equipos de tarea de este equipo.', 'error');
+      return;
+    }
+
     if (!confirm('¿Deseas eliminar este equipo de tarea?')) return;
 
-    const dt = (activeProject.iso19650?.deliveryTeams || []).find(d => d.id === deliveryId);
-    if (dt && Array.isArray(dt.taskTeams)) {
-      dt.taskTeams = dt.taskTeams.filter(t => t.id !== taskId);
-    }
+    dt.taskTeams = dt.taskTeams.filter(t => t.id !== taskId);
 
     renderAllViews();
     syncTeams();
