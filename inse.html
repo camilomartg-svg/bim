@@ -510,6 +510,7 @@
                             const empRes = await fetch('empresas.json');
                             if (empRes.ok) {
                                 const empresas = await empRes.json();
+                                // First check if user is an administrator in any company
                                 for (const empresa of empresas) {
                                     if (empresa.admins && empresa.admins.some(e => e.toLowerCase() === normalizedAccountEmail)) {
                                         dbUser = {
@@ -524,20 +525,25 @@
                                         window.adminEmpresaId = empresa.id;
                                         break;
                                     }
-                                    if (empresa.members) {
-                                        const member = empresa.members.find(m => m.email.toLowerCase() === normalizedAccountEmail);
-                                        if (member) {
-                                            dbUser = {
-                                                nombre: member.name || account.name,
-                                                email: normalizedAccountEmail,
-                                                rol: member.role || 'INVITADO',
-                                                estado: 'APROBADO',
-                                                empresa: member.empresaUsuario || empresa.name,
-                                                especialidad: member.especialidad || '',
-                                                cargo: member.cargo || ''
-                                            };
-                                            window.adminEmpresaId = empresa.id;
-                                            break;
+                                }
+                                // If not an administrator, check company membership
+                                if (!dbUser) {
+                                    for (const empresa of empresas) {
+                                        if (empresa.members) {
+                                            const member = empresa.members.find(m => m.email.toLowerCase() === normalizedAccountEmail);
+                                            if (member) {
+                                                dbUser = {
+                                                    nombre: member.name || account.name,
+                                                    email: normalizedAccountEmail,
+                                                    rol: member.role || 'INVITADO',
+                                                    estado: 'APROBADO',
+                                                    empresa: member.empresaUsuario || empresa.name,
+                                                    especialidad: member.especialidad || '',
+                                                    cargo: member.cargo || ''
+                                                };
+                                                window.adminEmpresaId = empresa.id;
+                                                break;
+                                            }
                                         }
                                     }
                                 }
@@ -646,18 +652,24 @@
                                     const empRes = await fetch('empresas.json');
                                     if (empRes.ok) {
                                         const empresas = await empRes.json();
+                                        // First check if user is an administrator in any company
                                         for (const empresa of empresas) {
                                             if (empresa.admins && empresa.admins.some(email => email.toLowerCase() === normalizedAccountEmail)) {
                                                 userRole = 'ADMINISTRADOR_EMPRESA';
                                                 window.adminEmpresaId = empresa.id;
                                                 break;
                                             }
-                                            if (empresa.members) {
-                                                const member = empresa.members.find(m => m.email.toLowerCase() === normalizedAccountEmail);
-                                                if (member) {
-                                                    userRole = member.role || 'INVITADO';
-                                                    window.adminEmpresaId = empresa.id;
-                                                    break;
+                                        }
+                                        // If not an administrator, check company membership
+                                        if (!userRole) {
+                                            for (const empresa of empresas) {
+                                                if (empresa.members) {
+                                                    const member = empresa.members.find(m => m.email.toLowerCase() === normalizedAccountEmail);
+                                                    if (member) {
+                                                        userRole = member.role || 'INVITADO';
+                                                        window.adminEmpresaId = empresa.id;
+                                                        break;
+                                                    }
                                                 }
                                             }
                                         }
@@ -1167,18 +1179,24 @@
                         const empRes = await fetch('empresas.json');
                         if (empRes.ok) {
                             const empresas = await empRes.json();
+                            // First check if user is an administrator in any company
                             for (const empresa of empresas) {
                                 if (empresa.admins && empresa.admins.some(e => e.toLowerCase() === normalizedAccountEmail)) {
                                     userRole = 'ADMINISTRADOR_EMPRESA';
                                     window.adminEmpresaId = empresa.id;
                                     break;
                                 }
-                                if (empresa.members) {
-                                    const member = empresa.members.find(m => m.email.toLowerCase() === normalizedAccountEmail);
-                                    if (member) {
-                                        userRole = member.role || 'INVITADO';
-                                        window.adminEmpresaId = empresa.id;
-                                        break;
+                            }
+                            // If not an administrator, check company membership
+                            if (!userRole) {
+                                for (const empresa of empresas) {
+                                    if (empresa.members) {
+                                        const member = empresa.members.find(m => m.email.toLowerCase() === normalizedAccountEmail);
+                                        if (member) {
+                                            userRole = member.role || 'INVITADO';
+                                            window.adminEmpresaId = empresa.id;
+                                            break;
+                                        }
                                     }
                                 }
                             }

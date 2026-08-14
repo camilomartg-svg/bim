@@ -243,7 +243,7 @@
     const memberMatch = Array.isArray(currentCompany?.members) ? currentCompany.members.find(m => m.email && m.email.toLowerCase().trim() === email) : null;
     const isMemberAdmin = memberMatch && (memberMatch.role === 'ADMINISTRADOR_EMPRESA' || memberMatch.role === 'ADMINISTRADOR');
 
-    const isCompanyAdmin = isSuperAdmin || companyAdmins.includes(email) || isMemberAdmin || (currentUser?.adminEmpresaId && currentUser?.adminEmpresaId === companyId);
+    const isCompanyAdmin = isSuperAdmin || companyAdmins.includes(email) || isMemberAdmin || (currentUser?.adminEmpresaId && currentUser?.adminEmpresaId === companyId && (currentUser?.role === 'ADMINISTRADOR_EMPRESA' || currentUser?.role === 'SUPER_ADMINISTRADOR' || currentUser?.role === 'SUPER_ADMIN'));
 
     const projectAdmins = Array.isArray(activeProject?.iso19650?.projectAdmins)
       ? activeProject.iso19650.projectAdmins.map(a => a.toLowerCase().trim())
