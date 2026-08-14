@@ -5,7 +5,9 @@ const filesToSync = [
   'super-admin.js',
   'portal-configurator.js',
   'project-settings.js',
-  'home.html'
+  'home.html',
+  'equipo.js',
+  'equipo.html'
 ];
 
 filesToSync.forEach(file => {

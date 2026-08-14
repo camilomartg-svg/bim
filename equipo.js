@@ -234,13 +234,16 @@
   // --- EVALUACIÓN DE ROLES Y PERMISOS ISO 19650 ---
   function evaluatePermissions() {
     currentUser = JSON.parse(sessionStorage.getItem('userAccount') || localStorage.getItem('userAccount') || 'null');
-    const email = (currentUser?.email || currentUser?.userAccount || '').toLowerCase().trim();
+    const email = (currentUser?.username || currentUser?.email || currentUser?.userAccount || '').toLowerCase().trim();
 
     const superAdmins = ['imagina3ddesign@gmail.com', 'mcmartinezg@unal.edu.co'];
-    const isSuperAdmin = superAdmins.includes(email) || currentUser?.role === 'SUPER_ADMIN';
+    const isSuperAdmin = superAdmins.includes(email) || currentUser?.role === 'SUPER_ADMIN' || currentUser?.role === 'SUPER_ADMINISTRADOR';
 
     const companyAdmins = Array.isArray(currentCompany?.admins) ? currentCompany.admins.map(a => a.toLowerCase().trim()) : [];
-    const isCompanyAdmin = isSuperAdmin || companyAdmins.includes(email) || (currentUser?.adminEmpresaId && currentUser?.adminEmpresaId === companyId);
+    const memberMatch = Array.isArray(currentCompany?.members) ? currentCompany.members.find(m => m.email && m.email.toLowerCase().trim() === email) : null;
+    const isMemberAdmin = memberMatch && (memberMatch.role === 'ADMINISTRADOR_EMPRESA' || memberMatch.role === 'ADMINISTRADOR');
+
+    const isCompanyAdmin = isSuperAdmin || companyAdmins.includes(email) || isMemberAdmin || (currentUser?.adminEmpresaId && currentUser?.adminEmpresaId === companyId);
 
     const projectAdmins = Array.isArray(activeProject?.iso19650?.projectAdmins)
       ? activeProject.iso19650.projectAdmins.map(a => a.toLowerCase().trim())
@@ -293,6 +296,7 @@
     if (el.deliveryActionControls) el.deliveryActionControls.style.display = canManageProjectStructure ? 'flex' : 'none';
     if (el.taskActionControls) el.taskActionControls.style.display = canManageProjectStructure ? 'flex' : 'none';
     if (el.addMemberBtn) el.addMemberBtn.style.display = canManageProjectStructure ? 'inline-flex' : 'none';
+    if (el.saveBtn) el.saveBtn.style.display = canManageProjectStructure ? 'inline-flex' : 'none';
   }
 
   // --- INICIALIZACIÓN DE LA ESTRUCTURA ISO 19650 ---
