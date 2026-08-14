@@ -1,0 +1,460 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+    <script>
+        if (!sessionStorage.getItem('userAccount') && !localStorage.getItem('userAccount')) {
+            window.location.replace('https://norabim.com/inse.html');
+        }
+    </script>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
+    <title>Mi Perfil | nora CDE</title>
+    <script src="https://cdn.tailwindcss.com?plugins=forms,typography"></script>
+    <script>
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        primary: "#171717",
+                        "background-light": "#F4F4F5",
+                        "background-dark": "#18181B",
+                        "card-light": "#FFFFFF",
+                        "card-dark": "#27272A",
+                        "text-light": "#18181B",
+                        "text-dark": "#F4F4F5",
+                        "border-light": "#E4E4E7",
+                        "border-dark": "#3F3F46"
+                    },
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                    },
+                },
+            },
+        };
+    </script>
+    <link href="https://fonts.googleapis.com" rel="preconnect" />
+    <link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect" />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&amp;display=swap" rel="stylesheet" />
+    <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet" />
+    <link rel="icon" href="https://i.postimg.cc/W3trgjZX/FAVICON-NORA-NEGRO.png" type="image/png">
+    
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            transition: background-color 0.3s ease, color 0.3s ease;
+        }
+
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+
+        .glass-card {
+            background: rgba(255, 255, 255, 0.85);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+        }
+        
+        .dark .glass-card {
+            background: rgba(39, 39, 42, 0.8);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+        }
+
+        /* Spinner style */
+        .spinner {
+            border: 3px solid rgba(0, 0, 0, 0.1);
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            border-left-color: #18181B;
+            animation: spin 1s linear infinite;
+        }
+
+        .dark .spinner {
+            border: 3px solid rgba(255, 255, 255, 0.1);
+            border-left-color: #F4F4F5;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+
+<body class="bg-background-light dark:bg-background-dark text-text-light dark:text-text-dark min-h-screen w-full flex flex-col relative">
+
+    <!-- Header -->
+    <header class="w-full z-10 px-8 py-4 border-b border-border-light dark:border-border-dark bg-white/50 dark:bg-zinc-900/50 backdrop-blur-md">
+        <div class="container mx-auto flex items-center justify-between">
+            <div class="flex items-center gap-3">
+                <button id="back-btn" aria-label="Volver"
+                    class="rounded-xl border border-border-light dark:border-border-dark bg-white dark:bg-zinc-800 px-3 py-1.5 hover:bg-zinc-50 dark:hover:bg-zinc-700 transition-colors flex items-center gap-1 text-xs font-semibold shadow-sm">
+                    <span class="material-symbols-outlined text-[16px]">arrow_back</span>
+                    <span>Volver</span>
+                </button>
+            </div>
+            
+            <div class="flex items-center gap-2">
+                <img src="https://i.postimg.cc/tR3YSryT/LOGO-NORA-NEGRO.png" alt="nora CDE" class="h-6 dark:hidden" />
+                <img src="https://i.postimg.cc/SQ6JTZqj/LOGO-NORA-BLANCO.png" alt="nora CDE" class="h-6 hidden dark:block" />
+            </div>
+
+            <div class="flex items-center space-x-4">
+                <button id="theme-toggle" aria-label="Cambiar tema"
+                    class="text-text-light dark:text-text-dark hover:text-zinc-600 dark:hover:text-zinc-300 transition-colors p-2 rounded-xl border border-border-light dark:border-border-dark bg-white dark:bg-zinc-800 shadow-sm flex items-center justify-center">
+                    <span class="material-symbols-outlined text-[18px]">dark_mode</span>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="flex-1 container mx-auto max-w-4xl px-4 py-8 md:py-12">
+        
+        <!-- Loading State Overlay -->
+        <div id="loading-overlay" class="fixed inset-0 z-50 bg-background-light/95 dark:bg-background-dark/95 flex flex-col items-center justify-center transition-all duration-300">
+            <div class="spinner mb-4"></div>
+            <p class="text-sm font-medium text-zinc-500 dark:text-zinc-400 animate-pulse">Sincronizando información de perfil...</p>
+        </div>
+
+        <div class="space-y-6">
+            <!-- Header Title -->
+            <div class="flex flex-col gap-1">
+                <h1 class="text-3xl font-bold tracking-tight">Mi Perfil</h1>
+                <p class="text-xs text-zinc-500 dark:text-zinc-400">Administra tus datos personales y visualiza tu rol y empresa activa.</p>
+            </div>
+
+            <!-- Profile Overview Card -->
+            <div class="glass-card border border-border-light dark:border-border-dark rounded-3xl p-6 shadow-sm flex flex-col md:flex-row items-center gap-6">
+                <!-- Avatar Container -->
+                <div id="avatar-container" class="w-24 h-24 rounded-full bg-zinc-200 dark:bg-zinc-800 border-2 border-border-light dark:border-border-dark flex items-center justify-center text-3xl font-black text-zinc-700 dark:text-zinc-300 shadow-inner overflow-hidden select-none">
+                    <!-- Initial will be placed here dynamically -->
+                </div>
+                
+                <!-- Info Summary -->
+                <div class="flex-1 text-center md:text-left space-y-2">
+                    <div>
+                        <h2 id="summary-name" class="text-xl font-bold">--</h2>
+                        <p id="summary-email" class="text-xs text-zinc-500 dark:text-zinc-400">--</p>
+                    </div>
+                    
+                    <div class="flex flex-wrap items-center justify-center md:justify-start gap-2 pt-1">
+                        <!-- Role Badge -->
+                        <span id="role-badge" class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-lg text-[10px] font-bold uppercase tracking-wider bg-zinc-100 text-zinc-800 dark:bg-zinc-800 dark:text-zinc-200 border border-zinc-200 dark:border-zinc-700">
+                            <span class="material-symbols-outlined text-[12px]">shield_person</span>
+                            <span id="role-text">--</span>
+                        </span>
+                        
+                        <!-- Status Badge -->
+                        <span id="status-badge" class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-lg text-[10px] font-bold uppercase tracking-wider bg-emerald-50 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-900/50">
+                            <span class="material-symbols-outlined text-[12px]">verified_user</span>
+                            <span id="status-text">--</span>
+                        </span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Form Edit Card -->
+            <form id="profile-form" class="glass-card border border-border-light dark:border-border-dark rounded-3xl p-6 md:p-8 shadow-sm space-y-6">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    
+                    <!-- Nombre -->
+                    <div class="space-y-1.5">
+                        <label for="input-nombre" class="block text-xs font-bold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">Nombre Completo</label>
+                        <input type="text" id="input-nombre" required
+                            class="w-full py-2 px-3.5 text-sm rounded-xl border border-border-light dark:border-border-dark bg-white dark:bg-zinc-800 focus:ring-2 focus:ring-zinc-500 dark:text-white transition-all shadow-sm font-medium" />
+                    </div>
+
+                    <!-- Email (Disabled) -->
+                    <div class="space-y-1.5">
+                        <div class="flex items-center justify-between">
+                            <label for="input-email" class="block text-xs font-bold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">Correo Electrónico</label>
+                            <span class="text-[9px] text-zinc-400 dark:text-zinc-500 font-semibold flex items-center gap-0.5">
+                                <span class="material-symbols-outlined text-[11px]">lock</span>
+                                No editable
+                            </span>
+                        </div>
+                        <input type="email" id="input-email" disabled
+                            class="w-full py-2 px-3.5 text-sm rounded-xl border border-border-light dark:border-border-dark bg-zinc-50 dark:bg-zinc-800/40 text-zinc-400 dark:text-zinc-500 font-medium cursor-not-allowed shadow-inner" />
+                    </div>
+
+                    <!-- Teléfono -->
+                    <div class="space-y-1.5">
+                        <label for="input-telefono" class="block text-xs font-bold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">Número de Teléfono</label>
+                        <input type="tel" id="input-telefono" placeholder="Ej: +57 300 123 4567"
+                            class="w-full py-2 px-3.5 text-sm rounded-xl border border-border-light dark:border-border-dark bg-white dark:bg-zinc-800 focus:ring-2 focus:ring-zinc-500 dark:text-white transition-all shadow-sm font-medium" />
+                    </div>
+
+                    <!-- Empresa (Disabled) -->
+                    <div class="space-y-1.5">
+                        <div class="flex items-center justify-between">
+                            <label for="input-empresa" class="block text-xs font-bold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">Empresa / Organización</label>
+                            <span class="text-[9px] text-zinc-400 dark:text-zinc-500 font-semibold flex items-center gap-0.5">
+                                <span class="material-symbols-outlined text-[11px]">lock</span>
+                                Gestionado por Admin
+                            </span>
+                        </div>
+                        <input type="text" id="input-empresa" disabled
+                            class="w-full py-2 px-3.5 text-sm rounded-xl border border-border-light dark:border-border-dark bg-zinc-50 dark:bg-zinc-800/40 text-zinc-400 dark:text-zinc-500 font-medium cursor-not-allowed shadow-inner" />
+                    </div>
+
+                    <!-- Cargo -->
+                    <div class="space-y-1.5">
+                        <label for="input-cargo" class="block text-xs font-bold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">Cargo / Ocupación</label>
+                        <input type="text" id="input-cargo" placeholder="Ej: Coordinador BIM, Ingeniero Residente..."
+                            class="w-full py-2 px-3.5 text-sm rounded-xl border border-border-light dark:border-border-dark bg-white dark:bg-zinc-800 focus:ring-2 focus:ring-zinc-500 dark:text-white transition-all shadow-sm font-medium" />
+                    </div>
+
+                    <!-- Especialidad -->
+                    <div class="space-y-1.5">
+                        <label for="input-especialidad" class="block text-xs font-bold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">Especialidad / Disciplina</label>
+                        <input type="text" id="input-especialidad" placeholder="Ej: Arquitectura, Estructuras, MEP, HVAC..."
+                            class="w-full py-2 px-3.5 text-sm rounded-xl border border-border-light dark:border-border-dark bg-white dark:bg-zinc-800 focus:ring-2 focus:ring-zinc-500 dark:text-white transition-all shadow-sm font-medium" />
+                    </div>
+
+                </div>
+
+                <!-- Form Controls -->
+                <div class="flex items-center justify-end gap-3 pt-4 border-t border-border-light dark:border-border-dark">
+                    <button type="button" id="btn-cancel" class="px-5 py-2.5 rounded-xl border border-border-light dark:border-border-dark hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors text-xs font-bold uppercase tracking-wider">Cancelar</button>
+                    <button type="submit" id="btn-submit" class="px-5 py-2.5 rounded-xl bg-zinc-900 hover:bg-black text-white dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-100 text-xs font-bold uppercase tracking-wider transition-all shadow-md flex items-center gap-1.5">
+                        <span class="material-symbols-outlined text-[16px]">save</span>
+                        <span>Guardar Cambios</span>
+                    </button>
+                </div>
+            </form>
+        </div>
+    </main>
+
+    <!-- Notification Toast -->
+    <div id="toast-banner" class="fixed bottom-6 right-6 z-50 transform translate-y-20 opacity-0 transition-all duration-300 max-w-sm w-full rounded-2xl p-4 shadow-xl flex items-start gap-3 border bg-white dark:bg-zinc-800 border-border-light dark:border-border-dark">
+        <span id="toast-icon" class="material-symbols-outlined text-[20px] mt-0.5 text-emerald-500">check_circle</span>
+        <div id="toast-message" class="text-xs font-semibold flex-1"></div>
+    </div>
+
+    <!-- Script logic -->
+    <script>
+        document.addEventListener('DOMContentLoaded', async () => {
+            const API_URL = 'https://script.google.com/macros/s/AKfycbx2RAQx_8K4o22xE0Mw-ETc7K_58vIoi6-PgVi64u80inuiw144ks3cgWSdCtXqIgB02g/exec';
+            
+            // DOM Elements
+            const loadingOverlay = document.getElementById('loading-overlay');
+            const summaryName = document.getElementById('summary-name');
+            const summaryEmail = document.getElementById('summary-email');
+            const roleText = document.getElementById('role-text');
+            const statusText = document.getElementById('status-text');
+            const roleBadge = document.getElementById('role-badge');
+            const statusBadge = document.getElementById('status-badge');
+            const avatarContainer = document.getElementById('avatar-container');
+            
+            const form = document.getElementById('profile-form');
+            const inputNombre = document.getElementById('input-nombre');
+            const inputEmail = document.getElementById('input-email');
+            const inputTelefono = document.getElementById('input-telefono');
+            const inputEmpresa = document.getElementById('input-empresa');
+            const inputCargo = document.getElementById('input-cargo');
+            const inputEspecialidad = document.getElementById('input-especialidad');
+            
+            const btnCancel = document.getElementById('btn-cancel');
+            const btnSubmit = document.getElementById('btn-submit');
+            const backBtn = document.getElementById('back-btn');
+            
+            const toast = document.getElementById('toast-banner');
+            const toastIcon = document.getElementById('toast-icon');
+            const toastMsg = document.getElementById('toast-message');
+
+            let userSession = null;
+            try {
+                userSession = JSON.parse(sessionStorage.getItem('userAccount') || localStorage.getItem('userAccount'));
+            } catch(e) {
+                console.error(e);
+            }
+
+            if (!userSession || !userSession.username) {
+                window.location.replace('https://norabim.com/inse.html');
+                return;
+            }
+
+            // Init Profile overview values
+            summaryEmail.textContent = userSession.username;
+            inputEmail.value = userSession.username;
+            
+            // Set fallback details from session
+            inputNombre.value = userSession.name || '';
+            inputEmpresa.value = userSession.empresa || '';
+            inputCargo.value = userSession.cargo || '';
+            inputEspecialidad.value = userSession.especialidad || '';
+            summaryName.textContent = userSession.name || 'Usuario';
+            roleText.textContent = userSession.role || 'INVITADO';
+            
+            // Generate avatar initial or image
+            const updateAvatar = (name, url) => {
+                if (url) {
+                    avatarContainer.innerHTML = `<img src="${url}" alt="${name}" class="w-full h-full object-cover" />`;
+                } else {
+                    avatarContainer.textContent = (name || 'U').charAt(0).toUpperCase();
+                }
+            };
+            updateAvatar(userSession.name, userSession.picture);
+
+            // Fetch latest details from Google Sheets
+            try {
+                const res = await fetch(`${API_URL}?t=${Date.now()}`);
+                if (res.ok) {
+                    const allUsers = await res.json();
+                    const dbUser = allUsers.find(u => u.email && u.email.toLowerCase().trim() === userSession.username.toLowerCase().trim());
+                    
+                    if (dbUser) {
+                        inputNombre.value = dbUser.nombre || userSession.name || '';
+                        inputTelefono.value = dbUser.telefono || '';
+                        inputEmpresa.value = dbUser.empresa || '';
+                        inputCargo.value = dbUser.cargo || '';
+                        inputEspecialidad.value = dbUser.especialidad || '';
+                        
+                        summaryName.textContent = dbUser.nombre || userSession.name || 'Usuario';
+                        roleText.textContent = dbUser.rol || 'INVITADO';
+                        statusText.textContent = dbUser.estado || 'PENDIENTE';
+                        
+                        // Update status badge design based on value
+                        const st = (dbUser.estado || 'PENDIENTE').toUpperCase();
+                        if (st === 'APROBADO') {
+                            statusBadge.className = "inline-flex items-center gap-1 px-2.5 py-0.5 rounded-lg text-[10px] font-bold uppercase tracking-wider bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800";
+                            statusBadge.querySelector('.material-symbols-outlined').textContent = "verified_user";
+                        } else if (st === 'PENDIENTE') {
+                            statusBadge.className = "inline-flex items-center gap-1 px-2.5 py-0.5 rounded-lg text-[10px] font-bold uppercase tracking-wider bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300 border border-amber-200 dark:border-amber-800";
+                            statusBadge.querySelector('.material-symbols-outlined').textContent = "schedule";
+                        } else {
+                            statusBadge.className = "inline-flex items-center gap-1 px-2.5 py-0.5 rounded-lg text-[10px] font-bold uppercase tracking-wider bg-rose-50 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300 border border-rose-200 dark:border-rose-800";
+                            statusBadge.querySelector('.material-symbols-outlined').textContent = "block";
+                        }
+
+                        // Update local session properties just in case
+                        userSession.name = dbUser.nombre || userSession.name;
+                        userSession.role = dbUser.rol || userSession.role;
+                        userSession.empresa = dbUser.empresa || userSession.empresa;
+                        userSession.cargo = dbUser.cargo || userSession.cargo;
+                        userSession.especialidad = dbUser.especialidad || userSession.especialidad;
+                        
+                        const storageLoc = localStorage.getItem('userAccount') ? localStorage : sessionStorage;
+                        storageLoc.setItem('userAccount', JSON.stringify(userSession));
+                        updateAvatar(userSession.name, userSession.picture);
+                    }
+                }
+            } catch(e) {
+                console.error("No se pudo conectar a Google Sheets para refrescar, usando local data.", e);
+                statusText.textContent = 'CACHED';
+            } finally {
+                // Fade out loader
+                loadingOverlay.classList.add('opacity-0', 'pointer-events-none');
+            }
+
+            // Toast helper
+            const showToast = (message, success = true) => {
+                toastMsg.textContent = message;
+                if (success) {
+                    toastIcon.className = "material-symbols-outlined text-[20px] mt-0.5 text-emerald-500";
+                    toastIcon.textContent = "check_circle";
+                } else {
+                    toastIcon.className = "material-symbols-outlined text-[20px] mt-0.5 text-rose-500";
+                    toastIcon.textContent = "error";
+                }
+                toast.classList.remove('translate-y-20', 'opacity-0');
+                
+                setTimeout(() => {
+                    toast.classList.add('translate-y-20', 'opacity-0');
+                }, 4000);
+            };
+
+            // Form Submit handler
+            form.addEventListener('submit', async (e) => {
+                e.preventDefault();
+                
+                btnSubmit.disabled = true;
+                const origContent = btnSubmit.innerHTML;
+                btnSubmit.innerHTML = `<span class="material-symbols-outlined text-[16px] animate-spin">refresh</span><span>Guardando...</span>`;
+
+                const dataToSend = {
+                    nombre: inputNombre.value.trim(),
+                    email: userSession.username.toLowerCase().trim(),
+                    telefono: inputTelefono.value.trim(),
+                    empresa: inputEmpresa.value.trim(),
+                    especialidad: inputEspecialidad.value.trim(),
+                    cargo: inputCargo.value.trim(),
+                    rol: roleText.textContent,
+                    estado: statusText.textContent === 'CACHED' ? 'APROBADO' : statusText.textContent
+                };
+
+                try {
+                    // Send request to Apps Script (mode: 'no-cors' matches login pattern for security / simplicity)
+                    await fetch(API_URL, {
+                        method: 'POST',
+                        mode: 'no-cors',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(dataToSend)
+                    });
+
+                    // Update local sessionStorage / localStorage values
+                    userSession.name = dataToSend.nombre;
+                    userSession.cargo = dataToSend.cargo;
+                    userSession.especialidad = dataToSend.especialidad;
+                    
+                    const storageLoc = localStorage.getItem('userAccount') ? localStorage : sessionStorage;
+                    storageLoc.setItem('userAccount', JSON.stringify(userSession));
+                    
+                    // Update UI immediately
+                    summaryName.textContent = dataToSend.nombre;
+                    updateAvatar(userSession.name, userSession.picture);
+
+                    showToast("Perfil actualizado exitosamente");
+                } catch(err) {
+                    console.error(err);
+                    showToast("Error al guardar cambios. Inténtalo de nuevo.", false);
+                } finally {
+                    btnSubmit.disabled = false;
+                    btnSubmit.innerHTML = origContent;
+                }
+            });
+
+            // Back & Cancel Button logic
+            const goBack = () => {
+                if (window.history.length > 1) {
+                    window.history.back();
+                } else {
+                    window.location.href = 'empresas.html';
+                }
+            };
+            btnCancel.addEventListener('click', goBack);
+            backBtn.addEventListener('click', goBack);
+
+            // --- GESTIÓN DEL TEMA (MODO OSCURO/CLARO) ---
+            const themeToggle = document.getElementById('theme-toggle');
+            const htmlEl = document.documentElement;
+
+            const applyTheme = (theme) => {
+                if (theme === 'dark') {
+                    htmlEl.classList.add('dark');
+                    themeToggle.querySelector('.material-symbols-outlined').textContent = 'light_mode';
+                } else {
+                    htmlEl.classList.remove('dark');
+                    themeToggle.querySelector('.material-symbols-outlined').textContent = 'dark_mode';
+                }
+            };
+
+            const savedTheme = localStorage.getItem('theme') || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+            applyTheme(savedTheme);
+
+            themeToggle.addEventListener('click', () => {
+                const newTheme = htmlEl.classList.contains('dark') ? 'light' : 'dark';
+                localStorage.setItem('theme', newTheme);
+                applyTheme(newTheme);
+            });
+        });
+    </script>
+</body>
+</html>

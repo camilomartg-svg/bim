@@ -7,7 +7,9 @@ const filesToSync = [
   'project-settings.js',
   'home.html',
   'equipo.js',
-  'equipo.html'
+  'equipo.html',
+  'empresas.html',
+  'perfil.html'
 ];
 
 filesToSync.forEach(file => {
