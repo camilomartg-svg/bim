@@ -51,6 +51,10 @@
     diagramDeliveryClusters: document.getElementById('diagram-delivery-clusters'),
     diagramAdminName: document.getElementById('diagram-admin-name'),
     diagramAdminCount: document.getElementById('diagram-admin-count'),
+    isoDiagramCanvas: document.getElementById('iso-diagram-canvas'),
+    isoDiagramSvg: document.getElementById('iso-diagram-svg'),
+    isoDiagramNodes: document.getElementById('iso-diagram-nodes'),
+    diagramTooltip: document.getElementById('diagram-tooltip'),
 
     // Tab panels & containers
     projectAdminsContainer: document.getElementById('project-admins-container'),
@@ -573,82 +577,311 @@
       }
     }
 
-    if (!el.diagramDeliveryClusters) return;
+    if (!el.isoDiagramNodes || !el.isoDiagramSvg) return;
+
+    // Clear SVG canvas (preserving defs)
+    const defs = el.isoDiagramSvg.querySelector('defs');
+    el.isoDiagramSvg.innerHTML = '';
+    if (defs) el.isoDiagramSvg.appendChild(defs);
+
+    // Clear HTML nodes container
+    el.isoDiagramNodes.innerHTML = '';
+
     const deliveryTeams = activeProject.iso19650?.deliveryTeams || [];
 
-    if (deliveryTeams.length === 0) {
-      el.diagramDeliveryClusters.innerHTML = `
-        <div class="col-span-full py-8 text-center text-xs text-slate-400 italic bg-white/40 dark:bg-slate-800/40 rounded-2xl border border-dashed border-slate-300 dark:border-slate-700">
-          No hay Equipos de Entrega configurados. Haz clic en "2. Equipos de Entrega" para agregar el primero.
+    const centerX = 450;
+    const centerY = 325;
+
+    // Helper: Draw offset double-headed arrow line in SVG
+    function drawOffsetLine(x1, y1, x2, y2, offset1, offset2, color = '#94a3b8', isDashed = false) {
+      const dx = x2 - x1;
+      const dy = y2 - y1;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      if (dist === 0) return;
+      const ux = dx / dist;
+      const uy = dy / dist;
+      const sx = x1 + offset1 * ux;
+      const sy = y1 + offset1 * uy;
+      const ex = x2 - offset2 * ux;
+      const ey = y2 - offset2 * uy;
+
+      const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+      line.setAttribute('x1', sx);
+      line.setAttribute('y1', sy);
+      line.setAttribute('x2', ex);
+      line.setAttribute('y2', ey);
+      line.setAttribute('stroke', color);
+      line.setAttribute('stroke-width', '1.5');
+      if (isDashed) {
+        line.setAttribute('stroke-dasharray', '3,3');
+      }
+      line.setAttribute('marker-end', 'url(#arrow-bi)');
+      line.setAttribute('marker-start', 'url(#arrow-bi)');
+      el.isoDiagramSvg.appendChild(line);
+    }
+
+    // Helper: Setup interactive tooltip
+    function setupTooltip(element, getHtmlCallback) {
+      element.addEventListener('mouseenter', (e) => {
+        if (!el.diagramTooltip) return;
+        el.diagramTooltip.innerHTML = getHtmlCallback();
+        el.diagramTooltip.classList.remove('hidden');
+        el.diagramTooltip.style.opacity = '1';
+        positionTooltip(e);
+      });
+
+      element.addEventListener('mousemove', (e) => {
+        positionTooltip(e);
+      });
+
+      element.addEventListener('mouseleave', () => {
+        if (!el.diagramTooltip) return;
+        el.diagramTooltip.classList.add('hidden');
+        el.diagramTooltip.style.opacity = '0';
+      });
+    }
+
+    function positionTooltip(e) {
+      if (!el.diagramTooltip) return;
+      const tooltipWidth = el.diagramTooltip.offsetWidth || 200;
+      const tooltipHeight = el.diagramTooltip.offsetHeight || 120;
+
+      let x = e.clientX + 15;
+      let y = e.clientY + 15;
+
+      if (x + tooltipWidth > window.innerWidth) {
+        x = e.clientX - tooltipWidth - 15;
+      }
+      if (y + tooltipHeight > window.innerHeight) {
+        y = e.clientY - tooltipHeight - 15;
+      }
+
+      el.diagramTooltip.style.left = `${x}px`;
+      el.diagramTooltip.style.top = `${y}px`;
+    }
+
+    // 1. Draw Outer Circle: "1. Equipo de Proyecto"
+    const projectCircle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+    projectCircle.setAttribute('cx', centerX);
+    projectCircle.setAttribute('cy', centerY);
+    projectCircle.setAttribute('r', '290');
+    projectCircle.setAttribute('stroke', '#cbd5e1');
+    projectCircle.setAttribute('stroke-width', '2');
+    projectCircle.setAttribute('stroke-dasharray', '5,5');
+    projectCircle.setAttribute('fill', 'none');
+    projectCircle.setAttribute('class', 'dark:stroke-slate-700/60');
+    el.isoDiagramSvg.appendChild(projectCircle);
+
+    // Label for Outer Circle
+    const outerCircleLabel = document.createElement('div');
+    outerCircleLabel.className = 'absolute px-3 py-0.5 rounded-full bg-slate-800/90 text-white font-mono text-[9px] font-black uppercase tracking-wider shadow-sm z-30 pointer-events-none';
+    outerCircleLabel.style.left = `${centerX}px`;
+    outerCircleLabel.style.top = '22px';
+    outerCircleLabel.style.transform = 'translateX(-50%)';
+    outerCircleLabel.innerHTML = '1. Equipo de Proyecto';
+    el.isoDiagramNodes.appendChild(outerCircleLabel);
+
+    // 2. Draw Central Hub: A. Adjudicador (Administrador)
+    const nodeA = document.createElement('div');
+    nodeA.className = 'absolute rounded-full bg-sky-600 hover:bg-sky-700 dark:bg-sky-500 dark:hover:bg-sky-600 text-white font-black flex items-center justify-center cursor-pointer shadow-lg shadow-sky-500/20 hover:scale-110 transition-transform border-4 border-white dark:border-slate-800 z-30 select-none';
+    nodeA.style.left = `${centerX - 28}px`;
+    nodeA.style.top = `${centerY - 28}px`;
+    nodeA.style.width = '56px';
+    nodeA.style.height = '56px';
+    nodeA.innerHTML = '<span class="text-base">A</span>';
+
+    setupTooltip(nodeA, () => {
+      const names = projectAdmins.map(email => getUserRegisteredName(email));
+      const listHtml = names.map(name => `<li>• ${escapeHtml(name)}</li>`).join('');
+      return `
+        <div class="space-y-1.5">
+          <div class="flex items-center gap-2">
+            <span class="px-1.5 py-0.5 rounded bg-sky-500 text-white text-[9px] font-black uppercase">Rol A</span>
+            <span class="font-bold text-slate-200">Adjudicador</span>
+          </div>
+          <div class="text-slate-300 text-[10px]">Administradores de Proyecto:</div>
+          <ul class="text-[10px] text-slate-400 space-y-0.5 list-none pl-0">
+            ${listHtml || '<li>• Sin administradores designados</li>'}
+          </ul>
+          <div class="text-[9px] text-indigo-400 mt-2 italic border-t border-slate-800 pt-1.5">Haz clic para ir a la pestaña de Administradores</div>
         </div>
       `;
+    });
+
+    nodeA.addEventListener('click', () => {
+      window.switchTab('admins');
+    });
+    el.isoDiagramNodes.appendChild(nodeA);
+
+    // Empty state if no delivery teams
+    if (deliveryTeams.length === 0) {
+      const emptyState = document.createElement('div');
+      emptyState.className = 'absolute text-center text-xs text-slate-400 italic bg-white/40 dark:bg-slate-800/40 rounded-2xl border border-dashed border-slate-300 dark:border-slate-700/60 p-4 w-72';
+      emptyState.style.left = `${centerX - 144}px`;
+      emptyState.style.top = `${centerY + 70}px`;
+      emptyState.innerHTML = 'No hay Equipos de Entrega configurados.<br>Haz clic en "2. Equipos de Entrega" para agregar el primero.';
+      el.isoDiagramNodes.appendChild(emptyState);
       return;
     }
 
-    el.diagramDeliveryClusters.innerHTML = deliveryTeams.map(dt => {
+    const N = deliveryTeams.length;
+    const R_dist = 195;
+
+    // Coordination ring connecting all B nodes
+    if (N >= 2) {
+      const coordCircle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+      coordCircle.setAttribute('cx', centerX);
+      coordCircle.setAttribute('cy', centerY);
+      coordCircle.setAttribute('r', R_dist.toString());
+      coordCircle.setAttribute('stroke', '#94a3b8');
+      coordCircle.setAttribute('stroke-width', '1.5');
+      coordCircle.setAttribute('stroke-dasharray', '4,4');
+      coordCircle.setAttribute('fill', 'none');
+      coordCircle.setAttribute('class', 'dark:stroke-slate-700/50');
+      el.isoDiagramSvg.appendChild(coordCircle);
+    }
+
+    // Render radial Delivery Team Clusters (2) and members (C) / task teams (3)
+    deliveryTeams.forEach((dt, i) => {
+      const angle = (2 * Math.PI * i) / N - Math.PI / 2;
+      const X_di = centerX + R_dist * Math.cos(angle);
+      const Y_di = centerY + R_dist * Math.sin(angle);
+
+      // Draw connection A <-> B
+      drawOffsetLine(centerX, centerY, X_di, Y_di, 28, 22, '#3b82f6');
+
+      // Delivery Team Circle (2) enclosing B and C
+      const bubble2 = document.createElement('div');
+      bubble2.className = 'absolute rounded-full border border-slate-200 dark:border-slate-800 bg-slate-100/30 dark:bg-slate-900/30 shadow-inner z-10 pointer-events-none transition-all duration-300';
+      bubble2.style.left = `${X_di - 80}px`;
+      bubble2.style.top = `${Y_di - 80}px`;
+      bubble2.style.width = '160px';
+      bubble2.style.height = '160px';
+      el.isoDiagramNodes.appendChild(bubble2);
+
+      // Label "2"
+      const badge2 = document.createElement('div');
+      badge2.className = 'absolute h-5 w-5 rounded-full bg-slate-500/80 text-white font-mono text-[9px] font-black flex items-center justify-center shadow-sm z-30 pointer-events-none';
+      badge2.style.left = `${X_di - 76}px`;
+      badge2.style.top = `${Y_di - 76}px`;
+      badge2.innerHTML = '2';
+      el.isoDiagramNodes.appendChild(badge2);
+
+      // B: Líder node (radius 21)
+      const nodeB = document.createElement('div');
+      nodeB.className = 'absolute rounded-full bg-blue-600 hover:bg-blue-700 text-white font-black flex items-center justify-center cursor-pointer shadow-md hover:scale-110 transition-transform border-2 border-white dark:border-slate-800 z-30 select-none';
+      nodeB.style.left = `${X_di - 21}px`;
+      nodeB.style.top = `${Y_di - 21}px`;
+      nodeB.style.width = '42px';
+      nodeB.style.height = '42px';
+      nodeB.innerHTML = '<span class="text-sm">B</span>';
+
       const leadMeta = getUserMetadata(dt.leadEmail);
-      const membersCount = (dt.members || []).length;
-      const tasksCount = (dt.taskTeams || []).length;
-
-      const tasksHtml = (dt.taskTeams || []).map(tt => {
-        return `
-          <div class="flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 text-[10px] font-bold">
-            <span class="material-symbols-outlined text-[12px]">task_alt</span>
-            <span class="truncate">${escapeHtml(tt.name)}</span>
+      setupTooltip(nodeB, () => `
+        <div class="space-y-1.5">
+          <div class="flex items-center gap-2">
+            <span class="px-1.5 py-0.5 rounded bg-blue-500 text-white text-[9px] font-black uppercase">Rol B</span>
+            <span class="font-bold text-slate-200">Líder de Entrega</span>
           </div>
-        `;
-      }).join('');
-
-      return `
-        <div class="iso-bubble rounded-2xl bg-white dark:bg-slate-800 border-2 border-purple-200 dark:border-purple-900/60 p-5 shadow-sm space-y-4 hover:border-purple-400 transition-all">
-          
-          <!-- Delivery Header -->
-          <div class="flex items-start justify-between gap-2 border-b border-slate-100 dark:border-slate-700 pb-3">
-            <div>
-              <span class="text-[9px] font-mono font-black uppercase tracking-widest px-2 py-0.5 rounded bg-purple-100 dark:bg-purple-950 text-purple-700 dark:text-purple-300">
-                2. Equipo de Entrega
-              </span>
-              <h4 class="text-sm font-black text-slate-900 dark:text-white mt-1 leading-snug">${escapeHtml(dt.name)}</h4>
-            </div>
-            <span class="h-7 w-7 rounded-xl bg-purple-50 dark:bg-purple-950 text-purple-600 dark:text-purple-400 flex items-center justify-center font-black text-xs shrink-0">
-              B
-            </span>
+          <div class="text-slate-300 text-xs font-bold">${escapeHtml(dt.name)}</div>
+          <div class="border-t border-slate-800 pt-1 space-y-0.5 text-[10px] text-slate-400">
+            <div><strong>Líder:</strong> ${escapeHtml(leadMeta.name || 'Sin Líder Asignado')}</div>
+            <div><strong>Email:</strong> ${escapeHtml(leadMeta.email || '-')}</div>
+            <div><strong>Empresa:</strong> ${escapeHtml(leadMeta.company || '-')}</div>
           </div>
-
-          <!-- Lead (Adjudicatario Principal) -->
-          <div class="p-3 rounded-xl bg-blue-50/70 dark:bg-blue-950/40 border border-blue-100 dark:border-blue-900/40 space-y-1">
-            <div class="flex items-center justify-between text-[10px] font-bold text-blue-600 dark:text-blue-400 uppercase tracking-wider">
-              <span>Líder de Entrega (B)</span>
-              <span class="material-symbols-outlined text-[14px]">star</span>
-            </div>
-            <div class="font-bold text-xs text-slate-900 dark:text-white">${escapeHtml(leadMeta.name || 'Sin Líder Asignado')}</div>
-            <div class="text-[11px] text-slate-500 dark:text-slate-400 font-mono truncate">${escapeHtml(leadMeta.email || '-')}</div>
-          </div>
-
-          <!-- Members count & Preview (Otros Adjudicatarios C) -->
-          <div class="space-y-1.5">
-            <div class="flex items-center justify-between text-[11px] font-bold text-slate-600 dark:text-slate-300">
-              <span class="flex items-center gap-1">
-                <span class="h-2 w-2 rounded-full bg-purple-500"></span> Miembros (C)
-              </span>
-              <span class="text-[10px] font-mono px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-700">${membersCount} Integrantes</span>
-            </div>
-          </div>
-
-          <!-- Nested Task Teams (3) -->
-          <div class="space-y-1.5 pt-2 border-t border-slate-100 dark:border-slate-700">
-            <div class="flex items-center justify-between text-[10px] font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider">
-              <span>3. Equipos de Tarea (${tasksCount})</span>
-              <span class="material-symbols-outlined text-[14px]">bolt</span>
-            </div>
-            <div class="flex flex-wrap gap-1.5">
-              ${tasksHtml || '<span class="text-[10px] text-slate-400 italic">Sin equipos de tarea</span>'}
-            </div>
-          </div>
-
+          <div class="text-[9px] text-indigo-400 mt-2 italic border-t border-slate-800 pt-1.5">Haz clic para ir a los Equipos de Entrega</div>
         </div>
-      `;
-    }).join('');
+      `);
+
+      nodeB.addEventListener('click', () => {
+        window.switchTab('delivery');
+        setTimeout(() => {
+          const card = document.getElementById(`delivery-team-card-${dt.id}`);
+          if (card) {
+            card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            card.classList.add('ring-4', 'ring-purple-500');
+            setTimeout(() => card.classList.remove('ring-4', 'ring-purple-500'), 2500);
+          }
+        }, 100);
+      });
+      el.isoDiagramNodes.appendChild(nodeB);
+
+      // C: Member nodes
+      const members = dt.members || [];
+      const nonLeaderEmails = members.filter(m => (m || '').toLowerCase().trim() !== (dt.leadEmail || '').toLowerCase().trim());
+      const M = nonLeaderEmails.length;
+
+      if (M > 0) {
+        const r_dist = 52;
+        nonLeaderEmails.forEach((mEmail, j) => {
+          const subAngle = (2 * Math.PI * j) / M - Math.PI / 2;
+          const X_mj = X_di + r_dist * Math.cos(subAngle);
+          const Y_mj = Y_di + r_dist * Math.sin(subAngle);
+
+          // Draw connection B <-> C
+          drawOffsetLine(X_di, Y_di, X_mj, Y_mj, 21, 15, '#c084fc');
+
+          // C node
+          const nodeC = document.createElement('div');
+          nodeC.className = 'absolute rounded-full bg-purple-600 hover:bg-purple-700 text-white font-black flex items-center justify-center cursor-pointer shadow-sm hover:scale-110 transition-transform border-2 border-white dark:border-slate-800 z-30 select-none';
+          nodeC.style.left = `${X_mj - 15}px`;
+          nodeC.style.top = `${Y_mj - 15}px`;
+          nodeC.style.width = '30px';
+          nodeC.style.height = '30px';
+          nodeC.innerHTML = '<span class="text-xs">C</span>';
+
+          const mMeta = getUserMetadata(mEmail);
+          const memberTeams = (dt.taskTeams || []).filter(tt => (tt.members || []).some(m => m.toLowerCase().trim() === mEmail.toLowerCase().trim()));
+
+          // Green badge "3" if member of task teams (disciplines)
+          if (memberTeams.length > 0) {
+            const badge3 = document.createElement('div');
+            badge3.className = 'absolute h-4 w-4 rounded-full bg-emerald-600 text-white font-mono text-[8px] font-black flex items-center justify-center border border-white dark:border-slate-800 shadow-sm z-40';
+            badge3.style.left = `${X_mj + 5}px`;
+            badge3.style.top = `${Y_mj - 15}px`;
+            badge3.innerHTML = '3';
+            el.isoDiagramNodes.appendChild(badge3);
+          }
+
+          setupTooltip(nodeC, () => {
+            const teamListHtml = memberTeams.map(t => `<span class="px-1.5 py-0.5 rounded bg-emerald-950 text-emerald-300 border border-emerald-800 text-[9px] font-bold">${escapeHtml(t.name)}</span>`).join(' ');
+            return `
+              <div class="space-y-1.5">
+                <div class="flex items-center gap-2">
+                  <span class="px-1.5 py-0.5 rounded bg-purple-500 text-white text-[9px] font-black uppercase">Rol C</span>
+                  <span class="font-bold text-slate-200">Adjudicatario (Miembro)</span>
+                </div>
+                <div class="border-t border-slate-800 pt-1 space-y-0.5 text-[10px] text-slate-400">
+                  <div><strong>Nombre:</strong> ${escapeHtml(mMeta.name || 'Usuario')}</div>
+                  <div><strong>Email:</strong> ${escapeHtml(mMeta.email || mEmail)}</div>
+                  <div><strong>Empresa:</strong> ${escapeHtml(mMeta.company || '-')}</div>
+                </div>
+                ${memberTeams.length > 0 ? `
+                  <div class="border-t border-slate-800 pt-1.5 space-y-1">
+                    <div class="text-[9px] uppercase font-bold text-emerald-400">3. Equipos de Tarea (Especialidad):</div>
+                    <div class="flex flex-wrap gap-1">${teamListHtml}</div>
+                  </div>
+                ` : ''}
+              </div>
+            `;
+          });
+
+          nodeC.addEventListener('click', () => {
+            window.switchTab('delivery');
+            setTimeout(() => {
+              const card = document.getElementById(`delivery-team-card-${dt.id}`);
+              if (card) {
+                card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                card.classList.add('ring-4', 'ring-purple-500');
+                setTimeout(() => card.classList.remove('ring-4', 'ring-purple-500'), 2500);
+              }
+            }, 100);
+          });
+
+          el.isoDiagramNodes.appendChild(nodeC);
+        });
+      }
+    });
   }
 
   // --- 3. PESTAÑA: 1. ADMINISTRADORES DE PROYECTO (ADJUDICADORES) ---
