@@ -789,33 +789,28 @@
       // Render members rows
       const userEmail = (currentUser?.username || currentUser?.email || currentUser?.userAccount || '').toLowerCase().trim();
       const isCurrentLeader = (dt.leadEmail || '').toLowerCase().trim() === userEmail;
-
-      const membersListHtml = members.map(mEmail => {
+      const nonLeaderMembers = members.filter(mEmail => mEmail.toLowerCase().trim() !== (dt.leadEmail || '').toLowerCase().trim());
+      const nonLeaderMembersListHtml = nonLeaderMembers.map(mEmail => {
         const mMeta = getUserMetadata(mEmail);
-        const isLead = (mEmail.toLowerCase().trim() === (dt.leadEmail || '').toLowerCase().trim());
         return `
           <div class="flex items-center justify-between py-2 px-3 rounded-xl bg-slate-50 dark:bg-slate-900/60 text-xs">
             <div class="flex items-center gap-2.5">
-              <span class="h-6 w-6 rounded-lg ${isLead ? 'bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300' : 'bg-purple-100 text-purple-700 dark:bg-purple-950 dark:text-purple-300'} flex items-center justify-center font-bold text-[10px]">
-                ${isLead ? 'B' : 'C'}
+              <span class="h-6 w-6 rounded-lg bg-purple-100 text-purple-700 dark:bg-purple-950 dark:text-purple-300 flex items-center justify-center font-bold text-[10px]">
+                C
               </span>
               <div>
-                <div class="font-bold text-slate-900 dark:text-white">${escapeHtml(mMeta.name)} ${isLead ? '<span class="text-[10px] text-blue-600 font-bold ml-1">(Líder)</span>' : ''}</div>
+                <div class="font-bold text-slate-900 dark:text-white">${escapeHtml(mMeta.name)}</div>
                 <div class="text-[10px] text-slate-400 font-mono">${escapeHtml(mEmail)} • ${escapeHtml(mMeta.company)}</div>
               </div>
             </div>
             ${(canManageProjectStructure || isCurrentLeader) ? `
               <div class="flex items-center gap-1">
-                ${(!isLead && (canManageProjectStructure || isCurrentLeader)) ? `
-                  <button onclick="setDeliveryTeamLead('${dt.id}', '${mEmail}')" class="px-2 py-1 rounded-lg text-[10px] font-bold text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950 transition-colors" title="Nombrar como Líder de Entrega (B)">
-                    Nombrar Líder
-                  </button>
-                ` : ''}
-                ${(canManageProjectStructure || isCurrentLeader) ? `
-                  <button onclick="removeDeliveryTeamMember('${dt.id}', '${mEmail}')" class="p-1 text-slate-400 hover:text-rose-600 transition-colors" title="Remover de este equipo">
-                    <span class="material-symbols-outlined text-[16px]">close</span>
-                  </button>
-                ` : ''}
+                <button onclick="setDeliveryTeamLead('${dt.id}', '${mEmail}')" class="px-2 py-1 rounded-lg text-[10px] font-bold text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950 transition-colors" title="Nombrar como Líder de Entrega (B)">
+                  Nombrar Líder
+                </button>
+                <button onclick="removeDeliveryTeamMember('${dt.id}', '${mEmail}')" class="p-1 text-slate-400 hover:text-rose-600 transition-colors" title="Remover de este equipo">
+                  <span class="material-symbols-outlined text-[16px]">close</span>
+                </button>
               </div>
             ` : ''}
           </div>
@@ -851,99 +846,57 @@
             ` : ''}
           </div>
 
-          <!-- Team Leader and Members Grid -->
-          <div class="grid grid-cols-1 lg:grid-cols-2 gap-5">
-            
-            <!-- Lead Card -->
-            <div class="p-4 rounded-2xl bg-gradient-to-br from-blue-50/60 to-indigo-50/30 dark:from-blue-950/40 dark:to-indigo-950/20 border border-blue-100 dark:border-blue-900/50 space-y-2">
-              <div class="flex items-center justify-between text-[11px] font-bold uppercase tracking-wider text-blue-700 dark:text-blue-300">
-                <span class="flex items-center gap-1.5">
-                  <span class="material-symbols-outlined text-[16px]">stars</span> Adjudicatario Principal (Líder B)
-                </span>
-              </div>
-              <div class="font-bold text-sm text-slate-900 dark:text-white">${escapeHtml(leadMeta.name || 'Sin Líder Asignado')}</div>
-              <div class="text-xs text-slate-500 dark:text-slate-400 font-mono">${escapeHtml(leadMeta.email || '-')}</div>
-              <div class="text-[11px] text-slate-400">${escapeHtml(leadMeta.company)} • ${escapeHtml(leadMeta.cargo)}</div>
+          <!-- Lead Card (Full Width) -->
+          <div class="p-4 rounded-2xl bg-gradient-to-br from-blue-50/60 to-indigo-50/30 dark:from-blue-950/40 dark:to-indigo-950/20 border border-blue-100 dark:border-blue-900/50 space-y-2">
+            <div class="flex items-center justify-between text-[11px] font-bold uppercase tracking-wider text-blue-700 dark:text-blue-300">
+              <span class="flex items-center gap-1.5">
+                <span class="material-symbols-outlined text-[16px]">stars</span> Adjudicatario Principal (Líder B)
+              </span>
             </div>
+            <div class="font-bold text-sm text-slate-900 dark:text-white">${escapeHtml(leadMeta.name || 'Sin Líder Asignado')}</div>
+            <div class="text-xs text-slate-500 dark:text-slate-400 font-mono">${escapeHtml(leadMeta.email || '-')}</div>
+            <div class="text-[11px] text-slate-400">${escapeHtml(leadMeta.company)} • ${escapeHtml(leadMeta.cargo)}</div>
+          </div>
 
-            <!-- Task Teams in this Delivery Team -->
-            <div class="p-4 rounded-2xl bg-slate-50 dark:bg-slate-900/40 border border-slate-200 dark:border-slate-700/60 space-y-2">
-              <div class="flex items-center justify-between text-[11px] font-bold uppercase tracking-wider text-emerald-700 dark:text-emerald-300">
-                <span class="flex items-center gap-1.5">
-                  <span class="material-symbols-outlined text-[16px]">task_alt</span> 3. Equipos de Tarea (${taskTeams.length})
-                </span>
+          <!-- 3. Equipo de Tarea Section -->
+          <div class="space-y-3 pt-2 border-t border-slate-100 dark:border-slate-700/60">
+            <div class="flex items-center justify-between text-xs font-bold text-slate-700 dark:text-slate-300">
+              <span class="flex items-center gap-1.5 uppercase tracking-wider text-[11px] text-emerald-700 dark:text-emerald-300">
+                <span class="material-symbols-outlined text-[16px]">task_alt</span> 3. Equipo de Tarea (Miembros C) (${nonLeaderMembers.length})
+              </span>
+              <div class="flex items-center gap-2">
                 ${(canManageProjectStructure || isCurrentLeader) ? `
-                  <button onclick="openCreateTaskTeamModal('${dt.id}')" class="text-[10px] font-bold text-emerald-600 hover:underline">
-                    + Añadir Tarea
+                  <button onclick="openCreateTaskTeamModal('${dt.id}')" class="text-[10px] font-bold text-emerald-600 hover:underline flex items-center gap-1">
+                    <span class="material-symbols-outlined text-[14px]">add</span> Añadir Disciplina
+                  </button>
+                  <span class="text-slate-300 dark:text-slate-600">|</span>
+                  <button onclick="openAddMemberToDeliveryTeamModal('${dt.id}')" class="text-[10px] font-bold text-purple-600 hover:underline flex items-center gap-1">
+                    <span class="material-symbols-outlined text-[14px]">person_add</span> Miembro
                   </button>
                 ` : ''}
               </div>
-              <div class="space-y-2 pt-1 max-h-56 overflow-y-auto">
-                ${taskTeams.map(tt => {
-                  const superAdmins = ['imagina3ddesign@gmail.com', 'mcmartinezg@unal.edu.co'];
-                  const companyAdmins = Array.isArray(currentCompany?.admins) ? currentCompany.admins.map(a => a.toLowerCase().trim()) : [];
-                  const projectAdmins = Array.isArray(activeProject?.iso19650?.projectAdmins)
-                    ? activeProject.iso19650.projectAdmins.map(a => a.toLowerCase().trim())
-                    : [];
-                  const lead = (dt.leadEmail || '').toLowerCase().trim();
-                  
-                  const ttMembers = (dt.members || []).filter(m => {
-                    const clean = m.toLowerCase().trim();
-                    const isLead = clean === lead;
-                    const isSuper = superAdmins.includes(clean);
-                    const isCompAdmin = companyAdmins.includes(clean);
-                    const isProjAdmin = projectAdmins.includes(clean);
-                    
-                    const memberMatch = Array.isArray(currentCompany?.members) 
-                      ? currentCompany.members.find(cm => cm.email && cm.email.toLowerCase().trim() === clean) 
-                      : null;
-                    const isMemberAdmin = memberMatch && (memberMatch.role === 'ADMINISTRADOR_EMPRESA' || memberMatch.role === 'ADMINISTRADOR');
+            </div>
 
-                    return !isLead && !isSuper && !isCompAdmin && !isProjAdmin && !isMemberAdmin;
-                  });
-
-                  const memberNames = ttMembers.map(m => getUserRegisteredName(m)).join(', ') || 'Ninguno';
-
-                  return `
-                    <div class="flex items-center justify-between p-2.5 rounded-xl bg-white dark:bg-slate-800 border border-slate-200/80 dark:border-slate-700/80 text-xs">
-                      <div class="min-w-0 flex-1">
-                        <div class="font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1.5 truncate">
-                          <span class="material-symbols-outlined text-[15px] text-emerald-600 dark:text-emerald-400">task_alt</span>
-                          <span>${escapeHtml(tt.name)}</span>
-                        </div>
-                        <div class="text-[10px] text-slate-400 font-medium mt-0.5">
-                          Disciplina: <span class="text-slate-500 dark:text-slate-300 font-semibold">${escapeHtml(tt.discipline || 'General')}</span>
-                        </div>
-                        <div class="text-[10px] text-slate-400 font-medium mt-0.5 truncate">
-                          Miembros (${ttMembers.length}): <span class="text-slate-500 dark:text-slate-300 font-semibold" title="${escapeHtml(memberNames)}">${escapeHtml(memberNames)}</span>
-                        </div>
-                      </div>
-                      ${(canManageProjectStructure || isCurrentLeader) ? `
-                        <button onclick="deleteTaskTeam('${dt.id}', '${tt.id}')" class="p-1 text-slate-400 hover:text-rose-600 transition-colors shrink-0 ml-2" title="Eliminar equipo de tarea">
-                          <span class="material-symbols-outlined text-[16px]">delete</span>
-                        </button>
-                      ` : ''}
-                    </div>
-                  `;
-                }).join('') || '<div class="text-xs text-slate-400 italic py-1">No hay equipos de tarea aún.</div>'}
+            <!-- Disciplines / Sub-teams List (If any exist) -->
+            ${taskTeams.length > 0 ? `
+              <div class="flex flex-wrap gap-2 p-3 rounded-2xl bg-slate-50 dark:bg-slate-900/40 border border-slate-200/60 dark:border-slate-700/40">
+                <span class="text-[10px] uppercase font-bold text-slate-400 dark:text-slate-500 w-full mb-1">Disciplinas / Sub-equipos:</span>
+                ${taskTeams.map(tt => `
+                  <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-xl bg-emerald-100/80 dark:bg-emerald-950/80 text-emerald-800 dark:text-emerald-200 text-xs font-bold border border-emerald-200 dark:border-emerald-800">
+                    <span class="material-symbols-outlined text-[13px]">check_box</span> ${escapeHtml(tt.name)} (${escapeHtml(tt.discipline || 'General')})
+                    ${(canManageProjectStructure || isCurrentLeader) ? `
+                      <button onclick="deleteTaskTeam('${dt.id}', '${tt.id}')" class="text-emerald-600 dark:text-emerald-400 hover:text-rose-600 ml-1 transition-colors flex items-center" title="Eliminar disciplina">
+                        <span class="material-symbols-outlined text-[12px] font-bold">close</span>
+                      </button>
+                    ` : ''}
+                  </span>
+                `).join('')}
               </div>
-            </div>
+            ` : ''}
 
-          </div>
-
-          <!-- Members Section -->
-          <div class="space-y-3 pt-2">
-            <div class="flex items-center justify-between text-xs font-bold text-slate-700 dark:text-slate-300">
-              <span>Otros Adjudicatarios / Miembros del Equipo de Entrega (${members.length})</span>
-              ${(canManageProjectStructure || isCurrentLeader) ? `
-                <button onclick="openAddMemberToDeliveryTeamModal('${dt.id}')" class="text-xs font-bold text-purple-600 hover:underline flex items-center gap-1">
-                  <span class="material-symbols-outlined text-[14px]">person_add</span> Añadir Miembro
-                </button>
-              ` : ''}
-            </div>
-
+            <!-- Non-leader Members List -->
             <div class="space-y-1.5 max-h-56 overflow-y-auto pr-1">
-              ${membersListHtml || '<div class="text-xs text-slate-400 italic py-2">Sin miembros asignados a este equipo de entrega.</div>'}
+              ${nonLeaderMembersListHtml || '<div class="text-xs text-slate-400 italic py-2">Sin miembros asignados en el equipo de tarea (C).</div>'}
             </div>
           </div>
 
