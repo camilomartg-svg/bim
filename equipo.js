@@ -364,10 +364,29 @@
       });
     }
 
-    // Automate Task Team members (all delivery team members except the leader)
+    // Automate Task Team members (all delivery team members except the leader, project/company/super admins)
+    const superAdmins = ['imagina3ddesign@gmail.com', 'mcmartinezg@unal.edu.co'];
+    const companyAdmins = Array.isArray(currentCompany?.admins) ? currentCompany.admins.map(a => a.toLowerCase().trim()) : [];
+    const projectAdmins = Array.isArray(activeProject?.iso19650?.projectAdmins)
+      ? activeProject.iso19650.projectAdmins.map(a => a.toLowerCase().trim())
+      : [];
+
     (activeProject.iso19650.deliveryTeams || []).forEach(dt => {
       const lead = (dt.leadEmail || '').toLowerCase().trim();
-      const ttMembers = (dt.members || []).filter(m => m.toLowerCase().trim() !== lead);
+      const ttMembers = (dt.members || []).filter(m => {
+        const clean = m.toLowerCase().trim();
+        const isLead = clean === lead;
+        const isSuper = superAdmins.includes(clean);
+        const isCompAdmin = companyAdmins.includes(clean);
+        const isProjAdmin = projectAdmins.includes(clean);
+        
+        const memberMatch = Array.isArray(currentCompany?.members) 
+          ? currentCompany.members.find(cm => cm.email && cm.email.toLowerCase().trim() === clean) 
+          : null;
+        const isMemberAdmin = memberMatch && (memberMatch.role === 'ADMINISTRADOR_EMPRESA' || memberMatch.role === 'ADMINISTRADOR');
+
+        return !isLead && !isSuper && !isCompAdmin && !isProjAdmin && !isMemberAdmin;
+      });
       (dt.taskTeams || []).forEach(tt => {
         tt.members = [...ttMembers];
       });
@@ -515,7 +534,6 @@
     renderDiagramStage();
     renderProjectAdminsTab();
     renderDeliveryTeamsTab();
-    renderTaskTeamsTab();
     renderDirectoryTab();
   }
 
@@ -860,12 +878,54 @@
                   </button>
                 ` : ''}
               </div>
-              <div class="flex flex-wrap gap-1.5 pt-1">
-                ${taskTeams.map(tt => `
-                  <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-xl bg-emerald-100/80 dark:bg-emerald-950/80 text-emerald-800 dark:text-emerald-200 text-xs font-bold border border-emerald-200 dark:border-emerald-800">
-                    <span class="material-symbols-outlined text-[13px]">check_box</span> ${escapeHtml(tt.name)}
-                  </span>
-                `).join('') || '<span class="text-xs text-slate-400 italic">No hay equipos de tarea aún.</span>'}
+              <div class="space-y-2 pt-1 max-h-56 overflow-y-auto">
+                ${taskTeams.map(tt => {
+                  const superAdmins = ['imagina3ddesign@gmail.com', 'mcmartinezg@unal.edu.co'];
+                  const companyAdmins = Array.isArray(currentCompany?.admins) ? currentCompany.admins.map(a => a.toLowerCase().trim()) : [];
+                  const projectAdmins = Array.isArray(activeProject?.iso19650?.projectAdmins)
+                    ? activeProject.iso19650.projectAdmins.map(a => a.toLowerCase().trim())
+                    : [];
+                  const lead = (dt.leadEmail || '').toLowerCase().trim();
+                  
+                  const ttMembers = (dt.members || []).filter(m => {
+                    const clean = m.toLowerCase().trim();
+                    const isLead = clean === lead;
+                    const isSuper = superAdmins.includes(clean);
+                    const isCompAdmin = companyAdmins.includes(clean);
+                    const isProjAdmin = projectAdmins.includes(clean);
+                    
+                    const memberMatch = Array.isArray(currentCompany?.members) 
+                      ? currentCompany.members.find(cm => cm.email && cm.email.toLowerCase().trim() === clean) 
+                      : null;
+                    const isMemberAdmin = memberMatch && (memberMatch.role === 'ADMINISTRADOR_EMPRESA' || memberMatch.role === 'ADMINISTRADOR');
+
+                    return !isLead && !isSuper && !isCompAdmin && !isProjAdmin && !isMemberAdmin;
+                  });
+
+                  const memberNames = ttMembers.map(m => getUserRegisteredName(m)).join(', ') || 'Ninguno';
+
+                  return `
+                    <div class="flex items-center justify-between p-2.5 rounded-xl bg-white dark:bg-slate-800 border border-slate-200/80 dark:border-slate-700/80 text-xs">
+                      <div class="min-w-0 flex-1">
+                        <div class="font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1.5 truncate">
+                          <span class="material-symbols-outlined text-[15px] text-emerald-600 dark:text-emerald-400">task_alt</span>
+                          <span>${escapeHtml(tt.name)}</span>
+                        </div>
+                        <div class="text-[10px] text-slate-400 font-medium mt-0.5">
+                          Disciplina: <span class="text-slate-500 dark:text-slate-300 font-semibold">${escapeHtml(tt.discipline || 'General')}</span>
+                        </div>
+                        <div class="text-[10px] text-slate-400 font-medium mt-0.5 truncate">
+                          Miembros (${ttMembers.length}): <span class="text-slate-500 dark:text-slate-300 font-semibold" title="${escapeHtml(memberNames)}">${escapeHtml(memberNames)}</span>
+                        </div>
+                      </div>
+                      ${(canManageProjectStructure || isCurrentLeader) ? `
+                        <button onclick="deleteTaskTeam('${dt.id}', '${tt.id}')" class="p-1 text-slate-400 hover:text-rose-600 transition-colors shrink-0 ml-2" title="Eliminar equipo de tarea">
+                          <span class="material-symbols-outlined text-[16px]">delete</span>
+                        </button>
+                      ` : ''}
+                    </div>
+                  `;
+                }).join('') || '<div class="text-xs text-slate-400 italic py-1">No hay equipos de tarea aún.</div>'}
               </div>
             </div>
 
