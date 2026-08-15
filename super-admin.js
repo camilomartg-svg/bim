@@ -286,9 +286,9 @@ document.addEventListener('DOMContentLoaded', async () => {
                         // Verificar si existe en la hoja "Usuarios"
                         const gu = gUsersMap.get(emailClean);
                         if (gu) {
-                            // Si existe, debe coincidir con la mejor empresa asignada
+                            // Si existe, debe coincidir con la mejor empresa asignada (si tiene una asignada)
                             const matchedEmpId = userBestCompanyMap.get(emailClean);
-                            if (matchedEmpId !== emp.id) {
+                            if (matchedEmpId && matchedEmpId !== emp.id) {
                                 return false; // Pertenece a otra empresa
                             }
                         } else {
@@ -1685,20 +1685,38 @@ let contentBase = '';
         });
       });
 
-      // Find which of those are currently PENDIENTE
-      const toApprove = [];
+      // Find which users need approval or company synchronization in Google Sheets
+      const toSyncUsers = [];
       membersByEmail.forEach((data, email) => {
         const key = email + '_' + (data.empName || '').toLowerCase().trim();
         const gu = window.globalUsersMap.get(key) || window.globalUsersMap.get(email);
-        if (gu && gu.estado === 'PENDIENTE') {
-          toApprove.push({ email, key, ...data });
+        
+        if (gu) {
+          const isPending = gu.estado === 'PENDIENTE';
+          const sheetCompany = (gu.companyName || '').trim().toLowerCase();
+          const localCompany = (data.empName || '').trim().toLowerCase();
+          
+          const isUnassigned = sheetCompany === '' || sheetCompany === 'sin empresa asignada';
+          const isMismatch = sheetCompany !== localCompany;
+          
+          // Sync if pending OR if the company is unassigned in the sheet OR if there is a mismatch (and local role is not guest)
+          if (isPending || isUnassigned || (isMismatch && data.role !== 'INVITADO')) {
+            toSyncUsers.push({
+              email: email,
+              key: key,
+              name: gu.name || data.name || email.split('@')[0],
+              role: data.role || gu.role || 'MIEMBRO',
+              companyName: data.empName,
+              estado: 'APROBADO'
+            });
+          }
         }
       });
 
-      if (toApprove.length > 0) {
-        for (const u of toApprove) {
+      if (toSyncUsers.length > 0) {
+        for (const u of toSyncUsers) {
           const rol = u.role || 'INVITADO';
-          const payload = { action: 'saveUser', email: u.email, nombre: u.name, rol: rol, empresa: u.empName, estado: 'APROBADO' };
+          const payload = { action: 'saveUser', email: u.email, nombre: u.name, rol: rol, empresa: u.companyName, estado: u.estado };
           const queryParams = new URLSearchParams(payload).toString();
           await fetch(`${ROLES_SCRIPT_URL}?${queryParams}`, {
             method: 'POST',
@@ -1707,7 +1725,14 @@ let contentBase = '';
           });
           // Update local map
           const existing = window.globalUsersMap.get(u.key) || window.globalUsersMap.get(u.email);
-          if (existing) window.globalUsersMap.set(u.key || u.email, { ...existing, estado: 'APROBADO', role: rol, companyName: u.empName });
+          if (existing) {
+            window.globalUsersMap.set(u.key || u.email, { 
+              ...existing, 
+              estado: u.estado, 
+              role: rol, 
+              companyName: u.companyName 
+            });
+          }
         }
         renderGlobalUsers();
       }
@@ -1897,11 +1922,45 @@ window.fetchGlobalUsers = async function() {
         scriptUsers.forEach(u => {
             if(!u.email) return;
             const email = u.email.toLowerCase().trim();
+            
+            // Reconcile/find the assigned company and role from local empresas data
+            let resolvedCompany = u.empresa;
+            let resolvedRole = u.rol || 'INVITADO';
+            if (Array.isArray(window.empresas)) {
+                // 1. Search for non-INVITADO membership
+                const matchedEmp = window.empresas.find(e => 
+                    !e.deleted && 
+                    Array.isArray(e.members) && 
+                    e.members.some(m => m.email && m.email.toLowerCase().trim() === email && m.role && m.role !== 'INVITADO')
+                );
+                if (matchedEmp) {
+                    const m = matchedEmp.members.find(m => m.email && m.email.toLowerCase().trim() === email);
+                    resolvedCompany = matchedEmp.name;
+                    resolvedRole = m.role;
+                } else {
+                    // 2. Search for any guest membership
+                    const guestEmp = window.empresas.find(e => 
+                        !e.deleted && 
+                        Array.isArray(e.members) && 
+                        e.members.some(m => m.email && m.email.toLowerCase().trim() === email)
+                    );
+                    if (guestEmp) {
+                        const m = guestEmp.members.find(m => m.email && m.email.toLowerCase().trim() === email);
+                        if (m) {
+                            if (m.empresaUsuario && m.empresaUsuario.trim() !== '') {
+                                resolvedCompany = m.empresaUsuario.trim();
+                            }
+                            resolvedRole = m.role || 'INVITADO';
+                        }
+                    }
+                }
+            }
+
             const userObj = {
                 email: email,
                 name: u.nombre || u.email.split('@')[0],
-                role: u.rol || 'INVITADO',
-                companyName: u.empresa || 'Sin Empresa Asignada',
+                role: resolvedRole,
+                companyName: resolvedCompany || 'Sin Empresa Asignada',
                 specialty: u.especialidad || '',
                 cargo: u.cargo || '',
                 estado: u.estado || 'PENDIENTE'
