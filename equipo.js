@@ -23,6 +23,7 @@
 
   // --- ESTADO DEL DIAGRAMA (ZOOM, PAN Y VISTAS) ---
   let diagramViewMode = 'radial'; // 'radial' | 'cards'
+  let selectedNode = { type: 'project', id: null };
   let zoomScale = 1.0;
   const MIN_ZOOM = 0.3;
   const MAX_ZOOM = 3.0;
@@ -60,7 +61,8 @@
     userPermissionPill: document.getElementById('user-permission-pill'),
 
     // Diagram stage
-    diagramDeliveryClusters: document.getElementById('diagram-delivery-clusters'),
+    diagramTreeViewContainer: document.getElementById('diagram-tree-view-container'),
+    diagramInspectorPanel: document.getElementById('diagram-inspector-panel'),
     diagramAdminName: document.getElementById('diagram-admin-name'),
     diagramAdminCount: document.getElementById('diagram-admin-count'),
     isoDiagramCanvas: document.getElementById('iso-diagram-canvas'),
@@ -556,6 +558,7 @@
     renderProjectAdminsTab();
     renderDeliveryTeamsTab();
     renderDirectoryTab();
+    updateSelectionInspector();
   }
 
   // --- 1. MÉTRICAS ---
@@ -610,7 +613,7 @@
         btnCards.className = 'px-3 py-1.5 rounded-lg text-xs font-bold transition-all inline-flex items-center gap-1.5 bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-sm';
       }
 
-      renderCardViewStage();
+      renderTreeView();
       return;
     } else {
       if (el.isoDiagramRadialView) el.isoDiagramRadialView.classList.remove('hidden');
@@ -734,33 +737,21 @@
 
     // 2. Draw Central Hub: A. Adjudicador (Administrador)
     const nodeA = document.createElement('div');
-    nodeA.className = 'absolute rounded-full bg-sky-600 hover:bg-sky-700 dark:bg-sky-500 dark:hover:bg-sky-600 text-white font-black flex items-center justify-center cursor-pointer shadow-lg shadow-sky-500/20 hover:scale-110 transition-transform border-4 border-white dark:border-slate-800 z-30 select-none';
+    const isASelected = selectedNode.type === 'A';
+    const aClasses = isASelected 
+      ? 'ring-4 ring-indigo-500 scale-105 border-indigo-500 z-40' 
+      : 'border-white dark:border-slate-800 z-30';
+    nodeA.className = `absolute rounded-full bg-sky-600 hover:bg-sky-700 dark:bg-sky-500 dark:hover:bg-sky-600 text-white font-black flex items-center justify-center cursor-pointer shadow-lg shadow-sky-500/20 hover:scale-110 transition-transform border-4 ${aClasses} select-none`;
     nodeA.style.left = `${centerX - 28}px`;
     nodeA.style.top = `${centerY - 28}px`;
     nodeA.style.width = '56px';
     nodeA.style.height = '56px';
     nodeA.innerHTML = '<span class="text-base">A</span>';
 
-    setupTooltip(nodeA, () => {
-      const names = projectAdmins.map(email => getUserRegisteredName(email));
-      const listHtml = names.map(name => `<li>• ${escapeHtml(name)}</li>`).join('');
-      return `
-        <div class="space-y-1.5">
-          <div class="flex items-center gap-2">
-            <span class="px-1.5 py-0.5 rounded bg-sky-500 text-white text-[9px] font-black uppercase">Rol A</span>
-            <span class="font-bold text-slate-200">Adjudicador</span>
-          </div>
-          <div class="text-slate-300 text-[10px]">Administradores de Proyecto:</div>
-          <ul class="text-[10px] text-slate-400 space-y-0.5 list-none pl-0">
-            ${listHtml || '<li>• Sin administradores designados</li>'}
-          </ul>
-          <div class="text-[9px] text-indigo-400 mt-2 italic border-t border-slate-800 pt-1.5">Haz clic para ir a la pestaña de Administradores</div>
-        </div>
-      `;
-    });
-
-    nodeA.addEventListener('click', () => {
-      window.switchTab('admins');
+    nodeA.addEventListener('click', (e) => {
+      e.stopPropagation();
+      selectedNode = { type: 'A', id: null };
+      renderAllViews();
     });
     el.isoDiagramNodes.appendChild(nodeA);
 
@@ -819,41 +810,23 @@
       el.isoDiagramNodes.appendChild(badge2);
 
       // B: Líder node (radius 21)
+      const isBSelected = selectedNode.type === 'B' && selectedNode.id === dt.id;
+      const bClasses = isBSelected 
+        ? 'ring-4 ring-indigo-500 scale-105 border-indigo-500 z-40' 
+        : 'border-white dark:border-slate-800 z-30';
+
       const nodeB = document.createElement('div');
-      nodeB.className = 'absolute rounded-full bg-blue-600 hover:bg-blue-700 text-white font-black flex items-center justify-center cursor-pointer shadow-md hover:scale-110 transition-transform border-2 border-white dark:border-slate-800 z-30 select-none';
+      nodeB.className = `absolute rounded-full bg-blue-600 hover:bg-blue-700 text-white font-black flex items-center justify-center cursor-pointer shadow-md hover:scale-110 transition-transform border-2 ${bClasses} select-none`;
       nodeB.style.left = `${X_di - 21}px`;
       nodeB.style.top = `${Y_di - 21}px`;
       nodeB.style.width = '42px';
       nodeB.style.height = '42px';
       nodeB.innerHTML = '<span class="text-sm">B</span>';
 
-      const leadMeta = getUserMetadata(dt.leadEmail);
-      setupTooltip(nodeB, () => `
-        <div class="space-y-1.5">
-          <div class="flex items-center gap-2">
-            <span class="px-1.5 py-0.5 rounded bg-blue-500 text-white text-[9px] font-black uppercase">Rol B</span>
-            <span class="font-bold text-slate-200">Líder de Entrega</span>
-          </div>
-          <div class="text-slate-300 text-xs font-bold">${escapeHtml(dt.name)}</div>
-          <div class="border-t border-slate-800 pt-1 space-y-0.5 text-[10px] text-slate-400">
-            <div><strong>Líder:</strong> ${escapeHtml(leadMeta.name || 'Sin Líder Asignado')}</div>
-            <div><strong>Email:</strong> ${escapeHtml(leadMeta.email || '-')}</div>
-            <div><strong>Empresa:</strong> ${escapeHtml(leadMeta.company || '-')}</div>
-          </div>
-          <div class="text-[9px] text-indigo-400 mt-2 italic border-t border-slate-800 pt-1.5">Haz clic para ir a los Equipos de Entrega</div>
-        </div>
-      `);
-
-      nodeB.addEventListener('click', () => {
-        window.switchTab('delivery');
-        setTimeout(() => {
-          const card = document.getElementById(`delivery-team-card-${dt.id}`);
-          if (card) {
-            card.scrollIntoView({ behavior: 'smooth', block: 'center' });
-            card.classList.add('ring-4', 'ring-purple-500');
-            setTimeout(() => card.classList.remove('ring-4', 'ring-purple-500'), 2500);
-          }
-        }, 100);
+      nodeB.addEventListener('click', (e) => {
+        e.stopPropagation();
+        selectedNode = { type: 'B', id: dt.id };
+        renderAllViews();
       });
       el.isoDiagramNodes.appendChild(nodeB);
 
@@ -873,8 +846,13 @@
           drawOffsetLine(X_di, Y_di, X_mj, Y_mj, 21, 15, '#c084fc');
 
           // C node
+          const isCSelected = selectedNode.type === 'C' && selectedNode.id === mEmail && selectedNode.teamId === dt.id;
+          const cClasses = isCSelected 
+            ? 'ring-4 ring-indigo-500 scale-105 border-indigo-500 z-40' 
+            : 'border-white dark:border-slate-800 z-30';
+
           const nodeC = document.createElement('div');
-          nodeC.className = 'absolute rounded-full bg-purple-600 hover:bg-purple-700 text-white font-black flex items-center justify-center cursor-pointer shadow-sm hover:scale-110 transition-transform border-2 border-white dark:border-slate-800 z-30 select-none';
+          nodeC.className = `absolute rounded-full bg-purple-600 hover:bg-purple-700 text-white font-black flex items-center justify-center cursor-pointer shadow-sm hover:scale-110 transition-transform border-2 ${cClasses} select-none`;
           nodeC.style.left = `${X_mj - 15}px`;
           nodeC.style.top = `${Y_mj - 15}px`;
           nodeC.style.width = '30px';
@@ -894,39 +872,10 @@
             el.isoDiagramNodes.appendChild(badge3);
           }
 
-          setupTooltip(nodeC, () => {
-            const teamListHtml = memberTeams.map(t => `<span class="px-1.5 py-0.5 rounded bg-emerald-950 text-emerald-300 border border-emerald-800 text-[9px] font-bold">${escapeHtml(t.name)}</span>`).join(' ');
-            return `
-              <div class="space-y-1.5">
-                <div class="flex items-center gap-2">
-                  <span class="px-1.5 py-0.5 rounded bg-purple-500 text-white text-[9px] font-black uppercase">Rol C</span>
-                  <span class="font-bold text-slate-200">Adjudicatario (Miembro)</span>
-                </div>
-                <div class="border-t border-slate-800 pt-1 space-y-0.5 text-[10px] text-slate-400">
-                  <div><strong>Nombre:</strong> ${escapeHtml(mMeta.name || 'Usuario')}</div>
-                  <div><strong>Email:</strong> ${escapeHtml(mMeta.email || mEmail)}</div>
-                  <div><strong>Empresa:</strong> ${escapeHtml(mMeta.company || '-')}</div>
-                </div>
-                ${memberTeams.length > 0 ? `
-                  <div class="border-t border-slate-800 pt-1.5 space-y-1">
-                    <div class="text-[9px] uppercase font-bold text-emerald-400">3. Equipos de Tarea (Especialidad):</div>
-                    <div class="flex flex-wrap gap-1">${teamListHtml}</div>
-                  </div>
-                ` : ''}
-              </div>
-            `;
-          });
-
-          nodeC.addEventListener('click', () => {
-            window.switchTab('delivery');
-            setTimeout(() => {
-              const card = document.getElementById(`delivery-team-card-${dt.id}`);
-              if (card) {
-                card.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                card.classList.add('ring-4', 'ring-purple-500');
-                setTimeout(() => card.classList.remove('ring-4', 'ring-purple-500'), 2500);
-              }
-            }, 100);
+          nodeC.addEventListener('click', (e) => {
+            e.stopPropagation();
+            selectedNode = { type: 'C', id: mEmail, teamId: dt.id };
+            renderAllViews();
           });
 
           el.isoDiagramNodes.appendChild(nodeC);
