@@ -65,6 +65,35 @@
     ::-webkit-scrollbar-track { background: transparent; }
     ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 9999px; }
     .dark ::-webkit-scrollbar-thumb { background: #334155; }
+
+    /* Zoom & Pan Styles */
+    .draggable-canvas {
+      cursor: grab;
+    }
+    .draggable-canvas:active {
+      cursor: grabbing;
+    }
+    #iso-diagram-viewport-wrapper {
+      transform-origin: center center;
+      transition: transform 0.05s ease-out;
+    }
+    
+    /* Fullscreen Mode overlay style */
+    .diagram-fullscreen {
+      position: fixed !important;
+      inset: 0 !important;
+      width: 100vw !important;
+      height: 100vh !important;
+      z-index: 50 !important;
+      margin: 0 !important;
+      border-radius: 0 !important;
+      background-color: rgba(15, 23, 42, 0.98) !important;
+      display: flex !important;
+      flex-direction: column !important;
+      align-items: center !important;
+      justify-content: center !important;
+      padding: 2rem !important;
+    }
   </style>
 </head>
 <body class="bg-bg-light dark:bg-bg-dark text-slate-900 dark:text-slate-100 min-h-screen flex flex-col transition-colors duration-300">
@@ -269,29 +298,98 @@
           </div>
         </div>
 
-        <!-- Interactive Diagram Container (Concentric Visual Stage) -->
-        <div class="mt-8 w-full overflow-x-auto rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-950/40 p-4">
-          <div id="iso-diagram-canvas" class="relative w-[900px] h-[650px] mx-auto bg-white dark:bg-slate-900 rounded-3xl border border-slate-200/80 dark:border-slate-800/80 shadow-md overflow-hidden select-none">
-            <!-- SVG connector lines and markers -->
-            <svg id="iso-diagram-svg" class="absolute inset-0 w-full h-full pointer-events-none z-10">
-              <defs>
-                <marker id="arrow-bi" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse">
-                  <path d="M 0 1 L 10 5 L 0 9 z" fill="#64748b"/>
-                </marker>
-              </defs>
-            </svg>
-            
-            <!-- Hidden inputs or placeholder tags to preserve old references if any -->
-            <div class="hidden">
-              <div id="diagram-admin-name"></div>
-              <div id="diagram-admin-count"></div>
-              <div id="diagram-delivery-clusters"></div>
+        <!-- Diagram Control Toolbar -->
+        <div class="flex flex-wrap items-center justify-between gap-3 mt-4 px-1 pb-2 border-b border-slate-100 dark:border-slate-800/60">
+          <!-- Left: View Toggle (Segmented control) -->
+          <div class="inline-flex rounded-xl p-1 bg-slate-100 dark:bg-slate-800/60 border border-slate-200/50 dark:border-slate-700/50">
+            <button id="btn-view-radial" class="px-3 py-1.5 rounded-lg text-xs font-bold transition-all inline-flex items-center gap-1.5 bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-sm" type="button">
+              <span class="material-symbols-outlined text-[16px]">bubble_chart</span>
+              <span>Esquema Radial</span>
+            </button>
+            <button id="btn-view-cards" class="px-3 py-1.5 rounded-lg text-xs font-bold transition-all inline-flex items-center gap-1.5 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white" type="button">
+              <span class="material-symbols-outlined text-[16px]">grid_view</span>
+              <span>Vista de Tarjetas</span>
+            </button>
+          </div>
+
+          <!-- Right: Zoom & Fullscreen controls (hidden in card view) -->
+          <div id="diagram-radial-controls" class="flex items-center gap-2">
+            <!-- Zoom Controls -->
+            <div class="inline-flex items-center rounded-xl bg-slate-100 dark:bg-slate-800/60 border border-slate-200/50 dark:border-slate-700/50 p-1">
+              <button id="btn-zoom-out" class="p-1.5 rounded-lg text-slate-600 dark:text-slate-400 hover:bg-white dark:hover:bg-slate-700 hover:text-slate-900 dark:hover:text-white transition-all" title="Alejar (-)" type="button">
+                <span class="material-symbols-outlined text-[16px]">zoom_out</span>
+              </button>
+              <span id="zoom-indicator" class="px-2 text-[10px] font-mono font-bold text-slate-600 dark:text-slate-400 min-w-[40px] text-center select-none">100%</span>
+              <button id="btn-zoom-in" class="p-1.5 rounded-lg text-slate-600 dark:text-slate-400 hover:bg-white dark:hover:bg-slate-700 hover:text-slate-900 dark:hover:text-white transition-all" title="Acercar (+)" type="button">
+                <span class="material-symbols-outlined text-[16px]">zoom_in</span>
+              </button>
+              <button id="btn-zoom-reset" class="p-1.5 rounded-lg text-slate-500 dark:text-slate-400 hover:bg-white dark:hover:bg-slate-700 hover:text-slate-900 dark:hover:text-white transition-all border-l border-slate-200 dark:border-slate-700 pl-2 ml-1" title="Restablecer Vista" type="button">
+                <span class="material-symbols-outlined text-[16px]">restart_alt</span>
+              </button>
             </div>
 
-            <!-- Interactive Diagram Nodes Layer -->
-            <div id="iso-diagram-nodes" class="absolute inset-0 z-20"></div>
+            <!-- Fullscreen Toggle -->
+            <button id="btn-fullscreen-toggle" class="p-2 rounded-xl bg-slate-100 dark:bg-slate-800/60 border border-slate-200/50 dark:border-slate-700/50 text-slate-600 dark:text-slate-400 hover:bg-white dark:hover:bg-slate-700 hover:text-slate-900 dark:hover:text-white shadow-sm transition-all" title="Pantalla Completa" type="button">
+              <span class="material-symbols-outlined id-fs-icon text-[18px]">fullscreen</span>
+            </button>
           </div>
         </div>
+
+        <!-- Radial Diagram View Container -->
+        <div id="iso-diagram-radial-view" class="mt-8 w-full overflow-x-auto rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-950/40 p-4">
+          <div id="iso-diagram-canvas" class="relative w-[900px] h-[650px] mx-auto bg-white dark:bg-slate-900 rounded-3xl border border-slate-200/80 dark:border-slate-800/80 shadow-md overflow-hidden select-none draggable-canvas">
+            
+            <!-- Viewport Wrapper (Handles all zoom & pan transformations) -->
+            <div id="iso-diagram-viewport-wrapper" class="absolute w-[900px] h-[650px] left-0 top-0">
+              <!-- SVG connector lines and markers -->
+              <svg id="iso-diagram-svg" width="900" height="650" viewBox="0 0 900 650" class="absolute left-0 top-0 pointer-events-none z-10">
+                <defs>
+                  <marker id="arrow-bi" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse">
+                    <path d="M 0 1 L 10 5 L 0 9 z" fill="#64748b"/>
+                  </marker>
+                </defs>
+              </svg>
+              
+              <!-- Interactive Diagram Nodes Layer -->
+              <div id="iso-diagram-nodes" class="absolute inset-0 z-20"></div>
+            </div>
+            
+          </div>
+        </div>
+
+        <!-- Card View Container (Simplified previous view) -->
+        <div id="iso-diagram-card-view" class="hidden mt-8">
+          <div class="grid grid-cols-1 lg:grid-cols-4 gap-6">
+            
+            <!-- Column 1: A. Adjudicador (Centralized Admin view) -->
+            <div class="lg:col-span-1 space-y-4">
+              <div class="rounded-2xl border-2 border-dashed border-slate-300 dark:border-slate-700 p-5 flex flex-col items-center text-center space-y-3 bg-slate-50/50 dark:bg-slate-900/30">
+                <span class="h-10 w-10 rounded-2xl bg-blue-50 dark:bg-blue-950 text-blue-600 dark:text-blue-400 flex items-center justify-center font-black text-sm">
+                  A
+                </span>
+                <div>
+                  <h4 class="text-xs font-black text-slate-900 dark:text-white uppercase tracking-wider">A. Adjudicador</h4>
+                  <p class="text-[10px] text-slate-400 dark:text-slate-500 mt-0.5">Administrador del Proyecto</p>
+                </div>
+                <div class="border-t border-slate-200 dark:border-slate-800 pt-3 w-full">
+                  <div id="diagram-admin-name" class="font-bold text-xs text-slate-800 dark:text-slate-200">Sin Administrador</div>
+                  <div class="text-[9px] text-slate-400 mt-1 font-mono uppercase tracking-wider">Designación Principal</div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Column 2-4: B & C. Delivery Clusters Grid -->
+            <div class="lg:col-span-3">
+              <div id="diagram-delivery-clusters" class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <!-- Rendered dynamically by JS -->
+              </div>
+            </div>
+
+          </div>
+        </div>
+
+        <!-- Hidden indicators count to keep script happy -->
+        <span id="diagram-admin-count" class="hidden"></span>
 
       </div>
 

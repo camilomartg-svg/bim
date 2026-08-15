@@ -21,6 +21,18 @@
   let allDirectoryUsers = [];
   let allCompaniesList = [];
 
+  // --- ESTADO DEL DIAGRAMA (ZOOM, PAN Y VISTAS) ---
+  let diagramViewMode = 'radial'; // 'radial' | 'cards'
+  let zoomScale = 1.0;
+  const MIN_ZOOM = 0.3;
+  const MAX_ZOOM = 3.0;
+  const ZOOM_STEP = 0.1;
+  let panX = 0;
+  let panY = 0;
+  let isDragging = false;
+  let startX = 0;
+  let startY = 0;
+
   const GOOGLE_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbx2RAQx_8K4o22xE0Mw-ETc7K_58vIoi6-PgVi64u80inuiw144ks3cgWSdCtXqIgB02g/exec';
 
   // --- SELECCIÓN DE ELEMENTOS DOM ---
@@ -55,6 +67,10 @@
     isoDiagramSvg: document.getElementById('iso-diagram-svg'),
     isoDiagramNodes: document.getElementById('iso-diagram-nodes'),
     diagramTooltip: document.getElementById('diagram-tooltip'),
+    isoDiagramRadialView: document.getElementById('iso-diagram-radial-view'),
+    isoDiagramCardView: document.getElementById('iso-diagram-card-view'),
+    isoDiagramViewportWrapper: document.getElementById('iso-diagram-viewport-wrapper'),
+    diagramRadialControls: document.getElementById('diagram-radial-controls'),
 
     // Tab panels & containers
     projectAdminsContainer: document.getElementById('project-admins-container'),
@@ -529,6 +545,7 @@
     normalizeProjectIsoStructure();
     evaluatePermissions();
     renderAllViews();
+    setupDiagramInteractions();
   }
 
   // --- RENDERIZADO GENERAL ---
@@ -574,6 +591,40 @@
         el.diagramAdminName.textContent = getUserRegisteredName(projectAdmins[0]);
       } else {
         el.diagramAdminName.textContent = `${getUserRegisteredName(projectAdmins[0])} (+${projectAdmins.length - 1})`;
+      }
+    }
+
+    // Toggle view elements in DOM
+    if (diagramViewMode === 'cards') {
+      if (el.isoDiagramRadialView) el.isoDiagramRadialView.classList.add('hidden');
+      if (el.isoDiagramCardView) el.isoDiagramCardView.classList.remove('hidden');
+      if (el.diagramRadialControls) el.diagramRadialControls.classList.add('hidden');
+
+      // Update toolbar segmented button classes
+      const btnRadial = document.getElementById('btn-view-radial');
+      const btnCards = document.getElementById('btn-view-cards');
+      if (btnRadial) {
+        btnRadial.className = 'px-3 py-1.5 rounded-lg text-xs font-bold transition-all inline-flex items-center gap-1.5 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white';
+      }
+      if (btnCards) {
+        btnCards.className = 'px-3 py-1.5 rounded-lg text-xs font-bold transition-all inline-flex items-center gap-1.5 bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-sm';
+      }
+
+      renderCardViewStage();
+      return;
+    } else {
+      if (el.isoDiagramRadialView) el.isoDiagramRadialView.classList.remove('hidden');
+      if (el.isoDiagramCardView) el.isoDiagramCardView.classList.add('hidden');
+      if (el.diagramRadialControls) el.diagramRadialControls.classList.remove('hidden');
+
+      // Update toolbar segmented button classes
+      const btnRadial = document.getElementById('btn-view-radial');
+      const btnCards = document.getElementById('btn-view-cards');
+      if (btnRadial) {
+        btnRadial.className = 'px-3 py-1.5 rounded-lg text-xs font-bold transition-all inline-flex items-center gap-1.5 bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-sm';
+      }
+      if (btnCards) {
+        btnCards.className = 'px-3 py-1.5 rounded-lg text-xs font-bold transition-all inline-flex items-center gap-1.5 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white';
       }
     }
 
@@ -883,6 +934,236 @@
       }
     });
   }
+
+  function renderCardViewStage() {
+    if (!el.diagramDeliveryClusters || !activeProject) return;
+
+    const deliveryTeams = activeProject.iso19650?.deliveryTeams || [];
+
+    if (deliveryTeams.length === 0) {
+      el.diagramDeliveryClusters.innerHTML = `
+        <div class="col-span-full py-12 text-center text-xs text-slate-400 italic bg-white/40 dark:bg-slate-800/40 rounded-2xl border border-dashed border-slate-300 dark:border-slate-700">
+          No hay Equipos de Entrega configurados.
+        </div>
+      `;
+      return;
+    }
+
+    el.diagramDeliveryClusters.innerHTML = deliveryTeams.map(dt => {
+      const leadMeta = getUserMetadata(dt.leadEmail);
+      const members = dt.members || [];
+      const nonLeaderEmails = members.filter(m => (m || '').toLowerCase().trim() !== (dt.leadEmail || '').toLowerCase().trim());
+      const taskTeams = dt.taskTeams || [];
+
+      const membersHtml = nonLeaderEmails.map(mEmail => {
+        const mMeta = getUserMetadata(mEmail);
+        return `
+          <div class="flex items-center gap-2 py-1.5 px-2.5 rounded-lg bg-slate-50 dark:bg-slate-800 text-[11px]">
+            <span class="h-5 w-5 rounded-md bg-purple-100 dark:bg-purple-950 text-purple-700 dark:text-purple-300 flex items-center justify-center font-bold text-[9px] shrink-0">
+              C
+            </span>
+            <div class="truncate">
+              <div class="font-bold text-slate-800 dark:text-slate-200 truncate">${escapeHtml(mMeta.name)}</div>
+              <div class="text-slate-400 font-mono text-[9px] truncate">${escapeHtml(mEmail)}</div>
+            </div>
+          </div>
+        `;
+      }).join('') || `<div class="text-[10px] text-slate-400 italic py-1">Sin otros miembros asignados</div>`;
+
+      const tasksHtml = taskTeams.map(tt => {
+        return `
+          <div class="flex items-center gap-1.5 py-1 px-2 rounded-md bg-emerald-50 dark:bg-emerald-950/40 text-emerald-800 dark:text-emerald-300 text-[10px] font-medium border border-emerald-100 dark:border-emerald-900/40">
+            <span class="material-symbols-outlined text-[12px]">task_alt</span>
+            <span>${escapeHtml(tt.name)}</span>
+          </div>
+        `;
+      }).join('');
+
+      return `
+        <div class="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-sm space-y-4 hover:shadow-md transition-shadow">
+          
+          <!-- Team Name & Designation number 2 -->
+          <div class="flex items-center justify-between gap-2 border-b border-slate-100 dark:border-slate-800 pb-3">
+            <div class="flex items-center gap-2 min-w-0">
+              <span class="h-7 w-7 rounded-xl bg-purple-50 dark:bg-purple-950 text-purple-600 dark:text-purple-300 flex items-center justify-center font-black text-xs border border-purple-200 dark:border-purple-800 shrink-0">
+                2
+              </span>
+              <h4 class="font-black text-xs text-slate-900 dark:text-white uppercase tracking-wider truncate">${escapeHtml(dt.name)}</h4>
+            </div>
+            <span class="text-[9px] px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-500 font-mono uppercase tracking-wider shrink-0">Equipo B</span>
+          </div>
+
+          <!-- B: Lead -->
+          <div class="p-3 rounded-xl bg-blue-50/70 dark:bg-blue-950/45 border border-blue-100 dark:border-blue-900/40 space-y-1">
+            <div class="text-[9px] font-bold uppercase tracking-wider text-blue-600 dark:text-blue-400 flex items-center gap-1">
+              <span class="material-symbols-outlined text-[12px]">stars</span> Adjudicatario Principal (Líder B)
+            </div>
+            <div class="font-bold text-xs text-slate-800 dark:text-slate-200 truncate">${escapeHtml(leadMeta.name || 'Sin Líder Asignado')}</div>
+            <div class="text-[9px] text-slate-400 font-mono truncate">${escapeHtml(leadMeta.email || '-')}</div>
+            <div class="text-[9px] text-slate-400 truncate">${escapeHtml(leadMeta.company)} • ${escapeHtml(leadMeta.cargo)}</div>
+          </div>
+
+          <!-- C: Members List -->
+          <div class="space-y-1.5">
+            <div class="text-[9px] font-bold uppercase tracking-wider text-purple-600 dark:text-purple-400">Miembros del Equipo (C)</div>
+            <div class="grid grid-cols-1 gap-1.5 max-h-[140px] overflow-y-auto pr-1">
+              ${membersHtml}
+            </div>
+          </div>
+
+          <!-- 3: Tasks list -->
+          ${tasksHtml ? `
+            <div class="space-y-1.5 border-t border-slate-100 dark:border-slate-800 pt-3">
+              <div class="text-[9px] font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400">3. Equipos de Tarea / Disciplinas</div>
+              <div class="flex flex-wrap gap-1.5">${tasksHtml}</div>
+            </div>
+          ` : ''}
+          
+        </div>
+      `;
+    }).join('');
+  }
+
+  function updateDiagramTransform() {
+    if (!el.isoDiagramViewportWrapper) return;
+    el.isoDiagramViewportWrapper.style.transform = `translate(${panX}px, ${panY}px) scale(${zoomScale})`;
+    const zoomIndicator = document.getElementById('zoom-indicator');
+    if (zoomIndicator) {
+      zoomIndicator.textContent = `${Math.round(zoomScale * 100)}%`;
+    }
+  }
+
+  function setupDiagramInteractions() {
+    if (!el.isoDiagramCanvas) return;
+
+    // Mouse drag (pan) events on canvas
+    el.isoDiagramCanvas.addEventListener('mousedown', (e) => {
+      // Only pan on left click
+      if (e.button !== 0) return;
+      isDragging = true;
+      startX = e.clientX - panX;
+      startY = e.clientY - panY;
+      el.isoDiagramCanvas.style.cursor = 'grabbing';
+    });
+
+    window.addEventListener('mousemove', (e) => {
+      if (!isDragging) return;
+      panX = e.clientX - startX;
+      panY = e.clientY - startY;
+      updateDiagramTransform();
+    });
+
+    window.addEventListener('mouseup', () => {
+      if (isDragging) {
+        isDragging = false;
+        if (el.isoDiagramCanvas) {
+          el.isoDiagramCanvas.style.cursor = 'grab';
+        }
+      }
+    });
+
+    // Zoom on wheel (scroll)
+    el.isoDiagramCanvas.addEventListener('wheel', (e) => {
+      e.preventDefault();
+      const zoomFactor = 1.1;
+      let newScale = zoomScale;
+      if (e.deltaY < 0) {
+        newScale = Math.min(MAX_ZOOM, zoomScale * zoomFactor);
+      } else {
+        newScale = Math.max(MIN_ZOOM, zoomScale / zoomFactor);
+      }
+      zoomScale = newScale;
+      updateDiagramTransform();
+    }, { passive: false });
+
+    // Toolbar Zoom Button handlers
+    const btnZoomIn = document.getElementById('btn-zoom-in');
+    const btnZoomOut = document.getElementById('btn-zoom-out');
+    const btnZoomReset = document.getElementById('btn-zoom-reset');
+
+    if (btnZoomIn) {
+      btnZoomIn.addEventListener('click', () => {
+        zoomScale = Math.min(MAX_ZOOM, zoomScale + ZOOM_STEP);
+        updateDiagramTransform();
+      });
+    }
+
+    if (btnZoomOut) {
+      btnZoomOut.addEventListener('click', () => {
+        zoomScale = Math.max(MIN_ZOOM, zoomScale - ZOOM_STEP);
+        updateDiagramTransform();
+      });
+    }
+
+    if (btnZoomReset) {
+      btnZoomReset.addEventListener('click', () => {
+        zoomScale = 1.0;
+        panX = 0;
+        panY = 0;
+        updateDiagramTransform();
+      });
+    }
+
+    // View toggles
+    const btnViewRadial = document.getElementById('btn-view-radial');
+    const btnViewCards = document.getElementById('btn-view-cards');
+
+    if (btnViewRadial) {
+      btnViewRadial.addEventListener('click', () => {
+        diagramViewMode = 'radial';
+        renderDiagramStage();
+      });
+    }
+
+    if (btnViewCards) {
+      btnViewCards.addEventListener('click', () => {
+        diagramViewMode = 'cards';
+        renderDiagramStage();
+      });
+    }
+
+    // Fullscreen Mode Toggle
+    const btnFullscreen = document.getElementById('btn-fullscreen-toggle');
+    if (btnFullscreen) {
+      btnFullscreen.addEventListener('click', () => {
+        toggleFullscreen();
+      });
+    }
+  }
+
+  function toggleFullscreen() {
+    if (!el.isoDiagramCanvas) return;
+    const isFs = el.isoDiagramCanvas.classList.contains('diagram-fullscreen');
+    const fsIcon = document.querySelector('.id-fs-icon');
+
+    if (isFs) {
+      el.isoDiagramCanvas.classList.remove('diagram-fullscreen');
+      if (fsIcon) fsIcon.textContent = 'fullscreen';
+      // Reset view to avoid drawing issues
+      zoomScale = 1.0;
+      panX = 0;
+      panY = 0;
+      updateDiagramTransform();
+    } else {
+      el.isoDiagramCanvas.classList.add('diagram-fullscreen');
+      if (fsIcon) fsIcon.textContent = 'fullscreen_exit';
+      // Center and scale slightly up inside fullscreen view
+      zoomScale = 1.15;
+      panX = 0;
+      panY = 0;
+      updateDiagramTransform();
+      window.showToast('Presiona ESC o haz clic en el botón para salir de pantalla completa.', 'info');
+    }
+  }
+
+  // Escape key to exit fullscreen
+  window.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+      if (el.isoDiagramCanvas && el.isoDiagramCanvas.classList.contains('diagram-fullscreen')) {
+        toggleFullscreen();
+      }
+    }
+  });
 
   // --- 3. PESTAÑA: 1. ADMINISTRADORES DE PROYECTO (ADJUDICADORES) ---
   function renderProjectAdminsTab() {
