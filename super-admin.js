@@ -1840,8 +1840,8 @@ let contentBase = '';
     }
   });
 
-  loadData();
-  window.fetchGlobalUsers();
+  await loadData();
+  await window.fetchGlobalUsers();
 });
 
 // ==========================================
