@@ -89,7 +89,48 @@
             "alc.spk.1@gmail.com"
           ]
         }
-      ]
+      ],
+      "iso19650": {
+        "projectAdmins": [
+          "alc.spk.2@gmail.com"
+        ],
+        "deliveryTeams": [
+          {
+            "id": "deliv-0-1786801216410",
+            "name": "HIDROSANITÁRIO",
+            "leadEmail": "camilomartg@gmail.com",
+            "description": "Equipo de entrega asignado a la producción de información.",
+            "members": [
+              "camilomartg@gmail.com",
+              "alc.spk.3@gmail.com"
+            ],
+            "taskTeams": []
+          },
+          {
+            "id": "deliv-1-1786801216410",
+            "name": "ARQUITECTURA",
+            "leadEmail": "info@meshestudio.com",
+            "description": "Equipo de entrega asignado a la producción de información.",
+            "members": [
+              "info@meshestudio.com",
+              "camilo.martinez@meshestudio.com",
+              "alc.spk.2@gmail.com"
+            ],
+            "taskTeams": []
+          },
+          {
+            "id": "deliv-2-1786801216410",
+            "name": "ELÉCTRICO",
+            "leadEmail": "alc.spk.5@gmail.com",
+            "description": "Equipo de entrega asignado a la producción de información.",
+            "members": [
+              "alc.spk.5@gmail.com",
+              "alc.spk.1@gmail.com"
+            ],
+            "taskTeams": []
+          }
+        ]
+      }
     }
   ],
   "portal": {
