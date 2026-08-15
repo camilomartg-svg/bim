@@ -2,6 +2,7 @@ const fs = require('fs');
 const path = require('path');
 
 const filesToSync = [
+  'super-admin.html',
   'super-admin.js',
   'portal-configurator.js',
   'project-settings.js',
