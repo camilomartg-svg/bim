@@ -1167,64 +1167,7 @@
   };
 
   // --- 5. PESTAÑA: 3. EQUIPOS DE TAREA ---
-  function renderTaskTeamsTab() {
-    if (!el.taskTeamsContainer || !activeProject) return;
-    const deliveryTeams = activeProject.iso19650?.deliveryTeams || [];
 
-    const allTasks = [];
-    deliveryTeams.forEach(dt => {
-      (dt.taskTeams || []).forEach(tt => {
-        allTasks.push({ ...tt, deliveryTeamId: dt.id, deliveryTeamName: dt.name });
-      });
-    });
-
-    if (allTasks.length === 0) {
-      el.taskTeamsContainer.innerHTML = `
-        <div class="col-span-full py-12 text-center text-xs text-slate-400 italic bg-white/40 dark:bg-slate-800/40 rounded-2xl border border-dashed border-slate-300 dark:border-slate-700">
-          No hay Equipos de Tarea creados todavía.
-        </div>
-      `;
-      return;
-    }
-    el.taskTeamsContainer.innerHTML = allTasks.map(tt => {
-      const dt = deliveryTeams.find(d => d.id === tt.deliveryTeamId);
-      const ttMembers = dt ? (dt.members || []).filter(m => m.toLowerCase().trim() !== (dt.leadEmail || '').toLowerCase().trim()) : [];
-      const membersCount = ttMembers.length;
-      const memberNames = ttMembers.map(m => getUserRegisteredName(m)).join(', ') || 'Ninguno';
-
-      const userEmail = (currentUser?.username || currentUser?.email || currentUser?.userAccount || '').toLowerCase().trim();
-      const isCurrentLeader = dt && (dt.leadEmail || '').toLowerCase().trim() === userEmail;
-
-      return `
-        <div class="rounded-2xl p-5 border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 shadow-sm space-y-4 hover:border-emerald-400 transition-all flex flex-col justify-between">
-          <div class="space-y-3">
-            <div class="flex items-center justify-between">
-              <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-emerald-50 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 font-mono text-[10px] font-bold uppercase">
-                <span class="material-symbols-outlined text-[13px]">task_alt</span> Tarea
-              </span>
-              ${(canManageProjectStructure || isCurrentLeader) ? `
-                <div class="flex items-center gap-1">
-                  <button onclick="deleteTaskTeam('${tt.deliveryTeamId}', '${tt.id}')" class="text-slate-400 hover:text-rose-600 transition-colors p-1" title="Eliminar equipo de tarea">
-                    <span class="material-symbols-outlined text-[18px]">delete</span>
-                  </button>
-                </div>
-              ` : ''}
-            </div>
-
-            <div>
-              <h4 class="font-bold text-sm text-slate-900 dark:text-white">${escapeHtml(tt.name)}</h4>
-              <p class="text-[11px] text-purple-600 dark:text-purple-400 font-semibold mt-0.5">Equipo de Entrega: ${escapeHtml(tt.deliveryTeamName)}</p>
-            </div>
-
-            <div class="text-xs text-slate-600 dark:text-slate-300 space-y-1">
-              <div><strong class="text-slate-400 text-[10px] uppercase">Disciplina:</strong> ${escapeHtml(tt.discipline || 'General')}</div>
-              <div><strong class="text-slate-400 text-[10px] uppercase">Integrantes (${membersCount}):</strong> ${escapeHtml(memberNames)}</div>
-            </div>
-          </div>
-        </div>
-      `;
-    }).join('');
-  }
 
   window.openCreateTaskTeamModal = function (preselectedDeliveryId = '') {
     const deliveryTeams = activeProject.iso19650?.deliveryTeams || [];
