@@ -363,47 +363,55 @@
           </div>
         </div>
 
-        <!-- Main Diagram Workspace (Flex container for side-by-side views and inspector) -->
-        <div class="flex flex-col lg:flex-row gap-6 mt-8">
-          
-          <!-- Left: Active Diagram View Container -->
-          <div class="flex-1 min-w-0">
+        <!-- Radial Diagram View Container -->
+        <div id="iso-diagram-radial-view" class="mt-6 w-full overflow-x-auto rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-950/40 p-4">
+          <div id="iso-diagram-canvas" class="relative w-[900px] h-[650px] mx-auto bg-white dark:bg-slate-900 rounded-3xl border border-slate-200/80 dark:border-slate-800/80 shadow-md overflow-hidden select-none draggable-canvas">
+            <!-- Viewport Wrapper (Handles all zoom & pan transformations) -->
+            <div id="iso-diagram-viewport-wrapper" class="absolute w-[900px] h-[650px] left-0 top-0">
+              <!-- SVG connector lines and markers -->
+              <svg id="iso-diagram-svg" width="900" height="650" viewBox="0 0 900 650" class="absolute left-0 top-0 pointer-events-none z-10">
+                <defs>
+                  <marker id="arrow-bi" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse">
+                    <path d="M 0 1 L 10 5 L 0 9 z" fill="#64748b"/>
+                  </marker>
+                </defs>
+              </svg>
+              
+              <!-- Interactive Diagram Nodes Layer -->
+              <div id="iso-diagram-nodes" class="absolute inset-0 z-20"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Card View Container (Old-style grid layout with A + Delivery Cards) -->
+        <div id="iso-diagram-card-view" class="hidden mt-6">
+          <div class="grid grid-cols-1 lg:grid-cols-4 gap-6">
             
-            <!-- Radial Diagram View Container -->
-            <div id="iso-diagram-radial-view" class="w-full rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-950/40 p-4">
-              <!-- Left: Interactive Canvas -->
-              <div id="iso-diagram-canvas" class="relative w-full h-[650px] bg-white dark:bg-slate-900 rounded-3xl border border-slate-200/80 dark:border-slate-800/80 shadow-md overflow-hidden select-none draggable-canvas flex items-center justify-center">
-                <!-- Viewport Wrapper (Handles all zoom & pan transformations) -->
-                <div id="iso-diagram-viewport-wrapper" class="relative w-[900px] h-[650px] shrink-0">
-                  <!-- SVG connector lines and markers -->
-                  <svg id="iso-diagram-svg" width="900" height="650" viewBox="0 0 900 650" class="absolute left-0 top-0 pointer-events-none z-10">
-                    <defs>
-                      <marker id="arrow-bi" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse">
-                        <path d="M 0 1 L 10 5 L 0 9 z" fill="#64748b"/>
-                      </marker>
-                    </defs>
-                  </svg>
-                  
-                  <!-- Interactive Diagram Nodes Layer -->
-                  <div id="iso-diagram-nodes" class="absolute inset-0 z-20"></div>
+            <!-- Column 1: A. Adjudicador (Centralized Admin view) -->
+            <div class="lg:col-span-1 space-y-4">
+              <div class="rounded-2xl border-2 border-dashed border-slate-300 dark:border-slate-700 p-5 flex flex-col items-center text-center space-y-3 bg-slate-50/50 dark:bg-slate-900/30">
+                <span class="h-10 w-10 rounded-2xl bg-blue-50 dark:bg-blue-950 text-blue-600 dark:text-blue-400 flex items-center justify-center font-black text-sm">
+                  A
+                </span>
+                <div>
+                  <h4 class="text-xs font-black text-slate-900 dark:text-white uppercase tracking-wider">A. Adjudicador</h4>
+                  <p class="text-[10px] text-slate-400 dark:text-slate-500 mt-0.5">Administrador del Proyecto</p>
+                </div>
+                <div class="border-t border-slate-200 dark:border-slate-800 pt-3 w-full">
+                  <div id="diagram-admin-name" class="font-bold text-xs text-slate-800 dark:text-slate-200">Sin Administrador</div>
+                  <div class="text-[9px] text-slate-400 mt-1 font-mono uppercase tracking-wider">Designación Principal</div>
                 </div>
               </div>
             </div>
 
-            <!-- Card View Container (Hierarchical Tree Diagram) -->
-            <div id="iso-diagram-card-view" class="hidden w-full overflow-x-auto rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-950/40 p-6 h-[682px] overflow-y-auto">
-              <div id="diagram-tree-view-container" class="w-full flex justify-center min-w-[1024px] py-4">
-                <!-- Rendered dynamically as a connected tree diagram by JS -->
+            <!-- Column 2-4: B & C. Delivery Clusters Grid -->
+            <div class="lg:col-span-3">
+              <div id="diagram-delivery-clusters" class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <!-- Rendered dynamically by JS -->
               </div>
             </div>
 
           </div>
-
-          <!-- Right: Persistent Node Selector Inspector Panel -->
-          <div id="diagram-inspector-panel" class="w-96 shrink-0 bg-white dark:bg-slate-900 rounded-3xl border border-slate-200/80 dark:border-slate-800/80 shadow-md p-6 flex flex-col justify-between h-[682px] overflow-y-auto">
-            <!-- Content injected dynamically by JavaScript -->
-          </div>
-
         </div>
 
         <!-- Hidden indicators count to keep script happy -->

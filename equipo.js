@@ -61,8 +61,7 @@
     userPermissionPill: document.getElementById('user-permission-pill'),
 
     // Diagram stage
-    diagramTreeViewContainer: document.getElementById('diagram-tree-view-container'),
-    diagramInspectorPanel: document.getElementById('diagram-inspector-panel'),
+    diagramDeliveryClusters: document.getElementById('diagram-delivery-clusters'),
     diagramAdminName: document.getElementById('diagram-admin-name'),
     diagramAdminCount: document.getElementById('diagram-admin-count'),
     isoDiagramCanvas: document.getElementById('iso-diagram-canvas'),
@@ -558,7 +557,6 @@
     renderProjectAdminsTab();
     renderDeliveryTeamsTab();
     renderDirectoryTab();
-    updateSelectionInspector();
   }
 
   // --- 1. MÉTRICAS ---
@@ -613,7 +611,7 @@
         btnCards.className = 'px-3 py-1.5 rounded-lg text-xs font-bold transition-all inline-flex items-center gap-1.5 bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-sm';
       }
 
-      renderTreeView();
+      renderCardViewStage();
       return;
     } else {
       if (el.isoDiagramRadialView) el.isoDiagramRadialView.classList.remove('hidden');
