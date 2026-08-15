@@ -340,8 +340,8 @@
               <span>Esquema Radial</span>
             </button>
             <button id="btn-view-cards" class="px-3 py-1.5 rounded-lg text-xs font-bold transition-all inline-flex items-center gap-1.5 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white" type="button">
-              <span class="material-symbols-outlined text-[16px]">grid_view</span>
-              <span>Vista de Tarjetas</span>
+              <span class="material-symbols-outlined text-[16px]">account_tree</span>
+              <span>Esquema Jerárquico</span>
             </button>
           </div>
 
@@ -363,41 +363,47 @@
           </div>
         </div>
 
-        <!-- Radial Diagram View Container -->
-        <div id="iso-diagram-radial-view" class="mt-8 w-full rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-950/40 p-4">
-          <div class="flex flex-col lg:flex-row gap-6 min-w-[900px]">
-            <!-- Left: Interactive Canvas -->
-            <div id="iso-diagram-canvas" class="relative flex-1 h-[650px] bg-white dark:bg-slate-900 rounded-3xl border border-slate-200/80 dark:border-slate-800/80 shadow-md overflow-hidden select-none draggable-canvas flex items-center justify-center">
-              
-              <!-- Viewport Wrapper (Handles all zoom & pan transformations) -->
-              <div id="iso-diagram-viewport-wrapper" class="relative w-[900px] h-[650px] shrink-0">
-                <!-- SVG connector lines and markers -->
-                <svg id="iso-diagram-svg" width="900" height="650" viewBox="0 0 900 650" class="absolute left-0 top-0 pointer-events-none z-10">
-                  <defs>
-                    <marker id="arrow-bi" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse">
-                      <path d="M 0 1 L 10 5 L 0 9 z" fill="#64748b"/>
-                    </marker>
-                  </defs>
-                </svg>
-                
-                <!-- Interactive Diagram Nodes Layer -->
-                <div id="iso-diagram-nodes" class="absolute inset-0 z-20"></div>
+        <!-- Main Diagram Workspace (Flex container for side-by-side views and inspector) -->
+        <div class="flex flex-col lg:flex-row gap-6 mt-8">
+          
+          <!-- Left: Active Diagram View Container -->
+          <div class="flex-1 min-w-0">
+            
+            <!-- Radial Diagram View Container -->
+            <div id="iso-diagram-radial-view" class="w-full rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-950/40 p-4">
+              <!-- Left: Interactive Canvas -->
+              <div id="iso-diagram-canvas" class="relative w-full h-[650px] bg-white dark:bg-slate-900 rounded-3xl border border-slate-200/80 dark:border-slate-800/80 shadow-md overflow-hidden select-none draggable-canvas flex items-center justify-center">
+                <!-- Viewport Wrapper (Handles all zoom & pan transformations) -->
+                <div id="iso-diagram-viewport-wrapper" class="relative w-[900px] h-[650px] shrink-0">
+                  <!-- SVG connector lines and markers -->
+                  <svg id="iso-diagram-svg" width="900" height="650" viewBox="0 0 900 650" class="absolute left-0 top-0 pointer-events-none z-10">
+                    <defs>
+                      <marker id="arrow-bi" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse">
+                        <path d="M 0 1 L 10 5 L 0 9 z" fill="#64748b"/>
+                      </marker>
+                    </defs>
+                  </svg>
+                  
+                  <!-- Interactive Diagram Nodes Layer -->
+                  <div id="iso-diagram-nodes" class="absolute inset-0 z-20"></div>
+                </div>
               </div>
-              
             </div>
 
-            <!-- Right: Node Selector Inspector Panel -->
-            <div id="diagram-inspector-panel" class="w-96 shrink-0 bg-white dark:bg-slate-900 rounded-3xl border border-slate-200/80 dark:border-slate-800/80 shadow-md p-6 flex flex-col justify-between h-[650px] overflow-y-auto">
-              <!-- Content injected dynamically by JavaScript -->
+            <!-- Card View Container (Hierarchical Tree Diagram) -->
+            <div id="iso-diagram-card-view" class="hidden w-full overflow-x-auto rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-950/40 p-6 h-[682px] overflow-y-auto">
+              <div id="diagram-tree-view-container" class="w-full flex justify-center min-w-[1024px] py-4">
+                <!-- Rendered dynamically as a connected tree diagram by JS -->
+              </div>
             </div>
-          </div>
-        </div>
 
-        <!-- Card View Container (Hierarchical Tree Diagram) -->
-        <div id="iso-diagram-card-view" class="hidden mt-8 w-full overflow-x-auto rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-950/40 p-6">
-          <div id="diagram-tree-view-container" class="w-full flex justify-center min-w-[1024px] py-4">
-            <!-- Rendered dynamically as a connected tree diagram by JS -->
           </div>
+
+          <!-- Right: Persistent Node Selector Inspector Panel -->
+          <div id="diagram-inspector-panel" class="w-96 shrink-0 bg-white dark:bg-slate-900 rounded-3xl border border-slate-200/80 dark:border-slate-800/80 shadow-md p-6 flex flex-col justify-between h-[682px] overflow-y-auto">
+            <!-- Content injected dynamically by JavaScript -->
+          </div>
+
         </div>
 
         <!-- Hidden indicators count to keep script happy -->

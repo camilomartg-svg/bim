@@ -884,94 +884,519 @@
     });
   }
 
-  function renderCardViewStage() {
-    if (!el.diagramDeliveryClusters || !activeProject) return;
+  function renderTreeView() {
+    if (!el.diagramTreeViewContainer || !activeProject) return;
 
+    const projectAdmins = activeProject.iso19650?.projectAdmins || [];
     const deliveryTeams = activeProject.iso19650?.deliveryTeams || [];
 
-    if (deliveryTeams.length === 0) {
-      el.diagramDeliveryClusters.innerHTML = `
-        <div class="col-span-full py-12 text-center text-xs text-slate-400 italic bg-white/40 dark:bg-slate-800/40 rounded-2xl border border-dashed border-slate-300 dark:border-slate-700">
-          No hay Equipos de Entrega configurados.
+    // 1. Root Node (A: Adjudicadores)
+    const isASelected = selectedNode && selectedNode.type === 'A';
+    const aRing = isASelected ? 'ring-4 ring-indigo-500 border-indigo-500 scale-105 shadow-lg' : 'border-slate-200 dark:border-slate-800';
+    
+    let adminsListHtml = projectAdmins.map(email => {
+      const meta = getUserMetadata(email);
+      return `<div class="font-bold text-slate-800 dark:text-slate-200 text-[11px] truncate">${escapeHtml(meta.name)} <span class="font-normal text-slate-400 text-[9px]">(${escapeHtml(meta.company)})</span></div>`;
+    }).join('') || '<div class="text-[10px] text-slate-400 italic">Sin administradores designados</div>';
+
+    let treeHtml = `
+      <div class="flex flex-col items-center w-full">
+        <!-- Root node: A -->
+        <div id="tree-node-A" class="glass-card rounded-2xl border ${aRing} p-4 shadow-sm w-72 text-center cursor-pointer transition-all hover:shadow-md hover:scale-[1.02]" onclick="selectTreeNode('A', null, event)">
+          <div class="flex items-center justify-center gap-1.5 mb-2">
+            <span class="h-5 w-5 rounded-lg bg-sky-100 dark:bg-sky-950 text-sky-600 dark:text-sky-400 flex items-center justify-center font-black text-[10px] border border-sky-200 dark:border-sky-800">
+              A
+            </span>
+            <span class="text-[10px] font-bold uppercase tracking-wider text-sky-600 dark:text-sky-400">Adjudicador (Cliente)</span>
+          </div>
+          <div class="font-black text-xs text-slate-900 dark:text-white uppercase mb-1">1. Administración de Proyecto</div>
+          <div class="space-y-1 mt-2 pt-2 border-t border-slate-100 dark:border-slate-800/60 max-h-[80px] overflow-y-auto">
+            ${adminsListHtml}
+          </div>
+        </div>
+
+        <!-- Connection line from Root to Level 2 -->
+        ${deliveryTeams.length > 0 ? '<div class="h-6 w-0.5 bg-slate-300 dark:bg-slate-700"></div>' : ''}
+
+        <!-- Delivery Teams Row -->
+        <div class="tree-row w-full flex flex-wrap justify-center gap-6">
+          ${deliveryTeams.map(dt => {
+            const isBSelected = selectedNode && selectedNode.type === 'B' && selectedNode.id === dt.id;
+            const bRing = isBSelected ? 'ring-4 ring-indigo-500 border-indigo-500 scale-105 shadow-lg' : 'border-slate-200 dark:border-slate-800';
+            const leadMeta = getUserMetadata(dt.leadEmail);
+            const members = dt.members || [];
+            const nonLeaderEmails = members.filter(m => (m || '').toLowerCase().trim() !== (dt.leadEmail || '').toLowerCase().trim());
+            const taskTeams = dt.taskTeams || [];
+
+            // Selection states for children C
+            const isAnyCSelected = selectedNode && selectedNode.type === 'C' && selectedNode.teamId === dt.id;
+            const cRing = isAnyCSelected ? 'ring-4 ring-indigo-500 border-indigo-500 scale-105 shadow-lg' : 'border-slate-200 dark:border-slate-800';
+
+            return `
+              <div class="tree-col flex flex-col items-center">
+                <!-- Delivery Team Card (B) -->
+                <div id="tree-node-B-${dt.id}" class="glass-card rounded-2xl border ${bRing} p-4 shadow-sm w-64 text-left cursor-pointer transition-all hover:shadow-md hover:scale-[1.02] z-20" onclick="selectTreeNode('B', '${dt.id}', event)">
+                  <div class="flex items-center justify-between mb-2">
+                    <div class="flex items-center gap-1.5">
+                      <span class="h-5 w-5 rounded-lg bg-blue-100 dark:bg-blue-950 text-blue-600 dark:text-blue-400 flex items-center justify-center font-black text-[10px] border border-blue-200 dark:border-blue-800">
+                        B
+                      </span>
+                      <span class="text-[9px] font-black uppercase tracking-wider text-blue-600 dark:text-blue-400">Líder de Entrega</span>
+                    </div>
+                    <span class="text-[9px] px-1.5 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-500 font-mono font-bold">2</span>
+                  </div>
+                  <h4 class="font-black text-xs text-slate-900 dark:text-white uppercase tracking-wider truncate mb-2">${escapeHtml(dt.name)}</h4>
+                  <div class="p-2 rounded-xl bg-blue-50/70 dark:bg-blue-950/45 border border-blue-100 dark:border-blue-900/40 text-[10px]">
+                    <div class="font-bold text-slate-800 dark:text-slate-200 truncate">${escapeHtml(leadMeta.name || 'Sin Líder Asignado')}</div>
+                    <div class="text-[9px] text-slate-400 font-mono truncate">${escapeHtml(leadMeta.email || '-')}</div>
+                    <div class="text-[9px] text-slate-400 truncate">${escapeHtml(leadMeta.company)}</div>
+                  </div>
+                </div>
+
+                <!-- Vertical Line under B to C & Task Teams -->
+                ${(nonLeaderEmails.length > 0 || taskTeams.length > 0) ? `
+                  <div class="h-6 w-0.5 bg-slate-300 dark:bg-slate-700"></div>
+                  
+                  <!-- Sub-tree row for members (C) and Task Teams (3) -->
+                  <div class="tree-row flex justify-center gap-4">
+                    
+                    <!-- Members (C) Column -->
+                    ${nonLeaderEmails.length > 0 ? `
+                      <div class="tree-col flex flex-col items-center">
+                        <div id="tree-node-C-${dt.id}" class="glass-card rounded-2xl border ${cRing} p-3.5 shadow-sm w-48 text-left cursor-pointer transition-all hover:shadow-md hover:scale-[1.02]" onclick="selectTreeNode('C', '${nonLeaderEmails[0]}', event, '${dt.id}')">
+                          <div class="flex items-center gap-1.5 mb-2">
+                            <span class="h-4.5 w-4.5 rounded bg-purple-100 dark:bg-purple-950 text-purple-600 dark:text-purple-400 flex items-center justify-center font-bold text-[9px] border border-purple-200 dark:border-purple-800 px-1">
+                              C
+                            </span>
+                            <span class="text-[9px] font-bold uppercase tracking-wider text-purple-600 dark:text-purple-400">Adjudicatarios</span>
+                          </div>
+                          <div class="text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">Miembros del Equipo</div>
+                          <div class="space-y-1 max-h-[100px] overflow-y-auto pr-1">
+                            ${nonLeaderEmails.map(mEmail => {
+                              const meta = getUserMetadata(mEmail);
+                              const isThisCSelected = selectedNode && selectedNode.type === 'C' && selectedNode.id === mEmail && selectedNode.teamId === dt.id;
+                              const highlightText = isThisCSelected ? 'text-indigo-600 dark:text-indigo-400 font-extrabold' : 'text-slate-700 dark:text-slate-300';
+                              return `
+                                <div class="text-[10px] hover:underline truncate py-0.5 ${highlightText}" onclick="selectTreeNode('C', '${mEmail}', event, '${dt.id}')">
+                                  • ${escapeHtml(meta.name)}
+                                </div>
+                              `;
+                            }).join('')}
+                          </div>
+                        </div>
+                      </div>
+                    ` : ''}
+
+                    <!-- Task Teams (3) Columns -->
+                    ${taskTeams.map(tt => {
+                      const isTTSelected = selectedNode && selectedNode.type === 'taskTeam' && selectedNode.id === tt.id;
+                      const ttRing = isTTSelected ? 'ring-4 ring-indigo-500 border-indigo-500 scale-105 shadow-lg' : 'border-slate-200 dark:border-slate-800';
+                      return `
+                        <div class="tree-col flex flex-col items-center">
+                          <div id="tree-node-TT-${tt.id}" class="glass-card rounded-2xl border ${ttRing} p-3.5 shadow-sm w-48 text-left cursor-pointer transition-all hover:shadow-md hover:scale-[1.02]" onclick="selectTreeNode('taskTeam', '${tt.id}', event, '${dt.id}')">
+                            <div class="flex items-center mb-2">
+                              <div class="flex items-center gap-1.5">
+                                <span class="h-4.5 w-4.5 rounded bg-emerald-100 dark:bg-emerald-950 text-emerald-600 dark:text-emerald-400 flex items-center justify-center font-bold text-[9px] border border-emerald-200 dark:border-emerald-800 px-1">
+                                  3
+                                </span>
+                                <span class="text-[9px] font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400">Equipo Tarea</span>
+                              </div>
+                            </div>
+                            <h5 class="font-bold text-[11px] text-slate-900 dark:text-white uppercase truncate mb-1">${escapeHtml(tt.name)}</h5>
+                            <span class="text-[8px] px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-500 font-mono font-bold uppercase">${escapeHtml(tt.discipline || 'Disciplina')}</span>
+                            <div class="mt-2 text-[9px] text-slate-400 italic">
+                              ${tt.members?.length || 0} integrantes
+                            </div>
+                          </div>
+                        </div>
+                      `;
+                    }).join('')}
+                  </div>
+                ` : ''}
+              </div>
+            `;
+          }).join('')}
+        </div>
+      </div>
+    `;
+
+    el.diagramTreeViewContainer.innerHTML = treeHtml;
+  }
+
+  // Global helper to handle selection from tree view clicking
+  window.selectTreeNode = function (type, id, event, teamId) {
+    if (event) event.stopPropagation();
+    selectedNode = { type, id, teamId };
+    renderAllViews();
+  };
+
+  function updateSelectionInspector() {
+    if (!el.diagramInspectorPanel) return;
+
+    if (!activeProject) {
+      el.diagramInspectorPanel.innerHTML = `
+        <div class="flex-1 flex flex-col items-center justify-center text-center p-6 space-y-3">
+          <span class="material-symbols-outlined text-slate-300 dark:text-slate-700 text-5xl">warning</span>
+          <p class="text-xs text-slate-400 italic">Selecciona o carga un proyecto activo.</p>
         </div>
       `;
       return;
     }
 
-    el.diagramDeliveryClusters.innerHTML = deliveryTeams.map(dt => {
-      const leadMeta = getUserMetadata(dt.leadEmail);
-      const members = dt.members || [];
-      const nonLeaderEmails = members.filter(m => (m || '').toLowerCase().trim() !== (dt.leadEmail || '').toLowerCase().trim());
-      const taskTeams = dt.taskTeams || [];
+    // Default view: Project Overview
+    if (!selectedNode || selectedNode.type === 'project') {
+      const admins = activeProject.iso19650?.projectAdmins || [];
+      const teams = activeProject.iso19650?.deliveryTeams || [];
+      let totalTasks = 0;
+      let totalMembers = (activeProject.members || []).length;
+      teams.forEach(t => {
+        totalTasks += (t.taskTeams || []).length;
+      });
 
-      const membersHtml = nonLeaderEmails.map(mEmail => {
-        const mMeta = getUserMetadata(mEmail);
-        return `
-          <div class="flex items-center gap-2 py-1.5 px-2.5 rounded-lg bg-slate-50 dark:bg-slate-800 text-[11px]">
-            <span class="h-5 w-5 rounded-md bg-purple-100 dark:bg-purple-950 text-purple-700 dark:text-purple-300 flex items-center justify-center font-bold text-[9px] shrink-0">
-              C
-            </span>
-            <div class="truncate">
-              <div class="font-bold text-slate-800 dark:text-slate-200 truncate">${escapeHtml(mMeta.name)}</div>
-              <div class="text-slate-400 font-mono text-[9px] truncate">${escapeHtml(mEmail)}</div>
+      el.diagramInspectorPanel.innerHTML = `
+        <div class="flex flex-col h-full justify-between">
+          <div class="space-y-5">
+            <div class="border-b border-slate-100 dark:border-slate-800/60 pb-4">
+              <span class="text-[9px] font-black uppercase tracking-widest text-indigo-600 dark:text-indigo-400">Inspector nora</span>
+              <h3 class="text-base font-black text-slate-900 dark:text-white mt-1">Gobernanza de Información</h3>
+              <p class="text-xs text-slate-500 dark:text-slate-400 mt-1 leading-relaxed">
+                Este panel muestra los metadatos detallados de la persona o equipo seleccionado en el organigrama.
+              </p>
             </div>
-          </div>
-        `;
-      }).join('') || `<div class="text-[10px] text-slate-400 italic py-1">Sin otros miembros asignados</div>`;
 
-      const tasksHtml = taskTeams.map(tt => {
-        return `
-          <div class="flex items-center gap-1.5 py-1 px-2 rounded-md bg-emerald-50 dark:bg-emerald-950/40 text-emerald-800 dark:text-emerald-300 text-[10px] font-medium border border-emerald-100 dark:border-emerald-900/40">
-            <span class="material-symbols-outlined text-[12px]">task_alt</span>
-            <span>${escapeHtml(tt.name)}</span>
-          </div>
-        `;
-      }).join('');
+            <div class="space-y-3">
+              <h4 class="text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">Resumen del Proyecto</h4>
+              
+              <div class="grid grid-cols-2 gap-2 text-xs">
+                <div class="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800">
+                  <div class="text-[10px] text-slate-400">Total Miembros</div>
+                  <div class="text-lg font-black mt-0.5 text-slate-900 dark:text-white">${totalMembers}</div>
+                </div>
+                <div class="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800">
+                  <div class="text-[10px] text-slate-400">Adjudicadores (A)</div>
+                  <div class="text-lg font-black mt-0.5 text-slate-900 dark:text-white">${admins.length}</div>
+                </div>
+                <div class="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800">
+                  <div class="text-[10px] text-slate-400">Equipos Entrega (B)</div>
+                  <div class="text-lg font-black mt-0.5 text-slate-900 dark:text-white">${teams.length}</div>
+                </div>
+                <div class="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800">
+                  <div class="text-[10px] text-slate-400">Equipos Tarea (3)</div>
+                  <div class="text-lg font-black mt-0.5 text-slate-900 dark:text-white">${totalTasks}</div>
+                </div>
+              </div>
 
-      return `
-        <div class="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-sm space-y-4 hover:shadow-md transition-shadow">
-          
-          <!-- Team Name & Designation number 2 -->
-          <div class="flex items-center justify-between gap-2 border-b border-slate-100 dark:border-slate-800 pb-3">
-            <div class="flex items-center gap-2 min-w-0">
-              <span class="h-7 w-7 rounded-xl bg-purple-50 dark:bg-purple-950 text-purple-600 dark:text-purple-300 flex items-center justify-center font-black text-xs border border-purple-200 dark:border-purple-800 shrink-0">
-                2
-              </span>
-              <h4 class="font-black text-xs text-slate-900 dark:text-white uppercase tracking-wider truncate">${escapeHtml(dt.name)}</h4>
-            </div>
-            <span class="text-[9px] px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-500 font-mono uppercase tracking-wider shrink-0">Equipo B</span>
-          </div>
-
-          <!-- B: Lead -->
-          <div class="p-3 rounded-xl bg-blue-50/70 dark:bg-blue-950/45 border border-blue-100 dark:border-blue-900/40 space-y-1">
-            <div class="text-[9px] font-bold uppercase tracking-wider text-blue-600 dark:text-blue-400 flex items-center gap-1">
-              <span class="material-symbols-outlined text-[12px]">stars</span> Adjudicatario Principal (Líder B)
-            </div>
-            <div class="font-bold text-xs text-slate-800 dark:text-slate-200 truncate">${escapeHtml(leadMeta.name || 'Sin Líder Asignado')}</div>
-            <div class="text-[9px] text-slate-400 font-mono truncate">${escapeHtml(leadMeta.email || '-')}</div>
-            <div class="text-[9px] text-slate-400 truncate">${escapeHtml(leadMeta.company)} • ${escapeHtml(leadMeta.cargo)}</div>
-          </div>
-
-          <!-- C: Members List -->
-          <div class="space-y-1.5">
-            <div class="text-[9px] font-bold uppercase tracking-wider text-purple-600 dark:text-purple-400">Miembros del Equipo (C)</div>
-            <div class="grid grid-cols-1 gap-1.5 max-h-[140px] overflow-y-auto pr-1">
-              ${membersHtml}
+              <div class="p-3.5 rounded-xl bg-indigo-50/50 dark:bg-indigo-950/20 border border-indigo-100/50 dark:border-indigo-900/30 text-xs">
+                <div class="flex items-center gap-1.5 font-bold text-indigo-700 dark:text-indigo-300">
+                  <span class="material-symbols-outlined text-[16px]">info</span>
+                  <span>Estándar ISO 19650-2</span>
+                </div>
+                <p class="text-[11px] text-slate-500 dark:text-slate-400 mt-1 leading-relaxed">
+                  Haz clic sobre cualquiera de los nodos circulares del gráfico o sobre las cajas del esquema jerárquico para inspeccionar integrantes en detalle.
+                </p>
+              </div>
             </div>
           </div>
 
-          <!-- 3: Tasks list -->
-          ${tasksHtml ? `
-            <div class="space-y-1.5 border-t border-slate-100 dark:border-slate-800 pt-3">
-              <div class="text-[9px] font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400">3. Equipos de Tarea / Disciplinas</div>
-              <div class="flex flex-wrap gap-1.5">${tasksHtml}</div>
-            </div>
-          ` : ''}
-          
+          <div class="pt-4 border-t border-slate-100 dark:border-slate-800/60 mt-4 flex flex-col gap-2">
+            <button onclick="window.switchTab('directory')" class="w-full inline-flex items-center justify-center gap-2 py-2 px-4 rounded-xl bg-slate-950 hover:bg-black text-white dark:bg-white dark:text-slate-950 dark:hover:bg-slate-100 text-xs font-bold uppercase tracking-wider transition-all shadow-sm">
+              <span class="material-symbols-outlined text-[16px]">person_search</span>
+              <span>Ir al Directorio General</span>
+            </button>
+          </div>
         </div>
       `;
-    }).join('');
+      return;
+    }
+
+    // A: Adjudicador
+    if (selectedNode.type === 'A') {
+      const admins = activeProject.iso19650?.projectAdmins || [];
+      const listHtml = admins.map(email => {
+        const meta = getUserMetadata(email);
+        return `
+          <div class="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800 flex items-start gap-3">
+            <span class="material-symbols-outlined text-slate-400 text-[18px] mt-0.5 shrink-0">account_circle</span>
+            <div class="min-w-0">
+              <div class="font-bold text-xs text-slate-900 dark:text-white truncate">${escapeHtml(meta.name)}</div>
+              <div class="text-[10px] text-slate-400 font-mono truncate">${escapeHtml(meta.email)}</div>
+              <div class="text-[10px] text-slate-500 mt-0.5">${escapeHtml(meta.company)} • ${escapeHtml(meta.cargo)}</div>
+            </div>
+          </div>
+        `;
+      }).join('') || `
+        <div class="p-4 rounded-xl border border-dashed border-slate-200 dark:border-slate-800 text-center text-xs text-slate-400 italic">
+          No hay administradores designados en este proyecto.
+        </div>
+      `;
+
+      el.diagramInspectorPanel.innerHTML = `
+        <div class="flex flex-col h-full justify-between">
+          <div class="space-y-4">
+            <div class="border-b border-slate-100 dark:border-slate-800/60 pb-3 flex items-start justify-between">
+              <div>
+                <span class="px-2 py-0.5 rounded bg-sky-100 dark:bg-sky-950 text-sky-700 dark:text-sky-300 text-[9px] font-black uppercase tracking-wider">Rol A</span>
+                <h3 class="text-base font-black text-slate-900 dark:text-white mt-1">Adjudicador</h3>
+              </div>
+              <button onclick="clearInspectorSelection(event)" class="text-slate-400 hover:text-slate-600 dark:hover:text-white" title="Limpiar selección">
+                <span class="material-symbols-outlined text-[18px]">close</span>
+              </button>
+            </div>
+
+            <p class="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
+              Es el cliente, promotor o representante principal del proyecto que designa a los administradores para liderar la gobernanza de información.
+            </p>
+
+            <div class="space-y-2 mt-2">
+              <h4 class="text-[10px] font-black uppercase tracking-wider text-slate-400 dark:text-slate-500">Administradores Asignados (${admins.length})</h4>
+              <div class="space-y-2 max-h-[300px] overflow-y-auto pr-1">
+                ${listHtml}
+              </div>
+            </div>
+          </div>
+
+          <div class="pt-4 border-t border-slate-100 dark:border-slate-800/60 mt-4 flex flex-col gap-2">
+            <button onclick="window.switchTab('admins')" class="w-full inline-flex items-center justify-center gap-2 py-2 px-4 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold uppercase tracking-wider transition-all shadow-sm">
+              <span class="material-symbols-outlined text-[16px]">shield_person</span>
+              <span>Gestionar Administradores</span>
+            </button>
+          </div>
+        </div>
+      `;
+      return;
+    }
+
+    // B: Delivery Team Leader
+    if (selectedNode.type === 'B') {
+      const teams = activeProject.iso19650?.deliveryTeams || [];
+      const dt = teams.find(t => t.id === selectedNode.id);
+      if (!dt) {
+        clearInspectorSelection();
+        return;
+      }
+
+      const leadMeta = getUserMetadata(dt.leadEmail);
+      const members = dt.members || [];
+      const taskTeams = dt.taskTeams || [];
+
+      el.diagramInspectorPanel.innerHTML = `
+        <div class="flex flex-col h-full justify-between">
+          <div class="space-y-4">
+            <div class="border-b border-slate-100 dark:border-slate-800/60 pb-3 flex items-start justify-between">
+              <div>
+                <span class="px-2 py-0.5 rounded bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-300 text-[9px] font-black uppercase tracking-wider">Rol B</span>
+                <h3 class="text-base font-black text-slate-900 dark:text-white mt-1">Líder de Entrega</h3>
+              </div>
+              <button onclick="clearInspectorSelection(event)" class="text-slate-400 hover:text-slate-600 dark:hover:text-white" title="Limpiar selección">
+                <span class="material-symbols-outlined text-[18px]">close</span>
+              </button>
+            </div>
+
+            <div>
+              <div class="text-[9px] font-black uppercase tracking-widest text-slate-400">Equipo de Entrega</div>
+              <div class="text-sm font-black text-indigo-600 dark:text-indigo-400 uppercase tracking-wide mt-0.5">${escapeHtml(dt.name)}</div>
+              ${dt.description ? `<p class="text-[11px] text-slate-500 dark:text-slate-400 mt-1 italic leading-relaxed">"${escapeHtml(dt.description)}"</p>` : ''}
+            </div>
+
+            <!-- Leader info card -->
+            <div class="p-3.5 rounded-2xl bg-blue-50/60 dark:bg-blue-950/20 border border-blue-100/50 dark:border-blue-900/30 space-y-1.5">
+              <div class="text-[9px] font-black uppercase tracking-wider text-blue-600 dark:text-blue-400 flex items-center gap-1">
+                <span class="material-symbols-outlined text-[12px]">stars</span> Adjudicatario Principal
+              </div>
+              <div>
+                <div class="font-black text-xs text-slate-800 dark:text-slate-200">${escapeHtml(leadMeta.name || 'Sin Líder Asignado')}</div>
+                <div class="text-[9px] text-slate-400 font-mono truncate">${escapeHtml(leadMeta.email || '-')}</div>
+                <div class="text-[10px] text-slate-500 mt-0.5">${escapeHtml(leadMeta.company)} • ${escapeHtml(leadMeta.cargo)}</div>
+              </div>
+            </div>
+
+            <div class="grid grid-cols-2 gap-2 text-xs">
+              <div class="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800">
+                <div class="text-[9px] text-slate-400 uppercase tracking-wider">Miembros C</div>
+                <div class="font-bold text-sm text-slate-900 dark:text-white mt-0.5">${members.length}</div>
+              </div>
+              <div class="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800">
+                <div class="text-[9px] text-slate-400 uppercase tracking-wider">Equipos Tarea</div>
+                <div class="font-bold text-sm text-slate-900 dark:text-white mt-0.5">${taskTeams.length}</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="pt-4 border-t border-slate-100 dark:border-slate-800/60 mt-4 flex flex-col gap-2">
+            <button onclick="scrollToTeamCard('${dt.id}')" class="w-full inline-flex items-center justify-center gap-2 py-2 px-4 rounded-xl bg-purple-600 hover:bg-purple-700 text-white text-xs font-bold uppercase tracking-wider transition-all shadow-sm">
+              <span class="material-symbols-outlined text-[16px]">visibility</span>
+              <span>Ver en Equipos de Entrega</span>
+            </button>
+          </div>
+        </div>
+      `;
+      return;
+    }
+
+    // C: Other Adjudicatarios (Miembros)
+    if (selectedNode.type === 'C') {
+      const teams = activeProject.iso19650?.deliveryTeams || [];
+      const dt = teams.find(t => t.id === selectedNode.teamId);
+      if (!dt) {
+        clearInspectorSelection();
+        return;
+      }
+
+      const mEmail = selectedNode.id;
+      const meta = getUserMetadata(mEmail);
+
+      // Find task teams this member belongs to
+      const memberTaskTeams = (dt.taskTeams || []).filter(tt => (tt.members || []).some(email => email.toLowerCase().trim() === mEmail.toLowerCase().trim()));
+      const taskTeamsListHtml = memberTaskTeams.map(tt => `
+        <span class="inline-flex items-center gap-1 py-0.5 px-2 rounded-lg bg-emerald-50 dark:bg-emerald-950/40 text-emerald-800 dark:text-emerald-300 text-[10px] font-bold border border-emerald-100 dark:border-emerald-900/40">
+          <span class="material-symbols-outlined text-[10px]">task_alt</span>
+          <span>${escapeHtml(tt.name)}</span>
+        </span>
+      `).join(' ') || '<span class="text-[10px] text-slate-400 italic">Ningún Equipo de Tarea asignado</span>';
+
+      el.diagramInspectorPanel.innerHTML = `
+        <div class="flex flex-col h-full justify-between">
+          <div class="space-y-4">
+            <div class="border-b border-slate-100 dark:border-slate-800/60 pb-3 flex items-start justify-between">
+              <div>
+                <span class="px-2 py-0.5 rounded bg-purple-100 dark:bg-purple-950 text-purple-700 dark:text-purple-300 text-[9px] font-black uppercase tracking-wider">Rol C</span>
+                <h3 class="text-base font-black text-slate-900 dark:text-white mt-1">Adjudicatario (Miembro)</h3>
+              </div>
+              <button onclick="clearInspectorSelection(event)" class="text-slate-400 hover:text-slate-600 dark:hover:text-white" title="Limpiar selección">
+                <span class="material-symbols-outlined text-[18px]">close</span>
+              </button>
+            </div>
+
+            <!-- Member profile details -->
+            <div class="space-y-3">
+              <div class="flex items-center gap-3">
+                <div class="h-10 w-10 rounded-xl bg-purple-50 dark:bg-purple-950/40 text-purple-600 dark:text-purple-400 flex items-center justify-center font-black text-sm border border-purple-200/50 dark:border-purple-900/30">
+                  C
+                </div>
+                <div class="min-w-0">
+                  <div class="font-black text-xs text-slate-900 dark:text-white truncate">${escapeHtml(meta.name)}</div>
+                  <div class="text-[9px] text-slate-400 font-mono truncate">${escapeHtml(meta.email)}</div>
+                </div>
+              </div>
+
+              <div class="border-t border-slate-100 dark:border-slate-800/60 pt-3 space-y-2 text-[11px]">
+                <div><strong class="text-slate-400 uppercase tracking-wider text-[9px]">Empresa:</strong> <span class="text-slate-800 dark:text-slate-200 font-semibold">${escapeHtml(meta.company || '-')}</span></div>
+                <div><strong class="text-slate-400 uppercase tracking-wider text-[9px]">Cargo / Rol:</strong> <span class="text-slate-800 dark:text-slate-200">${escapeHtml(meta.cargo || '-')}</span></div>
+                ${meta.especialidad ? `<div><strong class="text-slate-400 uppercase tracking-wider text-[9px]">Especialidad:</strong> <span class="text-slate-800 dark:text-slate-200">${escapeHtml(meta.especialidad)}</span></div>` : ''}
+              </div>
+
+              <div class="border-t border-slate-100 dark:border-slate-800/60 pt-3 space-y-1.5">
+                <div class="text-[9px] font-black uppercase tracking-wider text-slate-400">Pertenece al Equipo de Entrega</div>
+                <div class="text-[11px] font-extrabold text-indigo-600 dark:text-indigo-400 uppercase">${escapeHtml(dt.name)}</div>
+              </div>
+
+              <div class="border-t border-slate-100 dark:border-slate-800/60 pt-3 space-y-1.5">
+                <div class="text-[9px] font-black uppercase tracking-wider text-slate-400">Equipos de Tarea (Especialidades)</div>
+                <div class="flex flex-wrap gap-1">${taskTeamsListHtml}</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="pt-4 border-t border-slate-100 dark:border-slate-800/60 mt-4 flex flex-col gap-2">
+            <button onclick="scrollToTeamCard('${dt.id}')" class="w-full inline-flex items-center justify-center gap-2 py-2 px-4 rounded-xl bg-purple-600 hover:bg-purple-700 text-white text-xs font-bold uppercase tracking-wider transition-all shadow-sm">
+              <span class="material-symbols-outlined text-[16px]">visibility</span>
+              <span>Ver en Equipos de Entrega</span>
+            </button>
+          </div>
+        </div>
+      `;
+      return;
+    }
+
+    // taskTeam
+    if (selectedNode.type === 'taskTeam') {
+      const teams = activeProject.iso19650?.deliveryTeams || [];
+      const dt = teams.find(t => t.id === selectedNode.teamId);
+      if (!dt) {
+        clearInspectorSelection();
+        return;
+      }
+      const tt = (dt.taskTeams || []).find(t => t.id === selectedNode.id);
+      if (!tt) {
+        clearInspectorSelection();
+        return;
+      }
+
+      const teamMembersList = (tt.members || []).map(mEmail => {
+        const meta = getUserMetadata(mEmail);
+        return `
+          <div class="py-1 px-2 rounded-lg bg-slate-50 dark:bg-slate-800/30 text-[10px] flex items-center justify-between">
+            <span class="font-bold text-slate-700 dark:text-slate-300 truncate">${escapeHtml(meta.name)}</span>
+            <span class="text-slate-400 font-mono text-[8px] truncate max-w-[120px]">${escapeHtml(meta.email)}</span>
+          </div>
+        `;
+      }).join('') || '<div class="text-[10px] text-slate-400 italic py-1">Sin miembros asignados a esta especialidad</div>';
+
+      el.diagramInspectorPanel.innerHTML = `
+        <div class="flex flex-col h-full justify-between">
+          <div class="space-y-4">
+            <div class="border-b border-slate-100 dark:border-slate-800/60 pb-3 flex items-start justify-between">
+              <div>
+                <span class="px-2 py-0.5 rounded bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 text-[9px] font-black uppercase tracking-wider">Nivel 3</span>
+                <h3 class="text-base font-black text-slate-900 dark:text-white mt-1">Equipo de Tarea</h3>
+              </div>
+              <button onclick="clearInspectorSelection(event)" class="text-slate-400 hover:text-slate-600 dark:hover:text-white" title="Limpiar selección">
+                <span class="material-symbols-outlined text-[18px]">close</span>
+              </button>
+            </div>
+
+            <div>
+              <div class="text-[9px] font-black uppercase tracking-widest text-slate-400">Especialidad / Tarea</div>
+              <div class="text-sm font-black text-emerald-600 dark:text-emerald-400 uppercase tracking-wide mt-0.5">${escapeHtml(tt.name)}</div>
+              <div class="mt-1.5 flex items-center gap-1 text-[10px] text-slate-500 dark:text-slate-400">
+                <strong class="uppercase text-[8px] text-slate-400">Disciplina:</strong>
+                <span class="px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 font-bold">${escapeHtml(tt.discipline || 'Ninguna')}</span>
+              </div>
+            </div>
+
+            <div class="border-t border-slate-100 dark:border-slate-800/60 pt-3 space-y-1">
+              <div class="text-[9px] font-black uppercase tracking-wider text-slate-400">Equipo de Entrega Principal (B)</div>
+              <div class="text-[11px] font-bold text-slate-800 dark:text-slate-200 uppercase">${escapeHtml(dt.name)}</div>
+            </div>
+
+            <div class="border-t border-slate-100 dark:border-slate-800/60 pt-3 space-y-2">
+              <div class="text-[9px] font-black uppercase tracking-wider text-slate-400">Integrantes de la Especialidad (${tt.members?.length || 0})</div>
+              <div class="space-y-1.5 max-h-[180px] overflow-y-auto pr-1">
+                ${teamMembersList}
+              </div>
+            </div>
+          </div>
+
+          <div class="pt-4 border-t border-slate-100 dark:border-slate-800/60 mt-4 flex flex-col gap-2">
+            <button onclick="scrollToTeamCard('${dt.id}')" class="w-full inline-flex items-center justify-center gap-2 py-2 px-4 rounded-xl bg-purple-600 hover:bg-purple-700 text-white text-xs font-bold uppercase tracking-wider transition-all shadow-sm">
+              <span class="material-symbols-outlined text-[16px]">visibility</span>
+              <span>Ver en Equipos de Entrega</span>
+            </button>
+          </div>
+        </div>
+      `;
+      return;
+    }
   }
+
+  // Global helper functions to clear selection or scroll to cards
+  window.clearInspectorSelection = function (event) {
+    if (event) event.stopPropagation();
+    selectedNode = { type: 'project', id: null };
+    renderAllViews();
+  };
+
+  window.scrollToTeamCard = function (teamId) {
+    window.switchTab('delivery');
+    setTimeout(() => {
+      const card = document.getElementById(`delivery-team-card-${teamId}`);
+      if (card) {
+        card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        card.classList.add('ring-4', 'ring-purple-500');
+        setTimeout(() => card.classList.remove('ring-4', 'ring-purple-500'), 2500);
+      }
+    }, 120);
+  };
 
   function updateDiagramTransform() {
     if (!el.isoDiagramViewportWrapper) return;
