@@ -865,11 +865,13 @@
                 <span class="material-symbols-outlined text-[16px]">task_alt</span> 3. Equipo de Tarea (Miembros C) (${nonLeaderMembers.length})
               </span>
               <div class="flex items-center gap-2">
-                ${(canManageProjectStructure || isCurrentLeader) ? `
+                ${canManageProjectStructure ? `
                   <button onclick="openCreateTaskTeamModal('${dt.id}')" class="text-[10px] font-bold text-emerald-600 hover:underline flex items-center gap-1">
                     <span class="material-symbols-outlined text-[14px]">add</span> Añadir Disciplina
                   </button>
                   <span class="text-slate-300 dark:text-slate-600">|</span>
+                ` : ''}
+                ${(canManageProjectStructure || isCurrentLeader) ? `
                   <button onclick="openAddMemberToDeliveryTeamModal('${dt.id}')" class="text-[10px] font-bold text-purple-600 hover:underline flex items-center gap-1">
                     <span class="material-symbols-outlined text-[14px]">person_add</span> Miembro
                   </button>
@@ -884,7 +886,7 @@
                 ${taskTeams.map(tt => `
                   <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-xl bg-emerald-100/80 dark:bg-emerald-950/80 text-emerald-800 dark:text-emerald-200 text-xs font-bold border border-emerald-200 dark:border-emerald-800">
                     <span class="material-symbols-outlined text-[13px]">check_box</span> ${escapeHtml(tt.name)} (${escapeHtml(tt.discipline || 'General')})
-                    ${(canManageProjectStructure || isCurrentLeader) ? `
+                    ${canManageProjectStructure ? `
                       <button onclick="deleteTaskTeam('${dt.id}', '${tt.id}')" class="text-emerald-600 dark:text-emerald-400 hover:text-rose-600 ml-1 transition-colors flex items-center" title="Eliminar disciplina">
                         <span class="material-symbols-outlined text-[12px] font-bold">close</span>
                       </button>
@@ -1123,23 +1125,15 @@
 
 
   window.openCreateTaskTeamModal = function (preselectedDeliveryId = '') {
+    if (!canManageProjectStructure) {
+      window.showToast('No tienes permisos para crear equipos de tarea.', 'error');
+      return;
+    }
+
     const deliveryTeams = activeProject.iso19650?.deliveryTeams || [];
     if (deliveryTeams.length === 0) {
       window.showToast('Primero debes crear al menos un Equipo de Entrega.', 'error');
       window.switchTab('delivery');
-      return;
-    }
-
-    const userEmail = (currentUser?.username || currentUser?.email || currentUser?.userAccount || '').toLowerCase().trim();
-    
-    // Filter delivery teams that this user has permission to manage
-    const manageableTeams = deliveryTeams.filter(d => {
-      const isCurrentLeader = (d.leadEmail || '').toLowerCase().trim() === userEmail;
-      return canManageProjectStructure || isCurrentLeader;
-    });
-
-    if (manageableTeams.length === 0) {
-      window.showToast('No tienes permisos para crear equipos de tarea.', 'error');
       return;
     }
 
@@ -1149,7 +1143,7 @@
     document.getElementById('task-team-discipline').value = '';
 
     const delivSelect = document.getElementById('task-team-delivery-select');
-    delivSelect.innerHTML = manageableTeams.map(d => {
+    delivSelect.innerHTML = deliveryTeams.map(d => {
       const isSel = (d.id === preselectedDeliveryId) ? 'selected' : '';
       return `<option value="${escapeHtml(d.id)}" ${isSel}>${escapeHtml(d.name)}</option>`;
     }).join('');
@@ -1158,6 +1152,11 @@
   };
 
   window.confirmSaveTaskTeam = function () {
+    if (!canManageProjectStructure) {
+      window.showToast('No tienes permisos para crear equipos de tarea.', 'error');
+      return;
+    }
+
     const name = document.getElementById('task-team-name').value.trim();
     const deliveryId = document.getElementById('task-team-delivery-select').value;
     const discipline = document.getElementById('task-team-discipline').value.trim();
@@ -1170,14 +1169,6 @@
     const dt = (activeProject.iso19650?.deliveryTeams || []).find(d => d.id === deliveryId);
     if (!dt) {
       window.showToast('Equipo de Entrega no válido.', 'error');
-      return;
-    }
-
-    const userEmail = (currentUser?.username || currentUser?.email || currentUser?.userAccount || '').toLowerCase().trim();
-    const isCurrentLeader = (dt.leadEmail || '').toLowerCase().trim() === userEmail;
-
-    if (!canManageProjectStructure && !isCurrentLeader) {
-      window.showToast('No tienes permisos para crear equipos de tarea en este equipo.', 'error');
       return;
     }
 
@@ -1196,16 +1187,13 @@
   };
 
   window.deleteTaskTeam = function (deliveryId, taskId) {
-    const dt = (activeProject.iso19650?.deliveryTeams || []).find(d => d.id === deliveryId);
-    if (!dt) return;
-
-    const userEmail = (currentUser?.username || currentUser?.email || currentUser?.userAccount || '').toLowerCase().trim();
-    const isCurrentLeader = (dt.leadEmail || '').toLowerCase().trim() === userEmail;
-
-    if (!canManageProjectStructure && !isCurrentLeader) {
-      window.showToast('No tienes permisos para eliminar equipos de tarea de este equipo.', 'error');
+    if (!canManageProjectStructure) {
+      window.showToast('No tienes permisos para eliminar equipos de tarea.', 'error');
       return;
     }
+
+    const dt = (activeProject.iso19650?.deliveryTeams || []).find(d => d.id === deliveryId);
+    if (!dt) return;
 
     if (!confirm('¿Deseas eliminar este equipo de tarea?')) return;
 
