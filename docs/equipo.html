@@ -347,6 +347,11 @@
         <span>3. Equipos de Tarea</span>
       </button>
 
+      <button data-tab="receiver" class="tab-btn inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold uppercase tracking-wider transition-all text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 whitespace-nowrap">
+        <span class="material-symbols-outlined text-[16px]">groups</span>
+        <span>Equipo Receptor</span>
+      </button>
+
       <button data-tab="directory" class="tab-btn inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold uppercase tracking-wider transition-all text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 whitespace-nowrap">
         <span class="material-symbols-outlined text-[16px]">person_search</span>
         <span>Directorio de Participantes</span>
@@ -551,6 +556,38 @@
 
 
 
+    <!-- TAB PANEL 4: EQUIPO RECEPTOR -->
+    <div id="tab-content-receiver" class="tab-panel hidden space-y-6">
+      
+      <div class="glass-card rounded-3xl border border-slate-200/80 dark:border-slate-800 p-6 sm:p-8 shadow-sm">
+        
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-200/60 dark:border-slate-800 pb-5">
+          <div>
+            <div class="flex items-center gap-2">
+              <span class="px-2 py-0.5 rounded-md bg-amber-100 dark:bg-amber-950 text-amber-700 dark:text-amber-300 font-black text-[10px]">EQUIPO RECEPTOR</span>
+              <h2 class="text-lg font-black text-slate-900 dark:text-white">Equipo Receptor</h2>
+            </div>
+            <p class="text-xs text-slate-500 dark:text-slate-400 mt-1">
+              Aquí se gestionan los miembros de los equipos de obra, que se incorporan como usuarios del proyecto y pueden coordinarse como un equipo receptor dentro de la estructura BIM.
+            </p>
+          </div>
+
+          <div id="receiver-action-controls" class="flex items-center gap-2">
+            <button onclick="openCreateReceiverTeamModal()" class="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold uppercase tracking-wider shadow-sm transition-all">
+              <span class="material-symbols-outlined text-[16px]">add_circle</span>
+              <span>Crear Equipo Receptor</span>
+            </button>
+          </div>
+        </div>
+
+        <div id="receiver-teams-container" class="mt-6 space-y-6">
+          <!-- Populated by JS -->
+        </div>
+
+      </div>
+
+    </div>
+
     <!-- TAB PANEL 5: DIRECTORIO DE PARTICIPANTES -->
     <div id="tab-content-directory" class="tab-panel hidden space-y-6">
       
@@ -706,7 +743,53 @@
     </div>
   </div>
 
-  <!-- Modal 3: Crear / Editar Equipo de Tarea -->
+  <!-- Modal 3: Crear / Editar Equipo Receptor -->
+  <div id="modal-receiver-team" class="fixed inset-0 z-50 hidden bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+    <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-6 max-w-lg w-full shadow-2xl space-y-4">
+      <div class="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
+        <div class="flex items-center gap-2">
+          <span class="flex h-8 w-8 items-center justify-center rounded-xl bg-amber-50 dark:bg-amber-950 text-amber-600 dark:text-amber-400">
+            <span class="material-symbols-outlined text-[18px]">groups</span>
+          </span>
+          <div>
+            <h3 id="modal-receiver-title" class="text-sm font-black text-slate-900 dark:text-white uppercase tracking-wider">Crear Equipo Receptor</h3>
+            <p class="text-[11px] text-slate-400">Equipo de obra / recepción de información</p>
+          </div>
+        </div>
+        <button onclick="closeModal('modal-receiver-team')" class="text-slate-400 hover:text-slate-600 dark:hover:text-white">
+          <span class="material-symbols-outlined text-[20px]">close</span>
+        </button>
+      </div>
+
+      <div class="space-y-4 text-xs">
+        <input type="hidden" id="receiver-team-edit-id" value="" />
+        
+        <div>
+          <label class="block font-bold text-slate-700 dark:text-slate-300 mb-1">Nombre del Equipo Receptor:</label>
+          <input id="receiver-team-name" type="text" placeholder="Ej: Equipo Receptor Obra, IPR, Supervisión de Obra..." class="w-full py-2 px-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 dark:text-white font-medium focus:ring-2 focus:ring-amber-500" />
+        </div>
+
+        <div>
+          <label class="block font-bold text-slate-700 dark:text-slate-300 mb-1">Líder del Equipo Receptor:</label>
+          <select id="receiver-team-lead-select" class="w-full py-2 px-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 dark:text-white font-medium focus:ring-2 focus:ring-amber-500">
+            <option value="">-- Sin Líder Asignado --</option>
+          </select>
+        </div>
+
+        <div>
+          <label class="block font-bold text-slate-700 dark:text-slate-300 mb-1">Descripción / Alcance (Opcional):</label>
+          <textarea id="receiver-team-desc" rows="2" placeholder="Equipo receptor para coordinación de obra y recepción de información del proyecto..." class="w-full py-2 px-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 dark:text-white font-medium focus:ring-2 focus:ring-amber-500"></textarea>
+        </div>
+      </div>
+
+      <div class="flex items-center justify-end gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
+        <button onclick="closeModal('modal-receiver-team')" class="px-4 py-2 rounded-xl text-xs font-bold text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">Cancelar</button>
+        <button onclick="confirmSaveReceiverTeam()" class="px-4 py-2 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold uppercase tracking-wider shadow-sm transition-all">Guardar Equipo</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal 4: Crear / Editar Equipo de Tarea -->
   <div id="modal-task-team" class="fixed inset-0 z-50 hidden bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
     <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-6 max-w-lg w-full shadow-2xl space-y-4">
       <div class="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">

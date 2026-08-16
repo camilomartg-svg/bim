@@ -76,6 +76,8 @@
     adminActionControls: document.getElementById('admin-action-controls'),
     deliveryTeamsContainer: document.getElementById('delivery-teams-container'),
     deliveryActionControls: document.getElementById('delivery-action-controls'),
+    receiverTeamsContainer: document.getElementById('receiver-teams-container'),
+    receiverActionControls: document.getElementById('receiver-action-controls'),
     taskTeamsContainer: document.getElementById('task-teams-container'),
     taskActionControls: document.getElementById('task-action-controls'),
     
@@ -328,7 +330,8 @@
     if (!activeProject.iso19650 || typeof activeProject.iso19650 !== 'object') {
       activeProject.iso19650 = {
         projectAdmins: [],
-        deliveryTeams: []
+        deliveryTeams: [],
+        receiverTeams: []
       };
     }
 
@@ -338,6 +341,10 @@
 
     if (!Array.isArray(activeProject.iso19650.deliveryTeams)) {
       activeProject.iso19650.deliveryTeams = [];
+    }
+
+    if (!Array.isArray(activeProject.iso19650.receiverTeams)) {
+      activeProject.iso19650.receiverTeams = [];
     }
 
     // Sincronizar/migrar desde activeProject.equiposDeTarea (creados en Configuración del Proyecto)
@@ -554,6 +561,7 @@
     renderDiagramStage();
     renderProjectAdminsTab();
     renderDeliveryTeamsTab();
+    renderReceiverTeamsTab();
     renderDirectoryTab();
   }
 
@@ -1366,6 +1374,112 @@
   };
 
   // --- 4. PESTAÑA: 2. EQUIPOS DE ENTREGA ---
+  function renderReceiverTeamsTab() {
+    if (!el.receiverTeamsContainer || !activeProject) return;
+    const receiverTeams = activeProject.iso19650?.receiverTeams || [];
+
+    if (receiverTeams.length === 0) {
+      el.receiverTeamsContainer.innerHTML = `
+        <div class="py-12 text-center text-xs text-slate-400 italic bg-white/40 dark:bg-slate-800/40 rounded-2xl border border-dashed border-slate-300 dark:border-slate-700">
+          No hay Equipos Receptor configurados.
+        </div>
+      `;
+      return;
+    }
+
+    el.receiverTeamsContainer.innerHTML = receiverTeams.map((rt, rtIndex) => {
+      const leadMeta = getUserMetadata(rt.leadEmail);
+      const members = rt.members || [];
+      const nonLeaderMembers = members.filter(mEmail => mEmail.toLowerCase().trim() !== (rt.leadEmail || '').toLowerCase().trim());
+      const userEmail = (currentUser?.username || currentUser?.email || currentUser?.userAccount || '').toLowerCase().trim();
+      const isCurrentLeader = (rt.leadEmail || '').toLowerCase().trim() === userEmail;
+
+      const nonLeaderMembersListHtml = nonLeaderMembers.map(mEmail => {
+        const mMeta = getUserMetadata(mEmail);
+        return `
+          <div class="flex items-center justify-between py-2 px-3 rounded-xl bg-slate-50 dark:bg-slate-900/60 text-xs">
+            <div class="flex items-center gap-2.5">
+              <span class="h-6 w-6 rounded-lg bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300 flex items-center justify-center font-bold text-[10px]">
+                R
+              </span>
+              <div>
+                <div class="font-bold text-slate-900 dark:text-white">${escapeHtml(mMeta.name)}</div>
+                <div class="text-[10px] text-slate-400 font-mono">${escapeHtml(mEmail)} • ${escapeHtml(mMeta.company)}</div>
+              </div>
+            </div>
+            ${(canManageProjectStructure || isCurrentLeader) ? `
+              <div class="flex items-center gap-1">
+                <button onclick="setReceiverTeamLead('${rt.id}', '${mEmail}')" class="px-2 py-1 rounded-lg text-[10px] font-bold text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-950 transition-colors" title="Nombrar como Líder del Equipo Receptor">
+                  Nombrar Líder
+                </button>
+                <button onclick="removeReceiverTeamMember('${rt.id}', '${mEmail}')" class="p-1 text-slate-400 hover:text-rose-600 transition-colors" title="Remover de este equipo">
+                  <span class="material-symbols-outlined text-[16px]">close</span>
+                </button>
+              </div>
+            ` : ''}
+          </div>
+        `;
+      }).join('');
+
+      return `
+        <div class="rounded-3xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-6 shadow-sm space-y-5">
+          <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 dark:border-slate-700 pb-4">
+            <div class="flex items-center gap-3">
+              <span class="h-10 w-10 rounded-2xl bg-amber-50 dark:bg-amber-950/80 text-amber-600 dark:text-amber-300 flex items-center justify-center font-black text-sm border border-amber-200 dark:border-amber-800">
+                R
+              </span>
+              <div>
+                <h3 class="text-base font-black text-slate-900 dark:text-white">${escapeHtml(rt.name)}</h3>
+                <p class="text-xs text-slate-400">${escapeHtml(rt.description || 'Equipo receptor para coordinación de obra.')}</p>
+              </div>
+            </div>
+
+            ${(canManageProjectStructure || isCurrentLeader) ? `
+              <div class="flex items-center gap-2">
+                <button onclick="openEditReceiverTeamModal('${rt.id}')" class="px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors">
+                  Editar
+                </button>
+                ${canManageProjectStructure ? `
+                  <button onclick="deleteReceiverTeam('${rt.id}')" class="px-3 py-1.5 rounded-xl border border-rose-200 dark:border-rose-800 text-xs font-bold text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950 transition-colors">
+                    Eliminar
+                  </button>
+                ` : ''}
+              </div>
+            ` : ''}
+          </div>
+
+          <div class="p-4 rounded-2xl bg-gradient-to-br from-amber-50/60 to-orange-50/30 dark:from-amber-950/40 dark:to-orange-950/20 border border-amber-100 dark:border-amber-900/50 space-y-2">
+            <div class="flex items-center justify-between text-[11px] font-bold uppercase tracking-wider text-amber-700 dark:text-amber-300">
+              <span class="flex items-center gap-1.5">
+                <span class="material-symbols-outlined text-[16px]">star</span> Líder del Equipo Receptor
+              </span>
+            </div>
+            <div class="font-bold text-sm text-slate-900 dark:text-white">${escapeHtml(leadMeta.name || 'Sin Líder Asignado')}</div>
+            <div class="text-xs text-slate-500 dark:text-slate-400 font-mono">${escapeHtml(leadMeta.email || '-')}</div>
+            <div class="text-[11px] text-slate-400">${escapeHtml(leadMeta.company)} • ${escapeHtml(leadMeta.cargo)}</div>
+          </div>
+
+          <div class="space-y-3 pt-2 border-t border-slate-100 dark:border-slate-700/60">
+            <div class="flex items-center justify-between text-xs font-bold text-slate-700 dark:text-slate-300">
+              <span class="flex items-center gap-1.5 uppercase tracking-wider text-[11px] text-amber-700 dark:text-amber-300">
+                <span class="material-symbols-outlined text-[16px]">groups</span> Miembros del equipo (${nonLeaderMembers.length})
+              </span>
+              ${(canManageProjectStructure || isCurrentLeader) ? `
+                <button onclick="openAddMemberToReceiverTeamModal('${rt.id}')" class="text-[10px] font-bold text-amber-600 hover:underline flex items-center gap-1">
+                  <span class="material-symbols-outlined text-[14px]">person_add</span> Miembro
+                </button>
+              ` : ''}
+            </div>
+
+            <div class="space-y-1.5 max-h-56 overflow-y-auto pr-1">
+              ${nonLeaderMembersListHtml || '<div class="text-xs text-slate-400 italic py-2">Sin miembros asignados en este equipo receptor.</div>'}
+            </div>
+          </div>
+        </div>
+      `;
+    }).join('');
+  }
+
   function renderDeliveryTeamsTab() {
     if (!el.deliveryTeamsContainer || !activeProject) return;
     const deliveryTeams = activeProject.iso19650?.deliveryTeams || [];
@@ -1800,6 +1914,212 @@
     renderAllViews();
     syncTeams();
     window.showToast('Equipo de Tarea eliminado.', 'info');
+  };
+
+  // --- 5. PESTAÑA: EQUIPO RECEPTOR ---
+  window.openCreateReceiverTeamModal = function () {
+    if (!canManageProjectStructure) return;
+    document.getElementById('modal-receiver-title').textContent = 'Crear Equipo Receptor';
+    document.getElementById('receiver-team-edit-id').value = '';
+    document.getElementById('receiver-team-name').value = '';
+    document.getElementById('receiver-team-desc').value = '';
+
+    const leadSelect = document.getElementById('receiver-team-lead-select');
+    const memberOptions = (activeProject.members || []).map(m => {
+      const name = getUserRegisteredName(m);
+      return `<option value="${escapeHtml(m)}">${escapeHtml(name)} (${escapeHtml(m)})</option>`;
+    });
+    leadSelect.innerHTML = '<option value="">-- Seleccionar Líder del Equipo Receptor --</option>' + memberOptions.join('');
+
+    window.openModal('modal-receiver-team');
+  };
+
+  window.openEditReceiverTeamModal = function (receiverId) {
+    const rt = (activeProject.iso19650?.receiverTeams || []).find(d => d.id === receiverId);
+    if (!rt) return;
+
+    const userEmail = (currentUser?.username || currentUser?.email || currentUser?.userAccount || '').toLowerCase().trim();
+    const isCurrentLeader = (rt.leadEmail || '').toLowerCase().trim() === userEmail;
+
+    if (!canManageProjectStructure && !isCurrentLeader) {
+      window.showToast('No tienes permisos para editar este equipo receptor.', 'error');
+      return;
+    }
+
+    document.getElementById('modal-receiver-title').textContent = 'Editar Equipo Receptor';
+    document.getElementById('receiver-team-edit-id').value = rt.id;
+    document.getElementById('receiver-team-name').value = rt.name || '';
+    document.getElementById('receiver-team-desc').value = rt.description || '';
+
+    const leadSelect = document.getElementById('receiver-team-lead-select');
+    const memberOptions = (activeProject.members || []).map(m => {
+      const name = getUserRegisteredName(m);
+      const isSel = (m.toLowerCase().trim() === (rt.leadEmail || '').toLowerCase().trim()) ? 'selected' : '';
+      return `<option value="${escapeHtml(m)}" ${isSel}>${escapeHtml(name)} (${escapeHtml(m)})</option>`;
+    });
+    leadSelect.innerHTML = '<option value="">-- Seleccionar Líder del Equipo Receptor --</option>' + memberOptions.join('');
+
+    window.openModal('modal-receiver-team');
+  };
+
+  window.confirmSaveReceiverTeam = function () {
+    const editId = document.getElementById('receiver-team-edit-id').value;
+    const name = document.getElementById('receiver-team-name').value.trim();
+    const leadEmail = document.getElementById('receiver-team-lead-select').value.toLowerCase().trim();
+    const desc = document.getElementById('receiver-team-desc').value.trim();
+
+    if (editId) {
+      const rt = activeProject.iso19650.receiverTeams.find(d => d.id === editId);
+      if (!rt) return;
+      const userEmail = (currentUser?.username || currentUser?.email || currentUser?.userAccount || '').toLowerCase().trim();
+      const isCurrentLeader = (rt.leadEmail || '').toLowerCase().trim() === userEmail;
+      if (!canManageProjectStructure && !isCurrentLeader) {
+        window.showToast('No tienes permisos para guardar cambios en este equipo receptor.', 'error');
+        return;
+      }
+    } else {
+      if (!canManageProjectStructure) {
+        window.showToast('No tienes permisos para crear equipos receptor.', 'error');
+        return;
+      }
+    }
+
+    if (!name) {
+      window.showToast('Por favor escribe un nombre para el equipo receptor.', 'error');
+      return;
+    }
+    if (!leadEmail) {
+      window.showToast('Debe asignarse un líder para el equipo receptor.', 'error');
+      return;
+    }
+
+    if (!activeProject.iso19650) activeProject.iso19650 = { projectAdmins: [], deliveryTeams: [], receiverTeams: [] };
+    if (!activeProject.iso19650.receiverTeams) activeProject.iso19650.receiverTeams = [];
+
+    if (editId) {
+      const rt = activeProject.iso19650.receiverTeams.find(d => d.id === editId);
+      if (rt) {
+        rt.name = name;
+        rt.leadEmail = leadEmail;
+        rt.description = desc;
+        if (leadEmail && !rt.members.includes(leadEmail)) {
+          rt.members.push(leadEmail);
+        }
+      }
+    } else {
+      const newRt = {
+        id: 'recv-' + Date.now(),
+        name: name,
+        leadEmail: leadEmail,
+        description: desc,
+        members: leadEmail ? [leadEmail] : []
+      };
+      activeProject.iso19650.receiverTeams.push(newRt);
+    }
+
+    window.closeModal('modal-receiver-team');
+    renderAllViews();
+    syncTeams();
+    window.showToast('Equipo Receptor guardado exitosamente.', 'success');
+  };
+
+  window.deleteReceiverTeam = function (receiverId) {
+    if (!canManageProjectStructure) return;
+    if (!confirm('¿Estás seguro de eliminar este Equipo Receptor y sus configuraciones?')) return;
+
+    if (activeProject?.iso19650?.receiverTeams) {
+      activeProject.iso19650.receiverTeams = activeProject.iso19650.receiverTeams.filter(d => d.id !== receiverId);
+    }
+
+    renderAllViews();
+    syncTeams();
+    window.showToast('Equipo Receptor eliminado.', 'info');
+  };
+
+  window.setReceiverTeamLead = function (receiverId, email) {
+    const rt = (activeProject.iso19650?.receiverTeams || []).find(d => d.id === receiverId);
+    if (!rt) return;
+
+    const userEmail = (currentUser?.username || currentUser?.email || currentUser?.userAccount || '').toLowerCase().trim();
+    const isCurrentLeader = (rt.leadEmail || '').toLowerCase().trim() === userEmail;
+
+    if (!canManageProjectStructure && !isCurrentLeader) {
+      window.showToast('No tienes permisos para cambiar el líder de este equipo receptor.', 'error');
+      return;
+    }
+
+    if (!email) {
+      window.showToast('Debe asignarse un líder para el equipo receptor.', 'error');
+      return;
+    }
+
+    rt.leadEmail = email.toLowerCase().trim();
+    if (!rt.members.includes(rt.leadEmail)) {
+      rt.members.push(rt.leadEmail);
+    }
+
+    evaluatePermissions();
+    renderAllViews();
+    syncTeams();
+    window.showToast(`Nuevo líder asignado: ${getUserRegisteredName(email)}`, 'success');
+  };
+
+  window.removeReceiverTeamMember = function (receiverId, email) {
+    const rt = (activeProject.iso19650?.receiverTeams || []).find(d => d.id === receiverId);
+    if (!rt) return;
+
+    const userEmail = (currentUser?.username || currentUser?.email || currentUser?.userAccount || '').toLowerCase().trim();
+    const isCurrentLeader = (rt.leadEmail || '').toLowerCase().trim() === userEmail;
+
+    if (!canManageProjectStructure && !isCurrentLeader) {
+      window.showToast('No tienes permisos para remover miembros de este equipo receptor.', 'error');
+      return;
+    }
+
+    const clean = email.toLowerCase().trim();
+    if (rt.leadEmail && rt.leadEmail.toLowerCase().trim() === clean) {
+      window.showToast('No es posible remover al líder. Asigna un nuevo líder primero.', 'error');
+      return;
+    }
+
+    rt.members = rt.members.filter(m => m.toLowerCase().trim() !== clean);
+    renderAllViews();
+    syncTeams();
+    window.showToast('Miembro removido del equipo receptor.', 'info');
+  };
+
+  window.openAddMemberToReceiverTeamModal = function (receiverId) {
+    const rt = (activeProject.iso19650?.receiverTeams || []).find(d => d.id === receiverId);
+    if (!rt) return;
+
+    const userEmail = (currentUser?.username || currentUser?.email || currentUser?.userAccount || '').toLowerCase().trim();
+    const isCurrentLeader = (rt.leadEmail || '').toLowerCase().trim() === userEmail;
+
+    if (!canManageProjectStructure && !isCurrentLeader) {
+      window.showToast('No tienes permisos para añadir miembros a este equipo receptor.', 'error');
+      return;
+    }
+
+    const availableMembers = (activeProject.members || []).filter(m => !rt.members.includes(m.toLowerCase().trim()));
+    if (availableMembers.length === 0) {
+      window.showToast('Todos los participantes del proyecto ya están en este equipo receptor.', 'info');
+      return;
+    }
+
+    const memberPrompt = prompt(`Ingresa el correo del participante a integrar al equipo receptor "${rt.name}":\nOpciones disponibles:\n` + availableMembers.join('\n'));
+    if (!memberPrompt) return;
+
+    const clean = memberPrompt.toLowerCase().trim();
+    if (activeProject.members.includes(clean)) {
+      if (!rt.members.includes(clean)) {
+        rt.members.push(clean);
+        renderAllViews();
+        syncTeams();
+        window.showToast('Miembro añadido al equipo receptor.', 'success');
+      }
+    } else {
+      window.showToast('El usuario no pertenece al proyecto. Intégralo primero en el Directorio.', 'error');
+    }
   };
 
   // --- 6. PESTAÑA: DIRECTORIO DE PARTICIPANTES ---
