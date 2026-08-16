@@ -66,7 +66,6 @@
     isoDiagramCanvas: document.getElementById('iso-diagram-canvas'),
     isoDiagramSvg: document.getElementById('iso-diagram-svg'),
     isoDiagramNodes: document.getElementById('iso-diagram-nodes'),
-    diagramTooltip: document.getElementById('diagram-tooltip'),
     isoDiagramRadialView: document.getElementById('iso-diagram-radial-view'),
     isoDiagramCardView: document.getElementById('iso-diagram-card-view'),
     isoDiagramViewportWrapper: document.getElementById('iso-diagram-viewport-wrapper'),
@@ -671,45 +670,19 @@
       el.isoDiagramSvg.appendChild(line);
     }
 
-    // Helper: Setup interactive tooltip
-    function setupTooltip(element, getHtmlCallback) {
-      element.addEventListener('mouseenter', (e) => {
-        if (!el.diagramTooltip) return;
-        el.diagramTooltip.innerHTML = getHtmlCallback();
-        el.diagramTooltip.classList.remove('hidden');
-        el.diagramTooltip.style.opacity = '1';
-        positionTooltip(e);
-      });
-
-      element.addEventListener('mousemove', (e) => {
-        positionTooltip(e);
-      });
-
-      element.addEventListener('mouseleave', () => {
-        if (!el.diagramTooltip) return;
-        el.diagramTooltip.classList.add('hidden');
-        el.diagramTooltip.style.opacity = '0';
-      });
+    // Fichas siempre visibles: reemplazan los tooltips para leer el organigrama sin pasar el cursor.
+    function addNodeInfo(title, detail, x, y, width = 150) {
+      const label = document.createElement('div');
+      label.className = 'absolute rounded-lg border border-slate-200/90 dark:border-slate-700 bg-white/95 dark:bg-slate-900/95 px-2 py-1 shadow-sm z-20 pointer-events-none text-[9px] leading-tight text-slate-500 dark:text-slate-400';
+      label.style.left = `${x}px`;
+      label.style.top = `${y}px`;
+      label.style.width = `${width}px`;
+      label.innerHTML = `<div class="font-black text-slate-800 dark:text-white truncate">${escapeHtml(title)}</div><div class="mt-0.5 truncate">${escapeHtml(detail)}</div>`;
+      el.isoDiagramNodes.appendChild(label);
     }
 
-    function positionTooltip(e) {
-      if (!el.diagramTooltip) return;
-      const tooltipWidth = el.diagramTooltip.offsetWidth || 200;
-      const tooltipHeight = el.diagramTooltip.offsetHeight || 120;
-
-      let x = e.clientX + 15;
-      let y = e.clientY + 15;
-
-      if (x + tooltipWidth > window.innerWidth) {
-        x = e.clientX - tooltipWidth - 15;
-      }
-      if (y + tooltipHeight > window.innerHeight) {
-        y = e.clientY - tooltipHeight - 15;
-      }
-
-      el.diagramTooltip.style.left = `${x}px`;
-      el.diagramTooltip.style.top = `${y}px`;
-    }
+    // Se conserva la firma para los nodos existentes, pero ya no se muestran tooltips al pasar el cursor.
+    function setupTooltip() {}
 
     // 1. Draw Outer Circle: "1. Equipo de Proyecto"
     const projectCircle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
@@ -758,6 +731,14 @@
         </div>
       `;
     });
+
+    addNodeInfo(
+      'A · Administrador de Proyecto',
+      projectAdmins.map(email => getUserRegisteredName(email)).join(', ') || 'Sin administrador asignado',
+      centerX + 38,
+      centerY - 22,
+      180
+    );
 
     nodeA.addEventListener('click', () => {
       window.switchTab('admins');
@@ -845,6 +826,8 @@
         </div>
       `);
 
+      addNodeInfo(`B · ${dt.name}`, `Líder: ${leadMeta.name || 'Sin asignar'}`, X_di + 28, Y_di - 18, 155);
+
       nodeB.addEventListener('click', () => {
         window.switchTab('delivery');
         setTimeout(() => {
@@ -917,6 +900,8 @@
               </div>
             `;
           });
+
+          addNodeInfo('C · Adjudicatario', mMeta.name || mEmail, X_mj + 18, Y_mj - 13, 125);
 
           nodeC.addEventListener('click', () => {
             window.switchTab('delivery');

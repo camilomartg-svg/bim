@@ -81,8 +81,7 @@
     #iso-diagram-canvas {
       width: 100%;
       min-width: 900px;
-      height: auto;
-      aspect-ratio: 900 / 650;
+      height: clamp(460px, calc(100vh - 280px), 650px);
     }
     #iso-diagram-viewport-wrapper {
       left: calc(50% - 450px);
@@ -737,9 +736,6 @@
       </div>
     </div>
   </div>
-
-  <!-- Floating Tooltip for ISO Diagram -->
-  <div id="diagram-tooltip" class="fixed hidden bg-slate-950/95 dark:bg-slate-900/95 text-white text-xs rounded-2xl p-4 shadow-2xl border border-slate-800 dark:border-slate-700 z-50 pointer-events-none max-w-xs transition-opacity duration-200 backdrop-blur-md"></div>
 
   <!-- Notification Toast -->
   <div id="toast-banner" class="fixed bottom-6 right-6 z-50 transform translate-y-20 opacity-0 transition-all duration-300 max-w-md w-full rounded-2xl p-4 shadow-xl flex items-start gap-3 border">
