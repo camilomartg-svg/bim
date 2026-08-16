@@ -88,6 +88,36 @@
             "alc.spk.5@gmail.com",
             "alc.spk.1@gmail.com"
           ]
+        },
+        {
+          "name": "ESTRUCTURAL",
+          "members": [
+            "info@meshestudio.com"
+          ]
+        },
+        {
+          "name": "GAS",
+          "members": [
+            "info@meshestudio.com"
+          ]
+        },
+        {
+          "name": "HVAC",
+          "members": [
+            "info@meshestudio.com"
+          ]
+        },
+        {
+          "name": "ILUMINACIÓN",
+          "members": [
+            "info@meshestudio.com"
+          ]
+        },
+        {
+          "name": "URBANISMO",
+          "members": [
+            "info@meshestudio.com"
+          ]
         }
       ],
       "iso19650": {
@@ -126,6 +156,56 @@
             "members": [
               "alc.spk.5@gmail.com",
               "alc.spk.1@gmail.com"
+            ],
+            "taskTeams": []
+          },
+          {
+            "id": "deliv-1786887734230",
+            "name": "ESTRUCTURAL",
+            "leadEmail": "info@meshestudio.com",
+            "description": "",
+            "members": [
+              "info@meshestudio.com"
+            ],
+            "taskTeams": []
+          },
+          {
+            "id": "deliv-1786888421958",
+            "name": "GAS",
+            "leadEmail": "info@meshestudio.com",
+            "description": "",
+            "members": [
+              "info@meshestudio.com"
+            ],
+            "taskTeams": []
+          },
+          {
+            "id": "deliv-1786888434934",
+            "name": "HVAC",
+            "leadEmail": "info@meshestudio.com",
+            "description": "",
+            "members": [
+              "info@meshestudio.com"
+            ],
+            "taskTeams": []
+          },
+          {
+            "id": "deliv-1786888448094",
+            "name": "ILUMINACIÓN",
+            "leadEmail": "info@meshestudio.com",
+            "description": "",
+            "members": [
+              "info@meshestudio.com"
+            ],
+            "taskTeams": []
+          },
+          {
+            "id": "deliv-1786888453758",
+            "name": "URBANISMO",
+            "leadEmail": "info@meshestudio.com",
+            "description": "",
+            "members": [
+              "info@meshestudio.com"
             ],
             "taskTeams": []
           }
