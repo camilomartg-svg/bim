@@ -86,36 +86,24 @@
     #iso-diagram-viewport-wrapper {
       left: calc(50% - 450px);
     }
-    /* Conectores de la vista de fichas jerárquica. */
-    .delivery-diagram-teams {
-      position: relative;
-      padding-top: 24px;
+    /* Matriz horizontal A → B → C, una fila por equipo de entrega. */
+    .delivery-matrix-row {
+      display: grid;
+      grid-template-columns: minmax(190px, .8fr) 36px minmax(230px, 1fr) 36px minmax(280px, 1.35fr);
+      align-items: stretch;
+      gap: 10px;
     }
-    .delivery-diagram-teams::before {
-      content: '';
-      position: absolute;
-      top: 0;
-      left: 12.5%;
-      right: 12.5%;
-      height: 2px;
-      background: #bfdbfe;
+    .delivery-matrix-arrow {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #60a5fa;
+      font-size: 24px;
+      font-weight: 700;
     }
-    .delivery-diagram-card {
-      position: relative;
-    }
-    .delivery-diagram-card::before {
-      content: '';
-      position: absolute;
-      top: -24px;
-      left: 50%;
-      width: 2px;
-      height: 24px;
-      background: #bfdbfe;
-      transform: translateX(-50%);
-    }
-    @media (max-width: 767px) {
-      .delivery-diagram-teams::before { left: 50%; right: auto; width: 2px; height: calc(100% - 24px); }
-      .delivery-diagram-card::before { left: 50%; }
+    @media (max-width: 900px) {
+      .delivery-matrix-row { grid-template-columns: 1fr; gap: 8px; }
+      .delivery-matrix-arrow { height: 24px; transform: rotate(90deg); }
     }
     
     /* Fullscreen Mode overlay style */
@@ -368,15 +356,11 @@
               </button>
             </div>
 
-            <!-- Fullscreen Toggle -->
-            <button id="btn-fullscreen-toggle" class="p-2 rounded-xl bg-slate-100 dark:bg-slate-800/60 border border-slate-200/50 dark:border-slate-700/50 text-slate-600 dark:text-slate-400 hover:bg-white dark:hover:bg-slate-700 hover:text-slate-900 dark:hover:text-white shadow-sm transition-all" title="Pantalla Completa" type="button">
-              <span class="material-symbols-outlined id-fs-icon text-[18px]">fullscreen</span>
-            </button>
           </div>
         </div>
 
         <!-- Radial Diagram View Container -->
-        <div id="iso-diagram-radial-view" class="hidden mt-8 w-full overflow-x-auto rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-950/40 p-4">
+        <div id="iso-diagram-radial-view" class="hidden mt-8 w-full max-h-[calc(100vh-260px)] overflow-auto rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-950/40 p-4">
           <div id="iso-diagram-canvas" class="relative mx-auto bg-white dark:bg-slate-900 rounded-3xl border border-slate-200/80 dark:border-slate-800/80 shadow-md overflow-hidden select-none draggable-canvas">
             
             <!-- Viewport Wrapper (Handles all zoom & pan transformations) -->
@@ -397,10 +381,10 @@
           </div>
         </div>
 
-        <!-- Card View Container: hierarchical diagram -->
+        <!-- Card View Container: horizontal matrix A → B → C -->
         <div id="iso-diagram-card-view" class="mt-8">
           <div class="rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-950/40 p-5 sm:p-6">
-            <div class="mx-auto max-w-md">
+            <div class="hidden mx-auto max-w-md">
               <div class="rounded-2xl border-2 border-dashed border-slate-300 dark:border-slate-700 p-5 flex flex-col items-center text-center space-y-3 bg-white/80 dark:bg-slate-900/60 shadow-sm">
                 <span class="h-10 w-10 rounded-2xl bg-blue-50 dark:bg-blue-950 text-blue-600 dark:text-blue-400 flex items-center justify-center font-black text-sm">
                   A
@@ -415,11 +399,19 @@
                 </div>
               </div>
             </div>
-            <div class="mx-auto h-8 w-0.5 bg-blue-200 dark:bg-blue-900"></div>
-            <div class="delivery-diagram-teams">
-              <div id="diagram-delivery-clusters" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+            <div class="hidden mx-auto h-8 w-0.5 bg-blue-200 dark:bg-blue-900"></div>
+            <div class="hidden delivery-diagram-teams">
+              <div id="diagram-delivery-clusters-legacy" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
                 <!-- Rendered dynamically by JS -->
               </div>
+            </div>
+            <div class="mb-4 grid grid-cols-1 md:grid-cols-3 gap-3 text-[10px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500">
+              <span>1. Administrador del proyecto</span>
+              <span class="md:text-center">2. Líder de entrega</span>
+              <span class="md:text-right">3. Miembros y equipos de tarea</span>
+            </div>
+            <div id="diagram-delivery-clusters" class="space-y-4">
+              <!-- Rendered dynamically by JS -->
             </div>
           </div>
         </div>

@@ -638,9 +638,21 @@
     el.isoDiagramNodes.innerHTML = '';
 
     const deliveryTeams = activeProject.iso19650?.deliveryTeams || [];
+    const N = deliveryTeams.length;
+    const useMatrixLayout = N > 4;
+    const matrixColumns = 3;
+    const matrixRows = useMatrixLayout ? Math.ceil(N / matrixColumns) : 0;
+    const diagramHeight = useMatrixLayout ? Math.max(650, 120 + matrixRows * 210) : 650;
+
+    if (el.isoDiagramCanvas && el.isoDiagramViewportWrapper && el.isoDiagramSvg) {
+      el.isoDiagramCanvas.style.height = `${diagramHeight}px`;
+      el.isoDiagramViewportWrapper.style.height = `${diagramHeight}px`;
+      el.isoDiagramSvg.setAttribute('height', diagramHeight);
+      el.isoDiagramSvg.setAttribute('viewBox', `0 0 900 ${diagramHeight}`);
+    }
 
     const centerX = 450;
-    const centerY = 325;
+    const centerY = useMatrixLayout ? 65 : 325;
 
     // Helper: Draw offset double-headed arrow line in SVG
     function drawOffsetLine(x1, y1, x2, y2, offset1, offset2, color = '#94a3b8', isDashed = false) {
@@ -685,16 +697,18 @@
     function setupTooltip() {}
 
     // 1. Draw Outer Circle: "1. Equipo de Proyecto"
-    const projectCircle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
-    projectCircle.setAttribute('cx', centerX);
-    projectCircle.setAttribute('cy', centerY);
-    projectCircle.setAttribute('r', '290');
-    projectCircle.setAttribute('stroke', '#cbd5e1');
-    projectCircle.setAttribute('stroke-width', '2');
-    projectCircle.setAttribute('stroke-dasharray', '5,5');
-    projectCircle.setAttribute('fill', 'none');
-    projectCircle.setAttribute('class', 'dark:stroke-slate-700/60');
-    el.isoDiagramSvg.appendChild(projectCircle);
+    if (!useMatrixLayout) {
+      const projectCircle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+      projectCircle.setAttribute('cx', centerX);
+      projectCircle.setAttribute('cy', centerY);
+      projectCircle.setAttribute('r', '290');
+      projectCircle.setAttribute('stroke', '#cbd5e1');
+      projectCircle.setAttribute('stroke-width', '2');
+      projectCircle.setAttribute('stroke-dasharray', '5,5');
+      projectCircle.setAttribute('fill', 'none');
+      projectCircle.setAttribute('class', 'dark:stroke-slate-700/60');
+      el.isoDiagramSvg.appendChild(projectCircle);
+    }
 
     // Label for Outer Circle
     const outerCircleLabel = document.createElement('div');
@@ -757,11 +771,10 @@
       return;
     }
 
-    const N = deliveryTeams.length;
     const R_dist = 195;
 
     // Coordination ring connecting all B nodes
-    if (N >= 2) {
+    if (N >= 2 && !useMatrixLayout) {
       const coordCircle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
       coordCircle.setAttribute('cx', centerX);
       coordCircle.setAttribute('cy', centerY);
@@ -777,8 +790,10 @@
     // Render radial Delivery Team Clusters (2) and members (C) / task teams (3)
     deliveryTeams.forEach((dt, i) => {
       const angle = (2 * Math.PI * i) / N - Math.PI / 2;
-      const X_di = centerX + R_dist * Math.cos(angle);
-      const Y_di = centerY + R_dist * Math.sin(angle);
+      const matrixColumn = i % matrixColumns;
+      const matrixRow = Math.floor(i / matrixColumns);
+      const X_di = useMatrixLayout ? 135 + matrixColumn * 265 : centerX + R_dist * Math.cos(angle);
+      const Y_di = useMatrixLayout ? 150 + matrixRow * 210 : centerY + R_dist * Math.sin(angle);
 
       // Draw connection A <-> B
       drawOffsetLine(centerX, centerY, X_di, Y_di, 28, 22, '#3b82f6');
@@ -967,6 +982,37 @@
         `;
       }).join('');
 
+      const adminNames = (activeProject.iso19650?.projectAdmins || [])
+        .map(email => getUserRegisteredName(email))
+        .join(', ') || 'Sin administrador asignado';
+
+      return `
+        <div class="delivery-matrix-row rounded-2xl border border-slate-200 dark:border-slate-800 bg-white/80 dark:bg-slate-900/70 p-4 shadow-sm">
+          <section class="rounded-xl border border-sky-100 dark:border-sky-900/50 bg-sky-50/60 dark:bg-sky-950/25 p-4">
+            <div class="flex items-center gap-2 text-sky-700 dark:text-sky-300 font-black text-[10px] uppercase tracking-wider">
+              <span class="h-7 w-7 rounded-lg bg-sky-600 text-white flex items-center justify-center">A</span>
+              Administrador del proyecto
+            </div>
+            <div class="mt-3 font-bold text-xs text-slate-800 dark:text-slate-100">${escapeHtml(adminNames)}</div>
+          </section>
+          <div class="delivery-matrix-arrow" aria-hidden="true">→</div>
+          <section class="rounded-xl border border-blue-100 dark:border-blue-900/50 bg-blue-50/60 dark:bg-blue-950/25 p-4">
+            <div class="flex items-center gap-2 text-blue-700 dark:text-blue-300 font-black text-[10px] uppercase tracking-wider">
+              <span class="h-7 w-7 rounded-lg bg-blue-600 text-white flex items-center justify-center">B</span>
+              ${escapeHtml(dt.name)}
+            </div>
+            <div class="mt-3 font-bold text-xs text-slate-800 dark:text-slate-100">${escapeHtml(leadMeta.name || 'Sin líder asignado')}</div>
+            <div class="mt-1 text-[10px] text-slate-500 dark:text-slate-400 break-all">${escapeHtml(leadMeta.email || '')}</div>
+          </section>
+          <div class="delivery-matrix-arrow" aria-hidden="true">→</div>
+          <section class="rounded-xl border border-purple-100 dark:border-purple-900/50 bg-purple-50/40 dark:bg-purple-950/20 p-4">
+            <div class="text-purple-700 dark:text-purple-300 font-black text-[10px] uppercase tracking-wider">Miembros del equipo (C)</div>
+            <div class="mt-3 grid grid-cols-1 gap-1.5">${membersHtml}</div>
+            ${tasksHtml ? `<div class="mt-4 border-t border-purple-100 dark:border-purple-900/50 pt-3"><div class="mb-2 text-emerald-700 dark:text-emerald-300 font-black text-[10px] uppercase tracking-wider">Equipos de tarea</div><div class="flex flex-wrap gap-1.5">${tasksHtml}</div></div>` : ''}
+          </section>
+        </div>
+      `;
+
       return `
         <div class="delivery-diagram-card rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-sm space-y-4 hover:shadow-md transition-shadow">
           
@@ -1111,14 +1157,6 @@
       btnViewCards.addEventListener('click', () => {
         diagramViewMode = 'cards';
         renderDiagramStage();
-      });
-    }
-
-    // Fullscreen Mode Toggle
-    const btnFullscreen = document.getElementById('btn-fullscreen-toggle');
-    if (btnFullscreen) {
-      btnFullscreen.addEventListener('click', () => {
-        toggleFullscreen();
       });
     }
 
