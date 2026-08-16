@@ -77,6 +77,16 @@
       transform-origin: center center;
       transition: transform 0.05s ease-out;
     }
+    /* El organigrama conserva su proporción y crece con el panel disponible. */
+    #iso-diagram-canvas {
+      width: 100%;
+      min-width: 900px;
+      height: auto;
+      aspect-ratio: 900 / 650;
+    }
+    #iso-diagram-viewport-wrapper {
+      left: calc(50% - 450px);
+    }
     
     /* Fullscreen Mode overlay style */
     .diagram-fullscreen {
@@ -337,7 +347,7 @@
 
         <!-- Radial Diagram View Container -->
         <div id="iso-diagram-radial-view" class="mt-8 w-full overflow-x-auto rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-950/40 p-4">
-          <div id="iso-diagram-canvas" class="relative w-[900px] h-[650px] mx-auto bg-white dark:bg-slate-900 rounded-3xl border border-slate-200/80 dark:border-slate-800/80 shadow-md overflow-hidden select-none draggable-canvas">
+          <div id="iso-diagram-canvas" class="relative mx-auto bg-white dark:bg-slate-900 rounded-3xl border border-slate-200/80 dark:border-slate-800/80 shadow-md overflow-hidden select-none draggable-canvas">
             
             <!-- Viewport Wrapper (Handles all zoom & pan transformations) -->
             <div id="iso-diagram-viewport-wrapper" class="absolute w-[900px] h-[650px] left-0 top-0">

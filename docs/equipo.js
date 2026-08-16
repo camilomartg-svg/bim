@@ -772,6 +772,7 @@
       emptyState.style.top = `${centerY + 70}px`;
       emptyState.innerHTML = 'No hay Equipos de Entrega configurados.<br>Haz clic en "2. Equipos de Entrega" para agregar el primero.';
       el.isoDiagramNodes.appendChild(emptyState);
+      updateDiagramTransform();
       return;
     }
 
@@ -933,6 +934,8 @@
         });
       }
     });
+
+    updateDiagramTransform();
   }
 
   function renderCardViewStage() {
@@ -1025,8 +1028,12 @@
   }
 
   function updateDiagramTransform() {
-    if (!el.isoDiagramViewportWrapper) return;
-    el.isoDiagramViewportWrapper.style.transform = `translate(${panX}px, ${panY}px) scale(${zoomScale})`;
+    if (!el.isoDiagramViewportWrapper || !el.isoDiagramCanvas) return;
+    const fitScale = Math.min(
+      el.isoDiagramCanvas.clientWidth / 900,
+      el.isoDiagramCanvas.clientHeight / 650
+    );
+    el.isoDiagramViewportWrapper.style.transform = `translate(${panX}px, ${panY}px) scale(${fitScale * zoomScale})`;
     const zoomIndicator = document.getElementById('zoom-indicator');
     if (zoomIndicator) {
       zoomIndicator.textContent = `${Math.round(zoomScale * 100)}%`;
@@ -1129,6 +1136,8 @@
         toggleFullscreen();
       });
     }
+
+    window.addEventListener('resize', updateDiagramTransform);
   }
 
   function toggleFullscreen() {
