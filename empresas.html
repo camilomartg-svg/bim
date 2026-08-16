@@ -618,6 +618,7 @@
                 const html = `
                     <div style="display: flex; flex-direction: row; gap: 2rem; align-items: flex-start; flex-wrap: nowrap; width: 100%; min-width: 0;">
                         ${leftSection || ''}
+                        <div style="width: 1px; min-height: 100%; background: rgba(15, 23, 42, 0.12); align-self: stretch; margin: 0 0.5rem; opacity: 0.8;"></div>
                         ${rightSection || ''}
                     </div>
                     <style>
@@ -625,6 +626,9 @@
                             #companies-list > div {
                                 flex-direction: column !important;
                                 flex-wrap: wrap !important;
+                            }
+                            #companies-list > div > div[style*="width: 1px"] {
+                                display: none !important;
                             }
                         }
                     </style>
