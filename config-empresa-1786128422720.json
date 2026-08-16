@@ -88,6 +88,12 @@
             "alc.spk.5@gmail.com",
             "alc.spk.1@gmail.com"
           ]
+        },
+        {
+          "name": "ESTRUCTURAL",
+          "members": [
+            "info@meshestudio.com"
+          ]
         }
       ],
       "iso19650": {
@@ -126,6 +132,16 @@
             "members": [
               "alc.spk.5@gmail.com",
               "alc.spk.1@gmail.com"
+            ],
+            "taskTeams": []
+          },
+          {
+            "id": "deliv-1786887734230",
+            "name": "ESTRUCTURAL",
+            "leadEmail": "info@meshestudio.com",
+            "description": "",
+            "members": [
+              "info@meshestudio.com"
             ],
             "taskTeams": []
           }
