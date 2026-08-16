@@ -141,6 +141,30 @@
       .project-matrix-bus { display: none; }
       .project-matrix-branch, .project-matrix-team-row .delivery-matrix-arrow { height: 24px; justify-content: center; transform: rotate(90deg); }
     }
+    /* Superficies neutras Nora: el color queda reservado para los roles ISO. */
+    #iso-diagram-card-view .project-team-matrix > section,
+    #iso-diagram-card-view .project-matrix-team-row,
+    #iso-diagram-card-view .project-matrix-team-row section,
+    #iso-diagram-card-view .delivery-matrix-row,
+    #iso-diagram-card-view .delivery-matrix-row section {
+      background: #ffffff !important;
+      border-color: #e2e8f0 !important;
+    }
+    .dark #iso-diagram-card-view .project-team-matrix > section,
+    .dark #iso-diagram-card-view .project-matrix-team-row,
+    .dark #iso-diagram-card-view .project-matrix-team-row section,
+    .dark #iso-diagram-card-view .delivery-matrix-row,
+    .dark #iso-diagram-card-view .delivery-matrix-row section {
+      background: #0f172a !important;
+      border-color: #334155 !important;
+    }
+    #iso-diagram-card-view .project-matrix-bus::before { background: #cbd5e1; }
+    #iso-diagram-card-view .delivery-matrix-arrow,
+    #iso-diagram-card-view .project-matrix-branch { color: #64748b; }
+    #iso-diagram-card-view .project-matrix-team-row section > div:first-child,
+    #iso-diagram-card-view .delivery-matrix-row section > div:first-child { color: #334155 !important; }
+    .dark #iso-diagram-card-view .project-matrix-team-row section > div:first-child,
+    .dark #iso-diagram-card-view .delivery-matrix-row section > div:first-child { color: #e2e8f0 !important; }
     
     /* Fullscreen Mode overlay style */
     .diagram-fullscreen {

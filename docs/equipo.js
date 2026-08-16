@@ -809,7 +809,7 @@
           : centerY + R_dist * Math.sin(angle);
 
       // Draw connection A <-> B
-      drawOffsetLine(centerX, centerY, X_di, Y_di, 28, 22, '#3b82f6');
+      drawOffsetLine(centerX, centerY, X_di, Y_di, 28, 22, '#64748b');
 
       // Delivery Team Circle (2) enclosing B and C
       const bubble2 = document.createElement('div');
@@ -882,7 +882,7 @@
           const Y_mj = Y_di + r_dist * Math.sin(subAngle);
 
           // Draw connection B <-> C
-          drawOffsetLine(X_di, Y_di, X_mj, Y_mj, 21, 15, '#c084fc');
+          drawOffsetLine(X_di, Y_di, X_mj, Y_mj, 21, 15, '#64748b');
 
           // C node
           const nodeC = document.createElement('div');
