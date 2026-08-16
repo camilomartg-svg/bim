@@ -86,6 +86,37 @@
     #iso-diagram-viewport-wrapper {
       left: calc(50% - 450px);
     }
+    /* Conectores de la vista de fichas jerárquica. */
+    .delivery-diagram-teams {
+      position: relative;
+      padding-top: 24px;
+    }
+    .delivery-diagram-teams::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 12.5%;
+      right: 12.5%;
+      height: 2px;
+      background: #bfdbfe;
+    }
+    .delivery-diagram-card {
+      position: relative;
+    }
+    .delivery-diagram-card::before {
+      content: '';
+      position: absolute;
+      top: -24px;
+      left: 50%;
+      width: 2px;
+      height: 24px;
+      background: #bfdbfe;
+      transform: translateX(-50%);
+    }
+    @media (max-width: 767px) {
+      .delivery-diagram-teams::before { left: 50%; right: auto; width: 2px; height: calc(100% - 24px); }
+      .delivery-diagram-card::before { left: 50%; }
+    }
     
     /* Fullscreen Mode overlay style */
     .diagram-fullscreen {
@@ -311,18 +342,18 @@
         <div class="flex flex-wrap items-center justify-between gap-3 mt-4 px-1 pb-2 border-b border-slate-100 dark:border-slate-800/60">
           <!-- Left: View Toggle (Segmented control) -->
           <div class="inline-flex rounded-xl p-1 bg-slate-100 dark:bg-slate-800/60 border border-slate-200/50 dark:border-slate-700/50">
-            <button id="btn-view-radial" class="px-3 py-1.5 rounded-lg text-xs font-bold transition-all inline-flex items-center gap-1.5 bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-sm" type="button">
+            <button id="btn-view-radial" class="px-3 py-1.5 rounded-lg text-xs font-bold transition-all inline-flex items-center gap-1.5 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white" type="button">
               <span class="material-symbols-outlined text-[16px]">bubble_chart</span>
               <span>Esquema Radial</span>
             </button>
-            <button id="btn-view-cards" class="px-3 py-1.5 rounded-lg text-xs font-bold transition-all inline-flex items-center gap-1.5 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white" type="button">
+            <button id="btn-view-cards" class="px-3 py-1.5 rounded-lg text-xs font-bold transition-all inline-flex items-center gap-1.5 bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-sm" type="button">
               <span class="material-symbols-outlined text-[16px]">grid_view</span>
               <span>Vista de Tarjetas</span>
             </button>
           </div>
 
           <!-- Right: Zoom & Fullscreen controls (hidden in card view) -->
-          <div id="diagram-radial-controls" class="flex items-center gap-2">
+          <div id="diagram-radial-controls" class="hidden flex items-center gap-2">
             <!-- Zoom Controls -->
             <div class="inline-flex items-center rounded-xl bg-slate-100 dark:bg-slate-800/60 border border-slate-200/50 dark:border-slate-700/50 p-1">
               <button id="btn-zoom-out" class="p-1.5 rounded-lg text-slate-600 dark:text-slate-400 hover:bg-white dark:hover:bg-slate-700 hover:text-slate-900 dark:hover:text-white transition-all" title="Alejar (-)" type="button">
@@ -345,7 +376,7 @@
         </div>
 
         <!-- Radial Diagram View Container -->
-        <div id="iso-diagram-radial-view" class="mt-8 w-full overflow-x-auto rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-950/40 p-4">
+        <div id="iso-diagram-radial-view" class="hidden mt-8 w-full overflow-x-auto rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-950/40 p-4">
           <div id="iso-diagram-canvas" class="relative mx-auto bg-white dark:bg-slate-900 rounded-3xl border border-slate-200/80 dark:border-slate-800/80 shadow-md overflow-hidden select-none draggable-canvas">
             
             <!-- Viewport Wrapper (Handles all zoom & pan transformations) -->
@@ -366,13 +397,11 @@
           </div>
         </div>
 
-        <!-- Card View Container (Simplified previous view) -->
-        <div id="iso-diagram-card-view" class="hidden mt-8">
-          <div class="grid grid-cols-1 lg:grid-cols-4 gap-6">
-            
-            <!-- Column 1: A. Adjudicador (Centralized Admin view) -->
-            <div class="lg:col-span-1 space-y-4">
-              <div class="rounded-2xl border-2 border-dashed border-slate-300 dark:border-slate-700 p-5 flex flex-col items-center text-center space-y-3 bg-slate-50/50 dark:bg-slate-900/30">
+        <!-- Card View Container: hierarchical diagram -->
+        <div id="iso-diagram-card-view" class="mt-8">
+          <div class="rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-950/40 p-5 sm:p-6">
+            <div class="mx-auto max-w-md">
+              <div class="rounded-2xl border-2 border-dashed border-slate-300 dark:border-slate-700 p-5 flex flex-col items-center text-center space-y-3 bg-white/80 dark:bg-slate-900/60 shadow-sm">
                 <span class="h-10 w-10 rounded-2xl bg-blue-50 dark:bg-blue-950 text-blue-600 dark:text-blue-400 flex items-center justify-center font-black text-sm">
                   A
                 </span>
@@ -386,14 +415,12 @@
                 </div>
               </div>
             </div>
-
-            <!-- Column 2-4: B & C. Delivery Clusters Grid -->
-            <div class="lg:col-span-3">
-              <div id="diagram-delivery-clusters" class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div class="mx-auto h-8 w-0.5 bg-blue-200 dark:bg-blue-900"></div>
+            <div class="delivery-diagram-teams">
+              <div id="diagram-delivery-clusters" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
                 <!-- Rendered dynamically by JS -->
               </div>
             </div>
-
           </div>
         </div>
 

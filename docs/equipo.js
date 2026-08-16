@@ -22,7 +22,7 @@
   let allCompaniesList = [];
 
   // --- ESTADO DEL DIAGRAMA (ZOOM, PAN Y VISTAS) ---
-  let diagramViewMode = 'radial'; // 'radial' | 'cards'
+  let diagramViewMode = 'cards'; // 'radial' | 'cards'
   let zoomScale = 1.0;
   const MIN_ZOOM = 0.3;
   const MAX_ZOOM = 3.0;
@@ -968,7 +968,7 @@
       }).join('');
 
       return `
-        <div class="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-sm space-y-4 hover:shadow-md transition-shadow">
+        <div class="delivery-diagram-card rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-sm space-y-4 hover:shadow-md transition-shadow">
           
           <!-- Team Name & Designation number 2 -->
           <div class="flex items-center justify-between gap-2 border-b border-slate-100 dark:border-slate-800 pb-3">
