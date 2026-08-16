@@ -639,7 +639,12 @@
 
     const deliveryTeams = activeProject.iso19650?.deliveryTeams || [];
     const N = deliveryTeams.length;
-    const useMatrixLayout = N > 4;
+    const useMatrixLayout = N > 8;
+    const useSurroundLayout = N > 4 && N <= 8;
+    const surroundSlots = [
+      [160, 135], [450, 135], [740, 135], [160, 325],
+      [740, 325], [160, 515], [450, 515], [740, 515]
+    ];
     const matrixColumns = 3;
     const matrixRows = useMatrixLayout ? Math.ceil(N / matrixColumns) : 0;
     const diagramHeight = useMatrixLayout ? Math.max(650, 120 + matrixRows * 210) : 650;
@@ -774,7 +779,7 @@
     const R_dist = 195;
 
     // Coordination ring connecting all B nodes
-    if (N >= 2 && !useMatrixLayout) {
+    if (N >= 2 && !useMatrixLayout && !useSurroundLayout) {
       const coordCircle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
       coordCircle.setAttribute('cx', centerX);
       coordCircle.setAttribute('cy', centerY);
@@ -792,8 +797,16 @@
       const angle = (2 * Math.PI * i) / N - Math.PI / 2;
       const matrixColumn = i % matrixColumns;
       const matrixRow = Math.floor(i / matrixColumns);
-      const X_di = useMatrixLayout ? 135 + matrixColumn * 265 : centerX + R_dist * Math.cos(angle);
-      const Y_di = useMatrixLayout ? 150 + matrixRow * 210 : centerY + R_dist * Math.sin(angle);
+      const X_di = useMatrixLayout
+        ? 135 + matrixColumn * 265
+        : useSurroundLayout
+          ? surroundSlots[i][0]
+          : centerX + R_dist * Math.cos(angle);
+      const Y_di = useMatrixLayout
+        ? 150 + matrixRow * 210
+        : useSurroundLayout
+          ? surroundSlots[i][1]
+          : centerY + R_dist * Math.sin(angle);
 
       // Draw connection A <-> B
       drawOffsetLine(centerX, centerY, X_di, Y_di, 28, 22, '#3b82f6');
@@ -951,6 +964,45 @@
       `;
       return;
     }
+
+    const adminNames = (activeProject.iso19650?.projectAdmins || [])
+      .map(email => getUserRegisteredName(email))
+      .join(', ') || 'Sin administrador asignado';
+    const matrixRows = deliveryTeams.map(dt => {
+      const leadMeta = getUserMetadata(dt.leadEmail);
+      const members = (dt.members || []).filter(m => (m || '').toLowerCase().trim() !== (dt.leadEmail || '').toLowerCase().trim());
+      const membersHtml = members.map(email => {
+        const meta = getUserMetadata(email);
+        return `<div class="flex items-center gap-2 py-1.5 px-2.5 rounded-lg bg-white/70 dark:bg-slate-800 text-[11px]"><span class="h-5 w-5 rounded-md bg-purple-100 dark:bg-purple-950 text-purple-700 dark:text-purple-300 flex items-center justify-center font-bold text-[9px] shrink-0">C</span><div class="min-w-0"><div class="font-bold text-slate-800 dark:text-slate-200 truncate">${escapeHtml(meta.name || email)}</div><div class="text-slate-400 font-mono text-[9px] truncate">${escapeHtml(email)}</div></div></div>`;
+      }).join('') || '<div class="text-[10px] text-slate-400 italic py-1">Sin otros miembros asignados</div>';
+      const tasksHtml = (dt.taskTeams || []).map(tt => `<span class="inline-flex items-center gap-1 py-1 px-2 rounded-md bg-emerald-50 dark:bg-emerald-950/40 text-emerald-800 dark:text-emerald-300 text-[10px] font-medium border border-emerald-100 dark:border-emerald-900/40"><span class="material-symbols-outlined text-[12px]">task_alt</span>${escapeHtml(tt.name)}</span>`).join('');
+      return `
+        <div class="project-matrix-team-row rounded-xl border border-slate-200 dark:border-slate-800 bg-white/80 dark:bg-slate-900/70 p-3 shadow-sm">
+          <div class="project-matrix-branch" aria-hidden="true">→</div>
+          <section class="rounded-xl border border-blue-100 dark:border-blue-900/50 bg-blue-50/60 dark:bg-blue-950/25 p-4">
+            <div class="flex items-center gap-2 text-blue-700 dark:text-blue-300 font-black text-[10px] uppercase tracking-wider"><span class="h-7 w-7 rounded-lg bg-blue-600 text-white flex items-center justify-center">B</span>${escapeHtml(dt.name)}</div>
+            <div class="mt-3 font-bold text-xs text-slate-800 dark:text-slate-100">${escapeHtml(leadMeta.name || 'Sin líder asignado')}</div>
+            <div class="mt-1 text-[10px] text-slate-500 dark:text-slate-400 break-all">${escapeHtml(leadMeta.email || '')}</div>
+          </section>
+          <div class="delivery-matrix-arrow" aria-hidden="true">→</div>
+          <section class="rounded-xl border border-purple-100 dark:border-purple-900/50 bg-purple-50/40 dark:bg-purple-950/20 p-4">
+            <div class="text-purple-700 dark:text-purple-300 font-black text-[10px] uppercase tracking-wider">Miembros del equipo (C)</div>
+            <div class="mt-3 grid grid-cols-1 gap-1.5">${membersHtml}</div>
+            ${tasksHtml ? `<div class="mt-4 border-t border-purple-100 dark:border-purple-900/50 pt-3"><div class="mb-2 text-emerald-700 dark:text-emerald-300 font-black text-[10px] uppercase tracking-wider">Equipos de tarea</div><div class="flex flex-wrap gap-1.5">${tasksHtml}</div></div>` : ''}
+          </section>
+        </div>`;
+    }).join('');
+
+    el.diagramDeliveryClusters.innerHTML = `
+      <div class="project-team-matrix">
+        <section class="rounded-2xl border-2 border-dashed border-sky-200 dark:border-sky-900 bg-sky-50/60 dark:bg-sky-950/25 p-5 flex flex-col justify-center self-stretch">
+          <div class="flex items-center gap-2 text-sky-700 dark:text-sky-300 font-black text-[10px] uppercase tracking-wider"><span class="h-8 w-8 rounded-xl bg-sky-600 text-white flex items-center justify-center">A</span>Administrador del proyecto</div>
+          <div class="mt-4 font-bold text-sm text-slate-800 dark:text-slate-100">${escapeHtml(adminNames)}</div>
+        </section>
+        <div class="project-matrix-bus" aria-hidden="true"></div>
+        <div class="space-y-3">${matrixRows}</div>
+      </div>`;
+    return;
 
     el.diagramDeliveryClusters.innerHTML = deliveryTeams.map(dt => {
       const leadMeta = getUserMetadata(dt.leadEmail);

@@ -101,9 +101,45 @@
       font-size: 24px;
       font-weight: 700;
     }
+    .project-team-matrix {
+      display: grid;
+      grid-template-columns: minmax(220px, .7fr) 48px minmax(0, 2.3fr);
+      align-items: stretch;
+      gap: 12px;
+    }
+    .project-matrix-bus {
+      position: relative;
+      min-height: 100%;
+    }
+    .project-matrix-bus::before {
+      content: '';
+      position: absolute;
+      top: 24px;
+      bottom: 24px;
+      left: 50%;
+      width: 2px;
+      background: #93c5fd;
+      transform: translateX(-50%);
+    }
+    .project-matrix-team-row {
+      display: grid;
+      grid-template-columns: 28px minmax(210px, .9fr) 36px minmax(260px, 1.3fr);
+      align-items: stretch;
+      gap: 10px;
+    }
+    .project-matrix-branch {
+      display: flex;
+      align-items: center;
+      color: #60a5fa;
+      font-size: 20px;
+      font-weight: 700;
+    }
     @media (max-width: 900px) {
       .delivery-matrix-row { grid-template-columns: 1fr; gap: 8px; }
       .delivery-matrix-arrow { height: 24px; transform: rotate(90deg); }
+      .project-team-matrix, .project-matrix-team-row { grid-template-columns: 1fr; }
+      .project-matrix-bus { display: none; }
+      .project-matrix-branch, .project-matrix-team-row .delivery-matrix-arrow { height: 24px; justify-content: center; transform: rotate(90deg); }
     }
     
     /* Fullscreen Mode overlay style */
