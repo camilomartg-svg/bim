@@ -489,6 +489,57 @@
       const collapsedModelGroups = new Set();
       const STATUS_ORDER = { 'EN_PROGRESO': 0, 'COMPARTIDO': 1, 'PUBLICADO': 2 };
       const SUBTYPE_MAP = { models: 'model', pdfs: 'pdf', dwgs: 'dwg' };
+      const MODEL_3D_EXTENSIONS = new Set([
+        'frag', 'json', 'ifc', 'landxml', 'citygml',
+        'rvt', 'rfa', 'rte', 'pln', 'pla', 'mod',
+        'imodel', 'vwx', 'ndw', 'cyp',
+        'nwc', 'nwf', 'nwd', 'smc',
+        'e57', 'pts', 'xyz', 'las', 'laz', 'rcp', 'rcs'
+      ]);
+      const MODEL_TYPE_ORDER = [
+        'ifc', 'frag', 'json', 'landxml', 'citygml',
+        'rvt', 'rfa', 'rte', 'pln', 'pla', 'mod',
+        'imodel', 'vwx', 'ndw', 'cyp',
+        'nwc', 'nwf', 'nwd', 'smc',
+        'e57', 'pts', 'xyz', 'las', 'laz', 'rcp', 'rcs'
+      ];
+      const MODEL_TYPE_LABELS = {
+        frag: 'Fragmentos (.frag)', ifc: 'IFC (.ifc)', json: 'Datos JSON (.json)',
+        landxml: 'LandXML (.landxml)', citygml: 'CityGML (.citygml)',
+        rvt: 'Revit proyectos (.rvt)', rfa: 'Revit familias (.rfa)', rte: 'Revit plantillas (.rte)',
+        pln: 'Archicad (.pln)', pla: 'Archicad archivo (.pla)', mod: 'Modelos (.mod)',
+        imodel: 'iModels (.imodel)', vwx: 'Vectorworks (.vwx)', ndw: 'Nemetschek (.ndw)',
+        cyp: 'CYPE (.cyp)', nwc: 'Navisworks cache (.nwc)', nwf: 'Navisworks federado (.nwf)',
+        nwd: 'Navisworks publicado (.nwd)', smc: 'Solibri (.smc)',
+        e57: 'Nubes de puntos E57 (.e57)', pts: 'Nubes de puntos PTS (.pts)',
+        xyz: 'Nubes de puntos XYZ (.xyz)', las: 'LiDAR LAS (.las)', laz: 'LiDAR LAZ (.laz)',
+        rcp: 'Recap proyectos (.rcp)', rcs: 'Recap escaneos (.rcs)'
+      };
+
+      const getFileExtension = (filename) => {
+        const lower = String(filename || '').toLowerCase();
+        if (lower.endsWith('.landxml')) return 'landxml';
+        if (lower.endsWith('.citygml')) return 'citygml';
+        return (lower.split('.').pop() || 'otros');
+      };
+
+      const isModel3DExtension = (ext) => MODEL_3D_EXTENSIONS.has(ext);
+
+      const resolveUploadFileType = (ext) => {
+        if (isModel3DExtension(ext)) return 'model';
+        if (ext === 'pdf') return 'pdf';
+        if (ext === 'dwg' || ext === 'dxf') return 'dwg';
+        return 'other';
+      };
+
+      const getModelFileIcon = (ext) => {
+        if (ext === 'json') return { icon: 'data_object', iconClass: 'text-emerald-500' };
+        if (ext === 'frag') return { icon: 'view_in_ar', iconClass: 'text-indigo-500' };
+        if (['e57', 'pts', 'xyz', 'las', 'laz', 'rcp', 'rcs'].includes(ext)) {
+          return { icon: 'cloud', iconClass: 'text-cyan-500' };
+        }
+        return { icon: 'view_in_ar', iconClass: 'text-blue-500' };
+      };
 
       // Theme configuration
       const htmlEl = document.documentElement;
@@ -887,12 +938,8 @@
         const ds = activeProject.dataSources || {};
         const scriptUrl = ds.driveScriptUrl || DEFAULT_DRIVE_SCRIPT_URL;
         const driveFolderName = ds.driveFolderName || activeProject.name;
-        const ext = filename.split('.').pop().toLowerCase();
-        let fileType = 'other';
-        if (ext === 'frag' || ext === 'ifc') fileType = 'model';
-        else if (ext === 'pdf') fileType = 'pdf';
-        else if (ext === 'dwg' || ext === 'dxf') fileType = 'dwg';
-        else if (ext === 'json') fileType = 'json';
+        const ext = getFileExtension(filename);
+        const fileType = resolveUploadFileType(ext);
 
         const payload = {
           action: 'uploadFile',
@@ -1201,9 +1248,9 @@
         scountPublicado.textContent = allProjectFiles.filter(f => f.status === 'PUBLICADO').length;
 
         const currentInState = allProjectFiles.filter(f => f.status === currentStatusTab);
-        scountSubModels.textContent = currentInState.filter(f => f.type === 'model').length;
-        scountSubPdfs.textContent = currentInState.filter(f => f.type === 'pdf').length;
-        scountSubDwgs.textContent = currentInState.filter(f => f.type === 'dwg').length;
+        scountSubModels.textContent = currentInState.filter(f => f.type === 'model' || isModel3DExtension(getFileExtension(f.name))).length;
+        scountSubPdfs.textContent = currentInState.filter(f => f.type === 'pdf' && !isModel3DExtension(getFileExtension(f.name))).length;
+        scountSubDwgs.textContent = currentInState.filter(f => (f.type === 'dwg') && !isModel3DExtension(getFileExtension(f.name))).length;
       }
 
       function renderDriveFilesTable() {
@@ -1213,7 +1260,16 @@
         const filterVal = filesSearch.value.trim().toLowerCase();
         const typeFilter = SUBTYPE_MAP[currentStatusSubTab];
 
-        let listToRender = allProjectFiles.filter(f => f.status === currentStatusTab && f.type === typeFilter);
+        let listToRender = allProjectFiles.filter(f => {
+          if (f.status !== currentStatusTab) return false;
+          const ext = getFileExtension(f.name);
+          const is3D = isModel3DExtension(ext);
+          if (currentStatusSubTab === 'models') {
+            return f.type === typeFilter || is3D;
+          } else {
+            return f.type === typeFilter && !is3D;
+          }
+        });
 
         if (filterVal) {
           listToRender = listToRender.filter(f => f.name.toLowerCase().includes(filterVal));
@@ -1241,23 +1297,14 @@
 
         const renderFileRow = (f, extraClass = '') => {
           const specialty = cleanSpecialty(f.folder);
-          const ext = f.name.split('.').pop().toLowerCase();
-          
-          let icon = 'description';
-          let iconClass = 'text-blue-500';
-          if (ext === 'pdf') {
-            icon = 'picture_as_pdf';
-            iconClass = 'text-red-500';
-          } else if (ext === 'dwg' || ext === 'dxf') {
-            icon = 'architecture';
-            iconClass = 'text-amber-500';
-          } else if (ext === 'frag') {
-            icon = 'view_in_ar';
-            iconClass = 'text-indigo-500';
-          } else if (ext === 'json') {
-            icon = 'data_object';
-            iconClass = 'text-emerald-500';
-          }
+          const ext = getFileExtension(f.name);
+          const { icon, iconClass } = f.type === 'model'
+            ? getModelFileIcon(ext)
+            : (ext === 'pdf'
+              ? { icon: 'picture_as_pdf', iconClass: 'text-red-500' }
+              : ext === 'dwg' || ext === 'dxf'
+                ? { icon: 'architecture', iconClass: 'text-amber-500' }
+                : { icon: 'description', iconClass: 'text-blue-500' });
 
           const fileDataStr = encodeURIComponent(JSON.stringify(f));
           const isModel = f.type === 'model';
@@ -1371,28 +1418,25 @@
           return;
         }
 
-        const modelTypeLabels = {
-          frag: 'Fragmentos (.frag)', ifc: 'IFC (.ifc)', json: 'Datos JSON (.json)',
-          landxml: 'LandXML (.landxml)', citygml: 'CityGML (.citygml)',
-          rvt: 'Revit proyectos (.rvt)', rfa: 'Revit familias (.rfa)', rte: 'Revit plantillas (.rte)',
-          pln: 'Archicad (.pln)', pla: 'Archicad archivo (.pla)', mod: 'Modelos (.mod)',
-          imodel: 'iModels (.imodel)', vwx: 'Vectorworks (.vwx)', ndw: 'Nemetschek (.ndw)',
-          cyp: 'CYPE (.cyp)', nwc: 'Navisworks cache (.nwc)', nwf: 'Navisworks federado (.nwf)',
-          nwd: 'Navisworks publicado (.nwd)', smc: 'Solibri (.smc)',
-          e57: 'Nubes de puntos E57 (.e57)', pts: 'Nubes de puntos PTS (.pts)',
-          xyz: 'Nubes de puntos XYZ (.xyz)', las: 'LiDAR LAS (.las)', laz: 'LiDAR LAZ (.laz)',
-          rcp: 'Recap proyectos (.rcp)', rcs: 'Recap escaneos (.rcs)'
-        };
         const groups = new Map();
         listToRender.forEach(f => {
-          const extension = (f.name.split('.').pop() || 'otros').toLowerCase();
+          const extension = getFileExtension(f.name);
           if (!groups.has(extension)) groups.set(extension, []);
           groups.get(extension).push(f);
         });
 
-        filesTableBody.innerHTML = Array.from(groups.entries()).map(([extension, files]) => {
+        const sortedEntries = Array.from(groups.entries()).sort((a, b) => {
+          const idxA = MODEL_TYPE_ORDER.indexOf(a[0]);
+          const idxB = MODEL_TYPE_ORDER.indexOf(b[0]);
+          if (idxA === -1 && idxB === -1) return a[0].localeCompare(b[0]);
+          if (idxA === -1) return 1;
+          if (idxB === -1) return -1;
+          return idxA - idxB;
+        });
+
+        filesTableBody.innerHTML = sortedEntries.map(([extension, files]) => {
           const collapsed = collapsedModelGroups.has(extension);
-          const label = modelTypeLabels[extension] || `Otros modelos (.${extension})`;
+          const label = MODEL_TYPE_LABELS[extension] || `Otros modelos (.${extension})`;
           const rows = files.map(f => renderFileRow(f, `model-group-${extension}${collapsed ? ' hidden' : ''}`)).join('');
           return `
             <tr class="bg-slate-50 dark:bg-slate-800/60 border-y border-slate-200 dark:border-slate-700">

@@ -486,8 +486,60 @@
       let currentStatusTab = 'EN_PROGRESO'; // 'EN_PROGRESO', 'COMPARTIDO', 'PUBLICADO'
       let currentStatusSubTab = 'models';   // 'models', 'pdfs', 'dwgs'
       let allProjectFiles = [];             // Combined & resolved list of all files with status and version
+      const collapsedModelGroups = new Set();
       const STATUS_ORDER = { 'EN_PROGRESO': 0, 'COMPARTIDO': 1, 'PUBLICADO': 2 };
       const SUBTYPE_MAP = { models: 'model', pdfs: 'pdf', dwgs: 'dwg' };
+      const MODEL_3D_EXTENSIONS = new Set([
+        'frag', 'json', 'ifc', 'landxml', 'citygml',
+        'rvt', 'rfa', 'rte', 'pln', 'pla', 'mod',
+        'imodel', 'vwx', 'ndw', 'cyp',
+        'nwc', 'nwf', 'nwd', 'smc',
+        'e57', 'pts', 'xyz', 'las', 'laz', 'rcp', 'rcs'
+      ]);
+      const MODEL_TYPE_ORDER = [
+        'ifc', 'frag', 'json', 'landxml', 'citygml',
+        'rvt', 'rfa', 'rte', 'pln', 'pla', 'mod',
+        'imodel', 'vwx', 'ndw', 'cyp',
+        'nwc', 'nwf', 'nwd', 'smc',
+        'e57', 'pts', 'xyz', 'las', 'laz', 'rcp', 'rcs'
+      ];
+      const MODEL_TYPE_LABELS = {
+        frag: 'Fragmentos (.frag)', ifc: 'IFC (.ifc)', json: 'Datos JSON (.json)',
+        landxml: 'LandXML (.landxml)', citygml: 'CityGML (.citygml)',
+        rvt: 'Revit proyectos (.rvt)', rfa: 'Revit familias (.rfa)', rte: 'Revit plantillas (.rte)',
+        pln: 'Archicad (.pln)', pla: 'Archicad archivo (.pla)', mod: 'Modelos (.mod)',
+        imodel: 'iModels (.imodel)', vwx: 'Vectorworks (.vwx)', ndw: 'Nemetschek (.ndw)',
+        cyp: 'CYPE (.cyp)', nwc: 'Navisworks cache (.nwc)', nwf: 'Navisworks federado (.nwf)',
+        nwd: 'Navisworks publicado (.nwd)', smc: 'Solibri (.smc)',
+        e57: 'Nubes de puntos E57 (.e57)', pts: 'Nubes de puntos PTS (.pts)',
+        xyz: 'Nubes de puntos XYZ (.xyz)', las: 'LiDAR LAS (.las)', laz: 'LiDAR LAZ (.laz)',
+        rcp: 'Recap proyectos (.rcp)', rcs: 'Recap escaneos (.rcs)'
+      };
+
+      const getFileExtension = (filename) => {
+        const lower = String(filename || '').toLowerCase();
+        if (lower.endsWith('.landxml')) return 'landxml';
+        if (lower.endsWith('.citygml')) return 'citygml';
+        return (lower.split('.').pop() || 'otros');
+      };
+
+      const isModel3DExtension = (ext) => MODEL_3D_EXTENSIONS.has(ext);
+
+      const resolveUploadFileType = (ext) => {
+        if (isModel3DExtension(ext)) return 'model';
+        if (ext === 'pdf') return 'pdf';
+        if (ext === 'dwg' || ext === 'dxf') return 'dwg';
+        return 'other';
+      };
+
+      const getModelFileIcon = (ext) => {
+        if (ext === 'json') return { icon: 'data_object', iconClass: 'text-emerald-500' };
+        if (ext === 'frag') return { icon: 'view_in_ar', iconClass: 'text-indigo-500' };
+        if (['e57', 'pts', 'xyz', 'las', 'laz', 'rcp', 'rcs'].includes(ext)) {
+          return { icon: 'cloud', iconClass: 'text-cyan-500' };
+        }
+        return { icon: 'view_in_ar', iconClass: 'text-blue-500' };
+      };
 
       // Theme configuration
       const htmlEl = document.documentElement;
@@ -886,12 +938,8 @@
         const ds = activeProject.dataSources || {};
         const scriptUrl = ds.driveScriptUrl || DEFAULT_DRIVE_SCRIPT_URL;
         const driveFolderName = ds.driveFolderName || activeProject.name;
-        const ext = filename.split('.').pop().toLowerCase();
-        let fileType = 'other';
-        if (ext === 'frag' || ext === 'ifc') fileType = 'model';
-        else if (ext === 'pdf') fileType = 'pdf';
-        else if (ext === 'dwg' || ext === 'dxf') fileType = 'dwg';
-        else if (ext === 'json') fileType = 'json';
+        const ext = getFileExtension(filename);
+        const fileType = resolveUploadFileType(ext);
 
         const payload = {
           action: 'uploadFile',
@@ -943,8 +991,8 @@
       async function uploadFileResumable(file, contentType, fileObj) {
         const ds = activeProject.dataSources || {};
         const scriptUrl = ds.driveScriptUrl || DEFAULT_DRIVE_SCRIPT_URL;
-        const ext = file.name.split('.').pop().toLowerCase();
-        const fileType = (ext === 'pdf') ? 'pdf' : (ext === 'dwg' || ext === 'dxf') ? 'dwg' : (ext === 'frag' || ext === 'ifc') ? 'model' : 'other';
+        const ext = getFileExtension(file.name);
+        const fileType = resolveUploadFileType(ext);
         const common = {
           folderId: ds.driveFolderId || '',
           driveFolderName: ds.driveFolderName || activeProject.name,
@@ -1205,7 +1253,7 @@
               const fname = item.name || item.filename;
               const fld = item.folder || 'General';
               const fileKey = (fld + '/' + fname).toLowerCase();
-              const fid = type === 'model' ? item.fragId : item.fileId;
+              const fid = type === 'model' ? (item.fragId || item.fileId || item.path) : item.fileId;
               const match = statusMap[fid] || statusMap[fname.toLowerCase()] || null;
 
               const fileObj = {
@@ -1231,7 +1279,8 @@
             });
           };
 
-          addFiles(listData.models, 'model');
+          // allModels incluye todos los formatos 3D; models es retrocompatibilidad (.frag)
+          addFiles(listData.allModels || listData.models, 'model');
           addFiles(listData.pdfs, 'pdf');
           addFiles(listData.dwgs, 'dwg');
 
@@ -1255,9 +1304,9 @@
         scountPublicado.textContent = allProjectFiles.filter(f => f.status === 'PUBLICADO').length;
 
         const currentInState = allProjectFiles.filter(f => f.status === currentStatusTab);
-        scountSubModels.textContent = currentInState.filter(f => f.type === 'model').length;
-        scountSubPdfs.textContent = currentInState.filter(f => f.type === 'pdf').length;
-        scountSubDwgs.textContent = currentInState.filter(f => f.type === 'dwg').length;
+        scountSubModels.textContent = currentInState.filter(f => f.type === 'model' || isModel3DExtension(getFileExtension(f.name))).length;
+        scountSubPdfs.textContent = currentInState.filter(f => f.type === 'pdf' && !isModel3DExtension(getFileExtension(f.name))).length;
+        scountSubDwgs.textContent = currentInState.filter(f => (f.type === 'dwg') && !isModel3DExtension(getFileExtension(f.name))).length;
       }
 
       function renderDriveFilesTable() {
@@ -1267,7 +1316,16 @@
         const filterVal = filesSearch.value.trim().toLowerCase();
         const typeFilter = SUBTYPE_MAP[currentStatusSubTab];
 
-        let listToRender = allProjectFiles.filter(f => f.status === currentStatusTab && f.type === typeFilter);
+        let listToRender = allProjectFiles.filter(f => {
+          if (f.status !== currentStatusTab) return false;
+          const ext = getFileExtension(f.name);
+          const is3D = isModel3DExtension(ext);
+          if (currentStatusSubTab === 'models') {
+            return f.type === typeFilter || is3D;
+          } else {
+            return f.type === typeFilter && !is3D;
+          }
+        });
 
         if (filterVal) {
           listToRender = listToRender.filter(f => f.name.toLowerCase().includes(filterVal));
@@ -1293,30 +1351,20 @@
           return `${dd}/${mm}/${yyyy} ${hh}:${min}`;
         };
 
-        filesTableBody.innerHTML = listToRender.map(f => {
+        const renderFileRow = (f, extraClass = '') => {
           const specialty = cleanSpecialty(f.folder);
-          const ext = f.name.split('.').pop().toLowerCase();
-          
-          let icon = 'description';
-          let iconClass = 'text-blue-500';
-          if (ext === 'pdf') {
-            icon = 'picture_as_pdf';
-            iconClass = 'text-red-500';
-          } else if (ext === 'dwg' || ext === 'dxf') {
-            icon = 'architecture';
-            iconClass = 'text-amber-500';
-          } else if (ext === 'frag') {
-            icon = 'view_in_ar';
-            iconClass = 'text-indigo-500';
-          } else if (ext === 'json') {
-            icon = 'data_object';
-            iconClass = 'text-emerald-500';
-          }
+          const ext = getFileExtension(f.name);
+          const { icon, iconClass } = f.type === 'model'
+            ? getModelFileIcon(ext)
+            : (ext === 'pdf'
+              ? { icon: 'picture_as_pdf', iconClass: 'text-red-500' }
+              : ext === 'dwg' || ext === 'dxf'
+                ? { icon: 'architecture', iconClass: 'text-amber-500' }
+                : { icon: 'description', iconClass: 'text-blue-500' });
 
           const fileDataStr = encodeURIComponent(JSON.stringify(f));
           const isModel = f.type === 'model';
-          const deleteTitle = isModel ? 'Eliminar modelo (.frag + .json)' : 'Eliminar archivo';
-          const currentVer = f.version || 'v1.0';
+          const deleteTitle = isModel && f.jsonId ? 'Eliminar modelo (.frag + .json)' : 'Eliminar archivo';
 
           // Status Badge Pill
           let statusBadge = '';
@@ -1393,7 +1441,7 @@
           }
 
           return `
-            <tr class="hover:bg-slate-50/80 dark:hover:bg-slate-800/40 transition-colors">
+            <tr class="${extraClass} hover:bg-slate-50/80 dark:hover:bg-slate-800/40 transition-colors">
               <td class="py-3 px-4 font-medium text-slate-800 dark:text-slate-200">
                 <div class="flex items-center gap-2">
                   <span class="material-symbols-outlined text-base ${iconClass} shrink-0">${icon}</span>
@@ -1418,7 +1466,57 @@
               <td class="py-3 px-4 text-right whitespace-nowrap">${actionButtons}</td>
             </tr>
           `;
+        };
+
+        if (currentStatusSubTab !== 'models') {
+          filesTableBody.innerHTML = listToRender.map(f => renderFileRow(f)).join('');
+          return;
+        }
+
+        const groups = new Map();
+        listToRender.forEach(f => {
+          const extension = getFileExtension(f.name);
+          if (!groups.has(extension)) groups.set(extension, []);
+          groups.get(extension).push(f);
+        });
+
+        const sortedExtensions = Array.from(groups.keys()).sort((a, b) => {
+          const ai = MODEL_TYPE_ORDER.indexOf(a);
+          const bi = MODEL_TYPE_ORDER.indexOf(b);
+          if (ai === -1 && bi === -1) return a.localeCompare(b, 'es');
+          if (ai === -1) return 1;
+          if (bi === -1) return -1;
+          return ai - bi;
+        });
+
+        filesTableBody.innerHTML = sortedExtensions.map(extension => {
+          const files = groups.get(extension);
+          const collapsed = collapsedModelGroups.has(extension);
+          const label = MODEL_TYPE_LABELS[extension] || `Otros modelos (.${extension})`;
+          const rows = files.map(f => renderFileRow(f, `model-group-${extension}${collapsed ? ' hidden' : ''}`)).join('');
+          return `
+            <tr class="bg-slate-50 dark:bg-slate-800/60 border-y border-slate-200 dark:border-slate-700">
+              <td colspan="7" class="p-0">
+                <button type="button" data-model-group-toggle="${extension}" class="w-full flex items-center justify-between gap-3 px-4 py-3 text-left hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
+                  <span class="flex items-center gap-2 font-bold text-slate-700 dark:text-slate-200">
+                    <span class="material-symbols-outlined text-blue-600 dark:text-blue-400">${collapsed ? 'chevron_right' : 'expand_more'}</span>
+                    ${label}
+                    <span class="text-[10px] px-1.5 py-0.5 rounded-full bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-300">${files.length}</span>
+                  </span>
+                  <span class="text-[10px] font-medium text-slate-400">${collapsed ? 'Expandir' : 'Recoger'}</span>
+                </button>
+              </td>
+            </tr>${rows}`;
         }).join('');
+
+        filesTableBody.querySelectorAll('[data-model-group-toggle]').forEach(button => {
+          button.addEventListener('click', () => {
+            const extension = button.dataset.modelGroupToggle;
+            if (collapsedModelGroups.has(extension)) collapsedModelGroups.delete(extension);
+            else collapsedModelGroups.add(extension);
+            renderDriveFilesTable();
+          });
+        });
       }
 
       // ==========================================
