@@ -928,13 +928,6 @@ function listModels_(e, body) {
           folder: currentRelativePath || '',
           lastUpdated: lastUpdated
         });
-        allModels.push({
-          name: name,
-          fileId: fileId,
-          folder: currentRelativePath || '',
-          lastUpdated: lastUpdated,
-          extension: lower.endsWith('.dwg') ? '.dwg' : '.dxf'
-        });
         continue;
       }
 
@@ -1039,20 +1032,12 @@ function listModels_(e, body) {
 
   const uniqueAllModels = dedupeAllModels_(allModels).sort((a, b) => String(a.name).localeCompare(String(b.name), 'es'));
   
-  // Format for models.json compatibility (path instead of fileId)
-  const allModelsFormatted = uniqueAllModels.map(m => ({
-    name: m.name,
-    path: m.fileId, // Will be resolved by loader
-    folder: m.folder,
-    extension: m.extension,
-    lastUpdated: m.lastUpdated
-  }));
-
   return { 
     models: models,
     dwgs: sortedDwgs,
     pdfs: sortedPdfs,
-    allModels: allModelsFormatted  // NEW: All 3D file types unified
+    // Includes every supported 3D/geospatial/point-cloud source with its Drive id.
+    allModels: uniqueAllModels
   };
 }
 

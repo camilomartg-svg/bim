@@ -486,6 +486,7 @@
       let currentStatusTab = 'EN_PROGRESO'; // 'EN_PROGRESO', 'COMPARTIDO', 'PUBLICADO'
       let currentStatusSubTab = 'models';   // 'models', 'pdfs', 'dwgs'
       let allProjectFiles = [];             // Combined & resolved list of all files with status and version
+      const collapsedModelGroups = new Set();
       const STATUS_ORDER = { 'EN_PROGRESO': 0, 'COMPARTIDO': 1, 'PUBLICADO': 2 };
       const SUBTYPE_MAP = { models: 'model', pdfs: 'pdf', dwgs: 'dwg' };
 
@@ -1146,7 +1147,9 @@
               const fname = item.name || item.filename;
               const fld = item.folder || 'General';
               const fileKey = (fld + '/' + fname).toLowerCase();
-              const fid = type === 'model' ? item.fragId : item.fileId;
+              // Older responses expose fragId; the unified model list exposes fileId
+              // for every supported extension.
+              const fid = type === 'model' ? (item.fragId || item.fileId || item.path) : item.fileId;
               const match = statusMap[fid] || statusMap[fname.toLowerCase()] || null;
 
               const fileObj = {
@@ -1172,7 +1175,9 @@
             });
           };
 
-          addFiles(listData.models, 'model');
+          // allModels contains the complete set of supported 3D, BIM, GIS and point-cloud files.
+          // Fall back to models so older deployments of the Apps Script keep working.
+          addFiles(listData.allModels || listData.models, 'model');
           addFiles(listData.pdfs, 'pdf');
           addFiles(listData.dwgs, 'dwg');
 
@@ -1234,7 +1239,7 @@
           return `${dd}/${mm}/${yyyy} ${hh}:${min}`;
         };
 
-        filesTableBody.innerHTML = listToRender.map(f => {
+        const renderFileRow = (f, extraClass = '') => {
           const specialty = cleanSpecialty(f.folder);
           const ext = f.name.split('.').pop().toLowerCase();
           
@@ -1256,7 +1261,7 @@
 
           const fileDataStr = encodeURIComponent(JSON.stringify(f));
           const isModel = f.type === 'model';
-          const deleteTitle = isModel ? 'Eliminar modelo (.frag + .json)' : 'Eliminar archivo';
+          const deleteTitle = isModel && f.jsonId ? 'Eliminar modelo (.frag + .json)' : 'Eliminar archivo';
           const currentVer = f.version || 'v1.0';
 
           // Status Badge Pill
@@ -1334,7 +1339,7 @@
           }
 
           return `
-            <tr class="hover:bg-slate-50/80 dark:hover:bg-slate-800/40 transition-colors">
+            <tr class="${extraClass} hover:bg-slate-50/80 dark:hover:bg-slate-800/40 transition-colors">
               <td class="py-3 px-4 font-medium text-slate-800 dark:text-slate-200">
                 <div class="flex items-center gap-2">
                   <span class="material-symbols-outlined text-base ${iconClass} shrink-0">${icon}</span>
@@ -1359,7 +1364,59 @@
               <td class="py-3 px-4 text-right whitespace-nowrap">${actionButtons}</td>
             </tr>
           `;
+        };
+
+        if (currentStatusSubTab !== 'models') {
+          filesTableBody.innerHTML = listToRender.map(f => renderFileRow(f)).join('');
+          return;
+        }
+
+        const modelTypeLabels = {
+          frag: 'Fragmentos (.frag)', ifc: 'IFC (.ifc)', json: 'Datos JSON (.json)',
+          landxml: 'LandXML (.landxml)', citygml: 'CityGML (.citygml)',
+          rvt: 'Revit proyectos (.rvt)', rfa: 'Revit familias (.rfa)', rte: 'Revit plantillas (.rte)',
+          pln: 'Archicad (.pln)', pla: 'Archicad archivo (.pla)', mod: 'Modelos (.mod)',
+          imodel: 'iModels (.imodel)', vwx: 'Vectorworks (.vwx)', ndw: 'Nemetschek (.ndw)',
+          cyp: 'CYPE (.cyp)', nwc: 'Navisworks cache (.nwc)', nwf: 'Navisworks federado (.nwf)',
+          nwd: 'Navisworks publicado (.nwd)', smc: 'Solibri (.smc)',
+          e57: 'Nubes de puntos E57 (.e57)', pts: 'Nubes de puntos PTS (.pts)',
+          xyz: 'Nubes de puntos XYZ (.xyz)', las: 'LiDAR LAS (.las)', laz: 'LiDAR LAZ (.laz)',
+          rcp: 'Recap proyectos (.rcp)', rcs: 'Recap escaneos (.rcs)'
+        };
+        const groups = new Map();
+        listToRender.forEach(f => {
+          const extension = (f.name.split('.').pop() || 'otros').toLowerCase();
+          if (!groups.has(extension)) groups.set(extension, []);
+          groups.get(extension).push(f);
+        });
+
+        filesTableBody.innerHTML = Array.from(groups.entries()).map(([extension, files]) => {
+          const collapsed = collapsedModelGroups.has(extension);
+          const label = modelTypeLabels[extension] || `Otros modelos (.${extension})`;
+          const rows = files.map(f => renderFileRow(f, `model-group-${extension}${collapsed ? ' hidden' : ''}`)).join('');
+          return `
+            <tr class="bg-slate-50 dark:bg-slate-800/60 border-y border-slate-200 dark:border-slate-700">
+              <td colspan="7" class="p-0">
+                <button type="button" data-model-group-toggle="${extension}" class="w-full flex items-center justify-between gap-3 px-4 py-3 text-left hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
+                  <span class="flex items-center gap-2 font-bold text-slate-700 dark:text-slate-200">
+                    <span class="material-symbols-outlined text-blue-600 dark:text-blue-400">${collapsed ? 'chevron_right' : 'expand_more'}</span>
+                    ${label}
+                    <span class="text-[10px] px-1.5 py-0.5 rounded-full bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-300">${files.length}</span>
+                  </span>
+                  <span class="text-[10px] font-medium text-slate-400">${collapsed ? 'Expandir' : 'Recoger'}</span>
+                </button>
+              </td>
+            </tr>${rows}`;
         }).join('');
+
+        filesTableBody.querySelectorAll('[data-model-group-toggle]').forEach(button => {
+          button.addEventListener('click', () => {
+            const extension = button.dataset.modelGroupToggle;
+            if (collapsedModelGroups.has(extension)) collapsedModelGroups.delete(extension);
+            else collapsedModelGroups.add(extension);
+            renderDriveFilesTable();
+          });
+        });
       }
 
       // ==========================================
