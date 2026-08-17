@@ -131,6 +131,12 @@ function doPost(e) {
     if (action === 'uploadFile') {
       return output_(uploadFile_(e, data), callback);
     }
+    if (action === 'initResumableUpload') {
+      return output_(initResumableUpload_(e, data), callback);
+    }
+    if (action === 'uploadResumableChunk') {
+      return output_(uploadResumableChunk_(e, data), callback);
+    }
     if (action === 'deleteFile' || action === 'deleteFiles') {
       return output_(deleteFile_(e, data), callback);
     }
@@ -988,6 +994,91 @@ function textFile_(e, body) {
   return { text: text };
 }
 
+function resolveUploadFolder_(e, body) {
+  let folderId = String(((body && body.folderId) || (e && e.parameter && e.parameter.folderId) || DRIVE_ROOT_FOLDER_ID) ?? '').trim();
+  if (!folderId) throw new Error('Falta folderId');
+  let root = DriveApp.getFolderById(folderId);
+  if (folderId === DRIVE_ROOT_FOLDER_ID || folderId === '1fn1umYzIYsxymmwbmap6YbjTB33XJrG8') {
+    const driveFolderName = String(((body && body.driveFolderName) || (e && e.parameter && e.parameter.driveFolderName) || '') ?? '').trim();
+    const projectSlug = String(((body && body.project) || (e && e.parameter && e.parameter.project) || '') ?? '').trim();
+    const targetFolder = findProjectFolderRecursively(root, projectSlug, driveFolderName);
+    if (targetFolder) root = targetFolder;
+  }
+  return root;
+}
+
+function initResumableUpload_(e, body) {
+  const filename = String((body && body.filename) || '').trim();
+  const contentType = String((body && body.contentType) || 'application/octet-stream').trim();
+  const totalBytes = Number((body && body.totalBytes) || 0);
+  if (!filename || !totalBytes) return { status: 'error', message: 'Faltan nombre o tamaño del archivo.' };
+
+  try {
+    const folder = resolveUploadFolder_(e, body);
+    const token = ScriptApp.getOAuthToken();
+    const response = UrlFetchApp.fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable', {
+      method: 'post',
+      contentType: 'application/json',
+      headers: {
+        Authorization: 'Bearer ' + token,
+        'X-Upload-Content-Type': contentType,
+        'X-Upload-Content-Length': String(totalBytes)
+      },
+      payload: JSON.stringify({ name: filename, parents: [folder.getId()], mimeType: contentType }),
+      muteHttpExceptions: true
+    });
+    const status = response.getResponseCode();
+    const headers = response.getAllHeaders();
+    const sessionUrl = headers.Location || headers.location;
+    if ((status < 200 || status >= 300) || !sessionUrl) {
+      return { status: 'error', message: 'No se pudo iniciar la carga reanudable: ' + status + ' ' + response.getContentText() };
+    }
+    return { status: 'success', sessionUrl: sessionUrl };
+  } catch (err) {
+    return { status: 'error', message: err.toString() };
+  }
+}
+
+function uploadResumableChunk_(e, body) {
+  const sessionUrl = String((body && body.sessionUrl) || '').trim();
+  const content = String((body && body.content) || '').replace(/[\s\n\r]/g, '');
+  const start = Number((body && body.start) || 0);
+  const totalBytes = Number((body && body.totalBytes) || 0);
+  const contentType = String((body && body.contentType) || 'application/octet-stream').trim();
+  if (!sessionUrl || !content || !totalBytes) return { status: 'error', message: 'Fragmento de carga incompleto.' };
+
+  try {
+    const bytes = Utilities.base64Decode(content);
+    const end = start + bytes.length - 1;
+    const response = UrlFetchApp.fetch(sessionUrl, {
+      method: 'put',
+      contentType: contentType,
+      headers: {
+        Authorization: 'Bearer ' + ScriptApp.getOAuthToken(),
+        'Content-Range': 'bytes ' + start + '-' + end + '/' + totalBytes
+      },
+      payload: Utilities.newBlob(bytes, contentType),
+      muteHttpExceptions: true
+    });
+    const code = response.getResponseCode();
+    if (code !== 308 && (code < 200 || code >= 300)) {
+      return { status: 'error', message: 'Drive rechazó el fragmento: ' + code + ' ' + response.getContentText() };
+    }
+
+    const complete = code >= 200 && code < 300;
+    let fileId = '';
+    if (complete) {
+      try { fileId = JSON.parse(response.getContentText()).id || ''; } catch (ignore) {}
+      try {
+        registerFileStatus_(fileId, String(body.jsonId || ''), String(body.filename || ''), String(body.project || ''), 'EN_PROGRESO', String(body.changedBy || ''), String(body.changedByEmail || ''), fileId, String(body.fileType || ''));
+      } catch (statusErr) { /* non-fatal */ }
+    }
+    return { status: 'success', complete: complete, nextOffset: end + 1, fileId: fileId };
+  } catch (err) {
+    return { status: 'error', message: err.toString() };
+  }
+}
+
 function uploadFile_(e, body) {
   let folderId = String(((body && body.folderId) || (e && e.parameter && e.parameter.folderId) || DRIVE_ROOT_FOLDER_ID) ?? '').trim();
   if (!folderId) return { error: 'Falta folderId' };
@@ -1588,4 +1679,3 @@ function wipeAndInitDatabase() {
   
   Logger.log("Base de datos limpia e inicializada con los Super Administradores.");
 }
-

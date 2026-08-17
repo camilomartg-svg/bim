@@ -927,6 +927,68 @@
         return data;
       }
 
+      async function postDrivePayload(scriptUrl, payload) {
+        const res = await fetch(scriptUrl, {
+          method: 'POST',
+          mode: 'cors',
+          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+          body: JSON.stringify(payload)
+        });
+        if (!res.ok) throw new Error(`Error en el servidor de Google Apps Script: ${res.statusText}`);
+        const data = await res.json();
+        if (data.status === 'error') throw new Error(`Google Script Error: ${data.message}`);
+        return data;
+      }
+
+      async function uploadFileResumable(file, contentType, fileObj) {
+        const ds = activeProject.dataSources || {};
+        const scriptUrl = ds.driveScriptUrl || DEFAULT_DRIVE_SCRIPT_URL;
+        const ext = file.name.split('.').pop().toLowerCase();
+        const fileType = (ext === 'pdf') ? 'pdf' : (ext === 'dwg' || ext === 'dxf') ? 'dwg' : (ext === 'frag' || ext === 'ifc') ? 'model' : 'other';
+        const common = {
+          folderId: ds.driveFolderId || '',
+          driveFolderName: ds.driveFolderName || activeProject.name,
+          project: activeProject.slug || slugify(activeProject.name),
+          filename: file.name,
+          contentType,
+          totalBytes: file.size,
+          fileType,
+          changedBy: userAccount ? (userAccount.name || '') : '',
+          changedByEmail: userAccount ? (userAccount.email || '') : ''
+        };
+        const init = await postDrivePayload(scriptUrl, { action: 'initResumableUpload', ...common });
+        const chunkSize = 4 * 1024 * 1024;
+        let offset = 0;
+        let result = null;
+
+        while (offset < file.size) {
+          const end = Math.min(file.size, offset + chunkSize);
+          const content = await fileToBase64(file.slice(offset, end));
+          let lastError;
+          for (let attempt = 1; attempt <= 3; attempt++) {
+            try {
+              result = await postDrivePayload(scriptUrl, {
+                action: 'uploadResumableChunk',
+                ...common,
+                sessionUrl: init.sessionUrl,
+                start: offset,
+                content
+              });
+              lastError = null;
+              break;
+            } catch (err) {
+              lastError = err;
+              if (attempt < 3) await new Promise(resolve => setTimeout(resolve, attempt * 1000));
+            }
+          }
+          if (lastError) throw lastError;
+          offset = result.nextOffset;
+          const progress = 35 + Math.round((offset / file.size) * 60);
+          updateFileUI(fileObj, Math.min(progress, 95), `Subiendo... ${Math.min(100, Math.round((offset / file.size) * 100))}%`);
+        }
+        return result;
+      }
+
       function updateFileUI(fileObj, progress, status) {
         fileObj.progress = progress;
         fileObj.status = status;
@@ -1016,11 +1078,8 @@
               updateFileUI(fileObj, 100, 'Completado');
               addLog(`[${fileObj.file.name}] ¡Subida e IFC procesado con éxito!`);
             } else {
-              updateFileUI(fileObj, 25, 'Leyendo archivo...');
-              const base64Content = await fileToBase64(fileObj.file);
-              
-              updateFileUI(fileObj, 55, 'Subiendo...');
-              addLog(`[${fileObj.file.name}] Subiendo archivo directo...`);
+              updateFileUI(fileObj, 25, 'Preparando carga por fragmentos...');
+              addLog(`[${fileObj.file.name}] Iniciando carga reanudable por fragmentos...`);
               
               let mimeType = 'application/octet-stream';
               if (ext === 'pdf') mimeType = 'application/pdf';
@@ -1028,7 +1087,7 @@
               else if (ext === 'json') mimeType = 'application/json';
               else if (ext === 'frag') mimeType = 'application/octet-stream';
 
-              await uploadToDrive(fileObj.file.name, base64Content, mimeType, fileObj);
+              await uploadFileResumable(fileObj.file, mimeType, fileObj);
               
               updateFileUI(fileObj, 100, 'Completado');
               addLog(`[${fileObj.file.name}] ¡Subido con éxito!`);
