@@ -790,6 +790,15 @@ function autorizarDrive() {
   temp.setTrashed(true);
 }
 
+// Ejecutar una vez desde el editor de Apps Script tras incorporar la carga reanudable.
+// Solicita el permiso externo requerido por UrlFetchApp para enviar fragmentos a Drive.
+function autorizarCargaReanudable() {
+  UrlFetchApp.fetch('https://www.googleapis.com/discovery/v1/apis/drive/v3/rest', {
+    method: 'get',
+    muteHttpExceptions: true
+  });
+}
+
 function output_(data, callback) {
   const json = JSON.stringify(data);
   if (callback) {
