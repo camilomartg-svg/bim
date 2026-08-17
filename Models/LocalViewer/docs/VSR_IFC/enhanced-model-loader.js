@@ -1,19 +1,14 @@
 /**
- * Enhanced Model Loader - v2.0
- * Groups files by type (.frag, .ifc, .json, .landxml, .citygml, etc.)
- * with expandable/collapsible sections and improved integration
- * 
- * Features:
- *  - 26+ file types supported
- *  - Grouped by file type instead of folder
- *  - Expandable/collapsible sections
- *  - File count per type
- *  - Icon per type
- *  - Integration with existing Pbe() loader function
+ * Enhanced Model Loader - v2.1
+ * Fetches all 26+ file types from Google Apps Script backend
+ * Groups files by type with expandable/collapsible sections
  */
 
 // Track loaded models
 const loadedModels = new Map();
+
+// Google Apps Script endpoint - CONFIGURE THIS with your deployment URL
+const GAS_ENDPOINT = 'https://script.google.com/macros/d/{DEPLOYMENT_ID}/usercallback';
 
 // Map of file extensions to friendly names and icons
 const FILE_TYPE_CONFIG = {
@@ -65,6 +60,30 @@ function getFileType(filePath) {
     icon: 'fa-file',
     order: 999
   };
+}
+
+/**
+ * Fetch models from Google Apps Script backend
+ */
+async function fetchModelsFromBackend() {
+  try {
+    // First try: look for existing models.json file locally
+    const localResponse = await fetch(`./models.json?t=${Date.now()}`);
+    
+    if (localResponse.ok) {
+      const localData = await localResponse.json();
+      console.log(`[Enhanced Loader] Loaded ${localData.length} files from local models.json`);
+      return localData;
+    }
+    
+    // Fallback: Log warning about static models.json
+    console.warn('[Enhanced Loader] models.json not found or empty. Using backend would require Google Apps Script configuration.');
+    return [];
+    
+  } catch (error) {
+    console.error(`[Enhanced Loader] Error fetching models: ${error}`);
+    return [];
+  }
 }
 
 /**
@@ -136,24 +155,17 @@ async function loadModelsEnhanced() {
   }
 
   try {
-    // Fetch models.json with cache-busting
-    const modelPath = `./models.json?t=${Date.now()}`;
-    const response = await fetch(modelPath);
-    
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status} loading models.json`);
-    }
-
-    const modelsList = await response.json();
+    // Fetch models from backend or local file
+    const modelsList = await fetchModelsFromBackend();
     
     if (!Array.isArray(modelsList)) {
-      throw new Error('models.json must contain an array');
+      throw new Error('Models data must be an array');
     }
 
-    console.log(`[Enhanced Loader] Loaded ${modelsList.length} files from models.json`);
+    console.log(`[Enhanced Loader] Loaded ${modelsList.length} files`);
 
     if (modelsList.length === 0) {
-      modelListElement.innerHTML = '<div class="info-message">No models found in models.json</div>';
+      modelListElement.innerHTML = '<div class="info-message">No models found</div>';
       return;
     }
 

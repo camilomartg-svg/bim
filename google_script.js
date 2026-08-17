@@ -855,8 +855,32 @@ function listModels_(e, body) {
   const jsonByBase = {};
   const dwgs = [];
   const pdfs = [];
+  const allModels = []; // All 3D file types combined
 
   const normalizeBase_ = (name) => String(name || '').trim().toLowerCase();
+
+  // List of all supported 3D file extensions (case-insensitive)
+  const SUPPORTED_EXTENSIONS = [
+    '.frag', '.ifc', '.json', '.landxml', '.citygml',
+    '.rvt', '.rfa', '.rte', '.pln', '.pla', '.mod',
+    '.imodel', '.vwx', '.ndw', '.cyp',
+    '.nwc', '.nwf', '.nwd', '.smc',
+    '.e57', '.pts', '.xyz', '.las', '.laz',
+    '.rcp', '.rcs', '.dwg', '.dxf'
+  ];
+
+  const isSupportedFile_ = (filename) => {
+    const lower = String(filename || '').toLowerCase();
+    return SUPPORTED_EXTENSIONS.some(ext => lower.endsWith(ext));
+  };
+
+  const getFileExtension_ = (filename) => {
+    const lower = String(filename || '').toLowerCase();
+    for (const ext of SUPPORTED_EXTENSIONS) {
+      if (lower.endsWith(ext)) return ext;
+    }
+    return '';
+  };
 
   const walk_ = (folder, currentRelativePath) => {
     const it = folder.getFiles();
@@ -864,29 +888,52 @@ function listModels_(e, body) {
       const f = it.next();
       const name = f.getName();
       const lower = String(name).toLowerCase();
+      const fileId = f.getId();
+      const lastUpdated = f.getLastUpdated().toISOString();
 
       if (lower.endsWith('.frag')) {
         frags.push({ 
           name: name, 
-          fragId: f.getId(), 
+          fragId: fileId, 
           folder: currentRelativePath || '',
-          lastUpdated: f.getLastUpdated().toISOString()
+          lastUpdated: lastUpdated
+        });
+        allModels.push({
+          name: name,
+          fileId: fileId,
+          folder: currentRelativePath || '',
+          lastUpdated: lastUpdated,
+          extension: '.frag'
         });
         continue;
       }
 
       if (lower.endsWith('.json')) {
         const base = normalizeBase_(name.slice(0, -5));
-        jsonByBase[base] = f.getId();
+        jsonByBase[base] = fileId;
+        allModels.push({
+          name: name,
+          fileId: fileId,
+          folder: currentRelativePath || '',
+          lastUpdated: lastUpdated,
+          extension: '.json'
+        });
         continue;
       }
 
       if (lower.endsWith('.dwg') || lower.endsWith('.dxf')) {
         dwgs.push({ 
           name: name, 
-          fileId: f.getId(), 
+          fileId: fileId, 
           folder: currentRelativePath || '',
-          lastUpdated: f.getLastUpdated().toISOString()
+          lastUpdated: lastUpdated
+        });
+        allModels.push({
+          name: name,
+          fileId: fileId,
+          folder: currentRelativePath || '',
+          lastUpdated: lastUpdated,
+          extension: lower.endsWith('.dwg') ? '.dwg' : '.dxf'
         });
         continue;
       }
@@ -894,11 +941,23 @@ function listModels_(e, body) {
       if (lower.endsWith('.pdf')) {
         pdfs.push({ 
           name: name, 
-          fileId: f.getId(), 
+          fileId: fileId, 
           folder: currentRelativePath || '',
-          lastUpdated: f.getLastUpdated().toISOString()
+          lastUpdated: lastUpdated
         });
         continue;
+      }
+
+      // Check for other supported 3D file types
+      if (isSupportedFile_(name)) {
+        const ext = getFileExtension_(name);
+        allModels.push({
+          name: name,
+          fileId: fileId,
+          folder: currentRelativePath || '',
+          lastUpdated: lastUpdated,
+          extension: ext
+        });
       }
     }
 
@@ -959,10 +1018,41 @@ function listModels_(e, body) {
   const sortedDwgs = uniqueDwgs.sort((a, b) => String(a.name).localeCompare(String(b.name), 'es'));
   const sortedPdfs = uniquePdfs.sort((a, b) => String(a.name).localeCompare(String(b.name), 'es'));
 
+  // Deduplicate and format all 3D models for unified display
+  const dedupeAllModels_ = function(list) {
+    const map = {};
+    for (let i = 0; i < list.length; i++) {
+      const item = list[i];
+      const key = ((item.folder ? item.folder + '/' : '') + String(item.name || '').toLowerCase()).trim();
+      if (!map[key] || new Date(item.lastUpdated).getTime() > new Date(map[key].lastUpdated).getTime()) {
+        map[key] = item;
+      }
+    }
+    const result = [];
+    for (let k in map) {
+      if (map.hasOwnProperty(k)) {
+        result.push(map[k]);
+      }
+    }
+    return result;
+  };
+
+  const uniqueAllModels = dedupeAllModels_(allModels).sort((a, b) => String(a.name).localeCompare(String(b.name), 'es'));
+  
+  // Format for models.json compatibility (path instead of fileId)
+  const allModelsFormatted = uniqueAllModels.map(m => ({
+    name: m.name,
+    path: m.fileId, // Will be resolved by loader
+    folder: m.folder,
+    extension: m.extension,
+    lastUpdated: m.lastUpdated
+  }));
+
   return { 
     models: models,
     dwgs: sortedDwgs,
-    pdfs: sortedPdfs
+    pdfs: sortedPdfs,
+    allModels: allModelsFormatted  // NEW: All 3D file types unified
   };
 }
 
