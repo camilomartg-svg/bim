@@ -524,6 +524,7 @@
       };
 
       const isModel3DExtension = (ext) => MODEL_3D_EXTENSIONS.has(ext);
+      const isVisibleInProjectFilesView = (file) => getFileExtension(file?.name) !== 'json';
 
       const resolveUploadFileType = (ext) => {
         if (isModel3DExtension(ext)) return 'model';
@@ -1243,11 +1244,11 @@
 
       function updateTabCounts() {
         if (!scountProgreso) return;
-        scountProgreso.textContent = allProjectFiles.filter(f => f.status === 'EN_PROGRESO').length;
-        scountCompartido.textContent = allProjectFiles.filter(f => f.status === 'COMPARTIDO').length;
-        scountPublicado.textContent = allProjectFiles.filter(f => f.status === 'PUBLICADO').length;
+        scountProgreso.textContent = allProjectFiles.filter(f => f.status === 'EN_PROGRESO' && isVisibleInProjectFilesView(f)).length;
+        scountCompartido.textContent = allProjectFiles.filter(f => f.status === 'COMPARTIDO' && isVisibleInProjectFilesView(f)).length;
+        scountPublicado.textContent = allProjectFiles.filter(f => f.status === 'PUBLICADO' && isVisibleInProjectFilesView(f)).length;
 
-        const currentInState = allProjectFiles.filter(f => f.status === currentStatusTab);
+        const currentInState = allProjectFiles.filter(f => f.status === currentStatusTab && isVisibleInProjectFilesView(f));
         scountSubModels.textContent = currentInState.filter(f => f.type === 'model' || isModel3DExtension(getFileExtension(f.name))).length;
         scountSubPdfs.textContent = currentInState.filter(f => f.type === 'pdf' && !isModel3DExtension(getFileExtension(f.name))).length;
         scountSubDwgs.textContent = currentInState.filter(f => (f.type === 'dwg') && !isModel3DExtension(getFileExtension(f.name))).length;
@@ -1262,6 +1263,7 @@
 
         let listToRender = allProjectFiles.filter(f => {
           if (f.status !== currentStatusTab) return false;
+          if (!isVisibleInProjectFilesView(f)) return false;
           const ext = getFileExtension(f.name);
           const is3D = isModel3DExtension(ext);
           if (currentStatusSubTab === 'models') {
