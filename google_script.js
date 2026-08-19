@@ -891,19 +891,35 @@ function listModels_(e, body) {
       const fileId = f.getId();
       const lastUpdated = f.getLastUpdated().toISOString();
 
+      let ownerEmail = '';
+      let ownerName = '';
+      try {
+        const owner = f.getOwner();
+        if (owner) {
+          ownerEmail = owner.getEmail() || '';
+          ownerName = owner.getName() || '';
+        }
+      } catch (e) {
+        // ignore
+      }
+
       if (lower.endsWith('.frag')) {
         frags.push({ 
           name: name, 
           fragId: fileId, 
           folder: currentRelativePath || '',
-          lastUpdated: lastUpdated
+          lastUpdated: lastUpdated,
+          ownerEmail: ownerEmail,
+          ownerName: ownerName
         });
         allModels.push({
           name: name,
           fileId: fileId,
           folder: currentRelativePath || '',
           lastUpdated: lastUpdated,
-          extension: '.frag'
+          extension: '.frag',
+          ownerEmail: ownerEmail,
+          ownerName: ownerName
         });
         continue;
       }
@@ -916,7 +932,9 @@ function listModels_(e, body) {
           fileId: fileId,
           folder: currentRelativePath || '',
           lastUpdated: lastUpdated,
-          extension: '.json'
+          extension: '.json',
+          ownerEmail: ownerEmail,
+          ownerName: ownerName
         });
         continue;
       }
@@ -926,7 +944,9 @@ function listModels_(e, body) {
           name: name, 
           fileId: fileId, 
           folder: currentRelativePath || '',
-          lastUpdated: lastUpdated
+          lastUpdated: lastUpdated,
+          ownerEmail: ownerEmail,
+          ownerName: ownerName
         });
         continue;
       }
@@ -936,7 +956,9 @@ function listModels_(e, body) {
           name: name, 
           fileId: fileId, 
           folder: currentRelativePath || '',
-          lastUpdated: lastUpdated
+          lastUpdated: lastUpdated,
+          ownerEmail: ownerEmail,
+          ownerName: ownerName
         });
         continue;
       }
@@ -949,7 +971,9 @@ function listModels_(e, body) {
           fileId: fileId,
           folder: currentRelativePath || '',
           lastUpdated: lastUpdated,
-          extension: ext
+          extension: ext,
+          ownerEmail: ownerEmail,
+          ownerName: ownerName
         });
       }
     }
@@ -1003,7 +1027,9 @@ function listModels_(e, body) {
         fragId: m.fragId, 
         jsonId: jsonId, 
         folder: m.folder,
-        lastUpdated: m.lastUpdated
+        lastUpdated: m.lastUpdated,
+        ownerEmail: m.ownerEmail,
+        ownerName: m.ownerName
       };
     })
     .sort((a, b) => String(a.name).localeCompare(String(b.name), 'es'));

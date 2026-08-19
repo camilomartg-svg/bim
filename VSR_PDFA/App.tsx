@@ -1,8 +1,9 @@
-﻿
+
 import React, { useState, useCallback, useEffect, useMemo } from 'react';
 import PdfRenderer from './components/PdfRenderer';
 import Toolbar from './components/Toolbar';
 import { Calibration, Tool } from './types';
+import { loadSecurityContext, isUserAuthorizedForFile } from './securityUtils';
 
 interface DrawingItem {
   name: string;
@@ -165,6 +166,14 @@ const App: React.FC = () => {
         const project = params.get('project') || '';
         const driveFolderName = params.get('driveFolderName') || '';
         const folderId = params.get('driveFolderId') || DRIVE_MODELS_FOLDER_ID;
+        const companyId = params.get('empresa') || '';
+
+        let secCtx: any = null;
+        try {
+          secCtx = await loadSecurityContext(project, companyId);
+        } catch (se) {
+          console.warn('Error loading security context:', se);
+        }
 
         if (project || driveFolderName || folderId) {
           const url = new URL(DRIVE_MODELS_API_URL);
@@ -175,15 +184,62 @@ const App: React.FC = () => {
 
           const data = await jsonpRequest<{ pdfs?: DrawingItem[] }>(url, 45000);
           const files = Array.isArray(data?.pdfs) ? data.pdfs : [];
-          setDrawings(files);
+          
+          const processedFiles = files.map(item => {
+            const fname = item.name || item.filename || '';
+            const fid = item.fileId || '';
+            const match = secCtx?.statusMap?.[fid] || secCtx?.statusMap?.[fname.toLowerCase()] || null;
+            return {
+              ...item,
+              filename: fname,
+              status: match?.status || 'EN_PROGRESO',
+              changedBy: (match?.changedBy && match.changedBy.trim()) || (item as any).ownerName || 'UNASSIGNED',
+              changedByEmail: (match?.changedByEmail && match.changedByEmail.trim()) || (item as any).ownerEmail || 'unassigned@nora.cde'
+            };
+          });
+
+          const authorizedFiles = processedFiles.filter(f => isUserAuthorizedForFile(
+            secCtx?.currentUser,
+            f,
+            secCtx?.activeProject,
+            secCtx?.currentCompany,
+            companyId,
+            'view'
+          ));
+
+          setDrawings(authorizedFiles);
           return;
         }
 
         const response = await fetch(`${DRAWING_BASE_URL}/list.json`);
         if (!response.ok) return;
         const data: DrawingItem[] = await response.json();
-        setDrawings(data);
-      } catch {
+        
+        const processedLocal = data.map(item => {
+          const fname = item.name || item.filename || '';
+          const fid = item.fileId || '';
+          const match = secCtx?.statusMap?.[fid] || secCtx?.statusMap?.[fname.toLowerCase()] || null;
+          return {
+            ...item,
+            filename: fname,
+            status: match?.status || 'EN_PROGRESO',
+            changedBy: (match?.changedBy && match.changedBy.trim()) || (item as any).ownerName || 'UNASSIGNED',
+            changedByEmail: (match?.changedByEmail && match.changedByEmail.trim()) || (item as any).ownerEmail || 'unassigned@nora.cde'
+          };
+        });
+
+        const authorizedLocal = processedLocal.filter(f => isUserAuthorizedForFile(
+          secCtx?.currentUser,
+          f,
+          secCtx?.activeProject,
+          secCtx?.currentCompany,
+          companyId,
+          'view'
+        ));
+
+        setDrawings(authorizedLocal);
+      } catch (err) {
+        console.error('loadDrawings error:', err);
       }
     };
     loadDrawings();

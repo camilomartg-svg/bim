@@ -1,6 +1,7 @@
-﻿import React, { useState, useCallback, Component, ErrorInfo } from 'react'
+import React, { useState, useCallback, Component, ErrorInfo } from 'react'
 import { Calibration, Tool, SnapSettings } from './types'
 import DwgRenderer from './components/DwgRenderer'
+import { loadSecurityContext, isUserAuthorizedForFile } from './securityUtils'
 
 // Error Boundary Component
 class ErrorBoundary extends Component<{ children: React.ReactNode }, { hasError: boolean, error: Error | null }> {
@@ -231,7 +232,15 @@ const App: React.FC = () => {
       const project = params.get('project') || ''
       const driveFolderName = params.get('driveFolderName') || ''
       const folderId = params.get('driveFolderId') || DRIVE_MODELS_FOLDER_ID
+      const companyId = params.get('empresa') || ''
       
+      let secCtx: any = null
+      try {
+        secCtx = await loadSecurityContext(project, companyId)
+      } catch (se) {
+        console.warn('Error loading security context:', se)
+      }
+
       if (project || driveFolderName || folderId) {
         const url = new URL(DRIVE_MODELS_API_URL)
         url.searchParams.set('action', 'list')
@@ -242,11 +251,29 @@ const App: React.FC = () => {
         const data = await jsonpRequest<{ dwgs?: RepoFile[] }>(url, 45000)
         const files = Array.isArray(data?.dwgs) ? data.dwgs : []
         
-        const processedFiles = files.map(f => ({
-          ...f,
-          filename: f.filename || f.name
-        }))
-        setRepoFiles(processedFiles)
+        const processedFiles = files.map(item => {
+          const fname = item.name || item.filename || ''
+          const fid = item.fileId || ''
+          const match = secCtx?.statusMap?.[fid] || secCtx?.statusMap?.[fname.toLowerCase()] || null
+          return {
+            ...item,
+            filename: fname,
+            status: match?.status || 'EN_PROGRESO',
+            changedBy: (match?.changedBy && match.changedBy.trim()) || (item as any).ownerName || 'UNASSIGNED',
+            changedByEmail: (match?.changedByEmail && match.changedByEmail.trim()) || (item as any).ownerEmail || 'unassigned@nora.cde'
+          }
+        })
+
+        const authorizedFiles = processedFiles.filter(f => isUserAuthorizedForFile(
+          secCtx?.currentUser,
+          f,
+          secCtx?.activeProject,
+          secCtx?.currentCompany,
+          companyId,
+          'view'
+        ))
+
+        setRepoFiles(authorizedFiles)
         return
       }
 
@@ -254,7 +281,30 @@ const App: React.FC = () => {
       const res = await fetch(`${baseUrl}Drawing/list.json?t=${Date.now()}`)
       if (!res.ok) throw new Error('No se pudo cargar la lista de archivos')
       const data = await res.json()
-      setRepoFiles(data)
+
+      const processedLocal = (data as RepoFile[]).map(item => {
+        const fname = item.name || item.filename || ''
+        const fid = item.fileId || ''
+        const match = secCtx?.statusMap?.[fid] || secCtx?.statusMap?.[fname.toLowerCase()] || null
+        return {
+          ...item,
+          filename: fname,
+          status: match?.status || 'EN_PROGRESO',
+          changedBy: (match?.changedBy && match.changedBy.trim()) || (item as any).ownerName || 'UNASSIGNED',
+          changedByEmail: (match?.changedByEmail && match.changedByEmail.trim()) || (item as any).ownerEmail || 'unassigned@nora.cde'
+        }
+      })
+
+      const authorizedLocal = processedLocal.filter(f => isUserAuthorizedForFile(
+        secCtx?.currentUser,
+        f,
+        secCtx?.activeProject,
+        secCtx?.currentCompany,
+        companyId,
+        'view'
+      ))
+
+      setRepoFiles(authorizedLocal)
     } catch (err) {
       console.error(err)
       setRepoFiles([])

@@ -773,30 +773,9 @@
           if (!file || !activeProject) return [];
           const teams = new Set();
 
-          const uEmail = (file.changedByEmail || '').toLowerCase().trim();
-          if (uEmail) {
-            const deliveryTeams = activeProject.iso19650?.deliveryTeams || [];
-            deliveryTeams.forEach(dt => {
-              const isMember = Array.isArray(dt.members) && dt.members.map(m => m.toLowerCase().trim()).includes(uEmail);
-              const isLead = dt.leadEmail && dt.leadEmail.toLowerCase().trim() === uEmail;
-              if (isMember || isLead) {
-                teams.add(dt.name.toUpperCase().trim());
-              }
-            });
-
-            const equipos = activeProject.equiposDeTarea || [];
-            equipos.forEach(eq => {
-              const isMember = Array.isArray(eq.members) && eq.members.map(m => m.toLowerCase().trim()).includes(uEmail);
-              if (isMember) {
-                teams.add(eq.name.toUpperCase().trim());
-              }
-            });
-          }
-
-          // Fallback / addition based on specialty folder
+          // 1. Try folder specialty first (Primary source of truth)
           const specialty = cleanSpecialty(file.folder).toUpperCase().trim();
           if (specialty && specialty !== 'GENERAL') {
-            // Check if specialty matches any known team name (normalized)
             const normalizeName = str => str.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase().trim();
             const normSpecialty = normalizeName(specialty);
 
@@ -813,6 +792,29 @@
                 teams.add(eq.name.toUpperCase().trim());
               }
             });
+          }
+
+          // 2. Fallback / Secondary source: check by uploader/changedByEmail
+          if (teams.size === 0) {
+            const uEmail = (file.changedByEmail || '').toLowerCase().trim();
+            if (uEmail && uEmail !== 'unassigned@nora.cde') {
+              const deliveryTeams = activeProject.iso19650?.deliveryTeams || [];
+              deliveryTeams.forEach(dt => {
+                const isMember = Array.isArray(dt.members) && dt.members.map(m => m.toLowerCase().trim()).includes(uEmail);
+                const isLead = dt.leadEmail && dt.leadEmail.toLowerCase().trim() === uEmail;
+                if (isMember || isLead) {
+                  teams.add(dt.name.toUpperCase().trim());
+                }
+              });
+
+              const equipos = activeProject.equiposDeTarea || [];
+              equipos.forEach(eq => {
+                const isMember = Array.isArray(eq.members) && eq.members.map(m => m.toLowerCase().trim()).includes(uEmail);
+                if (isMember) {
+                  teams.add(eq.name.toUpperCase().trim());
+                }
+              });
+            }
           }
 
           return Array.from(teams);
@@ -1342,8 +1344,8 @@
                 status: match?.status || 'EN_PROGRESO',
                 version: match?.version || 'v1.0',
                 comments: match?.comments || '',
-                changedBy: match?.changedBy || (userAccount ? userAccount.name : 'CDE NORA'),
-                changedByEmail: match?.changedByEmail || (userAccount ? userAccount.email : '')
+                changedBy: (match?.changedBy && match.changedBy.trim()) || item.ownerName || 'UNASSIGNED',
+                changedByEmail: (match?.changedByEmail && match.changedByEmail.trim()) || item.ownerEmail || 'unassigned@nora.cde'
               };
 
               const prev = filesByPath.get(fileKey);
