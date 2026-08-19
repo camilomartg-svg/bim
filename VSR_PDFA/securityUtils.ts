@@ -65,7 +65,7 @@ export const loadSecurityContext = async (projectSlug: string, companyIdParam: s
   let configUrl = '../portal-config.json';
   if (companyId) {
     try {
-      const empRes = await fetch('../empresas.json');
+      const empRes = await fetch(`../empresas.json?t=${Date.now()}`);
       if (empRes.ok) {
         const empresas = await empRes.json();
         const currentCompany = empresas.find((e: any) => e.id === companyId);
@@ -82,7 +82,7 @@ export const loadSecurityContext = async (projectSlug: string, companyIdParam: s
   }
 
   try {
-    const configRes = await fetch(configUrl, { cache: 'no-store' });
+    const configRes = await fetch(`${configUrl}?t=${Date.now()}`, { cache: 'no-store' });
     if (configRes.ok) {
       const config = await configRes.json();
       const projects = Array.isArray(config.projects) ? config.projects : [];
@@ -99,6 +99,7 @@ export const loadSecurityContext = async (projectSlug: string, companyIdParam: s
     const url = new URL(DRIVE_MODELS_API_URL);
     url.searchParams.set('action', 'listStatus');
     if (projectSlug) url.searchParams.set('project', projectSlug);
+    url.searchParams.set('t', String(Date.now()));
     const sData = await jsonpRequest<{ entries?: any[] }>(url, 30000);
     const statusEntries = Array.isArray(sData?.entries) ? sData.entries : [];
     statusEntries.sort((a: any, b: any) => new Date(a.changedAt || 0).getTime() - new Date(b.changedAt || 0).getTime());
@@ -212,8 +213,14 @@ export const isUserAuthorizedForFile = (
   companyId: string,
   action: string = 'view'
 ): boolean => {
-  if (!activeProject) return true; // Bypass security if no active project context exists (e.g. local developer mode)
-  if (!currentUser) return false;
+  if (!activeProject) {
+    console.log('[SECURITY] Permitido: Sin contexto de proyecto activo (modo desarrollador local)');
+    return true;
+  }
+  if (!currentUser) {
+    console.log('[SECURITY] Denegado: No hay usuario autenticado');
+    return false;
+  }
   
   const email = (currentUser.username || currentUser.email || currentUser.userAccount || '').toLowerCase().trim();
 
@@ -231,24 +238,75 @@ export const isUserAuthorizedForFile = (
     : [];
   const isProjectAdmin = isCompanyAdmin || projectAdmins.includes(email);
 
-  if (isProjectAdmin) return true;
+  if (isProjectAdmin) {
+    console.log(`[SECURITY] Permitido: Usuario ${email} es administrador del proyecto/empresa`);
+    return true;
+  }
+
+  // Regla estricta para archivos en estado EN_PROGRESO
+  if (file.status === 'EN_PROGRESO') {
+    const uploaderEmail = (file.changedByEmail || '').toLowerCase().trim();
+    console.log(`[SECURITY] Evaluando archivo EN_PROGRESO: "${file.name || file.filename}" subido por: "${uploaderEmail}"`);
+
+    // El uploader siempre puede ver su propio archivo
+    if (uploaderEmail && uploaderEmail === email) {
+      console.log(`[SECURITY] Permitido: El usuario ${email} es el propietario/uploader del archivo`);
+      return true;
+    }
+
+    const uploaderTeams = getUserDeliveryTeams(uploaderEmail, activeProject);
+    const userTeams = getUserDeliveryTeams(email, activeProject);
+
+    console.log(`[SECURITY] Equipos del uploader (${uploaderEmail}):`, uploaderTeams);
+    console.log(`[SECURITY] Equipos del usuario actual (${email}):`, userTeams);
+
+    if (uploaderTeams.length === 0 || userTeams.length === 0) {
+      console.log('[SECURITY] Denegado: El uploader o el usuario consultor no pertenecen a ningún equipo');
+      return false;
+    }
+
+    const shareTeam = uploaderTeams.some(team => userTeams.includes(team));
+    if (shareTeam) {
+      console.log('[SECURITY] Permitido: Comparten al menos un equipo de trabajo');
+      return true;
+    } else {
+      console.log('[SECURITY] Denegado: No pertenecen al mismo equipo');
+      return false;
+    }
+  }
 
   if (action === 'view' && file.status !== 'EN_PROGRESO') {
     const isMember = (activeProject?.members || []).map((m: string) => m.toLowerCase().trim()).includes(email);
-    if (isMember) return true;
+    if (isMember) {
+      console.log(`[SECURITY] Permitido: Usuario ${email} es miembro del proyecto para archivo ${file.status}`);
+      return true;
+    }
     
     const userTeams = getUserDeliveryTeams(email, activeProject);
-    if (userTeams.length > 0) return true;
+    if (userTeams.length > 0) {
+      console.log(`[SECURITY] Permitido: Usuario ${email} pertenece a equipos del proyecto para archivo ${file.status}`);
+      return true;
+    }
   }
 
   const fileTeams = getFileDeliveryTeams(file, activeProject);
   const userTeams = getUserDeliveryTeams(email, activeProject);
 
+  console.log(`[SECURITY] Evaluando archivo no EN_PROGRESO: "${file.name || file.filename}" (${file.status})`);
+  console.log('[SECURITY] Equipos del archivo:', fileTeams);
+  console.log('[SECURITY] Equipos del usuario actual:', userTeams);
+
   if (fileTeams.length === 0) {
     const fileUploader = (file.changedByEmail || '').toLowerCase().trim();
-    if (fileUploader === email) return true;
+    if (fileUploader === email) {
+      console.log(`[SECURITY] Permitido: El usuario ${email} es el uploader del archivo`);
+      return true;
+    }
+    console.log('[SECURITY] Denegado: Sin equipos asociados al archivo y no es el uploader');
     return false;
   }
 
-  return fileTeams.some(team => userTeams.includes(team));
+  const authorized = fileTeams.some(team => userTeams.includes(team));
+  console.log(`[SECURITY] Resultado de autorización por equipos de archivo: ${authorized}`);
+  return authorized;
 };

@@ -181,6 +181,7 @@ const App: React.FC = () => {
           url.searchParams.set('folderId', folderId);
           if (project) url.searchParams.set('project', project);
           if (driveFolderName) url.searchParams.set('driveFolderName', driveFolderName);
+          url.searchParams.set('t', String(Date.now()));
 
           const data = await jsonpRequest<{ pdfs?: DrawingItem[] }>(url, 45000);
           const files = Array.isArray(data?.pdfs) ? data.pdfs : [];
