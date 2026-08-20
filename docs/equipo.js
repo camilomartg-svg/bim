@@ -22,7 +22,8 @@
   let allCompaniesList = [];
 
   // --- ESTADO DEL DIAGRAMA (ZOOM, PAN Y VISTAS) ---
-  let diagramViewMode = 'cards'; // 'radial' | 'cards'
+  let diagramViewMode = 'radial'; // 'radial' | 'cards'
+  let selectedNode = { type: 'project', id: null };
   let zoomScale = 1.0;
   const MIN_ZOOM = 0.3;
   const MAX_ZOOM = 3.0;
@@ -66,6 +67,7 @@
     isoDiagramCanvas: document.getElementById('iso-diagram-canvas'),
     isoDiagramSvg: document.getElementById('iso-diagram-svg'),
     isoDiagramNodes: document.getElementById('iso-diagram-nodes'),
+    diagramTooltip: document.getElementById('diagram-tooltip'),
     isoDiagramRadialView: document.getElementById('iso-diagram-radial-view'),
     isoDiagramCardView: document.getElementById('iso-diagram-card-view'),
     isoDiagramViewportWrapper: document.getElementById('iso-diagram-viewport-wrapper'),
@@ -314,6 +316,7 @@
     // Toggle Action Controls visibility
     if (el.adminActionControls) el.adminActionControls.style.display = canManageProjectAdmins ? 'flex' : 'none';
     if (el.deliveryActionControls) el.deliveryActionControls.style.display = canManageProjectStructure ? 'flex' : 'none';
+    if (el.receiverActionControls) el.receiverActionControls.style.display = canManageProjectStructure ? 'flex' : 'none';
     if (el.taskActionControls) el.taskActionControls.style.display = (canManageProjectStructure || isDeliveryLead) ? 'flex' : 'none';
     if (el.addMemberBtn) el.addMemberBtn.style.display = canManageProjectStructure ? 'inline-flex' : 'none';
     if (el.saveBtn) el.saveBtn.style.display = (canManageProjectStructure || isDeliveryLead) ? 'inline-flex' : 'none';
@@ -331,7 +334,8 @@
       activeProject.iso19650 = {
         projectAdmins: [],
         deliveryTeams: [],
-        receiverTeams: []
+        receiverTeams: [],
+        directorDeObra: ''
       };
     }
 
@@ -345,6 +349,10 @@
 
     if (!Array.isArray(activeProject.iso19650.receiverTeams)) {
       activeProject.iso19650.receiverTeams = [];
+    }
+
+    if (!activeProject.iso19650.directorDeObra) {
+      activeProject.iso19650.directorDeObra = '';
     }
 
     // Sincronizar/migrar desde activeProject.equiposDeTarea (creados en Configuración del Proyecto)
@@ -646,26 +654,9 @@
     el.isoDiagramNodes.innerHTML = '';
 
     const deliveryTeams = activeProject.iso19650?.deliveryTeams || [];
-    const N = deliveryTeams.length;
-    const useMatrixLayout = N > 8;
-    const useSurroundLayout = N > 4 && N <= 8;
-    const surroundSlots = [
-      [160, 135], [450, 135], [740, 135], [160, 325],
-      [740, 325], [160, 515], [450, 515], [740, 515]
-    ];
-    const matrixColumns = 3;
-    const matrixRows = useMatrixLayout ? Math.ceil(N / matrixColumns) : 0;
-    const diagramHeight = useMatrixLayout ? Math.max(650, 120 + matrixRows * 210) : 650;
-
-    if (el.isoDiagramCanvas && el.isoDiagramViewportWrapper && el.isoDiagramSvg) {
-      el.isoDiagramCanvas.style.height = `${diagramHeight}px`;
-      el.isoDiagramViewportWrapper.style.height = `${diagramHeight}px`;
-      el.isoDiagramSvg.setAttribute('height', diagramHeight);
-      el.isoDiagramSvg.setAttribute('viewBox', `0 0 900 ${diagramHeight}`);
-    }
 
     const centerX = 450;
-    const centerY = useMatrixLayout ? 65 : 325;
+    const centerY = 325;
 
     // Helper: Draw offset double-headed arrow line in SVG
     function drawOffsetLine(x1, y1, x2, y2, offset1, offset2, color = '#94a3b8', isDashed = false) {
@@ -695,33 +686,57 @@
       el.isoDiagramSvg.appendChild(line);
     }
 
-    // Fichas siempre visibles: reemplazan los tooltips para leer el organigrama sin pasar el cursor.
-    function addNodeInfo(title, detail, x, y, width = 150) {
-      const label = document.createElement('div');
-      label.className = 'absolute rounded-lg border border-slate-200/90 dark:border-slate-700 bg-white/95 dark:bg-slate-900/95 px-2 py-1 shadow-sm z-20 pointer-events-none text-[9px] leading-tight text-slate-500 dark:text-slate-400';
-      label.style.left = `${x}px`;
-      label.style.top = `${y}px`;
-      label.style.width = `${width}px`;
-      label.innerHTML = `<div class="font-black text-slate-800 dark:text-white truncate">${escapeHtml(title)}</div><div class="mt-0.5 truncate">${escapeHtml(detail)}</div>`;
-      el.isoDiagramNodes.appendChild(label);
+    // Helper: Setup interactive tooltip
+    function setupTooltip(element, getHtmlCallback) {
+      element.addEventListener('mouseenter', (e) => {
+        if (!el.diagramTooltip) return;
+        el.diagramTooltip.innerHTML = getHtmlCallback();
+        el.diagramTooltip.classList.remove('hidden');
+        el.diagramTooltip.style.opacity = '1';
+        positionTooltip(e);
+      });
+
+      element.addEventListener('mousemove', (e) => {
+        positionTooltip(e);
+      });
+
+      element.addEventListener('mouseleave', () => {
+        if (!el.diagramTooltip) return;
+        el.diagramTooltip.classList.add('hidden');
+        el.diagramTooltip.style.opacity = '0';
+      });
     }
 
-    // Se conserva la firma para los nodos existentes, pero ya no se muestran tooltips al pasar el cursor.
-    function setupTooltip() {}
+    function positionTooltip(e) {
+      if (!el.diagramTooltip) return;
+      const tooltipWidth = el.diagramTooltip.offsetWidth || 200;
+      const tooltipHeight = el.diagramTooltip.offsetHeight || 120;
+
+      let x = e.clientX + 15;
+      let y = e.clientY + 15;
+
+      if (x + tooltipWidth > window.innerWidth) {
+        x = e.clientX - tooltipWidth - 15;
+      }
+      if (y + tooltipHeight > window.innerHeight) {
+        y = e.clientY - tooltipHeight - 15;
+      }
+
+      el.diagramTooltip.style.left = `${x}px`;
+      el.diagramTooltip.style.top = `${y}px`;
+    }
 
     // 1. Draw Outer Circle: "1. Equipo de Proyecto"
-    if (!useMatrixLayout) {
-      const projectCircle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
-      projectCircle.setAttribute('cx', centerX);
-      projectCircle.setAttribute('cy', centerY);
-      projectCircle.setAttribute('r', '290');
-      projectCircle.setAttribute('stroke', '#cbd5e1');
-      projectCircle.setAttribute('stroke-width', '2');
-      projectCircle.setAttribute('stroke-dasharray', '5,5');
-      projectCircle.setAttribute('fill', 'none');
-      projectCircle.setAttribute('class', 'dark:stroke-slate-700/60');
-      el.isoDiagramSvg.appendChild(projectCircle);
-    }
+    const projectCircle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+    projectCircle.setAttribute('cx', centerX);
+    projectCircle.setAttribute('cy', centerY);
+    projectCircle.setAttribute('r', '290');
+    projectCircle.setAttribute('stroke', '#cbd5e1');
+    projectCircle.setAttribute('stroke-width', '2');
+    projectCircle.setAttribute('stroke-dasharray', '5,5');
+    projectCircle.setAttribute('fill', 'none');
+    projectCircle.setAttribute('class', 'dark:stroke-slate-700/60');
+    el.isoDiagramSvg.appendChild(projectCircle);
 
     // Label for Outer Circle
     const outerCircleLabel = document.createElement('div');
@@ -734,41 +749,21 @@
 
     // 2. Draw Central Hub: A. Adjudicador (Administrador)
     const nodeA = document.createElement('div');
-    nodeA.className = 'absolute rounded-full bg-sky-600 hover:bg-sky-700 dark:bg-sky-500 dark:hover:bg-sky-600 text-white font-black flex items-center justify-center cursor-pointer shadow-lg shadow-sky-500/20 hover:scale-110 transition-transform border-4 border-white dark:border-slate-800 z-30 select-none';
+    const isASelected = selectedNode.type === 'A';
+    const aClasses = isASelected 
+      ? 'ring-4 ring-indigo-500 scale-105 border-indigo-500 z-40' 
+      : 'border-white dark:border-slate-800 z-30';
+    nodeA.className = `absolute rounded-full bg-sky-600 hover:bg-sky-700 dark:bg-sky-500 dark:hover:bg-sky-600 text-white font-black flex items-center justify-center cursor-pointer shadow-lg shadow-sky-500/20 hover:scale-110 transition-transform border-4 ${aClasses} select-none`;
     nodeA.style.left = `${centerX - 28}px`;
     nodeA.style.top = `${centerY - 28}px`;
     nodeA.style.width = '56px';
     nodeA.style.height = '56px';
     nodeA.innerHTML = '<span class="text-base">A</span>';
 
-    setupTooltip(nodeA, () => {
-      const names = projectAdmins.map(email => getUserRegisteredName(email));
-      const listHtml = names.map(name => `<li>• ${escapeHtml(name)}</li>`).join('');
-      return `
-        <div class="space-y-1.5">
-          <div class="flex items-center gap-2">
-            <span class="px-1.5 py-0.5 rounded bg-sky-500 text-white text-[9px] font-black uppercase">Rol A</span>
-            <span class="font-bold text-slate-200">Adjudicador</span>
-          </div>
-          <div class="text-slate-300 text-[10px]">Administradores de Proyecto:</div>
-          <ul class="text-[10px] text-slate-400 space-y-0.5 list-none pl-0">
-            ${listHtml || '<li>• Sin administradores designados</li>'}
-          </ul>
-          <div class="text-[9px] text-indigo-400 mt-2 italic border-t border-slate-800 pt-1.5">Haz clic para ir a la pestaña de Administradores</div>
-        </div>
-      `;
-    });
-
-    addNodeInfo(
-      'A · Administrador de Proyecto',
-      projectAdmins.map(email => getUserRegisteredName(email)).join(', ') || 'Sin administrador asignado',
-      centerX + 38,
-      centerY - 22,
-      180
-    );
-
-    nodeA.addEventListener('click', () => {
-      window.switchTab('admins');
+    nodeA.addEventListener('click', (e) => {
+      e.stopPropagation();
+      selectedNode = { type: 'A', id: null };
+      renderAllViews();
     });
     el.isoDiagramNodes.appendChild(nodeA);
 
@@ -780,14 +775,14 @@
       emptyState.style.top = `${centerY + 70}px`;
       emptyState.innerHTML = 'No hay Equipos de Entrega configurados.<br>Haz clic en "2. Equipos de Entrega" para agregar el primero.';
       el.isoDiagramNodes.appendChild(emptyState);
-      updateDiagramTransform();
       return;
     }
 
+    const N = deliveryTeams.length;
     const R_dist = 195;
 
     // Coordination ring connecting all B nodes
-    if (N >= 2 && !useMatrixLayout && !useSurroundLayout) {
+    if (N >= 2) {
       const coordCircle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
       coordCircle.setAttribute('cx', centerX);
       coordCircle.setAttribute('cy', centerY);
@@ -803,21 +798,11 @@
     // Render radial Delivery Team Clusters (2) and members (C) / task teams (3)
     deliveryTeams.forEach((dt, i) => {
       const angle = (2 * Math.PI * i) / N - Math.PI / 2;
-      const matrixColumn = i % matrixColumns;
-      const matrixRow = Math.floor(i / matrixColumns);
-      const X_di = useMatrixLayout
-        ? 135 + matrixColumn * 265
-        : useSurroundLayout
-          ? surroundSlots[i][0]
-          : centerX + R_dist * Math.cos(angle);
-      const Y_di = useMatrixLayout
-        ? 150 + matrixRow * 210
-        : useSurroundLayout
-          ? surroundSlots[i][1]
-          : centerY + R_dist * Math.sin(angle);
+      const X_di = centerX + R_dist * Math.cos(angle);
+      const Y_di = centerY + R_dist * Math.sin(angle);
 
       // Draw connection A <-> B
-      drawOffsetLine(centerX, centerY, X_di, Y_di, 28, 22, '#64748b');
+      drawOffsetLine(centerX, centerY, X_di, Y_di, 28, 22, '#3b82f6');
 
       // Delivery Team Circle (2) enclosing B and C
       const bubble2 = document.createElement('div');
@@ -837,43 +822,23 @@
       el.isoDiagramNodes.appendChild(badge2);
 
       // B: Líder node (radius 21)
+      const isBSelected = selectedNode.type === 'B' && selectedNode.id === dt.id;
+      const bClasses = isBSelected 
+        ? 'ring-4 ring-indigo-500 scale-105 border-indigo-500 z-40' 
+        : 'border-white dark:border-slate-800 z-30';
+
       const nodeB = document.createElement('div');
-      nodeB.className = 'absolute rounded-full bg-blue-600 hover:bg-blue-700 text-white font-black flex items-center justify-center cursor-pointer shadow-md hover:scale-110 transition-transform border-2 border-white dark:border-slate-800 z-30 select-none';
+      nodeB.className = `absolute rounded-full bg-blue-600 hover:bg-blue-700 text-white font-black flex items-center justify-center cursor-pointer shadow-md hover:scale-110 transition-transform border-2 ${bClasses} select-none`;
       nodeB.style.left = `${X_di - 21}px`;
       nodeB.style.top = `${Y_di - 21}px`;
       nodeB.style.width = '42px';
       nodeB.style.height = '42px';
       nodeB.innerHTML = '<span class="text-sm">B</span>';
 
-      const leadMeta = getUserMetadata(dt.leadEmail);
-      setupTooltip(nodeB, () => `
-        <div class="space-y-1.5">
-          <div class="flex items-center gap-2">
-            <span class="px-1.5 py-0.5 rounded bg-blue-500 text-white text-[9px] font-black uppercase">Rol B</span>
-            <span class="font-bold text-slate-200">Líder de Entrega</span>
-          </div>
-          <div class="text-slate-300 text-xs font-bold">${escapeHtml(dt.name)}</div>
-          <div class="border-t border-slate-800 pt-1 space-y-0.5 text-[10px] text-slate-400">
-            <div><strong>Líder:</strong> ${escapeHtml(leadMeta.name || 'Sin Líder Asignado')}</div>
-            <div><strong>Email:</strong> ${escapeHtml(leadMeta.email || '-')}</div>
-            <div><strong>Empresa:</strong> ${escapeHtml(leadMeta.company || '-')}</div>
-          </div>
-          <div class="text-[9px] text-indigo-400 mt-2 italic border-t border-slate-800 pt-1.5">Haz clic para ir a los Equipos de Entrega</div>
-        </div>
-      `);
-
-      addNodeInfo(`B · ${dt.name}`, `Líder: ${leadMeta.name || 'Sin asignar'}`, X_di + 28, Y_di - 18, 155);
-
-      nodeB.addEventListener('click', () => {
-        window.switchTab('delivery');
-        setTimeout(() => {
-          const card = document.getElementById(`delivery-team-card-${dt.id}`);
-          if (card) {
-            card.scrollIntoView({ behavior: 'smooth', block: 'center' });
-            card.classList.add('ring-4', 'ring-purple-500');
-            setTimeout(() => card.classList.remove('ring-4', 'ring-purple-500'), 2500);
-          }
-        }, 100);
+      nodeB.addEventListener('click', (e) => {
+        e.stopPropagation();
+        selectedNode = { type: 'B', id: dt.id };
+        renderAllViews();
       });
       el.isoDiagramNodes.appendChild(nodeB);
 
@@ -890,11 +855,16 @@
           const Y_mj = Y_di + r_dist * Math.sin(subAngle);
 
           // Draw connection B <-> C
-          drawOffsetLine(X_di, Y_di, X_mj, Y_mj, 21, 15, '#64748b');
+          drawOffsetLine(X_di, Y_di, X_mj, Y_mj, 21, 15, '#c084fc');
 
           // C node
+          const isCSelected = selectedNode.type === 'C' && selectedNode.id === mEmail && selectedNode.teamId === dt.id;
+          const cClasses = isCSelected 
+            ? 'ring-4 ring-indigo-500 scale-105 border-indigo-500 z-40' 
+            : 'border-white dark:border-slate-800 z-30';
+
           const nodeC = document.createElement('div');
-          nodeC.className = 'absolute rounded-full bg-purple-600 hover:bg-purple-700 text-white font-black flex items-center justify-center cursor-pointer shadow-sm hover:scale-110 transition-transform border-2 border-white dark:border-slate-800 z-30 select-none';
+          nodeC.className = `absolute rounded-full bg-purple-600 hover:bg-purple-700 text-white font-black flex items-center justify-center cursor-pointer shadow-sm hover:scale-110 transition-transform border-2 ${cClasses} select-none`;
           nodeC.style.left = `${X_mj - 15}px`;
           nodeC.style.top = `${Y_mj - 15}px`;
           nodeC.style.width = '30px';
@@ -914,69 +884,29 @@
             el.isoDiagramNodes.appendChild(badge3);
           }
 
-          setupTooltip(nodeC, () => {
-            const teamListHtml = memberTeams.map(t => `<span class="px-1.5 py-0.5 rounded bg-emerald-950 text-emerald-300 border border-emerald-800 text-[9px] font-bold">${escapeHtml(t.name)}</span>`).join(' ');
-            return `
-              <div class="space-y-1.5">
-                <div class="flex items-center gap-2">
-                  <span class="px-1.5 py-0.5 rounded bg-purple-500 text-white text-[9px] font-black uppercase">Rol C</span>
-                  <span class="font-bold text-slate-200">Adjudicatario (Miembro)</span>
-                </div>
-                <div class="border-t border-slate-800 pt-1 space-y-0.5 text-[10px] text-slate-400">
-                  <div><strong>Nombre:</strong> ${escapeHtml(mMeta.name || 'Usuario')}</div>
-                  <div><strong>Email:</strong> ${escapeHtml(mMeta.email || mEmail)}</div>
-                  <div><strong>Empresa:</strong> ${escapeHtml(mMeta.company || '-')}</div>
-                </div>
-                ${memberTeams.length > 0 ? `
-                  <div class="border-t border-slate-800 pt-1.5 space-y-1">
-                    <div class="text-[9px] uppercase font-bold text-emerald-400">3. Equipos de Tarea (Especialidad):</div>
-                    <div class="flex flex-wrap gap-1">${teamListHtml}</div>
-                  </div>
-                ` : ''}
-              </div>
-            `;
-          });
-
-          addNodeInfo('C · Adjudicatario', mMeta.name || mEmail, X_mj + 18, Y_mj - 13, 125);
-
-          nodeC.addEventListener('click', () => {
-            window.switchTab('delivery');
-            setTimeout(() => {
-              const card = document.getElementById(`delivery-team-card-${dt.id}`);
-              if (card) {
-                card.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                card.classList.add('ring-4', 'ring-purple-500');
-                setTimeout(() => card.classList.remove('ring-4', 'ring-purple-500'), 2500);
-              }
-            }, 100);
+          nodeC.addEventListener('click', (e) => {
+            e.stopPropagation();
+            selectedNode = { type: 'C', id: mEmail, teamId: dt.id };
+            renderAllViews();
           });
 
           el.isoDiagramNodes.appendChild(nodeC);
         });
       }
     });
-
-    updateDiagramTransform();
   }
 
   function renderCardViewStage() {
     if (!el.diagramDeliveryClusters || !activeProject) return;
 
     const deliveryTeams = activeProject.iso19650?.deliveryTeams || [];
-
-    if (deliveryTeams.length === 0) {
-      el.diagramDeliveryClusters.innerHTML = `
-        <div class="col-span-full py-12 text-center text-xs text-slate-400 italic bg-white/40 dark:bg-slate-800/40 rounded-2xl border border-dashed border-slate-300 dark:border-slate-700">
-          No hay Equipos de Entrega configurados.
-        </div>
-      `;
-      return;
-    }
+    const receiverTeams = activeProject.iso19650?.receiverTeams || [];
 
     const adminNames = (activeProject.iso19650?.projectAdmins || [])
       .map(email => getUserRegisteredName(email))
       .join(', ') || 'Sin administrador asignado';
-    const matrixRows = deliveryTeams.map(dt => {
+
+    const deliveryMatrixRows = deliveryTeams.map(dt => {
       const leadMeta = getUserMetadata(dt.leadEmail);
       const members = (dt.members || []).filter(m => (m || '').toLowerCase().trim() !== (dt.leadEmail || '').toLowerCase().trim());
       const membersHtml = members.map(email => {
@@ -1001,6 +931,43 @@
         </div>`;
     }).join('');
 
+    const receiverMatrixRows = receiverTeams.map(rt => {
+      const leadMeta = getUserMetadata(rt.leadEmail);
+      const members = (rt.members || []).filter(m => (m || '').toLowerCase().trim() !== (rt.leadEmail || '').toLowerCase().trim());
+      const membersHtml = members.map(email => {
+        const meta = getUserMetadata(email);
+        return `<div class="flex items-center gap-2 py-1.5 px-2.5 rounded-lg bg-white/70 dark:bg-slate-800 text-[11px]"><span class="h-5 w-5 rounded-md bg-amber-100 dark:bg-amber-950 text-amber-700 dark:text-amber-300 flex items-center justify-center font-bold text-[9px] shrink-0">O</span><div class="min-w-0"><div class="font-bold text-slate-800 dark:text-slate-200 truncate">${escapeHtml(meta.name || email)}</div><div class="text-slate-400 font-mono text-[9px] truncate">${escapeHtml(email)}</div></div></div>`;
+      }).join('') || '<div class="text-[10px] text-slate-400 italic py-1">Sin otros miembros asignados</div>';
+      return `
+        <div class="project-matrix-team-row rounded-xl border border-slate-200 dark:border-slate-800 bg-white/80 dark:bg-slate-900/70 p-3 shadow-sm">
+          <div class="project-matrix-branch" aria-hidden="true">→</div>
+          <section class="rounded-xl border border-amber-100 dark:border-amber-900/50 bg-amber-50/60 dark:bg-amber-950/25 p-4">
+            <div class="flex items-center gap-2 text-amber-700 dark:text-amber-300 font-black text-[10px] uppercase tracking-wider"><span class="h-7 w-7 rounded-lg bg-amber-600 text-white flex items-center justify-center">O</span>${escapeHtml(rt.name)}</div>
+            <div class="mt-3 font-bold text-xs text-slate-800 dark:text-slate-100">${escapeHtml(leadMeta.name || 'Sin líder asignado')}</div>
+            <div class="mt-1 text-[10px] text-slate-500 dark:text-slate-400 break-all">${escapeHtml(leadMeta.email || '')}</div>
+          </section>
+          <div class="delivery-matrix-arrow" aria-hidden="true">→</div>
+          <section class="rounded-xl border border-amber-100 dark:border-amber-900/50 bg-amber-50/40 dark:bg-amber-950/20 p-4">
+            <div class="text-amber-700 dark:text-amber-300 font-black text-[10px] uppercase tracking-wider">Miembros del equipo receptor</div>
+            <div class="mt-3 grid grid-cols-1 gap-1.5">${membersHtml}</div>
+          </section>
+        </div>`;
+    }).join('');
+
+    const receiverPanel = receiverTeams.length > 0 ? `
+      <div class="space-y-3">
+        <div class="rounded-2xl border-2 border-dashed border-amber-200 dark:border-amber-800 bg-amber-50/60 dark:bg-amber-950/25 p-5 flex flex-col justify-center self-stretch">
+          <div class="flex items-center gap-2 text-amber-700 dark:text-amber-300 font-black text-[10px] uppercase tracking-wider"><span class="h-8 w-8 rounded-xl bg-amber-600 text-white flex items-center justify-center">R</span>Equipo receptor / obra</div>
+          <div class="mt-4 text-sm text-slate-800 dark:text-slate-100 font-bold">${receiverTeams.map(rt => escapeHtml(rt.name)).join(', ') || 'Sin equipos receptor'}</div>
+        </div>
+        <div class="space-y-3">${receiverMatrixRows}</div>
+      </div>
+    ` : `
+      <div class="rounded-2xl border border-dashed border-amber-200 dark:border-amber-800 bg-amber-50/40 dark:bg-amber-950/20 p-5 text-center text-xs text-slate-400 italic">
+        No hay equipos receptor configurados.
+      </div>
+    `;
+
     el.diagramDeliveryClusters.innerHTML = `
       <div class="project-team-matrix">
         <section class="rounded-2xl border-2 border-dashed border-sky-200 dark:border-sky-900 bg-sky-50/60 dark:bg-sky-950/25 p-5 flex flex-col justify-center self-stretch">
@@ -1008,123 +975,533 @@
           <div class="mt-4 font-bold text-sm text-slate-800 dark:text-slate-100">${escapeHtml(adminNames)}</div>
         </section>
         <div class="project-matrix-bus" aria-hidden="true"></div>
-        <div class="space-y-3">${matrixRows}</div>
-      </div>`;
-    return;
+        <div class="space-y-3">${deliveryMatrixRows || '<div class="text-[10px] text-slate-400 italic py-1">Sin equipos de entrega</div>'}</div>
+      </div>
+    `;
 
-    el.diagramDeliveryClusters.innerHTML = deliveryTeams.map(dt => {
-      const leadMeta = getUserMetadata(dt.leadEmail);
-      const members = dt.members || [];
-      const nonLeaderEmails = members.filter(m => (m || '').toLowerCase().trim() !== (dt.leadEmail || '').toLowerCase().trim());
-      const taskTeams = dt.taskTeams || [];
-
-      const membersHtml = nonLeaderEmails.map(mEmail => {
-        const mMeta = getUserMetadata(mEmail);
-        return `
-          <div class="flex items-center gap-2 py-1.5 px-2.5 rounded-lg bg-slate-50 dark:bg-slate-800 text-[11px]">
-            <span class="h-5 w-5 rounded-md bg-purple-100 dark:bg-purple-950 text-purple-700 dark:text-purple-300 flex items-center justify-center font-bold text-[9px] shrink-0">
-              C
-            </span>
-            <div class="truncate">
-              <div class="font-bold text-slate-800 dark:text-slate-200 truncate">${escapeHtml(mMeta.name)}</div>
-              <div class="text-slate-400 font-mono text-[9px] truncate">${escapeHtml(mEmail)}</div>
-            </div>
-          </div>
-        `;
-      }).join('') || `<div class="text-[10px] text-slate-400 italic py-1">Sin otros miembros asignados</div>`;
-
-      const tasksHtml = taskTeams.map(tt => {
-        return `
-          <div class="flex items-center gap-1.5 py-1 px-2 rounded-md bg-emerald-50 dark:bg-emerald-950/40 text-emerald-800 dark:text-emerald-300 text-[10px] font-medium border border-emerald-100 dark:border-emerald-900/40">
-            <span class="material-symbols-outlined text-[12px]">task_alt</span>
-            <span>${escapeHtml(tt.name)}</span>
-          </div>
-        `;
-      }).join('');
-
-      const adminNames = (activeProject.iso19650?.projectAdmins || [])
-        .map(email => getUserRegisteredName(email))
-        .join(', ') || 'Sin administrador asignado';
-
-      return `
-        <div class="delivery-matrix-row rounded-2xl border border-slate-200 dark:border-slate-800 bg-white/80 dark:bg-slate-900/70 p-4 shadow-sm">
-          <section class="rounded-xl border border-sky-100 dark:border-sky-900/50 bg-sky-50/60 dark:bg-sky-950/25 p-4">
-            <div class="flex items-center gap-2 text-sky-700 dark:text-sky-300 font-black text-[10px] uppercase tracking-wider">
-              <span class="h-7 w-7 rounded-lg bg-sky-600 text-white flex items-center justify-center">A</span>
-              Administrador del proyecto
-            </div>
-            <div class="mt-3 font-bold text-xs text-slate-800 dark:text-slate-100">${escapeHtml(adminNames)}</div>
-          </section>
-          <div class="delivery-matrix-arrow" aria-hidden="true">→</div>
-          <section class="rounded-xl border border-blue-100 dark:border-blue-900/50 bg-blue-50/60 dark:bg-blue-950/25 p-4">
-            <div class="flex items-center gap-2 text-blue-700 dark:text-blue-300 font-black text-[10px] uppercase tracking-wider">
-              <span class="h-7 w-7 rounded-lg bg-blue-600 text-white flex items-center justify-center">B</span>
-              ${escapeHtml(dt.name)}
-            </div>
-            <div class="mt-3 font-bold text-xs text-slate-800 dark:text-slate-100">${escapeHtml(leadMeta.name || 'Sin líder asignado')}</div>
-            <div class="mt-1 text-[10px] text-slate-500 dark:text-slate-400 break-all">${escapeHtml(leadMeta.email || '')}</div>
-          </section>
-          <div class="delivery-matrix-arrow" aria-hidden="true">→</div>
-          <section class="rounded-xl border border-purple-100 dark:border-purple-900/50 bg-purple-50/40 dark:bg-purple-950/20 p-4">
-            <div class="text-purple-700 dark:text-purple-300 font-black text-[10px] uppercase tracking-wider">Miembros del equipo (C)</div>
-            <div class="mt-3 grid grid-cols-1 gap-1.5">${membersHtml}</div>
-            ${tasksHtml ? `<div class="mt-4 border-t border-purple-100 dark:border-purple-900/50 pt-3"><div class="mb-2 text-emerald-700 dark:text-emerald-300 font-black text-[10px] uppercase tracking-wider">Equipos de tarea</div><div class="flex flex-wrap gap-1.5">${tasksHtml}</div></div>` : ''}
-          </section>
-        </div>
-      `;
-
-      return `
-        <div class="delivery-diagram-card rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-sm space-y-4 hover:shadow-md transition-shadow">
-          
-          <!-- Team Name & Designation number 2 -->
-          <div class="flex items-center justify-between gap-2 border-b border-slate-100 dark:border-slate-800 pb-3">
-            <div class="flex items-center gap-2 min-w-0">
-              <span class="h-7 w-7 rounded-xl bg-purple-50 dark:bg-purple-950 text-purple-600 dark:text-purple-300 flex items-center justify-center font-black text-xs border border-purple-200 dark:border-purple-800 shrink-0">
-                2
-              </span>
-              <h4 class="font-black text-xs text-slate-900 dark:text-white uppercase tracking-wider truncate">${escapeHtml(dt.name)}</h4>
-            </div>
-            <span class="text-[9px] px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-500 font-mono uppercase tracking-wider shrink-0">Equipo B</span>
-          </div>
-
-          <!-- B: Lead -->
-          <div class="p-3 rounded-xl bg-blue-50/70 dark:bg-blue-950/45 border border-blue-100 dark:border-blue-900/40 space-y-1">
-            <div class="text-[9px] font-bold uppercase tracking-wider text-blue-600 dark:text-blue-400 flex items-center gap-1">
-              <span class="material-symbols-outlined text-[12px]">stars</span> Adjudicatario Principal (Líder B)
-            </div>
-            <div class="font-bold text-xs text-slate-800 dark:text-slate-200 truncate">${escapeHtml(leadMeta.name || 'Sin Líder Asignado')}</div>
-            <div class="text-[9px] text-slate-400 font-mono truncate">${escapeHtml(leadMeta.email || '-')}</div>
-            <div class="text-[9px] text-slate-400 truncate">${escapeHtml(leadMeta.company)} • ${escapeHtml(leadMeta.cargo)}</div>
-          </div>
-
-          <!-- C: Members List -->
-          <div class="space-y-1.5">
-            <div class="text-[9px] font-bold uppercase tracking-wider text-purple-600 dark:text-purple-400">Miembros del Equipo (C)</div>
-            <div class="grid grid-cols-1 gap-1.5 max-h-[140px] overflow-y-auto pr-1">
-              ${membersHtml}
-            </div>
-          </div>
-
-          <!-- 3: Tasks list -->
-          ${tasksHtml ? `
-            <div class="space-y-1.5 border-t border-slate-100 dark:border-slate-800 pt-3">
-              <div class="text-[9px] font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400">3. Equipos de Tarea / Disciplinas</div>
-              <div class="flex flex-wrap gap-1.5">${tasksHtml}</div>
-            </div>
-          ` : ''}
-          
-        </div>
-      `;
-    }).join('');
+    const receiverPanelEl = document.getElementById('receiver-diagram-panel');
+    if (receiverPanelEl) {
+      receiverPanelEl.innerHTML = receiverPanel;
+    }
   }
 
+  function renderTreeView() {
+    if (!el.diagramTreeViewContainer || !activeProject) return;
+
+    const projectAdmins = activeProject.iso19650?.projectAdmins || [];
+    const deliveryTeams = activeProject.iso19650?.deliveryTeams || [];
+
+    // 1. Root Node (A: Adjudicadores)
+    const isASelected = selectedNode && selectedNode.type === 'A';
+    const aRing = isASelected ? 'ring-4 ring-indigo-500 border-indigo-500 scale-105 shadow-lg' : 'border-slate-200 dark:border-slate-800';
+    
+    let adminsListHtml = projectAdmins.map(email => {
+      const meta = getUserMetadata(email);
+      return `<div class="font-bold text-slate-800 dark:text-slate-200 text-[11px] truncate">${escapeHtml(meta.name)} <span class="font-normal text-slate-400 text-[9px]">(${escapeHtml(meta.company)})</span></div>`;
+    }).join('') || '<div class="text-[10px] text-slate-400 italic">Sin administradores designados</div>';
+
+    let treeHtml = `
+      <div class="flex flex-col items-center w-full">
+        <!-- Root node: A -->
+        <div id="tree-node-A" class="glass-card rounded-2xl border ${aRing} p-4 shadow-sm w-72 text-center cursor-pointer transition-all hover:shadow-md hover:scale-[1.02]" onclick="selectTreeNode('A', null, event)">
+          <div class="flex items-center justify-center gap-1.5 mb-2">
+            <span class="h-5 w-5 rounded-lg bg-sky-100 dark:bg-sky-950 text-sky-600 dark:text-sky-400 flex items-center justify-center font-black text-[10px] border border-sky-200 dark:border-sky-800">
+              A
+            </span>
+            <span class="text-[10px] font-bold uppercase tracking-wider text-sky-600 dark:text-sky-400">Adjudicador (Cliente)</span>
+          </div>
+          <div class="font-black text-xs text-slate-900 dark:text-white uppercase mb-1">1. Administración de Proyecto</div>
+          <div class="space-y-1 mt-2 pt-2 border-t border-slate-100 dark:border-slate-800/60 max-h-[80px] overflow-y-auto">
+            ${adminsListHtml}
+          </div>
+        </div>
+
+        <!-- Connection line from Root to Level 2 -->
+        ${deliveryTeams.length > 0 ? '<div class="h-6 w-0.5 bg-slate-300 dark:bg-slate-700"></div>' : ''}
+
+        <!-- Delivery Teams Row -->
+        <div class="tree-row w-full flex flex-wrap justify-center gap-6">
+          ${deliveryTeams.map(dt => {
+            const isBSelected = selectedNode && selectedNode.type === 'B' && selectedNode.id === dt.id;
+            const bRing = isBSelected ? 'ring-4 ring-indigo-500 border-indigo-500 scale-105 shadow-lg' : 'border-slate-200 dark:border-slate-800';
+            const leadMeta = getUserMetadata(dt.leadEmail);
+            const members = dt.members || [];
+            const nonLeaderEmails = members.filter(m => (m || '').toLowerCase().trim() !== (dt.leadEmail || '').toLowerCase().trim());
+            const taskTeams = dt.taskTeams || [];
+
+            // Selection states for children C
+            const isAnyCSelected = selectedNode && selectedNode.type === 'C' && selectedNode.teamId === dt.id;
+            const cRing = isAnyCSelected ? 'ring-4 ring-indigo-500 border-indigo-500 scale-105 shadow-lg' : 'border-slate-200 dark:border-slate-800';
+
+            return `
+              <div class="tree-col flex flex-col items-center">
+                <!-- Delivery Team Card (B) -->
+                <div id="tree-node-B-${dt.id}" class="glass-card rounded-2xl border ${bRing} p-4 shadow-sm w-64 text-left cursor-pointer transition-all hover:shadow-md hover:scale-[1.02] z-20" onclick="selectTreeNode('B', '${dt.id}', event)">
+                  <div class="flex items-center justify-between mb-2">
+                    <div class="flex items-center gap-1.5">
+                      <span class="h-5 w-5 rounded-lg bg-blue-100 dark:bg-blue-950 text-blue-600 dark:text-blue-400 flex items-center justify-center font-black text-[10px] border border-blue-200 dark:border-blue-800">
+                        B
+                      </span>
+                      <span class="text-[9px] font-black uppercase tracking-wider text-blue-600 dark:text-blue-400">Líder de Entrega</span>
+                    </div>
+                    <span class="text-[9px] px-1.5 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-500 font-mono font-bold">2</span>
+                  </div>
+                  <h4 class="font-black text-xs text-slate-900 dark:text-white uppercase tracking-wider truncate mb-2">${escapeHtml(dt.name)}</h4>
+                  <div class="p-2 rounded-xl bg-blue-50/70 dark:bg-blue-950/45 border border-blue-100 dark:border-blue-900/40 text-[10px]">
+                    <div class="font-bold text-slate-800 dark:text-slate-200 truncate">${escapeHtml(leadMeta.name || 'Sin Líder Asignado')}</div>
+                    <div class="text-[9px] text-slate-400 font-mono truncate">${escapeHtml(leadMeta.email || '-')}</div>
+                    <div class="text-[9px] text-slate-400 truncate">${escapeHtml(leadMeta.company)}</div>
+                  </div>
+                </div>
+
+                <!-- Vertical Line under B to C & Task Teams -->
+                ${(nonLeaderEmails.length > 0 || taskTeams.length > 0) ? `
+                  <div class="h-6 w-0.5 bg-slate-300 dark:bg-slate-700"></div>
+                  
+                  <!-- Sub-tree row for members (C) and Task Teams (3) -->
+                  <div class="tree-row flex justify-center gap-4">
+                    
+                    <!-- Members (C) Column -->
+                    ${nonLeaderEmails.length > 0 ? `
+                      <div class="tree-col flex flex-col items-center">
+                        <div id="tree-node-C-${dt.id}" class="glass-card rounded-2xl border ${cRing} p-3.5 shadow-sm w-48 text-left cursor-pointer transition-all hover:shadow-md hover:scale-[1.02]" onclick="selectTreeNode('C', '${nonLeaderEmails[0]}', event, '${dt.id}')">
+                          <div class="flex items-center gap-1.5 mb-2">
+                            <span class="h-4.5 w-4.5 rounded bg-purple-100 dark:bg-purple-950 text-purple-600 dark:text-purple-400 flex items-center justify-center font-bold text-[9px] border border-purple-200 dark:border-purple-800 px-1">
+                              C
+                            </span>
+                            <span class="text-[9px] font-bold uppercase tracking-wider text-purple-600 dark:text-purple-400">Adjudicatarios</span>
+                          </div>
+                          <div class="text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">Miembros del Equipo</div>
+                          <div class="space-y-1 max-h-[100px] overflow-y-auto pr-1">
+                            ${nonLeaderEmails.map(mEmail => {
+                              const meta = getUserMetadata(mEmail);
+                              const isThisCSelected = selectedNode && selectedNode.type === 'C' && selectedNode.id === mEmail && selectedNode.teamId === dt.id;
+                              const highlightText = isThisCSelected ? 'text-indigo-600 dark:text-indigo-400 font-extrabold' : 'text-slate-700 dark:text-slate-300';
+                              return `
+                                <div class="text-[10px] hover:underline truncate py-0.5 ${highlightText}" onclick="selectTreeNode('C', '${mEmail}', event, '${dt.id}')">
+                                  • ${escapeHtml(meta.name)}
+                                </div>
+                              `;
+                            }).join('')}
+                          </div>
+                        </div>
+                      </div>
+                    ` : ''}
+
+                    <!-- Task Teams (3) Columns -->
+                    ${taskTeams.map(tt => {
+                      const isTTSelected = selectedNode && selectedNode.type === 'taskTeam' && selectedNode.id === tt.id;
+                      const ttRing = isTTSelected ? 'ring-4 ring-indigo-500 border-indigo-500 scale-105 shadow-lg' : 'border-slate-200 dark:border-slate-800';
+                      return `
+                        <div class="tree-col flex flex-col items-center">
+                          <div id="tree-node-TT-${tt.id}" class="glass-card rounded-2xl border ${ttRing} p-3.5 shadow-sm w-48 text-left cursor-pointer transition-all hover:shadow-md hover:scale-[1.02]" onclick="selectTreeNode('taskTeam', '${tt.id}', event, '${dt.id}')">
+                            <div class="flex items-center mb-2">
+                              <div class="flex items-center gap-1.5">
+                                <span class="h-4.5 w-4.5 rounded bg-emerald-100 dark:bg-emerald-950 text-emerald-600 dark:text-emerald-400 flex items-center justify-center font-bold text-[9px] border border-emerald-200 dark:border-emerald-800 px-1">
+                                  3
+                                </span>
+                                <span class="text-[9px] font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400">Equipo Tarea</span>
+                              </div>
+                            </div>
+                            <h5 class="font-bold text-[11px] text-slate-900 dark:text-white uppercase truncate mb-1">${escapeHtml(tt.name)}</h5>
+                            <span class="text-[8px] px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-500 font-mono font-bold uppercase">${escapeHtml(tt.discipline || 'Disciplina')}</span>
+                            <div class="mt-2 text-[9px] text-slate-400 italic">
+                              ${tt.members?.length || 0} integrantes
+                            </div>
+                          </div>
+                        </div>
+                      `;
+                    }).join('')}
+                  </div>
+                ` : ''}
+              </div>
+            `;
+          }).join('')}
+        </div>
+      </div>
+    `;
+
+    el.diagramTreeViewContainer.innerHTML = treeHtml;
+  }
+
+  // Global helper to handle selection from tree view clicking
+  window.selectTreeNode = function (type, id, event, teamId) {
+    if (event) event.stopPropagation();
+    selectedNode = { type, id, teamId };
+    renderAllViews();
+  };
+
+  function updateSelectionInspector() {
+    if (!el.diagramInspectorPanel) return;
+
+    if (!activeProject) {
+      el.diagramInspectorPanel.innerHTML = `
+        <div class="flex-1 flex flex-col items-center justify-center text-center p-6 space-y-3">
+          <span class="material-symbols-outlined text-slate-300 dark:text-slate-700 text-5xl">warning</span>
+          <p class="text-xs text-slate-400 italic">Selecciona o carga un proyecto activo.</p>
+        </div>
+      `;
+      return;
+    }
+
+    // Default view: Project Overview
+    if (!selectedNode || selectedNode.type === 'project') {
+      const admins = activeProject.iso19650?.projectAdmins || [];
+      const teams = activeProject.iso19650?.deliveryTeams || [];
+      let totalTasks = 0;
+      let totalMembers = (activeProject.members || []).length;
+      teams.forEach(t => {
+        totalTasks += (t.taskTeams || []).length;
+      });
+
+      el.diagramInspectorPanel.innerHTML = `
+        <div class="flex flex-col h-full justify-between">
+          <div class="space-y-5">
+            <div class="border-b border-slate-100 dark:border-slate-800/60 pb-4">
+              <span class="text-[9px] font-black uppercase tracking-widest text-indigo-600 dark:text-indigo-400">Inspector nora</span>
+              <h3 class="text-base font-black text-slate-900 dark:text-white mt-1">Gobernanza de Información</h3>
+              <p class="text-xs text-slate-500 dark:text-slate-400 mt-1 leading-relaxed">
+                Este panel muestra los metadatos detallados de la persona o equipo seleccionado en el organigrama.
+              </p>
+            </div>
+
+            <div class="space-y-3">
+              <h4 class="text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">Resumen del Proyecto</h4>
+              
+              <div class="grid grid-cols-2 gap-2 text-xs">
+                <div class="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800">
+                  <div class="text-[10px] text-slate-400">Total Miembros</div>
+                  <div class="text-lg font-black mt-0.5 text-slate-900 dark:text-white">${totalMembers}</div>
+                </div>
+                <div class="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800">
+                  <div class="text-[10px] text-slate-400">Adjudicadores (A)</div>
+                  <div class="text-lg font-black mt-0.5 text-slate-900 dark:text-white">${admins.length}</div>
+                </div>
+                <div class="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800">
+                  <div class="text-[10px] text-slate-400">Equipos Entrega (B)</div>
+                  <div class="text-lg font-black mt-0.5 text-slate-900 dark:text-white">${teams.length}</div>
+                </div>
+                <div class="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800">
+                  <div class="text-[10px] text-slate-400">Equipos Tarea (3)</div>
+                  <div class="text-lg font-black mt-0.5 text-slate-900 dark:text-white">${totalTasks}</div>
+                </div>
+              </div>
+
+              <div class="p-3.5 rounded-xl bg-indigo-50/50 dark:bg-indigo-950/20 border border-indigo-100/50 dark:border-indigo-900/30 text-xs">
+                <div class="flex items-center gap-1.5 font-bold text-indigo-700 dark:text-indigo-300">
+                  <span class="material-symbols-outlined text-[16px]">info</span>
+                  <span>Estándar ISO 19650-2</span>
+                </div>
+                <p class="text-[11px] text-slate-500 dark:text-slate-400 mt-1 leading-relaxed">
+                  Haz clic sobre cualquiera de los nodos circulares del gráfico o sobre las cajas del esquema jerárquico para inspeccionar integrantes en detalle.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div class="pt-4 border-t border-slate-100 dark:border-slate-800/60 mt-4 flex flex-col gap-2">
+            <button onclick="window.switchTab('directory')" class="w-full inline-flex items-center justify-center gap-2 py-2 px-4 rounded-xl bg-slate-950 hover:bg-black text-white dark:bg-white dark:text-slate-950 dark:hover:bg-slate-100 text-xs font-bold uppercase tracking-wider transition-all shadow-sm">
+              <span class="material-symbols-outlined text-[16px]">person_search</span>
+              <span>Ir al Directorio General</span>
+            </button>
+          </div>
+        </div>
+      `;
+      return;
+    }
+
+    // A: Adjudicador
+    if (selectedNode.type === 'A') {
+      const admins = activeProject.iso19650?.projectAdmins || [];
+      const listHtml = admins.map(email => {
+        const meta = getUserMetadata(email);
+        return `
+          <div class="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800 flex items-start gap-3">
+            <span class="material-symbols-outlined text-slate-400 text-[18px] mt-0.5 shrink-0">account_circle</span>
+            <div class="min-w-0">
+              <div class="font-bold text-xs text-slate-900 dark:text-white truncate">${escapeHtml(meta.name)}</div>
+              <div class="text-[10px] text-slate-400 font-mono truncate">${escapeHtml(meta.email)}</div>
+              <div class="text-[10px] text-slate-500 mt-0.5">${escapeHtml(meta.company)} • ${escapeHtml(meta.cargo)}</div>
+            </div>
+          </div>
+        `;
+      }).join('') || `
+        <div class="p-4 rounded-xl border border-dashed border-slate-200 dark:border-slate-800 text-center text-xs text-slate-400 italic">
+          No hay administradores designados en este proyecto.
+        </div>
+      `;
+
+      el.diagramInspectorPanel.innerHTML = `
+        <div class="flex flex-col h-full justify-between">
+          <div class="space-y-4">
+            <div class="border-b border-slate-100 dark:border-slate-800/60 pb-3 flex items-start justify-between">
+              <div>
+                <span class="px-2 py-0.5 rounded bg-sky-100 dark:bg-sky-950 text-sky-700 dark:text-sky-300 text-[9px] font-black uppercase tracking-wider">Rol A</span>
+                <h3 class="text-base font-black text-slate-900 dark:text-white mt-1">Adjudicador</h3>
+              </div>
+              <button onclick="clearInspectorSelection(event)" class="text-slate-400 hover:text-slate-600 dark:hover:text-white" title="Limpiar selección">
+                <span class="material-symbols-outlined text-[18px]">close</span>
+              </button>
+            </div>
+
+            <p class="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
+              Es el cliente, promotor o representante principal del proyecto que designa a los administradores para liderar la gobernanza de información.
+            </p>
+
+            <div class="space-y-2 mt-2">
+              <h4 class="text-[10px] font-black uppercase tracking-wider text-slate-400 dark:text-slate-500">Administradores Asignados (${admins.length})</h4>
+              <div class="space-y-2 max-h-[300px] overflow-y-auto pr-1">
+                ${listHtml}
+              </div>
+            </div>
+          </div>
+
+          <div class="pt-4 border-t border-slate-100 dark:border-slate-800/60 mt-4 flex flex-col gap-2">
+            <button onclick="window.switchTab('admins')" class="w-full inline-flex items-center justify-center gap-2 py-2 px-4 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold uppercase tracking-wider transition-all shadow-sm">
+              <span class="material-symbols-outlined text-[16px]">shield_person</span>
+              <span>Gestionar Administradores</span>
+            </button>
+          </div>
+        </div>
+      `;
+      return;
+    }
+
+    // B: Delivery Team Leader
+    if (selectedNode.type === 'B') {
+      const teams = activeProject.iso19650?.deliveryTeams || [];
+      const dt = teams.find(t => t.id === selectedNode.id);
+      if (!dt) {
+        clearInspectorSelection();
+        return;
+      }
+
+      const leadMeta = getUserMetadata(dt.leadEmail);
+      const members = dt.members || [];
+      const taskTeams = dt.taskTeams || [];
+
+      el.diagramInspectorPanel.innerHTML = `
+        <div class="flex flex-col h-full justify-between">
+          <div class="space-y-4">
+            <div class="border-b border-slate-100 dark:border-slate-800/60 pb-3 flex items-start justify-between">
+              <div>
+                <span class="px-2 py-0.5 rounded bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-300 text-[9px] font-black uppercase tracking-wider">Rol B</span>
+                <h3 class="text-base font-black text-slate-900 dark:text-white mt-1">Líder de Entrega</h3>
+              </div>
+              <button onclick="clearInspectorSelection(event)" class="text-slate-400 hover:text-slate-600 dark:hover:text-white" title="Limpiar selección">
+                <span class="material-symbols-outlined text-[18px]">close</span>
+              </button>
+            </div>
+
+            <div>
+              <div class="text-[9px] font-black uppercase tracking-widest text-slate-400">Equipo de Entrega</div>
+              <div class="text-sm font-black text-indigo-600 dark:text-indigo-400 uppercase tracking-wide mt-0.5">${escapeHtml(dt.name)}</div>
+              ${dt.description ? `<p class="text-[11px] text-slate-500 dark:text-slate-400 mt-1 italic leading-relaxed">"${escapeHtml(dt.description)}"</p>` : ''}
+            </div>
+
+            <!-- Leader info card -->
+            <div class="p-3.5 rounded-2xl bg-blue-50/60 dark:bg-blue-950/20 border border-blue-100/50 dark:border-blue-900/30 space-y-1.5">
+              <div class="text-[9px] font-black uppercase tracking-wider text-blue-600 dark:text-blue-400 flex items-center gap-1">
+                <span class="material-symbols-outlined text-[12px]">stars</span> Adjudicatario Principal
+              </div>
+              <div>
+                <div class="font-black text-xs text-slate-800 dark:text-slate-200">${escapeHtml(leadMeta.name || 'Sin Líder Asignado')}</div>
+                <div class="text-[9px] text-slate-400 font-mono truncate">${escapeHtml(leadMeta.email || '-')}</div>
+                <div class="text-[10px] text-slate-500 mt-0.5">${escapeHtml(leadMeta.company)} • ${escapeHtml(leadMeta.cargo)}</div>
+              </div>
+            </div>
+
+            <div class="grid grid-cols-2 gap-2 text-xs">
+              <div class="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800">
+                <div class="text-[9px] text-slate-400 uppercase tracking-wider">Miembros C</div>
+                <div class="font-bold text-sm text-slate-900 dark:text-white mt-0.5">${members.length}</div>
+              </div>
+              <div class="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800">
+                <div class="text-[9px] text-slate-400 uppercase tracking-wider">Equipos Tarea</div>
+                <div class="font-bold text-sm text-slate-900 dark:text-white mt-0.5">${taskTeams.length}</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="pt-4 border-t border-slate-100 dark:border-slate-800/60 mt-4 flex flex-col gap-2">
+            <button onclick="scrollToTeamCard('${dt.id}')" class="w-full inline-flex items-center justify-center gap-2 py-2 px-4 rounded-xl bg-purple-600 hover:bg-purple-700 text-white text-xs font-bold uppercase tracking-wider transition-all shadow-sm">
+              <span class="material-symbols-outlined text-[16px]">visibility</span>
+              <span>Ver en Equipos de Entrega</span>
+            </button>
+          </div>
+        </div>
+      `;
+      return;
+    }
+
+    // C: Other Adjudicatarios (Miembros)
+    if (selectedNode.type === 'C') {
+      const teams = activeProject.iso19650?.deliveryTeams || [];
+      const dt = teams.find(t => t.id === selectedNode.teamId);
+      if (!dt) {
+        clearInspectorSelection();
+        return;
+      }
+
+      const mEmail = selectedNode.id;
+      const meta = getUserMetadata(mEmail);
+
+      // Find task teams this member belongs to
+      const memberTaskTeams = (dt.taskTeams || []).filter(tt => (tt.members || []).some(email => email.toLowerCase().trim() === mEmail.toLowerCase().trim()));
+      const taskTeamsListHtml = memberTaskTeams.map(tt => `
+        <span class="inline-flex items-center gap-1 py-0.5 px-2 rounded-lg bg-emerald-50 dark:bg-emerald-950/40 text-emerald-800 dark:text-emerald-300 text-[10px] font-bold border border-emerald-100 dark:border-emerald-900/40">
+          <span class="material-symbols-outlined text-[10px]">task_alt</span>
+          <span>${escapeHtml(tt.name)}</span>
+        </span>
+      `).join(' ') || '<span class="text-[10px] text-slate-400 italic">Ningún Equipo de Tarea asignado</span>';
+
+      el.diagramInspectorPanel.innerHTML = `
+        <div class="flex flex-col h-full justify-between">
+          <div class="space-y-4">
+            <div class="border-b border-slate-100 dark:border-slate-800/60 pb-3 flex items-start justify-between">
+              <div>
+                <span class="px-2 py-0.5 rounded bg-purple-100 dark:bg-purple-950 text-purple-700 dark:text-purple-300 text-[9px] font-black uppercase tracking-wider">Rol C</span>
+                <h3 class="text-base font-black text-slate-900 dark:text-white mt-1">Adjudicatario (Miembro)</h3>
+              </div>
+              <button onclick="clearInspectorSelection(event)" class="text-slate-400 hover:text-slate-600 dark:hover:text-white" title="Limpiar selección">
+                <span class="material-symbols-outlined text-[18px]">close</span>
+              </button>
+            </div>
+
+            <!-- Member profile details -->
+            <div class="space-y-3">
+              <div class="flex items-center gap-3">
+                <div class="h-10 w-10 rounded-xl bg-purple-50 dark:bg-purple-950/40 text-purple-600 dark:text-purple-400 flex items-center justify-center font-black text-sm border border-purple-200/50 dark:border-purple-900/30">
+                  C
+                </div>
+                <div class="min-w-0">
+                  <div class="font-black text-xs text-slate-900 dark:text-white truncate">${escapeHtml(meta.name)}</div>
+                  <div class="text-[9px] text-slate-400 font-mono truncate">${escapeHtml(meta.email)}</div>
+                </div>
+              </div>
+
+              <div class="border-t border-slate-100 dark:border-slate-800/60 pt-3 space-y-2 text-[11px]">
+                <div><strong class="text-slate-400 uppercase tracking-wider text-[9px]">Empresa:</strong> <span class="text-slate-800 dark:text-slate-200 font-semibold">${escapeHtml(meta.company || '-')}</span></div>
+                <div><strong class="text-slate-400 uppercase tracking-wider text-[9px]">Cargo / Rol:</strong> <span class="text-slate-800 dark:text-slate-200">${escapeHtml(meta.cargo || '-')}</span></div>
+                ${meta.especialidad ? `<div><strong class="text-slate-400 uppercase tracking-wider text-[9px]">Especialidad:</strong> <span class="text-slate-800 dark:text-slate-200">${escapeHtml(meta.especialidad)}</span></div>` : ''}
+              </div>
+
+              <div class="border-t border-slate-100 dark:border-slate-800/60 pt-3 space-y-1.5">
+                <div class="text-[9px] font-black uppercase tracking-wider text-slate-400">Pertenece al Equipo de Entrega</div>
+                <div class="text-[11px] font-extrabold text-indigo-600 dark:text-indigo-400 uppercase">${escapeHtml(dt.name)}</div>
+              </div>
+
+              <div class="border-t border-slate-100 dark:border-slate-800/60 pt-3 space-y-1.5">
+                <div class="text-[9px] font-black uppercase tracking-wider text-slate-400">Equipos de Tarea (Especialidades)</div>
+                <div class="flex flex-wrap gap-1">${taskTeamsListHtml}</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="pt-4 border-t border-slate-100 dark:border-slate-800/60 mt-4 flex flex-col gap-2">
+            <button onclick="scrollToTeamCard('${dt.id}')" class="w-full inline-flex items-center justify-center gap-2 py-2 px-4 rounded-xl bg-purple-600 hover:bg-purple-700 text-white text-xs font-bold uppercase tracking-wider transition-all shadow-sm">
+              <span class="material-symbols-outlined text-[16px]">visibility</span>
+              <span>Ver en Equipos de Entrega</span>
+            </button>
+          </div>
+        </div>
+      `;
+      return;
+    }
+
+    // taskTeam
+    if (selectedNode.type === 'taskTeam') {
+      const teams = activeProject.iso19650?.deliveryTeams || [];
+      const dt = teams.find(t => t.id === selectedNode.teamId);
+      if (!dt) {
+        clearInspectorSelection();
+        return;
+      }
+      const tt = (dt.taskTeams || []).find(t => t.id === selectedNode.id);
+      if (!tt) {
+        clearInspectorSelection();
+        return;
+      }
+
+      const teamMembersList = (tt.members || []).map(mEmail => {
+        const meta = getUserMetadata(mEmail);
+        return `
+          <div class="py-1 px-2 rounded-lg bg-slate-50 dark:bg-slate-800/30 text-[10px] flex items-center justify-between">
+            <span class="font-bold text-slate-700 dark:text-slate-300 truncate">${escapeHtml(meta.name)}</span>
+            <span class="text-slate-400 font-mono text-[8px] truncate max-w-[120px]">${escapeHtml(meta.email)}</span>
+          </div>
+        `;
+      }).join('') || '<div class="text-[10px] text-slate-400 italic py-1">Sin miembros asignados a esta especialidad</div>';
+
+      el.diagramInspectorPanel.innerHTML = `
+        <div class="flex flex-col h-full justify-between">
+          <div class="space-y-4">
+            <div class="border-b border-slate-100 dark:border-slate-800/60 pb-3 flex items-start justify-between">
+              <div>
+                <span class="px-2 py-0.5 rounded bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 text-[9px] font-black uppercase tracking-wider">Nivel 3</span>
+                <h3 class="text-base font-black text-slate-900 dark:text-white mt-1">Equipo de Tarea</h3>
+              </div>
+              <button onclick="clearInspectorSelection(event)" class="text-slate-400 hover:text-slate-600 dark:hover:text-white" title="Limpiar selección">
+                <span class="material-symbols-outlined text-[18px]">close</span>
+              </button>
+            </div>
+
+            <div>
+              <div class="text-[9px] font-black uppercase tracking-widest text-slate-400">Especialidad / Tarea</div>
+              <div class="text-sm font-black text-emerald-600 dark:text-emerald-400 uppercase tracking-wide mt-0.5">${escapeHtml(tt.name)}</div>
+              <div class="mt-1.5 flex items-center gap-1 text-[10px] text-slate-500 dark:text-slate-400">
+                <strong class="uppercase text-[8px] text-slate-400">Disciplina:</strong>
+                <span class="px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 font-bold">${escapeHtml(tt.discipline || 'Ninguna')}</span>
+              </div>
+            </div>
+
+            <div class="border-t border-slate-100 dark:border-slate-800/60 pt-3 space-y-1">
+              <div class="text-[9px] font-black uppercase tracking-wider text-slate-400">Equipo de Entrega Principal (B)</div>
+              <div class="text-[11px] font-bold text-slate-800 dark:text-slate-200 uppercase">${escapeHtml(dt.name)}</div>
+            </div>
+
+            <div class="border-t border-slate-100 dark:border-slate-800/60 pt-3 space-y-2">
+              <div class="text-[9px] font-black uppercase tracking-wider text-slate-400">Integrantes de la Especialidad (${tt.members?.length || 0})</div>
+              <div class="space-y-1.5 max-h-[180px] overflow-y-auto pr-1">
+                ${teamMembersList}
+              </div>
+            </div>
+          </div>
+
+          <div class="pt-4 border-t border-slate-100 dark:border-slate-800/60 mt-4 flex flex-col gap-2">
+            <button onclick="scrollToTeamCard('${dt.id}')" class="w-full inline-flex items-center justify-center gap-2 py-2 px-4 rounded-xl bg-purple-600 hover:bg-purple-700 text-white text-xs font-bold uppercase tracking-wider transition-all shadow-sm">
+              <span class="material-symbols-outlined text-[16px]">visibility</span>
+              <span>Ver en Equipos de Entrega</span>
+            </button>
+          </div>
+        </div>
+      `;
+      return;
+    }
+  }
+
+  // Global helper functions to clear selection or scroll to cards
+  window.clearInspectorSelection = function (event) {
+    if (event) event.stopPropagation();
+    selectedNode = { type: 'project', id: null };
+    renderAllViews();
+  };
+
+  window.scrollToTeamCard = function (teamId) {
+    window.switchTab('delivery');
+    setTimeout(() => {
+      const card = document.getElementById(`delivery-team-card-${teamId}`);
+      if (card) {
+        card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        card.classList.add('ring-4', 'ring-purple-500');
+        setTimeout(() => card.classList.remove('ring-4', 'ring-purple-500'), 2500);
+      }
+    }, 120);
+  };
+
   function updateDiagramTransform() {
-    if (!el.isoDiagramViewportWrapper || !el.isoDiagramCanvas) return;
-    const fitScale = Math.min(
-      el.isoDiagramCanvas.clientWidth / 900,
-      el.isoDiagramCanvas.clientHeight / 650
-    );
-    el.isoDiagramViewportWrapper.style.transform = `translate(${panX}px, ${panY}px) scale(${fitScale * zoomScale})`;
+    if (!el.isoDiagramViewportWrapper) return;
+    el.isoDiagramViewportWrapper.style.transform = `translate(${panX}px, ${panY}px) scale(${zoomScale})`;
     const zoomIndicator = document.getElementById('zoom-indicator');
     if (zoomIndicator) {
       zoomIndicator.textContent = `${Math.round(zoomScale * 100)}%`;
@@ -1220,7 +1597,13 @@
       });
     }
 
-    window.addEventListener('resize', updateDiagramTransform);
+    // Fullscreen Mode Toggle
+    const btnFullscreen = document.getElementById('btn-fullscreen-toggle');
+    if (btnFullscreen) {
+      btnFullscreen.addEventListener('click', () => {
+        toggleFullscreen();
+      });
+    }
   }
 
   function toggleFullscreen() {
@@ -1262,18 +1645,12 @@
     if (!el.projectAdminsContainer || !activeProject) return;
     const projectAdmins = activeProject.iso19650?.projectAdmins || [];
 
-    if (projectAdmins.length === 0) {
-      el.projectAdminsContainer.innerHTML = `
-        <div class="col-span-full py-12 text-center text-xs text-slate-400 italic bg-white/40 dark:bg-slate-800/40 rounded-2xl border border-dashed border-slate-300 dark:border-slate-700">
-          No hay ningún Administrador de Proyecto (Adjudicador) designado actualmente.
-        </div>
-      `;
-      return;
-    }
+    const directorEmail = (activeProject.iso19650?.directorDeObra || '').toLowerCase().trim();
+    const cards = [];
 
-    el.projectAdminsContainer.innerHTML = projectAdmins.map(email => {
+    projectAdmins.forEach(email => {
       const meta = getUserMetadata(email);
-      return `
+      cards.push(`
         <div class="rounded-2xl p-5 border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 shadow-sm relative group hover:border-blue-400 transition-all flex flex-col justify-between">
           <div class="space-y-3">
             <div class="flex items-center justify-between">
@@ -1298,8 +1675,49 @@
             </div>
           </div>
         </div>
+      `);
+    });
+
+    if (directorEmail) {
+      const meta = getUserMetadata(directorEmail);
+      cards.push(`
+        <div class="rounded-2xl p-5 border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 shadow-sm relative group hover:border-amber-400 transition-all flex flex-col justify-between">
+          <div class="space-y-3">
+            <div class="flex items-center justify-between">
+              <span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-lg bg-amber-50 dark:bg-amber-950 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800 font-mono text-[10px] font-bold uppercase">
+                <span class="material-symbols-outlined text-[13px]">engineering</span> Director de Obra
+              </span>
+              ${canManageProjectAdmins ? `
+                <button onclick="removeProjectDirector('${directorEmail}')" class="text-slate-400 hover:text-rose-600 transition-colors p-1" title="Remover rol de Director de Obra">
+                  <span class="material-symbols-outlined text-[18px]">person_remove</span>
+                </button>
+              ` : ''}
+            </div>
+
+            <div>
+              <h4 class="font-bold text-sm text-slate-900 dark:text-white">${escapeHtml(meta.name)}</h4>
+              <p class="text-xs font-mono text-slate-500 dark:text-slate-400 mt-0.5 truncate">${escapeHtml(meta.email)}</p>
+            </div>
+
+            <div class="pt-2 border-t border-slate-100 dark:border-slate-700 text-xs text-slate-600 dark:text-slate-300 space-y-1">
+              <div><strong class="text-slate-400 text-[10px] uppercase tracking-wider">Empresa:</strong> ${escapeHtml(meta.company)}</div>
+              <div><strong class="text-slate-400 text-[10px] uppercase tracking-wider">Cargo:</strong> ${escapeHtml(meta.cargo)}</div>
+            </div>
+          </div>
+        </div>
+      `);
+    }
+
+    if (cards.length === 0) {
+      el.projectAdminsContainer.innerHTML = `
+        <div class="col-span-full py-12 text-center text-xs text-slate-400 italic bg-white/40 dark:bg-slate-800/40 rounded-2xl border border-dashed border-slate-300 dark:border-slate-700">
+          No hay ningún Administrador de Proyecto (Adjudicador) ni Director de Obra designado actualmente.
+        </div>
       `;
-    }).join('');
+      return;
+    }
+
+    el.projectAdminsContainer.innerHTML = cards.join('');
   }
 
   window.openAddProjectAdminModal = function () {
@@ -1373,7 +1791,66 @@
     window.showToast('Administrador de Proyecto removido.', 'info');
   };
 
-  // --- 4. PESTAÑA: 2. EQUIPOS DE ENTREGA ---
+  window.openAddProjectDirectorModal = function () {
+    if (!canManageProjectAdmins) {
+      window.showToast('Solo los Administradores de Empresa pueden nombrar al Director de Obra.', 'error');
+      return;
+    }
+
+    const select = document.getElementById('select-director-obra-user');
+    if (!select) return;
+
+    const companyMembers = Array.isArray(currentCompany?.members) ? currentCompany.members : [];
+    const existing = (activeProject.iso19650?.directorDeObra || '').toLowerCase().trim();
+    const options = companyMembers
+      .filter(m => m.email && m.email.toLowerCase().trim() !== existing)
+      .map(m => {
+        const name = getUserRegisteredName(m.email);
+        return `<option value="${escapeHtml(m.email)}">${escapeHtml(name)} (${escapeHtml(m.email)})</option>`;
+      });
+
+    select.innerHTML = options.length ? options.join('') : '<option value="">No hay usuarios disponibles en la empresa</option>';
+    window.openModal('modal-director-obra');
+  };
+
+  window.confirmAddProjectDirector = function () {
+    const select = document.getElementById('select-director-obra-user');
+    const email = (select?.value || '').toLowerCase().trim();
+    if (!email) {
+      window.showToast('Por favor selecciona un usuario.', 'error');
+      return;
+    }
+
+    if (!activeProject.iso19650) activeProject.iso19650 = { projectAdmins: [], deliveryTeams: [], receiverTeams: [], directorDeObra: '' };
+    activeProject.iso19650.directorDeObra = email;
+
+    if (!activeProject.members.includes(email)) {
+      activeProject.members.push(email);
+    }
+
+    window.closeModal('modal-director-obra');
+    evaluatePermissions();
+    renderAllViews();
+    syncTeams();
+    window.showToast('Director de Obra designado con éxito.', 'success');
+  };
+
+  window.removeProjectDirector = function (email) {
+    if (!canManageProjectAdmins) return;
+    const clean = (email || '').toLowerCase().trim();
+    if (!confirm(`¿Estás seguro de remover el rol de Director de Obra para ${clean}?`)) return;
+
+    if (activeProject?.iso19650) {
+      activeProject.iso19650.directorDeObra = '';
+    }
+
+    evaluatePermissions();
+    renderAllViews();
+    syncTeams();
+    window.showToast('Director de Obra removido.', 'info');
+  };
+
+  // --- 4. PESTAÑA: EQUIPO RECEPTOR ---
   function renderReceiverTeamsTab() {
     if (!el.receiverTeamsContainer || !activeProject) return;
     const receiverTeams = activeProject.iso19650?.receiverTeams || [];
@@ -1387,7 +1864,7 @@
       return;
     }
 
-    el.receiverTeamsContainer.innerHTML = receiverTeams.map((rt, rtIndex) => {
+    el.receiverTeamsContainer.innerHTML = receiverTeams.map((rt) => {
       const leadMeta = getUserMetadata(rt.leadEmail);
       const members = rt.members || [];
       const nonLeaderMembers = members.filter(mEmail => mEmail.toLowerCase().trim() !== (rt.leadEmail || '').toLowerCase().trim());
@@ -1400,7 +1877,7 @@
           <div class="flex items-center justify-between py-2 px-3 rounded-xl bg-slate-50 dark:bg-slate-900/60 text-xs">
             <div class="flex items-center gap-2.5">
               <span class="h-6 w-6 rounded-lg bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300 flex items-center justify-center font-bold text-[10px]">
-                R
+                O
               </span>
               <div>
                 <div class="font-bold text-slate-900 dark:text-white">${escapeHtml(mMeta.name)}</div>
@@ -1426,7 +1903,7 @@
           <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 dark:border-slate-700 pb-4">
             <div class="flex items-center gap-3">
               <span class="h-10 w-10 rounded-2xl bg-amber-50 dark:bg-amber-950/80 text-amber-600 dark:text-amber-300 flex items-center justify-center font-black text-sm border border-amber-200 dark:border-amber-800">
-                R
+                O
               </span>
               <div>
                 <h3 class="text-base font-black text-slate-900 dark:text-white">${escapeHtml(rt.name)}</h3>
@@ -1480,6 +1957,156 @@
     }).join('');
   }
 
+  window.openCreateReceiverTeamModal = function () {
+    if (!canManageProjectStructure) return;
+    document.getElementById('modal-receiver-title').textContent = 'Crear Equipo Receptor';
+    document.getElementById('receiver-team-edit-id').value = '';
+    document.getElementById('receiver-team-name').value = '';
+    document.getElementById('receiver-team-desc').value = '';
+
+    const leadSelect = document.getElementById('receiver-team-lead-select');
+    if (!leadSelect) return;
+    const memberOptions = (activeProject.members || []).map(m => {
+      const name = getUserRegisteredName(m);
+      return `<option value="${escapeHtml(m)}">${escapeHtml(name)} (${escapeHtml(m)})</option>`;
+    });
+    leadSelect.innerHTML = '<option value="">-- Seleccionar Líder del Equipo Receptor --</option>' + memberOptions.join('');
+
+    window.openModal('modal-receiver-team');
+  };
+
+  window.openEditReceiverTeamModal = function (receiverId) {
+    const rt = (activeProject.iso19650?.receiverTeams || []).find(d => d.id === receiverId);
+    if (!rt) return;
+
+    const userEmail = (currentUser?.username || currentUser?.email || currentUser?.userAccount || '').toLowerCase().trim();
+    const isCurrentLeader = (rt.leadEmail || '').toLowerCase().trim() === userEmail;
+
+    if (!canManageProjectStructure && !isCurrentLeader) {
+      window.showToast('No tienes permisos para editar este equipo receptor.', 'error');
+      return;
+    }
+
+    document.getElementById('modal-receiver-title').textContent = 'Editar Equipo Receptor';
+    document.getElementById('receiver-team-edit-id').value = rt.id;
+    document.getElementById('receiver-team-name').value = rt.name || '';
+    document.getElementById('receiver-team-desc').value = rt.description || '';
+
+    const leadSelect = document.getElementById('receiver-team-lead-select');
+    if (!leadSelect) return;
+    const memberOptions = (activeProject.members || []).map(m => {
+      const name = getUserRegisteredName(m);
+      const isSel = (m.toLowerCase().trim() === (rt.leadEmail || '').toLowerCase().trim()) ? 'selected' : '';
+      return `<option value="${escapeHtml(m)}" ${isSel}>${escapeHtml(name)} (${escapeHtml(m)})</option>`;
+    });
+    leadSelect.innerHTML = '<option value="">-- Seleccionar Líder del Equipo Receptor --</option>' + memberOptions.join('');
+
+    window.openModal('modal-receiver-team');
+  };
+
+  window.confirmSaveReceiverTeam = function () {
+    const editId = document.getElementById('receiver-team-edit-id').value;
+    const name = document.getElementById('receiver-team-name').value.trim();
+    const leadEmail = document.getElementById('receiver-team-lead-select').value.toLowerCase().trim();
+    const desc = document.getElementById('receiver-team-desc').value.trim();
+
+    if (!name) {
+      window.showToast('Por favor escribe un nombre para el equipo receptor.', 'error');
+      return;
+    }
+    if (!leadEmail) {
+      window.showToast('Debe asignarse un líder para el equipo receptor.', 'error');
+      return;
+    }
+
+    if (!activeProject.iso19650) activeProject.iso19650 = { projectAdmins: [], deliveryTeams: [], receiverTeams: [], directorDeObra: '' };
+    if (!activeProject.iso19650.receiverTeams) activeProject.iso19650.receiverTeams = [];
+
+    if (editId) {
+      const rt = activeProject.iso19650.receiverTeams.find(d => d.id === editId);
+      if (rt) {
+        rt.name = name;
+        rt.leadEmail = leadEmail;
+        rt.description = desc;
+        if (leadEmail && !rt.members.includes(leadEmail)) rt.members.push(leadEmail);
+      }
+    } else {
+      activeProject.iso19650.receiverTeams.push({
+        id: 'recv-' + Date.now(),
+        name,
+        leadEmail,
+        description: desc,
+        members: [leadEmail]
+      });
+    }
+
+    window.closeModal('modal-receiver-team');
+    renderAllViews();
+    syncTeams();
+    window.showToast('Equipo Receptor guardado exitosamente.', 'success');
+  };
+
+  window.deleteReceiverTeam = function (receiverId) {
+    if (!canManageProjectStructure) return;
+    if (!confirm('¿Estás seguro de eliminar este Equipo Receptor y sus configuraciones?')) return;
+    activeProject.iso19650.receiverTeams = (activeProject.iso19650.receiverTeams || []).filter(d => d.id !== receiverId);
+    renderAllViews();
+    syncTeams();
+    window.showToast('Equipo Receptor eliminado.', 'info');
+  };
+
+  window.setReceiverTeamLead = function (receiverId, email) {
+    const rt = (activeProject.iso19650?.receiverTeams || []).find(d => d.id === receiverId);
+    if (!rt) return;
+    rt.leadEmail = email.toLowerCase().trim();
+    if (!rt.members.includes(rt.leadEmail)) rt.members.push(rt.leadEmail);
+    renderAllViews();
+    syncTeams();
+    window.showToast(`Nuevo líder asignado: ${getUserRegisteredName(email)}`, 'success');
+  };
+
+  window.removeReceiverTeamMember = function (receiverId, email) {
+    const rt = (activeProject.iso19650?.receiverTeams || []).find(d => d.id === receiverId);
+    if (!rt) return;
+    const clean = email.toLowerCase().trim();
+    if (rt.leadEmail && rt.leadEmail.toLowerCase().trim() === clean) {
+      window.showToast('No es posible remover al líder. Primero asigna un nuevo líder.', 'error');
+      return;
+    }
+
+    rt.members = (rt.members || []).filter(m => m.toLowerCase().trim() !== clean);
+    renderAllViews();
+    syncTeams();
+    window.showToast('Miembro removido del equipo receptor.', 'info');
+  };
+
+  window.openAddMemberToReceiverTeamModal = function (receiverId) {
+    const rt = (activeProject.iso19650?.receiverTeams || []).find(d => d.id === receiverId);
+    if (!rt) return;
+
+    const availableMembers = (activeProject.members || []).filter(m => !rt.members.includes(m.toLowerCase().trim()));
+    if (availableMembers.length === 0) {
+      window.showToast('Todos los participantes del proyecto ya están en este equipo receptor.', 'info');
+      return;
+    }
+
+    const memberPrompt = prompt(`Ingresa el correo del participante a integrar al equipo receptor "${rt.name}":\nOpciones disponibles:\n` + availableMembers.join('\n'));
+    if (!memberPrompt) return;
+
+    const clean = memberPrompt.toLowerCase().trim();
+    if (activeProject.members.includes(clean)) {
+      if (!rt.members.includes(clean)) {
+        rt.members.push(clean);
+        renderAllViews();
+        syncTeams();
+        window.showToast('Miembro añadido al equipo receptor.', 'success');
+      }
+    } else {
+      window.showToast('El usuario no pertenece al proyecto. Intégralo primero en el Directorio.', 'error');
+    }
+  };
+
+  // --- 5. PESTAÑA: DIRECTORIO DE PARTICIPANTES ---
   function renderDeliveryTeamsTab() {
     if (!el.deliveryTeamsContainer || !activeProject) return;
     const deliveryTeams = activeProject.iso19650?.deliveryTeams || [];
@@ -1916,212 +2543,6 @@
     window.showToast('Equipo de Tarea eliminado.', 'info');
   };
 
-  // --- 5. PESTAÑA: EQUIPO RECEPTOR ---
-  window.openCreateReceiverTeamModal = function () {
-    if (!canManageProjectStructure) return;
-    document.getElementById('modal-receiver-title').textContent = 'Crear Equipo Receptor';
-    document.getElementById('receiver-team-edit-id').value = '';
-    document.getElementById('receiver-team-name').value = '';
-    document.getElementById('receiver-team-desc').value = '';
-
-    const leadSelect = document.getElementById('receiver-team-lead-select');
-    const memberOptions = (activeProject.members || []).map(m => {
-      const name = getUserRegisteredName(m);
-      return `<option value="${escapeHtml(m)}">${escapeHtml(name)} (${escapeHtml(m)})</option>`;
-    });
-    leadSelect.innerHTML = '<option value="">-- Seleccionar Líder del Equipo Receptor --</option>' + memberOptions.join('');
-
-    window.openModal('modal-receiver-team');
-  };
-
-  window.openEditReceiverTeamModal = function (receiverId) {
-    const rt = (activeProject.iso19650?.receiverTeams || []).find(d => d.id === receiverId);
-    if (!rt) return;
-
-    const userEmail = (currentUser?.username || currentUser?.email || currentUser?.userAccount || '').toLowerCase().trim();
-    const isCurrentLeader = (rt.leadEmail || '').toLowerCase().trim() === userEmail;
-
-    if (!canManageProjectStructure && !isCurrentLeader) {
-      window.showToast('No tienes permisos para editar este equipo receptor.', 'error');
-      return;
-    }
-
-    document.getElementById('modal-receiver-title').textContent = 'Editar Equipo Receptor';
-    document.getElementById('receiver-team-edit-id').value = rt.id;
-    document.getElementById('receiver-team-name').value = rt.name || '';
-    document.getElementById('receiver-team-desc').value = rt.description || '';
-
-    const leadSelect = document.getElementById('receiver-team-lead-select');
-    const memberOptions = (activeProject.members || []).map(m => {
-      const name = getUserRegisteredName(m);
-      const isSel = (m.toLowerCase().trim() === (rt.leadEmail || '').toLowerCase().trim()) ? 'selected' : '';
-      return `<option value="${escapeHtml(m)}" ${isSel}>${escapeHtml(name)} (${escapeHtml(m)})</option>`;
-    });
-    leadSelect.innerHTML = '<option value="">-- Seleccionar Líder del Equipo Receptor --</option>' + memberOptions.join('');
-
-    window.openModal('modal-receiver-team');
-  };
-
-  window.confirmSaveReceiverTeam = function () {
-    const editId = document.getElementById('receiver-team-edit-id').value;
-    const name = document.getElementById('receiver-team-name').value.trim();
-    const leadEmail = document.getElementById('receiver-team-lead-select').value.toLowerCase().trim();
-    const desc = document.getElementById('receiver-team-desc').value.trim();
-
-    if (editId) {
-      const rt = activeProject.iso19650.receiverTeams.find(d => d.id === editId);
-      if (!rt) return;
-      const userEmail = (currentUser?.username || currentUser?.email || currentUser?.userAccount || '').toLowerCase().trim();
-      const isCurrentLeader = (rt.leadEmail || '').toLowerCase().trim() === userEmail;
-      if (!canManageProjectStructure && !isCurrentLeader) {
-        window.showToast('No tienes permisos para guardar cambios en este equipo receptor.', 'error');
-        return;
-      }
-    } else {
-      if (!canManageProjectStructure) {
-        window.showToast('No tienes permisos para crear equipos receptor.', 'error');
-        return;
-      }
-    }
-
-    if (!name) {
-      window.showToast('Por favor escribe un nombre para el equipo receptor.', 'error');
-      return;
-    }
-    if (!leadEmail) {
-      window.showToast('Debe asignarse un líder para el equipo receptor.', 'error');
-      return;
-    }
-
-    if (!activeProject.iso19650) activeProject.iso19650 = { projectAdmins: [], deliveryTeams: [], receiverTeams: [] };
-    if (!activeProject.iso19650.receiverTeams) activeProject.iso19650.receiverTeams = [];
-
-    if (editId) {
-      const rt = activeProject.iso19650.receiverTeams.find(d => d.id === editId);
-      if (rt) {
-        rt.name = name;
-        rt.leadEmail = leadEmail;
-        rt.description = desc;
-        if (leadEmail && !rt.members.includes(leadEmail)) {
-          rt.members.push(leadEmail);
-        }
-      }
-    } else {
-      const newRt = {
-        id: 'recv-' + Date.now(),
-        name: name,
-        leadEmail: leadEmail,
-        description: desc,
-        members: leadEmail ? [leadEmail] : []
-      };
-      activeProject.iso19650.receiverTeams.push(newRt);
-    }
-
-    window.closeModal('modal-receiver-team');
-    renderAllViews();
-    syncTeams();
-    window.showToast('Equipo Receptor guardado exitosamente.', 'success');
-  };
-
-  window.deleteReceiverTeam = function (receiverId) {
-    if (!canManageProjectStructure) return;
-    if (!confirm('¿Estás seguro de eliminar este Equipo Receptor y sus configuraciones?')) return;
-
-    if (activeProject?.iso19650?.receiverTeams) {
-      activeProject.iso19650.receiverTeams = activeProject.iso19650.receiverTeams.filter(d => d.id !== receiverId);
-    }
-
-    renderAllViews();
-    syncTeams();
-    window.showToast('Equipo Receptor eliminado.', 'info');
-  };
-
-  window.setReceiverTeamLead = function (receiverId, email) {
-    const rt = (activeProject.iso19650?.receiverTeams || []).find(d => d.id === receiverId);
-    if (!rt) return;
-
-    const userEmail = (currentUser?.username || currentUser?.email || currentUser?.userAccount || '').toLowerCase().trim();
-    const isCurrentLeader = (rt.leadEmail || '').toLowerCase().trim() === userEmail;
-
-    if (!canManageProjectStructure && !isCurrentLeader) {
-      window.showToast('No tienes permisos para cambiar el líder de este equipo receptor.', 'error');
-      return;
-    }
-
-    if (!email) {
-      window.showToast('Debe asignarse un líder para el equipo receptor.', 'error');
-      return;
-    }
-
-    rt.leadEmail = email.toLowerCase().trim();
-    if (!rt.members.includes(rt.leadEmail)) {
-      rt.members.push(rt.leadEmail);
-    }
-
-    evaluatePermissions();
-    renderAllViews();
-    syncTeams();
-    window.showToast(`Nuevo líder asignado: ${getUserRegisteredName(email)}`, 'success');
-  };
-
-  window.removeReceiverTeamMember = function (receiverId, email) {
-    const rt = (activeProject.iso19650?.receiverTeams || []).find(d => d.id === receiverId);
-    if (!rt) return;
-
-    const userEmail = (currentUser?.username || currentUser?.email || currentUser?.userAccount || '').toLowerCase().trim();
-    const isCurrentLeader = (rt.leadEmail || '').toLowerCase().trim() === userEmail;
-
-    if (!canManageProjectStructure && !isCurrentLeader) {
-      window.showToast('No tienes permisos para remover miembros de este equipo receptor.', 'error');
-      return;
-    }
-
-    const clean = email.toLowerCase().trim();
-    if (rt.leadEmail && rt.leadEmail.toLowerCase().trim() === clean) {
-      window.showToast('No es posible remover al líder. Asigna un nuevo líder primero.', 'error');
-      return;
-    }
-
-    rt.members = rt.members.filter(m => m.toLowerCase().trim() !== clean);
-    renderAllViews();
-    syncTeams();
-    window.showToast('Miembro removido del equipo receptor.', 'info');
-  };
-
-  window.openAddMemberToReceiverTeamModal = function (receiverId) {
-    const rt = (activeProject.iso19650?.receiverTeams || []).find(d => d.id === receiverId);
-    if (!rt) return;
-
-    const userEmail = (currentUser?.username || currentUser?.email || currentUser?.userAccount || '').toLowerCase().trim();
-    const isCurrentLeader = (rt.leadEmail || '').toLowerCase().trim() === userEmail;
-
-    if (!canManageProjectStructure && !isCurrentLeader) {
-      window.showToast('No tienes permisos para añadir miembros a este equipo receptor.', 'error');
-      return;
-    }
-
-    const availableMembers = (activeProject.members || []).filter(m => !rt.members.includes(m.toLowerCase().trim()));
-    if (availableMembers.length === 0) {
-      window.showToast('Todos los participantes del proyecto ya están en este equipo receptor.', 'info');
-      return;
-    }
-
-    const memberPrompt = prompt(`Ingresa el correo del participante a integrar al equipo receptor "${rt.name}":\nOpciones disponibles:\n` + availableMembers.join('\n'));
-    if (!memberPrompt) return;
-
-    const clean = memberPrompt.toLowerCase().trim();
-    if (activeProject.members.includes(clean)) {
-      if (!rt.members.includes(clean)) {
-        rt.members.push(clean);
-        renderAllViews();
-        syncTeams();
-        window.showToast('Miembro añadido al equipo receptor.', 'success');
-      }
-    } else {
-      window.showToast('El usuario no pertenece al proyecto. Intégralo primero en el Directorio.', 'error');
-    }
-  };
-
   // --- 6. PESTAÑA: DIRECTORIO DE PARTICIPANTES ---
   function renderDirectoryTab() {
     if (!el.directoryTableBody || !activeProject) return;
@@ -2130,12 +2551,14 @@
 
     const projectAdmins = activeProject.iso19650?.projectAdmins || [];
     const deliveryTeams = activeProject.iso19650?.deliveryTeams || [];
+    const receiverTeams = activeProject.iso19650?.receiverTeams || [];
+    const directorDeObra = (activeProject.iso19650?.directorDeObra || '').toLowerCase().trim();
     const members = activeProject.members || [];
 
     if (members.length === 0) {
       el.directoryTableBody.innerHTML = `
         <tr>
-          <td colspan="6" class="py-8 px-4 text-center text-xs text-slate-400 italic">
+          <td colspan="7" class="py-8 px-4 text-center text-xs text-slate-400 italic">
             No hay participantes asignados al proyecto. Haz clic en "Integrar Miembro" para añadir el primero.
           </td>
         </tr>
@@ -2150,14 +2573,21 @@
 
       // Check ISO role
       const isAdmin = projectAdmins.some(a => a.toLowerCase().trim() === clean);
+      const isDirector = directorDeObra === clean;
       const leadInTeams = deliveryTeams.filter(dt => (dt.leadEmail || '').toLowerCase().trim() === clean);
       const memberInTeams = deliveryTeams.filter(dt => (dt.members || []).some(m => m.toLowerCase().trim() === clean));
+      const receiverLeadInTeams = receiverTeams.filter(rt => (rt.leadEmail || '').toLowerCase().trim() === clean);
+      const memberInReceiverTeams = receiverTeams.filter(rt => (rt.members || []).some(m => m.toLowerCase().trim() === clean));
 
       let isoRoleCode = 'MEMBER';
       let isoRoleLabel = 'Otro Adjudicatario (C)';
       let isoRoleBadgeClass = 'bg-purple-50 text-purple-700 dark:bg-purple-950 dark:text-purple-300 border-purple-200 dark:border-purple-800';
 
-      if (isAdmin) {
+      if (isDirector) {
+        isoRoleCode = 'DIRECTOR_OBRA';
+        isoRoleLabel = 'Director de Obra';
+        isoRoleBadgeClass = 'bg-amber-50 text-amber-700 dark:bg-amber-950 dark:text-amber-300 border-amber-200 dark:border-amber-800';
+      } else if (isAdmin) {
         isoRoleCode = 'ADMIN';
         isoRoleLabel = 'Adjudicador (A)';
         isoRoleBadgeClass = 'bg-blue-50 text-blue-700 dark:bg-blue-950 dark:text-blue-300 border-blue-200 dark:border-blue-800';
@@ -2165,13 +2595,14 @@
         isoRoleCode = 'LEAD';
         isoRoleLabel = 'Adjudicatario Principal (B)';
         isoRoleBadgeClass = 'bg-indigo-50 text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300 border-indigo-200 dark:border-indigo-800';
-      } else if (memberInTeams.length === 0) {
+      } else if (memberInTeams.length === 0 && memberInReceiverTeams.length === 0) {
         isoRoleCode = 'UNASSIGNED';
         isoRoleLabel = 'Sin Equipo';
         isoRoleBadgeClass = 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400 border-slate-200 dark:border-slate-700';
       }
 
       const assignedDeliveryNames = memberInTeams.map(d => d.name).join(', ') || 'Sin Asignar';
+      const assignedReceiverNames = memberInReceiverTeams.map(d => d.name).join(', ') || (receiverLeadInTeams.length ? receiverLeadInTeams.map(d => d.name).join(', ') : 'Sin Asignar');
       
       // Find Task teams
       const taskNames = [];
@@ -2194,7 +2625,8 @@
         isoRoleLabel,
         isoRoleBadgeClass,
         assignedDeliveryNames,
-        assignedTaskNames
+        assignedTaskNames,
+        assignedReceiverNames
       };
     });
 
@@ -2212,7 +2644,7 @@
     if (filtered.length === 0) {
       el.directoryTableBody.innerHTML = `
         <tr>
-          <td colspan="6" class="py-8 px-4 text-center text-xs text-slate-400 italic">
+          <td colspan="7" class="py-8 px-4 text-center text-xs text-slate-400 italic">
             No se encontraron participantes que coincidan con la búsqueda.
           </td>
         </tr>
@@ -2242,6 +2674,9 @@
           <td class="py-3.5 px-4 text-xs font-mono text-slate-500">
             ${escapeHtml(r.assignedTaskNames)}
           </td>
+          <td class="py-3.5 px-4 text-xs font-medium text-slate-600 dark:text-slate-300">
+            ${escapeHtml(r.assignedReceiverNames)}
+          </td>
           <td class="py-3.5 px-4 text-right">
             ${canManageProjectStructure ? `
               <button onclick="removeProjectMember('${r.email}')" class="p-1 text-slate-400 hover:text-rose-600 transition-colors" title="Remover del Proyecto">
@@ -2264,6 +2699,7 @@
     if (!select || !delivSelect) return;
 
     const companyMembers = Array.isArray(currentCompany?.members) ? currentCompany.members : [];
+    const receiverTeams = activeProject.iso19650?.receiverTeams || [];
     const currentMembers = (activeProject.members || []).map(m => m.toLowerCase().trim());
 
     // Users not yet in project
@@ -2279,8 +2715,14 @@
     }
 
     const deliveryTeams = activeProject.iso19650?.deliveryTeams || [];
+    const receiverSelect = document.getElementById('select-member-receiver-team');
     delivSelect.innerHTML = '<option value="">-- Sin Asignar a Equipo de Entrega --</option>' +
       deliveryTeams.map(d => `<option value="${escapeHtml(d.id)}">${escapeHtml(d.name)}</option>`).join('');
+
+    if (receiverSelect) {
+      receiverSelect.innerHTML = '<option value="">-- Sin Asignar a Equipo Receptor --</option>' +
+        receiverTeams.map(d => `<option value="${escapeHtml(d.id)}">${escapeHtml(d.name)}</option>`).join('');
+    }
 
     window.openModal('modal-add-member');
   };
@@ -2288,6 +2730,7 @@
   window.confirmAddProjectMember = function () {
     const email = (document.getElementById('select-available-user')?.value || '').toLowerCase().trim();
     const deliveryId = document.getElementById('select-member-delivery-team')?.value;
+    const receiverId = document.getElementById('select-member-receiver-team')?.value;
 
     if (!email) {
       window.showToast('Por favor selecciona un usuario para integrar.', 'error');
@@ -2302,6 +2745,13 @@
       const dt = (activeProject.iso19650?.deliveryTeams || []).find(d => d.id === deliveryId);
       if (dt && !dt.members.includes(email)) {
         dt.members.push(email);
+      }
+    }
+
+    if (receiverId) {
+      const rt = (activeProject.iso19650?.receiverTeams || []).find(d => d.id === receiverId);
+      if (rt && !rt.members.includes(email)) {
+        rt.members.push(email);
       }
     }
 
@@ -2343,6 +2793,18 @@
         tt.members = (tt.members || []).filter(m => m.toLowerCase().trim() !== clean);
       });
     });
+
+    // Remove from receiver teams
+    (activeProject.iso19650?.receiverTeams || []).forEach(rt => {
+      rt.members = (rt.members || []).filter(m => m.toLowerCase().trim() !== clean);
+      if (rt.leadEmail && rt.leadEmail.toLowerCase().trim() === clean) {
+        rt.leadEmail = '';
+      }
+    });
+
+    if (activeProject.iso19650?.directorDeObra && activeProject.iso19650.directorDeObra.toLowerCase().trim() === clean) {
+      activeProject.iso19650.directorDeObra = '';
+    }
 
     evaluatePermissions();
     renderAllViews();

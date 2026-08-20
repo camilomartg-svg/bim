@@ -10,7 +10,8 @@ const filesToSync = [
   'equipo.js',
   'equipo.html',
   'empresas.html',
-  'perfil.html'
+  'perfil.html',
+  'upload.html'
 ];
 
 filesToSync.forEach(file => {

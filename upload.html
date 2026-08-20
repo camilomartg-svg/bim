@@ -1436,48 +1436,128 @@
           // Sort statusEntries chronologically so most recent statuses take precedence
           statusEntries.sort((a, b) => new Date(a.changedAt || 0) - new Date(b.changedAt || 0));
 
-          // Build a map of latest status & version for each file by originalFileId, fileId, or filename
-          const statusMap = {};
-          statusEntries.forEach(entry => {
-            if (entry.originalFileId) statusMap[entry.originalFileId] = entry;
-            if (entry.fileId) statusMap[entry.fileId] = entry;
-            if (entry.filename) statusMap[entry.filename.toLowerCase()] = entry;
-          });
+          // Helper to get status matches for a file chronologically
+          const getStatusMatchesForFile = (fid, fname) => {
+            const matches = {
+              EN_PROGRESO: null,
+              COMPARTIDO: null,
+              PUBLICADO: null
+            };
+            
+            statusEntries.forEach(entry => {
+              const hasId = entry.originalFileId || entry.fileId;
+              const matchesId = (entry.originalFileId && entry.originalFileId === fid) ||
+                                (entry.fileId && entry.fileId === fid);
+              
+              let isMatch = false;
+              if (hasId) {
+                isMatch = matchesId;
+              } else {
+                isMatch = entry.filename && entry.filename.toLowerCase() === fname.toLowerCase();
+              }
+              
+              if (isMatch) {
+                const status = entry.status;
+                if (status === 'EN_PROGRESO' || status === 'COMPARTIDO' || status === 'PUBLICADO') {
+                  matches[status] = entry;
+                }
+              }
+            });
+            
+            return matches;
+          };
 
           // Consolidate Drive files into allProjectFiles.
-          // Deduplicate so that ONLY the current / active version of each file is present!
+          // Composite keys using folder/name|STATUS ensure that files in different states do not overwrite each other.
           const filesByPath = new Map();
 
           const addFiles = (list, type) => {
             (list || []).forEach(item => {
               const fname = item.name || item.filename;
               const fld = item.folder || 'General';
-              const fileKey = (fld + '/' + fname).toLowerCase();
+              
               // Older responses expose fragId; the unified model list exposes fileId
               // for every supported extension.
               const fid = type === 'model' ? (item.fragId || item.fileId || item.path) : item.fileId;
-              const match = statusMap[fid] || statusMap[fname.toLowerCase()] || null;
+              const matches = getStatusMatchesForFile(fid, fname);
 
-              const fileObj = {
-                fileId: match?.fileId || fid,
+              // 1. Always keep the EN_PROGRESO (WIP) version of the file
+              const progMatch = matches.EN_PROGRESO;
+              const progFileObj = {
+                fileId: fid, // Original physical file ID
                 originalFileId: fid,
-                jsonId: type === 'model' ? (item.jsonId || (match ? match.jsonId : '')) : '',
+                jsonId: type === 'model' ? (item.jsonId || (progMatch ? progMatch.jsonId : '')) : '',
                 name: fname,
                 filename: fname,
                 type: type,
                 folder: fld,
-                lastUpdated: match?.changedAt || item.lastUpdated,
-                status: match?.status || 'EN_PROGRESO',
-                version: match?.version || 'v1.0',
-                comments: match?.comments || '',
-                changedBy: (match?.changedBy && match.changedBy.trim()) || item.ownerName || 'UNASSIGNED',
-                changedByEmail: (match?.changedByEmail && match.changedByEmail.trim()) || item.ownerEmail || 'unassigned@nora.cde',
-                deliveryTeams: parseStoredDeliveryTeams(match?.deliveryTeams || '')
+                lastUpdated: progMatch?.changedAt || item.lastUpdated,
+                status: 'EN_PROGRESO',
+                version: progMatch?.version || 'v1.0',
+                comments: progMatch?.comments || '',
+                changedBy: (progMatch?.changedBy && progMatch.changedBy.trim()) || item.ownerName || 'UNASSIGNED',
+                changedByEmail: (progMatch?.changedByEmail && progMatch.changedByEmail.trim()) || item.ownerEmail || 'unassigned@nora.cde',
+                deliveryTeams: parseStoredDeliveryTeams(progMatch?.deliveryTeams || '')
               };
 
-              const prev = filesByPath.get(fileKey);
-              if (!prev || new Date(fileObj.lastUpdated).getTime() >= new Date(prev.lastUpdated).getTime()) {
-                filesByPath.set(fileKey, fileObj);
+              const progKey = (fld + '/' + fname + '|EN_PROGRESO').toLowerCase();
+              const prevProg = filesByPath.get(progKey);
+              if (!prevProg || new Date(progFileObj.lastUpdated).getTime() >= new Date(prevProg.lastUpdated).getTime()) {
+                filesByPath.set(progKey, progFileObj);
+              }
+
+              // 2. If promoted to COMPARTIDO, add that entry
+              if (matches.COMPARTIDO) {
+                const compMatch = matches.COMPARTIDO;
+                const compFileObj = {
+                  fileId: compMatch.fileId || fid, // Use copied file's ID
+                  originalFileId: fid,
+                  jsonId: type === 'model' ? (compMatch.jsonId || '') : '',
+                  name: fname,
+                  filename: fname,
+                  type: type,
+                  folder: fld,
+                  lastUpdated: compMatch.changedAt || item.lastUpdated,
+                  status: 'COMPARTIDO',
+                  version: compMatch.version || 'v1.0',
+                  comments: compMatch.comments || '',
+                  changedBy: (compMatch.changedBy && compMatch.changedBy.trim()) || 'UNASSIGNED',
+                  changedByEmail: (compMatch.changedByEmail && compMatch.changedByEmail.trim()) || 'unassigned@nora.cde',
+                  deliveryTeams: parseStoredDeliveryTeams(compMatch.deliveryTeams || '')
+                };
+
+                const compKey = (fld + '/' + fname + '|COMPARTIDO').toLowerCase();
+                const prevComp = filesByPath.get(compKey);
+                if (!prevComp || new Date(compFileObj.lastUpdated).getTime() >= new Date(prevComp.lastUpdated).getTime()) {
+                  filesByPath.set(compKey, compFileObj);
+                }
+              }
+
+              // 3. If promoted to PUBLICADO, add that entry
+              if (matches.PUBLICADO) {
+                const pubMatch = matches.PUBLICADO;
+                const pubFileObj = {
+                  fileId: pubMatch.fileId || fid, // Use copied file's ID
+                  originalFileId: fid,
+                  jsonId: type === 'model' ? (pubMatch.jsonId || '') : '',
+                  name: fname,
+                  filename: fname,
+                  type: type,
+                  folder: fld,
+                  lastUpdated: pubMatch.changedAt || item.lastUpdated,
+                  status: 'PUBLICADO',
+                  version: pubMatch.version || 'v1.0',
+                  comments: pubMatch.comments || '',
+                  changedBy: (pubMatch.changedBy && pubMatch.changedBy.trim()) || 'UNASSIGNED',
+                  changedByEmail: (pubMatch.changedByEmail && pubMatch.changedByEmail.trim()) || 'unassigned@nora.cde',
+                  deliveryTeams: parseStoredDeliveryTeams(pubMatch.deliveryTeams || '')
+                };
+
+                const pubKey = (fld + '/' + fname + '|PUBLICADO').toLowerCase();
+                const prevPub = filesByPath.get(pubKey);
+                if (!prevPub || new Date(pubFileObj.lastUpdated).getTime() >= new Date(prevPub.lastUpdated).getTime()) {
+                  filesByPath.set(pubKey, pubFileObj);
+                }
               }
             });
           };

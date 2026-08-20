@@ -77,110 +77,55 @@
       transform-origin: center center;
       transition: transform 0.05s ease-out;
     }
-    /* El organigrama conserva su proporción y crece con el panel disponible. */
-    #iso-diagram-canvas {
-      width: 100%;
-      min-width: 900px;
-      height: clamp(460px, calc(100vh - 280px), 650px);
-    }
-    #iso-diagram-viewport-wrapper {
-      left: calc(50% - 450px);
-    }
-    /* Matriz horizontal A → B → C, una fila por equipo de entrega. */
-    .delivery-matrix-row {
-      display: grid;
-      grid-template-columns: minmax(190px, .8fr) 36px minmax(230px, 1fr) 36px minmax(280px, 1.35fr);
-      align-items: stretch;
-      gap: 10px;
-    }
-    .delivery-matrix-arrow {
+    
+    /* Tree diagram structure styles */
+    .tree-row {
       display: flex;
-      align-items: center;
       justify-content: center;
-      color: #60a5fa;
-      font-size: 24px;
-      font-weight: 700;
-    }
-    .project-team-matrix {
-      display: grid;
-      grid-template-columns: minmax(220px, .7fr) 48px minmax(0, 2.3fr);
-      align-items: stretch;
-      gap: 12px;
-    }
-    .project-matrix-bus {
+      align-items: flex-start;
       position: relative;
-      min-height: 100%;
     }
-    .project-matrix-bus::before {
+    .tree-col {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      position: relative;
+      padding-top: 24px;
+      flex: 1;
+    }
+    .tree-col::before {
       content: '';
       position: absolute;
-      top: 24px;
-      bottom: 24px;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 2px;
+      background-color: #cbd5e1;
+    }
+    .dark .tree-col::before {
+      background-color: #475569;
+    }
+    .tree-col:first-child::before {
+      left: 50%;
+    }
+    .tree-col:last-child::before {
+      right: 50%;
+    }
+    .tree-col:only-child::before {
+      display: none;
+    }
+    .tree-col::after {
+      content: '';
+      position: absolute;
+      top: 0;
       left: 50%;
       width: 2px;
-      background: #93c5fd;
+      height: 24px;
+      background-color: #cbd5e1;
       transform: translateX(-50%);
     }
-    .project-matrix-team-row {
-      display: grid;
-      grid-template-columns: 28px minmax(210px, .9fr) 36px minmax(260px, 1.3fr);
-      align-items: stretch;
-      gap: 10px;
-    }
-    .project-matrix-branch {
-      display: flex;
-      align-items: center;
-      color: #60a5fa;
-      font-size: 20px;
-      font-weight: 700;
-    }
-    @media (max-width: 900px) {
-      .delivery-matrix-row { grid-template-columns: 1fr; gap: 8px; }
-      .delivery-matrix-arrow { height: 24px; transform: rotate(90deg); }
-      .project-team-matrix, .project-matrix-team-row { grid-template-columns: 1fr; }
-      .project-matrix-bus { display: none; }
-      .project-matrix-branch, .project-matrix-team-row .delivery-matrix-arrow { height: 24px; justify-content: center; transform: rotate(90deg); }
-    }
-    /* Superficies neutras Nora: el color queda reservado para los roles ISO. */
-    #iso-diagram-card-view .project-team-matrix > section,
-    #iso-diagram-card-view .project-matrix-team-row,
-    #iso-diagram-card-view .project-matrix-team-row section,
-    #iso-diagram-card-view .delivery-matrix-row,
-    #iso-diagram-card-view .delivery-matrix-row section {
-      background: #ffffff !important;
-      border-color: #e2e8f0 !important;
-    }
-    .dark #iso-diagram-card-view .project-team-matrix > section,
-    .dark #iso-diagram-card-view .project-matrix-team-row,
-    .dark #iso-diagram-card-view .project-matrix-team-row section,
-    .dark #iso-diagram-card-view .delivery-matrix-row,
-    .dark #iso-diagram-card-view .delivery-matrix-row section {
-      background: #0f172a !important;
-      border-color: #334155 !important;
-    }
-    #iso-diagram-card-view .project-matrix-bus::before { background: #cbd5e1; }
-    #iso-diagram-card-view .delivery-matrix-arrow,
-    #iso-diagram-card-view .project-matrix-branch { color: #64748b; }
-    #iso-diagram-card-view .project-matrix-team-row section > div:first-child,
-    #iso-diagram-card-view .delivery-matrix-row section > div:first-child { color: #334155 !important; }
-    .dark #iso-diagram-card-view .project-matrix-team-row section > div:first-child,
-    .dark #iso-diagram-card-view .delivery-matrix-row section > div:first-child { color: #e2e8f0 !important; }
-    
-    /* Fullscreen Mode overlay style */
-    .diagram-fullscreen {
-      position: fixed !important;
-      inset: 0 !important;
-      width: 100vw !important;
-      height: 100vh !important;
-      z-index: 50 !important;
-      margin: 0 !important;
-      border-radius: 0 !important;
-      background-color: rgba(15, 23, 42, 0.98) !important;
-      display: flex !important;
-      flex-direction: column !important;
-      align-items: center !important;
-      justify-content: center !important;
-      padding: 2rem !important;
+    .dark .tree-col::after {
+      background-color: #475569;
     }
   </style>
 </head>
@@ -351,7 +296,6 @@
         <span class="material-symbols-outlined text-[16px]">groups</span>
         <span>Equipo Receptor</span>
       </button>
-
       <button data-tab="directory" class="tab-btn inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold uppercase tracking-wider transition-all text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 whitespace-nowrap">
         <span class="material-symbols-outlined text-[16px]">person_search</span>
         <span>Directorio de Participantes</span>
@@ -395,18 +339,18 @@
         <div class="flex flex-wrap items-center justify-between gap-3 mt-4 px-1 pb-2 border-b border-slate-100 dark:border-slate-800/60">
           <!-- Left: View Toggle (Segmented control) -->
           <div class="inline-flex rounded-xl p-1 bg-slate-100 dark:bg-slate-800/60 border border-slate-200/50 dark:border-slate-700/50">
-            <button id="btn-view-radial" class="px-3 py-1.5 rounded-lg text-xs font-bold transition-all inline-flex items-center gap-1.5 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white" type="button">
+            <button id="btn-view-radial" class="px-3 py-1.5 rounded-lg text-xs font-bold transition-all inline-flex items-center gap-1.5 bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-sm" type="button">
               <span class="material-symbols-outlined text-[16px]">bubble_chart</span>
               <span>Esquema Radial</span>
             </button>
-            <button id="btn-view-cards" class="px-3 py-1.5 rounded-lg text-xs font-bold transition-all inline-flex items-center gap-1.5 bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-sm" type="button">
-              <span class="material-symbols-outlined text-[16px]">grid_view</span>
-              <span>Vista de Tarjetas</span>
+            <button id="btn-view-cards" class="px-3 py-1.5 rounded-lg text-xs font-bold transition-all inline-flex items-center gap-1.5 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white" type="button">
+              <span class="material-symbols-outlined text-[16px]">account_tree</span>
+              <span>Esquema Jerárquico</span>
             </button>
           </div>
 
-          <!-- Right: Zoom & Fullscreen controls (hidden in card view) -->
-          <div id="diagram-radial-controls" class="hidden flex items-center gap-2">
+          <!-- Right: Zoom controls (hidden in card view) -->
+          <div id="diagram-radial-controls" class="flex items-center gap-2">
             <!-- Zoom Controls -->
             <div class="inline-flex items-center rounded-xl bg-slate-100 dark:bg-slate-800/60 border border-slate-200/50 dark:border-slate-700/50 p-1">
               <button id="btn-zoom-out" class="p-1.5 rounded-lg text-slate-600 dark:text-slate-400 hover:bg-white dark:hover:bg-slate-700 hover:text-slate-900 dark:hover:text-white transition-all" title="Alejar (-)" type="button">
@@ -420,18 +364,16 @@
                 <span class="material-symbols-outlined text-[16px]">restart_alt</span>
               </button>
             </div>
-
           </div>
         </div>
 
         <!-- Radial Diagram View Container -->
-        <div id="iso-diagram-radial-view" class="hidden mt-8 w-full max-h-[calc(100vh-260px)] overflow-auto rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-950/40 p-4">
-          <div id="iso-diagram-canvas" class="relative mx-auto bg-white dark:bg-slate-900 rounded-3xl border border-slate-200/80 dark:border-slate-800/80 shadow-md overflow-hidden select-none draggable-canvas">
-            
+        <div id="iso-diagram-radial-view" class="mt-6 w-full overflow-x-auto rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-950/40 p-4">
+          <div id="iso-diagram-canvas" class="relative w-full min-w-[1200px] h-[800px] mx-auto bg-white dark:bg-slate-900 rounded-3xl border border-slate-200/80 dark:border-slate-800/80 shadow-md overflow-hidden select-none draggable-canvas">
             <!-- Viewport Wrapper (Handles all zoom & pan transformations) -->
-            <div id="iso-diagram-viewport-wrapper" class="absolute w-[900px] h-[650px] left-0 top-0">
+            <div id="iso-diagram-viewport-wrapper" class="absolute w-[1200px] h-[800px] left-0 top-0">
               <!-- SVG connector lines and markers -->
-              <svg id="iso-diagram-svg" width="900" height="650" viewBox="0 0 900 650" class="absolute left-0 top-0 pointer-events-none z-10">
+              <svg id="iso-diagram-svg" width="1200" height="800" viewBox="0 0 1200 800" class="absolute left-0 top-0 pointer-events-none z-10">
                 <defs>
                   <marker id="arrow-bi" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse">
                     <path d="M 0 1 L 10 5 L 0 9 z" fill="#64748b"/>
@@ -442,41 +384,41 @@
               <!-- Interactive Diagram Nodes Layer -->
               <div id="iso-diagram-nodes" class="absolute inset-0 z-20"></div>
             </div>
-            
           </div>
         </div>
 
-        <!-- Card View Container: horizontal matrix A → B → C -->
-        <div id="iso-diagram-card-view" class="mt-8">
-          <div class="rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-950/40 p-5 sm:p-6">
-            <div class="hidden mx-auto max-w-md">
-              <div class="rounded-2xl border-2 border-dashed border-slate-300 dark:border-slate-700 p-5 flex flex-col items-center text-center space-y-3 bg-white/80 dark:bg-slate-900/60 shadow-sm">
-                <span class="h-10 w-10 rounded-2xl bg-blue-50 dark:bg-blue-950 text-blue-600 dark:text-blue-400 flex items-center justify-center font-black text-sm">
-                  A
-                </span>
-                <div>
-                  <h4 class="text-xs font-black text-slate-900 dark:text-white uppercase tracking-wider">A. Adjudicador</h4>
-                  <p class="text-[10px] text-slate-400 dark:text-slate-500 mt-0.5">Administrador del Proyecto</p>
+        <!-- Card View Container (Old-style grid layout with A + Delivery Cards) -->
+        <div id="iso-diagram-card-view" class="hidden mt-6">
+          <div class="grid grid-cols-1 xl:grid-cols-[1.3fr_1.1fr] gap-6">
+            <div class="grid grid-cols-1 lg:grid-cols-4 gap-6">
+              
+              <!-- Column 1: A. Adjudicador -->
+              <div class="lg:col-span-1 space-y-4">
+                <div class="rounded-2xl border-2 border-dashed border-slate-300 dark:border-slate-700 p-5 flex flex-col items-center text-center space-y-3 bg-slate-50/50 dark:bg-slate-900/30">
+                  <span class="h-10 w-10 rounded-2xl bg-blue-50 dark:bg-blue-950 text-blue-600 dark:text-blue-400 flex items-center justify-center font-black text-sm">
+                    A
+                  </span>
+                  <div>
+                    <h4 class="text-xs font-black text-slate-900 dark:text-white uppercase tracking-wider">A. Adjudicador</h4>
+                    <p class="text-[10px] text-slate-400 dark:text-slate-500 mt-0.5">Administrador del Proyecto</p>
+                  </div>
+                  <div class="border-t border-slate-200 dark:border-slate-800 pt-3 w-full">
+                    <div id="diagram-admin-name" class="font-bold text-xs text-slate-800 dark:text-slate-200">Sin Administrador</div>
+                    <div class="text-[9px] text-slate-400 mt-1 font-mono uppercase tracking-wider">Designación Principal</div>
+                  </div>
                 </div>
-                <div class="border-t border-slate-200 dark:border-slate-800 pt-3 w-full">
-                  <div id="diagram-admin-name" class="font-bold text-xs text-slate-800 dark:text-slate-200">Sin Administrador</div>
-                  <div class="text-[9px] text-slate-400 mt-1 font-mono uppercase tracking-wider">Designación Principal</div>
+              </div>
+
+              <!-- Column 2-4: B & C. Delivery Clusters Grid -->
+              <div class="lg:col-span-3">
+                <div id="diagram-delivery-clusters" class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <!-- Rendered dynamically by JS -->
                 </div>
               </div>
             </div>
-            <div class="hidden mx-auto h-8 w-0.5 bg-blue-200 dark:bg-blue-900"></div>
-            <div class="hidden delivery-diagram-teams">
-              <div id="diagram-delivery-clusters-legacy" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-                <!-- Rendered dynamically by JS -->
-              </div>
-            </div>
-            <div class="mb-4 grid grid-cols-1 md:grid-cols-3 gap-3 text-[10px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500">
-              <span>1. Administrador del proyecto</span>
-              <span class="md:text-center">2. Líder de entrega</span>
-              <span class="md:text-right">3. Miembros y equipos de tarea</span>
-            </div>
-            <div id="diagram-delivery-clusters" class="space-y-4">
-              <!-- Rendered dynamically by JS -->
+
+            <div id="receiver-diagram-panel" class="rounded-3xl border border-amber-200/80 dark:border-amber-800/80 bg-amber-50/40 dark:bg-amber-950/20 p-4 shadow-sm">
+              <!-- Receiver diagram rendered here -->
             </div>
           </div>
         </div>
@@ -508,6 +450,10 @@
             <button onclick="openAddProjectAdminModal()" class="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold uppercase tracking-wider shadow-sm transition-all">
               <span class="material-symbols-outlined text-[16px]">person_add</span>
               <span>Designar Administrador</span>
+            </button>
+            <button onclick="openAddProjectDirectorModal()" class="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold uppercase tracking-wider shadow-sm transition-all">
+              <span class="material-symbols-outlined text-[16px]">engineering</span>
+              <span>Designar Director de Obra</span>
             </button>
           </div>
         </div>
@@ -558,17 +504,16 @@
 
     <!-- TAB PANEL 4: EQUIPO RECEPTOR -->
     <div id="tab-content-receiver" class="tab-panel hidden space-y-6">
-      
+
       <div class="glass-card rounded-3xl border border-slate-200/80 dark:border-slate-800 p-6 sm:p-8 shadow-sm">
-        
         <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-200/60 dark:border-slate-800 pb-5">
           <div>
             <div class="flex items-center gap-2">
               <span class="px-2 py-0.5 rounded-md bg-amber-100 dark:bg-amber-950 text-amber-700 dark:text-amber-300 font-black text-[10px]">EQUIPO RECEPTOR</span>
-              <h2 class="text-lg font-black text-slate-900 dark:text-white">Equipo Receptor</h2>
+              <h2 class="text-lg font-black text-slate-900 dark:text-white">Equipo Receptor / Obra</h2>
             </div>
             <p class="text-xs text-slate-500 dark:text-slate-400 mt-1">
-              Aquí se gestionan los miembros de los equipos de obra, que se incorporan como usuarios del proyecto y pueden coordinarse como un equipo receptor dentro de la estructura BIM.
+              Se gestionan los miembros del equipo de obra y la recepción de información del proyecto, de forma paralela al equipo de entrega.
             </p>
           </div>
 
@@ -583,9 +528,7 @@
         <div id="receiver-teams-container" class="mt-6 space-y-6">
           <!-- Populated by JS -->
         </div>
-
       </div>
-
     </div>
 
     <!-- TAB PANEL 5: DIRECTORIO DE PARTICIPANTES -->
@@ -621,6 +564,7 @@
             <select id="directory-role-filter" class="w-full py-2 px-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-xs font-semibold focus:ring-2 focus:ring-indigo-500 dark:text-white transition-all shadow-sm">
               <option value="ALL">Todos los Roles ISO</option>
               <option value="ADMIN">Adjudicador (Admin Proyecto)</option>
+              <option value="DIRECTOR_OBRA">Director de Obra</option>
               <option value="LEAD">Adjudicatario Principal (Líder Entrega)</option>
               <option value="MEMBER">Otro Adjudicatario (Miembro Entrega)</option>
               <option value="UNASSIGNED">Sin Equipo Asignado</option>
@@ -638,6 +582,7 @@
                 <th class="py-3 px-4">Rol ISO 19650</th>
                 <th class="py-3 px-4">Equipo de Entrega</th>
                 <th class="py-3 px-4">Equipo de Tarea</th>
+                <th class="py-3 px-4">Equipo de Obra</th>
                 <th class="py-3 px-4 text-right">Acciones</th>
               </tr>
             </thead>
@@ -697,6 +642,38 @@
     </div>
   </div>
 
+  <!-- Modal 1B: Designar Director de Obra -->
+  <div id="modal-director-obra" class="fixed inset-0 z-50 hidden bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+    <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-6 max-w-lg w-full shadow-2xl space-y-4">
+      <div class="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
+        <div class="flex items-center gap-2">
+          <span class="flex h-8 w-8 items-center justify-center rounded-xl bg-amber-50 dark:bg-amber-950 text-amber-600 dark:text-amber-400">
+            <span class="material-symbols-outlined text-[18px]">engineering</span>
+          </span>
+          <div>
+            <h3 class="text-sm font-black text-slate-900 dark:text-white uppercase tracking-wider">Designar Director de Obra</h3>
+            <p class="text-[11px] text-slate-400">Rol de coordinación de obra / recepción</p>
+          </div>
+        </div>
+        <button onclick="closeModal('modal-director-obra')" class="text-slate-400 hover:text-slate-600 dark:hover:text-white">
+          <span class="material-symbols-outlined text-[20px]">close</span>
+        </button>
+      </div>
+
+      <div class="space-y-3 text-xs">
+        <label class="block font-bold text-slate-700 dark:text-slate-300">Seleccionar usuario de la empresa:</label>
+        <select id="select-director-obra-user" class="w-full py-2 px-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 dark:text-white font-medium focus:ring-2 focus:ring-amber-500">
+          <!-- Populated by JS -->
+        </select>
+      </div>
+
+      <div class="flex items-center justify-end gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
+        <button onclick="closeModal('modal-director-obra')" class="px-4 py-2 rounded-xl text-xs font-bold text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">Cancelar</button>
+        <button onclick="confirmAddProjectDirector()" class="px-4 py-2 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold uppercase tracking-wider shadow-sm transition-all">Asignar Director</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Modal 2: Crear / Editar Equipo de Entrega -->
   <div id="modal-delivery-team" class="fixed inset-0 z-50 hidden bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
     <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-6 max-w-lg w-full shadow-2xl space-y-4">
@@ -743,53 +720,7 @@
     </div>
   </div>
 
-  <!-- Modal 3: Crear / Editar Equipo Receptor -->
-  <div id="modal-receiver-team" class="fixed inset-0 z-50 hidden bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
-    <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-6 max-w-lg w-full shadow-2xl space-y-4">
-      <div class="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
-        <div class="flex items-center gap-2">
-          <span class="flex h-8 w-8 items-center justify-center rounded-xl bg-amber-50 dark:bg-amber-950 text-amber-600 dark:text-amber-400">
-            <span class="material-symbols-outlined text-[18px]">groups</span>
-          </span>
-          <div>
-            <h3 id="modal-receiver-title" class="text-sm font-black text-slate-900 dark:text-white uppercase tracking-wider">Crear Equipo Receptor</h3>
-            <p class="text-[11px] text-slate-400">Equipo de obra / recepción de información</p>
-          </div>
-        </div>
-        <button onclick="closeModal('modal-receiver-team')" class="text-slate-400 hover:text-slate-600 dark:hover:text-white">
-          <span class="material-symbols-outlined text-[20px]">close</span>
-        </button>
-      </div>
-
-      <div class="space-y-4 text-xs">
-        <input type="hidden" id="receiver-team-edit-id" value="" />
-        
-        <div>
-          <label class="block font-bold text-slate-700 dark:text-slate-300 mb-1">Nombre del Equipo Receptor:</label>
-          <input id="receiver-team-name" type="text" placeholder="Ej: Equipo Receptor Obra, IPR, Supervisión de Obra..." class="w-full py-2 px-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 dark:text-white font-medium focus:ring-2 focus:ring-amber-500" />
-        </div>
-
-        <div>
-          <label class="block font-bold text-slate-700 dark:text-slate-300 mb-1">Líder del Equipo Receptor:</label>
-          <select id="receiver-team-lead-select" class="w-full py-2 px-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 dark:text-white font-medium focus:ring-2 focus:ring-amber-500">
-            <option value="">-- Sin Líder Asignado --</option>
-          </select>
-        </div>
-
-        <div>
-          <label class="block font-bold text-slate-700 dark:text-slate-300 mb-1">Descripción / Alcance (Opcional):</label>
-          <textarea id="receiver-team-desc" rows="2" placeholder="Equipo receptor para coordinación de obra y recepción de información del proyecto..." class="w-full py-2 px-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 dark:text-white font-medium focus:ring-2 focus:ring-amber-500"></textarea>
-        </div>
-      </div>
-
-      <div class="flex items-center justify-end gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
-        <button onclick="closeModal('modal-receiver-team')" class="px-4 py-2 rounded-xl text-xs font-bold text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">Cancelar</button>
-        <button onclick="confirmSaveReceiverTeam()" class="px-4 py-2 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold uppercase tracking-wider shadow-sm transition-all">Guardar Equipo</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- Modal 4: Crear / Editar Equipo de Tarea -->
+  <!-- Modal 3: Crear / Editar Equipo de Tarea -->
   <div id="modal-task-team" class="fixed inset-0 z-50 hidden bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
     <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-6 max-w-lg w-full shadow-2xl space-y-4">
       <div class="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
@@ -867,6 +798,13 @@
             <option value="">-- Sin Asignar a Equipo de Entrega --</option>
           </select>
         </div>
+
+        <div>
+          <label class="block font-bold text-slate-700 dark:text-slate-300 mb-1">Asignar a Equipo Receptor / Obra (Opcional):</label>
+          <select id="select-member-receiver-team" class="w-full py-2 px-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 dark:text-white font-medium focus:ring-2 focus:ring-amber-500">
+            <option value="">-- Sin Asignar a Equipo Receptor --</option>
+          </select>
+        </div>
       </div>
 
       <div class="flex items-center justify-end gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
@@ -898,6 +836,9 @@
       </div>
     </div>
   </div>
+
+  <!-- Floating Tooltip for ISO Diagram -->
+  <div id="diagram-tooltip" class="fixed hidden bg-slate-950/95 dark:bg-slate-900/95 text-white text-xs rounded-2xl p-4 shadow-2xl border border-slate-800 dark:border-slate-700 z-50 pointer-events-none max-w-xs transition-opacity duration-200 backdrop-blur-md"></div>
 
   <!-- Notification Toast -->
   <div id="toast-banner" class="fixed bottom-6 right-6 z-50 transform translate-y-20 opacity-0 transition-all duration-300 max-w-md w-full rounded-2xl p-4 shadow-xl flex items-start gap-3 border">
