@@ -1209,7 +1209,7 @@
           content: base64Content,
           fileType: fileType,
           changedBy: userAccount ? (userAccount.name || '') : '',
-          changedByEmail: userAccount ? (userAccount.email || '') : '',
+          changedByEmail: userAccount ? (userAccount.email || userAccount.username || '') : '',
           deliveryTeams: resolveCurrentUserDeliveryTeams()
         };
 
@@ -1913,7 +1913,7 @@
             version: versionTag,
             comments: comments,
             changedBy: userAccount ? (userAccount.name || '') : '',
-            changedByEmail: userAccount ? (userAccount.email || '') : '',
+            changedByEmail: userAccount ? (userAccount.email || userAccount.username || '') : '',
             deliveryTeams: targetVersionFile.deliveryTeams || resolveCurrentUserDeliveryTeams(),
             originalFileId: targetVersionFile.originalFileId || targetVersionFile.fileId,
             type: targetVersionFile.type || '',
@@ -2097,7 +2097,7 @@
             folderId: ds.driveFolderId || '',
             driveFolderName: ds.driveFolderName || activeProject.name,
             changedBy: userAccount ? (userAccount.name || '') : '',
-            changedByEmail: userAccount ? (userAccount.email || '') : '',
+            changedByEmail: userAccount ? (userAccount.email || userAccount.username || '') : '',
             deliveryTeams: v.deliveryTeams || resolveCurrentUserDeliveryTeams()
           };
 
@@ -2164,7 +2164,7 @@
             version: f.version || 'v1.0',
             comments: `Promovido a ${labels[newStatus]}`,
             changedBy: userAccount ? (userAccount.name || '') : '',
-            changedByEmail: userAccount ? (userAccount.email || '') : '',
+            changedByEmail: userAccount ? (userAccount.email || userAccount.username || '') : '',
             deliveryTeams: f.deliveryTeams || resolveCurrentUserDeliveryTeams()
           };
           const res = await fetch(scriptUrl, {

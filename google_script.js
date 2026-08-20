@@ -1191,9 +1191,17 @@ function uploadResumableChunk_(e, body) {
     let fileId = '';
     if (complete) {
       try { fileId = JSON.parse(response.getContentText()).id || ''; } catch (ignore) {}
-      try {
-        registerFileStatus_(fileId, String(body.jsonId || ''), String(body.filename || ''), String(body.project || ''), 'EN_PROGRESO', String(body.changedBy || ''), String(body.changedByEmail || ''), fileId, String(body.fileType || ''), '', '', body.deliveryTeams);
-      } catch (statusErr) { /* non-fatal */ }
+      if (fileId) {
+        try {
+          registerFileStatus_(fileId, String(body.jsonId || ''), String(body.filename || ''), String(body.project || ''), 'EN_PROGRESO', String(body.changedBy || ''), String(body.changedByEmail || ''), fileId, String(body.fileType || ''), '', '', body.deliveryTeams);
+        } catch (statusErr) {
+          // Trash the completed file to avoid orphaning it in Drive
+          try {
+            DriveApp.getFileById(fileId).setTrashed(true);
+          } catch (trashErr) {}
+          return { status: 'error', message: 'No se pudo registrar el estado en el Spreadsheet: ' + statusErr.toString() };
+        }
+      }
     }
     return { status: 'success', complete: complete, nextOffset: end + 1, fileId: fileId };
   } catch (err) {
@@ -1228,6 +1236,7 @@ function uploadFile_(e, body) {
   
   const contentType = String(((body && body.contentType) || (e && e.parameter && e.parameter.contentType) || 'application/octet-stream') ?? '').trim();
   
+  let newFileId;
   try {
     // Trash existing files with the same name to avoid duplicates
     const existingFiles = root.getFilesByName(filename);
@@ -1239,29 +1248,43 @@ function uploadFile_(e, body) {
     const decoded = Utilities.base64Decode(content);
     const blob = Utilities.newBlob(decoded, contentType, filename);
     const file = root.createFile(blob);
-    const newFileId = file.getId();
-
-    // Auto-register EN_PROGRESO status (non-fatal)
-    try {
-      const project = String(((body && body.project) || (e && e.parameter && e.parameter.project) || '') ?? '').trim();
-      const changedBy = String(((body && body.changedBy) || (e && e.parameter && e.parameter.changedBy) || '') ?? '').trim();
-      const changedByEmail = String(((body && body.changedByEmail) || (e && e.parameter && e.parameter.changedByEmail) || '') ?? '').trim();
-      const fileType = String(((body && body.fileType) || (e && e.parameter && e.parameter.fileType) || '') ?? '').trim();
-      const jsonId = String(((body && body.jsonId) || (e && e.parameter && e.parameter.jsonId) || '') ?? '').trim();
-      if (project) {
-        registerFileStatus_(newFileId, jsonId, filename, project, 'EN_PROGRESO', changedBy, changedByEmail, newFileId, fileType, '', '', body && body.deliveryTeams);
-      }
-    } catch(statusErr) { /* non-fatal */ }
-
-    return { status: 'success', fileId: newFileId, name: file.getName() };
-  } catch (err) {
-    return { status: 'error', message: err.toString() };
+    newFileId = file.getId();
+  } catch (createErr) {
+    return { status: 'error', message: 'No se pudo crear el archivo en Drive: ' + createErr.toString() };
   }
+
+  try {
+    const project = String(((body && body.project) || (e && e.parameter && e.parameter.project) || '') ?? '').trim();
+    const changedBy = String(((body && body.changedBy) || (e && e.parameter && e.parameter.changedBy) || '') ?? '').trim();
+    const changedByEmail = String(((body && body.changedByEmail) || (e && e.parameter && e.parameter.changedByEmail) || '') ?? '').trim();
+    const fileType = String(((body && body.fileType) || (e && e.parameter && e.parameter.fileType) || '') ?? '').trim();
+    const jsonId = String(((body && body.jsonId) || (e && e.parameter && e.parameter.jsonId) || '') ?? '').trim();
+    if (project) {
+      registerFileStatus_(newFileId, jsonId, filename, project, 'EN_PROGRESO', changedBy, changedByEmail, newFileId, fileType, '', '', body && body.deliveryTeams);
+    }
+  } catch(statusErr) {
+    // Trash the uploaded file to avoid orphaning it in Drive
+    try {
+      if (newFileId) {
+        DriveApp.getFileById(newFileId).setTrashed(true);
+      }
+    } catch (trashErr) {}
+    return { status: 'error', message: 'No se pudo registrar el estado en el Spreadsheet: ' + statusErr.toString() };
+  }
+
+  return { status: 'success', fileId: newFileId, name: filename };
 }
 
 function registerFileStatus_(fileId, jsonId, filename, project, status, changedBy, changedByEmail, originalFileId, type, version, comments, deliveryTeams) {
   let doc;
-  try { doc = SpreadsheetApp.openById(SPREADSHEET_ID); } catch (err) { doc = SpreadsheetApp.getActiveSpreadsheet(); }
+  try {
+    doc = SpreadsheetApp.openById(SPREADSHEET_ID);
+  } catch (err) {
+    doc = SpreadsheetApp.getActiveSpreadsheet();
+  }
+  if (!doc) {
+    throw new Error("No se pudo abrir la hoja de cálculo de configuración (ID: " + SPREADSHEET_ID + "). Verifica que el script de Google tenga permisos y que la hoja exista.");
+  }
   let sheet = doc.getSheetByName('EstadosArchivos');
   if (!sheet) sheet = doc.insertSheet('EstadosArchivos');
   ensureHeaders(sheet, FILE_STATUS_HEADERS);
