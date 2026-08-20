@@ -8,7 +8,7 @@ const SPREADSHEET_ID = "1OczWRlaefMY5RQon8K3va91H8TInJlp9RuBJeTPLiiA";
 const COMPANY_HEADERS = ['fecha', 'id', 'name', 'legalName', 'type', 'website', 'email', 'phone', 'country', 'state', 'city', 'zip', 'address', 'sectors', 'specialties', 'logoBase64', 'code', 'driveFolderId'];
 const USER_HEADERS = ['fecha', 'nombre', 'email', 'telefono', 'empresa', 'especialidad', 'cargo', 'rol', 'estado'];
 const TEAM_HEADERS = ['fecha', 'empresa', 'proyecto', 'nombreEquipo', 'miembros'];
-const FILE_STATUS_HEADERS = ['rowId', 'fecha', 'fileId', 'jsonId', 'filename', 'project', 'status', 'changedAt', 'changedBy', 'changedByEmail', 'originalFileId', 'type', 'version', 'comments'];
+const FILE_STATUS_HEADERS = ['rowId', 'fecha', 'fileId', 'jsonId', 'filename', 'project', 'status', 'changedAt', 'changedBy', 'changedByEmail', 'originalFileId', 'type', 'version', 'comments', 'deliveryTeams'];
 const FILE_VERSION_HEADERS = ['versionId', 'fecha', 'fileId', 'jsonId', 'filename', 'project', 'status', 'version', 'comments', 'createdBy', 'createdByEmail', 'originalFileId', 'type', 'isCurrent', 'backupFileId'];
 
 function ensureHeaders(sheet, expectedHeaders) {
@@ -34,6 +34,18 @@ function getOrCreateFolder(parentFolder, name) {
     return folders.next();
   }
   return parentFolder.createFolder(name);
+}
+
+function serializeDeliveryTeams_(value) {
+  if (value === null || value === undefined) return '';
+  if (Array.isArray(value)) {
+    const clean = value.map(function(team) {
+      return String(team || '').trim();
+    }).filter(Boolean);
+    return clean.length ? JSON.stringify(clean) : '';
+  }
+  const str = String(value || '').trim();
+  return str || '';
 }
 
 function findProjectFolder(parentFolder, slug, name, driveFolderName) {
@@ -1180,7 +1192,7 @@ function uploadResumableChunk_(e, body) {
     if (complete) {
       try { fileId = JSON.parse(response.getContentText()).id || ''; } catch (ignore) {}
       try {
-        registerFileStatus_(fileId, String(body.jsonId || ''), String(body.filename || ''), String(body.project || ''), 'EN_PROGRESO', String(body.changedBy || ''), String(body.changedByEmail || ''), fileId, String(body.fileType || ''));
+        registerFileStatus_(fileId, String(body.jsonId || ''), String(body.filename || ''), String(body.project || ''), 'EN_PROGRESO', String(body.changedBy || ''), String(body.changedByEmail || ''), fileId, String(body.fileType || ''), '', '', body.deliveryTeams);
       } catch (statusErr) { /* non-fatal */ }
     }
     return { status: 'success', complete: complete, nextOffset: end + 1, fileId: fileId };
@@ -1237,7 +1249,7 @@ function uploadFile_(e, body) {
       const fileType = String(((body && body.fileType) || (e && e.parameter && e.parameter.fileType) || '') ?? '').trim();
       const jsonId = String(((body && body.jsonId) || (e && e.parameter && e.parameter.jsonId) || '') ?? '').trim();
       if (project) {
-        registerFileStatus_(newFileId, jsonId, filename, project, 'EN_PROGRESO', changedBy, changedByEmail, newFileId, fileType);
+        registerFileStatus_(newFileId, jsonId, filename, project, 'EN_PROGRESO', changedBy, changedByEmail, newFileId, fileType, '', '', body && body.deliveryTeams);
       }
     } catch(statusErr) { /* non-fatal */ }
 
@@ -1247,7 +1259,7 @@ function uploadFile_(e, body) {
   }
 }
 
-function registerFileStatus_(fileId, jsonId, filename, project, status, changedBy, changedByEmail, originalFileId, type, version, comments) {
+function registerFileStatus_(fileId, jsonId, filename, project, status, changedBy, changedByEmail, originalFileId, type, version, comments, deliveryTeams) {
   let doc;
   try { doc = SpreadsheetApp.openById(SPREADSHEET_ID); } catch (err) { doc = SpreadsheetApp.getActiveSpreadsheet(); }
   let sheet = doc.getSheetByName('EstadosArchivos');
@@ -1270,6 +1282,7 @@ function registerFileStatus_(fileId, jsonId, filename, project, status, changedB
     if (h === 'type') return type || '';
     if (h === 'version') return version || 'v1.0';
     if (h === 'comments') return comments || '';
+    if (h === 'deliveryTeams') return serializeDeliveryTeams_(deliveryTeams);
     return '';
   });
   sheet.appendRow(rowData);
@@ -1306,7 +1319,8 @@ function listStatus_(e, body) {
       originalFileId: String(row[idx['originalFileId']] || '').trim(),
       type: String(row[idx['type']] || '').trim(),
       version: String(row[idx['version']] || 'v1.0').trim(),
-      comments: String(row[idx['comments']] || '').trim()
+      comments: String(row[idx['comments']] || '').trim(),
+      deliveryTeams: String(row[idx['deliveryTeams']] || '').trim()
     });
   }
   return { entries: entries };
@@ -1326,6 +1340,7 @@ function changeFileStatus_(e, body) {
   const changedByEmail = String(((body && body.changedByEmail) || (e && e.parameter && e.parameter.changedByEmail) || '') ?? '').trim();
   const version = String(((body && body.version) || (e && e.parameter && e.parameter.version) || 'v1.0') ?? '').trim();
   const comments = String(((body && body.comments) || (e && e.parameter && e.parameter.comments) || ('Promovido a ' + newStatus)) ?? '').trim();
+  const deliveryTeams = (body && body.deliveryTeams) || (e && e.parameter && e.parameter.deliveryTeams) || '';
 
   if (!fileId) return { status: 'error', message: 'Falta fileId' };
   if (['COMPARTIDO', 'PUBLICADO'].indexOf(newStatus) === -1) return { status: 'error', message: 'Estado invalido' };
@@ -1357,7 +1372,7 @@ function changeFileStatus_(e, body) {
       } catch(je) { /* non-fatal */ }
     }
     var now = new Date().toISOString();
-    registerFileStatus_(copiedFileId, copiedJsonId, filename, project, newStatus, changedBy, changedByEmail, originalFileId, type, version, comments);
+    registerFileStatus_(copiedFileId, copiedJsonId, filename, project, newStatus, changedBy, changedByEmail, originalFileId, type, version, comments, deliveryTeams);
     
     // Mark previous versions as not current in VersionesArchivos
     try {
@@ -1622,6 +1637,7 @@ function restoreVersion_(e, body) {
   const changedBy = String(((body && body.changedBy) || (e && e.parameter && e.parameter.changedBy) || '') ?? '').trim();
   const changedByEmail = String(((body && body.changedByEmail) || (e && e.parameter && e.parameter.changedByEmail) || '') ?? '').trim();
   const type = String(((body && body.type) || (e && e.parameter && e.parameter.type) || '') ?? '').trim();
+  const deliveryTeams = (body && body.deliveryTeams) || (e && e.parameter && e.parameter.deliveryTeams) || '';
 
   if (!backupFileId) return { status: 'error', message: 'Falta backupFileId para restaurar' };
 
@@ -1687,7 +1703,7 @@ function restoreVersion_(e, body) {
     });
     vSheet.appendRow(rowData);
 
-    registerFileStatus_(newActiveFileId, '', filename, project, status, changedBy, changedByEmail, originalFileId || newActiveFileId, type, restoredVersionLabel, comment);
+    registerFileStatus_(newActiveFileId, '', filename, project, status, changedBy, changedByEmail, originalFileId || newActiveFileId, type, restoredVersionLabel, comment, deliveryTeams);
 
     return {
       status: 'success',

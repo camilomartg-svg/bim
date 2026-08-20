@@ -677,10 +677,12 @@
 
         if (matchedProject) {
           activeProject = {
+            ...matchedProject,
             name: urlDriveFolderName || matchedProject.name,
             slug: matchedProject.slug || slugify(matchedProject.name),
             city: matchedProject.city || 'Bogotá',
             dataSources: {
+              ...matchedProject.dataSources,
               driveFolderId: urlDriveFolderId || matchedProject.dataSources?.driveFolderId || '',
               driveFolderName: urlDriveFolderName || matchedProject.dataSources?.driveFolderName || matchedProject.name,
               driveScriptUrl: urlDriveScriptUrl || matchedProject.dataSources?.driveScriptUrl || DEFAULT_DRIVE_SCRIPT_URL
@@ -701,10 +703,12 @@
           } else {
             const firstProj = projects[0] || DEFAULT_PROJECT;
             activeProject = {
+              ...firstProj,
               name: firstProj.name,
               slug: firstProj.slug || slugify(firstProj.name),
               city: firstProj.city || 'Bogotá',
               dataSources: {
+                ...firstProj.dataSources,
                 driveFolderId: firstProj.dataSources?.driveFolderId || '',
                 driveFolderName: firstProj.dataSources?.driveFolderName || '',
                 driveScriptUrl: firstProj.dataSources?.driveScriptUrl || DEFAULT_DRIVE_SCRIPT_URL
@@ -715,30 +719,251 @@
 
         projectSelect.innerHTML = projects.map(p => `<option value="${p.slug || slugify(p.name)}" ${p.slug === activeProject.slug ? 'selected' : ''}>${p.name}</option>`).join('');
         
-        projectSelect.addEventListener('change', (e) => {
+        projectSelect.addEventListener('change', async (e) => {
           const selectedSlug = e.target.value;
           const configProject = projects.find(p => p.slug === selectedSlug || slugify(p.name) === selectedSlug);
           if (configProject) {
             activeProject = {
+              ...configProject,
               name: configProject.name,
               slug: configProject.slug || slugify(configProject.name),
               city: configProject.city || 'Bogotá',
               dataSources: {
+                ...configProject.dataSources,
                 driveFolderId: configProject.dataSources?.driveFolderId || '',
                 driveFolderName: configProject.dataSources?.driveFolderName || configProject.name,
                 driveScriptUrl: configProject.dataSources?.driveScriptUrl || DEFAULT_DRIVE_SCRIPT_URL
               }
             };
             updateProjectUI();
+            await hydrateProjectTeams();
             loadProjectFiles();
           }
         });
+
+        function normalizeTeamName(name) {
+          return String(name || '')
+            .normalize('NFD')
+            .replace(/[\u0300-\u036f]/g, '')
+            .toUpperCase()
+            .trim();
+        }
+
+        function parseStoredDeliveryTeams(value) {
+          if (Array.isArray(value)) {
+            return value.map(team => String(team || '').trim()).filter(Boolean);
+          }
+          const raw = String(value || '').trim();
+          if (!raw) return [];
+          if (raw.startsWith('[')) {
+            try {
+              const parsed = JSON.parse(raw);
+              if (Array.isArray(parsed)) {
+                return parsed.map(team => String(team || '').trim()).filter(Boolean);
+              }
+            } catch (err) {
+              console.warn('No se pudo interpretar deliveryTeams:', err);
+            }
+          }
+          return raw.split(/[|,]/).map(team => String(team || '').trim()).filter(Boolean);
+        }
+
+        function uniqueTeamNames(teams) {
+          const seen = new Set();
+          return (teams || []).reduce((acc, team) => {
+            const clean = String(team || '').trim();
+            const normalized = normalizeTeamName(clean);
+            if (!clean || seen.has(normalized)) return acc;
+            seen.add(normalized);
+            acc.push(clean.toUpperCase());
+            return acc;
+          }, []);
+        }
+
+        function ensureProjectTeamStructure(project) {
+          if (!project) return;
+          if (!Array.isArray(project.members)) project.members = [];
+          if (!project.iso19650) project.iso19650 = {};
+          if (!Array.isArray(project.iso19650.deliveryTeams)) project.iso19650.deliveryTeams = [];
+          if (!Array.isArray(project.equiposDeTarea)) project.equiposDeTarea = [];
+        }
+
+        async function hydrateProjectTeams() {
+          if (!activeProject) return;
+          ensureProjectTeamStructure(activeProject);
+
+          const ds = activeProject.dataSources || {};
+          const scriptUrl = ds.driveScriptUrl || DEFAULT_DRIVE_SCRIPT_URL;
+          const projectSlug = activeProject.slug || slugify(activeProject.name);
+
+          try {
+            const teamsRes = await fetch(`${scriptUrl}?action=getTeams&empresa=${encodeURIComponent(companyId || '')}&proyecto=${encodeURIComponent(projectSlug)}&t=${Date.now()}`);
+            if (!teamsRes.ok) return;
+
+            const remoteTeams = await teamsRes.json();
+            if (!Array.isArray(remoteTeams)) return;
+
+            remoteTeams.forEach(rt => {
+              const teamName = String(rt.name || '').trim();
+              if (!teamName) return;
+
+              const remoteMembers = Array.isArray(rt.members)
+                ? rt.members.map(member => String(member || '').toLowerCase().trim()).filter(Boolean)
+                : [];
+              const normalized = normalizeTeamName(teamName);
+
+              let deliveryTeam = activeProject.iso19650.deliveryTeams.find(dt => normalizeTeamName(dt.name) === normalized);
+              if (!deliveryTeam) {
+                deliveryTeam = {
+                  id: `dt-${projectSlug}-${normalized.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`,
+                  name: teamName,
+                  members: []
+                };
+                activeProject.iso19650.deliveryTeams.push(deliveryTeam);
+              }
+
+              const mergedMembers = new Set(
+                (Array.isArray(deliveryTeam.members) ? deliveryTeam.members : [])
+                  .map(member => String(member || '').toLowerCase().trim())
+                  .filter(Boolean)
+              );
+              remoteMembers.forEach(member => {
+                mergedMembers.add(member);
+                if (!activeProject.members.includes(member)) activeProject.members.push(member);
+              });
+              deliveryTeam.members = Array.from(mergedMembers);
+            });
+
+            activeProject.equiposDeTarea = (activeProject.iso19650.deliveryTeams || []).map(dt => ({
+              name: dt.name,
+              members: [...(dt.members || [])]
+            }));
+          } catch (err) {
+            console.warn('No se pudieron hidratar los equipos del proyecto:', err);
+          }
+        }
+
+        function getUserDeliveryTeams(email) {
+          if (!email || !activeProject) return [];
+          ensureProjectTeamStructure(activeProject);
+          const cleanEmail = email.toLowerCase().trim();
+          const teams = [];
+
+          const deliveryTeams = activeProject.iso19650?.deliveryTeams || [];
+          deliveryTeams.forEach(dt => {
+            const isMember = Array.isArray(dt.members) && dt.members.map(m => m.toLowerCase().trim()).includes(cleanEmail);
+            const isLead = dt.leadEmail && dt.leadEmail.toLowerCase().trim() === cleanEmail;
+            if (isMember || isLead) {
+              teams.push(dt.name);
+            }
+          });
+
+          const equipos = activeProject.equiposDeTarea || [];
+          equipos.forEach(eq => {
+            const isMember = Array.isArray(eq.members) && eq.members.map(m => m.toLowerCase().trim()).includes(cleanEmail);
+            if (isMember) {
+              teams.push(eq.name);
+            }
+          });
+
+          return uniqueTeamNames(teams);
+        }
+
+        function resolveCurrentUserDeliveryTeams() {
+          const currentUser = JSON.parse(sessionStorage.getItem('userAccount') || localStorage.getItem('userAccount') || 'null');
+          if (!currentUser) return [];
+          const email = (currentUser.username || currentUser.email || currentUser.userAccount || '').toLowerCase().trim();
+          return getUserDeliveryTeams(email);
+        }
+
+        function getFileDeliveryTeams(file) {
+          if (!file || !activeProject) return [];
+          ensureProjectTeamStructure(activeProject);
+          const teams = new Set();
+
+          parseStoredDeliveryTeams(file.deliveryTeams).forEach(team => {
+            const clean = String(team || '').trim();
+            if (clean) teams.add(clean.toUpperCase());
+          });
+
+          if (teams.size > 0) {
+            return Array.from(teams);
+          }
+
+          const specialty = cleanSpecialty(file.folder).toUpperCase().trim();
+          if (specialty && specialty !== 'GENERAL') {
+            const normSpecialty = normalizeTeamName(specialty);
+
+            const deliveryTeams = activeProject.iso19650?.deliveryTeams || [];
+            deliveryTeams.forEach(dt => {
+              if (normalizeTeamName(dt.name) === normSpecialty) {
+                teams.add(dt.name.toUpperCase().trim());
+              }
+            });
+
+            const equipos = activeProject.equiposDeTarea || [];
+            equipos.forEach(eq => {
+              if (normalizeTeamName(eq.name) === normSpecialty) {
+                teams.add(eq.name.toUpperCase().trim());
+              }
+            });
+          }
+
+          if (teams.size === 0) {
+            const uploaderEmail = (file.changedByEmail || '').toLowerCase().trim();
+            if (uploaderEmail && uploaderEmail !== 'unassigned@nora.cde') {
+              getUserDeliveryTeams(uploaderEmail).forEach(team => teams.add(team));
+            }
+          }
+
+          return uniqueTeamNames(Array.from(teams));
+        }
+
+        function isUserAuthorizedForFile(file, action = 'view') {
+          const currentUser = JSON.parse(sessionStorage.getItem('userAccount') || localStorage.getItem('userAccount') || 'null');
+          if (!currentUser) return false;
+          const email = (currentUser.username || currentUser.email || currentUser.userAccount || '').toLowerCase().trim();
+
+          const superAdmins = ['imagina3ddesign@gmail.com', 'mcmartinezg@unal.edu.co'];
+          const isSuperAdmin = superAdmins.includes(email) || currentUser.role === 'SUPER_ADMIN' || currentUser.role === 'SUPER_ADMINISTRADOR';
+
+          const companyAdmins = Array.isArray(currentCompany?.admins) ? currentCompany.admins.map(a => a.toLowerCase().trim()) : [];
+          const memberMatch = Array.isArray(currentCompany?.members) ? currentCompany.members.find(m => m.email && m.email.toLowerCase().trim() === email) : null;
+          const isMemberAdmin = memberMatch && (memberMatch.role === 'ADMINISTRADOR_EMPRESA' || memberMatch.role === 'ADMINISTRADOR');
+
+          const isCompanyAdmin = isSuperAdmin || companyAdmins.includes(email) || isMemberAdmin || (currentUser.adminEmpresaId && currentUser.adminEmpresaId === companyId && (currentUser.role === 'ADMINISTRADOR_EMPRESA' || currentUser.role === 'SUPER_ADMINISTRADOR' || currentUser.role === 'SUPER_ADMIN'));
+
+          const projectAdmins = Array.isArray(activeProject?.iso19650?.projectAdmins)
+            ? activeProject.iso19650.projectAdmins.map(a => a.toLowerCase().trim())
+            : [];
+          const isProjectAdmin = isCompanyAdmin || projectAdmins.includes(email);
+
+          if (isProjectAdmin) return true;
+
+          if (action === 'view' && file.status !== 'EN_PROGRESO') {
+            const isMember = (activeProject?.members || []).map(m => m.toLowerCase().trim()).includes(email);
+            if (isMember) return true;
+
+            const userTeams = getUserDeliveryTeams(email);
+            if (userTeams.length > 0) return true;
+          }
+
+          const fileTeams = getFileDeliveryTeams(file);
+          const userTeams = getUserDeliveryTeams(email);
+
+          if (fileTeams.length === 0) {
+            return (file.changedByEmail || '').toLowerCase().trim() === email;
+          }
+
+          return fileTeams.some(team => userTeams.includes(team));
+        }
 
         if (projects.length > 1) {
           projectSelectContainer.classList.remove('hidden');
         }
 
         updateProjectUI();
+        await hydrateProjectTeams();
         loadProjectFiles();
 
       } catch (err) {
@@ -952,7 +1177,8 @@
           content: base64Content,
           fileType: fileType,
           changedBy: userAccount ? (userAccount.name || '') : '',
-          changedByEmail: userAccount ? (userAccount.email || '') : ''
+          changedByEmail: userAccount ? (userAccount.email || '') : '',
+          deliveryTeams: resolveCurrentUserDeliveryTeams()
         };
 
         const res = await fetch(scriptUrl, {
@@ -1270,7 +1496,8 @@
                 version: match?.version || 'v1.0',
                 comments: match?.comments || '',
                 changedBy: match?.changedBy || (userAccount ? userAccount.name : 'CDE NORA'),
-                changedByEmail: match?.changedByEmail || (userAccount ? userAccount.email : '')
+                changedByEmail: match?.changedByEmail || (userAccount ? userAccount.email : ''),
+                deliveryTeams: parseStoredDeliveryTeams(match?.deliveryTeams || '')
               };
 
               const prev = filesByPath.get(fileKey);
@@ -1285,7 +1512,7 @@
           addFiles(listData.pdfs, 'pdf');
           addFiles(listData.dwgs, 'dwg');
 
-          allProjectFiles = Array.from(filesByPath.values());
+          allProjectFiles = Array.from(filesByPath.values()).filter(f => isUserAuthorizedForFile(f, 'view'));
           updateTabCounts();
           renderDriveFilesTable();
         } catch (err) {
@@ -1367,6 +1594,7 @@
           const fileDataStr = encodeURIComponent(JSON.stringify(f));
           const isModel = f.type === 'model';
           const deleteTitle = isModel && f.jsonId ? 'Eliminar modelo (.frag + .json)' : 'Eliminar archivo';
+          const canManage = isUserAuthorizedForFile(f, 'manage');
 
           // Status Badge Pill
           let statusBadge = '';
@@ -1392,6 +1620,7 @@
           if (currentStatusTab === 'EN_PROGRESO') {
             actionButtons = `
               <div class="flex items-center justify-end gap-1.5 flex-wrap sm:flex-nowrap">
+                ${canManage ? `
                 <button onclick="window.promoteFile(this, '${fileDataStr}', 'COMPARTIDO')" class="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-bold text-[10px] uppercase tracking-wider shadow-sm transition-all whitespace-nowrap" title="Pasar a Compartido">
                   <span class="material-symbols-outlined text-[13px]">share</span> COMPARTIDO
                 </button>
@@ -1401,28 +1630,35 @@
                 <button onclick="window.openNewVersionModal('${fileDataStr}')" class="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 font-semibold text-[10px] uppercase tracking-wider hover:bg-indigo-100 dark:hover:bg-indigo-900/40 transition-colors whitespace-nowrap" title="Guardar Nueva Versión">
                   <span class="material-symbols-outlined text-[13px]">history_edu</span> + Versión
                 </button>
+                ` : ''}
                 <button onclick="window.openVersionHistoryModal('${fileDataStr}')" class="inline-flex items-center justify-center p-1.5 rounded-lg text-slate-500 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950/30 transition-colors" title="Historial de Versiones">
                   <span class="material-symbols-outlined text-[16px]">history</span>
                 </button>
+                ${canManage ? `
                 <button onclick="window.deleteProjectFile(this, '${fileDataStr}')" class="inline-flex items-center justify-center p-1.5 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors" title="${deleteTitle}">
                   <span class="material-symbols-outlined text-[16px]">delete</span>
                 </button>
+                ` : ''}
               </div>`;
           } else if (currentStatusTab === 'COMPARTIDO') {
             actionButtons = `
               <div class="flex items-center justify-end gap-1.5 flex-wrap sm:flex-nowrap">
+                ${canManage ? `
                 <button onclick="window.promoteFile(this, '${fileDataStr}', 'PUBLICADO')" class="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-green-600 hover:bg-green-700 text-white font-bold text-[10px] uppercase tracking-wider shadow-sm transition-all whitespace-nowrap" title="Pasar a Publicado">
                   <span class="material-symbols-outlined text-[13px]">publish</span> PUBLICADO
                 </button>
                 <button onclick="window.openNewVersionModal('${fileDataStr}')" class="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 font-semibold text-[10px] uppercase tracking-wider hover:bg-indigo-100 dark:hover:bg-indigo-900/40 transition-colors whitespace-nowrap" title="Guardar Nueva Versión">
                   <span class="material-symbols-outlined text-[13px]">history_edu</span> + Versión
                 </button>
+                ` : ''}
                 <button onclick="window.openVersionHistoryModal('${fileDataStr}')" class="inline-flex items-center justify-center p-1.5 rounded-lg text-slate-500 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950/30 transition-colors" title="Historial de Versiones">
                   <span class="material-symbols-outlined text-[16px]">history</span>
                 </button>
+                ${canManage ? `
                 <button onclick="window.deleteProjectFile(this, '${fileDataStr}')" class="inline-flex items-center justify-center p-1.5 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors" title="${deleteTitle}">
                   <span class="material-symbols-outlined text-[16px]">delete</span>
                 </button>
+                ` : ''}
               </div>`;
           } else {
             actionButtons = `
@@ -1430,15 +1666,19 @@
                 <span class="inline-flex items-center gap-1 text-green-600 dark:text-green-400 font-bold text-[10px] uppercase tracking-wider mr-1">
                   <span class="material-symbols-outlined text-[14px]">verified</span> PUBLICADO
                 </span>
+                ${canManage ? `
                 <button onclick="window.openNewVersionModal('${fileDataStr}')" class="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 font-semibold text-[10px] uppercase tracking-wider hover:bg-indigo-100 dark:hover:bg-indigo-900/40 transition-colors whitespace-nowrap" title="Guardar Nueva Versión">
                   <span class="material-symbols-outlined text-[13px]">history_edu</span> + Versión
                 </button>
+                ` : ''}
                 <button onclick="window.openVersionHistoryModal('${fileDataStr}')" class="inline-flex items-center justify-center p-1.5 rounded-lg text-slate-500 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950/30 transition-colors" title="Historial de Versiones">
                   <span class="material-symbols-outlined text-[16px]">history</span>
                 </button>
+                ${canManage ? `
                 <button onclick="window.deleteProjectFile(this, '${fileDataStr}')" class="inline-flex items-center justify-center p-1.5 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors" title="${deleteTitle}">
                   <span class="material-symbols-outlined text-[16px]">delete</span>
                 </button>
+                ` : ''}
               </div>`;
           }
 
@@ -1528,6 +1768,11 @@
         let f;
         try { f = JSON.parse(decodeURIComponent(encodedData)); } catch(e) { return; }
         if (!f) return;
+
+        if (!isUserAuthorizedForFile(f, 'manage')) {
+          alert('No tienes autorización para realizar esta acción sobre este archivo.');
+          return;
+        }
         targetVersionFile = f;
 
         const specialty = cleanSpecialty(f.folder);
@@ -1610,6 +1855,7 @@
             comments: comments,
             changedBy: userAccount ? (userAccount.name || '') : '',
             changedByEmail: userAccount ? (userAccount.email || '') : '',
+            deliveryTeams: targetVersionFile.deliveryTeams || resolveCurrentUserDeliveryTeams(),
             originalFileId: targetVersionFile.originalFileId || targetVersionFile.fileId,
             type: targetVersionFile.type || '',
             folderId: ds.driveFolderId || '',
@@ -1692,6 +1938,8 @@
             return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
           };
 
+          const canManage = isUserAuthorizedForFile(f, 'manage');
+
           historyList.innerHTML = versions.map((ver, idx) => {
             const isLatest = idx === 0;
             const stateLabels = { EN_PROGRESO: 'En Progreso', COMPARTIDO: 'Compartido', PUBLICADO: 'Publicado' };
@@ -1708,7 +1956,10 @@
               version: ver.version,
               status: f.status || ver.status,
               originalFileId: f.originalFileId || f.fileId,
-              type: f.type || ''
+              type: f.type || '',
+              folder: f.folder,
+              changedByEmail: f.changedByEmail || ver.createdByEmail || '',
+              deliveryTeams: f.deliveryTeams || []
             }));
 
             const downloadUrl = `https://drive.google.com/uc?export=download&id=${ver.backupFileId || ver.fileId}`;
@@ -1736,7 +1987,7 @@
                   <a href="${downloadUrl}" target="_blank" rel="noopener noreferrer" class="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 font-semibold text-xs transition-colors" title="Descargar archivo de esta versión">
                     <span class="material-symbols-outlined text-[14px]">download</span> Descargar
                   </a>
-                  ${!isLatest ? `
+                  ${(!isLatest && canManage) ? `
                     <button onclick="window.restoreVersionItem(this, '${verJsonStr}')" class="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-600 text-white font-bold text-xs transition-colors" title="Restablecer como versión activa">
                       <span class="material-symbols-outlined text-[14px]">restore</span> Restablecer
                     </button>
@@ -1757,6 +2008,11 @@
         let v;
         try { v = JSON.parse(decodeURIComponent(encodedData)); } catch(e) { return; }
         if (!v || !activeProject) return;
+
+        if (!isUserAuthorizedForFile(v, 'manage')) {
+          alert('No tienes autorización para realizar esta acción sobre este archivo.');
+          return;
+        }
 
         if (!confirm(`¿Deseas restablecer la versión ${v.version} de "${v.filename}" como la versión activa actual?\nSe creará un registro de restauración.`)) {
           return;
@@ -1782,7 +2038,8 @@
             folderId: ds.driveFolderId || '',
             driveFolderName: ds.driveFolderName || activeProject.name,
             changedBy: userAccount ? (userAccount.name || '') : '',
-            changedByEmail: userAccount ? (userAccount.email || '') : ''
+            changedByEmail: userAccount ? (userAccount.email || '') : '',
+            deliveryTeams: v.deliveryTeams || resolveCurrentUserDeliveryTeams()
           };
 
           const res = await fetch(scriptUrl, {
@@ -1819,6 +2076,11 @@
         try { f = JSON.parse(decodeURIComponent(encodedData)); } catch(e) { return; }
         if (!f || !activeProject) return;
 
+        if (!isUserAuthorizedForFile(f, 'manage')) {
+          alert('No tienes autorización para realizar esta acción sobre este archivo.');
+          return;
+        }
+
         const labels = { COMPARTIDO: 'Compartido', PUBLICADO: 'Publicado' };
         if (!confirm(`¿Mover "${f.name}" a ${labels[newStatus]}?\nEsto creará una copia del archivo en ese estado.`)) return;
 
@@ -1843,7 +2105,8 @@
             version: f.version || 'v1.0',
             comments: `Promovido a ${labels[newStatus]}`,
             changedBy: userAccount ? (userAccount.name || '') : '',
-            changedByEmail: userAccount ? (userAccount.email || '') : ''
+            changedByEmail: userAccount ? (userAccount.email || '') : '',
+            deliveryTeams: f.deliveryTeams || resolveCurrentUserDeliveryTeams()
           };
           const res = await fetch(scriptUrl, {
             method: 'POST', mode: 'cors',
@@ -1874,6 +2137,11 @@
         }
 
         if (!f || !activeProject) return;
+
+        if (!isUserAuthorizedForFile(f, 'manage')) {
+          alert('No tienes autorización para realizar esta acción sobre este archivo.');
+          return;
+        }
 
         const isModel = f.type === 'model';
         const fileDesc = isModel && f.jsonId ? `"${f.name}" y sus datos asociados (.json)` : `"${f.name}"`;

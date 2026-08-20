@@ -720,7 +720,7 @@
 
         projectSelect.innerHTML = projects.map(p => `<option value="${p.slug || slugify(p.name)}" ${p.slug === activeProject.slug ? 'selected' : ''}>${p.name}</option>`).join('');
         
-        projectSelect.addEventListener('change', (e) => {
+        projectSelect.addEventListener('change', async (e) => {
           const selectedSlug = e.target.value;
           const configProject = projects.find(p => p.slug === selectedSlug || slugify(p.name) === selectedSlug);
           if (configProject) {
@@ -737,14 +737,118 @@
               }
             };
             updateProjectUI();
+            await hydrateProjectTeams();
             loadProjectFiles();
           }
         });
 
         // Helper functions for ISO 19650 Team Silos & Permissions
+        function normalizeTeamName(name) {
+          return String(name || '')
+            .normalize('NFD')
+            .replace(/[\u0300-\u036f]/g, '')
+            .toUpperCase()
+            .trim();
+        }
+
+        function parseStoredDeliveryTeams(value) {
+          if (Array.isArray(value)) {
+            return value.map(team => String(team || '').trim()).filter(Boolean);
+          }
+          const raw = String(value || '').trim();
+          if (!raw) return [];
+          if (raw.startsWith('[')) {
+            try {
+              const parsed = JSON.parse(raw);
+              if (Array.isArray(parsed)) {
+                return parsed.map(team => String(team || '').trim()).filter(Boolean);
+              }
+            } catch (err) {
+              console.warn('No se pudo interpretar deliveryTeams:', err);
+            }
+          }
+          return raw.split(/[|,]/).map(team => String(team || '').trim()).filter(Boolean);
+        }
+
+        function uniqueTeamNames(teams) {
+          const seen = new Set();
+          return (teams || []).reduce((acc, team) => {
+            const clean = String(team || '').trim();
+            const normalized = normalizeTeamName(clean);
+            if (!clean || seen.has(normalized)) return acc;
+            seen.add(normalized);
+            acc.push(clean.toUpperCase());
+            return acc;
+          }, []);
+        }
+
+        function ensureProjectTeamStructure(project) {
+          if (!project) return;
+          if (!Array.isArray(project.members)) project.members = [];
+          if (!project.iso19650) project.iso19650 = {};
+          if (!Array.isArray(project.iso19650.deliveryTeams)) project.iso19650.deliveryTeams = [];
+          if (!Array.isArray(project.equiposDeTarea)) project.equiposDeTarea = [];
+        }
+
+        async function hydrateProjectTeams() {
+          if (!activeProject) return;
+          ensureProjectTeamStructure(activeProject);
+
+          const ds = activeProject.dataSources || {};
+          const scriptUrl = ds.driveScriptUrl || DEFAULT_DRIVE_SCRIPT_URL;
+          const projectSlug = activeProject.slug || slugify(activeProject.name);
+
+          try {
+            const teamsRes = await fetch(`${scriptUrl}?action=getTeams&empresa=${encodeURIComponent(companyId || '')}&proyecto=${encodeURIComponent(projectSlug)}&t=${Date.now()}`);
+            if (!teamsRes.ok) return;
+
+            const remoteTeams = await teamsRes.json();
+            if (!Array.isArray(remoteTeams)) return;
+
+            remoteTeams.forEach(rt => {
+              const teamName = String(rt.name || '').trim();
+              if (!teamName) return;
+
+              const remoteMembers = Array.isArray(rt.members)
+                ? rt.members.map(member => String(member || '').toLowerCase().trim()).filter(Boolean)
+                : [];
+              const normalized = normalizeTeamName(teamName);
+
+              let deliveryTeam = activeProject.iso19650.deliveryTeams.find(dt => normalizeTeamName(dt.name) === normalized);
+              if (!deliveryTeam) {
+                deliveryTeam = {
+                  id: `dt-${projectSlug}-${normalized.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`,
+                  name: teamName,
+                  members: []
+                };
+                activeProject.iso19650.deliveryTeams.push(deliveryTeam);
+              }
+
+              const mergedMembers = new Set(
+                (Array.isArray(deliveryTeam.members) ? deliveryTeam.members : [])
+                  .map(member => String(member || '').toLowerCase().trim())
+                  .filter(Boolean)
+              );
+              remoteMembers.forEach(member => {
+                mergedMembers.add(member);
+                if (!activeProject.members.includes(member)) activeProject.members.push(member);
+              });
+              deliveryTeam.members = Array.from(mergedMembers);
+            });
+
+            activeProject.equiposDeTarea = (activeProject.iso19650.deliveryTeams || []).map(dt => ({
+              name: dt.name,
+              members: [...(dt.members || [])]
+            }));
+          } catch (err) {
+            console.warn('No se pudieron hidratar los equipos del proyecto:', err);
+          }
+        }
+
         function getUserDeliveryTeams(email) {
           if (!email || !activeProject) return [];
           const cleanEmail = email.toLowerCase().trim();
+          ensureProjectTeamStructure(activeProject);
           const teams = [];
 
           // Check deliveryTeams
@@ -753,7 +857,7 @@
             const isMember = Array.isArray(dt.members) && dt.members.map(m => m.toLowerCase().trim()).includes(cleanEmail);
             const isLead = dt.leadEmail && dt.leadEmail.toLowerCase().trim() === cleanEmail;
             if (isMember || isLead) {
-              teams.push(dt.name.toUpperCase().trim());
+              teams.push(dt.name);
             }
           });
 
@@ -761,34 +865,50 @@
           const equipos = activeProject.equiposDeTarea || [];
           equipos.forEach(eq => {
             const isMember = Array.isArray(eq.members) && eq.members.map(m => m.toLowerCase().trim()).includes(cleanEmail);
-            if (isMember && !teams.includes(eq.name.toUpperCase().trim())) {
-              teams.push(eq.name.toUpperCase().trim());
+            if (isMember) {
+              teams.push(eq.name);
             }
           });
 
-          return teams;
+          return uniqueTeamNames(teams);
+        }
+
+        function resolveCurrentUserDeliveryTeams() {
+          const currentUser = JSON.parse(sessionStorage.getItem('userAccount') || localStorage.getItem('userAccount') || 'null');
+          if (!currentUser) return [];
+          const email = (currentUser.username || currentUser.email || currentUser.userAccount || '').toLowerCase().trim();
+          return getUserDeliveryTeams(email);
         }
 
         function getFileDeliveryTeams(file) {
           if (!file || !activeProject) return [];
+          ensureProjectTeamStructure(activeProject);
           const teams = new Set();
+
+          parseStoredDeliveryTeams(file.deliveryTeams).forEach(team => {
+            const clean = String(team || '').trim();
+            if (clean) teams.add(clean.toUpperCase());
+          });
+
+          if (teams.size > 0) {
+            return Array.from(teams);
+          }
 
           // 1. Try folder specialty first (Primary source of truth)
           const specialty = cleanSpecialty(file.folder).toUpperCase().trim();
           if (specialty && specialty !== 'GENERAL') {
-            const normalizeName = str => str.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase().trim();
-            const normSpecialty = normalizeName(specialty);
+            const normSpecialty = normalizeTeamName(specialty);
 
             const deliveryTeams = activeProject.iso19650?.deliveryTeams || [];
             deliveryTeams.forEach(dt => {
-              if (normalizeName(dt.name) === normSpecialty) {
+              if (normalizeTeamName(dt.name) === normSpecialty) {
                 teams.add(dt.name.toUpperCase().trim());
               }
             });
 
             const equipos = activeProject.equiposDeTarea || [];
             equipos.forEach(eq => {
-              if (normalizeName(eq.name) === normSpecialty) {
+              if (normalizeTeamName(eq.name) === normSpecialty) {
                 teams.add(eq.name.toUpperCase().trim());
               }
             });
@@ -817,7 +937,7 @@
             }
           }
 
-          return Array.from(teams);
+          return uniqueTeamNames(Array.from(teams));
         }
 
         function isUserAuthorizedForFile(file, action = 'view') {
@@ -871,6 +991,7 @@
         }
 
         updateProjectUI();
+        await hydrateProjectTeams();
         loadProjectFiles();
 
       } catch (err) {
@@ -1084,7 +1205,8 @@
           content: base64Content,
           fileType: fileType,
           changedBy: userAccount ? (userAccount.name || '') : '',
-          changedByEmail: userAccount ? (userAccount.email || '') : ''
+          changedByEmail: userAccount ? (userAccount.email || '') : '',
+          deliveryTeams: resolveCurrentUserDeliveryTeams()
         };
 
         const res = await fetch(scriptUrl, {
@@ -1345,7 +1467,8 @@
                 version: match?.version || 'v1.0',
                 comments: match?.comments || '',
                 changedBy: (match?.changedBy && match.changedBy.trim()) || item.ownerName || 'UNASSIGNED',
-                changedByEmail: (match?.changedByEmail && match.changedByEmail.trim()) || item.ownerEmail || 'unassigned@nora.cde'
+                changedByEmail: (match?.changedByEmail && match.changedByEmail.trim()) || item.ownerEmail || 'unassigned@nora.cde',
+                deliveryTeams: parseStoredDeliveryTeams(match?.deliveryTeams || '')
               };
 
               const prev = filesByPath.get(fileKey);
@@ -1707,6 +1830,7 @@
             comments: comments,
             changedBy: userAccount ? (userAccount.name || '') : '',
             changedByEmail: userAccount ? (userAccount.email || '') : '',
+            deliveryTeams: targetVersionFile.deliveryTeams || resolveCurrentUserDeliveryTeams(),
             originalFileId: targetVersionFile.originalFileId || targetVersionFile.fileId,
             type: targetVersionFile.type || '',
             folderId: ds.driveFolderId || '',
@@ -1809,7 +1933,8 @@
               originalFileId: f.originalFileId || f.fileId,
               type: f.type || '',
               folder: f.folder,
-              changedByEmail: f.changedByEmail || ver.createdByEmail || ''
+              changedByEmail: f.changedByEmail || ver.createdByEmail || '',
+              deliveryTeams: f.deliveryTeams || []
             }));
 
             const downloadUrl = `https://drive.google.com/uc?export=download&id=${ver.backupFileId || ver.fileId}`;
@@ -1888,7 +2013,8 @@
             folderId: ds.driveFolderId || '',
             driveFolderName: ds.driveFolderName || activeProject.name,
             changedBy: userAccount ? (userAccount.name || '') : '',
-            changedByEmail: userAccount ? (userAccount.email || '') : ''
+            changedByEmail: userAccount ? (userAccount.email || '') : '',
+            deliveryTeams: v.deliveryTeams || resolveCurrentUserDeliveryTeams()
           };
 
           const res = await fetch(scriptUrl, {
@@ -1954,7 +2080,8 @@
             version: f.version || 'v1.0',
             comments: `Promovido a ${labels[newStatus]}`,
             changedBy: userAccount ? (userAccount.name || '') : '',
-            changedByEmail: userAccount ? (userAccount.email || '') : ''
+            changedByEmail: userAccount ? (userAccount.email || '') : '',
+            deliveryTeams: f.deliveryTeams || resolveCurrentUserDeliveryTeams()
           };
           const res = await fetch(scriptUrl, {
             method: 'POST', mode: 'cors',
