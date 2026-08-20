@@ -480,6 +480,7 @@
       let isUploading = false;
       let targetVersionFile = null; // Currently selected file for new version
 
+      let currentCompany = null;
       let config = DEFAULT_PORTAL_CONFIG;
       let projects = [];
       let activeProject = null;
@@ -642,9 +643,9 @@
               const empRes = await fetch('empresas.json');
               if (empRes.ok) {
                 const empresas = await empRes.json();
-                const emp = empresas.find(e => e.id === companyId);
-                if (emp && emp.configUrl) {
-                  configUrl = emp.configUrl;
+                currentCompany = empresas.find(e => e.id === companyId);
+                if (currentCompany && currentCompany.configUrl) {
+                  configUrl = currentCompany.configUrl;
                 }
               }
             } catch(e) {
@@ -741,6 +742,7 @@
           }
         });
 
+        // Helper functions for ISO 19650 Team Silos & Permissions
         function normalizeTeamName(name) {
           return String(name || '')
             .normalize('NFD')
@@ -845,10 +847,11 @@
 
         function getUserDeliveryTeams(email) {
           if (!email || !activeProject) return [];
-          ensureProjectTeamStructure(activeProject);
           const cleanEmail = email.toLowerCase().trim();
+          ensureProjectTeamStructure(activeProject);
           const teams = [];
 
+          // Check deliveryTeams
           const deliveryTeams = activeProject.iso19650?.deliveryTeams || [];
           deliveryTeams.forEach(dt => {
             const isMember = Array.isArray(dt.members) && dt.members.map(m => m.toLowerCase().trim()).includes(cleanEmail);
@@ -858,6 +861,7 @@
             }
           });
 
+          // Check equiposDeTarea
           const equipos = activeProject.equiposDeTarea || [];
           equipos.forEach(eq => {
             const isMember = Array.isArray(eq.members) && eq.members.map(m => m.toLowerCase().trim()).includes(cleanEmail);
@@ -890,6 +894,7 @@
             return Array.from(teams);
           }
 
+          // 1. Try folder specialty first (Primary source of truth)
           const specialty = cleanSpecialty(file.folder).toUpperCase().trim();
           if (specialty && specialty !== 'GENERAL') {
             const normSpecialty = normalizeTeamName(specialty);
@@ -909,10 +914,26 @@
             });
           }
 
+          // 2. Fallback / Secondary source: check by uploader/changedByEmail
           if (teams.size === 0) {
-            const uploaderEmail = (file.changedByEmail || '').toLowerCase().trim();
-            if (uploaderEmail && uploaderEmail !== 'unassigned@nora.cde') {
-              getUserDeliveryTeams(uploaderEmail).forEach(team => teams.add(team));
+            const uEmail = (file.changedByEmail || '').toLowerCase().trim();
+            if (uEmail && uEmail !== 'unassigned@nora.cde') {
+              const deliveryTeams = activeProject.iso19650?.deliveryTeams || [];
+              deliveryTeams.forEach(dt => {
+                const isMember = Array.isArray(dt.members) && dt.members.map(m => m.toLowerCase().trim()).includes(uEmail);
+                const isLead = dt.leadEmail && dt.leadEmail.toLowerCase().trim() === uEmail;
+                if (isMember || isLead) {
+                  teams.add(dt.name.toUpperCase().trim());
+                }
+              });
+
+              const equipos = activeProject.equiposDeTarea || [];
+              equipos.forEach(eq => {
+                const isMember = Array.isArray(eq.members) && eq.members.map(m => m.toLowerCase().trim()).includes(uEmail);
+                if (isMember) {
+                  teams.add(eq.name.toUpperCase().trim());
+                }
+              });
             }
           }
 
@@ -920,10 +941,12 @@
         }
 
         function isUserAuthorizedForFile(file, action = 'view') {
+          // 1. Get current user's email
           const currentUser = JSON.parse(sessionStorage.getItem('userAccount') || localStorage.getItem('userAccount') || 'null');
           if (!currentUser) return false;
           const email = (currentUser.username || currentUser.email || currentUser.userAccount || '').toLowerCase().trim();
 
+          // 2. Superadmins and Project Admins are always authorized
           const superAdmins = ['imagina3ddesign@gmail.com', 'mcmartinezg@unal.edu.co'];
           const isSuperAdmin = superAdmins.includes(email) || currentUser.role === 'SUPER_ADMIN' || currentUser.role === 'SUPER_ADMINISTRADOR';
 
@@ -940,22 +963,31 @@
 
           if (isProjectAdmin) return true;
 
+          // El uploader siempre puede ver/gestionar su propio archivo
+          const fileUploader = (file.changedByEmail || '').toLowerCase().trim();
+          if (fileUploader && fileUploader === email) return true;
+
+          // 3. For view action of shared/published files, any project member is authorized
           if (action === 'view' && file.status !== 'EN_PROGRESO') {
             const isMember = (activeProject?.members || []).map(m => m.toLowerCase().trim()).includes(email);
             if (isMember) return true;
-
+            
+            // Fallback: check if the user is in any delivery team
             const userTeams = getUserDeliveryTeams(email);
             if (userTeams.length > 0) return true;
           }
 
+          // 4. For WIP (EN_PROGRESO) files or edit/workflow actions, check delivery team ownership (accent-insensitive)
           const fileTeams = getFileDeliveryTeams(file);
           const userTeams = getUserDeliveryTeams(email);
 
-          if (fileTeams.length === 0) {
-            return (file.changedByEmail || '').toLowerCase().trim() === email;
-          }
+          const normalizeName = str => String(str || '').normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase().trim();
+          const normFileTeams = fileTeams.map(normalizeName);
+          const normUserTeams = userTeams.map(normalizeName);
 
-          return fileTeams.some(team => userTeams.includes(team));
+          if (normFileTeams.length === 0) return false;
+
+          return normFileTeams.some(team => normUserTeams.includes(team));
         }
 
         if (projects.length > 1) {
@@ -1202,68 +1234,6 @@
         return data;
       }
 
-      async function postDrivePayload(scriptUrl, payload) {
-        const res = await fetch(scriptUrl, {
-          method: 'POST',
-          mode: 'cors',
-          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-          body: JSON.stringify(payload)
-        });
-        if (!res.ok) throw new Error(`Error en el servidor de Google Apps Script: ${res.statusText}`);
-        const data = await res.json();
-        if (data.status === 'error') throw new Error(`Google Script Error: ${data.message}`);
-        return data;
-      }
-
-      async function uploadFileResumable(file, contentType, fileObj) {
-        const ds = activeProject.dataSources || {};
-        const scriptUrl = ds.driveScriptUrl || DEFAULT_DRIVE_SCRIPT_URL;
-        const ext = getFileExtension(file.name);
-        const fileType = resolveUploadFileType(ext);
-        const common = {
-          folderId: ds.driveFolderId || '',
-          driveFolderName: ds.driveFolderName || activeProject.name,
-          project: activeProject.slug || slugify(activeProject.name),
-          filename: file.name,
-          contentType,
-          totalBytes: file.size,
-          fileType,
-          changedBy: userAccount ? (userAccount.name || '') : '',
-          changedByEmail: userAccount ? (userAccount.email || '') : ''
-        };
-        const init = await postDrivePayload(scriptUrl, { action: 'initResumableUpload', ...common });
-        const chunkSize = 4 * 1024 * 1024;
-        let offset = 0;
-        let result = null;
-
-        while (offset < file.size) {
-          const end = Math.min(file.size, offset + chunkSize);
-          const content = await fileToBase64(file.slice(offset, end));
-          let lastError;
-          for (let attempt = 1; attempt <= 3; attempt++) {
-            try {
-              result = await postDrivePayload(scriptUrl, {
-                action: 'uploadResumableChunk',
-                ...common,
-                sessionUrl: init.sessionUrl,
-                start: offset,
-                content
-              });
-              lastError = null;
-              break;
-            } catch (err) {
-              lastError = err;
-              if (attempt < 3) await new Promise(resolve => setTimeout(resolve, attempt * 1000));
-            }
-          }
-          if (lastError) throw lastError;
-          offset = result.nextOffset;
-          const progress = 35 + Math.round((offset / file.size) * 60);
-          updateFileUI(fileObj, Math.min(progress, 95), `Subiendo... ${Math.min(100, Math.round((offset / file.size) * 100))}%`);
-        }
-        return result;
-      }
-
       function updateFileUI(fileObj, progress, status) {
         fileObj.progress = progress;
         fileObj.status = status;
@@ -1353,8 +1323,11 @@
               updateFileUI(fileObj, 100, 'Completado');
               addLog(`[${fileObj.file.name}] ¡Subida e IFC procesado con éxito!`);
             } else {
-              updateFileUI(fileObj, 25, 'Preparando carga por fragmentos...');
-              addLog(`[${fileObj.file.name}] Iniciando carga reanudable por fragmentos...`);
+              updateFileUI(fileObj, 25, 'Leyendo archivo...');
+              const base64Content = await fileToBase64(fileObj.file);
+              
+              updateFileUI(fileObj, 55, 'Subiendo...');
+              addLog(`[${fileObj.file.name}] Subiendo archivo directo...`);
               
               let mimeType = 'application/octet-stream';
               if (ext === 'pdf') mimeType = 'application/pdf';
@@ -1362,7 +1335,7 @@
               else if (ext === 'json') mimeType = 'application/json';
               else if (ext === 'frag') mimeType = 'application/octet-stream';
 
-              await uploadFileResumable(fileObj.file, mimeType, fileObj);
+              await uploadToDrive(fileObj.file.name, base64Content, mimeType, fileObj);
               
               updateFileUI(fileObj, 100, 'Completado');
               addLog(`[${fileObj.file.name}] ¡Subido con éxito!`);
@@ -1480,6 +1453,8 @@
               const fname = item.name || item.filename;
               const fld = item.folder || 'General';
               const fileKey = (fld + '/' + fname).toLowerCase();
+              // Older responses expose fragId; the unified model list exposes fileId
+              // for every supported extension.
               const fid = type === 'model' ? (item.fragId || item.fileId || item.path) : item.fileId;
               const match = statusMap[fid] || statusMap[fname.toLowerCase()] || null;
 
@@ -1495,8 +1470,8 @@
                 status: match?.status || 'EN_PROGRESO',
                 version: match?.version || 'v1.0',
                 comments: match?.comments || '',
-                changedBy: match?.changedBy || (userAccount ? userAccount.name : 'CDE NORA'),
-                changedByEmail: match?.changedByEmail || (userAccount ? userAccount.email : ''),
+                changedBy: (match?.changedBy && match.changedBy.trim()) || item.ownerName || 'UNASSIGNED',
+                changedByEmail: (match?.changedByEmail && match.changedByEmail.trim()) || item.ownerEmail || 'unassigned@nora.cde',
                 deliveryTeams: parseStoredDeliveryTeams(match?.deliveryTeams || '')
               };
 
@@ -1507,12 +1482,14 @@
             });
           };
 
-          // allModels incluye todos los formatos 3D; models es retrocompatibilidad (.frag)
+          // allModels contains the complete set of supported 3D, BIM, GIS and point-cloud files.
+          // Fall back to models so older deployments of the Apps Script keep working.
           addFiles(listData.allModels || listData.models, 'model');
           addFiles(listData.pdfs, 'pdf');
           addFiles(listData.dwgs, 'dwg');
 
-          allProjectFiles = Array.from(filesByPath.values()).filter(f => isUserAuthorizedForFile(f, 'view'));
+          const rawProjectFiles = Array.from(filesByPath.values());
+          allProjectFiles = rawProjectFiles.filter(f => isUserAuthorizedForFile(f, 'view'));
           updateTabCounts();
           renderDriveFilesTable();
         } catch (err) {
@@ -1594,7 +1571,7 @@
           const fileDataStr = encodeURIComponent(JSON.stringify(f));
           const isModel = f.type === 'model';
           const deleteTitle = isModel && f.jsonId ? 'Eliminar modelo (.frag + .json)' : 'Eliminar archivo';
-          const canManage = isUserAuthorizedForFile(f, 'manage');
+          const currentVer = f.version || 'v1.0';
 
           // Status Badge Pill
           let statusBadge = '';
@@ -1614,6 +1591,8 @@
                 <span class="w-1.5 h-1.5 rounded-full bg-green-500"></span> Publicado
               </span>`;
           }
+
+          const canManage = isUserAuthorizedForFile(f, 'manage');
 
           // Action buttons depending on state
           let actionButtons = '';
@@ -1722,17 +1701,16 @@
           groups.get(extension).push(f);
         });
 
-        const sortedExtensions = Array.from(groups.keys()).sort((a, b) => {
-          const ai = MODEL_TYPE_ORDER.indexOf(a);
-          const bi = MODEL_TYPE_ORDER.indexOf(b);
-          if (ai === -1 && bi === -1) return a.localeCompare(b, 'es');
-          if (ai === -1) return 1;
-          if (bi === -1) return -1;
-          return ai - bi;
+        const sortedEntries = Array.from(groups.entries()).sort((a, b) => {
+          const idxA = MODEL_TYPE_ORDER.indexOf(a[0]);
+          const idxB = MODEL_TYPE_ORDER.indexOf(b[0]);
+          if (idxA === -1 && idxB === -1) return a[0].localeCompare(b[0]);
+          if (idxA === -1) return 1;
+          if (idxB === -1) return -1;
+          return idxA - idxB;
         });
 
-        filesTableBody.innerHTML = sortedExtensions.map(extension => {
-          const files = groups.get(extension);
+        filesTableBody.innerHTML = sortedEntries.map(([extension, files]) => {
           const collapsed = collapsedModelGroups.has(extension);
           const label = MODEL_TYPE_LABELS[extension] || `Otros modelos (.${extension})`;
           const rows = files.map(f => renderFileRow(f, `model-group-${extension}${collapsed ? ' hidden' : ''}`)).join('');
@@ -1773,6 +1751,7 @@
           alert('No tienes autorización para realizar esta acción sobre este archivo.');
           return;
         }
+
         targetVersionFile = f;
 
         const specialty = cleanSpecialty(f.folder);

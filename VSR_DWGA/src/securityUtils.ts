@@ -160,6 +160,32 @@ export const getFileDeliveryTeams = (file: any, activeProject: any): string[] =>
   if (!file || !activeProject) return [];
   const teams = new Set<string>();
 
+  const parseStoredDeliveryTeams = (val: any): string[] => {
+    if (!val) return [];
+    if (Array.isArray(val)) return val;
+    try {
+      if (typeof val === 'string') {
+        const trimmed = val.trim();
+        if (trimmed.startsWith('[') && trimmed.endsWith(']')) {
+          return JSON.parse(trimmed);
+        }
+        return trimmed.split(',').map(s => s.trim()).filter(Boolean);
+      }
+    } catch (e) {
+      console.warn('Error parsing delivery teams:', val, e);
+    }
+    return [];
+  };
+
+  parseStoredDeliveryTeams(file.deliveryTeams).forEach(team => {
+    const clean = String(team || '').trim();
+    if (clean) teams.add(clean.toUpperCase());
+  });
+
+  if (teams.size > 0) {
+    return Array.from(teams);
+  }
+
   const specialty = cleanSpecialty(file.folder).toUpperCase().trim();
   if (specialty && specialty !== 'GENERAL') {
     const normalizeName = (str: string) => str.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase().trim();
@@ -243,70 +269,47 @@ export const isUserAuthorizedForFile = (
     return true;
   }
 
-  // Regla estricta para archivos en estado EN_PROGRESO
-  if (file.status === 'EN_PROGRESO') {
-    const uploaderEmail = (file.changedByEmail || '').toLowerCase().trim();
-    console.log(`[SECURITY] Evaluando archivo EN_PROGRESO: "${file.name || file.filename}" subido por: "${uploaderEmail}"`);
-
-    // El uploader siempre puede ver su propio archivo
-    if (uploaderEmail && uploaderEmail === email) {
-      console.log(`[SECURITY] Permitido: El usuario ${email} es el propietario/uploader del archivo`);
-      return true;
-    }
-
-    const uploaderTeams = getUserDeliveryTeams(uploaderEmail, activeProject);
-    const userTeams = getUserDeliveryTeams(email, activeProject);
-
-    console.log(`[SECURITY] Equipos del uploader (${uploaderEmail}):`, uploaderTeams);
-    console.log(`[SECURITY] Equipos del usuario actual (${email}):`, userTeams);
-
-    if (uploaderTeams.length === 0 || userTeams.length === 0) {
-      console.log('[SECURITY] Denegado: El uploader o el usuario consultor no pertenecen a ningún equipo');
-      return false;
-    }
-
-    const shareTeam = uploaderTeams.some(team => userTeams.includes(team));
-    if (shareTeam) {
-      console.log('[SECURITY] Permitido: Comparten al menos un equipo de trabajo');
-      return true;
-    } else {
-      console.log('[SECURITY] Denegado: No pertenecen al mismo equipo');
-      return false;
-    }
+  // El uploader siempre puede ver su propio archivo
+  const fileUploader = (file.changedByEmail || '').toLowerCase().trim();
+  if (fileUploader && fileUploader === email) {
+    console.log(`[SECURITY] Permitido: El usuario ${email} es el uploader del archivo`);
+    return true;
   }
 
+  // Para visualizar archivos COMPARTIDOS o PUBLICADOS (no EN_PROGRESO), cualquier miembro del proyecto puede verlos
   if (action === 'view' && file.status !== 'EN_PROGRESO') {
     const isMember = (activeProject?.members || []).map((m: string) => m.toLowerCase().trim()).includes(email);
     if (isMember) {
-      console.log(`[SECURITY] Permitido: Usuario ${email} es miembro del proyecto para archivo ${file.status}`);
+      console.log(`[SECURITY] Permitido: Usuario ${email} es miembro del proyecto para archivo compartido/publicado`);
       return true;
     }
     
     const userTeams = getUserDeliveryTeams(email, activeProject);
     if (userTeams.length > 0) {
-      console.log(`[SECURITY] Permitido: Usuario ${email} pertenece a equipos del proyecto para archivo ${file.status}`);
+      console.log(`[SECURITY] Permitido: Usuario ${email} pertenece a algún equipo del proyecto para archivo compartido/publicado`);
       return true;
     }
   }
 
+  // Para archivos EN_PROGRESO (WIP) o para acciones de edición/gestión:
+  // Se requiere que el usuario y el archivo compartan al menos un equipo de entrega (comparación insensible a acentos)
   const fileTeams = getFileDeliveryTeams(file, activeProject);
   const userTeams = getUserDeliveryTeams(email, activeProject);
 
-  console.log(`[SECURITY] Evaluando archivo no EN_PROGRESO: "${file.name || file.filename}" (${file.status})`);
-  console.log('[SECURITY] Equipos del archivo:', fileTeams);
-  console.log('[SECURITY] Equipos del usuario actual:', userTeams);
+  const normalizeName = (str: string) => str.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase().trim();
+  const normFileTeams = fileTeams.map(normalizeName);
+  const normUserTeams = userTeams.map(normalizeName);
 
-  if (fileTeams.length === 0) {
-    const fileUploader = (file.changedByEmail || '').toLowerCase().trim();
-    if (fileUploader === email) {
-      console.log(`[SECURITY] Permitido: El usuario ${email} es el uploader del archivo`);
-      return true;
-    }
-    console.log('[SECURITY] Denegado: Sin equipos asociados al archivo y no es el uploader');
+  console.log(`[SECURITY] Evaluando archivo: "${file.name || file.filename}" (${file.status})`);
+  console.log('[SECURITY] Equipos normalizados del archivo:', normFileTeams);
+  console.log('[SECURITY] Equipos normalizados del usuario:', normUserTeams);
+
+  if (normFileTeams.length === 0) {
+    console.log('[SECURITY] Denegado: Archivo sin equipos asociados y el usuario no es el uploader');
     return false;
   }
 
-  const authorized = fileTeams.some(team => userTeams.includes(team));
-  console.log(`[SECURITY] Resultado de autorización por equipos de archivo: ${authorized}`);
+  const authorized = normFileTeams.some(team => normUserTeams.includes(team));
+  console.log(`[SECURITY] Resultado de autorización por equipos: ${authorized}`);
   return authorized;
-};
+}

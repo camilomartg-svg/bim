@@ -167,6 +167,11 @@ function isUserAuthorizedForFile(currentUser, file, action = 'view') {
 
   if (isProjectAdmin) return true;
 
+  // El uploader siempre puede ver su propio archivo
+  const fileUploader = (file.changedByEmail || '').toLowerCase().trim();
+  if (fileUploader && fileUploader === email) return true;
+
+  // Para visualizar archivos COMPARTIDOS o PUBLICADOS (no EN_PROGRESO), cualquier miembro del proyecto puede verlos
   if (action === 'view' && file.status !== 'EN_PROGRESO') {
     const isMember = (activeProject?.members || []).map(m => m.toLowerCase().trim()).includes(email);
     if (isMember) return true;
@@ -175,16 +180,18 @@ function isUserAuthorizedForFile(currentUser, file, action = 'view') {
     if (userTeams.length > 0) return true;
   }
 
+  // Para archivos EN_PROGRESO (WIP) o para acciones de edición/gestión:
+  // Se requiere que el usuario y el archivo compartan al menos un equipo de entrega (comparación insensible a acentos)
   const fileTeams = getFileDeliveryTeams(file);
   const userTeams = getUserDeliveryTeams(email);
 
-  if (fileTeams.length === 0) {
-    const fileUploader = (file.changedByEmail || '').toLowerCase().trim();
-    if (fileUploader === email) return true;
-    return false;
-  }
+  const normalizeName = str => String(str || '').normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase().trim();
+  const normFileTeams = fileTeams.map(normalizeName);
+  const normUserTeams = userTeams.map(normalizeName);
 
-  return fileTeams.some(team => userTeams.includes(team));
+  if (normFileTeams.length === 0) return false;
+
+  return normFileTeams.some(team => normUserTeams.includes(team));
 }
 
 // TEST CASES

@@ -963,6 +963,10 @@
 
           if (isProjectAdmin) return true;
 
+          // El uploader siempre puede ver/gestionar su propio archivo
+          const fileUploader = (file.changedByEmail || '').toLowerCase().trim();
+          if (fileUploader && fileUploader === email) return true;
+
           // 3. For view action of shared/published files, any project member is authorized
           if (action === 'view' && file.status !== 'EN_PROGRESO') {
             const isMember = (activeProject?.members || []).map(m => m.toLowerCase().trim()).includes(email);
@@ -973,17 +977,17 @@
             if (userTeams.length > 0) return true;
           }
 
-          // 4. For WIP (EN_PROGRESO) files or edit/workflow actions, check delivery team ownership
+          // 4. For WIP (EN_PROGRESO) files or edit/workflow actions, check delivery team ownership (accent-insensitive)
           const fileTeams = getFileDeliveryTeams(file);
           const userTeams = getUserDeliveryTeams(email);
 
-          if (fileTeams.length === 0) {
-            const fileUploader = (file.changedByEmail || '').toLowerCase().trim();
-            if (fileUploader === email) return true;
-            return false;
-          }
+          const normalizeName = str => String(str || '').normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase().trim();
+          const normFileTeams = fileTeams.map(normalizeName);
+          const normUserTeams = userTeams.map(normalizeName);
 
-          return fileTeams.some(team => userTeams.includes(team));
+          if (normFileTeams.length === 0) return false;
+
+          return normFileTeams.some(team => normUserTeams.includes(team));
         }
 
         if (projects.length > 1) {
