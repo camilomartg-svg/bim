@@ -566,8 +566,20 @@
       const userAccount = JSON.parse(sessionStorage.getItem('userAccount') || localStorage.getItem('userAccount') || 'null');
       if (userAccount) {
         authContainer.innerHTML = `
-          <span class="text-sm font-medium">Hola, ${userAccount.name.split(' ')[0]}</span>
+          <div class="flex items-center gap-3">
+            <span class="text-sm font-medium">Hola, ${userAccount.name.split(' ')[0]}</span>
+            <button id="logout-btn" class="flex items-center justify-center p-1.5 rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 hover:bg-red-50 dark:hover:bg-red-950/30 hover:border-red-200 dark:hover:border-red-900 hover:text-red-600 dark:hover:text-red-400 transition-colors" title="Cerrar sesión">
+              <span class="material-symbols-outlined text-[16px]">logout</span>
+            </button>
+          </div>
         `;
+        document.getElementById('logout-btn').addEventListener('click', () => {
+          if (confirm('¿Cerrar sesión?')) {
+            sessionStorage.removeItem('userAccount');
+            localStorage.removeItem('userAccount');
+            window.location.reload();
+          }
+        });
       }
 
       // Time updater
@@ -1373,6 +1385,19 @@
         return last.charAt(0).toUpperCase() + last.slice(1);
       };
 
+      // Helper: get specialty based on user's delivery teams (fallback to folder specialty)
+      function getFileDisplaySpecialty(f) {
+        if (!f) return 'General';
+        const email = String(f.changedByEmail || '').toLowerCase().trim();
+        if (email && email !== 'unassigned@nora.cde') {
+          const userTeams = getUserDeliveryTeams(email);
+          if (userTeams && userTeams.length > 0) {
+            return userTeams.join(', ');
+          }
+        }
+        return cleanSpecialty(f.folder);
+      }
+
       // Helper: auto calculate next version
       const calculateNextVersion = (verStr) => {
         if (!verStr) return 'v1.1';
@@ -1638,7 +1663,7 @@
         };
 
         const renderFileRow = (f, extraClass = '') => {
-          const specialty = cleanSpecialty(f.folder);
+          const specialty = getFileDisplaySpecialty(f);
           const ext = getFileExtension(f.name);
           const { icon, iconClass } = f.type === 'model'
             ? getModelFileIcon(ext)
@@ -1834,7 +1859,7 @@
 
         targetVersionFile = f;
 
-        const specialty = cleanSpecialty(f.folder);
+        const specialty = getFileDisplaySpecialty(f);
         const currentVer = f.version || 'v1.0';
         const nextVer = calculateNextVersion(currentVer);
 
@@ -1955,7 +1980,7 @@
         if (!f || !activeProject) return;
 
         historyModalTitle.textContent = `Historial: ${f.name}`;
-        historyModalSubtitle.textContent = `Especialidad: ${cleanSpecialty(f.folder)} | Estado actual: ${f.status}`;
+        historyModalSubtitle.textContent = `Especialidad: ${getFileDisplaySpecialty(f)} | Estado actual: ${f.status}`;
         modalVersionHistory.classList.remove('hidden');
 
         historyLoading.classList.remove('hidden');
