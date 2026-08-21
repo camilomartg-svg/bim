@@ -719,6 +719,51 @@
       </div>
     </div>
   </div>
+  <!-- Modal 2B: Crear / Editar Equipo Receptor -->
+  <div id="modal-receiver-team" class="fixed inset-0 z-50 hidden bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+    <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-6 max-w-lg w-full shadow-2xl space-y-4">
+      <div class="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
+        <div class="flex items-center gap-2">
+          <span class="flex h-8 w-8 items-center justify-center rounded-xl bg-amber-50 dark:bg-amber-950 text-amber-600 dark:text-amber-400">
+            <span class="material-symbols-outlined text-[18px]">groups</span>
+          </span>
+          <div>
+            <h3 id="modal-receiver-title" class="text-sm font-black text-slate-900 dark:text-white uppercase tracking-wider">Crear Equipo Receptor</h3>
+            <p class="text-[11px] text-slate-400">Equipo Receptor / Obra</p>
+          </div>
+        </div>
+        <button onclick="closeModal('modal-receiver-team')" class="text-slate-400 hover:text-slate-600 dark:hover:text-white">
+          <span class="material-symbols-outlined text-[20px]">close</span>
+        </button>
+      </div>
+
+      <div class="space-y-4 text-xs">
+        <input type="hidden" id="receiver-team-edit-id" value="" />
+        
+        <div>
+          <label class="block font-bold text-slate-700 dark:text-slate-300 mb-1">Nombre del Equipo Receptor:</label>
+          <input id="receiver-team-name" type="text" placeholder="Ej: Equipo de Obra, Supervisión, Interventoría..." class="w-full py-2 px-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 dark:text-white font-medium focus:ring-2 focus:ring-amber-500" />
+        </div>
+
+        <div>
+          <label class="block font-bold text-slate-700 dark:text-slate-300 mb-1">Líder del Equipo Receptor:</label>
+          <select id="receiver-team-lead-select" class="w-full py-2 px-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 dark:text-white font-medium focus:ring-2 focus:ring-amber-500">
+            <option value="">-- Seleccionar Líder --</option>
+          </select>
+        </div>
+
+        <div>
+          <label class="block font-bold text-slate-700 dark:text-slate-300 mb-1">Descripción / Alcance (Opcional):</label>
+          <textarea id="receiver-team-desc" rows="2" placeholder="Descripción de las funciones de recepción de información..." class="w-full py-2 px-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 dark:text-white font-medium focus:ring-2 focus:ring-amber-500"></textarea>
+        </div>
+      </div>
+
+      <div class="flex items-center justify-end gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
+        <button onclick="closeModal('modal-receiver-team')" class="px-4 py-2 rounded-xl text-xs font-bold text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">Cancelar</button>
+        <button onclick="confirmSaveReceiverTeam()" class="px-4 py-2 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold uppercase tracking-wider shadow-sm transition-all">Guardar Equipo</button>
+      </div>
+    </div>
+  </div>
 
   <!-- Modal 3: Crear / Editar Equipo de Tarea -->
   <div id="modal-task-team" class="fixed inset-0 z-50 hidden bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
