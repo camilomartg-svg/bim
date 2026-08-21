@@ -1193,6 +1193,18 @@ function uploadResumableChunk_(e, body) {
       try { fileId = JSON.parse(response.getContentText()).id || ''; } catch (ignore) {}
       if (fileId) {
         try {
+          const targetFolder = resolveUploadFolder_(e, body);
+          const existingFiles = targetFolder.getFilesByName(String(body.filename || '').trim());
+          while (existingFiles.hasNext()) {
+            const extFile = existingFiles.next();
+            if (extFile.getId() !== fileId) {
+              extFile.setTrashed(true);
+            }
+          }
+        } catch (trashErr) {
+          // non-fatal
+        }
+        try {
           registerFileStatus_(fileId, String(body.jsonId || ''), String(body.filename || ''), String(body.project || ''), 'EN_PROGRESO', String(body.changedBy || ''), String(body.changedByEmail || ''), fileId, String(body.fileType || ''), '', '', body.deliveryTeams);
         } catch (statusErr) {
           // Trash the completed file to avoid orphaning it in Drive
