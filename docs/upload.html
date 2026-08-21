@@ -958,10 +958,31 @@
           if (!currentUser) return false;
           const email = (currentUser.username || currentUser.email || currentUser.userAccount || '').toLowerCase().trim();
 
-          // 2. Superadmins and Project Admins are always authorized
+          // 2. Superadmins are always authorized
           const superAdmins = ['imagina3ddesign@gmail.com', 'mcmartinezg@unal.edu.co'];
           const isSuperAdmin = superAdmins.includes(email) || currentUser.role === 'SUPER_ADMIN' || currentUser.role === 'SUPER_ADMINISTRADOR';
 
+          if (isSuperAdmin) return true;
+
+          // Restrict WIP (EN_PROGRESO) files strictly to specialty team members and the uploader
+          if (file.status === 'EN_PROGRESO') {
+            // El uploader siempre puede ver/gestionar su propio archivo en progreso
+            const fileUploader = (file.changedByEmail || '').toLowerCase().trim();
+            if (fileUploader && fileUploader === email) return true;
+
+            const fileTeams = getFileDeliveryTeams(file);
+            const userTeams = getUserDeliveryTeams(email);
+
+            const normalizeName = str => String(str || '').normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase().trim();
+            const normFileTeams = fileTeams.map(normalizeName);
+            const normUserTeams = userTeams.map(normalizeName);
+
+            if (normFileTeams.length === 0) return false;
+
+            return normFileTeams.some(team => normUserTeams.includes(team));
+          }
+
+          // For shared/published files, check company and project admin permissions
           const companyAdmins = Array.isArray(currentCompany?.admins) ? currentCompany.admins.map(a => a.toLowerCase().trim()) : [];
           const memberMatch = Array.isArray(currentCompany?.members) ? currentCompany.members.find(m => m.email && m.email.toLowerCase().trim() === email) : null;
           const isMemberAdmin = memberMatch && (memberMatch.role === 'ADMINISTRADOR_EMPRESA' || memberMatch.role === 'ADMINISTRADOR');
@@ -979,8 +1000,8 @@
           const fileUploader = (file.changedByEmail || '').toLowerCase().trim();
           if (fileUploader && fileUploader === email) return true;
 
-          // 3. For view action of shared/published files, any project member is authorized
-          if (action === 'view' && file.status !== 'EN_PROGRESO') {
+          // For view action of shared/published files, any project member is authorized
+          if (action === 'view') {
             const isMember = (activeProject?.members || []).map(m => m.toLowerCase().trim()).includes(email);
             if (isMember) return true;
             
@@ -989,7 +1010,7 @@
             if (userTeams.length > 0) return true;
           }
 
-          // 4. For WIP (EN_PROGRESO) files or edit/workflow actions, check delivery team ownership (accent-insensitive)
+          // For edit/manage action of shared/published files, check delivery team ownership
           const fileTeams = getFileDeliveryTeams(file);
           const userTeams = getUserDeliveryTeams(email);
 
