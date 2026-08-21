@@ -654,9 +654,20 @@
     el.isoDiagramNodes.innerHTML = '';
 
     const deliveryTeams = activeProject.iso19650?.deliveryTeams || [];
+    const receiverTeams = activeProject.iso19650?.receiverTeams || [];
+    const projectAdmins = activeProject.iso19650?.projectAdmins || [];
+    const directorEmail = (activeProject.iso19650?.directorDeObra || '').toLowerCase().trim();
 
-    const centerX = 450;
-    const centerY = 325;
+    const centerX1 = 375;
+    const centerX2 = 1025;
+    const centerY = 400;
+
+    function getShortName(fullName) {
+      if (!fullName) return '';
+      const parts = fullName.trim().split(/\s+/);
+      if (parts.length === 1) return parts[0];
+      return `${parts[0]} ${parts[parts.length - 1].charAt(0)}.`;
+    }
 
     // Helper: Draw offset double-headed arrow line in SVG
     function drawOffsetLine(x1, y1, x2, y2, offset1, offset2, color = '#94a3b8', isDashed = false) {
@@ -726,39 +737,69 @@
       el.diagramTooltip.style.top = `${y}px`;
     }
 
-    // 1. Draw Outer Circle: "1. Equipo de Proyecto"
-    const projectCircle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
-    projectCircle.setAttribute('cx', centerX);
-    projectCircle.setAttribute('cy', centerY);
-    projectCircle.setAttribute('r', '290');
-    projectCircle.setAttribute('stroke', '#cbd5e1');
-    projectCircle.setAttribute('stroke-width', '2');
-    projectCircle.setAttribute('stroke-dasharray', '5,5');
-    projectCircle.setAttribute('fill', 'none');
-    projectCircle.setAttribute('class', 'dark:stroke-slate-700/60');
-    el.isoDiagramSvg.appendChild(projectCircle);
+    // 1. Draw Outer Circles for both sides
+    // Left side: Delivery Teams outer circle
+    const projectCircle1 = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+    projectCircle1.setAttribute('cx', centerX1);
+    projectCircle1.setAttribute('cy', centerY);
+    projectCircle1.setAttribute('r', '260');
+    projectCircle1.setAttribute('stroke', '#cbd5e1');
+    projectCircle1.setAttribute('stroke-width', '2');
+    projectCircle1.setAttribute('stroke-dasharray', '5,5');
+    projectCircle1.setAttribute('fill', 'none');
+    projectCircle1.setAttribute('class', 'dark:stroke-slate-700/60');
+    el.isoDiagramSvg.appendChild(projectCircle1);
 
-    // Label for Outer Circle
-    const outerCircleLabel = document.createElement('div');
-    outerCircleLabel.className = 'absolute px-3 py-0.5 rounded-full bg-slate-800/90 text-white font-mono text-[9px] font-black uppercase tracking-wider shadow-sm z-30 pointer-events-none';
-    outerCircleLabel.style.left = `${centerX}px`;
-    outerCircleLabel.style.top = '22px';
-    outerCircleLabel.style.transform = 'translateX(-50%)';
-    outerCircleLabel.innerHTML = '1. Equipo de Proyecto';
-    el.isoDiagramNodes.appendChild(outerCircleLabel);
+    // Left outer circle label
+    const outerCircleLabel1 = document.createElement('div');
+    outerCircleLabel1.className = 'absolute px-3 py-0.5 rounded-full bg-slate-800/90 text-white font-mono text-[9px] font-black uppercase tracking-wider shadow-sm z-30 pointer-events-none';
+    outerCircleLabel1.style.left = `${centerX1}px`;
+    outerCircleLabel1.style.top = '110px';
+    outerCircleLabel1.style.transform = 'translateX(-50%)';
+    outerCircleLabel1.innerHTML = '1. Equipos de Entrega';
+    el.isoDiagramNodes.appendChild(outerCircleLabel1);
 
-    // 2. Draw Central Hub: A. Adjudicador (Administrador)
+    // Right side: Receiver Teams outer circle
+    const projectCircle2 = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+    projectCircle2.setAttribute('cx', centerX2);
+    projectCircle2.setAttribute('cy', centerY);
+    projectCircle2.setAttribute('r', '260');
+    projectCircle2.setAttribute('stroke', '#cbd5e1');
+    projectCircle2.setAttribute('stroke-width', '2');
+    projectCircle2.setAttribute('stroke-dasharray', '5,5');
+    projectCircle2.setAttribute('fill', 'none');
+    projectCircle2.setAttribute('class', 'dark:stroke-slate-700/60');
+    el.isoDiagramSvg.appendChild(projectCircle2);
+
+    // Right outer circle label
+    const outerCircleLabel2 = document.createElement('div');
+    outerCircleLabel2.className = 'absolute px-3 py-0.5 rounded-full bg-amber-800/90 text-white font-mono text-[9px] font-black uppercase tracking-wider shadow-sm z-30 pointer-events-none';
+    outerCircleLabel2.style.left = `${centerX2}px`;
+    outerCircleLabel2.style.top = '110px';
+    outerCircleLabel2.style.transform = 'translateX(-50%)';
+    outerCircleLabel2.innerHTML = '1. Equipos Receptores';
+    el.isoDiagramNodes.appendChild(outerCircleLabel2);
+
+    // Primary coordinating line between Adjudicador (A) and Director de Obra (D)
+    drawOffsetLine(centerX1, centerY, centerX2, centerY, 28, 28, '#475569', true);
+
+    // 2. Draw Left Center Hub: A. Adjudicador (Administrador)
     const nodeA = document.createElement('div');
     const isASelected = selectedNode.type === 'A';
     const aClasses = isASelected 
       ? 'ring-4 ring-indigo-500 scale-105 border-indigo-500 z-40' 
       : 'border-white dark:border-slate-800 z-30';
     nodeA.className = `absolute rounded-full bg-sky-600 hover:bg-sky-700 dark:bg-sky-500 dark:hover:bg-sky-600 text-white font-black flex items-center justify-center cursor-pointer shadow-lg shadow-sky-500/20 hover:scale-110 transition-transform border-4 ${aClasses} select-none`;
-    nodeA.style.left = `${centerX - 28}px`;
+    nodeA.style.left = `${centerX1 - 28}px`;
     nodeA.style.top = `${centerY - 28}px`;
     nodeA.style.width = '56px';
     nodeA.style.height = '56px';
     nodeA.innerHTML = '<span class="text-base">A</span>';
+
+    setupTooltip(nodeA, () => {
+      const names = projectAdmins.map(email => getUserMetadata(email).name).join(', ') || 'Sin Administrador';
+      return `<div class="p-2 text-xs space-y-1"><strong>Adjudicador:</strong><br>${names}</div>`;
+    });
 
     nodeA.addEventListener('click', (e) => {
       e.stopPropagation();
@@ -767,133 +808,379 @@
     });
     el.isoDiagramNodes.appendChild(nodeA);
 
-    // Empty state if no delivery teams
+    // Label for Node A
+    const adminName = projectAdmins.length > 0 ? getUserMetadata(projectAdmins[0]).name : 'Sin Administrador';
+    const labelA = document.createElement('div');
+    labelA.className = 'absolute text-center pointer-events-none select-none z-30';
+    labelA.style.left = `${centerX1}px`;
+    labelA.style.top = `${centerY + 32}px`;
+    labelA.style.transform = 'translateX(-50%)';
+    labelA.style.width = '120px';
+    labelA.innerHTML = `
+      <div class="bg-white/95 dark:bg-slate-900/95 border border-slate-200 dark:border-slate-800 rounded px-1.5 py-0.5 shadow-sm text-slate-800 dark:text-slate-200 text-[10px] font-extrabold truncate">${escapeHtml(getShortName(adminName))}</div>
+      <div class="text-[8px] text-slate-400 dark:text-slate-500 font-bold uppercase tracking-wider mt-0.5">Adjudicador</div>
+    `;
+    el.isoDiagramNodes.appendChild(labelA);
+
+    // Draw Delivery Teams (Left Side)
     if (deliveryTeams.length === 0) {
       const emptyState = document.createElement('div');
       emptyState.className = 'absolute text-center text-xs text-slate-400 italic bg-white/40 dark:bg-slate-800/40 rounded-2xl border border-dashed border-slate-300 dark:border-slate-700/60 p-4 w-72';
-      emptyState.style.left = `${centerX - 144}px`;
+      emptyState.style.left = `${centerX1 - 144}px`;
       emptyState.style.top = `${centerY + 70}px`;
-      emptyState.innerHTML = 'No hay Equipos de Entrega configurados.<br>Haz clic en "2. Equipos de Entrega" para agregar el primero.';
+      emptyState.innerHTML = 'No hay Equipos de Entrega configurados.<br>Haz clic en "Equipos de Entrega" para agregar el primero.';
       el.isoDiagramNodes.appendChild(emptyState);
-      return;
-    }
+    } else {
+      const N1 = deliveryTeams.length;
+      const R_dist = 180;
 
-    const N = deliveryTeams.length;
-    const R_dist = 195;
-
-    // Coordination ring connecting all B nodes
-    if (N >= 2) {
-      const coordCircle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
-      coordCircle.setAttribute('cx', centerX);
-      coordCircle.setAttribute('cy', centerY);
-      coordCircle.setAttribute('r', R_dist.toString());
-      coordCircle.setAttribute('stroke', '#94a3b8');
-      coordCircle.setAttribute('stroke-width', '1.5');
-      coordCircle.setAttribute('stroke-dasharray', '4,4');
-      coordCircle.setAttribute('fill', 'none');
-      coordCircle.setAttribute('class', 'dark:stroke-slate-700/50');
-      el.isoDiagramSvg.appendChild(coordCircle);
-    }
-
-    // Render radial Delivery Team Clusters (2) and members (C) / task teams (3)
-    deliveryTeams.forEach((dt, i) => {
-      const angle = (2 * Math.PI * i) / N - Math.PI / 2;
-      const X_di = centerX + R_dist * Math.cos(angle);
-      const Y_di = centerY + R_dist * Math.sin(angle);
-
-      // Draw connection A <-> B
-      drawOffsetLine(centerX, centerY, X_di, Y_di, 28, 22, '#3b82f6');
-
-      // Delivery Team Circle (2) enclosing B and C
-      const bubble2 = document.createElement('div');
-      bubble2.className = 'absolute rounded-full border border-slate-200 dark:border-slate-800 bg-slate-100/30 dark:bg-slate-900/30 shadow-inner z-10 pointer-events-none transition-all duration-300';
-      bubble2.style.left = `${X_di - 80}px`;
-      bubble2.style.top = `${Y_di - 80}px`;
-      bubble2.style.width = '160px';
-      bubble2.style.height = '160px';
-      el.isoDiagramNodes.appendChild(bubble2);
-
-      // Label "2"
-      const badge2 = document.createElement('div');
-      badge2.className = 'absolute h-5 w-5 rounded-full bg-slate-500/80 text-white font-mono text-[9px] font-black flex items-center justify-center shadow-sm z-30 pointer-events-none';
-      badge2.style.left = `${X_di - 76}px`;
-      badge2.style.top = `${Y_di - 76}px`;
-      badge2.innerHTML = '2';
-      el.isoDiagramNodes.appendChild(badge2);
-
-      // B: Líder node (radius 21)
-      const isBSelected = selectedNode.type === 'B' && selectedNode.id === dt.id;
-      const bClasses = isBSelected 
-        ? 'ring-4 ring-indigo-500 scale-105 border-indigo-500 z-40' 
-        : 'border-white dark:border-slate-800 z-30';
-
-      const nodeB = document.createElement('div');
-      nodeB.className = `absolute rounded-full bg-blue-600 hover:bg-blue-700 text-white font-black flex items-center justify-center cursor-pointer shadow-md hover:scale-110 transition-transform border-2 ${bClasses} select-none`;
-      nodeB.style.left = `${X_di - 21}px`;
-      nodeB.style.top = `${Y_di - 21}px`;
-      nodeB.style.width = '42px';
-      nodeB.style.height = '42px';
-      nodeB.innerHTML = '<span class="text-sm">B</span>';
-
-      nodeB.addEventListener('click', (e) => {
-        e.stopPropagation();
-        selectedNode = { type: 'B', id: dt.id };
-        renderAllViews();
-      });
-      el.isoDiagramNodes.appendChild(nodeB);
-
-      // C: Member nodes
-      const members = dt.members || [];
-      const nonLeaderEmails = members.filter(m => (m || '').toLowerCase().trim() !== (dt.leadEmail || '').toLowerCase().trim());
-      const M = nonLeaderEmails.length;
-
-      if (M > 0) {
-        const r_dist = 52;
-        nonLeaderEmails.forEach((mEmail, j) => {
-          const subAngle = (2 * Math.PI * j) / M - Math.PI / 2;
-          const X_mj = X_di + r_dist * Math.cos(subAngle);
-          const Y_mj = Y_di + r_dist * Math.sin(subAngle);
-
-          // Draw connection B <-> C
-          drawOffsetLine(X_di, Y_di, X_mj, Y_mj, 21, 15, '#c084fc');
-
-          // C node
-          const isCSelected = selectedNode.type === 'C' && selectedNode.id === mEmail && selectedNode.teamId === dt.id;
-          const cClasses = isCSelected 
-            ? 'ring-4 ring-indigo-500 scale-105 border-indigo-500 z-40' 
-            : 'border-white dark:border-slate-800 z-30';
-
-          const nodeC = document.createElement('div');
-          nodeC.className = `absolute rounded-full bg-purple-600 hover:bg-purple-700 text-white font-black flex items-center justify-center cursor-pointer shadow-sm hover:scale-110 transition-transform border-2 ${cClasses} select-none`;
-          nodeC.style.left = `${X_mj - 15}px`;
-          nodeC.style.top = `${Y_mj - 15}px`;
-          nodeC.style.width = '30px';
-          nodeC.style.height = '30px';
-          nodeC.innerHTML = '<span class="text-xs">C</span>';
-
-          const mMeta = getUserMetadata(mEmail);
-          const memberTeams = (dt.taskTeams || []).filter(tt => (tt.members || []).some(m => m.toLowerCase().trim() === mEmail.toLowerCase().trim()));
-
-          // Green badge "3" if member of task teams (disciplines)
-          if (memberTeams.length > 0) {
-            const badge3 = document.createElement('div');
-            badge3.className = 'absolute h-4 w-4 rounded-full bg-emerald-600 text-white font-mono text-[8px] font-black flex items-center justify-center border border-white dark:border-slate-800 shadow-sm z-40';
-            badge3.style.left = `${X_mj + 5}px`;
-            badge3.style.top = `${Y_mj - 15}px`;
-            badge3.innerHTML = '3';
-            el.isoDiagramNodes.appendChild(badge3);
-          }
-
-          nodeC.addEventListener('click', (e) => {
-            e.stopPropagation();
-            selectedNode = { type: 'C', id: mEmail, teamId: dt.id };
-            renderAllViews();
-          });
-
-          el.isoDiagramNodes.appendChild(nodeC);
-        });
+      // Coordination ring connecting B nodes
+      if (N1 >= 2) {
+        const coordCircle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+        coordCircle.setAttribute('cx', centerX1);
+        coordCircle.setAttribute('cy', centerY);
+        coordCircle.setAttribute('r', R_dist.toString());
+        coordCircle.setAttribute('stroke', '#94a3b8');
+        coordCircle.setAttribute('stroke-width', '1.5');
+        coordCircle.setAttribute('stroke-dasharray', '4,4');
+        coordCircle.setAttribute('fill', 'none');
+        coordCircle.setAttribute('class', 'dark:stroke-slate-700/50');
+        el.isoDiagramSvg.appendChild(coordCircle);
       }
+
+      deliveryTeams.forEach((dt, i) => {
+        const angle = (2 * Math.PI * i) / N1 - Math.PI / 2;
+        const X_di = centerX1 + R_dist * Math.cos(angle);
+        const Y_di = centerY + R_dist * Math.sin(angle);
+
+        // Draw connection A <-> B
+        drawOffsetLine(centerX1, centerY, X_di, Y_di, 28, 21, '#3b82f6');
+
+        // Delivery Team Circle (2) enclosing B and C
+        const bubble2 = document.createElement('div');
+        bubble2.className = 'absolute rounded-full border border-slate-200 dark:border-slate-800 bg-slate-100/30 dark:bg-slate-900/30 shadow-inner z-10 pointer-events-none transition-all duration-300';
+        bubble2.style.left = `${X_di - 70}px`;
+        bubble2.style.top = `${Y_di - 70}px`;
+        bubble2.style.width = '140px';
+        bubble2.style.height = '140px';
+        el.isoDiagramNodes.appendChild(bubble2);
+
+        // Label "2"
+        const badge2 = document.createElement('div');
+        badge2.className = 'absolute h-5 w-5 rounded-full bg-slate-500/80 text-white font-mono text-[9px] font-black flex items-center justify-center shadow-sm z-30 pointer-events-none';
+        badge2.style.left = `${X_di - 66}px`;
+        badge2.style.top = `${Y_di - 66}px`;
+        badge2.innerHTML = '2';
+        el.isoDiagramNodes.appendChild(badge2);
+
+        // B: Líder node (radius 21)
+        const isBSelected = selectedNode.type === 'B' && selectedNode.id === dt.id;
+        const bClasses = isBSelected 
+          ? 'ring-4 ring-indigo-500 scale-105 border-indigo-500 z-40' 
+          : 'border-white dark:border-slate-800 z-30';
+
+        const nodeB = document.createElement('div');
+        nodeB.className = `absolute rounded-full bg-blue-600 hover:bg-blue-700 text-white font-black flex items-center justify-center cursor-pointer shadow-md hover:scale-110 transition-transform border-2 ${bClasses} select-none`;
+        nodeB.style.left = `${X_di - 21}px`;
+        nodeB.style.top = `${Y_di - 21}px`;
+        nodeB.style.width = '42px';
+        nodeB.style.height = '42px';
+        nodeB.innerHTML = '<span class="text-sm">B</span>';
+
+        setupTooltip(nodeB, () => {
+          const leaderName = dt.leadEmail ? getUserMetadata(dt.leadEmail).name : 'Sin Líder';
+          return `<div class="p-2 text-xs space-y-1"><strong>Líder de Entrega:</strong><br>${leaderName}<br><span class="text-[10px] text-slate-400 font-bold">${dt.name}</span></div>`;
+        });
+
+        nodeB.addEventListener('click', (e) => {
+          e.stopPropagation();
+          selectedNode = { type: 'B', id: dt.id };
+          renderAllViews();
+        });
+        el.isoDiagramNodes.appendChild(nodeB);
+
+        // Labels for B
+        // 1. Team name above bubble
+        const labelBTeam = document.createElement('div');
+        labelBTeam.className = 'absolute text-center pointer-events-none select-none z-30';
+        labelBTeam.style.left = `${X_di}px`;
+        labelBTeam.style.top = `${Y_di - 84}px`;
+        labelBTeam.style.transform = 'translateX(-50%)';
+        labelBTeam.style.width = '120px';
+        labelBTeam.innerHTML = `<span class="px-1.5 py-0.5 rounded-full bg-blue-100 dark:bg-blue-950 text-blue-800 dark:text-blue-200 border border-blue-200 dark:border-blue-900 shadow-sm text-[8px] font-black uppercase tracking-wider truncate block">${escapeHtml(dt.name)}</span>`;
+        el.isoDiagramNodes.appendChild(labelBTeam);
+
+        // 2. Leader name below node B
+        const leaderName = dt.leadEmail ? getUserMetadata(dt.leadEmail).name : 'Sin Líder';
+        const labelBLeader = document.createElement('div');
+        labelBLeader.className = 'absolute text-center pointer-events-none select-none z-30';
+        labelBLeader.style.left = `${X_di}px`;
+        labelBLeader.style.top = `${Y_di + 23}px`;
+        labelBLeader.style.transform = 'translateX(-50%)';
+        labelBLeader.style.width = '100px';
+        labelBLeader.innerHTML = `<div class="bg-white/90 dark:bg-slate-900/90 border border-slate-200/80 dark:border-slate-800/80 rounded px-1 py-0.5 text-slate-700 dark:text-slate-300 text-[9px] font-bold truncate">${escapeHtml(getShortName(leaderName))}</div>`;
+        el.isoDiagramNodes.appendChild(labelBLeader);
+
+        // C: Member nodes
+        const members = dt.members || [];
+        const nonLeaderEmails = members.filter(m => (m || '').toLowerCase().trim() !== (dt.leadEmail || '').toLowerCase().trim());
+        const M = nonLeaderEmails.length;
+
+        if (M > 0) {
+          const r_dist = 45;
+          nonLeaderEmails.forEach((mEmail, j) => {
+            const subAngle = (2 * Math.PI * j) / M - Math.PI / 2;
+            const X_mj = X_di + r_dist * Math.cos(subAngle);
+            const Y_mj = Y_di + r_dist * Math.sin(subAngle);
+
+            // Draw connection B <-> C
+            drawOffsetLine(X_di, Y_di, X_mj, Y_mj, 21, 15, '#c084fc');
+
+            // C node
+            const isCSelected = selectedNode.type === 'C' && selectedNode.id === mEmail && selectedNode.teamId === dt.id;
+            const cClasses = isCSelected 
+              ? 'ring-4 ring-indigo-500 scale-105 border-indigo-500 z-40' 
+              : 'border-white dark:border-slate-800 z-30';
+
+            const nodeC = document.createElement('div');
+            nodeC.className = `absolute rounded-full bg-purple-600 hover:bg-purple-700 text-white font-black flex items-center justify-center cursor-pointer shadow-sm hover:scale-110 transition-transform border-2 ${cClasses} select-none`;
+            nodeC.style.left = `${X_mj - 15}px`;
+            nodeC.style.top = `${Y_mj - 15}px`;
+            nodeC.style.width = '30px';
+            nodeC.style.height = '30px';
+            nodeC.innerHTML = '<span class="text-xs">C</span>';
+
+            const mMeta = getUserMetadata(mEmail);
+            setupTooltip(nodeC, () => {
+              return `<div class="p-2 text-xs space-y-0.5"><strong>Adjudicatario (C):</strong><br>${mMeta.name}<br><span class="text-[10px] text-slate-400">${mMeta.cargo}</span></div>`;
+            });
+
+            const memberTeams = (dt.taskTeams || []).filter(tt => (tt.members || []).some(m => m.toLowerCase().trim() === mEmail.toLowerCase().trim()));
+
+            // Green badge "3" if member of task teams (disciplines)
+            if (memberTeams.length > 0) {
+              const badge3 = document.createElement('div');
+              badge3.className = 'absolute h-4 w-4 rounded-full bg-emerald-600 text-white font-mono text-[8px] font-black flex items-center justify-center border border-white dark:border-slate-800 shadow-sm z-40';
+              badge3.style.left = `${X_mj + 5}px`;
+              badge3.style.top = `${Y_mj - 15}px`;
+              badge3.innerHTML = '3';
+              el.isoDiagramNodes.appendChild(badge3);
+            }
+
+            nodeC.addEventListener('click', (e) => {
+              e.stopPropagation();
+              selectedNode = { type: 'C', id: mEmail, teamId: dt.id };
+              renderAllViews();
+            });
+
+            el.isoDiagramNodes.appendChild(nodeC);
+
+            // Label for C member
+            const labelCMember = document.createElement('div');
+            labelCMember.className = 'absolute text-center pointer-events-none select-none z-30';
+            labelCMember.style.left = `${X_mj}px`;
+            labelCMember.style.top = `${Y_mj + 16}px`;
+            labelCMember.style.transform = 'translateX(-50%)';
+            labelCMember.style.width = '80px';
+            labelCMember.innerHTML = `<div class="bg-white/80 dark:bg-slate-900/80 border border-slate-200/60 dark:border-slate-700/60 rounded px-0.5 text-slate-600 dark:text-slate-400 text-[8px] font-medium truncate">${escapeHtml(getShortName(mMeta.name))}</div>`;
+            el.isoDiagramNodes.appendChild(labelCMember);
+          });
+        }
+      });
+    }
+
+    // 3. Draw Right Center Hub: D. Director de Obra
+    const nodeD = document.createElement('div');
+    const isDSelected = selectedNode.type === 'D';
+    const dClasses = isDSelected 
+      ? 'ring-4 ring-amber-500 scale-105 border-amber-500 z-40' 
+      : 'border-white dark:border-slate-800 z-30';
+    nodeD.className = `absolute rounded-full bg-amber-600 hover:bg-amber-700 dark:bg-amber-500 dark:hover:bg-amber-600 text-white font-black flex items-center justify-center cursor-pointer shadow-lg shadow-amber-500/20 hover:scale-110 transition-transform border-4 ${dClasses} select-none`;
+    nodeD.style.left = `${centerX2 - 28}px`;
+    nodeD.style.top = `${centerY - 28}px`;
+    nodeD.style.width = '56px';
+    nodeD.style.height = '56px';
+    nodeD.innerHTML = '<span class="text-base">D</span>';
+
+    setupTooltip(nodeD, () => {
+      const name = directorEmail ? getUserMetadata(directorEmail).name : 'Sin Director';
+      return `<div class="p-2 text-xs space-y-1"><strong>Director de Obra:</strong><br>${name}</div>`;
     });
+
+    nodeD.addEventListener('click', (e) => {
+      e.stopPropagation();
+      selectedNode = { type: 'D', id: null };
+      renderAllViews();
+    });
+    el.isoDiagramNodes.appendChild(nodeD);
+
+    // Label for Node D
+    const directorName = directorEmail ? getUserMetadata(directorEmail).name : 'Sin Director Asignado';
+    const labelD = document.createElement('div');
+    labelD.className = 'absolute text-center pointer-events-none select-none z-30';
+    labelD.style.left = `${centerX2}px`;
+    labelD.style.top = `${centerY + 32}px`;
+    labelD.style.transform = 'translateX(-50%)';
+    labelD.style.width = '120px';
+    labelD.innerHTML = `
+      <div class="bg-white/95 dark:bg-slate-900/95 border border-slate-200 dark:border-slate-800 rounded px-1.5 py-0.5 shadow-sm text-slate-800 dark:text-slate-200 text-[10px] font-extrabold truncate">${escapeHtml(getShortName(directorName))}</div>
+      <div class="text-[8px] text-slate-400 dark:text-slate-500 font-bold uppercase tracking-wider mt-0.5">Director Obra</div>
+    `;
+    el.isoDiagramNodes.appendChild(labelD);
+
+    // Draw Receiver Teams (Right Side)
+    if (receiverTeams.length === 0) {
+      const emptyState = document.createElement('div');
+      emptyState.className = 'absolute text-center text-xs text-slate-400 italic bg-white/40 dark:bg-slate-800/40 rounded-2xl border border-dashed border-slate-300 dark:border-slate-700/60 p-4 w-72';
+      emptyState.style.left = `${centerX2 - 144}px`;
+      emptyState.style.top = `${centerY + 70}px`;
+      emptyState.innerHTML = 'No hay Equipos Receptores configurados.<br>Haz clic en "Equipos Receptores" para agregar el primero.';
+      el.isoDiagramNodes.appendChild(emptyState);
+    } else {
+      const N2 = receiverTeams.length;
+      const R_dist = 180;
+
+      // Coordination ring for Receiver Leaders (O nodes)
+      if (N2 >= 2) {
+        const coordCircle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+        coordCircle.setAttribute('cx', centerX2);
+        coordCircle.setAttribute('cy', centerY);
+        coordCircle.setAttribute('r', R_dist.toString());
+        coordCircle.setAttribute('stroke', '#f59e0b');
+        coordCircle.setAttribute('stroke-width', '1.5');
+        coordCircle.setAttribute('stroke-dasharray', '4,4');
+        coordCircle.setAttribute('fill', 'none');
+        coordCircle.setAttribute('class', 'dark:stroke-amber-900/50');
+        el.isoDiagramSvg.appendChild(coordCircle);
+      }
+
+      receiverTeams.forEach((rt, i) => {
+        const angle = (2 * Math.PI * i) / N2 - Math.PI / 2;
+        const X_ri = centerX2 + R_dist * Math.cos(angle);
+        const Y_ri = centerY + R_dist * Math.sin(angle);
+
+        // Draw connection D <-> O
+        drawOffsetLine(centerX2, centerY, X_ri, Y_ri, 28, 21, '#f59e0b');
+
+        // Receiver Team Circle enclosing O and M
+        const bubbleRt = document.createElement('div');
+        bubbleRt.className = 'absolute rounded-full border border-amber-200/60 dark:border-amber-900/40 bg-amber-50/20 dark:bg-amber-950/10 shadow-inner z-10 pointer-events-none transition-all duration-300';
+        bubbleRt.style.left = `${X_ri - 70}px`;
+        bubbleRt.style.top = `${Y_ri - 70}px`;
+        bubbleRt.style.width = '140px';
+        bubbleRt.style.height = '140px';
+        el.isoDiagramNodes.appendChild(bubbleRt);
+
+        // Label "2" next to it (styled in amber)
+        const badgeO = document.createElement('div');
+        badgeO.className = 'absolute h-5 w-5 rounded-full bg-amber-500/80 text-white font-mono text-[9px] font-black flex items-center justify-center shadow-sm z-30 pointer-events-none';
+        badgeO.style.left = `${X_ri - 66}px`;
+        badgeO.style.top = `${Y_ri - 66}px`;
+        badgeO.innerHTML = '2';
+        el.isoDiagramNodes.appendChild(badgeO);
+
+        // O: Líder node (radius 21)
+        const isOSelected = selectedNode.type === 'O' && selectedNode.id === rt.id;
+        const oClasses = isOSelected 
+          ? 'ring-4 ring-amber-500 scale-105 border-amber-500 z-40' 
+          : 'border-white dark:border-slate-800 z-30';
+
+        const nodeO = document.createElement('div');
+        nodeO.className = `absolute rounded-full bg-amber-600 hover:bg-amber-700 text-white font-black flex items-center justify-center cursor-pointer shadow-md hover:scale-110 transition-transform border-2 ${oClasses} select-none`;
+        nodeO.style.left = `${X_ri - 21}px`;
+        nodeO.style.top = `${Y_ri - 21}px`;
+        nodeO.style.width = '42px';
+        nodeO.style.height = '42px';
+        nodeO.innerHTML = '<span class="text-sm">O</span>';
+
+        setupTooltip(nodeO, () => {
+          const leaderName = rt.leadEmail ? getUserMetadata(rt.leadEmail).name : 'Sin Líder';
+          return `<div class="p-2 text-xs space-y-1"><strong>Líder de Recepción:</strong><br>${leaderName}<br><span class="text-[10px] text-amber-400 font-bold">${rt.name}</span></div>`;
+        });
+
+        nodeO.addEventListener('click', (e) => {
+          e.stopPropagation();
+          selectedNode = { type: 'O', id: rt.id };
+          renderAllViews();
+        });
+        el.isoDiagramNodes.appendChild(nodeO);
+
+        // Labels for O
+        // 1. Team name above bubble
+        const labelOTeam = document.createElement('div');
+        labelOTeam.className = 'absolute text-center pointer-events-none select-none z-30';
+        labelOTeam.style.left = `${X_ri}px`;
+        labelOTeam.style.top = `${Y_ri - 84}px`;
+        labelOTeam.style.transform = 'translateX(-50%)';
+        labelOTeam.style.width = '120px';
+        labelOTeam.innerHTML = `<span class="px-1.5 py-0.5 rounded-full bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-200 border border-amber-200 dark:border-amber-900 shadow-sm text-[8px] font-black uppercase tracking-wider truncate block">${escapeHtml(rt.name)}</span>`;
+        el.isoDiagramNodes.appendChild(labelOTeam);
+
+        // 2. Leader name below node O
+        const leaderName = rt.leadEmail ? getUserMetadata(rt.leadEmail).name : 'Sin Líder';
+        const labelOLeader = document.createElement('div');
+        labelOLeader.className = 'absolute text-center pointer-events-none select-none z-30';
+        labelOLeader.style.left = `${X_ri}px`;
+        labelOLeader.style.top = `${Y_ri + 23}px`;
+        labelOLeader.style.transform = 'translateX(-50%)';
+        labelOLeader.style.width = '100px';
+        labelOLeader.innerHTML = `<div class="bg-white/90 dark:bg-slate-900/90 border border-slate-200/80 dark:border-slate-800/80 rounded px-1 py-0.5 text-slate-700 dark:text-slate-300 text-[9px] font-bold truncate">${escapeHtml(getShortName(leaderName))}</div>`;
+        el.isoDiagramNodes.appendChild(labelOLeader);
+
+        // M: Member nodes
+        const members = rt.members || [];
+        const nonLeaderEmails = members.filter(m => (m || '').toLowerCase().trim() !== (rt.leadEmail || '').toLowerCase().trim());
+        const M = nonLeaderEmails.length;
+
+        if (M > 0) {
+          const r_dist = 45;
+          nonLeaderEmails.forEach((mEmail, j) => {
+            const subAngle = (2 * Math.PI * j) / M - Math.PI / 2;
+            const X_mj = X_ri + r_dist * Math.cos(subAngle);
+            const Y_mj = Y_ri + r_dist * Math.sin(subAngle);
+
+            // Draw connection O <-> M
+            drawOffsetLine(X_ri, Y_ri, X_mj, Y_mj, 21, 15, '#f59e0b');
+
+            // M node
+            const isMSelected = selectedNode.type === 'M' && selectedNode.id === mEmail && selectedNode.teamId === rt.id;
+            const mClasses = isMSelected 
+              ? 'ring-4 ring-amber-500 scale-105 border-amber-500 z-40' 
+              : 'border-white dark:border-slate-800 z-30';
+
+            const nodeM = document.createElement('div');
+            nodeM.className = `absolute rounded-full bg-amber-500 hover:bg-amber-600 text-white font-black flex items-center justify-center cursor-pointer shadow-sm hover:scale-110 transition-transform border-2 ${mClasses} select-none`;
+            nodeM.style.left = `${X_mj - 15}px`;
+            nodeM.style.top = `${Y_mj - 15}px`;
+            nodeM.style.width = '30px';
+            nodeM.style.height = '30px';
+            nodeM.innerHTML = '<span class="text-xs">M</span>';
+
+            const mMeta = getUserMetadata(mEmail);
+            setupTooltip(nodeM, () => {
+              return `<div class="p-2 text-xs space-y-0.5"><strong>Miembro Receptor (M):</strong><br>${mMeta.name}<br><span class="text-[10px] text-slate-400">${mMeta.cargo}</span></div>`;
+            });
+
+            nodeM.addEventListener('click', (e) => {
+              e.stopPropagation();
+              selectedNode = { type: 'M', id: mEmail, teamId: rt.id };
+              renderAllViews();
+            });
+            el.isoDiagramNodes.appendChild(nodeM);
+
+            // Label for M member
+            const labelMMember = document.createElement('div');
+            labelMMember.className = 'absolute text-center pointer-events-none select-none z-30';
+            labelMMember.style.left = `${X_mj}px`;
+            labelMMember.style.top = `${Y_mj + 16}px`;
+            labelMMember.style.transform = 'translateX(-50%)';
+            labelMMember.style.width = '80px';
+            labelMMember.innerHTML = `<div class="bg-white/80 dark:bg-slate-900/80 border border-slate-200/60 dark:border-slate-700/60 rounded px-0.5 text-slate-600 dark:text-slate-400 text-[8px] font-medium truncate">${escapeHtml(getShortName(mMeta.name))}</div>`;
+            el.isoDiagramNodes.appendChild(labelMMember);
+          });
+        }
+      });
+    }
   }
 
   function renderCardViewStage() {
@@ -1409,6 +1696,181 @@
       return;
     }
 
+    // D: Director de Obra
+    if (selectedNode.type === 'D') {
+      const directorEmail = activeProject.iso19650?.directorDeObra || '';
+      const meta = getUserMetadata(directorEmail);
+      const contentHtml = directorEmail ? `
+        <div class="p-3.5 rounded-2xl bg-amber-50/60 dark:bg-amber-950/20 border border-amber-100/50 dark:border-amber-900/30 space-y-1.5">
+          <div class="text-[9px] font-black uppercase tracking-wider text-amber-600 dark:text-amber-400 flex items-center gap-1">
+            <span class="material-symbols-outlined text-[12px]">stars</span> Director de Obra
+          </div>
+          <div>
+            <div class="font-black text-xs text-slate-800 dark:text-slate-200">${escapeHtml(meta.name)}</div>
+            <div class="text-[9px] text-slate-400 font-mono truncate">${escapeHtml(meta.email)}</div>
+            <div class="text-[10px] text-slate-500 mt-0.5">${escapeHtml(meta.company)} • ${escapeHtml(meta.cargo)}</div>
+          </div>
+        </div>
+      ` : `
+        <div class="p-4 rounded-xl border border-dashed border-slate-200 dark:border-slate-800 text-center text-xs text-slate-400 italic">
+          No hay Director de Obra designado en este proyecto.
+        </div>
+      `;
+
+      el.diagramInspectorPanel.innerHTML = `
+        <div class="flex flex-col h-full justify-between">
+          <div class="space-y-4">
+            <div class="border-b border-slate-100 dark:border-slate-800/60 pb-3 flex items-start justify-between">
+              <div>
+                <span class="px-2 py-0.5 rounded bg-amber-100 dark:bg-amber-950 text-amber-700 dark:text-amber-300 text-[9px] font-black uppercase tracking-wider">Rol D</span>
+                <h3 class="text-base font-black text-slate-900 dark:text-white mt-1">Director de Obra</h3>
+              </div>
+              <button onclick="clearInspectorSelection(event)" class="text-slate-400 hover:text-slate-600 dark:hover:text-white" title="Limpiar selección">
+                <span class="material-symbols-outlined text-[18px]">close</span>
+              </button>
+            </div>
+
+            <p class="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
+              Es la máxima autoridad técnica del receptor del proyecto, encargada de validar la conformidad de la información entregada.
+            </p>
+
+            <div class="space-y-2 mt-2">
+              ${contentHtml}
+            </div>
+          </div>
+
+          <div class="pt-4 border-t border-slate-100 dark:border-slate-800/60 mt-4 flex flex-col gap-2">
+            <button onclick="window.switchTab('settings')" class="w-full inline-flex items-center justify-center gap-2 py-2 px-4 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold uppercase tracking-wider transition-all shadow-sm">
+              <span class="material-symbols-outlined text-[16px]">settings</span>
+              <span>Configuración del Proyecto</span>
+            </button>
+          </div>
+        </div>
+      `;
+      return;
+    }
+
+    // O: Receiver Team Leader
+    if (selectedNode.type === 'O') {
+      const receiverTeams = activeProject.iso19650?.receiverTeams || [];
+      const rt = receiverTeams.find(t => t.id === selectedNode.id);
+      if (!rt) {
+        clearInspectorSelection();
+        return;
+      }
+
+      const leadMeta = getUserMetadata(rt.leadEmail);
+      const members = rt.members || [];
+
+      el.diagramInspectorPanel.innerHTML = `
+        <div class="flex flex-col h-full justify-between">
+          <div class="space-y-4">
+            <div class="border-b border-slate-100 dark:border-slate-800/60 pb-3 flex items-start justify-between">
+              <div>
+                <span class="px-2 py-0.5 rounded bg-amber-100 dark:bg-amber-950 text-amber-700 dark:text-amber-300 text-[9px] font-black uppercase tracking-wider">Rol O</span>
+                <h3 class="text-base font-black text-slate-900 dark:text-white mt-1">Líder de Recepción</h3>
+              </div>
+              <button onclick="clearInspectorSelection(event)" class="text-slate-400 hover:text-slate-600 dark:hover:text-white" title="Limpiar selección">
+                <span class="material-symbols-outlined text-[18px]">close</span>
+              </button>
+            </div>
+
+            <div>
+              <div class="text-[9px] font-black uppercase tracking-widest text-slate-400">Equipo de Recepción</div>
+              <div class="text-sm font-black text-amber-600 dark:text-amber-400 uppercase tracking-wide mt-0.5">${escapeHtml(rt.name)}</div>
+              ${rt.description ? `<p class="text-[11px] text-slate-500 dark:text-slate-400 mt-1 italic leading-relaxed">"${escapeHtml(rt.description)}"</p>` : ''}
+            </div>
+
+            <!-- Leader info card -->
+            <div class="p-3.5 rounded-2xl bg-amber-50/60 dark:bg-amber-950/20 border border-amber-100/50 dark:border-amber-900/30 space-y-1.5">
+              <div class="text-[9px] font-black uppercase tracking-wider text-amber-600 dark:text-amber-400 flex items-center gap-1">
+                <span class="material-symbols-outlined text-[12px]">stars</span> Receptor Principal
+              </div>
+              <div>
+                <div class="font-black text-xs text-slate-800 dark:text-slate-200">${escapeHtml(leadMeta.name || 'Sin Líder Asignado')}</div>
+                <div class="text-[9px] text-slate-400 font-mono truncate">${escapeHtml(leadMeta.email || '-')}</div>
+                <div class="text-[10px] text-slate-500 mt-0.5">${escapeHtml(leadMeta.company)} • ${escapeHtml(leadMeta.cargo)}</div>
+              </div>
+            </div>
+
+            <div class="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800">
+              <div class="text-[9px] text-slate-400 uppercase tracking-wider">Miembros M</div>
+              <div class="font-bold text-sm text-slate-900 dark:text-white mt-0.5">${members.length}</div>
+            </div>
+          </div>
+
+          <div class="pt-4 border-t border-slate-100 dark:border-slate-800/60 mt-4 flex flex-col gap-2">
+            <button onclick="scrollToReceiverTeamCard('${rt.id}')" class="w-full inline-flex items-center justify-center gap-2 py-2 px-4 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold uppercase tracking-wider transition-all shadow-sm">
+              <span class="material-symbols-outlined text-[16px]">visibility</span>
+              <span>Ver en Equipos Receptores</span>
+            </button>
+          </div>
+        </div>
+      `;
+      return;
+    }
+
+    // M: Receiver Member
+    if (selectedNode.type === 'M') {
+      const receiverTeams = activeProject.iso19650?.receiverTeams || [];
+      const rt = receiverTeams.find(t => t.id === selectedNode.teamId);
+      if (!rt) {
+        clearInspectorSelection();
+        return;
+      }
+
+      const mEmail = selectedNode.id;
+      const meta = getUserMetadata(mEmail);
+
+      el.diagramInspectorPanel.innerHTML = `
+        <div class="flex flex-col h-full justify-between">
+          <div class="space-y-4">
+            <div class="border-b border-slate-100 dark:border-slate-800/60 pb-3 flex items-start justify-between">
+              <div>
+                <span class="px-2 py-0.5 rounded bg-amber-100 dark:bg-amber-950 text-amber-700 dark:text-amber-300 text-[9px] font-black uppercase tracking-wider">Rol M</span>
+                <h3 class="text-base font-black text-slate-900 dark:text-white mt-1">Miembro Receptor</h3>
+              </div>
+              <button onclick="clearInspectorSelection(event)" class="text-slate-400 hover:text-slate-600 dark:hover:text-white" title="Limpiar selección">
+                <span class="material-symbols-outlined text-[18px]">close</span>
+              </button>
+            </div>
+
+            <!-- Member profile details -->
+            <div class="space-y-3">
+              <div class="flex items-center gap-3">
+                <div class="h-10 w-10 rounded-xl bg-amber-50 dark:bg-amber-950/40 text-amber-600 dark:text-amber-400 flex items-center justify-center font-black text-sm border border-amber-200/50 dark:border-amber-900/30">
+                  M
+                </div>
+                <div class="min-w-0">
+                  <div class="font-black text-xs text-slate-900 dark:text-white truncate">${escapeHtml(meta.name)}</div>
+                  <div class="text-[9px] text-slate-400 font-mono truncate">${escapeHtml(meta.email)}</div>
+                </div>
+              </div>
+
+              <div class="border-t border-slate-100 dark:border-slate-800/60 pt-3 space-y-2 text-[11px]">
+                <div><strong class="text-slate-400 uppercase tracking-wider text-[9px]">Empresa:</strong> <span class="text-slate-800 dark:text-slate-200 font-semibold">${escapeHtml(meta.company || '-')}</span></div>
+                <div><strong class="text-slate-400 uppercase tracking-wider text-[9px]">Cargo / Rol:</strong> <span class="text-slate-800 dark:text-slate-200">${escapeHtml(meta.cargo || '-')}</span></div>
+                ${meta.especialidad ? `<div><strong class="text-slate-400 uppercase tracking-wider text-[9px]">Especialidad:</strong> <span class="text-slate-800 dark:text-slate-200">${escapeHtml(meta.especialidad)}</span></div>` : ''}
+              </div>
+
+              <div class="border-t border-slate-100 dark:border-slate-800/60 pt-3 space-y-1.5">
+                <div class="text-[9px] font-black uppercase tracking-wider text-slate-400">Pertenece al Equipo Receptor</div>
+                <div class="text-[11px] font-extrabold text-amber-600 dark:text-amber-400 uppercase">${escapeHtml(rt.name)}</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="pt-4 border-t border-slate-100 dark:border-slate-800/60 mt-4 flex flex-col gap-2">
+            <button onclick="scrollToReceiverTeamCard('${rt.id}')" class="w-full inline-flex items-center justify-center gap-2 py-2 px-4 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold uppercase tracking-wider transition-all shadow-sm">
+              <span class="material-symbols-outlined text-[16px]">visibility</span>
+              <span>Ver en Equipos Receptores</span>
+            </button>
+          </div>
+        </div>
+      `;
+      return;
+    }
+
     // taskTeam
     if (selectedNode.type === 'taskTeam') {
       const teams = activeProject.iso19650?.deliveryTeams || [];
@@ -1495,6 +1957,18 @@
         card.scrollIntoView({ behavior: 'smooth', block: 'center' });
         card.classList.add('ring-4', 'ring-purple-500');
         setTimeout(() => card.classList.remove('ring-4', 'ring-purple-500'), 2500);
+      }
+    }, 120);
+  };
+
+  window.scrollToReceiverTeamCard = function (teamId) {
+    window.switchTab('receiver');
+    setTimeout(() => {
+      const card = document.getElementById(`receiver-team-card-${teamId}`);
+      if (card) {
+        card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        card.classList.add('ring-4', 'ring-amber-500');
+        setTimeout(() => card.classList.remove('ring-4', 'ring-amber-500'), 2500);
       }
     }, 120);
   };
@@ -1899,7 +2373,7 @@
       }).join('');
 
       return `
-        <div class="rounded-3xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-6 shadow-sm space-y-5">
+        <div id="receiver-team-card-${rt.id}" class="rounded-3xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-6 shadow-sm space-y-5 transition-all duration-300">
           <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 dark:border-slate-700 pb-4">
             <div class="flex items-center gap-3">
               <span class="h-10 w-10 rounded-2xl bg-amber-50 dark:bg-amber-950/80 text-amber-600 dark:text-amber-300 flex items-center justify-center font-black text-sm border border-amber-200 dark:border-amber-800">
