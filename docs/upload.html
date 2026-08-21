@@ -488,6 +488,7 @@
       let currentStatusSubTab = 'models';   // 'models', 'pdfs', 'dwgs'
       let allProjectFiles = [];             // Combined & resolved list of all files with status and version
       const collapsedModelGroups = new Set();
+      const collapsedSpecialtyGroups = new Set();
       const STATUS_ORDER = { 'EN_PROGRESO': 0, 'COMPARTIDO': 1, 'PUBLICADO': 2 };
       const SUBTYPE_MAP = { models: 'model', pdfs: 'pdf', dwgs: 'dwg' };
       const MODEL_3D_EXTENSIONS = new Set([
@@ -1939,6 +1940,48 @@
             </tr>
           `;
         };
+
+        if (currentStatusTab === 'COMPARTIDO' || currentStatusTab === 'PUBLICADO') {
+          const groups = new Map();
+          listToRender.forEach(f => {
+            const specialty = getFileDisplaySpecialty(f) || 'General';
+            if (!groups.has(specialty)) groups.set(specialty, []);
+            groups.get(specialty).push(f);
+          });
+
+          const sortedEntries = Array.from(groups.entries()).sort((a, b) => {
+            return a[0].localeCompare(b[0], 'es', { sensitivity: 'base' });
+          });
+
+          filesTableBody.innerHTML = sortedEntries.map(([specialty, files]) => {
+            const collapsed = collapsedSpecialtyGroups.has(specialty);
+            const label = specialty;
+            const rows = files.map(f => renderFileRow(f, `specialty-group-${specialty.replace(/\s+/g, '-')}${collapsed ? ' hidden' : ''}`)).join('');
+            return `
+              <tr class="bg-slate-50 dark:bg-slate-800/60 border-y border-slate-200 dark:border-slate-700">
+                <td colspan="7" class="p-0">
+                  <button type="button" data-specialty-group-toggle="${specialty}" class="w-full flex items-center justify-between gap-3 px-4 py-3 text-left hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
+                    <span class="flex items-center gap-2 font-bold text-slate-700 dark:text-slate-200">
+                      <span class="material-symbols-outlined text-blue-600 dark:text-blue-400">${collapsed ? 'chevron_right' : 'expand_more'}</span>
+                      ${label}
+                      <span class="text-[10px] px-1.5 py-0.5 rounded-full bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-300">${files.length}</span>
+                    </span>
+                    <span class="text-[10px] font-medium text-slate-400">${collapsed ? 'Expandir' : 'Recoger'}</span>
+                  </button>
+                </td>
+              </tr>${rows}`;
+          }).join('');
+
+          filesTableBody.querySelectorAll('[data-specialty-group-toggle]').forEach(button => {
+            button.addEventListener('click', () => {
+              const specialty = button.dataset.specialtyGroupToggle;
+              if (collapsedSpecialtyGroups.has(specialty)) collapsedSpecialtyGroups.delete(specialty);
+              else collapsedSpecialtyGroups.add(specialty);
+              renderDriveFilesTable();
+            });
+          });
+          return;
+        }
 
         if (currentStatusSubTab !== 'models') {
           filesTableBody.innerHTML = listToRender.map(f => renderFileRow(f)).join('');
