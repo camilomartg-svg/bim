@@ -50,7 +50,7 @@
         "name": "Nuevo Usuario",
         "email": "alc.spk.5@gmail.com",
         "role": "INVITADO",
-        "empresaUsuario": "",
+        "empresaUsuario": "ELECTRICOS SAS",
         "cargo": ""
       },
       {
@@ -59,6 +59,13 @@
         "role": "INVITADO",
         "empresaUsuario": "ELECTRICOS SAS",
         "cargo": ""
+      },
+      {
+        "name": "Director de Construcción",
+        "email": "ianeiara.oficial@gmail.com",
+        "role": "MIEMBRO",
+        "empresaUsuario": "Mesh Estudio",
+        "cargo": "Director de Obra"
       }
     ],
     "razonSocial": "Mesh Estudio SAS",
