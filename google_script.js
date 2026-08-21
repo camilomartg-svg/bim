@@ -1498,8 +1498,9 @@ function createVersion_(e, body) {
   // Optional new file upload content
   const content = String(((body && body.content) || (e && e.parameter && e.parameter.content) || '') ?? '').trim();
   const contentType = String(((body && body.contentType) || (e && e.parameter && e.parameter.contentType) || 'application/octet-stream') ?? '').trim();
+  const uploadedFileId = String(((body && body.uploadedFileId) || (e && e.parameter && e.parameter.uploadedFileId) || '') ?? '').trim();
 
-  if (!fileId && !content) return { status: 'error', message: 'Falta fileId o contenido del archivo' };
+  if (!fileId && !content && !uploadedFileId) return { status: 'error', message: 'Falta fileId, contenido o ID del archivo cargado' };
 
   try {
     var root = DriveApp.getFolderById(folderId);
@@ -1531,8 +1532,45 @@ function createVersion_(e, body) {
       } catch (be) { /* non-fatal */ }
     }
 
-    // 2. If new file content was uploaded, create replacement in target folder (trashing older copies in that folder)
-    if (content) {
+    // 2. If an already uploaded file ID is provided, use it, otherwise check content
+    if (uploadedFileId) {
+      activeFileId = uploadedFileId;
+      var destFolder = root;
+      if (status === 'COMPARTIDO' || status === 'PUBLICADO') {
+        var ef = root.getFoldersByName('.estados');
+        var estadosFolder = ef.hasNext() ? ef.next() : root.createFolder('.estados');
+        var sf = estadosFolder.getFoldersByName(status.toLowerCase());
+        destFolder = sf.hasNext() ? sf.next() : estadosFolder.createFolder(status.toLowerCase());
+      }
+
+      // Ensure the file is in the destFolder
+      try {
+        var fileToMove = DriveApp.getFileById(uploadedFileId);
+        var parents = fileToMove.getParents();
+        var alreadyInDest = false;
+        while (parents.hasNext()) {
+          if (parents.next().getId() === destFolder.getId()) {
+            alreadyInDest = true;
+            break;
+          }
+        }
+        if (!alreadyInDest) {
+          destFolder.addFile(fileToMove);
+          try {
+            root.removeFile(fileToMove);
+          } catch (e) {}
+        }
+      } catch (moveErr) {}
+
+      // Trash older copies in destFolder
+      var existing = destFolder.getFilesByName(filename);
+      while (existing.hasNext()) {
+        var oldF = existing.next();
+        if (oldF.getId() !== backupFileId && oldF.getId() !== activeFileId) {
+          oldF.setTrashed(true);
+        }
+      }
+    } else if (content) {
       var destFolder = root;
       if (status === 'COMPARTIDO' || status === 'PUBLICADO') {
         var ef = root.getFoldersByName('.estados');
