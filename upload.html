@@ -1204,6 +1204,126 @@
         reader.onerror = error => reject(error);
       });
 
+      function base64ToBlob(base64, contentType = '') {
+        const binStr = atob(base64);
+        const len = binStr.length;
+        const arr = new Uint8Array(len);
+        for (let i = 0; i < len; i++) {
+          arr[i] = binStr.charCodeAt(i);
+        }
+        return new Blob([arr], { type: contentType });
+      }
+
+      async function uploadToDriveResumable(fileOrBlob, filename, contentType, fileObj, progressCallback) {
+        const ds = activeProject.dataSources || {};
+        const scriptUrl = ds.driveScriptUrl || DEFAULT_DRIVE_SCRIPT_URL;
+        const driveFolderName = ds.driveFolderName || activeProject.name;
+        const ext = getFileExtension(filename);
+        const fileType = resolveUploadFileType(ext);
+
+        const initPayload = {
+          action: 'initResumableUpload',
+          folderId: ds.driveFolderId || '',
+          driveFolderName: driveFolderName,
+          project: activeProject.slug || slugify(activeProject.name),
+          filename: filename,
+          contentType: contentType,
+          totalBytes: fileOrBlob.size
+        };
+
+        const initRes = await fetch(scriptUrl, {
+          method: 'POST',
+          mode: 'cors',
+          headers: {
+            'Content-Type': 'text/plain;charset=utf-8'
+          },
+          body: JSON.stringify(initPayload)
+        });
+
+        if (!initRes.ok) {
+          throw new Error(`Error iniciando carga resumida: ${initRes.statusText}`);
+        }
+
+        const initData = await initRes.json();
+        if (initData.status === 'error') {
+          throw new Error(`Google Script Error (init): ${initData.message}`);
+        }
+
+        const sessionUrl = initData.sessionUrl;
+        const chunkSize = 2 * 1024 * 1024; // 2MB chunk size
+        let offset = 0;
+        let fileId = '';
+
+        while (offset < fileOrBlob.size) {
+          const chunk = fileOrBlob.slice(offset, offset + chunkSize);
+          const chunkBase64 = await new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => {
+              const bytes = new Uint8Array(reader.result);
+              let binary = '';
+              const subChunkSize = 8192;
+              for (let i = 0; i < bytes.length; i += subChunkSize) {
+                const subChunk = bytes.subarray(i, Math.min(i + subChunkSize, bytes.length));
+                binary += String.fromCharCode.apply(null, subChunk);
+              }
+              resolve(btoa(binary));
+            };
+            reader.onerror = reject;
+            reader.readAsArrayBuffer(chunk);
+          });
+
+          const chunkPayload = {
+            action: 'uploadResumableChunk',
+            sessionUrl: sessionUrl,
+            content: chunkBase64,
+            start: offset,
+            totalBytes: fileOrBlob.size,
+            contentType: contentType,
+            filename: filename,
+            project: activeProject.slug || slugify(activeProject.name),
+            fileType: fileType,
+            jsonId: (fileObj && fileObj.jsonId) || '',
+            changedBy: userAccount ? (userAccount.name || '') : '',
+            changedByEmail: userAccount ? (userAccount.email || userAccount.username || '') : '',
+            deliveryTeams: resolveCurrentUserDeliveryTeams(),
+            folderId: ds.driveFolderId || '',
+            driveFolderName: driveFolderName
+          };
+
+          const chunkRes = await fetch(scriptUrl, {
+            method: 'POST',
+            mode: 'cors',
+            headers: {
+              'Content-Type': 'text/plain;charset=utf-8'
+            },
+            body: JSON.stringify(chunkPayload)
+          });
+
+          if (!chunkRes.ok) {
+            throw new Error(`Error cargando fragmento: ${chunkRes.statusText}`);
+          }
+
+          const chunkData = await chunkRes.json();
+          if (chunkData.status === 'error') {
+            throw new Error(`Google Script Error (chunk): ${chunkData.message}`);
+          }
+
+          offset = chunkData.nextOffset;
+          fileId = chunkData.fileId;
+
+          if (progressCallback) {
+            const pct = Math.round((offset / fileOrBlob.size) * 100);
+            progressCallback(pct);
+          }
+
+          if (chunkData.complete) {
+            break;
+          }
+        }
+
+        return { status: 'success', fileId: fileId, name: filename };
+      }
+
       async function uploadToDrive(filename, base64Content, contentType, fileObj) {
         const ds = activeProject.dataSources || {};
         const scriptUrl = ds.driveScriptUrl || DEFAULT_DRIVE_SCRIPT_URL;
@@ -1321,24 +1441,27 @@
                 throw new Error(`Error en el convertidor: ${errText}`);
               }
 
-              updateFileUI(fileObj, 45, 'Subiendo fragmento...');
+              updateFileUI(fileObj, 40, 'Subiendo fragmento...');
               const conversionResult = await convertResponse.json();
               const baseName = conversionResult.baseName;
 
               addLog(`[${fileObj.file.name}] Subiendo fragmento (.frag)...`);
-              await uploadToDrive(`${baseName}.frag`, conversionResult.fragBase64, 'application/octet-stream', fileObj);
+              const fragBlob = base64ToBlob(conversionResult.fragBase64, 'application/octet-stream');
+              await uploadToDriveResumable(fragBlob, `${baseName}.frag`, 'application/octet-stream', fileObj, (pct) => {
+                updateFileUI(fileObj, Math.round(40 + (pct * 0.3)), 'Subiendo fragmento...');
+              });
               
-              updateFileUI(fileObj, 75, 'Subiendo propiedades...');
+              updateFileUI(fileObj, 70, 'Subiendo propiedades...');
               addLog(`[${fileObj.file.name}] Subiendo propiedades (.json)...`);
-              await uploadToDrive(`${baseName}.json`, conversionResult.jsonBase64, 'application/json', fileObj);
+              const jsonBlob = base64ToBlob(conversionResult.jsonBase64, 'application/json');
+              await uploadToDriveResumable(jsonBlob, `${baseName}.json`, 'application/json', fileObj, (pct) => {
+                updateFileUI(fileObj, Math.round(70 + (pct * 0.25)), 'Subiendo propiedades...');
+              });
 
               updateFileUI(fileObj, 100, 'Completado');
               addLog(`[${fileObj.file.name}] ¡Subida e IFC procesado con éxito!`);
             } else {
-              updateFileUI(fileObj, 25, 'Leyendo archivo...');
-              const base64Content = await fileToBase64(fileObj.file);
-              
-              updateFileUI(fileObj, 55, 'Subiendo...');
+              updateFileUI(fileObj, 25, 'Iniciando subida...');
               addLog(`[${fileObj.file.name}] Subiendo archivo directo...`);
               
               let mimeType = 'application/octet-stream';
@@ -1347,7 +1470,9 @@
               else if (ext === 'json') mimeType = 'application/json';
               else if (ext === 'frag') mimeType = 'application/octet-stream';
 
-              await uploadToDrive(fileObj.file.name, base64Content, mimeType, fileObj);
+              await uploadToDriveResumable(fileObj.file, fileObj.file.name, mimeType, fileObj, (pct) => {
+                updateFileUI(fileObj, Math.round(25 + (pct * 0.7)), 'Subiendo...');
+              });
               
               updateFileUI(fileObj, 100, 'Completado');
               addLog(`[${fileObj.file.name}] ¡Subido con éxito!`);
@@ -1917,15 +2042,20 @@
           const ds = activeProject.dataSources || {};
           const scriptUrl = ds.driveScriptUrl || DEFAULT_DRIVE_SCRIPT_URL;
 
-          let base64Content = '';
-          let contentType = 'application/octet-stream';
+          let uploadedFileId = '';
           if (verInputFile.files && verInputFile.files.length > 0) {
             const uploadedFile = verInputFile.files[0];
-            base64Content = await fileToBase64(uploadedFile);
             const ext = uploadedFile.name.split('.').pop().toLowerCase();
+            let contentType = 'application/octet-stream';
             if (ext === 'pdf') contentType = 'application/pdf';
             else if (ext === 'dwg') contentType = 'image/vnd.dwg';
             else if (ext === 'json') contentType = 'application/json';
+
+            addLog(`[VERSIÓN] Iniciando subida resumible de ${uploadedFile.name}...`);
+            const uploadResult = await uploadToDriveResumable(uploadedFile, uploadedFile.name, contentType, null, (pct) => {
+              btnSubmitVerModal.innerHTML = `<span class="inline-block w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-1"></span> Subiendo ${pct}%...`;
+            });
+            uploadedFileId = uploadResult.fileId;
           }
 
           const payload = {
@@ -1944,8 +2074,9 @@
             type: targetVersionFile.type || '',
             folderId: ds.driveFolderId || '',
             driveFolderName: ds.driveFolderName || activeProject.name,
-            content: base64Content,
-            contentType: contentType
+            uploadedFileId: uploadedFileId,
+            content: '',
+            contentType: ''
           };
 
           const res = await fetch(scriptUrl, {
