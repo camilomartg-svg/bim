@@ -223,6 +223,29 @@ const App: React.FC = () => {
     loadRepoFiles()
   }, [])
 
+  React.useEffect(() => {
+    if (repoFiles.length > 0) {
+      const params = new URLSearchParams(window.location.search)
+      const autoLoadFileId = params.get('fileId')
+      const autoLoadFilename = params.get('file')
+
+      if ((autoLoadFileId || autoLoadFilename) && !(window as any)._autoLoadedFile) {
+        (window as any)._autoLoadedFile = true
+        const matchingItem = repoFiles.find((f) =>
+          (autoLoadFileId && f.fileId === autoLoadFileId) ||
+          (autoLoadFilename && (f.name === autoLoadFilename || f.filename === autoLoadFilename))
+        )
+
+        if (matchingItem) {
+          selectRepoFile(matchingItem)
+          if (matchingItem.folder) {
+            setCollapsedFolders(prev => ({ ...prev, [matchingItem.folder!]: false }))
+          }
+        }
+      }
+    }
+  }, [repoFiles])
+
 
 
   const loadRepoFiles = async () => {

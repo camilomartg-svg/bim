@@ -304,6 +304,27 @@ const App: React.FC = () => {
     }
   }, [drawings, expandedFolders]);
 
+  useEffect(() => {
+    if (drawings.length > 0) {
+      const params = new URLSearchParams(window.location.search);
+      const autoLoadFileId = params.get('fileId');
+      const autoLoadFilename = params.get('file');
+
+      if ((autoLoadFileId || autoLoadFilename) && !(window as any)._autoLoadedDrawing) {
+        (window as any)._autoLoadedDrawing = true;
+        const matchingItem = drawings.find((d) =>
+          (autoLoadFileId && d.fileId === autoLoadFileId) ||
+          (autoLoadFilename && (d.name === autoLoadFilename || d.filename === autoLoadFilename))
+        );
+
+        if (matchingItem) {
+          handleSelectDrawing(matchingItem);
+          setExpandedFolders(prev => ({ ...prev, [matchingItem.folder]: true }));
+        }
+      }
+    }
+  }, [drawings]);
+
   const toggleFolder = (folder: string) => {
     setExpandedFolders(prev => ({ ...prev, [folder]: !prev[folder] }));
   };

@@ -1823,6 +1823,48 @@
           return `${dd}/${mm}/${yyyy} ${hh}:${min}`;
         };
 
+        const getOpenViewerButtonHtml = (f) => {
+          if (!activeProject) return '';
+          const ext = getFileExtension(f.name);
+          let viewerPath = '';
+          let viewerIcon = '';
+          if (ext === 'pdf') {
+            viewerPath = 'VSR_PDFA/index.html';
+            viewerIcon = 'picture_as_pdf';
+          } else if (ext === 'dwg' || ext === 'dxf') {
+            viewerPath = 'VSR_DWGA/index.html';
+            viewerIcon = 'architecture';
+          } else if (ext === 'ifc' || ext === 'frag') {
+            viewerPath = 'VSR_IFCA/index.html';
+            viewerIcon = 'view_in_ar';
+          } else {
+            return ''; // Not compatible
+          }
+
+          const ds = activeProject.dataSources || {};
+          const projectSlug = activeProject.slug || slugify(activeProject.name);
+          const driveFolderName = ds.driveFolderName || activeProject.name;
+          const driveFolderId = ds.driveFolderId || '';
+          const driveScriptUrl = ds.driveScriptUrl || '';
+
+          const url = new URL(viewerPath, window.location.href);
+          if (companyId) url.searchParams.set('empresa', companyId);
+          url.searchParams.set('project', projectSlug);
+          if (driveFolderName) url.searchParams.set('driveFolderName', driveFolderName);
+          if (driveFolderId) url.searchParams.set('driveFolderId', driveFolderId);
+          if (driveScriptUrl) url.searchParams.set('driveScriptUrl', driveScriptUrl);
+          
+          if (f.fileId) url.searchParams.set('fileId', f.fileId);
+          if (f.name) url.searchParams.set('file', f.name);
+          if (f.jsonId) url.searchParams.set('jsonId', f.jsonId);
+
+          return `
+            <a href="${url.toString()}" target="_blank" class="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-[10px] uppercase tracking-wider shadow-sm transition-all whitespace-nowrap" title="Abrir en Visor">
+              <span class="material-symbols-outlined text-[13px]">${viewerIcon}</span> VISOR
+            </a>
+          `;
+        };
+
         const renderFileRow = (f, extraClass = '') => {
           const specialty = getFileDisplaySpecialty(f);
           const ext = getFileExtension(f.name);
@@ -1859,12 +1901,14 @@
           }
 
           const canManage = isUserAuthorizedForFile(f, 'manage');
+          const openButton = getOpenViewerButtonHtml(f);
 
           // Action buttons depending on state
           let actionButtons = '';
           if (currentStatusTab === 'EN_PROGRESO') {
             actionButtons = `
               <div class="flex items-center justify-end gap-1.5 flex-wrap sm:flex-nowrap">
+                ${openButton}
                 ${canManage ? `
                 <button onclick="window.promoteFile(this, '${fileDataStr}', 'COMPARTIDO')" class="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-bold text-[10px] uppercase tracking-wider shadow-sm transition-all whitespace-nowrap" title="Pasar a Compartido">
                   <span class="material-symbols-outlined text-[13px]">share</span> COMPARTIDO
@@ -1888,6 +1932,7 @@
           } else if (currentStatusTab === 'COMPARTIDO') {
             actionButtons = `
               <div class="flex items-center justify-end gap-1.5 flex-wrap sm:flex-nowrap">
+                ${openButton}
                 ${canManage ? `
                 <button onclick="window.promoteFile(this, '${fileDataStr}', 'PUBLICADO')" class="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-green-600 hover:bg-green-700 text-white font-bold text-[10px] uppercase tracking-wider shadow-sm transition-all whitespace-nowrap" title="Pasar a Publicado">
                   <span class="material-symbols-outlined text-[13px]">publish</span> PUBLICADO
@@ -1908,6 +1953,7 @@
           } else {
             actionButtons = `
               <div class="flex items-center justify-end gap-1.5 flex-wrap sm:flex-nowrap">
+                ${openButton}
                 <span class="inline-flex items-center gap-1 text-green-600 dark:text-green-400 font-bold text-[10px] uppercase tracking-wider mr-1">
                   <span class="material-symbols-outlined text-[14px]">verified</span> PUBLICADO
                 </span>

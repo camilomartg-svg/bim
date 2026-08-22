@@ -3836,6 +3836,33 @@ async function loadModelList() {
                 listContainer.appendChild(groupDiv);
             }
 
+            // Check for autoload parameters in URL on initial load
+            const autoLoadFileId = params.get('fileId');
+            const autoLoadFilename = params.get('file');
+            const autoLoadJsonId = params.get('jsonId');
+
+            if ((autoLoadFileId || autoLoadFilename) && !(window as any)._autoLoadedModel) {
+                (window as any)._autoLoadedModel = true;
+                const matchingItem = models.find((m) => 
+                    (autoLoadFileId && (m.driveFragId === autoLoadFileId || m.fileId === autoLoadFileId)) ||
+                    (autoLoadFilename && (m.name === autoLoadFilename || m.filename === autoLoadFilename))
+                );
+
+                if (matchingItem) {
+                    const allLiElements = Array.from(listContainer.querySelectorAll('li.model-item'));
+                    const targetLi = allLiElements.find((li) => (li as HTMLElement).dataset.path === matchingItem.path);
+                    if (targetLi) {
+                        if (autoLoadJsonId && !matchingItem.driveJsonId) {
+                            matchingItem.driveJsonId = autoLoadJsonId;
+                        }
+                        logToScreen(`Auto-loading model: ${matchingItem.name}`);
+                        toggleModel(matchingItem, baseUrl, targetLi as HTMLElement).catch((err) => {
+                            console.error('Auto-load failed:', err);
+                        });
+                    }
+                }
+            }
+
         } catch (err) {
             logToScreen(`Error loading model list: ${err}`, true);
         }
