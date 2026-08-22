@@ -210,7 +210,19 @@
             ],
             "taskTeams": []
           }
-        ]
+        ],
+        "receiverTeams": [
+          {
+            "id": "recv-1787434761208",
+            "name": "ADMINISTRACIÓN DE OBRA",
+            "leadEmail": "ianeiara.oficial@gmail.com",
+            "description": "",
+            "members": [
+              "ianeiara.oficial@gmail.com"
+            ]
+          }
+        ],
+        "directorDeObra": ""
       }
     }
   ],
