@@ -247,8 +247,20 @@ export const isUserAuthorizedForFile = (
     console.log('[SECURITY] Denegado: No hay usuario autenticado');
     return false;
   }
-  
   const email = (currentUser.username || currentUser.email || currentUser.userAccount || '').toLowerCase().trim();
+
+  // Rule: If user is in a receiver team, they can ONLY access files with status === 'PUBLICADO'
+  const receiverTeams = activeProject?.iso19650?.receiverTeams || [];
+  const isInReceiverTeam = receiverTeams.some((rt: any) => {
+    const isMember = Array.isArray(rt.members) && rt.members.map((m: string) => m.toLowerCase().trim()).includes(email);
+    const isLead = rt.leadEmail && rt.leadEmail.toLowerCase().trim() === email;
+    return isMember || isLead;
+  });
+
+  if (isInReceiverTeam && file.status !== 'PUBLICADO') {
+    console.log(`[SECURITY] Denegado: Usuario ${email} está en un equipo receptor y el archivo "${file.name || file.filename}" no está PUBLICADO (status: ${file.status})`);
+    return false;
+  }
 
   const superAdmins = ['imagina3ddesign@gmail.com', 'mcmartinezg@unal.edu.co'];
   const isSuperAdmin = superAdmins.includes(email) || currentUser.role === 'SUPER_ADMIN' || currentUser.role === 'SUPER_ADMINISTRADOR';
@@ -287,6 +299,11 @@ export const isUserAuthorizedForFile = (
     const userTeams = getUserDeliveryTeams(email, activeProject);
     if (userTeams.length > 0) {
       console.log(`[SECURITY] Permitido: Usuario ${email} pertenece a algún equipo del proyecto para archivo compartido/publicado`);
+      return true;
+    }
+
+    if (isInReceiverTeam) {
+      console.log(`[SECURITY] Permitido: Usuario ${email} pertenece a un equipo receptor para archivo publicado`);
       return true;
     }
   }

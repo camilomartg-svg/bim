@@ -959,6 +959,18 @@
           if (!currentUser) return false;
           const email = (currentUser.username || currentUser.email || currentUser.userAccount || '').toLowerCase().trim();
 
+          // Rule: If user is in a receiver team, they can ONLY access files with status === 'PUBLICADO'
+          const receiverTeams = activeProject?.iso19650?.receiverTeams || [];
+          const isInReceiverTeam = receiverTeams.some(rt => {
+            const isMember = Array.isArray(rt.members) && rt.members.map(m => m.toLowerCase().trim()).includes(email);
+            const isLead = rt.leadEmail && rt.leadEmail.toLowerCase().trim() === email;
+            return isMember || isLead;
+          });
+
+          if (isInReceiverTeam && file.status !== 'PUBLICADO') {
+            return false;
+          }
+
           // 2. Superadmins are always authorized
           const superAdmins = ['imagina3ddesign@gmail.com', 'mcmartinezg@unal.edu.co'];
           const isSuperAdmin = superAdmins.includes(email) || currentUser.role === 'SUPER_ADMIN' || currentUser.role === 'SUPER_ADMINISTRADOR';
@@ -1009,6 +1021,8 @@
             // Fallback: check if the user is in any delivery team
             const userTeams = getUserDeliveryTeams(email);
             if (userTeams.length > 0) return true;
+
+            if (isInReceiverTeam) return true;
           }
 
           // For edit/manage action of shared/published files, check delivery team ownership

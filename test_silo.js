@@ -47,6 +47,17 @@ const activeProject = {
           "alc.spk.2@gmail.com"
         ]
       }
+    ],
+    "receiverTeams": [
+      {
+        "id": "eq-rec-1",
+        "name": "RECEPTOR",
+        "leadEmail": "receptor@nora.cde",
+        "members": [
+          "receptor@nora.cde",
+          "camilomartg@gmail.com"
+        ]
+      }
     ]
   }
 };
@@ -151,6 +162,18 @@ function isUserAuthorizedForFile(currentUser, file, action = 'view') {
   if (!currentUser) return false;
   const email = (currentUser.username || currentUser.email || currentUser.userAccount || '').toLowerCase().trim();
 
+  // Rule: If user is in a receiver team, they can ONLY access files with status === 'PUBLICADO'
+  const receiverTeams = activeProject?.iso19650?.receiverTeams || [];
+  const isInReceiverTeam = receiverTeams.some(rt => {
+    const isMember = Array.isArray(rt.members) && rt.members.map(m => m.toLowerCase().trim()).includes(email);
+    const isLead = rt.leadEmail && rt.leadEmail.toLowerCase().trim() === email;
+    return isMember || isLead;
+  });
+
+  if (isInReceiverTeam && file.status !== 'PUBLICADO') {
+    return false;
+  }
+
   const superAdmins = ['imagina3ddesign@gmail.com', 'mcmartinezg@unal.edu.co'];
   const isSuperAdmin = superAdmins.includes(email) || currentUser.role === 'SUPER_ADMIN' || currentUser.role === 'SUPER_ADMINISTRADOR';
 
@@ -178,6 +201,8 @@ function isUserAuthorizedForFile(currentUser, file, action = 'view') {
     
     const userTeams = getUserDeliveryTeams(email);
     if (userTeams.length > 0) return true;
+
+    if (isInReceiverTeam) return true;
   }
 
   // Para archivos EN_PROGRESO (WIP) o para acciones de edición/gestión:
@@ -199,7 +224,8 @@ function isUserAuthorizedForFile(currentUser, file, action = 'view') {
 const users = {
   hidrosanitario: { name: 'Camilo Martinez', email: 'camilomartg@gmail.com', role: 'COLABORADOR' },
   arquitectura: { name: 'Arquitecto', email: 'camilo.martinez@meshestudio.com', role: 'COLABORADOR' },
-  admin: { name: 'Admin', email: 'alc.spk.2@gmail.com', role: 'COLABORADOR' }
+  admin: { name: 'Admin', email: 'alc.spk.2@gmail.com', role: 'COLABORADOR' },
+  receiver: { name: 'Receptor Only', email: 'receptor@nora.cde', role: 'COLABORADOR' }
 };
 
 const testFiles = [
@@ -237,11 +263,19 @@ const testFiles = [
     }
   },
   {
-    desc: "5. Shared file in ARQUITECTURA folder (not EN_PROGRESO status)",
+    desc: "5. Shared file in ARQUITECTURA folder (COMPARTIDO status)",
     file: {
       folder: "ARQUITECTURA",
       status: "COMPARTIDO",
       changedByEmail: "camilo.martinez@meshestudio.com"
+    }
+  },
+  {
+    desc: "6. Published file in General folder (PUBLICADO status)",
+    file: {
+      folder: "General",
+      status: "PUBLICADO",
+      changedByEmail: "camilomartg@gmail.com"
     }
   }
 ];

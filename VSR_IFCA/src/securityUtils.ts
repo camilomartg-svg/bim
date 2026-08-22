@@ -307,8 +307,6 @@ export const isUserAuthorizedForFile = (
       return true;
     }
   }
-  
-
 
   // Para archivos EN_PROGRESO (WIP) o para acciones de edición/gestión:
   // Se requiere que el usuario y el archivo compartan al menos un equipo de entrega (comparación insensible a acentos)
@@ -331,4 +329,4 @@ export const isUserAuthorizedForFile = (
   const authorized = normFileTeams.some(team => normUserTeams.includes(team));
   console.log(`[SECURITY] Resultado de autorización por equipos: ${authorized}`);
   return authorized;
-}
+};

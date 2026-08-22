@@ -11,6 +11,8 @@ import {
     DRIVE_MODELS_FOLDER_ID as DEFAULT_DRIVE_MODELS_FOLDER_ID,
 } from './config';
 import './style.css';
+import { loadSecurityContext, isUserAuthorizedForFile } from './securityUtils';
+
 
 const currentUrl = typeof window !== 'undefined' ? new URL(window.location.href) : null;
 const currentParams = currentUrl?.searchParams ?? new URLSearchParams();
@@ -39,6 +41,8 @@ const DRIVE_MODELS_FOLDER_ID = extractDriveFolderId(
 const PROJECT_RUNTIME_KEY = normalizeProjectRuntimeKey(
     currentParams.get('project') || currentParams.get('driveFolderName') || DRIVE_MODELS_FOLDER_ID || 'default',
 );
+
+let activeSecurityContext: any = null;
 
 
 // --- Viewpoints State ---
@@ -1618,6 +1622,62 @@ const loadDriveJsonProps = async (jsonId: string): Promise<any | null> => {
 
 async function loadModel(url: string, path: string, options?: { propertiesUrl?: string; propertiesJson?: any | null; sourceUrl?: string }) {
     resetFilters();
+    
+    // Security check
+    if (!activeSecurityContext) {
+        const params = new URLSearchParams(window.location.search);
+        const project = params.get('project') || '';
+        const companyId = params.get('empresa') || '';
+        try {
+            activeSecurityContext = await loadSecurityContext(project, companyId);
+        } catch (se) {
+            console.warn('Error loading security context in loadModel:', se);
+        }
+    }
+    
+    if (activeSecurityContext) {
+        const fname = path.split('/').pop() || path;
+        let fid = '';
+        if (options?.sourceUrl && options.sourceUrl.startsWith('drive://')) {
+            try {
+                const urlObj = new URL(options.sourceUrl);
+                fid = urlObj.hostname;
+            } catch (e) {
+                const matchDrive = options.sourceUrl.match(/drive:\/\/([^?]+)/);
+                if (matchDrive) fid = decodeURIComponent(matchDrive[1]);
+            }
+        }
+        
+        const match = activeSecurityContext.statusMap?.[fid] || activeSecurityContext.statusMap?.[fname.toLowerCase()] || null;
+        const fileObj = {
+            name: fname,
+            filename: fname,
+            fileId: fid || undefined,
+            status: match?.status || 'EN_PROGRESO',
+            changedBy: match?.changedBy || 'UNASSIGNED',
+            changedByEmail: match?.changedByEmail || 'unassigned@nora.cde',
+            folder: fname
+        };
+        
+        const params = new URLSearchParams(window.location.search);
+        const companyId = params.get('empresa') || '';
+        
+        const authorized = isUserAuthorizedForFile(
+            activeSecurityContext.currentUser,
+            fileObj,
+            activeSecurityContext.activeProject,
+            activeSecurityContext.currentCompany,
+            companyId,
+            'view'
+        );
+        
+        if (!authorized) {
+            const errorMsg = `Acceso denegado al modelo "${fname}": No autorizado para visualizar este archivo.`;
+            logToScreen(errorMsg, true);
+            throw new Error(errorMsg);
+        }
+    }
+
     try {
         logToScreen(`Fetching Fragment: ${url}`);
         const file = await fetch(url);
@@ -3558,23 +3618,84 @@ async function loadModelList() {
 
         try {
             let models: RemoteModelItem[] = [];
+            
+            // Load security context if not loaded yet
+            if (!activeSecurityContext) {
+                const params = new URLSearchParams(window.location.search);
+                const project = params.get('project') || '';
+                const companyId = params.get('empresa') || '';
+                try {
+                    activeSecurityContext = await loadSecurityContext(project, companyId);
+                } catch (se) {
+                    console.warn('Error loading security context in loadModelList:', se);
+                }
+            }
+
+            const params = new URLSearchParams(window.location.search);
+            const companyId = params.get('empresa') || '';
+
             if (shouldUseDriveModels()) {
                 logToScreen('Loading models from Google Drive (Apps Script)...');
                 try {
                     const driveModels = await listDriveModels();
-                    models = driveModels
+                    const processed = driveModels
                         .filter((m) => String(m.name || '').toLowerCase().endsWith('.frag'))
-                        .map((m) => ({
-                            name: m.name,
-                            path: `models/${m.name}`,
-                            driveFragId: m.fragId,
-                            driveJsonId: m.jsonId ?? null
-                        }));
-                    logToScreen(`Drive Scan: ${models.length} .frag models found`);
+                        .map((m) => {
+                            const fname = m.name || '';
+                            const fid = m.fragId || '';
+                            const match = activeSecurityContext?.statusMap?.[fid] || activeSecurityContext?.statusMap?.[fname.toLowerCase()] || null;
+                            return {
+                                name: m.name,
+                                path: `models/${m.name}`,
+                                driveFragId: m.fragId,
+                                driveJsonId: m.jsonId ?? null,
+                                status: match?.status || 'EN_PROGRESO',
+                                changedBy: match?.changedBy || 'UNASSIGNED',
+                                changedByEmail: match?.changedByEmail || 'unassigned@nora.cde',
+                                fileId: fid,
+                                filename: fname,
+                                folder: m.name
+                            };
+                        });
+                    models = processed.filter(f => 
+                        isUserAuthorizedForFile(
+                            activeSecurityContext?.currentUser,
+                            f,
+                            activeSecurityContext?.activeProject,
+                            activeSecurityContext?.currentCompany,
+                            companyId,
+                            'view'
+                        )
+                    );
+                    logToScreen(`Drive Scan: ${models.length} authorized .frag models found`);
                 } catch (driveError) {
                     logToScreen(`Drive Scan failed, using published list: ${driveError}`, true);
-                    models = await loadPublishedModelList();
-                    logToScreen(`Published list: ${models.length} .frag models found`);
+                    const localModels = await loadPublishedModelList();
+                    const processedLocal = localModels.map((m) => {
+                        const fname = m.name || '';
+                        const fid = m.driveFragId || '';
+                        const match = activeSecurityContext?.statusMap?.[fid] || activeSecurityContext?.statusMap?.[fname.toLowerCase()] || null;
+                        return {
+                            ...m,
+                            status: match?.status || 'EN_PROGRESO',
+                            changedBy: match?.changedBy || 'UNASSIGNED',
+                            changedByEmail: match?.changedByEmail || 'unassigned@nora.cde',
+                            fileId: fid || undefined,
+                            filename: fname,
+                            folder: m.name
+                        };
+                    });
+                    models = processedLocal.filter(f => 
+                        isUserAuthorizedForFile(
+                            activeSecurityContext?.currentUser,
+                            f,
+                            activeSecurityContext?.activeProject,
+                            activeSecurityContext?.currentCompany,
+                            companyId,
+                            'view'
+                        )
+                    );
+                    logToScreen(`Published list: ${models.length} authorized .frag models found`);
                 }
             } else {
                 const GITHUB_API_URL = 'https://api.github.com/repos/camilomartg-svg/bim/contents/docs/VSR_IFCA/models';
@@ -3586,15 +3707,39 @@ async function loadModelList() {
                 const data = await response.json();
                 if (!Array.isArray(data)) throw new Error('Invalid GitHub response');
 
-                models = data
+                const gitModels = data
                     .filter((item: any) => item.name.toLowerCase().endsWith('.frag'))
                     .map((item: any) => ({
                         name: item.name,
                         path: `models/${item.name}`,
                         url: item.download_url
                     }));
+                
+                const processedGit = gitModels.map((m) => {
+                    const fname = m.name || '';
+                    const match = activeSecurityContext?.statusMap?.[fname.toLowerCase()] || null;
+                    return {
+                        ...m,
+                        status: match?.status || 'EN_PROGRESO',
+                        changedBy: match?.changedBy || 'UNASSIGNED',
+                        changedByEmail: match?.changedByEmail || 'unassigned@nora.cde',
+                        filename: fname,
+                        folder: m.name
+                    };
+                });
+                
+                models = processedGit.filter(f => 
+                    isUserAuthorizedForFile(
+                        activeSecurityContext?.currentUser,
+                        f,
+                        activeSecurityContext?.activeProject,
+                        activeSecurityContext?.currentCompany,
+                        companyId,
+                        'view'
+                    )
+                );
 
-                logToScreen(`GitHub Scan: ${models.length} .frag models found`);
+                logToScreen(`GitHub Scan: ${models.length} authorized .frag models found`);
             }
 
             // Group models by specialty
@@ -10130,12 +10275,69 @@ function setupViewpoints() {
             return models;
         },
         restoreLoadedModels: async (savedModels) => {
+            // Load security context if not loaded yet
+            if (!activeSecurityContext) {
+                const params = new URLSearchParams(window.location.search);
+                const project = params.get('project') || '';
+                const companyId = params.get('empresa') || '';
+                try {
+                    activeSecurityContext = await loadSecurityContext(project, companyId);
+                } catch (se) {
+                    console.warn('Error loading security context in restoreLoadedModels:', se);
+                }
+            }
+
+            // Filter saved models to only include those the user is authorized to see
+            const authorizedSavedModels = savedModels.filter(m => {
+                const fname = m.uuid.split('/').pop() || m.uuid;
+                let fid = '';
+                if (m.url && m.url.startsWith('drive://')) {
+                    try {
+                        const urlObj = new URL(m.url);
+                        fid = urlObj.hostname;
+                    } catch (e) {
+                        const matchDrive = m.url.match(/drive:\/\/([^?]+)/);
+                        if (matchDrive) fid = decodeURIComponent(matchDrive[1]);
+                    }
+                }
+                
+                const match = activeSecurityContext?.statusMap?.[fid] || activeSecurityContext?.statusMap?.[fname.toLowerCase()] || null;
+                const fileObj = {
+                    name: fname,
+                    filename: fname,
+                    fileId: fid || undefined,
+                    status: match?.status || 'EN_PROGRESO',
+                    changedBy: match?.changedBy || 'UNASSIGNED',
+                    changedByEmail: match?.changedByEmail || 'unassigned@nora.cde',
+                    folder: fname
+                };
+                
+                const params = new URLSearchParams(window.location.search);
+                const companyId = params.get('empresa') || '';
+                
+                const authorized = isUserAuthorizedForFile(
+                    activeSecurityContext?.currentUser,
+                    fileObj,
+                    activeSecurityContext?.activeProject,
+                    activeSecurityContext?.currentCompany,
+                    companyId,
+                    'view'
+                );
+                
+                if (!authorized) {
+                    console.warn(`[SECURITY] Viewpoint restoration blocked for unauthorized model: ${fname}`);
+                    logToScreen(`Acceso denegado en punto de vista para: ${fname}`, true);
+                    return false;
+                }
+                return true;
+            });
+
             // Use fragments.list as primary source
             const source = (fragments.list && fragments.list.size > 0) ? fragments.list : fragments.groups;
             const isMap = source instanceof Map;
 
             const currentUUIDs = new Set(isMap ? source.keys() : Object.keys(source || {}));
-            const savedUUIDs = new Set(savedModels.map(m => m.uuid));
+            const savedUUIDs = new Set(authorizedSavedModels.map(m => m.uuid));
 
             // Sync visibility: Hide models not in the view, Show models that are.
             for (const uuid of currentUUIDs) {
@@ -10154,7 +10356,7 @@ function setupViewpoints() {
             updateProjectLinksBarVisibility();
 
             // Load missing models
-            for (const m of savedModels) {
+            for (const m of authorizedSavedModels) {
                 if (!currentUUIDs.has(m.uuid)) {
                     try {
                         console.log(`[Viewpoints] Restoring model: ${m.uuid} from ${m.url}`);
@@ -10162,6 +10364,7 @@ function setupViewpoints() {
                         let loadUrl = m.url;
                         let isLocal = false;
                         let dbKey = '';
+                        let props: any | null = null;
 
                         // Check if it's a local model in IndexedDB
                         if (m.url.startsWith('indexeddb://')) {
@@ -10179,10 +10382,33 @@ function setupViewpoints() {
                                 logToScreen(`Error: Local model ${dbKey} expired/missing. Please reload file.`, true);
                                 continue;
                             }
+                        } else if (m.url.startsWith('drive://')) {
+                            // Google Drive model restoration
+                            try {
+                                const urlObj = new URL(m.url);
+                                const driveFragId = decodeURIComponent(urlObj.hostname);
+                                const driveJsonId = urlObj.searchParams.get('jsonId');
+
+                                logToScreen(`Restoring Google Drive model: ${m.uuid}...`);
+                                const buffer = await loadDriveFragBuffer(driveFragId);
+                                const blob = new Blob([buffer], { type: 'application/octet-stream' });
+                                loadUrl = URL.createObjectURL(blob);
+
+                                if (driveJsonId) {
+                                    try {
+                                        props = await loadDriveJsonProps(driveJsonId);
+                                    } catch (jsonErr) {
+                                        console.warn('Error loading JSON props for restored drive model', jsonErr);
+                                    }
+                                }
+                            } catch (driveErr) {
+                                console.error('Failed to resolve drive URL for restoration:', driveErr);
+                                continue;
+                            }
                         }
 
                         console.log(`[Viewpoints] Calling loadModel with URL: ${loadUrl}`);
-                        await loadModel(loadUrl, m.uuid);
+                        await loadModel(loadUrl, m.uuid, { propertiesJson: props, sourceUrl: m.url });
                         console.log(`[Viewpoints] loadModel completed for ${m.uuid}`);
 
                         // Restore local flags if needed
