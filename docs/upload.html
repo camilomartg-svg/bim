@@ -1767,31 +1767,35 @@
 
           const rawProjectFiles = Array.from(filesByPath.values());
 
-          // Emparejar archivos IFC con sus FRAG convertidos por nombre base
-          // Esto permite que el botón del visor para IFC use el fileId del .frag correspondiente
-          const fragsByBaseName = new Map();
+          // Emparejar IFC con FRAG por nombre base + estado, y ocultar el FRAG derivado
+          // Construir mapa de frags indexado por (baseName|status)
+          const fragsByKey = new Map();
           rawProjectFiles.forEach(f => {
             if (getFileExtension(f.name) === 'frag') {
               const base = f.name.replace(/\.frag$/i, '').toLowerCase();
-              // Preferir el .frag del mismo estado
-              if (!fragsByBaseName.has(base) || f.status === 'EN_PROGRESO') {
-                fragsByBaseName.set(base, f);
-              }
+              const key = `${base}|${f.status}`;
+              fragsByKey.set(key, f);
             }
           });
+          // Para cada IFC, buscar un FRAG del mismo nombre base y mismo estado
           rawProjectFiles.forEach(f => {
             if (getFileExtension(f.name) === 'ifc') {
               const base = f.name.replace(/\.ifc$/i, '').toLowerCase();
-              const pairedFrag = fragsByBaseName.get(base);
+              // Primero: mismo estado. Luego: cualquier estado como fallback
+              const pairedFrag = fragsByKey.get(`${base}|${f.status}`)
+                || fragsByKey.get(`${base}|EN_PROGRESO`);
               if (pairedFrag) {
                 f.pairedFragId = pairedFrag.fileId;
                 f.pairedFragName = pairedFrag.name;
                 f.pairedFragJsonId = pairedFrag.jsonId || '';
+                // Marcar el FRAG como derivado: no se mostrará en el listado
+                pairedFrag._derivedFromIfc = true;
               }
             }
           });
 
-          allProjectFiles = rawProjectFiles.filter(f => isUserAuthorizedForFile(f, 'view'));
+          // Excluir FRAG derivados de IFC y archivos no autorizados
+          allProjectFiles = rawProjectFiles.filter(f => isUserAuthorizedForFile(f, 'view') && !f._derivedFromIfc);
           updateTabCounts();
           renderDriveFilesTable();
         } catch (err) {
@@ -1954,12 +1958,23 @@
           const canManage = isUserAuthorizedForFile(f, 'manage');
           const openButton = getOpenViewerButtonHtml(f);
 
+          // Botón de descarga del archivo original desde Google Drive
+          const downloadFileId = f.fileId || '';
+          const downloadButton = downloadFileId ? `
+            <a href="https://drive.google.com/uc?export=download&id=${encodeURIComponent(downloadFileId)}" target="_blank" rel="noopener noreferrer"
+               class="inline-flex items-center justify-center p-1.5 rounded-lg text-slate-500 hover:text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-950/30 transition-colors"
+               title="Descargar ${f.name}">
+              <span class="material-symbols-outlined text-[16px]">download</span>
+            </a>
+          ` : '';
+
           // Action buttons depending on state
           let actionButtons = '';
           if (currentStatusTab === 'EN_PROGRESO') {
             actionButtons = `
               <div class="flex items-center justify-end gap-1.5 flex-wrap sm:flex-nowrap">
                 ${openButton}
+                ${downloadButton}
                 ${canManage ? `
                 <button onclick="window.promoteFile(this, '${fileDataStr}', 'COMPARTIDO')" class="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-bold text-[10px] uppercase tracking-wider shadow-sm transition-all whitespace-nowrap" title="Pasar a Compartido">
                   <span class="material-symbols-outlined text-[13px]">share</span> COMPARTIDO
@@ -1984,6 +1999,7 @@
             actionButtons = `
               <div class="flex items-center justify-end gap-1.5 flex-wrap sm:flex-nowrap">
                 ${openButton}
+                ${downloadButton}
                 ${canManage ? `
                 <button onclick="window.promoteFile(this, '${fileDataStr}', 'PUBLICADO')" class="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-green-600 hover:bg-green-700 text-white font-bold text-[10px] uppercase tracking-wider shadow-sm transition-all whitespace-nowrap" title="Pasar a Publicado">
                   <span class="material-symbols-outlined text-[13px]">publish</span> PUBLICADO
@@ -2005,6 +2021,7 @@
             actionButtons = `
               <div class="flex items-center justify-end gap-1.5 flex-wrap sm:flex-nowrap">
                 ${openButton}
+                ${downloadButton}
                 <span class="inline-flex items-center gap-1 text-green-600 dark:text-green-400 font-bold text-[10px] uppercase tracking-wider mr-1">
                   <span class="material-symbols-outlined text-[14px]">verified</span> PUBLICADO
                 </span>
