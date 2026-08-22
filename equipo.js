@@ -657,9 +657,33 @@
     const receiverTeams = activeProject.iso19650?.receiverTeams || [];
     const directorEmail = (activeProject.iso19650?.directorDeObra || '').toLowerCase().trim();
 
-    const centerX1 = 375;
-    const centerX2 = 1025;
-    const centerY = 400;
+    // Dynamically calculate canvas size and spacing based on the number of teams to prevent overlapping
+    const N_delivery = deliveryTeams.length;
+    const R_dist_delivery = N_delivery <= 1 ? 180 : Math.max(180, 85 / Math.sin(Math.PI / N_delivery));
+
+    const N_receiver = receiverTeams.length;
+    const R_dist_receiver = N_receiver <= 1 ? 180 : Math.max(180, 85 / Math.sin(Math.PI / N_receiver));
+
+    const centerX1 = R_dist_delivery + 195;
+    const centerX2 = centerX1 + R_dist_delivery + R_dist_receiver + 290;
+    const canvasWidth = centerX2 + R_dist_receiver + 195;
+
+    const centerY = Math.max(400, Math.max(R_dist_delivery, R_dist_receiver) + 220);
+    const canvasHeight = centerY * 2;
+
+    const R_outer_delivery = R_dist_delivery + 80;
+    const R_outer_receiver = R_dist_receiver + 80;
+
+    // Apply dimensions to DOM wrapper and SVG
+    if (el.isoDiagramViewportWrapper) {
+      el.isoDiagramViewportWrapper.style.width = `${canvasWidth}px`;
+      el.isoDiagramViewportWrapper.style.height = `${canvasHeight}px`;
+    }
+    if (el.isoDiagramSvg) {
+      el.isoDiagramSvg.setAttribute('width', canvasWidth.toString());
+      el.isoDiagramSvg.setAttribute('height', canvasHeight.toString());
+      el.isoDiagramSvg.setAttribute('viewBox', `0 0 ${canvasWidth} ${canvasHeight}`);
+    }
 
     function getShortName(fullName) {
       if (!fullName) return '';
@@ -741,7 +765,7 @@
     const projectCircle1 = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
     projectCircle1.setAttribute('cx', centerX1);
     projectCircle1.setAttribute('cy', centerY);
-    projectCircle1.setAttribute('r', '260');
+    projectCircle1.setAttribute('r', R_outer_delivery.toString());
     projectCircle1.setAttribute('stroke', '#cbd5e1');
     projectCircle1.setAttribute('stroke-width', '2');
     projectCircle1.setAttribute('stroke-dasharray', '5,5');
@@ -753,7 +777,7 @@
     const outerCircleLabel1 = document.createElement('div');
     outerCircleLabel1.className = 'absolute px-3 py-0.5 rounded-full bg-slate-800/90 text-white font-mono text-[9px] font-black uppercase tracking-wider shadow-sm z-30 pointer-events-none';
     outerCircleLabel1.style.left = `${centerX1}px`;
-    outerCircleLabel1.style.top = '110px';
+    outerCircleLabel1.style.top = `${centerY - R_outer_delivery - 30}px`;
     outerCircleLabel1.style.transform = 'translateX(-50%)';
     outerCircleLabel1.innerHTML = '1. Equipos de Entrega';
     el.isoDiagramNodes.appendChild(outerCircleLabel1);
@@ -762,7 +786,7 @@
     const projectCircle2 = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
     projectCircle2.setAttribute('cx', centerX2);
     projectCircle2.setAttribute('cy', centerY);
-    projectCircle2.setAttribute('r', '260');
+    projectCircle2.setAttribute('r', R_outer_receiver.toString());
     projectCircle2.setAttribute('stroke', '#cbd5e1');
     projectCircle2.setAttribute('stroke-width', '2');
     projectCircle2.setAttribute('stroke-dasharray', '5,5');
@@ -774,7 +798,7 @@
     const outerCircleLabel2 = document.createElement('div');
     outerCircleLabel2.className = 'absolute px-3 py-0.5 rounded-full bg-amber-800/90 text-white font-mono text-[9px] font-black uppercase tracking-wider shadow-sm z-30 pointer-events-none';
     outerCircleLabel2.style.left = `${centerX2}px`;
-    outerCircleLabel2.style.top = '110px';
+    outerCircleLabel2.style.top = `${centerY - R_outer_receiver - 30}px`;
     outerCircleLabel2.style.transform = 'translateX(-50%)';
     outerCircleLabel2.innerHTML = '1. Equipos Receptores';
     el.isoDiagramNodes.appendChild(outerCircleLabel2);
@@ -831,7 +855,7 @@
       el.isoDiagramNodes.appendChild(emptyState);
     } else {
       const N1 = deliveryTeams.length;
-      const R_dist = 180;
+      const R_dist = R_dist_delivery;
 
       // Coordination ring connecting B nodes
       if (N1 >= 2) {
@@ -1037,7 +1061,7 @@
       el.isoDiagramNodes.appendChild(emptyState);
     } else {
       const N2 = receiverTeams.length;
-      const R_dist = 180;
+      const R_dist = R_dist_receiver;
 
       // Coordination ring for Receiver Leaders (O nodes)
       if (N2 >= 2) {
