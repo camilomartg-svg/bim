@@ -1477,25 +1477,36 @@
                 throw new Error(`Error en el convertidor: ${errText}`);
               }
 
-              updateFileUI(fileObj, 40, 'Subiendo fragmento...');
+              updateFileUI(fileObj, 35, 'Subiendo fragmento...');
               const conversionResult = await convertResponse.json();
               const baseName = conversionResult.baseName;
 
               addLog(`[${fileObj.file.name}] Subiendo fragmento (.frag)...`);
               const fragBlob = base64ToBlob(conversionResult.fragBase64, 'application/octet-stream');
-              await uploadToDriveResumable(fragBlob, `${baseName}.frag`, 'application/octet-stream', fileObj, (pct) => {
-                updateFileUI(fileObj, Math.round(40 + (pct * 0.3)), 'Subiendo fragmento...');
+              const fragUploadResult = await uploadToDriveResumable(fragBlob, `${baseName}.frag`, 'application/octet-stream', fileObj, (pct) => {
+                updateFileUI(fileObj, Math.round(35 + (pct * 0.2)), 'Subiendo fragmento...');
               });
+              const fragFileId = fragUploadResult.fileId;
               
-              updateFileUI(fileObj, 70, 'Subiendo propiedades...');
+              updateFileUI(fileObj, 55, 'Subiendo propiedades...');
               addLog(`[${fileObj.file.name}] Subiendo propiedades (.json)...`);
               const jsonBlob = base64ToBlob(conversionResult.jsonBase64, 'application/json');
               await uploadToDriveResumable(jsonBlob, `${baseName}.json`, 'application/json', fileObj, (pct) => {
-                updateFileUI(fileObj, Math.round(70 + (pct * 0.25)), 'Subiendo propiedades...');
+                updateFileUI(fileObj, Math.round(55 + (pct * 0.2)), 'Subiendo propiedades...');
+              });
+
+              // También subir el IFC original para que aparezca en el listado de modelos
+              updateFileUI(fileObj, 75, 'Subiendo IFC original...');
+              addLog(`[${fileObj.file.name}] Subiendo IFC original para el registro...`);
+              // Almacenar fragId temporalmente en fileObj para que sea accesible en la carga resumible
+              fileObj._ifcConvertedFragId = fragFileId;
+              fileObj._ifcConvertedFragName = `${baseName}.frag`;
+              await uploadToDriveResumable(fileObj.file, fileObj.file.name, 'application/octet-stream', fileObj, (pct) => {
+                updateFileUI(fileObj, Math.round(75 + (pct * 0.2)), 'Subiendo IFC...');
               });
 
               updateFileUI(fileObj, 100, 'Completado');
-              addLog(`[${fileObj.file.name}] ¡Subida e IFC procesado con éxito!`);
+              addLog(`[${fileObj.file.name}] ¡IFC convertido, subido y registrado con éxito! (.frag + .json + .ifc)`);
             } else {
               updateFileUI(fileObj, 25, 'Iniciando subida...');
               addLog(`[${fileObj.file.name}] Subiendo archivo directo...`);
@@ -1755,6 +1766,31 @@
           addFiles(listData.dwgs, 'dwg');
 
           const rawProjectFiles = Array.from(filesByPath.values());
+
+          // Emparejar archivos IFC con sus FRAG convertidos por nombre base
+          // Esto permite que el botón del visor para IFC use el fileId del .frag correspondiente
+          const fragsByBaseName = new Map();
+          rawProjectFiles.forEach(f => {
+            if (getFileExtension(f.name) === 'frag') {
+              const base = f.name.replace(/\.frag$/i, '').toLowerCase();
+              // Preferir el .frag del mismo estado
+              if (!fragsByBaseName.has(base) || f.status === 'EN_PROGRESO') {
+                fragsByBaseName.set(base, f);
+              }
+            }
+          });
+          rawProjectFiles.forEach(f => {
+            if (getFileExtension(f.name) === 'ifc') {
+              const base = f.name.replace(/\.ifc$/i, '').toLowerCase();
+              const pairedFrag = fragsByBaseName.get(base);
+              if (pairedFrag) {
+                f.pairedFragId = pairedFrag.fileId;
+                f.pairedFragName = pairedFrag.name;
+                f.pairedFragJsonId = pairedFrag.jsonId || '';
+              }
+            }
+          });
+
           allProjectFiles = rawProjectFiles.filter(f => isUserAuthorizedForFile(f, 'view'));
           updateTabCounts();
           renderDriveFilesTable();
@@ -1828,15 +1864,27 @@
           const ext = getFileExtension(f.name);
           let viewerPath = '';
           let viewerIcon = '';
+          let viewerFileId = f.fileId;
+          let viewerFileName = f.name;
+          let viewerJsonId = f.jsonId || '';
+
           if (ext === 'pdf') {
             viewerPath = 'VSR_PDFA/index.html';
             viewerIcon = 'picture_as_pdf';
           } else if (ext === 'dwg' || ext === 'dxf') {
             viewerPath = 'VSR_DWGA/index.html';
             viewerIcon = 'architecture';
-          } else if (ext === 'ifc' || ext === 'frag') {
+          } else if (ext === 'frag') {
             viewerPath = 'VSR_IFCA/index.html';
             viewerIcon = 'view_in_ar';
+          } else if (ext === 'ifc') {
+            // Para IFC: usar el .frag emparejado si existe, si no, no mostrar botón del visor
+            if (!f.pairedFragId) return '';
+            viewerPath = 'VSR_IFCA/index.html';
+            viewerIcon = 'view_in_ar';
+            viewerFileId = f.pairedFragId;
+            viewerFileName = f.pairedFragName || f.name.replace(/\.ifc$/i, '.frag');
+            viewerJsonId = f.pairedFragJsonId || f.jsonId || '';
           } else {
             return ''; // Not compatible
           }
@@ -1854,12 +1902,15 @@
           if (driveFolderId) url.searchParams.set('driveFolderId', driveFolderId);
           if (driveScriptUrl) url.searchParams.set('driveScriptUrl', driveScriptUrl);
           
-          if (f.fileId) url.searchParams.set('fileId', f.fileId);
-          if (f.name) url.searchParams.set('file', f.name);
-          if (f.jsonId) url.searchParams.set('jsonId', f.jsonId);
+          if (viewerFileId) url.searchParams.set('fileId', viewerFileId);
+          if (viewerFileName) url.searchParams.set('file', viewerFileName);
+          if (viewerJsonId) url.searchParams.set('jsonId', viewerJsonId);
+
+          // Tooltip diferente para IFC que apunta a su FRAG
+          const tooltip = ext === 'ifc' ? 'Abrir en Visor (via .frag convertido)' : 'Abrir en Visor';
 
           return `
-            <a href="${url.toString()}" target="_blank" class="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-[10px] uppercase tracking-wider shadow-sm transition-all whitespace-nowrap" title="Abrir en Visor">
+            <a href="${url.toString()}" target="_blank" class="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-[10px] uppercase tracking-wider shadow-sm transition-all whitespace-nowrap" title="${tooltip}">
               <span class="material-symbols-outlined text-[13px]">${viewerIcon}</span> VISOR
             </a>
           `;
@@ -1980,6 +2031,8 @@
                   <span class="material-symbols-outlined text-base ${iconClass} shrink-0">${icon}</span>
                   <span class="truncate max-w-xs sm:max-w-md md:max-w-lg lg:max-w-xl xl:max-w-3xl" title="${f.name}">${f.name}</span>
                   ${isModel && f.jsonId ? '<span class="text-[9px] px-1.5 py-0.5 rounded bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 font-mono font-medium shrink-0">+json</span>' : ''}
+                  ${ext === 'ifc' && f.pairedFragId ? '<span class="text-[9px] px-1.5 py-0.5 rounded bg-indigo-100 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 font-mono font-medium shrink-0" title="Convertido a .frag">→FRAG</span>' : ''}
+                  ${ext === 'ifc' && !f.pairedFragId ? '<span class="text-[9px] px-1.5 py-0.5 rounded bg-amber-100 dark:bg-amber-950 text-amber-700 dark:text-amber-300 font-mono font-medium shrink-0" title="Sin conversión FRAG disponible">sin FRAG</span>' : ''}
                 </div>
               </td>
               <td class="py-3 px-3 text-center whitespace-nowrap">
