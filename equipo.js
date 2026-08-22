@@ -655,7 +655,6 @@
 
     const deliveryTeams = activeProject.iso19650?.deliveryTeams || [];
     const receiverTeams = activeProject.iso19650?.receiverTeams || [];
-    const projectAdmins = activeProject.iso19650?.projectAdmins || [];
     const directorEmail = (activeProject.iso19650?.directorDeObra || '').toLowerCase().trim();
 
     const centerX1 = 375;
