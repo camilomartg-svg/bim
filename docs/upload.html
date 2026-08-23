@@ -380,6 +380,55 @@
   <script>
     document.addEventListener('DOMContentLoaded', async () => {
       const DEFAULT_DRIVE_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbx2RAQx_8K4o22xE0Mw-ETc7K_58vIoi6-PgVi64u80inuiw144ks3cgWSdCtXqIgB02g/exec';
+
+      // =====================================================================
+      // IFC Converter iframe — runs @thatopen/fragments WASM in the browser
+      // No localhost server needed: conversion happens client-side.
+      // =====================================================================
+      const _convFrame = document.createElement('iframe');
+      _convFrame.src = new URL('/CONVERTIR_FRAG/index.html', window.location.origin).href;
+      _convFrame.style.cssText = 'position:absolute;left:-9999px;width:1px;height:1px;border:0;overflow:hidden';
+      _convFrame.setAttribute('aria-hidden', 'true');
+      document.body.appendChild(_convFrame);
+
+      let _convReadyResolve;
+      const converterReadyPromise = new Promise(r => { _convReadyResolve = r; });
+      window.addEventListener('message', function(e) {
+        if (e.data && e.data.type === 'CONVERTER_READY') { _convReadyResolve(); }
+      });
+
+      async function convertIfcInBrowser(fileObj) {
+        // Wait up to 90 s for the iframe to load and initialize WebAssembly
+        await Promise.race([
+          converterReadyPromise,
+          new Promise(function(_, rej) {
+            setTimeout(function() { rej(new Error('El convertidor no pudo inicializar. Recarga la página e inténtalo de nuevo.')); }, 90000);
+          })
+        ]);
+        const arrayBuffer = await fileObj.file.arrayBuffer();
+        const requestId = 'ifc_' + Date.now() + '_' + Math.random().toString(36).slice(2);
+        return new Promise(function(resolve, reject) {
+          var t = setTimeout(function() {
+            window.removeEventListener('message', h);
+            reject(new Error('La conversión IFC excedió el tiempo límite (10 min). El archivo puede ser demasiado grande.'));
+          }, 600000);
+          function h(e) {
+            if (!e.data || e.data.requestId !== requestId) return;
+            clearTimeout(t);
+            window.removeEventListener('message', h);
+            if (e.data.type === 'CONVERT_RESULT') resolve(e.data);
+            else reject(new Error(e.data.error || 'Error desconocido en la conversión IFC'));
+          }
+          window.addEventListener('message', h);
+          // Transfer buffer (zero-copy) — the file object is untouched
+          _convFrame.contentWindow.postMessage(
+            { type: 'CONVERT_IFC', bytes: arrayBuffer, filename: fileObj.file.name, requestId: requestId },
+            '*',
+            [arrayBuffer]
+          );
+        });
+      }
+      // =====================================================================
       const DEFAULT_PORTAL_CONFIG = {
         portal: {
           name: 'nora CDE',
@@ -1456,49 +1505,32 @@
           
           try {
             if (ext === 'ifc') {
+              updateFileUI(fileObj, 5, 'Iniciando convertidor...');
+              addLog(`[${fileObj.file.name}] Iniciando conversión IFC en el navegador (no se requiere servidor local)...`);
+
               updateFileUI(fileObj, 10, 'Convirtiendo IFC...');
-              addLog(`[${fileObj.file.name}] Enviando al convertidor local...`);
+              addLog(`[${fileObj.file.name}] Convirtiendo con WebAssembly. Puede tardar varios minutos según el tamaño del archivo...`);
 
-              const formData = new FormData();
-              formData.append('ifcFile', fileObj.file);
-
-              let convertResponse;
-              try {
-                convertResponse = await fetch('http://localhost:3000/convert-json', {
-                  method: 'POST',
-                  body: formData
-                });
-              } catch (err) {
-                throw new Error('No se pudo conectar con el convertidor local (Puerto 3000). Asegúrate de tenerlo iniciado en la carpeta Models/ConverterApp.');
-              }
-
-              if (!convertResponse.ok) {
-                const errText = await convertResponse.text();
-                throw new Error(`Error en el convertidor: ${errText}`);
-              }
+              const convResult = await convertIfcInBrowser(fileObj);
+              const { fragBase64, jsonBase64, baseName } = convResult;
 
               updateFileUI(fileObj, 35, 'Subiendo fragmento...');
-              const conversionResult = await convertResponse.json();
-              const baseName = conversionResult.baseName;
-
               addLog(`[${fileObj.file.name}] Subiendo fragmento (.frag)...`);
-              const fragBlob = base64ToBlob(conversionResult.fragBase64, 'application/octet-stream');
+              const fragBlob = base64ToBlob(fragBase64, 'application/octet-stream');
               const fragUploadResult = await uploadToDriveResumable(fragBlob, `${baseName}.frag`, 'application/octet-stream', fileObj, (pct) => {
                 updateFileUI(fileObj, Math.round(35 + (pct * 0.2)), 'Subiendo fragmento...');
               });
               const fragFileId = fragUploadResult.fileId;
-              
+
               updateFileUI(fileObj, 55, 'Subiendo propiedades...');
               addLog(`[${fileObj.file.name}] Subiendo propiedades (.json)...`);
-              const jsonBlob = base64ToBlob(conversionResult.jsonBase64, 'application/json');
+              const jsonBlob = base64ToBlob(jsonBase64, 'application/json');
               await uploadToDriveResumable(jsonBlob, `${baseName}.json`, 'application/json', fileObj, (pct) => {
                 updateFileUI(fileObj, Math.round(55 + (pct * 0.2)), 'Subiendo propiedades...');
               });
 
-              // También subir el IFC original para que aparezca en el listado de modelos
               updateFileUI(fileObj, 75, 'Subiendo IFC original...');
               addLog(`[${fileObj.file.name}] Subiendo IFC original para el registro...`);
-              // Almacenar fragId temporalmente en fileObj para que sea accesible en la carga resumible
               fileObj._ifcConvertedFragId = fragFileId;
               fileObj._ifcConvertedFragName = `${baseName}.frag`;
               await uploadToDriveResumable(fileObj.file, fileObj.file.name, 'application/octet-stream', fileObj, (pct) => {
@@ -1506,7 +1538,7 @@
               });
 
               updateFileUI(fileObj, 100, 'Completado');
-              addLog(`[${fileObj.file.name}] ¡IFC convertido, subido y registrado con éxito! (.frag + .json + .ifc)`);
+              addLog(`[${fileObj.file.name}] ¡IFC convertido y subido con éxito! (.frag + .json + .ifc)`);
             } else {
               updateFileUI(fileObj, 25, 'Iniciando subida...');
               addLog(`[${fileObj.file.name}] Subiendo archivo directo...`);
