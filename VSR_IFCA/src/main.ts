@@ -4976,8 +4976,8 @@ function initQuantitiesPanel() {
     let pipeGroupingMode = 'POR_NIVEL'; // 'POR_NIVEL' | 'TOTAL'
     let mergeUnionLengthsIntoPipes = false;
 
-    // View colorization toggles
-    let statusColorsEnabled = true;
+    // View colorization toggles (off by default — user can enable via 'Colores 3D' button)
+    let statusColorsEnabled = false;
 
     // Selection state
     let selectedElementIds: number[] = [];
@@ -6971,8 +6971,8 @@ function initStatusPanel() {
     let filterLevel = 'Todos';
     let filterStatus = 'Todos';
 
-    // View colorization toggles
-    let statusColorsEnabled = true;
+    // View colorization toggles (off by default — user can enable via 'Colores 3D' button)
+    let statusColorsEnabled = false;
 
     // Selection state
     let selectedElementIds: number[] = [];
