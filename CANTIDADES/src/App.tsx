@@ -1501,59 +1501,181 @@ export default function App() {
     console.log("Procesando modelo cargado ID:", model.uuid || model.modelId);
     const extractedElements: BIMElement[] = [];
     const categoryMap: Record<string, { totalVolume: number; count: number }> = {};
+    const modelUUID = model.uuid || model.modelId;
 
     try {
       const ids = await model.getLocalIds();
       console.log(`Modelo con ${ids.length} elementos locales.`);
 
-      // Intentar obtener datos básicos de los elementos
-      const itemsData = await model.getItemsData(ids, {
-        attributesDefault: true,
-      });
-
-      const getValue = (attr: any) => {
-        if (attr === undefined || attr === null) return undefined;
-        if (typeof attr === 'object') {
-          if ('value' in attr) return attr.value;
-          if ('NominalValue' in attr) {
-            const nv = attr.NominalValue;
-            return (nv && typeof nv === 'object' && 'value' in nv) ? nv.value : nv;
-          }
-          if ('QuantityValue' in attr) {
-            const qv = attr.QuantityValue;
-            return (qv && typeof qv === 'object' && 'value' in qv) ? qv.value : qv;
+      // 1. Try to fetch attributes in chunks using FragmentsManager
+      const itemsMap = new Map<number, any>();
+      const fragments = componentsRef.current?.get(OBC.FragmentsManager);
+      if (fragments && ids.length > 0) {
+        console.log(`[processModel] Fetching properties with fragments.getData for ${ids.length} elements...`);
+        const CHUNK = 1000;
+        for (let i = 0; i < ids.length; i += CHUNK) {
+          const chunk = ids.slice(i, i + CHUNK);
+          try {
+            const result = await fragments.getData(
+              { [modelUUID]: chunk } as any,
+              { attributesDefault: true } as any
+            );
+            const items: any[] = (result as any)[modelUUID] || [];
+            items.forEach((raw: any, idx: number) => {
+              const expressID = chunk[idx];
+              if (expressID !== undefined) {
+                const attrs = raw?.data || raw?.attributes || raw || {};
+                itemsMap.set(expressID, attrs);
+              }
+            });
+          } catch (e) {
+            console.warn('[processModel] fragments.getData chunk error:', e);
           }
         }
-        return attr;
+      }
+
+      // 2. Fallback to model.getItemsData if fragments.getData returned nothing
+      let itemsData: any[] = [];
+      if (itemsMap.size === 0) {
+        console.log(`[processModel] Fallback to model.getItemsData...`);
+        try {
+          itemsData = await model.getItemsData(ids, {
+            attributesDefault: true,
+          });
+        } catch (e) {
+          console.warn('[processModel] getItemsData error:', e);
+        }
+      }
+
+      // Helper: unwrap {type, value} objects or return plain string
+      const getVal = (obj: any, ...keys: string[]): string | null => {
+        if (!obj || typeof obj !== 'object') return null;
+
+        // Try top-level keys first
+        for (const k of keys) {
+          const raw = obj[k];
+          if (raw !== undefined && raw !== null) {
+            const v = (raw && typeof raw === 'object' && 'value' in raw) ? raw.value : raw;
+            if (v !== null && v !== undefined && String(v).trim() !== '') return String(v).trim();
+          }
+        }
+
+        // Recursive deep search (BFS)
+        const queue = [obj];
+        const seen = new Set<any>();
+        let steps = 0;
+        const maxSteps = 1000;
+
+        while (queue.length > 0 && steps < maxSteps) {
+          const current = queue.shift();
+          if (!current || typeof current !== 'object') continue;
+          if (seen.has(current)) continue;
+          seen.add(current);
+          steps++;
+
+          for (const k of keys) {
+            const raw = current[k];
+            if (raw !== undefined && raw !== null) {
+              const v = (raw && typeof raw === 'object' && 'value' in raw) ? raw.value : raw;
+              if (v !== null && v !== undefined && String(v).trim() !== '') return String(v).trim();
+            }
+          }
+
+          for (const key in current) {
+            if (key === 'ObjectPlacement' || key === 'Representation' || key === 'OwnerHistory') continue;
+            const val = current[key];
+            if (val && typeof val === 'object') {
+              queue.push(val);
+            }
+          }
+        }
+
+        return null;
+      };
+
+      const parseNum = (value: unknown): number => {
+        if (value === undefined || value === null) return 0;
+        if (typeof value === 'number') return Number.isFinite(value) ? value : 0;
+        const s = String(value).trim();
+        if (!s || s === '-') return 0;
+        const cleaned = s.replace(/\s/g, '').replace(',', '.').replace(/[^\d.\-]/g, '');
+        const n = parseFloat(cleaned);
+        return Number.isFinite(n) ? n : 0;
       };
 
       for (let i = 0; i < ids.length; i++) {
         const localId = ids[i];
-        const data = itemsData[i] || {};
-        
-        // Extraer todos los IDs posibles para asegurar vinculación
-        const rawId = getValue(data.expressID || data.ExpressID || data.id || localId);
-        const expressId = rawId !== undefined && rawId !== null ? rawId.toString() : localId.toString();
-        
-        const rawGlobalId = getValue(data.GlobalId || data.globalId || data.guid || data.Guid || data.GlobalID);
-        const globalId = rawGlobalId?.toString();
-        
-        const rawCategory = getValue(data.type || data.ifcType || data.Category || data.ObjectType || 'Elemento');
-        const category = (rawCategory !== undefined && rawCategory !== null ? rawCategory : 'Elemento').toString();
-        const rawName = getValue(data.Name || data.name);
-        const name = (rawName !== undefined && rawName !== null ? rawName : `${category} - ${expressId}`).toString();
-        const volume = 0;
+        const data = itemsMap.get(localId) || itemsData[i] || {};
+
+        // Extract basic fields
+        const rawId = getVal(data, 'expressID', 'ExpressID', 'id') || String(localId);
+        const expressId = String(rawId);
+
+        const globalId = getVal(data, 'GlobalId', 'globalId', 'guid', 'Guid', 'GlobalID') || undefined;
+
+        // Extract integrated properties using the exact same keys as VSR_IFCA
+        const classification = getVal(data, 'CLASIFICACIÓN', 'Clasificación', 'CLASIFICACION', 'clasificacion') || undefined;
+        const level = getVal(data, 'NIVEL INTEGRADO', 'Nivel Integrado', 'nivel integrado') || undefined;
+        const material = getVal(data, 'MATERIAL INTEGRADO', 'Material Integrado', 'material integrado') || undefined;
+        const nombre = getVal(data, 'NOMBRE INTEGRADO', 'Nombre Integrado', 'nombre integrado') || undefined;
+        const sub = getVal(data, 'SUBPROYECTOS INTEGRADO', 'Subproyectos Integrado', 'subproyectos integrado', 'SUBPROYECTO INTEGRADO', 'Workset1', 'Workset') || undefined;
+        const category = getVal(data, 'type', 'ifcType', 'Category', 'ObjectType', 'CLASIFICACIÓN', 'Clasificación', 'CLASIFICACION', 'clasificacion', 'CATEGORÍA', 'CATEGORIA', 'Categoría', 'categoria', 'TIPO', 'Tipo', 'tipo', 'DETALLE', 'Detalle', 'detalle') || 'Elemento';
+        const detail = getVal(data, 'DETALLE', 'Detalle', 'detalle') || undefined;
+
+        const volume = parseNum(getVal(data, 'VOLUMEN INTEGRADO', 'Volumen', 'Volume', 'Volume integrado', 'Volumen integrado'));
+        const area = parseNum(getVal(data, 'ÁREA INTEGRADO', 'Area', 'Area integrado', 'Área', 'Área integrado', 'AREA INTEGRADO'));
+        const length = parseNum(getVal(data, 'LONGITUD INTEGRADO', 'Longitud', 'Length', 'Longitud integrado', 'Longitud integrado', 'LONGITUD', 'longitud'));
+
+        const name = nombre || getVal(data, 'Name', 'name', 'ObjectType', 'objectType') || `${category} - ${expressId}`;
+
+        // Build integrated properties dictionary so getProp can read it immediately
+        const integratedProps: Record<string, any> = {};
+        if (classification !== undefined) {
+          integratedProps["CLASIFICACIÓN"] = classification;
+          integratedProps["CLASIFICACION"] = classification;
+        }
+        if (level !== undefined) {
+          integratedProps["NIVEL INTEGRADO"] = level;
+        }
+        if (material !== undefined) {
+          integratedProps["MATERIAL INTEGRADO"] = material;
+        }
+        if (nombre !== undefined) {
+          integratedProps["NOMBRE INTEGRADO"] = nombre;
+        }
+        if (sub !== undefined) {
+          integratedProps["SUBPROYECTOS INTEGRADO"] = sub;
+          integratedProps["SUBPROYECTO INTEGRADO"] = sub;
+        }
+        if (category !== undefined) {
+          integratedProps["CATEGORÍA"] = category;
+          integratedProps["CATEGORIA"] = category;
+        }
+        if (detail !== undefined) {
+          integratedProps["DETALLE"] = detail;
+        }
+        if (volume > 0) {
+          integratedProps["VOLUMEN INTEGRADO"] = volume;
+        }
+        if (area > 0) {
+          integratedProps["ÁREA INTEGRADO"] = area;
+          integratedProps["AREA INTEGRADO"] = area;
+        }
+        if (length > 0) {
+          integratedProps["LONGITUD INTEGRADO"] = length;
+          integratedProps["LONGITUD"] = length;
+        }
 
         extractedElements.push({
-          id: expressId, 
-          globalId: globalId,
+          id: expressId,
+          globalId,
           name,
           category,
-          volume: volume,
+          volume,
           unit: 'm³',
-          properties: { ...data },
-          modelId: model.uuid || model.id || model.modelId,
-          localId: localId
+          properties: { ...data, ...integratedProps },
+          modelId: modelUUID,
+          localId
         });
 
         if (!categoryMap[category]) {
@@ -1569,7 +1691,7 @@ export default function App() {
         totalVolume: data.totalVolume,
         count: data.count
       })));
-      
+
       console.log(`Preparados ${extractedElements.length} elementos para vinculación.`);
     } catch (err) {
       console.error("Error en processModel:", err);
