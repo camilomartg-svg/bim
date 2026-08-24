@@ -74,13 +74,10 @@
     </script>
     <script type="module" src="/src/main.tsx"></script>
   
-        <!-- VIEWER LOGO INJECT START -->
+            <!-- VIEWER LOGO INJECT START -->
     <script>
         (async function() {
             try {
-                const logoImg = document.getElementById('logo-img');
-                if (!logoImg) return;
-                
                 const metaVersion = document.querySelector('meta[name="x-app-version"]');
                 const currentVersion = metaVersion?.getAttribute('content') || Date.now().toString();
                 
@@ -141,32 +138,52 @@
                     }
                 }
                 
-                const updateLogo = () => {
-                    const isDark = document.body.classList.contains('dark-mode') || document.documentElement.classList.contains('dark');
-                    const desiredSrc = isDark ? darkLogo : lightLogo;
-                    if (logoImg.getAttribute('src') !== desiredSrc) {
-                        logoImg.src = desiredSrc;
-                    }
-                };
-
-                const observer = new MutationObserver(() => updateLogo());
-                observer.observe(document.body, { attributes: true, attributeFilter: ['class'] });
-                observer.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
-                
-                const origSetAttribute = logoImg.setAttribute.bind(logoImg);
-                logoImg.setAttribute = function(name, value) {
-                    if (name === 'src') {
+                const setupLogoOverride = (logoImg) => {
+                    const updateLogo = () => {
                         const isDark = document.body.classList.contains('dark-mode') || document.documentElement.classList.contains('dark');
                         const desiredSrc = isDark ? darkLogo : lightLogo;
-                        if (value !== desiredSrc) {
-                            origSetAttribute('src', desiredSrc);
-                            return;
+                        if (logoImg.getAttribute('src') !== desiredSrc) {
+                            logoImg.src = desiredSrc;
                         }
-                    }
-                    origSetAttribute(name, value);
+                    };
+
+                    const observer = new MutationObserver(() => updateLogo());
+                    observer.observe(document.body, { attributes: true, attributeFilter: ['class'] });
+                    observer.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
+                    
+                    const origSetAttribute = logoImg.setAttribute.bind(logoImg);
+                    logoImg.setAttribute = function(name, value) {
+                        if (name === 'src') {
+                            const isDark = document.body.classList.contains('dark-mode') || document.documentElement.classList.contains('dark');
+                            const desiredSrc = isDark ? darkLogo : lightLogo;
+                            if (value !== desiredSrc) {
+                                origSetAttribute('src', desiredSrc);
+                                return;
+                            }
+                        }
+                        origSetAttribute(name, value);
+                    };
+
+                    updateLogo();
                 };
 
-                updateLogo();
+                // Wait for element to be present in DOM
+                const logoImg = document.getElementById('logo-img');
+                if (logoImg) {
+                    setupLogoOverride(logoImg);
+                } else {
+                    const bodyObserver = new MutationObserver((mutations, obs) => {
+                        const target = document.getElementById('logo-img');
+                        if (target) {
+                            setupLogoOverride(target);
+                            obs.disconnect();
+                        }
+                    });
+                    bodyObserver.observe(document.body || document.documentElement, {
+                        childList: true,
+                        subtree: true
+                    });
+                }
             } catch (e) {
                 console.warn('Error loading dynamic logo', e);
             }
