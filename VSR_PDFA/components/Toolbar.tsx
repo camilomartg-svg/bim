@@ -55,7 +55,7 @@ const Toolbar: React.FC<ToolbarProps> = ({
           <a href="../home.html" title="Volver al Home" className="flex items-center">
             <img 
               id="logo-img"
-              src={theme === 'dark' ? 'https://i.postimg.cc/3xdLSg9g/nora_cde2_(1).png' : 'https://i.postimg.cc/tR3YSryT/LOGO-NORA-NEGRO.png'} 
+              src={theme === 'dark' ? 'https://i.postimg.cc/FFfBKzb8/LOGO-TEXTO-NORA-BLANCO.png' : 'https://i.postimg.cc/L4r0gSvV/LOGO-TEXTO-NORA-NEGRO.png'} 
               alt="nora CDE" 
               className="h-6 select-none"
               draggable={false}

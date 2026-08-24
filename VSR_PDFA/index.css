@@ -71,6 +71,23 @@
   background-color: var(--bg-darker) !important;
 }
 
+/* Resizer matching VSR_IFCA */
+.resizer {
+  position: absolute;
+  right: 0;
+  top: 0;
+  width: 5px;
+  height: 100%;
+  cursor: ew-resize;
+  background: transparent;
+  z-index: 50;
+  transition: background-color 0.2s;
+}
+
+.resizer:hover, .resizer.resizing {
+  background-color: var(--primary-color) !important;
+}
+
 /* Unified Toolbar Button styles matching VSR_IFCA */
 .toolbar-btn {
   display: inline-flex;

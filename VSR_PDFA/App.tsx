@@ -139,6 +139,55 @@ const App: React.FC = () => {
   const [isLoadingDrawing, setIsLoadingDrawing] = useState(false);
   const [expandedFolders, setExpandedFolders] = useState<Record<string, boolean>>({});
   const [showSidebar, setShowSidebar] = useState(true);
+  
+  const [sidebarWidth, setSidebarWidth] = useState(() => {
+    const saved = localStorage.getItem('vsr_pdfa_sidebar_width');
+    return saved ? parseInt(saved, 10) : 256;
+  });
+  const [isResizing, setIsResizing] = useState(false);
+
+  const startResizing = useCallback((mouseDownEvent: React.MouseEvent) => {
+    mouseDownEvent.preventDefault();
+    setIsResizing(true);
+  }, []);
+
+  const stopResizing = useCallback(() => {
+    setIsResizing(false);
+  }, []);
+
+  const resize = useCallback((mouseMoveEvent: MouseEvent) => {
+    if (isResizing) {
+      const newWidth = mouseMoveEvent.clientX;
+      if (newWidth >= 180 && newWidth <= 500) {
+        setSidebarWidth(newWidth);
+        localStorage.setItem('vsr_pdfa_sidebar_width', String(newWidth));
+      }
+    }
+  }, [isResizing]);
+
+  useEffect(() => {
+    if (isResizing) {
+      window.addEventListener('mousemove', resize);
+      window.addEventListener('mouseup', stopResizing);
+    } else {
+      window.removeEventListener('mousemove', resize);
+      window.removeEventListener('mouseup', stopResizing);
+    }
+    return () => {
+      window.removeEventListener('mousemove', resize);
+      window.removeEventListener('mouseup', stopResizing);
+    };
+  }, [isResizing, resize, stopResizing]);
+
+  useEffect(() => {
+    if (theme === 'dark') {
+      document.documentElement.classList.add('dark');
+      document.documentElement.classList.remove('light');
+    } else {
+      document.documentElement.classList.add('light');
+      document.documentElement.classList.remove('dark');
+    }
+  }, [theme]);
 
   const handleFileSelect = (selectedFile: File) => {
     setFile(selectedFile);
@@ -420,9 +469,12 @@ const App: React.FC = () => {
           </div>
         )}
 
-        <main className="flex-1 relative overflow-hidden flex">
+        <main className={`flex-1 relative overflow-hidden flex ${isResizing ? 'cursor-col-resize select-none' : ''}`}>
           {showSidebar && (
-          <aside className="w-64 sidebar-panel border-r border-[var(--border-color)] flex-shrink-0 flex flex-col pb-16 transition-colors duration-200">
+          <aside 
+            style={{ width: `${sidebarWidth}px` }}
+            className="sidebar-panel border-r border-[var(--border-color)] flex-shrink-0 flex flex-col pb-16 transition-colors duration-200 relative"
+          >
             <div className="px-4 py-3 border-b border-[var(--border-color)]">
               <h2 className="text-[11px] font-black tracking-[0.18em] uppercase text-[var(--text-black)]">
                 Planos BIM
@@ -483,6 +535,12 @@ const App: React.FC = () => {
                 </div>
               ))}
             </div>
+            
+            {/* Drag Handle for Resizing */}
+            <div
+              onMouseDown={startResizing}
+              className={`resizer ${isResizing ? 'resizing' : ''}`}
+            />
           </aside>
           )}
 
