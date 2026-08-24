@@ -57,7 +57,7 @@ const Toolbar: React.FC<ToolbarProps> = ({
               id="logo-img"
               src={theme === 'dark' ? 'https://i.postimg.cc/FFfBKzb8/LOGO-TEXTO-NORA-BLANCO.png' : 'https://i.postimg.cc/L4r0gSvV/LOGO-TEXTO-NORA-NEGRO.png'} 
               alt="nora CDE" 
-              className="h-6 select-none"
+              className="logo-img select-none h-[65px] max-md:h-[32px]"
               draggable={false}
             />
           </a>
