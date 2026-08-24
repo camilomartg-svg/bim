@@ -447,7 +447,7 @@
         })();
     </script>
 
-    <!-- VIEWER LOGO INJECT START -->
+        <!-- VIEWER LOGO INJECT START -->
     <script>
         (async function() {
             try {
@@ -457,11 +457,39 @@
                 const metaVersion = document.querySelector('meta[name="x-app-version"]');
                 const currentVersion = metaVersion?.getAttribute('content') || Date.now().toString();
                 
+                const params = new URLSearchParams(window.location.search);
+                const projectSlug = params.get('project');
+                let companyId = params.get('empresa');
+                if (!companyId) {
+                    try {
+                        const currentUser = JSON.parse(sessionStorage.getItem('userAccount') || localStorage.getItem('userAccount') || 'null');
+                        companyId = currentUser?.adminEmpresaId || sessionStorage.getItem('empresa') || '';
+                    } catch (e) {}
+                }
+
                 let config = null;
-                try {
-                    const response = await fetch(`../portal-config.json?v=${encodeURIComponent(currentVersion)}`, { cache: 'no-store' });
-                    if (response.ok) config = await response.json();
-                } catch (e) {}
+                if (companyId) {
+                    try {
+                        const empRes = await fetch(`../empresas.json?t=${Date.now()}`);
+                        if (empRes.ok) {
+                            const empresas = await empRes.json();
+                            const currentCompany = empresas.find(e => e.id === companyId);
+                            if (currentCompany && currentCompany.configUrl) {
+                                const response = await fetch(`../${currentCompany.configUrl}?v=${encodeURIComponent(currentVersion)}`, { cache: 'no-store' });
+                                if (response.ok) config = await response.json();
+                            }
+                        }
+                    } catch (e) {
+                        console.warn('Error loading empresas.json or company config in logo script', e);
+                    }
+                }
+
+                if (!config) {
+                    try {
+                        const response = await fetch(`../portal-config.json?v=${encodeURIComponent(currentVersion)}`, { cache: 'no-store' });
+                        if (response.ok) config = await response.json();
+                    } catch (e) {}
+                }
 
                 if (!config) {
                     const draft = localStorage.getItem('portal:pba-config-draft:v2');
@@ -469,20 +497,20 @@
                 }
 
                 if (!config) return;
-
-                const params = new URLSearchParams(window.location.search);
-                const projectSlug = params.get('project');
                 
-                // Fallback a los logos del portal (estrictamente los de Nora para el visor)
-                let lightLogo = 'https://i.postimg.cc/L4r0gSvV/LOGO-TEXTO-NORA-NEGRO.png';
-                let darkLogo = 'https://i.postimg.cc/FFfBKzb8/LOGO-TEXTO-NORA-BLANCO.png';
+                // Fallback a los logos del portal
+                let lightLogo = config.portal?.logoLight || 'https://i.postimg.cc/L4r0gSvV/LOGO-TEXTO-NORA-NEGRO.png';
+                let darkLogo = config.portal?.logoDark || 'https://i.postimg.cc/FFfBKzb8/LOGO-TEXTO-NORA-BLANCO.png';
                 
                 if (projectSlug && config.projects) {
                     const proj = config.projects.find(p => p.slug === projectSlug);
                     if (proj && proj.landing) {
-                        // Priorizar viewerLogo (el nuevo campo), sino mantener los fijos de Nora
+                        // Priorizar viewerLogo (el nuevo campo), sino usar portalLogo
                         if (proj.landing.viewerLogoLight) lightLogo = proj.landing.viewerLogoLight;
+                        else if (proj.landing.portalLogoLight) lightLogo = proj.landing.portalLogoLight;
+                        
                         if (proj.landing.viewerLogoDark) darkLogo = proj.landing.viewerLogoDark;
+                        else if (proj.landing.portalLogoDark) darkLogo = proj.landing.portalLogoDark;
                     }
                 }
                 

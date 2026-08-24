@@ -23,8 +23,8 @@
         "logoUrl": "https://i.postimg.cc/J4Fy2Qsx/LOGO-(1).jpg",
         "portalLogoLight": "https://i.postimg.cc/tR3YSryT/LOGO-NORA-NEGRO.png",
         "portalLogoDark": "https://i.postimg.cc/SQ6JTZqj/LOGO-NORA-BLANCO.png",
-        "viewerLogoLight": "https://i.postimg.cc/L4r0gSvV/LOGO-TEXTO-NORA-NEGRO.png",
-        "viewerLogoDark": "https://i.postimg.cc/FFfBKzb8/LOGO-TEXTO-NORA-BLANCO.png"
+        "viewerLogoLight": "https://i.postimg.cc/tR3YSryT/LOGO-NORA-NEGRO.png",
+        "viewerLogoDark": "https://i.postimg.cc/SQ6JTZqj/LOGO-NORA-BLANCO.png"
       },
       "modules": {
         "ifc": "VSR_IFCA/",
