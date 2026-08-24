@@ -103,7 +103,18 @@ document.addEventListener('DOMContentLoaded', async () => {
     volumenProyectos: document.getElementById('emp-volumenProyectos'),
     // Legal
     terminosAceptados: document.getElementById('emp-terminosAceptados'),
-    tratamientoDatos: document.getElementById('emp-tratamientoDatos')
+    tratamientoDatos: document.getElementById('emp-tratamientoDatos'),
+    // Portal Generalidades
+    portalName: document.getElementById('portal-name'),
+    portalShortName: document.getElementById('portal-short-name'),
+    portalLogoLight: document.getElementById('portal-logo-light'),
+    portalLogoDark: document.getElementById('portal-logo-dark'),
+    portalLogoFooterLight: document.getElementById('portal-logo-footer-light'),
+    portalLogoFooterDark: document.getElementById('portal-logo-footer-dark'),
+    portalLogoFooterSecondaryLight: document.getElementById('portal-logo-footer-secondary-light'),
+    portalLogoFooterSecondaryDark: document.getElementById('portal-logo-footer-secondary-dark'),
+    portalFooterText: document.getElementById('portal-footer-text'),
+    portalHeroImages: document.getElementById('portal-hero-images')
   };
 
   function showBanner(msg, type = 'info') {
@@ -449,6 +460,19 @@ document.addEventListener('DOMContentLoaded', async () => {
     // Legal
     el.terminosAceptados.checked = emp.terminosAceptados || false;
     el.tratamientoDatos.checked = emp.tratamientoDatos || false;
+
+    // Portal Generalidades (from company config)
+    const portalData = companyConfigs[emp.id]?.portal || {};
+    if (el.portalName) el.portalName.value = portalData.name || '';
+    if (el.portalShortName) el.portalShortName.value = portalData.shortName || '';
+    if (el.portalLogoLight) el.portalLogoLight.value = portalData.logoLight || '';
+    if (el.portalLogoDark) el.portalLogoDark.value = portalData.logoDark || '';
+    if (el.portalLogoFooterLight) el.portalLogoFooterLight.value = portalData.footerLogoLight || '';
+    if (el.portalLogoFooterDark) el.portalLogoFooterDark.value = portalData.footerLogoDark || '';
+    if (el.portalLogoFooterSecondaryLight) el.portalLogoFooterSecondaryLight.value = portalData.footerLogoSecondaryLight || '';
+    if (el.portalLogoFooterSecondaryDark) el.portalLogoFooterSecondaryDark.value = portalData.footerLogoSecondaryDark || '';
+    if (el.portalFooterText) el.portalFooterText.value = portalData.footerText || '';
+    if (el.portalHeroImages) el.portalHeroImages.value = (portalData.heroImages || []).join('\n');
 
     renderUsers();
     renderProjects();
@@ -1131,6 +1155,7 @@ let contentBase = '';
   <div class="mt-4 grid gap-4 md:grid-cols-2">
     <label class="block"><span class="mb-2 block text-sm font-semibold text-slate-700">Slug (Solo lectura)</span><input class="w-full text-xs rounded-xl border-slate-200 bg-slate-100" type="text" value="${p.slug || ''}" readonly disabled /></label>
     <label class="block"><span class="mb-2 block text-sm font-semibold text-slate-700">Home personalizado</span><input class="w-full text-xs rounded-xl border-slate-200" type="text" placeholder="Vacío = usar landing automática" value="${p.homeUrl || ''}" onchange="updateProject('${p.slug}', 'homeUrl', this.value)" /></label>
+    <label class="inline-flex items-center gap-2 rounded-xl border border-slate-200 px-4 py-3 text-sm font-semibold text-slate-700"><input class="rounded border-slate-300" type="checkbox" ${p.landing?.enabled !== false ? 'checked' : ''} onchange="updateProjectDeep('${p.slug}', 'landing', 'enabled', this.checked)" />Usar landing tipo Green I</label>
   </div>
 </section>
 
@@ -1154,14 +1179,14 @@ let contentBase = '';
             <section>
               <h3 class="text-sm font-bold uppercase tracking-[0.2em] text-slate-500">Mapa y ciudad</h3>
               <div class="mt-4 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-                <label class="block"><span class="mb-2 block text-sm font-semibold text-slate-700">Eyebrow mapa</span><input class="w-full text-xs rounded-xl border-slate-200" type="text" value="${p.landing?.map?.eyebrow || ''}" onchange="updateProjectDeepMap('${p.slug}', 'eyebrow', this.value)" /></label>
-                <label class="block"><span class="mb-2 block text-sm font-semibold text-slate-700">Nombre ciudad visible</span><input class="w-full text-xs rounded-xl border-slate-200" type="text" value="${p.landing?.map?.cityLabel || ''}" onchange="updateProjectDeepMap('${p.slug}', 'cityLabel', this.value)" /></label>
+                <label class="block"><span class="mb-2 block text-sm font-semibold text-slate-700">Eyebrow mapa</span><input class="w-full text-xs rounded-xl border-slate-200" type="text" value="${p.landing?.mapEyebrow || ''}" onchange="updateProjectDeep('${p.slug}', 'landing', 'mapEyebrow', this.value)" /></label>
+                <label class="block"><span class="mb-2 block text-sm font-semibold text-slate-700">Nombre ciudad visible</span><input class="w-full text-xs rounded-xl border-slate-200" type="text" value="${p.landing?.cityLabel || ''}" onchange="updateProjectDeep('${p.slug}', 'landing', 'cityLabel', this.value)" /></label>
                 <label class="block"><span class="mb-2 block text-sm font-semibold text-slate-700">Zoom del mapa</span><input class="w-full text-xs rounded-xl border-slate-200" type="number" step="1" value="${p.landing?.map?.zoom || 15}" onchange="updateProjectDeepMap('${p.slug}', 'zoom', parseFloat(this.value))" /></label>
                 <label class="block"><span class="mb-2 block text-sm font-semibold text-slate-700">Latitud</span><input class="w-full text-xs rounded-xl border-slate-200" type="number" step="any" value="${p.landing?.map?.lat || 4.60971}" onchange="updateProjectDeepMap('${p.slug}', 'lat', parseFloat(this.value))" /></label>
                 <label class="block"><span class="mb-2 block text-sm font-semibold text-slate-700">Longitud</span><input class="w-full text-xs rounded-xl border-slate-200" type="number" step="any" value="${p.landing?.map?.lng || -74.08175}" onchange="updateProjectDeepMap('${p.slug}', 'lng', parseFloat(this.value))" /></label>
                 <div class="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">Actualiza las coordenadas para ajustar la visualización del mapa en la landing.</div>
-                <label class="block md:col-span-2 xl:col-span-3"><span class="mb-2 block text-sm font-semibold text-slate-700">Descripción de ciudad</span><textarea class="w-full text-xs rounded-2xl border-slate-200" rows="3" onchange="updateProjectDeepMap('${p.slug}', 'description', this.value)">${p.landing?.map?.description || ''}</textarea></label>
-                <label class="block md:col-span-2 xl:col-span-3"><span class="mb-2 block text-sm font-semibold text-slate-700">Dirección</span><input class="w-full text-xs rounded-xl border-slate-200" type="text" value="${p.landing?.map?.address || ''}" onchange="updateProjectDeepMap('${p.slug}', 'address', this.value)" /></label>
+                <label class="block md:col-span-2 xl:col-span-3"><span class="mb-2 block text-sm font-semibold text-slate-700">Descripción de ciudad</span><textarea class="w-full text-xs rounded-2xl border-slate-200" rows="3" onchange="updateProjectDeep('${p.slug}', 'landing', 'mapDescription', this.value)">${p.landing?.mapDescription || ''}</textarea></label>
+                <label class="block md:col-span-2 xl:col-span-3"><span class="mb-2 block text-sm font-semibold text-slate-700">Dirección</span><input class="w-full text-xs rounded-xl border-slate-200" type="text" value="${p.landing?.address || ''}" onchange="updateProjectDeep('${p.slug}', 'landing', 'address', this.value)" /></label>
               </div>
             </section>
 
@@ -1587,12 +1612,38 @@ let contentBase = '';
   });
 
   // Auto-save to memory on input
+  const portalFieldMap = {
+    portalName: 'name',
+    portalShortName: 'shortName',
+    portalLogoLight: 'logoLight',
+    portalLogoDark: 'logoDark',
+    portalLogoFooterLight: 'footerLogoLight',
+    portalLogoFooterDark: 'footerLogoDark',
+    portalLogoFooterSecondaryLight: 'footerLogoSecondaryLight',
+    portalLogoFooterSecondaryDark: 'footerLogoSecondaryDark',
+    portalFooterText: 'footerText',
+    portalHeroImages: 'heroImages'
+  };
+
   Object.keys(el).forEach(key => {
     el[key].addEventListener('input', () => {
       if (key === 'superAdmins') return;
       if (selectedIndex === -1) return;
       const emp = empresas[selectedIndex];
       
+      // Route portal fields to companyConfigs[empId].portal
+      if (portalFieldMap[key]) {
+        const config = companyConfigs[emp.id];
+        if (!config) return;
+        if (!config.portal) config.portal = {};
+        if (key === 'portalHeroImages') {
+          config.portal.heroImages = el[key].value.split('\n').map(s => s.trim()).filter(Boolean);
+        } else {
+          config.portal[portalFieldMap[key]] = el[key].value;
+        }
+        return;
+      }
+
       if (el[key].type === 'checkbox') {
         emp[key] = el[key].checked;
       } else {
