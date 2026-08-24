@@ -2356,10 +2356,17 @@ const parseNumGlobal = (value: unknown): number => {
 };
 
 // Global cache populated by classifyModel — lets extractAllElementsGlobal read integrated
-// values (level, material, name, classification, volumes) without relying on external JSON.
+// values (level, material, name, classification, volumes, detail, category) without relying on external JSON.
 const modelElementData = new Map<string, Map<number, {
-    level: string; material: string; name: string; classification: string;
-    volume: number; area: number; length: number;
+    level: string;
+    material: string;
+    name: string;
+    classification: string;
+    volume: number;
+    area: number;
+    length: number;
+    detail: string;
+    category: string;
 }>>();
 
 function extractAllElementsGlobal() {
@@ -2380,7 +2387,7 @@ function extractAllElementsGlobal() {
             const cached = idsFromCache?.get(expressID);
 
             let level: string, material: string, name: string, classification: string;
-            let volume: number, area: number, length: number;
+            let volume: number, area: number, length: number, detail: string, category: string;
 
             if (cached) {
                 level = cached.level;
@@ -2390,17 +2397,20 @@ function extractAllElementsGlobal() {
                 volume = cached.volume;
                 area = cached.area;
                 length = cached.length;
+                detail = cached.detail;
+                category = cached.category;
             } else if (modelAny.properties) {
                 const attrs = modelAny.properties[String(expressID)];
                 if (!attrs || typeof attrs !== 'object') continue;
-                const category = getValGlobal(attrs, 'type', 'ifcType', 'Category', 'ObjectType', 'CLASIFICACIóN', 'Clasificación', 'CLASIFICACION', 'clasificacion', 'CATEGORÍA', 'CATEGORIA', 'Categoría', 'categoria', 'TIPO', 'Tipo', 'tipo', 'DETALLE', 'Detalle', 'detalle') || 'Elemento';
+                category = getValGlobal(attrs, 'type', 'ifcType', 'Category', 'ObjectType', 'CLASIFICACIóN', 'Clasificación', 'CLASIFICACION', 'clasificacion', 'CATEGORÍA', 'CATEGORIA', 'Categoría', 'categoria', 'TIPO', 'Tipo', 'tipo', 'DETALLE', 'Detalle', 'detalle') || 'Elemento';
                 name = getValGlobal(attrs, 'NOMBRE INTEGRADO', 'Nombre Integrado', 'nombre integrado', 'Name', 'name') || `${category} - ${expressID}`;
                 classification = getValGlobal(attrs, 'CLASIFICACIóN', 'Clasificación', 'CLASIFICACION', 'clasificacion') || 'SIN CLASIFICAR';
                 level = getValGlobal(attrs, 'NIVEL INTEGRADO', 'Nivel Integrado', 'nivel integrado', 'Nivel', 'nivel') || 'SIN NIVEL';
                 material = getValGlobal(attrs, 'MATERIAL INTEGRADO', 'Material Integrado', 'material integrado') || 'SIN MATERIAL';
                 volume = parseNumGlobal(getValGlobal(attrs, 'VOLUMEN INTEGRADO', 'Volumen', 'Volume', 'Volume integrado', 'Volumen integrado'));
                 area = parseNumGlobal(getValGlobal(attrs, 'ÁREA INTEGRADO', 'Area', 'Area integrado', 'Área', 'Área integrado', 'AREA INTEGRADO'));
-                length = parseNumGlobal(getValGlobal(attrs, 'LONGITUD INTEGRADO', 'Longitud', 'Length', 'Longitud integrado', 'Longitud integrado'));
+                length = parseNumGlobal(getValGlobal(attrs, 'LONGITUD INTEGRADO', 'Longitud', 'Length', 'Longitud integrado', 'Longitud integrado', 'LONGITUD', 'longitud'));
+                detail = getValGlobal(attrs, 'DETALLE', 'Detalle', 'detalle') || '-';
             } else {
                 continue;
             }
@@ -2416,10 +2426,11 @@ function extractAllElementsGlobal() {
                 expressID,
                 id: String(expressID),
                 name,
-                category: classification,
+                category,
                 classification,
                 level,
                 material,
+                detail,
                 volume,
                 area,
                 length,
@@ -5179,60 +5190,7 @@ function initQuantitiesPanel() {
 
     // Extract elements from model
     function extractAllElements() {
-        const allElements: any[] = [];
-        for (const [modelUUID, model] of loadedModels.entries()) {
-            const modelAny = model as any;
-            if (!modelAny.properties) continue;
-
-            for (const idStr of Object.keys(modelAny.properties)) {
-                const expressID = parseInt(idStr, 10);
-                if (isNaN(expressID)) continue;
-
-                const attrs = modelAny.properties[idStr];
-                if (!attrs || typeof attrs !== 'object') continue;
-
-                const category = getVal(attrs, 'type', 'ifcType', 'Category', 'ObjectType', 'CLASIFICACIÓN', 'Clasificación', 'CLASIFICACION', 'clasificacion', 'CATEGORÍA', 'CATEGORIA', 'Categoría', 'categoria', 'TIPO', 'Tipo', 'tipo', 'DETALLE', 'Detalle', 'detalle') || 'Elemento';
-                const name = getVal(attrs, 'NOMBRE INTEGRADO', 'Nombre Integrado', 'nombre integrado', 'Name', 'name') || `${category} - ${expressID}`;
-                const classification = getVal(attrs, 'CLASIFICACIÓN', 'Clasificación', 'CLASIFICACION', 'clasificacion') || 'SIN CLASIFICAR';
-                const level = getVal(attrs, 'NIVEL INTEGRADO', 'Nivel Integrado', 'nivel integrado', 'Nivel', 'nivel') || 'SIN NIVEL';
-                const material = getVal(attrs, 'MATERIAL INTEGRADO', 'Material Integrado', 'material integrado') || 'SIN MATERIAL';
-
-                const volume = parseNum(getVal(attrs, 'VOLUMEN INTEGRADO', 'Volumen', 'Volume', 'Volume integrado', 'Volumen integrado'));
-                const area = parseNum(getVal(attrs, 'ÁREA INTEGRADO', 'Area', 'Area integrado', 'Área', 'Área integrado', 'AREA INTEGRADO'));
-                const length = parseNum(getVal(attrs, 'LONGITUD INTEGRADO', 'Longitud', 'Length', 'Longitud integrado', 'Longitud integrado'));
-                const diameter = getVal(attrs, 'Tamaño', 'TAMAÑO', 'TAMANO', 'Diametro', 'diametro', 'Tamao') || '';
-
-                const searchStr = [
-                    category,
-                    name,
-                    classification,
-                    level,
-                    material,
-                    diameter
-                ].join(' ').toLowerCase();
-
-                const isUnion = searchStr.includes('fitting') || searchStr.includes('conduitfitting') || searchStr.includes('cablecarrierfitting') || searchStr.includes('union') || searchStr.includes('codo') || searchStr.includes('tee') || searchStr.includes('reducc') || searchStr.includes('caja') || searchStr.includes('accesorio') || searchStr.includes('adaptador') || searchStr.includes('copla');
-                const isPipe = (searchStr.includes('pipe') || searchStr.includes('conduit') || searchStr.includes('cablecarrier') || searchStr.includes('tuber') || searchStr.includes('tubo') || searchStr.includes('conduit') || searchStr.includes('canalizacion') || searchStr.includes('canalización') || searchStr.includes('coraza') || searchStr.includes('ducto') || searchStr.includes('bandeja')) && !isUnion;
-
-                allElements.push({
-                    modelUUID,
-                    expressID,
-                    id: String(expressID),
-                    name,
-                    category,
-                    classification,
-                    level,
-                    material,
-                    volume,
-                    area,
-                    length,
-                    diameter,
-                    isPipe,
-                    isUnion
-                });
-            }
-        }
-        return allElements;
+        return extractAllElementsGlobal();
     }
 
     // Synchronization logic
@@ -7278,60 +7236,7 @@ function initStatusPanel() {
     }
 
     function extractAllElements() {
-        const allElements: any[] = [];
-        for (const [modelUUID, model] of loadedModels.entries()) {
-            const modelAny = model as any;
-            if (!modelAny.properties) continue;
-            for (const idStr of Object.keys(modelAny.properties)) {
-                const expressID = parseInt(idStr, 10);
-                if (isNaN(expressID)) continue;
-                const attrs = modelAny.properties[idStr];
-                if (!attrs || typeof attrs !== 'object') continue;
-
-                const category = getVal(attrs, 'type', 'ifcType', 'Category', 'ObjectType', 'CLASIFICACIÓN', 'Clasificación', 'CLASIFICACION', 'clasificacion', 'CATEGORÍA', 'CATEGORIA', 'Categoría', 'categoria', 'TIPO', 'Tipo', 'tipo', 'DETALLE', 'Detalle', 'detalle') || 'Elemento';
-                const name = getVal(attrs, 'NOMBRE INTEGRADO', 'Nombre Integrado', 'nombre integrado', 'Name', 'name') || `${category} - ${expressID}`;
-                const classification = getVal(attrs, 'CLASIFICACIÓN', 'Clasificación', 'CLASIFICACION', 'clasificacion') || 'SIN CLASIFICAR';
-                const level = getVal(attrs, 'NIVEL INTEGRADO', 'Nivel Integrado', 'nivel integrado', 'Nivel', 'nivel') || 'SIN NIVEL';
-                const material = getVal(attrs, 'MATERIAL INTEGRADO', 'Material Integrado', 'material integrado') || 'SIN MATERIAL';
-                const detail = getVal(attrs, 'DETALLE', 'Detalle', 'detalle') || '-';
-
-                const volume = parseNum(getVal(attrs, 'VOLUMEN INTEGRADO', 'Volumen', 'Volume', 'Volume integrado', 'Volumen integrado'));
-                const area = parseNum(getVal(attrs, 'ÁREA INTEGRADO', 'Area', 'Area integrado', 'Área', 'Área integrado', 'AREA INTEGRADO'));
-                const length = parseNum(getVal(attrs, 'LONGITUD INTEGRADO', 'Longitud', 'Length', 'Longitud integrado', 'Longitud integrado'));
-                const diameter = getVal(attrs, 'Tamaño', 'TAMAÑO', 'TAMANO', 'Diametro', 'diametro', 'Tamao') || '';
-
-                const searchStr = [
-                    category,
-                    name,
-                    classification,
-                    level,
-                    material,
-                    diameter
-                ].join(' ').toLowerCase();
-
-                const isUnion = searchStr.includes('fitting') || searchStr.includes('conduitfitting') || searchStr.includes('cablecarrierfitting') || searchStr.includes('union') || searchStr.includes('codo') || searchStr.includes('tee') || searchStr.includes('reducc') || searchStr.includes('caja') || searchStr.includes('accesorio') || searchStr.includes('adaptador') || searchStr.includes('copla');
-                const isPipe = (searchStr.includes('pipe') || searchStr.includes('conduit') || searchStr.includes('cablecarrier') || searchStr.includes('tuber') || searchStr.includes('tubo') || searchStr.includes('conduit') || searchStr.includes('canalizacion') || searchStr.includes('canalización') || searchStr.includes('coraza') || searchStr.includes('ducto') || searchStr.includes('bandeja')) && !isUnion;
-
-                allElements.push({
-                    modelUUID,
-                    expressID,
-                    id: String(expressID),
-                    name,
-                    category,
-                    classification,
-                    level,
-                    material,
-                    detail,
-                    volume,
-                    area,
-                    length,
-                    diameter,
-                    isPipe,
-                    isUnion
-                });
-            }
-        }
-        return allElements;
+        return extractAllElementsGlobal();
     }
 
     // Synchronization logic
@@ -8294,6 +8199,11 @@ async function classifyModel(model: any) {
     const integratedNameById = new Map<number, string>();
     const integratedSubById = new Map<number, string>();
     const elementFallbackById = new Map<number, string>();
+    const integratedCategoryById = new Map<number, string>();
+    const integratedDetailById = new Map<number, string>();
+    const integratedVolumeById = new Map<number, number>();
+    const integratedAreaById = new Map<number, number>();
+    const integratedLengthById = new Map<number, number>();
 
     // Helper: unwrap {type, value} objects or return plain string
     const getVal = (obj: any, ...keys: string[]): string | null => {
@@ -8363,6 +8273,21 @@ async function classifyModel(model: any) {
             'SUBPROYECTOS INTEGRADO', 'Subproyectos Integrado', 'subproyectos integrado',
             'SUBPROYECTO INTEGRADO', 'Workset1', 'Workset');
         if (sub) integratedSubById.set(expressID, sub);
+
+        const category = getVal(attrs, 'type', 'ifcType', 'Category', 'ObjectType', 'CLASIFICACIÓN', 'Clasificación', 'CLASIFICACION', 'clasificacion', 'CATEGORÍA', 'CATEGORIA', 'Categoría', 'categoria', 'TIPO', 'Tipo', 'tipo', 'DETALLE', 'Detalle', 'detalle');
+        if (category) integratedCategoryById.set(expressID, category);
+
+        const detail = getVal(attrs, 'DETALLE', 'Detalle', 'detalle');
+        if (detail) integratedDetailById.set(expressID, detail);
+
+        const volume = getVal(attrs, 'VOLUMEN INTEGRADO', 'Volumen', 'Volume', 'Volume integrado', 'Volumen integrado');
+        if (volume) integratedVolumeById.set(expressID, parseNumGlobal(volume));
+
+        const area = getVal(attrs, 'ÁREA INTEGRADO', 'Area', 'Area integrado', 'Área', 'Área integrado', 'AREA INTEGRADO');
+        if (area) integratedAreaById.set(expressID, parseNumGlobal(area));
+
+        const length = getVal(attrs, 'LONGITUD INTEGRADO', 'Longitud', 'Length', 'Longitud integrado', 'Longitud integrado', 'LONGITUD', 'longitud');
+        if (length) integratedLengthById.set(expressID, parseNumGlobal(length));
 
         if (!clasif) {
             const name = getVal(attrs, 'Name', 'name', 'ObjectType', 'objectType');
@@ -8453,20 +8378,23 @@ async function classifyModel(model: any) {
     );
 
     // --- Populate modelElementData global cache so extractAllElementsGlobal can use it ---
-    const modelCache = new Map<number, { level: string; material: string; name: string; classification: string; volume: number; area: number; length: number; }>();
+    const modelCache = new Map<number, { level: string; material: string; name: string; classification: string; volume: number; area: number; length: number; detail: string; category: string; }>();
 
     for (const id of allIds) {
         const lvl = integratedLevelById.get(id);
         const mat = integratedMaterialById.get(id);
         const nm = integratedNameById.get(id);
         const cls = integratedClassById.get(id) ?? elementFallbackById.get(id);
-        // For numeric quantities, try to find them in properties JSON if available
+        const cat = integratedCategoryById.get(id) ?? cls;
+        const det = integratedDetailById.get(id);
+        
+        // Try fallback to model.properties if available
         const propEntry = model.properties ? model.properties[String(id)] : null;
-        const vol = propEntry ? parseNumGlobal(getValGlobal(propEntry, 'VOLUMEN INTEGRADO', 'Volumen', 'Volume')) : 0;
-        const ar = propEntry ? parseNumGlobal(getValGlobal(propEntry, 'ÁREA INTEGRADO', 'Area', 'Área', 'AREA INTEGRADO')) : 0;
-        const len = propEntry ? parseNumGlobal(getValGlobal(propEntry, 'LONGITUD INTEGRADO', 'Longitud', 'Length')) : 0;
+        const vol = integratedVolumeById.get(id) ?? (propEntry ? parseNumGlobal(getValGlobal(propEntry, 'VOLUMEN INTEGRADO', 'Volumen', 'Volume')) : 0);
+        const ar = integratedAreaById.get(id) ?? (propEntry ? parseNumGlobal(getValGlobal(propEntry, 'ÁREA INTEGRADO', 'Area', 'Área', 'AREA INTEGRADO')) : 0);
+        const len = integratedLengthById.get(id) ?? (propEntry ? parseNumGlobal(getValGlobal(propEntry, 'LONGITUD INTEGRADO', 'Longitud', 'Length', 'LONGITUD', 'longitud')) : 0);
 
-        // Only add entries that have at least level or material or classification
+        // Only add entries that have at least level or material or classification or name
         if (lvl || mat || nm || cls) {
             modelCache.set(id, {
                 level: lvl ?? 'SIN NIVEL',
@@ -8475,7 +8403,9 @@ async function classifyModel(model: any) {
                 classification: cls ?? 'SIN CLASIFICAR',
                 volume: vol,
                 area: ar,
-                length: len
+                length: len,
+                detail: det ?? '-',
+                category: cat ?? 'Elemento'
             });
         }
     }
