@@ -1377,10 +1377,14 @@ function getDB(): Promise<IDBDatabase> {
 async function saveToIndexedDB(key: string, data: ArrayBuffer) {
     try {
         const db = await getDB();
+        const entry = {
+            data: data,
+            ts: Date.now()
+        };
         return new Promise<void>((resolve, reject) => {
             const tx = db.transaction(STORE_NAME, 'readwrite');
             const store = tx.objectStore(STORE_NAME);
-            const req = store.put(data, key);
+            const req = store.put(entry, key);
             req.onsuccess = () => resolve();
             req.onerror = () => reject(req.error);
         });
@@ -1396,7 +1400,29 @@ async function loadFromIndexedDB(key: string): Promise<ArrayBuffer | undefined> 
             const tx = db.transaction(STORE_NAME, 'readonly');
             const store = tx.objectStore(STORE_NAME);
             const req = store.get(key);
-            req.onsuccess = () => resolve(req.result);
+            req.onsuccess = () => {
+                const res = req.result;
+                if (!res) {
+                    resolve(undefined);
+                } else if (res instanceof ArrayBuffer) {
+                    // Legacy un-timestamped entry
+                    resolve(res);
+                } else if (res && typeof res === 'object' && res.data instanceof ArrayBuffer) {
+                    // New timestamped entry
+                    const isDriveKey = key.startsWith('drive:');
+                    const cacheLimit = 10 * 60 * 1000; // 10 minutes cache
+                    const params = new URLSearchParams(window.location.search);
+                    const forceNoCache = params.get('nocache') === 'true' || params.get('cache') === 'false';
+                    if (isDriveKey && navigator.onLine && (forceNoCache || (Date.now() - (res.ts || 0) > cacheLimit))) {
+                        console.log(`Cache expired or bypassed for key: ${key}`);
+                        resolve(undefined); // Treat as cache miss
+                    } else {
+                        resolve(res.data);
+                    }
+                } else {
+                    resolve(undefined);
+                }
+            };
             req.onerror = () => reject(req.error);
         });
     } catch (e) {
@@ -8331,7 +8357,7 @@ async function classifyModel(model: any) {
     }
 
     // --- STRATEGY 2: model.properties JSON (external .json file loaded from Drive or URL) ---
-    if (gdataHits === 0 && model.properties) {
+    if (model.properties) {
         const jsonKeys = Object.keys(model.properties);
         logToScreen(`[Classify] Fallback JSON: ${jsonKeys.length} entradas...`);
         let jsonHits = 0;

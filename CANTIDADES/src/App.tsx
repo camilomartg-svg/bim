@@ -1288,7 +1288,7 @@ export default function App() {
         throw new Error('No se encontraron modelos nuevos en Drive ni en la copia publicada. Si acabas de cargar archivos, verifica que el Apps Script publicado tenga el cambio `action=list` y que la carpeta use el ID correcto.');
       }
 
-      const previousByName = new Map(availableModelsRef.current.map((item) => [item.name, item]));
+      const previousByName = new Map<string, RemoteModel>(availableModelsRef.current.map((item) => [item.name, item]));
       const selectedNext = selectedRemoteModelName ? nextModels.find((item) => item.name === selectedRemoteModelName) ?? null : null;
       const selectedPrev = selectedRemoteModelName ? previousByName.get(selectedRemoteModelName) ?? null : null;
       const selectedChanged =
@@ -1918,6 +1918,10 @@ export default function App() {
         }
         if (foundName) {
           updatedEl.name = foundName;
+        }
+        const foundCategory = integratedProps["CATEGORÍA"] || integratedProps["CATEGORIA"];
+        if (foundCategory) {
+          updatedEl.category = foundCategory;
         }
 
         return updatedEl;

@@ -252,7 +252,7 @@ export default function BIMViewer({ onModelLoaded, allElements, visibleElements,
           webIfc: {
             COORDINATE_TO_ORIGIN: true,
             USE_FAST_BOOLS: false,
-          },
+          } as any,
         });
         console.log("FragmentsManager inicializado.");
         setIsInitialized(true);
