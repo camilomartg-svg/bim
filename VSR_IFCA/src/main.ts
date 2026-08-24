@@ -6029,28 +6029,27 @@ function initQuantitiesPanel() {
                     <thead>
                         <tr>
                             <th style="width: 110px;">Estado</th>
-                            <th>ID Express</th>
-                            <th>Nombre</th>
                             <th>Clasificación</th>
-                            <th>Nivel</th>
+                            <th>Tipo</th>
+                            <th>Categoría</th>
+                            <th>Elemento</th>
+                            <th>Detalle</th>
                             <th>Material</th>
-                            <th style="text-align: right;">Medición</th>
+                            <th>Ubicación</th>
+                            <th style="text-align: right;">Área (m²)</th>
+                            <th style="text-align: right;">Longitud (m)</th>
+                            <th style="text-align: right;">Volumen (m³)</th>
                         </tr>
                     </thead>
                     <tbody>
             `;
 
             if (shownElements.length === 0) {
-                html += `<tr><td colspan="7" style="text-align: center; color: var(--text-med-gray); padding: 20px; font-style: italic;">No se encontraron elementos.</td></tr>`;
+                html += `<tr><td colspan="11" style="text-align: center; color: var(--text-med-gray); padding: 20px; font-style: italic;">No se encontraron elementos.</td></tr>`;
             } else {
                 shownElements.forEach(el => {
                     const st = elementStatuses[el.id] || 'PENDIENTE';
                     const isSelected = selectedElementIds.includes(el.expressID);
-
-                    let measurement = '-';
-                    if (el.length > 0) measurement = `${el.length.toFixed(2)} m`;
-                    else if (el.area > 0) measurement = `${el.area.toFixed(2)} m²`;
-                    else if (el.volume > 0) measurement = `${el.volume.toFixed(3)} m³`;
 
                     html += `
                         <tr class="status-row-${st.toLowerCase()} ${isSelected ? 'q-table-row-selected' : ''}" data-id="${el.id}" data-model="${el.modelUUID}">
@@ -6063,12 +6062,16 @@ function initQuantitiesPanel() {
                                     <option value="INSTALADO" ${st === 'INSTALADO' ? 'selected' : ''}>Instalado</option>
                                 </select>
                             </td>
-                            <td><strong>${el.expressID}</strong></td>
-                            <td>${el.name}</td>
                             <td>${el.classification}</td>
-                            <td>${el.level}</td>
+                            <td>${el.name}</td>
+                            <td>${el.category}</td>
+                            <td>${el.name}</td>
+                            <td>${el.detail}</td>
                             <td>${el.material}</td>
-                            <td style="text-align: right; font-family: monospace;">${measurement}</td>
+                            <td>${el.level}</td>
+                            <td style="text-align: right; font-family: monospace;">${el.area > 0 ? el.area.toFixed(2) : '-'}</td>
+                            <td style="text-align: right; font-family: monospace;">${el.length > 0 ? el.length.toFixed(2) : '-'}</td>
+                            <td style="text-align: right; font-family: monospace; font-weight: bold;">${el.volume > 0 ? el.volume.toFixed(3) : '-'}</td>
                         </tr>
                     `;
                 });
