@@ -178,36 +178,42 @@ const App: React.FC = () => {
   const [isDarkMode, setIsDarkMode] = useState(true)
 
   // Sidebar Resizing Logic
-  const [sidebarWidth, setSidebarWidth] = useState(300)
-  const isResizing = React.useRef(false)
+  const [sidebarWidth, setSidebarWidth] = useState(() => {
+    const saved = localStorage.getItem('vsr_dwga_sidebar_width');
+    return saved ? parseInt(saved, 10) : 300;
+  });
+  const [isResizing, setIsResizing] = useState(false);
 
-  const startResizing = useCallback(() => {
-    isResizing.current = true
-    document.body.style.cursor = 'col-resize'
-    document.body.style.userSelect = 'none'
-  }, [])
+  const startResizing = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    setIsResizing(true);
+  }, []);
 
   const stopResizing = useCallback(() => {
-    isResizing.current = false
-    document.body.style.cursor = ''
-    document.body.style.userSelect = ''
-  }, [])
+    setIsResizing(false);
+  }, []);
 
   const resize = useCallback((e: MouseEvent) => {
-    if (isResizing.current) {
-      const newWidth = Math.min(Math.max(e.clientX, 300), window.innerWidth - 100)
-      setSidebarWidth(newWidth)
+    if (isResizing) {
+      const newWidth = Math.min(Math.max(e.clientX, 180), 500);
+      setSidebarWidth(newWidth);
+      localStorage.setItem('vsr_dwga_sidebar_width', String(newWidth));
     }
-  }, [])
+  }, [isResizing]);
 
   React.useEffect(() => {
-    window.addEventListener('mousemove', resize)
-    window.addEventListener('mouseup', stopResizing)
-    return () => {
-      window.removeEventListener('mousemove', resize)
-      window.removeEventListener('mouseup', stopResizing)
+    if (isResizing) {
+      window.addEventListener('mousemove', resize);
+      window.addEventListener('mouseup', stopResizing);
+    } else {
+      window.removeEventListener('mousemove', resize);
+      window.removeEventListener('mouseup', stopResizing);
     }
-  }, [resize, stopResizing])
+    return () => {
+      window.removeEventListener('mousemove', resize);
+      window.removeEventListener('mouseup', stopResizing);
+    };
+  }, [isResizing, resize, stopResizing]);
 
   // Sync dark mode with HTML element
   React.useEffect(() => {
@@ -389,16 +395,16 @@ const App: React.FC = () => {
   }, [])
 
   return (
-    <div className={`flex h-screen w-full ${isDarkMode ? 'dark' : ''} bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 overflow-hidden select-none`}>
+    <div className={`flex h-screen w-full ${isDarkMode ? 'dark' : ''} bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 overflow-hidden select-none ${isResizing ? 'cursor-col-resize select-none' : ''}`}>
       {/* Sidebar */}
       <div 
         style={{ width: isSidebarOpen ? sidebarWidth : 0 }}
         className={`bg-white dark:bg-black border-r border-slate-200 dark:border-slate-800 flex flex-col overflow-hidden relative`}
       >
-        {/* Resize Handle */}
-        <div 
-          className="absolute right-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-nora-500 z-50 transition-colors delay-100"
+        {/* Drag Handle for Resizing */}
+        <div
           onMouseDown={startResizing}
+          className={`resizer ${isResizing ? 'resizing' : ''}`}
         />
         <div className="h-12 flex items-center justify-between px-4 border-b border-slate-200 dark:border-slate-800 shrink-0">
           <span className="text-sm font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Galería</span>
@@ -468,15 +474,15 @@ const App: React.FC = () => {
 
         <div className="p-4 border-t border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-black flex justify-center items-center">
           {isDarkMode ? (
-            <img src="https://i.postimg.cc/fJT9Jjyh/LOGO_BIM_BLANCO_ICO.png" alt="BIM" className="h-12 object-contain" />
+            <img src="https://i.postimg.cc/yY0XpLzW/LOGO_BIM_BLANCO_ICO.png" alt="BIM" className="h-12 object-contain" />
           ) : (
-            <img src="https://i.postimg.cc/Whbkh6zc/LOGO_BIM_NEGRO_ICO.png" alt="BIM" className="h-12 object-contain" />
+            <img src="https://i.postimg.cc/jdyQ3Mr2/LOGO_BIM_NEGRO_ICO.png" alt="BIM" className="h-12 object-contain" />
           )}
         </div>
       </div>
 
       <div className="flex-1 flex flex-col min-w-0 h-full relative">
-        <header className="h-12 bg-white dark:bg-black border-b border-slate-200 dark:border-slate-800 px-4 flex items-center justify-between z-30 shadow-sm">
+        <header className="h-[60px] bg-white dark:bg-black border-b border-slate-200 dark:border-slate-800 px-4 flex items-center justify-between z-30 shadow-sm">
           <div className="flex items-center gap-4">
             {!isSidebarOpen && (
               <button 
@@ -496,19 +502,13 @@ const App: React.FC = () => {
                 <i className="fa-solid fa-arrow-left"></i>
               </button>
               <a href="../home.html" title="Volver al Home" className="flex items-center">
-                {isDarkMode ? (
-                  <img 
-                    src="https://i.postimg.cc/tR3YSryT/LOGO-NORA-NEGRO.png" 
-                    alt="nora CDE" 
-                    className="h-7 object-contain"
-                  />
-                ) : (
-                  <img 
-                    src="https://i.postimg.cc/vmKVZndP/nora-urbano2.png" 
-                    alt="nora CDE" 
-                    className="h-7 object-contain"
-                  />
-                )}
+                <img 
+                  id="logo-img"
+                  src={isDarkMode ? 'https://i.postimg.cc/FFfBKzb8/LOGO-TEXTO-NORA-BLANCO.png' : 'https://i.postimg.cc/L4r0gSvV/LOGO-TEXTO-NORA-NEGRO.png'} 
+                  alt="nora CDE" 
+                  className="logo-img select-none h-[65px] max-md:h-[32px]"
+                  draggable={false}
+                />
               </a>
             </div>
             {file && <div className="h-4 w-px bg-slate-300 dark:bg-slate-700 mx-2"></div>}

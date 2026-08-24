@@ -13,3 +13,25 @@
 ::-webkit-scrollbar-thumb:hover { background: #facc15; }
 
 #root { background-color: #020617; min-height: 100vh; }
+
+/* Resizer matching VSR_PDFA/VSR_IFCA design */
+.resizer {
+  position: absolute;
+  right: 0;
+  top: 0;
+  width: 5px;
+  height: 100%;
+  cursor: ew-resize;
+  background: transparent;
+  z-index: 50;
+  transition: background-color 0.2s;
+}
+
+.resizer:hover, .resizer.resizing {
+  background-color: #6b7280 !important; /* nora-500 */
+}
+
+.dark .resizer:hover, .dark .resizer.resizing {
+  background-color: #9ca3af !important; /* nora-400 */
+}
+
