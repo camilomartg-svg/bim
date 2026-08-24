@@ -422,90 +422,63 @@ const App: React.FC = () => {
 
         <main className="flex-1 relative overflow-hidden flex">
           {showSidebar && (
-          <aside className="w-64 sidebar-panel border-r border-[#1E1B22] flex-shrink-0 flex flex-col pb-16">
-            <div className="px-4 py-3 border-b border-[#1E1B22]">
-              <h2
-                className={`text-[11px] font-black tracking-[0.18em] uppercase ${
-                  theme === 'dark' ? 'text-[#C5C0C8]' : 'text-[#605E62]'
-                }`}
-              >
+          <aside className="w-64 sidebar-panel border-r border-[var(--border-color)] flex-shrink-0 flex flex-col pb-16 transition-colors duration-200">
+            <div className="px-4 py-3 border-b border-[var(--border-color)]">
+              <h2 className="text-[11px] font-black tracking-[0.18em] uppercase text-[var(--text-black)]">
                 Planos BIM
               </h2>
-              <p
-                className={`text-[10px] mt-1 ${
-                  theme === 'dark' ? 'text-[#827E84]' : 'text-[#827E84]'
-                }`}
-              >
+              <p className="text-[10px] mt-1 text-[var(--text-med-gray)]">
                 Selecciona un plano de la galería.
               </p>
             </div>
-            <div className="px-4 py-2 border-b border-[#1E1B22] flex items-center gap-2">
+            <div className="px-4 py-2 border-b border-[var(--border-color)] flex items-center gap-2">
               <button 
                 onClick={expandAll} 
-                className={`text-[10px] px-2 py-1 rounded border transition ${
-                  theme === 'dark' 
-                    ? 'bg-[#15121A] hover:bg-[#211C2A] text-[#C5C0C8] border-transparent' 
-                    : 'bg-[#FFFFFF] hover:bg-[#F3F3F3] text-[#605E62] border-[#C5C0C8]'
-                }`}
+                className="text-[10px] px-2 py-1 rounded border border-[var(--border-color)] bg-[var(--bg-white)] text-[var(--text-dark-gray)] hover:bg-[var(--bg-light-gray)] hover:text-[var(--primary-color)] transition"
               >
                 Expandir todo
               </button>
               <button 
                 onClick={collapseAll} 
-                className={`text-[10px] px-2 py-1 rounded border transition ${
-                  theme === 'dark' 
-                    ? 'bg-[#15121A] hover:bg-[#211C2A] text-[#C5C0C8] border-transparent' 
-                    : 'bg-[#FFFFFF] hover:bg-[#F3F3F3] text-[#605E62] border-[#C5C0C8]'
-                }`}
+                className="text-[10px] px-2 py-1 rounded border border-[var(--border-color)] bg-[var(--bg-white)] text-[var(--text-dark-gray)] hover:bg-[var(--bg-light-gray)] hover:text-[var(--primary-color)] transition"
               >
                 Contraer todo
               </button>
             </div>
-            <div className="flex-1 overflow-y-auto py-2 px-2 pb-16 space-y-1">
+            <div className="flex-1 overflow-y-auto py-2 px-2 pb-16 space-y-1 bg-[var(--bg-light-gray)]">
               {groupedDrawings.map(group => (
                 <div key={group.folder} className="mb-2">
-                  <div
-                    className={`px-1 py-1 text-[9px] font-bold uppercase tracking-[0.16em] flex items-center justify-between ${
-                      theme === 'dark' ? 'text-[#827E84]' : 'text-[#605E62]'
-                    }`}
-                  >
+                  <div className="px-1 py-1 text-[9px] font-bold uppercase tracking-[0.16em] flex items-center justify-between text-[var(--text-med-gray)]">
                     <span>{group.folder}</span>
-                      <button 
-                        onClick={() => toggleFolder(group.folder)} 
-                        className={`w-6 h-6 flex items-center justify-center rounded transition ${
-                          theme === 'dark' 
-                            ? 'hover:bg-[#211C2A] text-[#C5C0C8]' 
-                            : 'hover:bg-[#F3F3F3] text-[#605E62]'
-                        }`}
-                      >
+                    <button 
+                      onClick={() => toggleFolder(group.folder)} 
+                      className="w-6 h-6 flex items-center justify-center rounded text-[var(--text-dark-gray)] hover:bg-[var(--bg-light-gray)] hover:text-[var(--primary-color)] transition"
+                    >
                       <i className={`fa-solid ${expandedFolders[group.folder] ? 'fa-chevron-down' : 'fa-chevron-right'} text-xs`}></i>
                     </button>
                   </div>
                   {expandedFolders[group.folder] && (
-                    <>
-                      {group.items.map(drawing => (
-                        <button
-                          key={`${group.folder}-${drawing.filename}`}
-                          onClick={() => handleSelectDrawing(drawing)}
-                          className={`w-full text-left px-3 py-2 rounded-lg text-[11px] font-medium transition border ${
-                            file && file.name.startsWith(drawing.name)
-                              ? (
-                                  theme === 'dark'
-                                    ? 'bg-[#333333]/15 border-[#333333]/40 text-white'
-                                    : 'bg-[#333333]/10 border-[#333333] text-[#000000]'
-                                )
-                              : (
-                                  theme === 'dark'
-                                    ? 'bg-[#15121A] hover:bg-[#211C2A] text-[#C5C0C8] border-transparent'
-                                    : 'bg-[#FFFFFF] hover:bg-[#F3F3F3] text-[#605E62] border-[#E0E0E0]'
-                                )
-                          }`}
-                        >
-                          <span className="block truncate">{drawing.name}</span>
-                          <span className="block text-[9px] text-[#827E84] mt-0.5">{drawing.folder}</span>
-                        </button>
-                      ))}
-                    </>
+                    <div className="space-y-1 pl-1">
+                      {group.items.map(drawing => {
+                        const isActive = file && file.name.startsWith(drawing.name);
+                        return (
+                          <button
+                            key={`${group.folder}-${drawing.filename}`}
+                            onClick={() => handleSelectDrawing(drawing)}
+                            className={`w-full text-left px-3 py-2 rounded-lg text-[11px] font-medium transition border ${
+                              isActive
+                                ? 'bg-[var(--primary-color)] text-[var(--bg-white)] border-[var(--primary-color)] shadow-sm'
+                                : 'bg-[var(--bg-white)] hover:bg-[var(--bg-light-gray)] text-[var(--text-dark-gray)] border-[var(--border-color)]'
+                            }`}
+                          >
+                            <span className="block truncate">{drawing.name}</span>
+                            <span className={`block text-[9px] mt-0.5 ${isActive ? 'text-[var(--bg-white)] opacity-80' : 'text-[var(--text-med-gray)]'}`}>
+                              {drawing.folder}
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </div>
                   )}
                 </div>
               ))}
@@ -513,7 +486,7 @@ const App: React.FC = () => {
           </aside>
           )}
 
-          <div className="flex-1 relative flex flex-col">
+          <div className="flex-1 relative flex flex-col viewer-panel transition-colors duration-200">
             <PdfRenderer 
               file={file} 
               currentPage={currentPage} 

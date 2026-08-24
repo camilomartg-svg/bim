@@ -12,101 +12,103 @@
   }
 }
 
-/* Custom Scrollbar */
-::-webkit-scrollbar { width: 4px; height: 4px; }
-::-webkit-scrollbar-track { background: #000000; }
-::-webkit-scrollbar-thumb { background: #333333; border-radius: 10px; }
-::-webkit-scrollbar-thumb:hover { background: #F28705; }
-
-#root { background-color: #000000; min-height: 100vh; }
-
-.sidebar-panel {
-  background-color: #0D0D0D;
+/* Theme variables mapped to VSR_IFCA colors */
+.theme-light {
+  --primary-color: #000000;
+  --secondary-color: #f4f4f5;
+  --bg-white: #FFFFFF;
+  --bg-light-gray: #f4f4f5;
+  --bg-darker: #ecece8;
+  --text-black: #111827;
+  --text-med-gray: #9ca3af;
+  --text-dark-gray: #4b5563;
+  --border-color: #e5e7eb;
 }
-.theme-light .sidebar-panel {
-  background-color: #FFFFFF;
+
+.theme-dark {
+  --primary-color: #ffffff;
+  --secondary-color: #1b2124;
+  --bg-white: #111517;
+  --bg-light-gray: #1b2124;
+  --bg-darker: #0d1012;
+  --text-black: #ffffff;
+  --text-med-gray: #a4aba7;
+  --text-dark-gray: #e4e8e6;
+  --border-color: #2d3538;
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar { 
+  width: 4px; 
+  height: 4px; 
+}
+::-webkit-scrollbar-track { 
+  background: var(--bg-darker); 
+}
+::-webkit-scrollbar-thumb { 
+  background: var(--text-med-gray); 
+  border-radius: 10px; 
+}
+::-webkit-scrollbar-thumb:hover { 
+  background: var(--primary-color); 
+}
+
+#root { 
+  background-color: var(--bg-white); 
+  min-height: 100vh; 
+  color: var(--text-dark-gray);
+  font-family: 'Inter', sans-serif;
+}
+
+/* Sidebar & Viewer Styles */
+.sidebar-panel {
+  background-color: var(--bg-white) !important;
+  color: var(--text-dark-gray) !important;
+  border-color: var(--border-color) !important;
 }
 
 .viewer-panel {
-  background-color: #000000;
-}
-.theme-light .viewer-panel {
-  background-color: #F5F5F5;
+  background-color: var(--bg-darker) !important;
 }
 
-.theme-light .sidebar-panel,
-.theme-light .viewer-panel {
-  color: #605E62;
+/* Unified Toolbar Button styles matching VSR_IFCA */
+.toolbar-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--text-dark-gray);
+  padding: 8px 10px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 500;
+  transition: all 0.2s ease;
+  user-select: none;
 }
 
-.theme-light .viewer-panel h3,
-.theme-light .viewer-panel p {
-  color: #605E62;
+.toolbar-btn:hover {
+  background-color: var(--bg-light-gray);
+  color: var(--primary-color);
 }
 
-/* nora Palette Overrides (Tailwind class skins) */
-/* Base grays */
-.bg-slate-950 { background-color: #000000 !important; }
-.bg-slate-900 { background-color: #605E62 !important; }
-.bg-slate-800 { background-color: #827E84 !important; }
-.bg-slate-700 { background-color: #A49FA6 !important; }
-.bg-slate-600 { background-color: #C5C0C8 !important; }
-.border-slate-800 { border-color: #827E84 !important; }
-.border-slate-700 { border-color: #A49FA6 !important; }
-.text-slate-100 { color: #FFFFFF !important; }
-.text-slate-300 { color: #C5C0C8 !important; }
-.text-slate-400 { color: #A49FA6 !important; }
-.text-slate-500 { color: #827E84 !important; }
-.text-slate-900 { color: #000000 !important; }
-
-/* Primary accent (nora Orange) */
-.bg-yellow-500,
-.bg-yellow-600,
-.bg-yellow-400,
-.bg-indigo-600,
-.bg-pink-600 { background-color: #333333 !important; }
-.hover\:bg-yellow-400:hover { background-color: #F28705 !important; }
-.hover\:bg-slate-800:hover { background-color: #827E84 !important; }
-.text-yellow-500, .text-indigo-500, .text-pink-500 { color: #333333 !important; }
-.text-indigo-600 { color: #333333 !important; }
-.text-indigo-800 { color: #F28705 !important; }
-.border-yellow-500, .border-indigo-500, .border-pink-500 { border-color: #333333 !important; }
-.shadow-yellow-500\/10 { box-shadow: 0 0 0 0 rgba(255,164,0,0.10) !important; }
-.bg-yellow-500\/10 { background-color: rgba(255,164,0,0.10) !important; }
-.border-yellow-500\/20 { border-color: rgba(255,164,0,0.20) !important; }
-.text-slate-950 { color: #000000 !important; }
-
-/* Panel tints */
-.bg-slate-900\/90 { background-color: rgba(13,13,13,0.90) !important; }
-.bg-slate-950\/80 { background-color: rgba(0,0,0,0.80) !important; }
-
-/* Indigo light variants to primary tint */
-.bg-indigo-50 { background-color: rgba(255,164,0,0.08) !important; }
-.border-indigo-100 { border-color: rgba(255,164,0,0.25) !important; }
-.bg-indigo-700 { background-color: #F28705 !important; }
-.text-indigo-800 { color: #F28705 !important; }
-
-/* Theme-scoped overrides */
-.theme-dark {
-  color: #FFFFFF !important;
-  background-color: #000000 !important;
+.toolbar-btn-active {
+  background-color: var(--primary-color) !important;
+  color: var(--bg-white) !important;
+  border-color: var(--primary-color) !important;
 }
-.theme-dark .bg-slate-950 { background-color: #000000 !important; }
-.theme-dark .bg-slate-900 { background-color: #111111 !important; }
-.theme-dark .bg-slate-800 { background-color: #1A1A1A !important; }
-.theme-dark .bg-slate-700 { background-color: #222222 !important; }
-.theme-dark .text-slate-400 { color: #A49FA6 !important; }
-.theme-dark .border-slate-800 { border-color: #333333 !important; }
-.theme-dark .border-slate-700 { border-color: #2A2A2A !important; }
 
-.theme-light {
-  color: #000000 !important;
-  background-color: #FFFFFF !important;
+.theme-dark .toolbar-btn-active {
+  background-color: var(--bg-light-gray) !important;
+  color: var(--text-black) !important;
+  border: 1px solid var(--text-med-gray) !important;
 }
-.theme-light .bg-slate-950 { background-color: #FFFFFF !important; }
-.theme-light .bg-slate-900 { background-color: #F5F5F5 !important; }
-.theme-light .bg-slate-800 { background-color: #EEEEEE !important; }
-.theme-light .bg-slate-700 { background-color: #E4E4E4 !important; }
-.theme-light .text-slate-400 { color: #605E62 !important; }
-.theme-light .border-slate-800 { border-color: #DDDDDD !important; }
-.theme-light .border-slate-700 { border-color: #D0D0D0 !important; }
+
+/* Layout divider borders matching VSR_IFCA */
+.toolbar-divider {
+  width: 1px;
+  height: 20px;
+  background-color: var(--border-color);
+  margin: 0 8px;
+}
