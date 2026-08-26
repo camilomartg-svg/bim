@@ -259,39 +259,16 @@
                 projects: [
                     { name: 'Green I', homeUrl: '#', enabled: true }
                 ],
-                publicaciones: [
-                    {
-                        id: 'link-publicaciones',
-                        label: 'Publicaciones por proyecto',
-                        href: 'https://norabim.com/Publicaciones.html',
-                        allowedRoles: ['COMBOS Y REFORMAS', 'ACÚSTICA', 'ADMINISTRADOR']
-                    }
-                ],
+                publicaciones: [],
                 solicitudes: [
-                    {
-                        id: 'link-solicitud-cde',
-                        label: 'Solicitud de acceso a CDE',
-                        href: 'https://norabim.com/solicitudes.html',
-                        allowedRoles: ['EDGE', 'COMBOS Y REFORMAS', 'ARQUITECTURA', 'ADMINISTRADOR']
-                    },
                     {
                         id: 'link-admin-usuarios',
                         label: 'Administrar CDE',
                         href: 'super-admin.html',
                         allowedRoles: ['ADMINISTRADOR']
-                    },
-                    {
-                        id: 'link-lista-usuarios',
-                        label: 'Lista Usuarios',
-                        href: 'https://norabim.com/equipo.html',
-                        allowedRoles: ['ADMINISTRADOR']
                     }
                 ],
-                metricas: [
-                    { label: 'Auditorías', href: '#' },
-                    { label: 'Incidencias', href: '#' },
-                    { label: 'Seguimiento de proyectos', href: '#' }
-                ],
+                metricas: [],
                 administracion: [
                     {
                         id: 'link-pba-config',
@@ -538,14 +515,7 @@
                     return item;
                 }).filter(canAccess);
                 
-                if (userRole === 'SUPER_ADMINISTRADOR') {
-                    adminItems.unshift({
-                        id: 'link-super-admin',
-                        label: 'Gestión Global de Empresas',
-                        href: 'super-admin.html',
-                        allowedRoles: ['SUPER_ADMINISTRADOR']
-                    });
-                }
+
                 
                 if (adminColumn) {
                     if (adminItems.length) {

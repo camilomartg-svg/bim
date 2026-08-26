@@ -75,59 +75,9 @@
       }
     }
   ],
-  "publicaciones": [
-    {
-      "id": "link-publicaciones",
-      "label": "Publicaciones por proyecto",
-      "href": "https://norabim.com/Publicaciones.html",
-      "allowedRoles": [
-        "COMBOS Y REFORMAS",
-        "ACÚSTICA",
-        "ADMINISTRADOR"
-      ]
-    }
-  ],
-  "solicitudes": [
-    {
-      "id": "link-solicitud-cde",
-      "label": "Solicitud de acceso a CDE",
-      "href": "https://norabim.com/index.html",
-      "allowedRoles": [
-        "EDGE",
-        "COMBOS Y REFORMAS",
-        "ARQUITECTURA",
-        "ADMINISTRADOR"
-      ]
-    },
-    {
-      "id": "link-lista-usuarios",
-      "label": "Listar Usuarios",
-      "href": "https://norabim.com/equipo.html",
-      "allowedRoles": [
-        "ADMINISTRADOR"
-      ]
-    }
-  ],
-  "metricas": [
-    {
-      "id": "item-1",
-      "label": "Auditorías",
-      "href": "#",
-      "allowedRoles": []
-    },
-    {
-      "id": "item-2",
-      "label": "Incidencias",
-      "href": "#",
-      "allowedRoles": []
-    },
-    {
-      "id": "item-3",
-      "label": "Seguimiento de proyectos",
-      "href": "#",
-      "allowedRoles": []
-    }
-  ],
+  "publicaciones": [],
+  "solicitudes": [],
+  "metricas": [],
   "administracion": [
     {
       "id": "link-pba-config",
