@@ -59,9 +59,7 @@ export const loadSecurityContext = async (projectSlug: string, companyIdParam: s
     loaded: false
   };
 
-  if (!currentUser) return context;
-
-  const companyId = companyIdParam || currentUser.adminEmpresaId || sessionStorage.getItem('empresa') || '';
+  const companyId = companyIdParam || (currentUser ? currentUser.adminEmpresaId : '') || sessionStorage.getItem('empresa') || '';
   let configUrl = '../portal-config.json';
   if (companyId) {
     try {
@@ -118,7 +116,89 @@ export const loadSecurityContext = async (projectSlug: string, companyIdParam: s
   return context;
 };
 
-export const cleanSpecialty = (folder?: string): string => {
+export const cleanSpecialty = (folder?: string, filename?: string): string => {
+  const nameLower = (filename || '').toLowerCase();
+  
+  // Clean folder prefix to avoid matching "estados" as "est" (Estructural)
+  let folderClean = (folder || '').toLowerCase();
+  folderClean = folderClean
+    .replace(/^\.?estados\/?/i, '')
+    .replace(/^\.?versiones\/?/i, '')
+    .trim();
+  
+  const combined = `${folderClean} | ${nameLower}`;
+
+  // 1. Arquitectura
+  if (
+    combined.includes('arquitectura') ||
+    combined.includes('architecture') ||
+    /(?:^|[^a-z])arq(?:[^a-z]|$)/i.test(combined)
+  ) {
+    return 'Arquitectura';
+  }
+
+  // 2. Estructural
+  if (
+    combined.includes('estructural') ||
+    combined.includes('estructura') ||
+    combined.includes('structural') ||
+    combined.includes('structure') ||
+    /(?:^|[^a-z])est(?:[^a-z]|$)/i.test(combined)
+  ) {
+    return 'Estructural';
+  }
+
+  // 3. Eléctrico
+  if (
+    combined.includes('electrico') ||
+    combined.includes('eléctrico') ||
+    combined.includes('electrical') ||
+    /(?:^|[^a-z])elec(?:[^a-z]|$)/i.test(combined)
+  ) {
+    return 'Eléctrico';
+  }
+
+  // 4. Hidrosanitario
+  if (
+    combined.includes('hidrosanitario') ||
+    combined.includes('hidraulico') ||
+    combined.includes('hidráulico') ||
+    combined.includes('plomeria') ||
+    combined.includes('plomería') ||
+    combined.includes('sanitario') ||
+    combined.includes('desagues') ||
+    combined.includes('desagües') ||
+    combined.includes('plumbing') ||
+    combined.includes('sanitary')
+  ) {
+    return 'Hidrosanitario';
+  }
+
+  // 5. Mecánico
+  if (
+    combined.includes('mecanico') ||
+    combined.includes('mecánico') ||
+    combined.includes('hvac') ||
+    combined.includes('mechanical')
+  ) {
+    return 'Mecánico';
+  }
+
+  // 6. Gas
+  if (/(?:^|[^a-z])gas(?:[^a-z]|$)/i.test(combined)) {
+    return 'Gas';
+  }
+
+  // 7. Red Contra Incendio
+  if (
+    combined.includes('incendio') ||
+    combined.includes('extincion') ||
+    combined.includes('extinción') ||
+    combined.includes('fire')
+  ) {
+    return 'Red Contra Incendio';
+  }
+
   if (!folder) return 'General';
   const str = String(folder).replace(/^\.?estados\/?/i, '').replace(/^\.?versiones\/?/i, '').trim();
   if (!str || str.startsWith('.')) return 'General';
@@ -186,7 +266,7 @@ export const getFileDeliveryTeams = (file: any, activeProject: any): string[] =>
     return Array.from(teams);
   }
 
-  const specialty = cleanSpecialty(file.folder).toUpperCase().trim();
+  const specialty = cleanSpecialty(file.folder, file.name || file.filename).toUpperCase().trim();
   if (specialty && specialty !== 'GENERAL') {
     const normalizeName = (str: string) => str.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase().trim();
     const normSpecialty = normalizeName(specialty);
@@ -244,6 +324,10 @@ export const isUserAuthorizedForFile = (
     return true;
   }
   if (!currentUser) {
+    if (action === 'view' && file.status === 'PUBLICADO') {
+      console.log(`[SECURITY] Permitido para invitado: Archivo "${file.name || file.filename}" está PUBLICADO`);
+      return true;
+    }
     console.log('[SECURITY] Denegado: No hay usuario autenticado');
     return false;
   }

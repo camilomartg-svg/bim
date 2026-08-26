@@ -3,7 +3,7 @@ import React, { useState, useCallback, useEffect, useMemo } from 'react';
 import PdfRenderer from './components/PdfRenderer';
 import Toolbar from './components/Toolbar';
 import { Calibration, Tool } from './types';
-import { loadSecurityContext, isUserAuthorizedForFile } from './securityUtils';
+import { loadSecurityContext, isUserAuthorizedForFile, cleanSpecialty } from './securityUtils';
 
 interface DrawingItem {
   name: string;
@@ -328,8 +328,9 @@ const App: React.FC = () => {
   const groupedDrawings = useMemo(() => {
     const groups: Record<string, DrawingItem[]> = {};
     drawings.forEach(d => {
-      if (!groups[d.folder]) groups[d.folder] = [];
-      groups[d.folder].push(d);
+      const specialty = cleanSpecialty(d.folder, d.name || d.filename);
+      if (!groups[specialty]) groups[specialty] = [];
+      groups[specialty].push(d);
     });
     const sortedFolders = Object.keys(groups).sort((a, b) => {
       const na = Number(a);
@@ -348,7 +349,10 @@ const App: React.FC = () => {
   useEffect(() => {
     if (drawings.length && Object.keys(expandedFolders).length === 0) {
       const init: Record<string, boolean> = {};
-      drawings.forEach(d => { init[d.folder] = false; });
+      drawings.forEach(d => {
+        const specialty = cleanSpecialty(d.folder, d.name || d.filename);
+        init[specialty] = false;
+      });
       setExpandedFolders(init);
     }
   }, [drawings, expandedFolders]);
@@ -368,7 +372,8 @@ const App: React.FC = () => {
 
         if (matchingItem) {
           handleSelectDrawing(matchingItem);
-          setExpandedFolders(prev => ({ ...prev, [matchingItem.folder]: true }));
+          const specialty = cleanSpecialty(matchingItem.folder, matchingItem.name || matchingItem.filename);
+          setExpandedFolders(prev => ({ ...prev, [specialty]: true }));
         }
       }
     }
@@ -525,7 +530,7 @@ const App: React.FC = () => {
                           >
                             <span className="block truncate">{drawing.name}</span>
                             <span className={`block text-[9px] mt-0.5 ${isActive ? 'text-[var(--bg-white)] opacity-80' : 'text-[var(--text-med-gray)]'}`}>
-                              {drawing.folder}
+                              {cleanSpecialty(drawing.folder, drawing.name || drawing.filename)}
                             </span>
                           </button>
                         );

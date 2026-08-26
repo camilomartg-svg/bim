@@ -2,7 +2,9 @@
 <html lang="es">
 <head>
     <script>
-        if (!sessionStorage.getItem('userAccount') && !localStorage.getItem('userAccount')) {
+        const params = new URLSearchParams(window.location.search);
+        const hasProject = params.has('project');
+        if (!hasProject && !sessionStorage.getItem('userAccount') && !localStorage.getItem('userAccount')) {
             window.location.replace('https://norabim.com/inse.html');
         }
     </script>
