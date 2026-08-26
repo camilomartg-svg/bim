@@ -1539,7 +1539,7 @@ let contentBase = '';
         subtitle: "Accesos rápidos, seguimiento y contexto del proyecto.",
         actionEyebrow: "Panel",
         actionTitle: "Acciones",
-        actionDescription: "Atajos para publicaciones, solicitudes y equipo.",
+        actionDescription: "Atajos para equipo, incidencias y gestión del proyecto.",
         logoUrl: "https://i.postimg.cc/J4Fy2Qsx/LOGO-(1).jpg",
         portalLogoLight: "https://i.postimg.cc/tR3YSryT/LOGO-NORA-NEGRO.png",
         portalLogoDark: "https://i.postimg.cc/SQ6JTZqj/LOGO-NORA-BLANCO.png",

@@ -335,11 +335,19 @@
             const renderLinkItems = (listEl, items) => {
                 if (!listEl) return;
                 const visibleItems = (Array.isArray(items) ? items : []).filter(canAccess);
-                listEl.innerHTML = visibleItems.length
-                    ? visibleItems
+                if (visibleItems.length > 0) {
+                    listEl.innerHTML = visibleItems
                         .map((item) => `<li id="${escapeHtml(item.id || '')}"><a class="text-base font-light text-[#111] dark:text-white hover:text-gray-400 transition-colors duration-200" href="${escapeHtml(item.href || '#')}">${escapeHtml(item.label || 'Sin nombre')}</a></li>`)
-                        .join('')
-                    : '<li class="text-[10px] font-light text-gray-400">Sin enlaces configurados</li>';
+                        .join('');
+                    if (listEl.parentElement) {
+                        listEl.parentElement.classList.remove('hidden');
+                    }
+                } else {
+                    listEl.innerHTML = '';
+                    if (listEl.parentElement) {
+                        listEl.parentElement.classList.add('hidden');
+                    }
+                }
             };
             const renderProjects = (projects) => {
                 if (!projectsList) return;
