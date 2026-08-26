@@ -36,9 +36,11 @@
     (function () {
       const rawAccount = sessionStorage.getItem('userAccount') || localStorage.getItem('userAccount');
       const userAccount = rawAccount ? JSON.parse(rawAccount) : null;
-      const isAdmin = Boolean(userAccount && (userAccount.role === 'ADMINISTRADOR' || userAccount.role === 'SUPER_ADMINISTRADOR' || userAccount.role === 'ADMINISTRADOR_EMPRESA'));
-      if (!isAdmin) {
-        alert('Acceso denegado. Esta pagina es solo para administradores del CDE.');
+      const userEmail = (userAccount?.username || '').toLowerCase().trim();
+      const superAdminEmails = ['imagina3ddesign@gmail.com', 'mcmartinezg@unal.edu.co'];
+      const isGlobalSuperAdmin = userAccount && (userAccount.role === 'SUPER_ADMINISTRADOR' || superAdminEmails.includes(userEmail));
+      if (!isGlobalSuperAdmin) {
+        alert('Acceso denegado. Esta página es solo para super administradores del CDE.');
         window.location.replace('home.html');
       }
     })();

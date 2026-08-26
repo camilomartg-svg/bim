@@ -5,6 +5,7 @@ const filesToSync = [
   'super-admin.html',
   'super-admin.js',
   'portal-configurator.js',
+  'portal-configurator.html',
   'project-settings.js',
   'project-settings.html',
   'project-landing.html',

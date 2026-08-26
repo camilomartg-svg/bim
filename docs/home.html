@@ -274,7 +274,7 @@
                         id: 'link-pba-config',
                         label: 'Configuración del CDE',
                         href: 'portal-configurator.html',
-                        allowedRoles: ['ADMINISTRADOR']
+                        allowedRoles: ['SUPER_ADMINISTRADOR']
                     }
                 ]
             };
@@ -515,13 +515,20 @@
                 renderLinkItems(solicitudesList, safeConfig.solicitudes);
                 renderLinkItems(metricasList, safeConfig.metricas);
                 
-                const adminItems = (Array.isArray(safeConfig.administracion) ? safeConfig.administracion : []).map(item => {
-                    if (item.label === 'Configuración PBA') item.label = 'Configuración del CDE';
-                    if (item.href.includes('portal-configurator.html') && currentEmpresaId) {
-                        item.href = `${item.href}?empresa=${currentEmpresaId}`;
-                    }
-                    return item;
-                }).filter(canAccess);
+                const adminItems = (Array.isArray(safeConfig.administracion) ? safeConfig.administracion : [])
+                    .filter(item => {
+                        if (item.href.includes('portal-configurator.html')) {
+                            return effectiveRole === 'SUPER_ADMINISTRADOR';
+                        }
+                        return canAccess(item);
+                    })
+                    .map(item => {
+                        if (item.label === 'Configuración PBA') item.label = 'Configuración del CDE';
+                        if (item.href.includes('portal-configurator.html') && currentEmpresaId) {
+                            item.href = `${item.href}?empresa=${currentEmpresaId}`;
+                        }
+                        return item;
+                    });
                 
 
                 

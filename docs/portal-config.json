@@ -28,7 +28,7 @@
       "label": "Configuración PBA",
       "href": "portal-configurator.html",
       "allowedRoles": [
-        "ADMINISTRADOR"
+        "SUPER_ADMINISTRADOR"
       ]
     }
   ],
