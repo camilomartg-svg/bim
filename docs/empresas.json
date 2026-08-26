@@ -65,7 +65,8 @@
         "email": "ianeiara.oficial@gmail.com",
         "role": "MIEMBRO",
         "empresaUsuario": "Mesh Estudio",
-        "cargo": "Director de Obra"
+        "cargo": "",
+        "especialidad": ""
       }
     ],
     "razonSocial": "Mesh Estudio SAS",
