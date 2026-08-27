@@ -1,9 +1,9 @@
 {
-  "id": "./home.html",
-  "name": "Portal BIM nora",
-  "short_name": "Portal BIM",
+  "id": "./inse.html",
+  "name": "nora BIM",
+  "short_name": "nora BIM",
   "description": "Portal para la centralizacion de procesos BIM en nora.",
-  "start_url": "./home.html",
+  "start_url": "./inse.html",
   "scope": "./",
   "display": "standalone",
   "background_color": "#FFFFFF",

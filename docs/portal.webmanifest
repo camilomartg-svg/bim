@@ -1,9 +1,9 @@
 {
-  "id": "./home.html",
-  "name": "Portal BIM nora",
-  "short_name": "Portal BIM",
+  "id": "./inse.html",
+  "name": "nora BIM",
+  "short_name": "nora BIM",
   "description": "Portal para la centralizacion de procesos BIM en nora.",
-  "start_url": "./home.html",
+  "start_url": "./inse.html",
   "scope": "./",
   "display": "standalone",
   "background_color": "#FFFFFF",
@@ -30,11 +30,25 @@
     }
   ],
   "shortcuts": [
-    { "name": "Green I©", "short_name": "Green I©", "url": "Green I©_home.html" },
-    { "name": "Visor IFC", "short_name": "IFC", "url": "VSR_IFCA/" },
-    { "name": "Estado", "short_name": "STATUS", "url": "STATUS/" },
-    { "name": "Cantidades", "short_name": "CANTIDADES", "url": "CANTIDADES/" }
+    {
+      "name": "Green Iï¿½",
+      "short_name": "Green Iï¿½",
+      "url": "Green Iï¿½_home.html"
+    },
+    {
+      "name": "Visor IFC",
+      "short_name": "IFC",
+      "url": "VSR_IFCA/"
+    },
+    {
+      "name": "Estado",
+      "short_name": "STATUS",
+      "url": "STATUS/"
+    },
+    {
+      "name": "Cantidades",
+      "short_name": "CANTIDADES",
+      "url": "CANTIDADES/"
+    }
   ]
 }
-
-

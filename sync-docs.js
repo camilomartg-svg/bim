@@ -10,11 +10,15 @@ const filesToSync = [
   'project-settings.html',
   'project-landing.html',
   'home.html',
+  'inse.html',
   'equipo.js',
   'equipo.html',
   'empresas.html',
   'perfil.html',
-  'upload.html'
+  'upload.html',
+  'manifest.json',
+  'portal.webmanifest',
+  'sw.js'
 ];
 
 filesToSync.forEach(file => {
