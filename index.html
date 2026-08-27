@@ -25,6 +25,7 @@
     </script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet"/>
     <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet" />
+    <link rel="manifest" href="portal.webmanifest"/>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js"></script>
     <style>
         body, html {
@@ -113,6 +114,10 @@
                     <a href="#recursos" class="text-xs font-bold text-gray-900 hover:text-gray-500 uppercase tracking-widest transition">Recursos</a>
                 </div>
                 <div class="flex items-center space-x-6">
+                    <button class="nav-pwa-install-btn hidden text-xs font-bold text-gray-900 hover:text-gray-500 uppercase tracking-widest transition flex items-center gap-1">
+                        <span class="material-symbols-outlined text-[18px]">download</span>
+                        Instalar
+                    </button>
                     <a href="inse.html" class="text-sm font-medium text-gray-900 hover:text-gray-600 transition">Iniciar Sesión</a>
                     <a href="#precios" class="bg-black text-white px-5 py-2.5 rounded-full text-sm font-medium hover:bg-gray-800 transition">Comprar</a>
                 </div>
@@ -505,5 +510,8 @@
             }
         });
     </script>
+
+    <!-- PWA Centralized Registration and Installation script -->
+    <script src="pwa-helper.js"></script>
 </body>
 </html>

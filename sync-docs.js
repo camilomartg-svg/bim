@@ -10,6 +10,7 @@ const filesToSync = [
   'project-settings.html',
   'project-landing.html',
   'home.html',
+  'index.html',
   'inse.html',
   'equipo.js',
   'equipo.html',
@@ -18,7 +19,8 @@ const filesToSync = [
   'upload.html',
   'manifest.json',
   'portal.webmanifest',
-  'sw.js'
+  'sw.js',
+  'pwa-helper.js'
 ];
 
 filesToSync.forEach(file => {
