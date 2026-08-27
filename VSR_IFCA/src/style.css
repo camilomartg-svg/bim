@@ -579,11 +579,12 @@ body {
         display: none !important;
     }
 
-    .projection-toggle-btn span {
+    .projection-toggle-btn span:not(.material-symbols-outlined) {
         display: none;
     }
 
-    .view-dropdown-btn span {
+    .view-dropdown-btn .dropdown-text,
+    .view-dropdown-btn .dropdown-arrow {
         display: none;
     }
 
@@ -599,6 +600,32 @@ body {
 
     .classification-controls {
         flex-wrap: wrap;
+    }
+
+    /* Bottom panels (quantities & status) overrides */
+    .quantities-panel {
+        height: 50vh !important;
+        max-height: 50vh !important;
+    }
+    .quantities-header h3 {
+        display: none !important;
+    }
+    .q-header-totals {
+        display: none !important;
+    }
+    .quantities-actions .action-btn-text {
+        display: none !important;
+    }
+    .resizer-top {
+        display: none !important;
+    }
+    .quantities-header {
+        padding: 6px 10px;
+        gap: 8px;
+    }
+    .q-tab-btn {
+        padding: 6px 8px;
+        font-size: 11px;
     }
 }
 

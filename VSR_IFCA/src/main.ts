@@ -4202,13 +4202,22 @@ viewButtons.forEach(btn => {
 
         // Update Main Button Text to show selected view
         if (viewDropdownBtn) {
-            const icon = btn.querySelector('i')?.cloneNode(true);
-            const text = btn.textContent?.trim();
-            const span = viewDropdownBtn.querySelector('span');
-            if (span && icon && text) {
-                span.innerHTML = '';
-                span.appendChild(icon);
-                span.appendChild(document.createTextNode(' ' + text));
+            const icon = (btn.querySelector('span.material-symbols-outlined') || btn.querySelector('i'))?.cloneNode(true);
+            let text = btn.textContent?.trim() || '';
+            // Remove the icon name from text content if it's a material symbol icon
+            if (btn.querySelector('span.material-symbols-outlined')) {
+                const iconName = btn.querySelector('span.material-symbols-outlined')?.textContent?.trim() || '';
+                if (iconName && text.startsWith(iconName)) {
+                    text = text.substring(iconName.length).trim();
+                }
+            }
+            const iconSpan = viewDropdownBtn.querySelector('span.material-symbols-outlined');
+            const textSpan = viewDropdownBtn.querySelector('.dropdown-text');
+            if (iconSpan && icon) {
+                iconSpan.replaceWith(icon);
+            }
+            if (textSpan && text) {
+                textSpan.textContent = text;
             }
         }
 
