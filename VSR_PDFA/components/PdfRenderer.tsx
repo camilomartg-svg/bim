@@ -124,13 +124,34 @@ const PdfRenderer: React.FC<PdfRendererProps> = ({
       console.error("Error rendering page:", error);
     }
   }, [pdfDoc, scale, rotation]);
-  const touchPinchRef = useRef<{
+  // Keep refs up-to-date for event listeners without causing re-subscriptions
+  const scaleRef = useRef(scale);
+  scaleRef.current = scale;
+
+  const toolRef = useRef(tool);
+  toolRef.current = tool;
+
+  const onZoomRef = useRef(onZoom);
+  onZoomRef.current = onZoom;
+
+  const touchStateRef = useRef<{
+    mode: 'pan' | 'pinch';
+    startX: number;
+    startY: number;
+    startPanX: number;
+    startPanY: number;
     initialDist: number;
     initialScale: number;
     canvasPointX: number;
     canvasPointY: number;
     targetScale: number;
   } | null>(null);
+
+  const isMouseDraggingRef = useRef(false);
+  const mouseStartXRef = useRef(0);
+  const mouseStartYRef = useRef(0);
+  const mouseStartPanXRef = useRef(0);
+  const mouseStartPanYRef = useRef(0);
 
   useEffect(() => {
     if (pdfDoc) renderPage(currentPage);
@@ -148,15 +169,31 @@ const PdfRenderer: React.FC<PdfRendererProps> = ({
     }
   }, [pdfDoc, currentPage]);
 
-  // Hardware-accelerated Multi-touch Pinch-to-Zoom
+  // Native Non-Passive Touch Handler for 1-Finger Pan & 2-Finger Pinch Zoom
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
 
     const handleTouchStart = (e: TouchEvent) => {
-      if (e.touches.length >= 2) {
+      if (!file) return;
+
+      if (e.touches.length === 1) {
+        const touch = e.touches[0];
+        touchStateRef.current = {
+          mode: 'pan',
+          startX: touch.clientX,
+          startY: touch.clientY,
+          startPanX: panXRef.current,
+          startPanY: panYRef.current,
+          initialDist: 0,
+          initialScale: scaleRef.current,
+          canvasPointX: 0,
+          canvasPointY: 0,
+          targetScale: scaleRef.current,
+        };
+      } else if (e.touches.length === 2) {
         e.preventDefault();
-        setIsDragging(false);
+        isMouseDraggingRef.current = false;
 
         const touch1 = e.touches[0];
         const touch2 = e.touches[1];
@@ -165,21 +202,44 @@ const PdfRenderer: React.FC<PdfRendererProps> = ({
         const centerY = (touch1.clientY + touch2.clientY) / 2;
 
         const rect = container.getBoundingClientRect();
-        const canvasPointX = (centerX - rect.left - panXRef.current) / scale;
-        const canvasPointY = (centerY - rect.top - panYRef.current) / scale;
+        const currentScale = scaleRef.current;
+        const canvasPointX = (centerX - rect.left - panXRef.current) / currentScale;
+        const canvasPointY = (centerY - rect.top - panYRef.current) / currentScale;
 
-        touchPinchRef.current = {
+        touchStateRef.current = {
+          mode: 'pinch',
+          startX: centerX,
+          startY: centerY,
+          startPanX: panXRef.current,
+          startPanY: panYRef.current,
           initialDist: dist,
-          initialScale: scale,
+          initialScale: currentScale,
           canvasPointX,
           canvasPointY,
-          targetScale: scale,
+          targetScale: currentScale,
         };
       }
     };
 
     const handleTouchMove = (e: TouchEvent) => {
-      if (e.touches.length >= 2 && touchPinchRef.current) {
+      if (!touchStateRef.current || !canvasContainerRef.current) return;
+
+      if (e.touches.length === 1 && touchStateRef.current.mode === 'pan') {
+        if (toolRef.current === 'hand') {
+          e.preventDefault();
+          const touch = e.touches[0];
+          const dx = touch.clientX - touchStateRef.current.startX;
+          const dy = touch.clientY - touchStateRef.current.startY;
+          const nextX = touchStateRef.current.startPanX + dx;
+          const nextY = touchStateRef.current.startPanY + dy;
+
+          panXRef.current = nextX;
+          panYRef.current = nextY;
+
+          canvasContainerRef.current.style.transformOrigin = '0 0';
+          canvasContainerRef.current.style.transform = `translate3d(${nextX}px, ${nextY}px, 0)`;
+        }
+      } else if (e.touches.length === 2) {
         e.preventDefault();
 
         const touch1 = e.touches[0];
@@ -188,7 +248,27 @@ const PdfRenderer: React.FC<PdfRendererProps> = ({
         const currentCenterX = (touch1.clientX + touch2.clientX) / 2;
         const currentCenterY = (touch1.clientY + touch2.clientY) / 2;
 
-        const { initialDist, initialScale, canvasPointX, canvasPointY } = touchPinchRef.current;
+        if (touchStateRef.current.mode !== 'pinch') {
+          const rect = container.getBoundingClientRect();
+          const currentScale = scaleRef.current;
+          const canvasPointX = (currentCenterX - rect.left - panXRef.current) / currentScale;
+          const canvasPointY = (currentCenterY - rect.top - panYRef.current) / currentScale;
+          touchStateRef.current = {
+            mode: 'pinch',
+            startX: currentCenterX,
+            startY: currentCenterY,
+            startPanX: panXRef.current,
+            startPanY: panYRef.current,
+            initialDist: currentDist,
+            initialScale: currentScale,
+            canvasPointX,
+            canvasPointY,
+            targetScale: currentScale,
+          };
+          return;
+        }
+
+        const { initialDist, initialScale, canvasPointX, canvasPointY } = touchStateRef.current;
         if (initialDist <= 0) return;
 
         const ratio = currentDist / initialDist;
@@ -200,22 +280,56 @@ const PdfRenderer: React.FC<PdfRendererProps> = ({
 
         panXRef.current = newPanX;
         panYRef.current = newPanY;
-        touchPinchRef.current.targetScale = targetScale;
+        touchStateRef.current.targetScale = targetScale;
 
-        if (canvasContainerRef.current) {
-          const visualScale = targetScale / scale;
-          canvasContainerRef.current.style.transformOrigin = '0 0';
-          canvasContainerRef.current.style.transform = `translate3d(${newPanX}px, ${newPanY}px, 0) scale(${visualScale})`;
-        }
+        const visualScale = targetScale / scaleRef.current;
+        canvasContainerRef.current.style.transformOrigin = '0 0';
+        canvasContainerRef.current.style.transform = `translate3d(${newPanX}px, ${newPanY}px, 0) scale(${visualScale})`;
       }
     };
 
     const handleTouchEnd = (e: TouchEvent) => {
-      if (touchPinchRef.current && e.touches.length < 2) {
-        const finalScale = touchPinchRef.current.targetScale;
-        touchPinchRef.current = null;
-        if (onZoom && Math.abs(finalScale - scale) > 0.01) {
-          onZoom(finalScale);
+      if (touchStateRef.current) {
+        if (touchStateRef.current.mode === 'pinch') {
+          const finalScale = touchStateRef.current.targetScale;
+          const currentScale = scaleRef.current;
+          touchStateRef.current = null;
+          if (onZoomRef.current && Math.abs(finalScale - currentScale) > 0.01) {
+            onZoomRef.current(finalScale);
+          }
+        } else if (touchStateRef.current.mode === 'pan') {
+          // Handle tap for measurement tools on touch screen
+          if (e.changedTouches.length === 1 && (toolRef.current === 'measure' || toolRef.current === 'calibrate')) {
+            const touch = e.changedTouches[0];
+            const distMoved = Math.hypot(touch.clientX - touchStateRef.current.startX, touch.clientY - touchStateRef.current.startY);
+            if (distMoved < 8 && canvasRef.current) {
+              const rect = canvasRef.current.getBoundingClientRect();
+              const x = touch.clientX - rect.left;
+              const y = touch.clientY - rect.top;
+              setPoints(prev => {
+                if (prev.length >= 2) return [{ x, y }];
+                const newPts = [...prev, { x, y }];
+                if (newPts.length === 2 && toolRef.current === 'calibrate') {
+                  const dx = newPts[1].x - newPts[0].x;
+                  const dy = newPts[1].y - newPts[0].y;
+                  const pixelDist = Math.sqrt(dx * dx + dy * dy);
+                  const val = prompt("Establecer escala: ¿Cuántos metros mide esta línea en la realidad?", "1.0");
+                  if (val) {
+                    onCalibrationComplete({
+                      pixels: pixelDist,
+                      realValue: parseFloat(val),
+                      unit: 'm'
+                    });
+                    onToolChange?.('measure');
+                  }
+                }
+                return newPts;
+              });
+            }
+          }
+          touchStateRef.current = null;
+        } else {
+          touchStateRef.current = null;
         }
       }
     };
@@ -231,41 +345,22 @@ const PdfRenderer: React.FC<PdfRendererProps> = ({
       container.removeEventListener('touchend', handleTouchEnd);
       container.removeEventListener('touchcancel', handleTouchEnd);
     };
-  }, [scale, onZoom]);
-
-  useEffect(() => {
-    const handleGlobalPointerUp = () => {
-      if (isDragging) {
-        setIsDragging(false);
-      }
-    };
-    
-    if (isDragging) {
-      window.addEventListener('pointerup', handleGlobalPointerUp);
-    }
-    
-    return () => {
-      window.removeEventListener('pointerup', handleGlobalPointerUp);
-    };
-  }, [isDragging]);
+  }, [file, onCalibrationComplete, onToolChange]);
 
   const handlePointerDown = (e: React.PointerEvent) => {
     if (!file) return;
-    const isPanButton = e.button === 1 || e.button === 2;
-    if (tool === 'hand' || isPanButton || e.pointerType === 'touch') {
-      if (isPanButton) {
-        e.preventDefault();
-      }
-      setIsDragging(true);
+    if (e.pointerType === 'touch') return; // Handled by native TouchEventListeners
+
+    const isPanButton = e.button === 0 || e.button === 1 || e.button === 2;
+    if (tool === 'hand' || isPanButton) {
+      isMouseDraggingRef.current = true;
+      mouseStartXRef.current = e.clientX;
+      mouseStartYRef.current = e.clientY;
+      mouseStartPanXRef.current = panXRef.current;
+      mouseStartPanYRef.current = panYRef.current;
       try {
         e.currentTarget.setPointerCapture(e.pointerId);
       } catch {}
-      if (containerRef.current) {
-        setStartX(e.clientX);
-        setStartY(e.clientY);
-        setScrollLeft(panXRef.current);
-        setScrollTop(panYRef.current);
-      }
     } else if ((tool === 'measure' || tool === 'calibrate') && canvasRef.current && e.button === 0) {
       const rect = canvasRef.current.getBoundingClientRect();
       const x = e.clientX - rect.left;
@@ -296,24 +391,25 @@ const PdfRenderer: React.FC<PdfRendererProps> = ({
   };
 
   const handlePointerUp = (e: React.PointerEvent) => {
-    setIsDragging(false);
+    if (e.pointerType === 'touch') return;
+    isMouseDraggingRef.current = false;
     try {
       e.currentTarget.releasePointerCapture(e.pointerId);
     } catch {}
   };
 
   const handlePointerMove = (e: React.PointerEvent) => {
-    if (!isDragging || !containerRef.current) return;
-    if ((e.nativeEvent as TouchEvent)?.touches?.length >= 2) return;
+    if (e.pointerType === 'touch') return;
+    if (!isMouseDraggingRef.current || !canvasContainerRef.current) return;
 
-    const x = e.clientX;
-    const y = e.clientY;
-    const dx = x - startX;
-    const dy = y - startY;
-    const nextX = scrollLeft + dx;
-    const nextY = scrollTop + dy;
+    const dx = e.clientX - mouseStartXRef.current;
+    const dy = e.clientY - mouseStartYRef.current;
+    const nextX = mouseStartPanXRef.current + dx;
+    const nextY = mouseStartPanYRef.current + dy;
+
     panXRef.current = nextX;
     panYRef.current = nextY;
+
     if (canvasContainerRef.current) {
       canvasContainerRef.current.style.transformOrigin = '0 0';
       canvasContainerRef.current.style.transform = `translate3d(${nextX}px, ${nextY}px, 0)`;
