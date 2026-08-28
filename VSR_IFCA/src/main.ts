@@ -3656,18 +3656,21 @@ function initMultiSelectToggle() {
     if (container) {
         const overrideCtrlKey = (e: any) => {
             if (multiSelectModeActive) {
-                try {
-                    Object.defineProperty(e, 'ctrlKey', {
-                        value: true,
-                        configurable: true
-                    });
-                } catch (err) {}
+                if (container === e.target || container.contains(e.target)) {
+                    try {
+                        Object.defineProperty(e, 'ctrlKey', {
+                            value: true,
+                            configurable: true
+                        });
+                    } catch (err) {}
+                }
             }
         };
 
-        container.addEventListener('pointerdown', overrideCtrlKey, true);
-        container.addEventListener('pointerup', overrideCtrlKey, true);
-        container.addEventListener('click', overrideCtrlKey, true);
+        const events = ['pointerdown', 'pointerup', 'mousedown', 'mouseup', 'click', 'touchstart', 'touchend'];
+        events.forEach(evt => {
+            window.addEventListener(evt, overrideCtrlKey, { capture: true });
+        });
     }
 }
 
