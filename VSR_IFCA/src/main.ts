@@ -3654,45 +3654,20 @@ function initMultiSelectToggle() {
     });
 
     if (container) {
-        const interceptSelectionEvent = (e: any) => {
-            if (multiSelectModeActive && !e.isSynthesized) {
-                e.stopImmediatePropagation();
-                const eventClass = e instanceof PointerEvent ? PointerEvent : MouseEvent;
-                const clone = new eventClass(e.type, {
-                    bubbles: e.bubbles,
-                    cancelable: e.cancelable,
-                    view: e.view,
-                    detail: e.detail,
-                    screenX: e.screenX,
-                    screenY: e.screenY,
-                    clientX: e.clientX,
-                    clientY: e.clientY,
-                    ctrlKey: true,
-                    altKey: e.altKey,
-                    shiftKey: e.shiftKey,
-                    metaKey: e.metaKey,
-                    button: e.button,
-                    buttons: e.buttons,
-                    relatedTarget: e.relatedTarget,
-                    pointerId: e.pointerId,
-                    width: e.width,
-                    height: e.height,
-                    pressure: e.pressure,
-                    tangentialPressure: e.tangentialPressure,
-                    tiltX: e.tiltX,
-                    tiltY: e.tiltY,
-                    twist: e.twist,
-                    pointerType: e.pointerType,
-                    isPrimary: e.isPrimary,
-                });
-                Object.defineProperty(clone, 'isSynthesized', { value: true });
-                e.target.dispatchEvent(clone);
+        const overrideCtrlKey = (e: any) => {
+            if (multiSelectModeActive) {
+                try {
+                    Object.defineProperty(e, 'ctrlKey', {
+                        value: true,
+                        configurable: true
+                    });
+                } catch (err) {}
             }
         };
 
-        container.addEventListener('pointerdown', interceptSelectionEvent, true);
-        container.addEventListener('pointerup', interceptSelectionEvent, true);
-        container.addEventListener('click', interceptSelectionEvent, true);
+        container.addEventListener('pointerdown', overrideCtrlKey, true);
+        container.addEventListener('pointerup', overrideCtrlKey, true);
+        container.addEventListener('click', overrideCtrlKey, true);
     }
 }
 
