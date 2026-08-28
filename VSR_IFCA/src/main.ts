@@ -3652,6 +3652,48 @@ function initMultiSelectToggle() {
         multiSelectModeActive = !multiSelectModeActive;
         btn.classList.toggle('active', multiSelectModeActive);
     });
+
+    if (container) {
+        const interceptSelectionEvent = (e: any) => {
+            if (multiSelectModeActive && !e.isSynthesized) {
+                e.stopImmediatePropagation();
+                const eventClass = e instanceof PointerEvent ? PointerEvent : MouseEvent;
+                const clone = new eventClass(e.type, {
+                    bubbles: e.bubbles,
+                    cancelable: e.cancelable,
+                    view: e.view,
+                    detail: e.detail,
+                    screenX: e.screenX,
+                    screenY: e.screenY,
+                    clientX: e.clientX,
+                    clientY: e.clientY,
+                    ctrlKey: true,
+                    altKey: e.altKey,
+                    shiftKey: e.shiftKey,
+                    metaKey: e.metaKey,
+                    button: e.button,
+                    buttons: e.buttons,
+                    relatedTarget: e.relatedTarget,
+                    pointerId: e.pointerId,
+                    width: e.width,
+                    height: e.height,
+                    pressure: e.pressure,
+                    tangentialPressure: e.tangentialPressure,
+                    tiltX: e.tiltX,
+                    tiltY: e.tiltY,
+                    twist: e.twist,
+                    pointerType: e.pointerType,
+                    isPrimary: e.isPrimary,
+                });
+                Object.defineProperty(clone, 'isSynthesized', { value: true });
+                e.target.dispatchEvent(clone);
+            }
+        };
+
+        container.addEventListener('pointerdown', interceptSelectionEvent, true);
+        container.addEventListener('pointerup', interceptSelectionEvent, true);
+        container.addEventListener('click', interceptSelectionEvent, true);
+    }
 }
 
 function initGridToggle() {
@@ -4287,94 +4329,19 @@ if (propertiesContent) {
     propertiesContent.appendChild(propsTable);
 }
 
-let accumulatedSelection: Record<string, Set<number>> = {};
-let isUpdatingSelection = false;
-
-(window as any).syncAccumulatedSelection = (selectedIds: number[], elements: any[]) => {
-    accumulatedSelection = {};
-    elements.forEach(el => {
-        if (selectedIds.includes(el.expressID)) {
-            if (!accumulatedSelection[el.modelUUID]) accumulatedSelection[el.modelUUID] = new Set();
-            accumulatedSelection[el.modelUUID].add(el.expressID);
-        }
-    });
-};
-
-(window as any).setIsUpdatingSelection = (val: boolean) => {
-    isUpdatingSelection = val;
-};
-
 highlighter.events.select.onHighlight.add(async (modelIdMap) => {
-    if (isUpdatingSelection) return;
-
-    if (multiSelectModeActive) {
-        for (const [modelUUID, ids] of Object.entries(modelIdMap)) {
-            if (!accumulatedSelection[modelUUID]) {
-                accumulatedSelection[modelUUID] = new Set<number>();
-            }
-            const currentSet = accumulatedSelection[modelUUID];
-            for (const id of ids) {
-                if (currentSet.has(id)) {
-                    currentSet.delete(id);
-                } else {
-                    currentSet.add(id);
-                }
-            }
-            if (currentSet.size === 0) {
-                delete accumulatedSelection[modelUUID];
-            }
-        }
-
-        const arrayMap: Record<string, number[]> = {};
-        for (const [modelUUID, set] of Object.entries(accumulatedSelection)) {
-            arrayMap[modelUUID] = Array.from(set);
-        }
-
-        isUpdatingSelection = true;
-        try {
-            highlighter.clear('select');
-            if (Object.keys(arrayMap).length > 0) {
-                highlighter.highlightByID('select', arrayMap as any, true, true);
-            }
-        } catch (err) {
-            console.error("Error highlighting accumulated selection:", err);
-        } finally {
-            isUpdatingSelection = false;
-        }
-    } else {
-        accumulatedSelection = {};
-        for (const [modelUUID, ids] of Object.entries(modelIdMap)) {
-            accumulatedSelection[modelUUID] = new Set(ids);
-        }
-    }
-
-    const ids: number[] = [];
-    for (const set of Object.values(accumulatedSelection)) {
-        set.forEach(id => ids.push(id));
-    }
-    selectedElementIds = ids;
-
-    (window as any).updateQuantitiesSelectionUI?.();
-    (window as any).updateStatusSelectionUI?.();
-
-    await renderPropertiesTable(accumulatedSelection as any);
+    console.log('[DEBUG] Highlight event:', modelIdMap);
+    await renderPropertiesTable(modelIdMap as any);
 });
 
 highlighter.events.select.onClear.add(async () => {
-    if (isUpdatingSelection) return;
-
-    accumulatedSelection = {};
-    selectedElementIds = [];
-
-    (window as any).updateQuantitiesSelectionUI?.();
-    (window as any).updateStatusSelectionUI?.();
-
     await renderPropertiesTable({} as any);
 });
 
 if (container) {
     container.addEventListener('click', () => {
-        renderPropertiesTable(accumulatedSelection || ({} as any));
+        const selection = (highlighter as any).selection?.select as Record<string, Set<number>> | undefined;
+        renderPropertiesTable(selection || ({} as any));
     });
 }
 
@@ -5647,15 +5614,8 @@ function initQuantitiesPanel() {
         const highlighter = components.get(OBF.Highlighter);
         if (!highlighter) return;
 
-        (window as any).syncAccumulatedSelection?.(selectedElementIds, elements);
-
         if (selectedElementIds.length === 0) {
-            (window as any).setIsUpdatingSelection?.(true);
-            try {
-                highlighter.clear('select');
-            } finally {
-                (window as any).setIsUpdatingSelection?.(false);
-            }
+            highlighter.clear('select');
             return;
         }
 
@@ -5667,21 +5627,36 @@ function initQuantitiesPanel() {
             }
         });
 
-        (window as any).setIsUpdatingSelection?.(true);
         try {
             highlighter.highlightByID('select', map as any, true, true);
         } catch (err) {
             console.error("Error setting viewer selection:", err);
-        } finally {
-            (window as any).setIsUpdatingSelection?.(false);
         }
     }
 
     // Two-way selection listeners
-    (window as any).updateQuantitiesSelectionUI = () => {
+    const onHighlightCallback = (modelIdMap: any) => {
+        const ids: number[] = [];
+        for (const set of Object.values(modelIdMap)) {
+            if (set instanceof Set) {
+                set.forEach((id) => ids.push(id));
+            } else if (Array.isArray(set)) {
+                (set as any[]).forEach((id) => ids.push(Number(id)));
+            }
+        }
+        selectedElementIds = ids;
         updateSelectedRowsInUI();
         updateBulkActionBar();
     };
+
+    const onClearCallback = () => {
+        selectedElementIds = [];
+        updateSelectedRowsInUI();
+        updateBulkActionBar();
+    };
+
+    highlighter.events.select.onHighlight.add(onHighlightCallback);
+    highlighter.events.select.onClear.add(onClearCallback);
 
     function updateSelectedRowsInUI() {
         const rows = contentArea?.querySelectorAll('tbody tr[data-id]');
@@ -7603,15 +7578,8 @@ function initStatusPanel() {
         const highlighter = components.get(OBF.Highlighter);
         if (!highlighter) return;
 
-        (window as any).syncAccumulatedSelection?.(selectedElementIds, elements);
-
         if (selectedElementIds.length === 0) {
-            (window as any).setIsUpdatingSelection?.(true);
-            try {
-                highlighter.clear('select');
-            } finally {
-                (window as any).setIsUpdatingSelection?.(false);
-            }
+            highlighter.clear('select');
             return;
         }
 
@@ -7623,23 +7591,41 @@ function initStatusPanel() {
             }
         });
 
-        (window as any).setIsUpdatingSelection?.(true);
         try {
             highlighter.highlightByID('select', map as any, true, true);
         } catch (err) {
             console.error("Error setting viewer selection:", err);
-        } finally {
-            (window as any).setIsUpdatingSelection?.(false);
         }
     }
 
     // Two-way selection listeners
-    (window as any).updateStatusSelectionUI = () => {
-        if (isPanelOpen) {
-            updateSelectedRowsInUI();
-            updateBulkActionBar();
+    const onHighlightCallback = (modelIdMap: any) => {
+        if (!isPanelOpen) return;
+        const ids: number[] = [];
+        for (const set of Object.values(modelIdMap)) {
+            if (set instanceof Set) {
+                set.forEach((id) => ids.push(id));
+            } else if (Array.isArray(set)) {
+                (set as any[]).forEach((id) => ids.push(Number(id)));
+            }
         }
+        selectedElementIds = ids;
+        updateSelectedRowsInUI();
+        updateBulkActionBar();
     };
+
+    const onClearCallback = () => {
+        if (!isPanelOpen) return;
+        selectedElementIds = [];
+        updateSelectedRowsInUI();
+        updateBulkActionBar();
+    };
+
+    const highlighter = components.get(OBF.Highlighter);
+    if (highlighter) {
+        highlighter.events.select.onHighlight.add(onHighlightCallback);
+        highlighter.events.select.onClear.add(onClearCallback);
+    }
 
     function updateSelectedRowsInUI() {
         const rows = contentArea?.querySelectorAll('tbody tr[data-id]');
