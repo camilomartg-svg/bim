@@ -125,9 +125,19 @@ const PdfRenderer: React.FC<PdfRendererProps> = ({
     }
   }, [pdfDoc, scale, rotation]);
 
+  const touchStateRef = useRef<{
+    initialDist: number;
+    initialScale: number;
+    canvasPointX: number;
+    canvasPointY: number;
+  } | null>(null);
+
   useEffect(() => {
     if (pdfDoc) renderPage(currentPage);
     setPoints([]);
+  }, [pdfDoc, currentPage, scale, rotation, renderPage]);
+
+  useEffect(() => {
     panXRef.current = 0;
     panYRef.current = 0;
     if (canvasContainerRef.current) {
@@ -135,7 +145,88 @@ const PdfRenderer: React.FC<PdfRendererProps> = ({
       canvasContainerRef.current.style.transition = 'none';
       canvasContainerRef.current.style.transform = 'translate3d(0px, 0px, 0)';
     }
-  }, [pdfDoc, currentPage, scale, rotation, renderPage]);
+  }, [pdfDoc, currentPage]);
+
+  // Touch Pinch-to-Zoom Gesture for mobile devices
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+
+    const handleTouchStart = (e: TouchEvent) => {
+      if (e.touches.length === 2) {
+        e.preventDefault();
+        setIsDragging(false);
+
+        const touch1 = e.touches[0];
+        const touch2 = e.touches[1];
+        const dist = Math.hypot(touch1.clientX - touch2.clientX, touch1.clientY - touch2.clientY);
+        const centerX = (touch1.clientX + touch2.clientX) / 2;
+        const centerY = (touch1.clientY + touch2.clientY) / 2;
+
+        const rect = container.getBoundingClientRect();
+        const canvasPointX = (centerX - rect.left - panXRef.current) / scale;
+        const canvasPointY = (centerY - rect.top - panYRef.current) / scale;
+
+        touchStateRef.current = {
+          initialDist: dist,
+          initialScale: scale,
+          canvasPointX,
+          canvasPointY,
+        };
+      }
+    };
+
+    const handleTouchMove = (e: TouchEvent) => {
+      if (e.touches.length === 2 && touchStateRef.current) {
+        e.preventDefault();
+
+        const touch1 = e.touches[0];
+        const touch2 = e.touches[1];
+        const currentDist = Math.hypot(touch1.clientX - touch2.clientX, touch1.clientY - touch2.clientY);
+        const currentCenterX = (touch1.clientX + touch2.clientX) / 2;
+        const currentCenterY = (touch1.clientY + touch2.clientY) / 2;
+
+        const { initialDist, initialScale, canvasPointX, canvasPointY } = touchStateRef.current;
+        if (initialDist <= 0) return;
+
+        const ratio = currentDist / initialDist;
+        const targetScale = Math.max(0.1, Math.min(10.0, parseFloat((initialScale * ratio).toFixed(2))));
+
+        const rect = container.getBoundingClientRect();
+        const newPanX = currentCenterX - rect.left - canvasPointX * targetScale;
+        const newPanY = currentCenterY - rect.top - canvasPointY * targetScale;
+
+        panXRef.current = newPanX;
+        panYRef.current = newPanY;
+
+        if (canvasContainerRef.current) {
+          canvasContainerRef.current.style.transform = `translate3d(${newPanX}px, ${newPanY}px, 0)`;
+        }
+
+        if (onZoom && targetScale !== scale) {
+          onZoom(targetScale);
+        }
+      }
+    };
+
+    const handleTouchEnd = (e: TouchEvent) => {
+      if (e.touches.length < 2) {
+        touchStateRef.current = null;
+      }
+    };
+
+    container.addEventListener('touchstart', handleTouchStart, { passive: false });
+    container.addEventListener('touchmove', handleTouchMove, { passive: false });
+    container.addEventListener('touchend', handleTouchEnd, { passive: false });
+    container.addEventListener('touchcancel', handleTouchEnd, { passive: false });
+
+    return () => {
+      container.removeEventListener('touchstart', handleTouchStart);
+      container.removeEventListener('touchmove', handleTouchMove);
+      container.removeEventListener('touchend', handleTouchEnd);
+      container.removeEventListener('touchcancel', handleTouchEnd);
+    };
+  }, [scale, onZoom]);
 
   useEffect(() => {
     const handleGlobalPointerUp = () => {
