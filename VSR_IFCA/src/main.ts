@@ -3642,6 +3642,60 @@ function initClipperTool() {
     });
 }
 
+let multiSelectModeActive = false;
+
+function initMultiSelectToggle() {
+    const btn = document.getElementById('multiselect-toggle');
+    if (!btn) return;
+
+    btn.addEventListener('click', () => {
+        multiSelectModeActive = !multiSelectModeActive;
+        btn.classList.toggle('active', multiSelectModeActive);
+    });
+
+    if (container) {
+        const interceptSelectionEvent = (e: any) => {
+            if (multiSelectModeActive && !e.isSynthesized) {
+                e.stopImmediatePropagation();
+                const eventClass = e instanceof PointerEvent ? PointerEvent : MouseEvent;
+                const clone = new eventClass(e.type, {
+                    bubbles: e.bubbles,
+                    cancelable: e.cancelable,
+                    view: e.view,
+                    detail: e.detail,
+                    screenX: e.screenX,
+                    screenY: e.screenY,
+                    clientX: e.clientX,
+                    clientY: e.clientY,
+                    ctrlKey: true,
+                    altKey: e.altKey,
+                    shiftKey: e.shiftKey,
+                    metaKey: e.metaKey,
+                    button: e.button,
+                    buttons: e.buttons,
+                    relatedTarget: e.relatedTarget,
+                    pointerId: e.pointerId,
+                    width: e.width,
+                    height: e.height,
+                    pressure: e.pressure,
+                    tangentialPressure: e.tangentialPressure,
+                    tiltX: e.tiltX,
+                    tiltY: e.tiltY,
+                    twist: e.twist,
+                    pointerType: e.pointerType,
+                    isPrimary: e.isPrimary,
+                });
+                Object.defineProperty(clone, 'isSynthesized', { value: true });
+                e.target.dispatchEvent(clone);
+            }
+        };
+
+        container.addEventListener('pointerdown', interceptSelectionEvent, true);
+        container.addEventListener('pointerup', interceptSelectionEvent, true);
+        container.addEventListener('click', interceptSelectionEvent, true);
+    }
+}
+
 function initGridToggle() {
     const btn = document.getElementById('grid-toggle');
     if (!btn) return;
@@ -4087,6 +4141,7 @@ initClassificationControls();
 initTheme();
 initProjectionToggle();
 initGridToggle();
+initMultiSelectToggle();
 initClipperTool();
 initFitModelTool();
 loadModelList();
@@ -6123,7 +6178,7 @@ function initQuantitiesPanel() {
                     const idStr = row.getAttribute('data-id') || '';
                     const id = parseInt(idStr, 10);
 
-                    if (me.ctrlKey) {
+                    if (me.ctrlKey || multiSelectModeActive) {
                         if (selectedElementIds.includes(id)) {
                             selectedElementIds = selectedElementIds.filter(x => x !== id);
                         } else {
@@ -7956,7 +8011,7 @@ function initStatusPanel() {
                     const idStr = row.getAttribute('data-id') || '';
                     const id = parseInt(idStr, 10);
 
-                    if (me.ctrlKey) {
+                    if (me.ctrlKey || multiSelectModeActive) {
                         if (selectedElementIds.includes(id)) {
                             selectedElementIds = selectedElementIds.filter(x => x !== id);
                         } else {
