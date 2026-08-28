@@ -3652,48 +3652,6 @@ function initMultiSelectToggle() {
         multiSelectModeActive = !multiSelectModeActive;
         btn.classList.toggle('active', multiSelectModeActive);
     });
-
-    if (container) {
-        const interceptSelectionEvent = (e: any) => {
-            if (multiSelectModeActive && !e.isSynthesized) {
-                e.stopImmediatePropagation();
-                const eventClass = e instanceof PointerEvent ? PointerEvent : MouseEvent;
-                const clone = new eventClass(e.type, {
-                    bubbles: e.bubbles,
-                    cancelable: e.cancelable,
-                    view: e.view,
-                    detail: e.detail,
-                    screenX: e.screenX,
-                    screenY: e.screenY,
-                    clientX: e.clientX,
-                    clientY: e.clientY,
-                    ctrlKey: true,
-                    altKey: e.altKey,
-                    shiftKey: e.shiftKey,
-                    metaKey: e.metaKey,
-                    button: e.button,
-                    buttons: e.buttons,
-                    relatedTarget: e.relatedTarget,
-                    pointerId: e.pointerId,
-                    width: e.width,
-                    height: e.height,
-                    pressure: e.pressure,
-                    tangentialPressure: e.tangentialPressure,
-                    tiltX: e.tiltX,
-                    tiltY: e.tiltY,
-                    twist: e.twist,
-                    pointerType: e.pointerType,
-                    isPrimary: e.isPrimary,
-                });
-                Object.defineProperty(clone, 'isSynthesized', { value: true });
-                e.target.dispatchEvent(clone);
-            }
-        };
-
-        container.addEventListener('pointerdown', interceptSelectionEvent, true);
-        container.addEventListener('pointerup', interceptSelectionEvent, true);
-        container.addEventListener('click', interceptSelectionEvent, true);
-    }
 }
 
 function initGridToggle() {
@@ -4329,19 +4287,70 @@ if (propertiesContent) {
     propertiesContent.appendChild(propsTable);
 }
 
+let accumulatedSelection: Record<string, Set<number>> = {};
+let isUpdatingSelection = false;
+
 highlighter.events.select.onHighlight.add(async (modelIdMap) => {
-    console.log('[DEBUG] Highlight event:', modelIdMap);
-    await renderPropertiesTable(modelIdMap as any);
+    if (isUpdatingSelection) return;
+
+    if (multiSelectModeActive) {
+        for (const [modelUUID, ids] of Object.entries(modelIdMap)) {
+            if (!accumulatedSelection[modelUUID]) {
+                accumulatedSelection[modelUUID] = new Set<number>();
+            }
+            const currentSet = accumulatedSelection[modelUUID];
+            for (const id of ids) {
+                if (currentSet.has(id)) {
+                    currentSet.delete(id);
+                } else {
+                    currentSet.add(id);
+                }
+            }
+            if (currentSet.size === 0) {
+                delete accumulatedSelection[modelUUID];
+            }
+        }
+
+        isUpdatingSelection = true;
+        highlighter.clear('select');
+        if (Object.keys(accumulatedSelection).length > 0) {
+            highlighter.highlightByID('select', accumulatedSelection, true, true);
+        }
+        isUpdatingSelection = false;
+    } else {
+        accumulatedSelection = {};
+        for (const [modelUUID, ids] of Object.entries(modelIdMap)) {
+            accumulatedSelection[modelUUID] = new Set(ids);
+        }
+    }
+
+    const ids: number[] = [];
+    for (const set of Object.values(accumulatedSelection)) {
+        set.forEach(id => ids.push(id));
+    }
+    selectedElementIds = ids;
+
+    (window as any).updateQuantitiesSelectionUI?.();
+    (window as any).updateStatusSelectionUI?.();
+
+    await renderPropertiesTable(accumulatedSelection as any);
 });
 
 highlighter.events.select.onClear.add(async () => {
+    if (isUpdatingSelection) return;
+
+    accumulatedSelection = {};
+    selectedElementIds = [];
+
+    (window as any).updateQuantitiesSelectionUI?.();
+    (window as any).updateStatusSelectionUI?.();
+
     await renderPropertiesTable({} as any);
 });
 
 if (container) {
     container.addEventListener('click', () => {
-        const selection = (highlighter as any).selection?.select as Record<string, Set<number>> | undefined;
-        renderPropertiesTable(selection || ({} as any));
+        renderPropertiesTable(accumulatedSelection || ({} as any));
     });
 }
 
@@ -5635,28 +5644,10 @@ function initQuantitiesPanel() {
     }
 
     // Two-way selection listeners
-    const onHighlightCallback = (modelIdMap: any) => {
-        const ids: number[] = [];
-        for (const set of Object.values(modelIdMap)) {
-            if (set instanceof Set) {
-                set.forEach((id) => ids.push(id));
-            } else if (Array.isArray(set)) {
-                (set as any[]).forEach((id) => ids.push(Number(id)));
-            }
-        }
-        selectedElementIds = ids;
+    (window as any).updateQuantitiesSelectionUI = () => {
         updateSelectedRowsInUI();
         updateBulkActionBar();
     };
-
-    const onClearCallback = () => {
-        selectedElementIds = [];
-        updateSelectedRowsInUI();
-        updateBulkActionBar();
-    };
-
-    highlighter.events.select.onHighlight.add(onHighlightCallback);
-    highlighter.events.select.onClear.add(onClearCallback);
 
     function updateSelectedRowsInUI() {
         const rows = contentArea?.querySelectorAll('tbody tr[data-id]');
@@ -7599,33 +7590,12 @@ function initStatusPanel() {
     }
 
     // Two-way selection listeners
-    const onHighlightCallback = (modelIdMap: any) => {
-        if (!isPanelOpen) return;
-        const ids: number[] = [];
-        for (const set of Object.values(modelIdMap)) {
-            if (set instanceof Set) {
-                set.forEach((id) => ids.push(id));
-            } else if (Array.isArray(set)) {
-                (set as any[]).forEach((id) => ids.push(Number(id)));
-            }
+    (window as any).updateStatusSelectionUI = () => {
+        if (isPanelOpen) {
+            updateSelectedRowsInUI();
+            updateBulkActionBar();
         }
-        selectedElementIds = ids;
-        updateSelectedRowsInUI();
-        updateBulkActionBar();
     };
-
-    const onClearCallback = () => {
-        if (!isPanelOpen) return;
-        selectedElementIds = [];
-        updateSelectedRowsInUI();
-        updateBulkActionBar();
-    };
-
-    const highlighter = components.get(OBF.Highlighter);
-    if (highlighter) {
-        highlighter.events.select.onHighlight.add(onHighlightCallback);
-        highlighter.events.select.onClear.add(onClearCallback);
-    }
 
     function updateSelectedRowsInUI() {
         const rows = contentArea?.querySelectorAll('tbody tr[data-id]');
