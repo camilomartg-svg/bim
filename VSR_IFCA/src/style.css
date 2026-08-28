@@ -574,7 +574,6 @@ body {
 
     .toolbar-group.visibility-group,
     .toolbar-group.measure-group,
-    #clipper-controls,
     #user-profile-container {
         display: none !important;
     }
@@ -623,9 +622,20 @@ body {
         padding: 6px 10px;
         gap: 8px;
     }
+    .quantities-tabs {
+        overflow-x: auto;
+        display: flex;
+        flex: 1;
+        scrollbar-width: none; /* Firefox */
+        -webkit-overflow-scrolling: touch;
+    }
+    .quantities-tabs::-webkit-scrollbar {
+        display: none; /* Chrome/Safari */
+    }
     .q-tab-btn {
         padding: 6px 8px;
         font-size: 11px;
+        flex-shrink: 0;
     }
 }
 
@@ -912,6 +922,13 @@ bim-label {
 
 .quantities-panel.closed {
   transform: translateY(100%);
+}
+
+.quantities-panel.maximized {
+  height: 100vh !important;
+  max-height: 100vh !important;
+  top: 0 !important;
+  z-index: 2000 !important;
 }
 
 .quantities-header {

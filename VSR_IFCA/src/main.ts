@@ -5148,6 +5148,18 @@ function initQuantitiesPanel() {
         return next;
     }
 
+    // Maximize button handler
+    const maxBtn = document.getElementById('btn-q-maximize');
+    if (maxBtn) {
+        maxBtn.addEventListener('click', () => {
+            const isMaximized = qPanel.classList.toggle('maximized');
+            const icon = maxBtn.querySelector('.material-symbols-outlined');
+            if (icon) {
+                icon.textContent = isMaximized ? 'fullscreen_exit' : 'fullscreen';
+            }
+        });
+    }
+
     // Toggle button handler
     toggleBtn.addEventListener('click', () => {
         const currentlyClosed = qPanel.classList.contains('closed');
@@ -5158,6 +5170,10 @@ function initQuantitiesPanel() {
             const sToggle = document.getElementById('status-toggle');
             if (sPanel && !sPanel.classList.contains('closed')) {
                 sPanel.classList.add('closed');
+                sPanel.classList.remove('maximized');
+                const sMaxBtn = document.getElementById('btn-s-maximize');
+                const sIcon = sMaxBtn?.querySelector('.material-symbols-outlined');
+                if (sIcon) sIcon.textContent = 'fullscreen';
                 if (sToggle) sToggle.classList.remove('active');
             }
 
@@ -5170,6 +5186,9 @@ function initQuantitiesPanel() {
             }
         } else {
             qPanel.classList.add('closed');
+            qPanel.classList.remove('maximized');
+            const icon = maxBtn?.querySelector('.material-symbols-outlined');
+            if (icon) icon.textContent = 'fullscreen';
             toggleBtn.classList.remove('active');
         }
     });
@@ -5178,6 +5197,9 @@ function initQuantitiesPanel() {
         closeBtn.addEventListener('click', () => {
             isPanelOpen = false;
             qPanel.classList.add('closed');
+            qPanel.classList.remove('maximized');
+            const icon = maxBtn?.querySelector('.material-symbols-outlined');
+            if (icon) icon.textContent = 'fullscreen';
             toggleBtn.classList.remove('active');
             // Clear status highlighting when closed
             const currentColorsEnabled = statusColorsEnabled;
@@ -7603,6 +7625,18 @@ function initStatusPanel() {
         });
     }
 
+    // Maximize button handler
+    const maxBtn = document.getElementById('btn-s-maximize');
+    if (maxBtn) {
+        maxBtn.addEventListener('click', () => {
+            const isMaximized = sPanel.classList.toggle('maximized');
+            const icon = maxBtn.querySelector('.material-symbols-outlined');
+            if (icon) {
+                icon.textContent = isMaximized ? 'fullscreen_exit' : 'fullscreen';
+            }
+        });
+    }
+
     // Toggle button handler
     toggleBtn.addEventListener('click', () => {
         const currentlyClosed = sPanel.classList.contains('closed');
@@ -7614,6 +7648,10 @@ function initStatusPanel() {
             const qToggle = document.getElementById('quantities-toggle');
             if (qPanel && !qPanel.classList.contains('closed')) {
                 qPanel.classList.add('closed');
+                qPanel.classList.remove('maximized');
+                const qMaxBtn = document.getElementById('btn-q-maximize');
+                const qIcon = qMaxBtn?.querySelector('.material-symbols-outlined');
+                if (qIcon) qIcon.textContent = 'fullscreen';
                 if (qToggle) qToggle.classList.remove('active');
             }
 
@@ -7626,6 +7664,9 @@ function initStatusPanel() {
             }
         } else {
             sPanel.classList.add('closed');
+            sPanel.classList.remove('maximized');
+            const icon = maxBtn?.querySelector('.material-symbols-outlined');
+            if (icon) icon.textContent = 'fullscreen';
             toggleBtn.classList.remove('active');
             stopTimelinePlayback();
             selectedTimelineDate = null;
@@ -7642,6 +7683,9 @@ function initStatusPanel() {
         closeBtn.addEventListener('click', () => {
             isPanelOpen = false;
             sPanel.classList.add('closed');
+            sPanel.classList.remove('maximized');
+            const icon = maxBtn?.querySelector('.material-symbols-outlined');
+            if (icon) icon.textContent = 'fullscreen';
             toggleBtn.classList.remove('active');
             stopTimelinePlayback();
             selectedTimelineDate = null;
