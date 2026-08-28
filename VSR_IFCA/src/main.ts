@@ -4290,6 +4290,20 @@ if (propertiesContent) {
 let accumulatedSelection: Record<string, Set<number>> = {};
 let isUpdatingSelection = false;
 
+(window as any).syncAccumulatedSelection = (selectedIds: number[], elements: any[]) => {
+    accumulatedSelection = {};
+    elements.forEach(el => {
+        if (selectedIds.includes(el.expressID)) {
+            if (!accumulatedSelection[el.modelUUID]) accumulatedSelection[el.modelUUID] = new Set();
+            accumulatedSelection[el.modelUUID].add(el.expressID);
+        }
+    });
+};
+
+(window as any).setIsUpdatingSelection = (val: boolean) => {
+    isUpdatingSelection = val;
+};
+
 highlighter.events.select.onHighlight.add(async (modelIdMap) => {
     if (isUpdatingSelection) return;
 
@@ -4311,12 +4325,22 @@ highlighter.events.select.onHighlight.add(async (modelIdMap) => {
             }
         }
 
-        isUpdatingSelection = true;
-        highlighter.clear('select');
-        if (Object.keys(accumulatedSelection).length > 0) {
-            highlighter.highlightByID('select', accumulatedSelection, true, true);
+        const arrayMap: Record<string, number[]> = {};
+        for (const [modelUUID, set] of Object.entries(accumulatedSelection)) {
+            arrayMap[modelUUID] = Array.from(set);
         }
-        isUpdatingSelection = false;
+
+        isUpdatingSelection = true;
+        try {
+            highlighter.clear('select');
+            if (Object.keys(arrayMap).length > 0) {
+                highlighter.highlightByID('select', arrayMap as any, true, true);
+            }
+        } catch (err) {
+            console.error("Error highlighting accumulated selection:", err);
+        } finally {
+            isUpdatingSelection = false;
+        }
     } else {
         accumulatedSelection = {};
         for (const [modelUUID, ids] of Object.entries(modelIdMap)) {
@@ -5623,8 +5647,15 @@ function initQuantitiesPanel() {
         const highlighter = components.get(OBF.Highlighter);
         if (!highlighter) return;
 
+        (window as any).syncAccumulatedSelection?.(selectedElementIds, elements);
+
         if (selectedElementIds.length === 0) {
-            highlighter.clear('select');
+            (window as any).setIsUpdatingSelection?.(true);
+            try {
+                highlighter.clear('select');
+            } finally {
+                (window as any).setIsUpdatingSelection?.(false);
+            }
             return;
         }
 
@@ -5636,10 +5667,13 @@ function initQuantitiesPanel() {
             }
         });
 
+        (window as any).setIsUpdatingSelection?.(true);
         try {
             highlighter.highlightByID('select', map as any, true, true);
         } catch (err) {
             console.error("Error setting viewer selection:", err);
+        } finally {
+            (window as any).setIsUpdatingSelection?.(false);
         }
     }
 
@@ -7569,8 +7603,15 @@ function initStatusPanel() {
         const highlighter = components.get(OBF.Highlighter);
         if (!highlighter) return;
 
+        (window as any).syncAccumulatedSelection?.(selectedElementIds, elements);
+
         if (selectedElementIds.length === 0) {
-            highlighter.clear('select');
+            (window as any).setIsUpdatingSelection?.(true);
+            try {
+                highlighter.clear('select');
+            } finally {
+                (window as any).setIsUpdatingSelection?.(false);
+            }
             return;
         }
 
@@ -7582,10 +7623,13 @@ function initStatusPanel() {
             }
         });
 
+        (window as any).setIsUpdatingSelection?.(true);
         try {
             highlighter.highlightByID('select', map as any, true, true);
         } catch (err) {
             console.error("Error setting viewer selection:", err);
+        } finally {
+            (window as any).setIsUpdatingSelection?.(false);
         }
     }
 
