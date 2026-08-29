@@ -295,7 +295,7 @@ const PdfRenderer: React.FC<PdfRendererProps> = ({
       container.removeEventListener('touchend', handleTouchEnd);
       container.removeEventListener('touchcancel', handleTouchEnd);
     };
-  }, [scale, tool, onZoom]);
+  }, [file, scale, tool, onZoom]);
 
   useEffect(() => {
     const handleGlobalPointerUp = () => {
