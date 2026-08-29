@@ -42,6 +42,7 @@ const DwgRenderer: React.FC<Props> = ({
   const [areas, setAreas] = useState<AreaItem[]>([])
   const [debugStats, setDebugStats] = useState<string>('')
   const [zoomLevel, setZoomLevel] = useState<number>(1)
+  const [, setCamVersion] = useState<number>(0)
   
   const { layers, layerVisibility, toggleLayer, showAll, hideAll } = useLayers(entityRoot, file)
   
@@ -319,11 +320,12 @@ const DwgRenderer: React.FC<Props> = ({
     controls.minAzimuthAngle = 0
     controls.maxAzimuthAngle = 0
     
-    // Listen to zoom changes
+    // Listen to zoom and pan changes
     const onChange = () => {
       if (controls.object instanceof THREE.OrthographicCamera) {
         setZoomLevel(controls.object.zoom)
       }
+      setCamVersion(v => (v + 1) % 1000000)
     }
     controls.addEventListener('change', onChange)
 
@@ -474,6 +476,7 @@ const DwgRenderer: React.FC<Props> = ({
         controls.target.y = touchStateRef.current.startTargetY + worldDy
         controls.update()
       }
+      setCamVersion(v => (v + 1) % 1000000)
     }
 
     const handleTouchEnd = () => {
@@ -1375,15 +1378,15 @@ const DwgRenderer: React.FC<Props> = ({
         const s = projectToScreen(snap.pos)
         if (isNaN(s.x) || isNaN(s.y)) return null
         
-        const color = "#333333"
+        const color = isDarkMode ? "#38bdf8" : "#0284c7"
         
         return (
           <svg className="absolute inset-0 pointer-events-none w-full h-full z-10">
             {snap.type === 'endpoint' && (
-              <rect x={s.x - 5} y={s.y - 5} width="10" height="10" stroke={color} strokeWidth="2" fill="none" />
+              <rect x={s.x - 5} y={s.y - 5} width="10" height="10" stroke={color} strokeWidth="2.5" fill="none" />
             )}
             {snap.type === 'midpoint' && (
-               <polygon points={`${s.x},${s.y - 6} ${s.x - 5},${s.y + 4} ${s.x + 5},${s.y + 4}`} stroke={color} strokeWidth="2" fill="none" />
+               <polygon points={`${s.x},${s.y - 6} ${s.x - 5},${s.y + 4} ${s.x + 5},${s.y + 4}`} stroke={color} strokeWidth="2.5" fill="none" />
             )}
           </svg>
         )
@@ -1392,12 +1395,12 @@ const DwgRenderer: React.FC<Props> = ({
       {polyPoints.length > 0 && renderer && tool === 'area' && (
         <svg className="absolute inset-0 pointer-events-none w-full h-full z-10">
           {(() => {
-            const color = "#333333"
+            const color = isDarkMode ? "#38bdf8" : "#0284c7"
             const pts = polyPoints.map(p => projectToScreen(p))
             return (
               <>
                 {pts.map((p, i) => (
-                  i > 0 ? <line key={`seg-${i}`} x1={pts[i-1].x} y1={pts[i-1].y} x2={p.x} y2={p.y} stroke={color} strokeWidth="2" /> : null
+                  i > 0 ? <line key={`seg-${i}`} x1={pts[i-1].x} y1={pts[i-1].y} x2={p.x} y2={p.y} stroke={color} strokeWidth="2.5" /> : null
                 ))}
                 {(() => {
                   const last = pts[pts.length - 1]
@@ -1406,7 +1409,7 @@ const DwgRenderer: React.FC<Props> = ({
                     const p = ndcToWorldOnPlaneZ0({ clientX: 0, clientY: 0 } as any)
                     return p ? projectToScreen(p) : last
                   })()
-                  return <line x1={last.x} y1={last.y} x2={target.x} y2={target.y} stroke={color} strokeWidth="2" strokeDasharray="4,3" />
+                  return <line x1={last.x} y1={last.y} x2={target.x} y2={target.y} stroke={color} strokeWidth="2.5" strokeDasharray="4,3" />
                 })()}
               </>
             )
@@ -1421,13 +1424,15 @@ const DwgRenderer: React.FC<Props> = ({
             const path = spts.map(p => `${p.x},${p.y}`).join(' ')
             const cx = spts.reduce((acc, p) => acc + p.x, 0) / spts.length
             const cy = spts.reduce((acc, p) => acc + p.y, 0) / spts.length
-            const color = "#333333"
+            const color = isDarkMode ? "#a855f7" : "#7e22ce"
+            const badgeBg = isDarkMode ? "#0f172a" : "#ffffff"
+            const textColor = isDarkMode ? "#f8fafc" : "#0f172a"
             return (
               <g key={`area-${i}`}>
-                <polygon points={path} fill="rgba(255,164,0,0.15)" stroke={color} strokeWidth="2" />
+                <polygon points={path} fill="rgba(168, 85, 247, 0.25)" stroke={color} strokeWidth="2.5" />
                 <g transform={`translate(${cx}, ${cy - 12})`}>
-                  <rect x="-60" y="-12" width="120" height="24" rx="12" fill="#000" stroke={color} strokeWidth="2" />
-                  <text fontSize="12" fontWeight="900" textAnchor="middle" fill={color} dy="5" className="font-mono">
+                  <rect x="-60" y="-14" width="120" height="28" rx="14" fill={badgeBg} stroke={color} strokeWidth="2" />
+                  <text fontSize="12" fontWeight="800" textAnchor="middle" fill={textColor} dy="5" className="font-mono">
                     {ar.text}
                   </text>
                 </g>
@@ -1464,19 +1469,23 @@ const DwgRenderer: React.FC<Props> = ({
             const bHead1 = { x: b1.x + outUx * arrowLen + px * arrowWing, y: b1.y + outUy * arrowLen + py * arrowWing }
             const bHead2 = { x: b1.x + outUx * arrowLen - px * arrowWing, y: b1.y + outUy * arrowLen - py * arrowWing }
             const mid = { x: (a1.x + b1.x) / 2, y: (a1.y + b1.y) / 2 - 10 }
-            const color = "#333333"
+            
+            const color = isDarkMode ? "#38bdf8" : "#0284c7"
+            const badgeBg = isDarkMode ? "#0f172a" : "#ffffff"
+            const textColor = isDarkMode ? "#f8fafc" : "#0f172a"
+
             return (
               <g key={i}>
-                <line x1={a.x} y1={a.y} x2={a1.x} y2={a1.y} stroke={color} strokeWidth="2" />
-                <line x1={b.x} y1={b.y} x2={b1.x} y2={b1.y} stroke={color} strokeWidth="2" />
-                <line x1={a1.x} y1={a1.y} x2={b1.x} y2={b1.y} stroke={color} strokeWidth="2" />
-                <line x1={a1.x} y1={a1.y} x2={aHead1.x} y2={aHead1.y} stroke={color} strokeWidth="2" />
-                <line x1={a1.x} y1={a1.y} x2={aHead2.x} y2={aHead2.y} stroke={color} strokeWidth="2" />
-                <line x1={b1.x} y1={b1.y} x2={bHead1.x} y2={bHead1.y} stroke={color} strokeWidth="2" />
-                <line x1={b1.x} y1={b1.y} x2={bHead2.x} y2={bHead2.y} stroke={color} strokeWidth="2" />
+                <line x1={a.x} y1={a.y} x2={a1.x} y2={a1.y} stroke={color} strokeWidth="2" strokeDasharray="3,3" opacity="0.8" />
+                <line x1={b.x} y1={b.y} x2={b1.x} y2={b1.y} stroke={color} strokeWidth="2" strokeDasharray="3,3" opacity="0.8" />
+                <line x1={a1.x} y1={a1.y} x2={b1.x} y2={b1.y} stroke={color} strokeWidth="2.5" />
+                <line x1={a1.x} y1={a1.y} x2={aHead1.x} y2={aHead1.y} stroke={color} strokeWidth="2.5" />
+                <line x1={a1.x} y1={a1.y} x2={aHead2.x} y2={aHead2.y} stroke={color} strokeWidth="2.5" />
+                <line x1={b1.x} y1={b1.y} x2={bHead1.x} y2={bHead1.y} stroke={color} strokeWidth="2.5" />
+                <line x1={b1.x} y1={b1.y} x2={bHead2.x} y2={bHead2.y} stroke={color} strokeWidth="2.5" />
                 <g transform={`translate(${mid.x}, ${mid.y})`}>
-                  <rect x="-50" y="-12" width="100" height="24" rx="12" fill="#000" stroke={color} strokeWidth="2" />
-                  <text fontSize="12" fontWeight="900" textAnchor="middle" fill={color} dy="5" className="font-mono">
+                  <rect x="-55" y="-14" width="110" height="28" rx="14" fill={badgeBg} stroke={color} strokeWidth="2" className="shadow-lg" />
+                  <text fontSize="12" fontWeight="800" textAnchor="middle" fill={textColor} dy="5" className="font-mono">
                     {dim.text}
                   </text>
                 </g>
@@ -1487,21 +1496,25 @@ const DwgRenderer: React.FC<Props> = ({
       )}
 
       {points.length > 0 && renderer && (
-        <svg className="absolute inset-0 pointer-events-none w-full h-full">
+        <svg className="absolute inset-0 pointer-events-none w-full h-full z-10">
           {points.map((p, i) => {
             const s = projectToScreen(p)
-            return <circle key={i} cx={s.x} cy={s.y} r="6" fill="#333333" stroke="#000" strokeWidth="2" />
+            const color = isDarkMode ? "#38bdf8" : "#0284c7"
+            return <circle key={i} cx={s.x} cy={s.y} r="6" fill={color} stroke={isDarkMode ? '#ffffff' : '#000000'} strokeWidth="2" />
           })}
           {points.length === 2 && (() => {
             const a = projectToScreen(points[0])
             const b = projectToScreen(points[1])
             const mid = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 - 20 }
+            const color = isDarkMode ? "#38bdf8" : "#0284c7"
+            const badgeBg = isDarkMode ? "#0f172a" : "#ffffff"
+            const textColor = isDarkMode ? "#f8fafc" : "#0f172a"
             return (
               <>
-                <line x1={a.x} y1={a.y} x2={b.x} y2={b.y} stroke="#333333" strokeWidth="3" strokeDasharray="6,4" />
+                <line x1={a.x} y1={a.y} x2={b.x} y2={b.y} stroke={color} strokeWidth="3" strokeDasharray="6,4" />
                 <g transform={`translate(${mid.x}, ${mid.y})`}>
-                  <rect x="-50" y="-12" width="100" height="24" rx="12" fill="#000" stroke="#333333" strokeWidth="2" />
-                  <text fontSize="12" fontWeight="900" textAnchor="middle" fill="#333333" dy="5" className="font-mono">
+                  <rect x="-55" y="-14" width="110" height="28" rx="14" fill={badgeBg} stroke={color} strokeWidth="2" />
+                  <text fontSize="12" fontWeight="800" textAnchor="middle" fill={textColor} dy="5" className="font-mono">
                     {displayDist()}
                   </text>
                 </g>
@@ -1513,31 +1526,32 @@ const DwgRenderer: React.FC<Props> = ({
 
       </div>
 
+      {/* Floating Action Buttons for Clear Cotas / Clear Areas */}
       <div 
-        className="absolute top-14 right-2 z-[100] flex flex-col gap-2 pointer-events-auto"
+        className="absolute bottom-6 right-4 z-[120] flex flex-col gap-2 pointer-events-auto"
       >
         {dimensions.length > 0 && (
           <button
             onClick={() => setDimensions([])}
-            className="text-xs text-white px-3 py-1.5 rounded bg-red-900/80 border border-red-700 hover:bg-red-800 shadow-lg transition-colors flex items-center gap-2 backdrop-blur-sm cursor-pointer"
+            className="text-xs font-bold text-white px-3.5 py-2 rounded-xl bg-red-600 hover:bg-red-500 border border-red-400 shadow-2xl transition-all flex items-center gap-2 backdrop-blur-md cursor-pointer transform active:scale-95"
             title="Borrar todas las cotas"
           >
             <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
             </svg>
-            Borrar Cotas
+            Borrar Cotas ({dimensions.length})
           </button>
         )}
         {areas.length > 0 && (
           <button
             onClick={() => setAreas([])}
-            className="text-xs text-white px-3 py-1.5 rounded bg-red-900/80 border border-red-700 hover:bg-red-800 shadow-lg transition-colors flex items-center gap-2 backdrop-blur-sm cursor-pointer"
+            className="text-xs font-bold text-white px-3.5 py-2 rounded-xl bg-red-600 hover:bg-red-500 border border-red-400 shadow-2xl transition-all flex items-center gap-2 backdrop-blur-md cursor-pointer transform active:scale-95"
             title="Borrar todas las áreas"
           >
             <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
             </svg>
-            Borrar Áreas
+            Borrar Áreas ({areas.length})
           </button>
         )}
       </div>
