@@ -63,7 +63,7 @@ export default function Sidebar({
     : fullMenuItems;
 
   return (
-    <div className="w-20 lg:w-[240px] bg-white dark:bg-[#050505] border-r border-slate-200 dark:border-[#1a1a1a] flex flex-col h-screen overflow-hidden transition-all duration-500 z-[60]">
+    <div className="hidden md:flex w-20 lg:w-[240px] bg-white dark:bg-[#050505] border-r border-slate-200 dark:border-[#1a1a1a] flex-col h-screen overflow-hidden transition-all duration-500 z-[60]">
       <div className="p-5 lg:p-6 flex flex-col items-center lg:items-start gap-5">
         <div className="flex items-center gap-3 group cursor-pointer">
           <div className="w-8 h-8 bg-slate-900 dark:bg-white border border-slate-900 dark:border-white rounded-lg flex items-center justify-center shadow-lg group-hover:scale-105 transition-transform duration-500 overflow-hidden p-1.5">

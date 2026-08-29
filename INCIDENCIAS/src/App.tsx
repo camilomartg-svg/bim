@@ -11,7 +11,7 @@ import QualityReportList from './components/QualityReportList';
 import EnvironmentalReportList from './components/EnvironmentalReportList';
 import ConfigPanel from './components/ConfigPanel';
 import { Issue } from './types';
-import { LogIn, Box, Layers, Workflow, Package, Plus, Bell, Calendar, ChevronRight, Moon, Sun, AlertCircle } from 'lucide-react';
+import { LogIn, Box, Layers, Workflow, Package, Plus, Bell, Calendar, ChevronRight, Moon, Sun, AlertCircle, ClipboardList, MessageSquare } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { cn } from './lib/utils';
 import { format } from 'date-fns';
@@ -48,6 +48,7 @@ function Dashboard() {
   const [selectedReportId, setSelectedReportId] = useState<string | null>(null);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [summaryFilter, setSummaryFilter] = useState<'author' | 'responsible' | 'reviewer' | 'bim'>('author');
+  const [mobileTab, setMobileTab] = useState<'summary' | 'chat'>('summary');
   const { user, googleAccessToken, connectGoogleDrive } = useAuth();
   const { theme, toggleTheme } = useTheme();
   const [currentTime, setCurrentTime] = useState(new Date());
@@ -128,18 +129,72 @@ function Dashboard() {
       case 'dashboard':
         return (
           <div className="flex-1 flex flex-col md:flex-row overflow-hidden bg-white dark:bg-[#020617] transition-colors duration-300">
-            {/* Left Column: Chat/Activity (50% on PC, stacked on Mobile) */}
-            <section className="w-full md:w-1/2 h-1/2 md:h-full relative z-10 flex flex-col bg-white dark:bg-[#020617] transition-colors duration-300 border-b md:border-b-0 md:border-r border-slate-200 dark:border-slate-800/30 overflow-hidden">
+            {/* Selector superior para PWA celular (Celular = 100% pantalla) */}
+            {isMobilePhone && (
+              <div className="flex bg-slate-100 dark:bg-[#090d16] p-1 border-b border-slate-200 dark:border-slate-800 shrink-0 gap-1 z-20">
+                <button
+                  onClick={() => setMobileTab('summary')}
+                  className={cn(
+                    "flex-1 py-2 rounded-xl text-[9px] font-black uppercase tracking-wider transition-all flex items-center justify-center gap-1.5",
+                    mobileTab === 'summary'
+                      ? "bg-slate-900 dark:bg-white text-white dark:text-slate-900 shadow-md"
+                      : "text-slate-500 hover:text-slate-900 dark:hover:text-white"
+                  )}
+                >
+                  <ClipboardList className="w-3.5 h-3.5" />
+                  <span>Hallazgos e Incidencias</span>
+                </button>
+                <button
+                  onClick={() => setMobileTab('chat')}
+                  className={cn(
+                    "flex-1 py-2 rounded-xl text-[9px] font-black uppercase tracking-wider transition-all flex items-center justify-center gap-1.5 relative",
+                    mobileTab === 'chat'
+                      ? "bg-slate-900 dark:bg-white text-white dark:text-slate-900 shadow-md"
+                      : "text-slate-500 hover:text-slate-900 dark:hover:text-white"
+                  )}
+                >
+                  <MessageSquare className="w-3.5 h-3.5" />
+                  <span>Chat y Trazabilidad</span>
+                  {selectedIssue && (
+                    <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
+                  )}
+                </button>
+              </div>
+            )}
+
+            {/* Left Column: Chat/Activity (50% on PC, 100% on Mobile when chat tab active) */}
+            <section className={cn(
+              "w-full md:w-1/2 h-full relative z-10 flex flex-col bg-white dark:bg-[#020617] transition-colors duration-300 border-b md:border-b-0 md:border-r border-slate-200 dark:border-slate-800/30 overflow-hidden",
+              isMobilePhone && mobileTab !== 'chat' && "hidden md:flex"
+            )}>
+               {isMobilePhone && (
+                 <div className="px-3 py-2 bg-amber-500/10 border-b border-amber-500/20 flex items-center justify-between shrink-0">
+                   <button
+                     onClick={() => setMobileTab('summary')}
+                     className="text-[9px] font-black uppercase tracking-wider text-amber-600 dark:text-amber-400 flex items-center gap-1.5 hover:underline"
+                   >
+                     ← Volver a Hallazgos
+                   </button>
+                   {selectedIssue && (
+                     <span className="text-[8px] font-bold text-slate-500 truncate max-w-[170px]">
+                       {selectedIssue.code || selectedIssue.title}
+                     </span>
+                   )}
+                 </div>
+               )}
                <DashboardChat selectedIssue={selectedIssue} />
             </section>
 
-            {/* Right Column: Execution/Management (50% on PC, stacked on Mobile) */}
-            <section className="w-full md:w-1/2 h-1/2 md:h-full flex flex-col overflow-hidden">
+            {/* Right Column: Execution/Management (50% on PC, 100% on Mobile when summary tab active) */}
+            <section className={cn(
+              "w-full md:w-1/2 h-full flex flex-col overflow-hidden",
+              isMobilePhone && mobileTab !== 'summary' && "hidden md:flex"
+            )}>
                {/* Fixed Header within Right Column */}
                <div className="px-3 md:px-5 py-2 md:py-3.5 bg-white/50 dark:bg-black/50 backdrop-blur-xl border-b border-slate-100 dark:border-[#111111]">
                   <button 
                     onClick={() => setIsCreateModalOpen(true)}
-                    className="w-full bg-[#FFC000] text-slate-900 px-4 md:px-5 py-2 md:py-2.5 rounded-lg font-black text-[8.5px] uppercase tracking-[0.15em] hover:bg-amber-400 transition-all shadow-md active:scale-[0.98] flex items-center justify-center gap-2 group"
+                    className="w-full bg-[#FFC000] text-slate-900 px-4 md:px-5 py-2.5 rounded-lg font-black text-[8.5px] uppercase tracking-[0.15em] hover:bg-amber-400 transition-all shadow-md active:scale-[0.98] flex items-center justify-center gap-2 group"
                   >
                     <Plus className="w-3.5 h-3.5 group-hover:rotate-90 transition-transform duration-500" />
                     Registrar Hallazgo en Obra
@@ -175,7 +230,12 @@ function Dashboard() {
                {/* Dynamic Content Area */}
                <div className="flex-1 overflow-hidden px-2 md:px-4 py-1 flex flex-col">
                   <DashboardSummary 
-                    onSelectIssue={(issue) => setSelectedIssue(issue)} 
+                    onSelectIssue={(issue) => {
+                      setSelectedIssue(issue);
+                      if (isMobilePhone) {
+                        setMobileTab('chat');
+                      }
+                    }} 
                     onOpenReport={(reportId) => {
                       if (!isMobilePhone) {
                         setSelectedReportId(reportId);
@@ -302,8 +362,8 @@ function Dashboard() {
       />
       <main className="flex-1 flex flex-col overflow-hidden relative">
         {/* Superior Navigation / Breadcrumbs */}
-        <header className="h-10 border-b border-slate-200 dark:border-[#1a1a1a] flex items-center justify-between px-6 bg-white/80 dark:bg-black/80 backdrop-blur-md z-50 shrink-0 transition-colors duration-200">
-          <div className="flex items-center gap-2.5">
+        <header className="min-h-10 border-b border-slate-200 dark:border-[#1a1a1a] flex items-center justify-between px-3 md:px-6 py-1.5 bg-white/80 dark:bg-black/80 backdrop-blur-md z-50 shrink-0 transition-colors duration-200 gap-2">
+          <div className="flex items-center gap-2">
              <span className="text-[8px] font-black text-slate-400 dark:text-slate-600 uppercase tracking-[0.2em]">Portal BIM</span>
              <ChevronRight className="w-2 h-2 text-slate-300 dark:text-slate-700" />
              <span className="text-[8px] font-black text-slate-900 dark:text-white uppercase tracking-[0.2em]">Nora</span>
@@ -315,12 +375,11 @@ function Dashboard() {
              )}
           </div>
 
-          <div className="flex items-center gap-6">
-             <div className="flex items-center gap-2.5 text-slate-500">
+          <div className="flex items-center gap-2 md:gap-6">
+             <div className="hidden sm:flex items-center gap-2 text-slate-500">
                <Calendar className="w-3 h-3" />
                <span className="text-[8px] font-black uppercase tracking-widest">{format(currentTime, "EEEE, d 'de' MMMM", { locale: es })}</span>
              </div>
-             <div className="h-4 w-px bg-slate-200 dark:bg-[#1a1a1a]" />
              <button 
                onClick={toggleTheme}
                className="p-1.5 rounded-lg border border-slate-200 dark:border-[#1a1a1a] hover:bg-slate-50 dark:hover:bg-[#111111] transition-all text-slate-400 dark:text-slate-700 hover:text-slate-900 dark:hover:text-white active:scale-95 group"
@@ -332,7 +391,6 @@ function Dashboard() {
                  <Moon className="w-3.5 h-3.5 group-hover:-rotate-12 transition-transform duration-500" />
                )}
              </button>
-             <div className="h-4 w-px bg-slate-200 dark:bg-[#1a1a1a]" />
 
              {/* Google Drive Status & Connection Button */}
              <button
@@ -355,7 +413,7 @@ function Dashboard() {
                  }
                }}
                className={cn(
-                 "p-1 px-2.5 rounded-lg border text-[7.5px] font-black uppercase tracking-wider flex items-center gap-2 active:scale-95 transition-all outline-none",
+                 "p-1 px-2 rounded-lg border text-[7.5px] font-black uppercase tracking-wider flex items-center gap-1.5 active:scale-95 transition-all outline-none",
                  googleAccessToken
                    ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/20"
                    : "bg-red-500/10 border-red-500/20 text-red-500 hover:bg-red-500/20"
@@ -363,16 +421,16 @@ function Dashboard() {
                title={googleAccessToken ? "Google Drive Vinculado" : "Google Drive Desconectado"}
              >
                <span className={cn("w-1.5 h-1.5 rounded-full", googleAccessToken ? "bg-emerald-500 animate-pulse" : "bg-red-500")} />
-               <span>Drive: {googleAccessToken ? "VINCULADO" : "CONECTAR"}</span>
+               <span className="hidden sm:inline">Drive: {googleAccessToken ? "VINCULADO" : "CONECTAR"}</span>
+               <span className="sm:hidden">{googleAccessToken ? "DRIVE OK" : "CONECTAR"}</span>
              </button>
 
-             <div className="h-4 w-px bg-slate-200 dark:bg-[#1a1a1a]" />
-             <div className="flex items-center gap-2.5">
-               <div className="text-right">
+             <div className="flex items-center gap-2">
+               <div className="text-right hidden sm:block">
                  <p className="text-[8px] font-black text-slate-900 dark:text-white uppercase tracking-tight leading-none">{user?.name}</p>
                  <p className="text-[6.5px] font-bold text-slate-400 dark:text-slate-600 uppercase tracking-widest mt-1">{user?.position || 'Usuario BIM'}</p>
                </div>
-               <div className="w-7 h-7 bg-slate-900 dark:bg-white rounded-lg flex items-center justify-center p-1.5 shadow-sm">
+               <div className="w-6 h-6 sm:w-7 sm:h-7 bg-slate-900 dark:bg-white rounded-lg flex items-center justify-center p-1 shadow-sm">
                  <img 
                     src="https://i.postimg.cc/yY0XpLzW/LOGO-BIM-BLANCO-ICO.png" 
                     alt="BIM Logo" 
