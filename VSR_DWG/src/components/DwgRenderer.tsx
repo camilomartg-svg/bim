@@ -12,6 +12,7 @@ interface Props {
   file: File | null
   tool: Tool
   showGrid: boolean
+  showZoomSlider?: boolean
   calibration: Calibration | null
   onCalibrationComplete: (c: Calibration) => void
   snapSettings: SnapSettings
@@ -19,7 +20,7 @@ interface Props {
 }
 
 const DwgRenderer: React.FC<Props> = ({
-  file, tool, showGrid, calibration, onCalibrationComplete, snapSettings, isDarkMode
+  file, tool, showGrid, showZoomSlider = false, calibration, onCalibrationComplete, snapSettings, isDarkMode
 }) => {
   const containerRef = useRef<HTMLDivElement>(null)
   const controlsTargetRef = useRef<HTMLDivElement>(null)
@@ -347,6 +348,150 @@ const DwgRenderer: React.FC<Props> = ({
       controls.removeEventListener('change', onChange)
     }
   }, [controls, tool])
+
+  const touchStateRef = useRef<{
+    mode: 'pan' | 'pinch' | 'none';
+    startX: number;
+    startY: number;
+    startCamX: number;
+    startCamY: number;
+    startTargetX: number;
+    startTargetY: number;
+    initialDist: number;
+    initialZoom: number;
+  } | null>(null)
+
+  useEffect(() => {
+    const container = controlsTargetRef.current
+    if (!container || !camera || !controls || !renderer) return
+
+    const getScreenToWorldUnits = () => {
+      const rect = container.getBoundingClientRect()
+      if (!rect.height) return 1
+      const visibleHeight = (camera.top - camera.bottom) / camera.zoom
+      return visibleHeight / rect.height
+    }
+
+    const handleTouchStart = (e: TouchEvent) => {
+      if (e.touches.length === 1) {
+        const touch = e.touches[0]
+        touchStateRef.current = {
+          mode: 'pan',
+          startX: touch.clientX,
+          startY: touch.clientY,
+          startCamX: camera.position.x,
+          startCamY: camera.position.y,
+          startTargetX: controls.target.x,
+          startTargetY: controls.target.y,
+          initialDist: 0,
+          initialZoom: camera.zoom,
+        }
+      } else if (e.touches.length === 2) {
+        e.preventDefault()
+        const t1 = e.touches[0]
+        const t2 = e.touches[1]
+        const dist = Math.hypot(t1.clientX - t2.clientX, t1.clientY - t2.clientY)
+        const centerX = (t1.clientX + t2.clientX) / 2
+        const centerY = (t1.clientY + t2.clientY) / 2
+
+        touchStateRef.current = {
+          mode: 'pinch',
+          startX: centerX,
+          startY: centerY,
+          startCamX: camera.position.x,
+          startCamY: camera.position.y,
+          startTargetX: controls.target.x,
+          startTargetY: controls.target.y,
+          initialDist: dist,
+          initialZoom: camera.zoom,
+        }
+      }
+    }
+
+    const handleTouchMove = (e: TouchEvent) => {
+      if (!touchStateRef.current) return
+
+      if (e.touches.length === 1 && touchStateRef.current.mode === 'pan') {
+        e.preventDefault()
+        const touch = e.touches[0]
+        const dx = touch.clientX - touchStateRef.current.startX
+        const dy = touch.clientY - touchStateRef.current.startY
+        const unitsPerPixel = getScreenToWorldUnits()
+
+        const worldDx = -dx * unitsPerPixel
+        const worldDy = dy * unitsPerPixel
+
+        camera.position.x = touchStateRef.current.startCamX + worldDx
+        camera.position.y = touchStateRef.current.startCamY + worldDy
+        controls.target.x = touchStateRef.current.startTargetX + worldDx
+        controls.target.y = touchStateRef.current.startTargetY + worldDy
+        controls.update()
+      } else if (e.touches.length === 2) {
+        e.preventDefault()
+        const t1 = e.touches[0]
+        const t2 = e.touches[1]
+        const currentDist = Math.hypot(t1.clientX - t2.clientX, t1.clientY - t2.clientY)
+        const currentCenterX = (t1.clientX + t2.clientX) / 2
+        const currentCenterY = (t1.clientY + t2.clientY) / 2
+
+        if (touchStateRef.current.mode !== 'pinch') {
+          touchStateRef.current = {
+            mode: 'pinch',
+            startX: currentCenterX,
+            startY: currentCenterY,
+            startCamX: camera.position.x,
+            startCamY: camera.position.y,
+            startTargetX: controls.target.x,
+            startTargetY: controls.target.y,
+            initialDist: currentDist,
+            initialZoom: camera.zoom,
+          }
+          return
+        }
+
+        const { initialDist, initialZoom } = touchStateRef.current
+        if (initialDist <= 0) return
+
+        const ratio = currentDist / initialDist
+        let newZoom = initialZoom * ratio
+        if (newZoom < 0.1) newZoom = 0.1
+        if (newZoom > 10) newZoom = 10
+
+        camera.zoom = newZoom
+        camera.updateProjectionMatrix()
+        setZoomLevel(newZoom)
+
+        const dx = currentCenterX - touchStateRef.current.startX
+        const dy = currentCenterY - touchStateRef.current.startY
+        const unitsPerPixel = (camera.top - camera.bottom) / (newZoom * container.getBoundingClientRect().height)
+
+        const worldDx = -dx * unitsPerPixel
+        const worldDy = dy * unitsPerPixel
+
+        camera.position.x = touchStateRef.current.startCamX + worldDx
+        camera.position.y = touchStateRef.current.startCamY + worldDy
+        controls.target.x = touchStateRef.current.startTargetX + worldDx
+        controls.target.y = touchStateRef.current.startTargetY + worldDy
+        controls.update()
+      }
+    }
+
+    const handleTouchEnd = () => {
+      touchStateRef.current = null
+    }
+
+    container.addEventListener('touchstart', handleTouchStart, { passive: false })
+    container.addEventListener('touchmove', handleTouchMove, { passive: false })
+    container.addEventListener('touchend', handleTouchEnd, { passive: false })
+    container.addEventListener('touchcancel', handleTouchEnd, { passive: false })
+
+    return () => {
+      container.removeEventListener('touchstart', handleTouchStart)
+      container.removeEventListener('touchmove', handleTouchMove)
+      container.removeEventListener('touchend', handleTouchEnd)
+      container.removeEventListener('touchcancel', handleTouchEnd)
+    }
+  }, [camera, controls, renderer])
 
   useEffect(() => {
     if (!renderer || !entityRoot) return
@@ -1025,29 +1170,31 @@ const DwgRenderer: React.FC<Props> = ({
       </button>
 
       {/* Zoom Slider */}
-      <div className="absolute top-1/2 right-4 transform -translate-y-1/2 flex flex-col items-center bg-slate-800/80 p-2 rounded-xl z-50 gap-2 shadow-xl border border-slate-700">
-         <div className="flex flex-col items-center gap-1 mb-2">
-            <span className="text-[10px] text-slate-400 uppercase tracking-wider">Zoom</span>
-            <input 
-              type="number" 
-              value={Math.round(zoomLevel * 100)} 
-              onChange={handleZoomInput}
-              className="w-12 bg-slate-900 text-white text-xs text-center rounded border border-slate-600 py-1 focus:border-nora-500 outline-none"
-            />
-            <span className="text-xs text-slate-400">%</span>
-         </div>
-         <input 
-            type="range" 
-            min="0.1" 
-            max="10" 
-            step="0.1"
-            value={zoomLevel} 
-            onChange={handleManualZoom}
-            className="h-40 w-2 appearance-none bg-slate-600 rounded-lg outline-none slider-vertical"
-            style={{ writingMode: 'bt-lr', WebkitAppearance: 'slider-vertical' } as any}
-            {...{ orient: "vertical" } as any}
-         />
-      </div>
+      {showZoomSlider && (
+        <div className="absolute top-1/2 right-4 transform -translate-y-1/2 flex flex-col items-center bg-slate-800/80 p-2 rounded-xl z-50 gap-2 shadow-xl border border-slate-700">
+           <div className="flex flex-col items-center gap-1 mb-2">
+              <span className="text-[10px] text-slate-400 uppercase tracking-wider">Zoom</span>
+              <input 
+                type="number" 
+                value={Math.round(zoomLevel * 100)} 
+                onChange={handleZoomInput}
+                className="w-12 bg-slate-900 text-white text-xs text-center rounded border border-slate-600 py-1 focus:border-nora-500 outline-none"
+              />
+              <span className="text-xs text-slate-400">%</span>
+           </div>
+           <input 
+              type="range" 
+              min="0.1" 
+              max="10" 
+              step="0.1"
+              value={zoomLevel} 
+              onChange={handleManualZoom}
+              className="h-40 w-2 appearance-none bg-slate-600 rounded-lg outline-none slider-vertical"
+              style={{ writingMode: 'bt-lr', WebkitAppearance: 'slider-vertical' } as any}
+              {...{ orient: "vertical" } as any}
+           />
+        </div>
+      )}
 
       {/* Top Left Tools */}
       <div className="absolute top-2 left-2 z-[100] flex gap-2">
@@ -1214,7 +1361,7 @@ const DwgRenderer: React.FC<Props> = ({
 
       <div
         ref={controlsTargetRef}
-        className="absolute inset-0 w-full h-full"
+        className="absolute inset-0 w-full h-full touch-none"
         onContextMenu={(e) => e.preventDefault()}
         onMouseDown={onMouseDown}
         onDoubleClick={onDoubleClick}
