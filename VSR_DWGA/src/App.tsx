@@ -160,6 +160,7 @@ const App: React.FC = () => {
   const [file, setFile] = useState<File | null>(null)
   const [activeTool, setActiveTool] = useState<Tool>('hand')
   const [showGrid, setShowGrid] = useState(false)
+  const [showZoomSlider, setShowZoomSlider] = useState(false)
   const [calibration, setCalibration] = useState<Calibration | null>(null)
   const [snapSettings, setSnapSettings] = useState<SnapSettings>({
     enableEndpoint: true,
@@ -555,6 +556,14 @@ const App: React.FC = () => {
             </div>
 
             <button onClick={() => setShowGrid(!showGrid)} className={`w-8 h-8 rounded shrink-0 transition ${showGrid ? 'text-nora-600 dark:text-nora-400 bg-nora-50 dark:bg-nora-500/10' : 'text-slate-400 dark:text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800'}`} title="Grid"><i className="fa-solid fa-border-none text-xs"></i></button>
+
+            <button 
+              onClick={() => setShowZoomSlider(!showZoomSlider)} 
+              className={`w-8 h-8 rounded shrink-0 transition ${showZoomSlider ? 'text-nora-600 dark:text-nora-400 bg-nora-50 dark:bg-nora-500/10' : 'text-slate-400 dark:text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800'}`} 
+              title="Control de Zoom"
+            >
+              <i className="fa-solid fa-magnifying-glass-plus text-xs"></i>
+            </button>
                         
             <button 
               onClick={() => setIsDarkMode(!isDarkMode)} 
@@ -637,6 +646,7 @@ const App: React.FC = () => {
               file={file}
               tool={activeTool}
               showGrid={showGrid}
+              showZoomSlider={showZoomSlider}
               calibration={calibration}
               onCalibrationComplete={onCalibrationComplete}
               snapSettings={snapSettings}
