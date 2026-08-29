@@ -482,18 +482,18 @@ const App: React.FC = () => {
       </div>
 
       <div className="flex-1 flex flex-col min-w-0 h-full relative">
-        <header className="h-[60px] bg-white dark:bg-black border-b border-slate-200 dark:border-slate-800 px-4 flex items-center justify-between z-30 shadow-sm">
-          <div className="flex items-center gap-4">
+        <header className="h-[60px] bg-white dark:bg-black border-b border-slate-200 dark:border-slate-800 px-3 flex items-center justify-between z-30 shadow-sm gap-2 overflow-hidden">
+          <div className="flex items-center gap-2 shrink-0">
             {!isSidebarOpen && (
               <button 
                 onClick={() => setIsSidebarOpen(true)}
-                className="w-8 h-8 flex items-center justify-center rounded hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white transition mr-2"
+                className="w-8 h-8 flex items-center justify-center rounded hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white transition"
                 title="Mostrar Galería"
               >
                 <i className="fa-solid fa-bars"></i>
               </button>
             )}
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2">
               <button 
                 onClick={() => window.history.back()}
                 className="w-8 h-8 flex items-center justify-center rounded hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white transition"
@@ -506,17 +506,17 @@ const App: React.FC = () => {
                   id="logo-img"
                   src={isDarkMode ? 'https://i.postimg.cc/FFfBKzb8/LOGO-TEXTO-NORA-BLANCO.png' : 'https://i.postimg.cc/L4r0gSvV/LOGO-TEXTO-NORA-NEGRO.png'} 
                   alt="nora CDE" 
-                  className="logo-img select-none h-[65px] max-md:h-[32px]"
+                  className="logo-img select-none h-[50px] max-md:h-[28px]"
                   draggable={false}
                 />
               </a>
             </div>
-            {file && <div className="h-4 w-px bg-slate-300 dark:bg-slate-700 mx-2"></div>}
-            {file && <span className="text-[10px] text-slate-500 dark:text-slate-400 font-mono truncate max-w-[160px]">{file.name}</span>}
+            {file && <div className="h-4 w-px bg-slate-300 dark:bg-slate-700 hidden sm:block"></div>}
+            {file && <span className="text-[10px] text-slate-500 dark:text-slate-400 font-mono truncate max-w-[90px] sm:max-w-[160px] hidden sm:inline-block">{file.name}</span>}
           </div>
 
-          <div className="flex items-center gap-1">
-            <div className="flex bg-slate-100 dark:bg-black rounded p-0.5 border border-slate-200 dark:border-slate-700 mr-4">
+          <div className="flex items-center gap-2 overflow-x-auto no-scrollbar py-1 shrink min-w-0 max-w-full touch-pan-x whitespace-nowrap">
+            <div className="flex bg-slate-100 dark:bg-black rounded p-0.5 border border-slate-200 dark:border-slate-700 shrink-0">
               <button 
                 onClick={() => setActiveTool('hand')}
                 className={`w-8 h-8 flex items-center justify-center rounded transition ${activeTool === 'hand' ? 'bg-white dark:bg-nora-600 shadow text-nora-600 dark:text-white' : 'text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700'}`}
@@ -554,23 +554,23 @@ const App: React.FC = () => {
               </button>
             </div>
 
-            <button onClick={() => setShowGrid(!showGrid)} className={`w-8 h-8 rounded transition ${showGrid ? 'text-nora-600 dark:text-nora-400 bg-nora-50 dark:bg-nora-500/10' : 'text-slate-400 dark:text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800'}`} title="Grid"><i className="fa-solid fa-border-none text-xs"></i></button>
+            <button onClick={() => setShowGrid(!showGrid)} className={`w-8 h-8 rounded shrink-0 transition ${showGrid ? 'text-nora-600 dark:text-nora-400 bg-nora-50 dark:bg-nora-500/10' : 'text-slate-400 dark:text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800'}`} title="Grid"><i className="fa-solid fa-border-none text-xs"></i></button>
                         
             <button 
               onClick={() => setIsDarkMode(!isDarkMode)} 
-              className={`w-8 h-8 rounded transition ${isDarkMode ? 'text-nora-400 hover:bg-slate-800' : 'text-slate-600 hover:bg-slate-100'}`} 
+              className={`w-8 h-8 rounded shrink-0 transition ${isDarkMode ? 'text-nora-400 hover:bg-slate-800' : 'text-slate-600 hover:bg-slate-100'}`} 
               title="Alternar Tema"
             >
               <i className={`fa-solid ${isDarkMode ? 'fa-sun' : 'fa-moon'} text-xs`}></i>
             </button>
 
-            <div className="hidden md:flex items-center gap-2 ml-4 px-2 py-1 rounded bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
+            <div className="flex items-center gap-2 px-2 py-1 rounded bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shrink-0">
               <span className="text-[10px] text-slate-500 dark:text-slate-400">Snap:</span>
-              <label className="flex items-center gap-1 text-[10px] text-slate-700 dark:text-slate-300">
+              <label className="flex items-center gap-1 text-[10px] text-slate-700 dark:text-slate-300 cursor-pointer">
                 <input type="checkbox" checked={snapSettings.enableEndpoint} onChange={(e) => setSnapSettings(s => ({ ...s, enableEndpoint: e.target.checked }))} />
                 <span>Endpoint</span>
               </label>
-              <label className="flex items-center gap-1 text-[10px] text-slate-700 dark:text-slate-300">
+              <label className="flex items-center gap-1 text-[10px] text-slate-700 dark:text-slate-300 cursor-pointer">
                 <input type="checkbox" checked={snapSettings.enableMidpoint} onChange={(e) => setSnapSettings(s => ({ ...s, enableMidpoint: e.target.checked }))} />
                 <span>Midpoint</span>
               </label>
@@ -582,14 +582,11 @@ const App: React.FC = () => {
                   max={32}
                   value={snapSettings.thresholdPx}
                   onChange={(e) => setSnapSettings(s => ({ ...s, thresholdPx: parseInt(e.target.value) }))}
+                  className="w-16 h-1"
                 />
-                <span className="text-[10px] text-slate-300 w-6 text-center">{snapSettings.thresholdPx}</span>
+                <span className="text-[10px] text-slate-300 w-5 text-center">{snapSettings.thresholdPx}</span>
               </div>
             </div>
-          </div>
-
-          <div className="flex items-center gap-3">
-            {/* Gallery button removed, upload moved to sidebar */}
           </div>
         </header>
 
