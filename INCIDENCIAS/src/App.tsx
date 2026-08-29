@@ -51,6 +51,26 @@ function Dashboard() {
   const { user, googleAccessToken, connectGoogleDrive } = useAuth();
   const { theme, toggleTheme } = useTheme();
   const [currentTime, setCurrentTime] = useState(new Date());
+  const [isMobilePhone, setIsMobilePhone] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return false;
+    return window.innerWidth < 768;
+  });
+
+  useEffect(() => {
+    const handleResize = () => {
+      setIsMobilePhone(window.innerWidth < 768);
+    };
+    handleResize();
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
+  useEffect(() => {
+    if (isMobilePhone && activeTab !== 'dashboard') {
+      setActiveTab('dashboard');
+    }
+  }, [isMobilePhone, activeTab]);
+
   const [projectConfig, setProjectConfig] = useState<any>(() => {
     try {
       const cached = localStorage.getItem('cached_project_config');
@@ -86,6 +106,7 @@ function Dashboard() {
   const canViewEnv = isBimTeam || isAdmin || envAllowed.length === 0 || envAllowed.includes(userTeam) || envAllowed.includes(userPosition);
 
   const handleOpenIssue = async (issueId: string) => {
+    if (isMobilePhone) return;
     try {
       const issueDoc = await getDoc(doc(db, 'issues', issueId));
       if (issueDoc.exists()) {
@@ -106,37 +127,36 @@ function Dashboard() {
     switch (activeTab) {
       case 'dashboard':
         return (
-          <div className="flex-1 flex overflow-hidden bg-white dark:bg-[#020617] transition-colors duration-300">
-            {/* Left Column: Chat/Activity (50%) */}
-            <section className="w-1/2 relative z-10 flex flex-col bg-white dark:bg-[#020617] transition-colors duration-300">
+          <div className="flex-1 flex flex-col md:flex-row overflow-hidden bg-white dark:bg-[#020617] transition-colors duration-300">
+            {/* Left Column: Chat/Activity (50% on PC, stacked on Mobile) */}
+            <section className="w-full md:w-1/2 h-1/2 md:h-full relative z-10 flex flex-col bg-white dark:bg-[#020617] transition-colors duration-300 border-b md:border-b-0 md:border-r border-slate-200 dark:border-slate-800/30 overflow-hidden">
                <DashboardChat selectedIssue={selectedIssue} />
-               <div className="absolute top-0 right-0 w-px h-full bg-slate-200 dark:bg-slate-800/30" />
             </section>
 
-            {/* Right Column: Execution/Management (50%) */}
-            <section className="w-1/2 flex flex-col overflow-hidden">
+            {/* Right Column: Execution/Management (50% on PC, stacked on Mobile) */}
+            <section className="w-full md:w-1/2 h-1/2 md:h-full flex flex-col overflow-hidden">
                {/* Fixed Header within Right Column */}
-               <div className="px-5 py-3.5 bg-white/50 dark:bg-black/50 backdrop-blur-xl border-b border-slate-100 dark:border-[#111111]">
+               <div className="px-3 md:px-5 py-2 md:py-3.5 bg-white/50 dark:bg-black/50 backdrop-blur-xl border-b border-slate-100 dark:border-[#111111]">
                   <button 
                     onClick={() => setIsCreateModalOpen(true)}
-                    className="w-full bg-[#FFC000] text-slate-900 px-5 py-2.5 rounded-lg font-black text-[8.5px] uppercase tracking-[0.15em] hover:bg-amber-400 transition-all shadow-md active:scale-[0.98] flex items-center justify-center gap-2 group"
+                    className="w-full bg-[#FFC000] text-slate-900 px-4 md:px-5 py-2 md:py-2.5 rounded-lg font-black text-[8.5px] uppercase tracking-[0.15em] hover:bg-amber-400 transition-all shadow-md active:scale-[0.98] flex items-center justify-center gap-2 group"
                   >
                     <Plus className="w-3.5 h-3.5 group-hover:rotate-90 transition-transform duration-500" />
                     Registrar Hallazgo en Obra
                   </button>
                   
-                  <div className="flex gap-6 mt-4 border-b border-slate-200 dark:border-[#1a1a1a]">
+                  <div className="flex gap-4 md:gap-6 mt-3 md:mt-4 border-b border-slate-200 dark:border-[#1a1a1a] overflow-x-auto custom-scrollbar">
                     {[
                       { id: 'author', label: 'Autor' },
                       { id: 'responsible', label: 'Responsable' },
                       { id: 'reviewer', label: 'Revisor' },
-                      ...(isBimTeam ? [{ id: 'bim', label: 'PANEL BIM (ELIMINAR)' }] : [])
+                      ...(isBimTeam ? [{ id: 'bim', label: 'PANEL BIM' }] : [])
                     ].map((tab) => (
                       <button 
                         key={tab.id}
                         onClick={() => setSummaryFilter(tab.id as any)}
                         className={cn(
-                          "pb-2 text-[8px] font-black uppercase tracking-[0.15em] transition-all relative px-0.5",
+                          "pb-2 text-[8px] font-black uppercase tracking-[0.15em] transition-all relative px-0.5 whitespace-nowrap",
                           summaryFilter === tab.id ? "text-slate-900 dark:text-white" : "text-slate-400 dark:text-slate-600 hover:text-slate-800 dark:hover:text-slate-300"
                         )}
                       >
@@ -153,13 +173,15 @@ function Dashboard() {
                </div>
 
                {/* Dynamic Content Area */}
-               <div className="flex-1 overflow-hidden px-4 py-1 flex flex-col">
+               <div className="flex-1 overflow-hidden px-2 md:px-4 py-1 flex flex-col">
                   <DashboardSummary 
                     onSelectIssue={(issue) => setSelectedIssue(issue)} 
                     onOpenReport={(reportId) => {
-                      setSelectedReportId(reportId);
-                      setActiveTab('site-reports');
-                      setSelectedIssue(null);
+                      if (!isMobilePhone) {
+                        setSelectedReportId(reportId);
+                        setActiveTab('site-reports');
+                        setSelectedIssue(null);
+                      }
                     }}
                     selectedIssueId={selectedIssue?.id}
                     filterRole={summaryFilter}

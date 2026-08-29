@@ -11,6 +11,7 @@ interface SidebarProps {
   canViewEnv?: boolean;
 }
 
+import { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 
 export default function Sidebar({ 
@@ -21,13 +22,27 @@ export default function Sidebar({
   canViewEnv = true
 }: SidebarProps) {
   const { logout, user } = useAuth();
+  const [isMobilePhone, setIsMobilePhone] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return false;
+    return window.innerWidth < 768;
+  });
+
+  useEffect(() => {
+    const handleResize = () => {
+      setIsMobilePhone(window.innerWidth < 768);
+    };
+    handleResize();
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
   const isBimTeam = user?.team?.toUpperCase().includes('BIM') || 
                     user?.position?.toUpperCase().includes('BIM') ||
                     user?.email?.toLowerCase() === 'imagina3ddesign@gmail.com';
 
   const isAdmin = user?.role === 'admin' || user?.role === 'super admin' || Boolean((user as any)?.isSuperAdmin);
 
-  const menuItems = [
+  const fullMenuItems = [
     { id: 'dashboard', icon: LayoutDashboard, label: 'Dashboard' },
     ...(isBimTeam || isAdmin ? [
       { id: 'issues', icon: ClipboardList, label: 'Incidencias' },
@@ -41,6 +56,11 @@ export default function Sidebar({
     { id: 'notifications', icon: Bell, label: 'Notificaciones' },
     ...(isAdmin ? [{ id: 'settings', icon: Settings, label: 'Configuración' }] : []),
   ];
+
+  // Dispositivos móviles / celular únicamente muestran el módulo Dashboard
+  const menuItems = isMobilePhone
+    ? [{ id: 'dashboard', icon: LayoutDashboard, label: 'Dashboard' }]
+    : fullMenuItems;
 
   return (
     <div className="w-20 lg:w-[240px] bg-white dark:bg-[#050505] border-r border-slate-200 dark:border-[#1a1a1a] flex flex-col h-screen overflow-hidden transition-all duration-500 z-[60]">
