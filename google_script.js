@@ -167,6 +167,9 @@ function doPost(e) {
     if (action === 'restoreVersion') {
       return output_(restoreVersion_(e, data), callback);
     }
+    if (action === 'wompiWebhook' || (data && data.event === 'transaction.updated')) {
+      return output_(handleWompiWebhook_(e, data), callback);
+    }
 
     let doc;
     try {
@@ -1877,4 +1880,60 @@ function wipeAndInitDatabase() {
   }
   
   Logger.log("Base de datos limpia e inicializada con los Super Administradores.");
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// CONTROL Y REGISTRO DE WEBHOOKS WOMPI (PASARELA DE PAGOS)
+// ─────────────────────────────────────────────────────────────────────────────
+const WOMPI_HEADERS = ['fecha', 'transactionId', 'reference', 'status', 'amountInCents', 'currency', 'paymentMethod', 'customerEmail'];
+
+function handleWompiWebhook_(e, data) {
+  try {
+    let doc;
+    try {
+      doc = SpreadsheetApp.openById(SPREADSHEET_ID);
+    } catch (err) {
+      doc = SpreadsheetApp.getActiveSpreadsheet();
+    }
+
+    let sheet = doc.getSheetByName('TransaccionesWompi');
+    if (!sheet) {
+      sheet = doc.insertSheet('TransaccionesWompi');
+    }
+    ensureHeaders(sheet, WOMPI_HEADERS);
+
+    const payload = data || {};
+    const tx = (payload.data && payload.data.transaction) ? payload.data.transaction : payload;
+    const fecha = new Date().toISOString();
+
+    const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0].map(h => String(h).trim());
+    const row = new Array(headers.length).fill("");
+
+    const setVal = (headerName, value) => {
+      const idx = headers.indexOf(headerName);
+      if (idx !== -1) row[idx] = value;
+    };
+
+    setVal('fecha', fecha);
+    setVal('transactionId', tx.id || tx.transactionId || '');
+    setVal('reference', tx.reference || '');
+    setVal('status', tx.status || '');
+    setVal('amountInCents', tx.amount_in_cents || tx.amountInCents || 0);
+    setVal('currency', tx.currency || 'COP');
+    setVal('paymentMethod', tx.payment_method_type || '');
+    setVal('customerEmail', tx.customer_email || (tx.customer_data ? tx.customer_data.email : ''));
+
+    sheet.appendRow(row);
+
+    return {
+      status: "success",
+      message: "Notificación de transacción Wompi registrada correctamente",
+      transactionId: tx.id || tx.reference
+    };
+  } catch (err) {
+    return {
+      status: "error",
+      message: err.toString()
+    };
+  }
 }
