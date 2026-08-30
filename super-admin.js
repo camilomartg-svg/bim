@@ -24,6 +24,9 @@ document.addEventListener('DOMContentLoaded', async () => {
       
       const configTabBtn = document.getElementById('tab-btn-configuracion');
       if (configTabBtn) configTabBtn.classList.remove('hidden');
+
+      const wompiBtn = document.getElementById('global-wompi-config-btn');
+      if (wompiBtn) wompiBtn.classList.remove('hidden');
   } else {
       const title = document.getElementById('page-title');
       const subtitle = document.getElementById('page-subtitle');
@@ -43,6 +46,9 @@ document.addEventListener('DOMContentLoaded', async () => {
       
       const configTabBtn = document.getElementById('tab-btn-configuracion');
       if (configTabBtn) configTabBtn.classList.add('hidden');
+
+      const wompiBtn = document.getElementById('global-wompi-config-btn');
+      if (wompiBtn) wompiBtn.classList.add('hidden');
   }
 
   let empresas = [];
