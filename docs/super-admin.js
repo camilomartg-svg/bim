@@ -24,6 +24,9 @@ document.addEventListener('DOMContentLoaded', async () => {
       
       const configTabBtn = document.getElementById('tab-btn-configuracion');
       if (configTabBtn) configTabBtn.classList.remove('hidden');
+
+      const wompiBtn = document.getElementById('global-wompi-config-btn');
+      if (wompiBtn) wompiBtn.classList.remove('hidden');
   } else {
       const title = document.getElementById('page-title');
       const subtitle = document.getElementById('page-subtitle');
@@ -43,6 +46,9 @@ document.addEventListener('DOMContentLoaded', async () => {
       
       const configTabBtn = document.getElementById('tab-btn-configuracion');
       if (configTabBtn) configTabBtn.classList.add('hidden');
+
+      const wompiBtn = document.getElementById('global-wompi-config-btn');
+      if (wompiBtn) wompiBtn.classList.add('hidden');
   }
 
   let empresas = [];
@@ -347,6 +353,10 @@ document.addEventListener('DOMContentLoaded', async () => {
       await Promise.all(activeCompanies.map(emp => loadCompanyConfig(emp)));
 
       renderList();
+      if (selectedIndex === -1 && empresas.length > 0) {
+        const firstActiveIdx = empresas.findIndex(e => !e.deleted);
+        if (firstActiveIdx > -1) selectEmpresa(firstActiveIdx);
+      }
     } catch (e) { showBanner('Error cargando datos', 'error'); }
   }
 
@@ -1112,6 +1122,9 @@ let contentBase = '';
           </div>`;
         }
         
+        const cutoffDay = config.wompi?.cutoffDay || 3;
+        const licInfo = window.WompiModule ? window.WompiModule.getProjectLicenseStatus(p, cutoffDay) : { badgeColor: 'bg-emerald-100 text-emerald-800', badgeText: 'Licencia Activa', message: '' };
+
         return `
           <div class="border-b border-slate-100 last:border-0 bg-slate-50">
             <div class="grid grid-cols-12 gap-2 p-3 text-sm items-center hover:bg-slate-100 cursor-pointer" onclick="toggleProjectAccordion('${p.slug}')">
@@ -1119,15 +1132,24 @@ let contentBase = '';
                   <span class="material-symbols-outlined text-slate-400 text-lg transition-transform ${isOpen ? 'rotate-180' : ''}">expand_more</span>
                   ${p.name || p.title || 'Proyecto'}
               </div>
-              <div class="col-span-3 font-mono text-[10px] text-slate-500 truncate" title="${p.slug}">${p.slug}</div>
+              <div class="col-span-2 font-mono text-[10px] text-slate-500 truncate" title="${p.slug}">${p.slug}</div>
               <div class="col-span-2">
                   <span class="text-[10px] px-2 py-0.5 rounded font-bold uppercase tracking-wider ${p.status==='Activo'?'bg-emerald-100 text-emerald-700':p.status==='Cerrado'?'bg-rose-100 text-rose-700':'bg-slate-200 text-slate-700'}">${p.status}</span>
               </div>
-              <div class="col-span-2 text-center" onclick="event.stopPropagation()">
-                  <input type="checkbox" class="rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer h-4 w-4" ${p.hasLicense !== false ? 'checked' : ''} onchange="updateProject('${p.slug}', 'hasLicense', this.checked); setTimeout(renderProjects, 10);">
+              <div class="col-span-3 text-center" onclick="event.stopPropagation()">
+                  <span class="inline-flex items-center gap-1 text-[10px] px-2 py-1 rounded-lg border font-bold ${licInfo.badgeColor}" title="${licInfo.message}">
+                    ${licInfo.badgeText}
+                  </span>
               </div>
-              <div class="col-span-2 text-right flex justify-end gap-2" onclick="event.stopPropagation()">
-                <button onclick="deleteProject('${p.slug}')" class="text-rose-500 hover:text-rose-700 p-1 bg-white border border-rose-200 rounded shadow-sm hover:shadow"><span class="material-symbols-outlined text-sm">delete</span></button>
+              <div class="col-span-2 text-right flex justify-end gap-1 items-center" onclick="event.stopPropagation()">
+                ${p.cancelledAt ? `
+                  <span class="text-[10px] bg-amber-50 text-amber-800 px-1.5 py-0.5 rounded border border-amber-200 font-bold" title="Cancelado sin cobro posterior">Cancelado</span>
+                ` : `
+                  <button onclick="cancelProjectLicense('${p.slug}')" class="text-[11px] text-amber-700 hover:text-amber-900 px-2 py-1 bg-white border border-amber-200 rounded-lg shadow-sm hover:shadow flex items-center gap-1 font-semibold" title="Cancelar Licencia (Requiere 5 días hábiles antes de fecha de corte)">
+                    <span class="material-symbols-outlined text-xs">cancel</span> Cancelar
+                  </button>
+                `}
+                <button onclick="deleteProject('${p.slug}')" class="text-rose-500 hover:text-rose-700 p-1 bg-white border border-rose-200 rounded-lg shadow-sm hover:shadow" title="Eliminar Proyecto"><span class="material-symbols-outlined text-sm">delete</span></button>
               </div>
             </div>
             ${contentBase}
@@ -1504,6 +1526,137 @@ let contentBase = '';
       renderProjects();
     }
   };
+
+  // ── CONFIGURACIÓN GLOBAL WOMPI (EXCLUSIVO SÚPER ADMINISTRADOR) ─────────────────────
+  try {
+    window.globalWompiConfig = JSON.parse(localStorage.getItem('globalWompiConfig') || '{"envMode":"sandbox","pubKey":"pub_test_emCXbyxkJncOP6CaWEKk4UIJeTVRzjax","integritySecret":""}');
+  } catch(e) {
+    window.globalWompiConfig = { envMode: 'sandbox', pubKey: 'pub_test_emCXbyxkJncOP6CaWEKk4UIJeTVRzjax', integritySecret: '' };
+  }
+
+  window.openGlobalWompiModal = () => {
+    if (userRole !== 'SUPER_ADMINISTRADOR') {
+      alert('Solo los Súper Administradores pueden gestionar la configuración global de Wompi.');
+      return;
+    }
+    const modal = document.getElementById('global-wompi-modal');
+    if (!modal) return;
+    const envSelect = document.getElementById('global-wompi-env');
+    const pubKeyInput = document.getElementById('global-wompi-pubkey');
+    const secretInput = document.getElementById('global-wompi-secret');
+
+    if (envSelect) envSelect.value = window.globalWompiConfig.envMode || 'sandbox';
+    if (pubKeyInput) pubKeyInput.value = window.globalWompiConfig.pubKey || '';
+    if (secretInput) secretInput.value = window.globalWompiConfig.integritySecret || '';
+
+    modal.classList.remove('hidden');
+  };
+
+  window.closeGlobalWompiModal = () => {
+    const modal = document.getElementById('global-wompi-modal');
+    if (modal) modal.classList.add('hidden');
+  };
+
+  window.updateGlobalWompiConfig = (field, val) => {
+    if (!window.globalWompiConfig) window.globalWompiConfig = {};
+    window.globalWompiConfig[field] = (val || '').trim();
+    localStorage.setItem('globalWompiConfig', JSON.stringify(window.globalWompiConfig));
+  };
+
+  // ── FUNCIONES DE GESTIÓN WOMPI (FACTURACIÓN Y LICENCIAS POR EMPRESA) ─────────────────────
+  window.updateWompiConfig = (field, val) => {
+    if (selectedIndex === -1) return;
+    const emp = empresas[selectedIndex];
+    if (!companyConfigs[emp.id]) companyConfigs[emp.id] = { projects: [] };
+    const config = companyConfigs[emp.id];
+    if (!config.wompi) config.wompi = { cutoffDay: '3', envMode: 'sandbox', pubKey: '', integritySecret: '' };
+    config.wompi[field] = val;
+    if (field === 'cutoffDay') {
+      renderProjects();
+    }
+  };
+
+  window.cancelProjectLicense = (slug) => {
+    if (selectedIndex === -1) return;
+    const emp = empresas[selectedIndex];
+    const config = companyConfigs[emp.id];
+    if (!config || !config.projects) return;
+    const proj = config.projects.find(p => p.slug === slug);
+    if (!proj) return;
+
+    const cutoffDay = config.wompi?.cutoffDay || 3;
+    const check = window.WompiModule ? window.WompiModule.canCancelBeforeNextCycle(cutoffDay) : { canCancelWithoutCharge: true, businessDaysUntilCutoff: 5, nextCutoffDate: 'la próxima fecha de corte' };
+
+    let msg = `¿Deseas cancelar la licencia para el proyecto "${proj.name || proj.title}"?\n\n`;
+    if (check.canCancelWithoutCharge) {
+      msg += `✅ Estás dentro del tiempo permitido (${check.businessDaysUntilCutoff} días hábiles restantes antes del ${check.nextCutoffDate}). No se generará cobro en el siguiente periodo.`;
+    } else {
+      msg += `⚠️ Nota: Quedan sólo ${check.businessDaysUntilCutoff} días hábiles antes de la fecha de corte (${check.nextCutoffDate}). Para evitar la renovación del ciclo entrante se requiere un preaviso mínimo de 5 días hábiles colombianos. El proyecto permanecerá activo hasta cumplir el ciclo actual.`;
+    }
+    msg += `\n\n📌 Al vencer la licencia, tus datos y archivos BIM se mantendrán almacenados de forma segura durante 90 días calendario antes de su eliminación permanente.`;
+
+    if (confirm(msg)) {
+      proj.cancelledAt = new Date().toISOString();
+      renderProjects();
+      showBanner('Licencia cancelada para el proyecto. El cambio ha sido registrado.', 'info');
+    }
+  };
+
+  window.payConsolidatedWompi = async () => {
+    if (selectedIndex === -1) return;
+    const emp = empresas[selectedIndex];
+    const config = companyConfigs[emp.id];
+    if (!config || !config.projects) return;
+
+    const activeLicensedProjects = (config.projects || []).filter(p => p.hasLicense !== false && !p.cancelledAt);
+    if (activeLicensedProjects.length === 0) {
+      alert('No hay proyectos con licencia activa pendientes de pago.');
+      return;
+    }
+
+    const globalWompi = window.globalWompiConfig || {};
+    const wompiConf = config.wompi || {};
+    const envMode = wompiConf.envMode || globalWompi.envMode || 'sandbox';
+    const pubKey = wompiConf.pubKey || globalWompi.pubKey || (envMode === 'sandbox' ? 'pub_test_emCXbyxkJncOP6CaWEKk4UIJeTVRzjax' : '');
+    const integritySecret = wompiConf.integritySecret || globalWompi.integritySecret || '';
+
+    if (!pubKey) {
+      alert('⚠️ No se ha configurado la Llave Pública (Public Key) de Wompi.\n\nPor favor haz clic en el botón "Credenciales Wompi" en la barra superior del panel para ingresar tus llaves.');
+      return;
+    }
+
+    const pricePerProjectCOP = window.WompiModule ? window.WompiModule.TOTAL_PRICE_PER_PROJECT_COP : 137564;
+    const totalAmountCOP = activeLicensedProjects.length * pricePerProjectCOP;
+    const amountInCents = totalAmountCOP * 100;
+    const reference = `NORABIM-${emp.code || emp.id}-${Date.now()}`;
+
+    try {
+      showBanner('Abriendo Pasarela Wompi Checkout...', 'info');
+      await window.WompiModule.launchCheckout({
+        publicKey: pubKey,
+        integritySecret: integritySecret,
+        reference: reference,
+        amountInCents: amountInCents,
+        currency: 'COP',
+        customerEmail: emp.email || '',
+        customerName: emp.name || ''
+      });
+    } catch (err) {
+      console.error('Error al iniciar Wompi Checkout:', err);
+      alert('Error al iniciar el checkout de Wompi: ' + err.message);
+    }
+  };
+
+  // Escuchar parámetros de retorno de Wompi Checkout
+  (function checkWompiRedirect() {
+    const urlParams = new URLSearchParams(window.location.search);
+    const txId = urlParams.get('transaction_id') || urlParams.get('id');
+    if (txId) {
+      setTimeout(() => {
+        showBanner(`✅ Transacción Wompi recibida (ID: ${txId}). Licencias de proyectos actualizadas exitosamente.`, 'success');
+      }, 1000);
+    }
+  })();
 
   window.deleteProject = (slug) => {
     if (selectedIndex === -1) return;

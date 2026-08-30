@@ -20,7 +20,8 @@ const filesToSync = [
   'manifest.json',
   'portal.webmanifest',
   'sw.js',
-  'pwa-helper.js'
+  'pwa-helper.js',
+  'wompi-integration.js'
 ];
 
 filesToSync.forEach(file => {
