@@ -788,23 +788,23 @@ export default function CreateIssueModal({ onClose, onSuccess }: CreateIssueModa
   };
 
   return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-slate-900/40 dark:bg-[#020617]/40 backdrop-blur-md">
+    <div className="fixed inset-0 z-[60] flex items-center justify-center sm:p-4 bg-slate-900/50 dark:bg-[#020617]/50 backdrop-blur-md">
       <motion.div 
         initial={{ opacity: 0, scale: 0.95, y: 20 }}
         animate={{ opacity: 1, scale: 1, y: 0 }}
-        className="bg-white dark:bg-[#020617] rounded-[2.5rem] w-full max-w-5xl overflow-hidden shadow-2xl flex flex-col max-h-[95vh] border border-slate-200 dark:border-slate-800"
+        className="bg-white dark:bg-[#020617] rounded-none sm:rounded-2xl w-full max-w-5xl overflow-hidden shadow-2xl flex flex-col h-full sm:h-auto max-h-[100vh] sm:max-h-[95vh] border-0 sm:border border-slate-200 dark:border-slate-800"
       >
         {/* Header */}
-        <div className="p-8 lg:p-10 border-b border-slate-200 dark:border-slate-800 flex justify-between items-center bg-white/80 dark:bg-white/80 dark:bg-[#020617]/80 backdrop-blur-xl sticky top-0 z-20">
-          <div className="flex items-center gap-5">
-            <div className="flex bg-slate-100 dark:bg-slate-900 p-1.5 rounded-2xl border border-slate-200 dark:border-slate-800 mr-2">
+        <div className="p-3.5 sm:p-6 lg:p-8 border-b border-slate-200 dark:border-slate-800 flex justify-between items-center bg-white/90 dark:bg-[#020617]/90 backdrop-blur-xl sticky top-0 z-20 shrink-0">
+          <div className="flex flex-wrap items-center gap-2.5 sm:gap-5">
+            <div className="flex bg-slate-100 dark:bg-slate-900 p-1 rounded-xl border border-slate-200 dark:border-slate-800">
               <button 
                 type="button"
                 onClick={() => setActiveMode('issue')}
                 className={cn(
-                  "px-5 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-2",
+                  "px-3 sm:px-5 py-1.5 sm:py-2.5 rounded-lg text-[9px] sm:text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-1.5",
                   activeMode === 'issue' 
-                    ? "bg-white dark:bg-[#020617] text-slate-900 dark:text-white shadow-xl shadow-slate-900/5" 
+                    ? "bg-white dark:bg-[#020617] text-slate-900 dark:text-white shadow-md" 
                     : "text-slate-400 hover:text-slate-600"
                 )}
               >
@@ -815,9 +815,9 @@ export default function CreateIssueModal({ onClose, onSuccess }: CreateIssueModa
                   type="button"
                   onClick={() => setActiveMode('report')}
                   className={cn(
-                    "px-5 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-2",
+                    "px-3 sm:px-5 py-1.5 sm:py-2.5 rounded-lg text-[9px] sm:text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-1.5",
                     activeMode === 'report' 
-                      ? "bg-white dark:bg-[#020617] text-slate-900 dark:text-white shadow-xl shadow-slate-900/5" 
+                      ? "bg-white dark:bg-[#020617] text-slate-900 dark:text-white shadow-md" 
                       : "text-slate-400 hover:text-slate-600"
                   )}
                 >
@@ -826,28 +826,28 @@ export default function CreateIssueModal({ onClose, onSuccess }: CreateIssueModa
               )}
             </div>
             <div>
-                      <div className="flex items-center gap-3 mb-0.5">
-                <h2 className="text-2xl font-display font-black text-slate-900 dark:text-white tracking-tight">
+              <div className="flex items-center gap-2">
+                <h2 className="text-base sm:text-xl lg:text-2xl font-display font-black text-slate-900 dark:text-white tracking-tight truncate max-w-[180px] sm:max-w-none">
                   {activeMode === 'issue' ? 'Registro de Hallazgo' : 'Informe de Obra'}
                 </h2>
-                <div className="px-2.5 py-0.5 bg-blue-500/10 text-blue-500 dark:text-blue-400 rounded-full text-[8px] font-black uppercase tracking-widest border border-blue-500/20">SISTEMA CDE</div>
+                <div className="hidden sm:inline-block px-2.5 py-0.5 bg-blue-500/10 text-blue-500 dark:text-blue-400 rounded-full text-[8px] font-black uppercase tracking-widest border border-blue-500/20">SISTEMA CDE</div>
               </div>
-              <p className="text-[9px] text-slate-400 dark:text-slate-600 font-bold uppercase tracking-[0.3em]">
+              <p className="text-[8px] sm:text-[9px] text-slate-400 dark:text-slate-600 font-bold uppercase tracking-wider">
                 {activeMode === 'issue' ? (
-                   <span className="flex items-center gap-2">
-                     EQUIPO ENCARGADO: <span className={cn(
-                       "px-2 py-0.5 rounded-md border",
+                   <span className="flex items-center gap-1.5">
+                     EQUIPO: <span className={cn(
+                       "px-1.5 py-0.5 rounded border text-[8px]",
                        activeCreatorTeam === 'ARQUITECTURA' ? "bg-amber-500/10 border-amber-500/20 text-amber-500" :
-                       activeCreatorTeam === 'COORDINACIÓN TÉCNICA' ? "bg-cyan-500/10 border-cyan-500/20 text-cyan-600 shadow-cyan-500/5 shadow-xl" :
+                       activeCreatorTeam === 'COORDINACIÓN TÉCNICA' ? "bg-cyan-500/10 border-cyan-500/20 text-cyan-600" :
                        "bg-slate-500/10 border-slate-500/20 text-slate-500"
                      )}>{activeCreatorTeam}</span>
                    </span>
                 ) : (
-                   <span className="flex items-center gap-2">
+                   <span className="flex items-center gap-1.5">
                      EMITIDO POR: <span className={cn(
-                       "px-2 py-0.5 rounded-md border",
+                       "px-1.5 py-0.5 rounded border text-[8px]",
                        activeCreatorTeam === 'ARQUITECTURA' ? "bg-amber-500/10 border-amber-500/20 text-amber-500" :
-                       activeCreatorTeam === 'COORDINACIÓN TÉCNICA' ? "bg-cyan-500/10 border-cyan-500/20 text-cyan-500 shadow-cyan-500/5 shadow-xl" :
+                       activeCreatorTeam === 'COORDINACIÓN TÉCNICA' ? "bg-cyan-500/10 border-cyan-500/20 text-cyan-500" :
                        "bg-slate-500/10 border-slate-500/20 text-slate-500"
                      )}>{activeCreatorTeam}</span>
                    </span>
@@ -855,14 +855,14 @@ export default function CreateIssueModal({ onClose, onSuccess }: CreateIssueModa
               </p>
             </div>
           </div>
-          <button onClick={onClose} className="p-4 bg-slate-50 dark:bg-slate-900 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-2xl transition-all border border-slate-200 dark:border-slate-800 shadow-sm active:scale-95 group">
-            <X className="w-5 h-5 text-slate-400 group-hover:text-slate-900 dark:group-hover:text-white transition-colors" />
+          <button onClick={onClose} className="p-2 sm:p-3 bg-slate-100 dark:bg-slate-900 hover:bg-slate-200 dark:hover:bg-slate-800 rounded-xl transition-all border border-slate-200 dark:border-slate-800 shadow-sm active:scale-95 group">
+            <X className="w-4 h-4 sm:w-5 sm:h-5 text-slate-400 group-hover:text-slate-900 dark:group-hover:text-white transition-colors" />
           </button>
         </div>
 
         <form 
           onSubmit={activeMode === 'issue' ? handleSubmit : handleReportSubmit} 
-          className="flex-1 overflow-auto p-10 lg:p-12 space-y-12 custom-scrollbar bg-white dark:bg-transparent transition-colors"
+          className="flex-1 overflow-auto p-4 sm:p-8 lg:p-10 space-y-6 sm:space-y-10 custom-scrollbar bg-white dark:bg-transparent transition-colors"
         >
           {activeMode === 'report' && (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-10 pb-10 border-b border-slate-100 dark:border-slate-800/50">
@@ -906,11 +906,11 @@ export default function CreateIssueModal({ onClose, onSuccess }: CreateIssueModa
           {activeMode === 'issue' ? (
             <>
               {/* Section 1: Basic Info */}
-          <section className="space-y-8">
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-10">
-              <div className="space-y-6">
+          <section className="space-y-6 sm:space-y-8">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-8">
+              <div className="space-y-4 sm:space-y-6">
                 <div className="group">
-                  <label className="block text-[9px] font-black uppercase tracking-[0.2em] text-slate-400 dark:text-slate-600 mb-3 px-1 flex items-center justify-between">
+                  <label className="block text-[9px] font-black uppercase tracking-[0.2em] text-slate-400 dark:text-slate-600 mb-2 px-1 flex items-center justify-between">
                     <span>Título de la incidencia <span className="text-red-500">*</span></span>
                   </label>
                   <input
@@ -919,24 +919,24 @@ export default function CreateIssueModal({ onClose, onSuccess }: CreateIssueModa
                     value={title}
                     onChange={(e) => setTitle(e.target.value)}
                     placeholder="Ej: Inconsistencia en trazado hidrosanitario N05"
-                    className="w-full px-6 py-4 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-800 rounded-2xl text-[13px] text-slate-900 dark:text-white font-semibold focus:border-slate-400 dark:focus:border-slate-700 outline-none transition-all placeholder:text-slate-300 dark:placeholder:text-slate-700 shadow-inner"
+                    className="w-full px-4 py-3 sm:px-6 sm:py-4 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-800 rounded-xl text-xs sm:text-[13px] text-slate-900 dark:text-white font-semibold focus:border-slate-400 dark:focus:border-slate-700 outline-none transition-all placeholder:text-slate-300 dark:placeholder:text-slate-700 shadow-inner"
                   />
                 </div>
                 {isFieldVisible('type') && (
                   <div>
-                    <label className="block text-[9px] font-black uppercase tracking-[0.2em] text-slate-600 mb-3 px-1">
+                    <label className="block text-[9px] font-black uppercase tracking-[0.2em] text-slate-600 mb-2 px-1">
                       Tipo de Incidencia <span className="text-red-500">*</span>
                     </label>
                     <div className="relative">
                       <select
                         value={type}
                         onChange={(e) => setType(e.target.value)}
-                        className="w-full px-6 py-4 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-800 rounded-2xl text-[13px] text-slate-900 dark:text-white font-semibold focus:border-slate-400 dark:focus:border-slate-700 outline-none transition-all appearance-none cursor-pointer shadow-inner pr-12"
+                        className="w-full px-4 py-3 sm:px-6 sm:py-4 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-800 rounded-xl text-xs sm:text-[13px] text-slate-900 dark:text-white font-semibold focus:border-slate-400 dark:focus:border-slate-700 outline-none transition-all appearance-none cursor-pointer shadow-inner pr-10"
                       >
                         <option value="">Seleccionar Categoría...</option>
                         {customTypes.sort().map(t => <option key={t} value={t}>{t}</option>)}
                       </select>
-                      <Box className="w-4.5 h-4.5 text-slate-700 absolute right-6 top-1/2 -translate-y-1/2 pointer-events-none" />
+                      <Box className="w-4 h-4 text-slate-700 absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none" />
                     </div>
                   </div>
                 )}
@@ -944,10 +944,10 @@ export default function CreateIssueModal({ onClose, onSuccess }: CreateIssueModa
 
               {isFieldVisible('degreeOfAction') && (
                 <div>
-                  <label className="block text-[9px] font-black uppercase tracking-[0.2em] text-slate-600 mb-3 px-1">
+                  <label className="block text-[9px] font-black uppercase tracking-[0.2em] text-slate-600 mb-2 px-1">
                     Prioridad de Respuesta <span className="text-red-500">*</span>
                   </label>
-                  <div className="grid grid-cols-2 gap-3 p-1.5 bg-slate-50 dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-inner">
+                  <div className="grid grid-cols-2 gap-2 p-1.5 bg-slate-50 dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-inner">
                     {Object.entries(DEGREE_OF_ACTION)
                       .filter(([key]) => ['inmediata', 'urgente', 'pronta', 'posterior'].includes(key))
                       .map(([key, value]) => (
@@ -956,15 +956,15 @@ export default function CreateIssueModal({ onClose, onSuccess }: CreateIssueModa
                           type="button"
                           onClick={() => setDegreeOfAction(key as IssueDegreeOfAction)}
                           className={cn(
-                            "py-3 text-[9px] font-black uppercase tracking-[0.15em] rounded-xl transition-all border shadow-sm",
+                            "py-2.5 sm:py-3 px-2 text-[8.5px] sm:text-[9px] font-black uppercase tracking-wider rounded-lg transition-all border shadow-sm",
                             degreeOfAction === key 
-                              ? "bg-white border-white text-slate-900 shadow-xl" 
+                              ? "bg-white border-white text-slate-900 shadow-md" 
                               : "text-slate-500 border-transparent hover:text-slate-300"
                           )}
                         >
-                        <span className="flex items-center justify-center gap-2">
-                          <div className={cn("w-1.5 h-1.5 rounded-full", degreeOfAction === key ? "" : "opacity-30")} style={{ backgroundColor: (value as any).color }} />
-                          {(value as any).label}
+                        <span className="flex items-center justify-center gap-1.5">
+                          <div className={cn("w-1.5 h-1.5 rounded-full shrink-0", degreeOfAction === key ? "" : "opacity-30")} style={{ backgroundColor: (value as any).color }} />
+                          <span className="truncate">{(value as any).label}</span>
                         </span>
                       </button>
                     ))}
@@ -975,22 +975,22 @@ export default function CreateIssueModal({ onClose, onSuccess }: CreateIssueModa
 
             {isFieldVisible('impact') && (
               <div>
-                <label className="block text-[9px] font-black uppercase tracking-[0.2em] text-slate-600 mb-4 px-1 flex items-center justify-between">
+                <label className="block text-[9px] font-black uppercase tracking-[0.2em] text-slate-600 mb-3 px-1 flex items-center justify-between">
                   <span>Afectación del Proyecto (Prioridad) <span className="text-red-500">*</span></span>
                   <div className="flex gap-1">
                     {impact.length > 0 && <span className="px-2 py-0.5 bg-blue-500 text-white rounded-full text-[8px] font-black">{impact.length}</span>}
                   </div>
                 </label>
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-2 sm:gap-3">
                   {customImpacts.sort().map((opt) => (
                     <button
                       key={opt}
                       type="button"
                       onClick={() => toggleImpact(opt)}
                       className={cn(
-                        "p-4 text-[8px] font-black uppercase tracking-[0.1em] rounded-xl border transition-all text-center leading-tight shadow-sm min-h-[60px] flex items-center justify-center px-4",
+                        "p-2.5 sm:p-4 text-[8px] sm:text-[8.5px] font-black uppercase tracking-wider rounded-lg border transition-all text-center leading-tight shadow-sm min-h-[44px] sm:min-h-[56px] flex items-center justify-center px-3",
                         impact.includes(opt) 
-                          ? "bg-white border-white text-[#020617] shadow-xl shadow-white/5 scale-[1.02]" 
+                          ? "bg-slate-900 dark:bg-white border-slate-900 dark:border-white text-white dark:text-[#020617] shadow-md" 
                           : "bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-800 text-slate-500 hover:border-slate-400 dark:hover:border-slate-700 hover:text-slate-900 dark:hover:text-white"
                       )}
                     >
@@ -1003,12 +1003,12 @@ export default function CreateIssueModal({ onClose, onSuccess }: CreateIssueModa
 
             {isFieldVisible('issueClass') && (
               <div className="md:col-span-2 lg:col-span-1">
-                <label className="block text-[9px] font-black uppercase tracking-[0.2em] text-slate-600 mb-3 px-1">
+                <label className="block text-[9px] font-black uppercase tracking-[0.2em] text-slate-600 mb-2 px-1">
                   Clase de Incidencia (Automático)
                 </label>
-                <div className="px-6 py-4 bg-slate-900/50 border border-slate-800 rounded-2xl flex items-center justify-between">
-                  <span className="text-[13px] text-white font-black">{PRIORITY_CLASS_MAP[DEGREE_OF_ACTION[degreeOfAction]?.label] || 'N/A'}</span>
-                  <div className="w-8 h-8 rounded-full bg-slate-800 flex items-center justify-center text-[10px] font-black text-slate-500">
+                <div className="px-4 py-3 bg-slate-900/50 border border-slate-800 rounded-xl flex items-center justify-between">
+                  <span className="text-xs sm:text-[13px] text-white font-black">{PRIORITY_CLASS_MAP[DEGREE_OF_ACTION[degreeOfAction]?.label] || 'N/A'}</span>
+                  <div className="w-7 h-7 rounded-full bg-slate-800 flex items-center justify-center text-[10px] font-black text-slate-500">
                     {PRIORITY_CLASS_MAP[DEGREE_OF_ACTION[degreeOfAction]?.label] || '-'}
                   </div>
                 </div>
@@ -1018,13 +1018,13 @@ export default function CreateIssueModal({ onClose, onSuccess }: CreateIssueModa
 
           {/* Section 1.5: Categorización y Riesgo */}
           {(isFieldVisible('month') || isFieldVisible('economicActivity') || isFieldVisible('danger')) && (
-            <section className="grid grid-cols-1 md:grid-cols-3 gap-10 p-10 bg-slate-50 dark:bg-slate-950/30 rounded-[3rem] border border-slate-100 dark:border-slate-800/50">
+            <section className="grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-8 p-4 sm:p-8 bg-slate-50 dark:bg-slate-950/30 rounded-xl border border-slate-100 dark:border-slate-800/50">
               {isFieldVisible('month') && (
                 <div>
-                  <label className="block text-[9px] font-black uppercase tracking-[0.2em] text-slate-600 mb-3 px-1">
+                  <label className="block text-[9px] font-black uppercase tracking-[0.2em] text-slate-600 mb-2 px-1">
                     Mes de Ejecución <span className="text-red-500">*</span>
                   </label>
-                  <div className="w-full px-6 py-4 bg-slate-100 dark:bg-slate-900/80 border border-slate-200 dark:border-slate-800 rounded-2xl text-[13px] text-slate-500 dark:text-slate-400 font-bold shadow-inner">
+                  <div className="w-full px-4 py-3 sm:px-6 sm:py-4 bg-slate-100 dark:bg-slate-900/80 border border-slate-200 dark:border-slate-800 rounded-xl text-xs sm:text-[13px] text-slate-500 dark:text-slate-400 font-bold shadow-inner">
                     {month}
                   </div>
                 </div>
@@ -1032,13 +1032,13 @@ export default function CreateIssueModal({ onClose, onSuccess }: CreateIssueModa
 
               {isFieldVisible('economicActivity') && (
                 <div>
-                  <label className="block text-[9px] font-black uppercase tracking-[0.2em] text-slate-600 mb-3 px-1">
+                  <label className="block text-[9px] font-black uppercase tracking-[0.2em] text-slate-600 mb-2 px-1">
                     Actividad Económica <span className="text-red-500">*</span>
                   </label>
                   <select
                     value={economicActivity}
                     onChange={(e) => setEconomicActivity(e.target.value)}
-                    className="w-full px-6 py-4 bg-white dark:bg-slate-900/50 border border-slate-200 dark:border-slate-800 rounded-2xl text-[13px] text-slate-900 dark:text-white font-bold focus:border-slate-400 dark:focus:border-slate-700 outline-none transition-all shadow-sm"
+                    className="w-full px-4 py-3 sm:px-6 sm:py-4 bg-white dark:bg-slate-900/50 border border-slate-200 dark:border-slate-800 rounded-xl text-xs sm:text-[13px] text-slate-900 dark:text-white font-bold focus:border-slate-400 dark:focus:border-slate-700 outline-none transition-all shadow-sm"
                   >
                     <option value="">Seleccionar Actividad...</option>
                     {customActivities.sort().map(a => <option key={a} value={a}>{a}</option>)}
@@ -1048,7 +1048,7 @@ export default function CreateIssueModal({ onClose, onSuccess }: CreateIssueModa
 
               {isFieldVisible('danger') && (
                 <div>
-                  <label className="block text-[9px] font-black uppercase tracking-[0.2em] text-slate-600 mb-3 px-1">
+                  <label className="block text-[9px] font-black uppercase tracking-[0.2em] text-slate-600 mb-2 px-1">
                     Factor de Peligro <span className="text-red-500">*</span>
                   </label>
                   <select
@@ -1057,7 +1057,7 @@ export default function CreateIssueModal({ onClose, onSuccess }: CreateIssueModa
                       setDanger(e.target.value);
                       setDangerDescription('');
                     }}
-                    className="w-full px-6 py-4 bg-white dark:bg-slate-900/50 border border-slate-200 dark:border-slate-800 rounded-2xl text-[13px] text-slate-900 dark:text-white font-bold focus:border-slate-400 dark:focus:border-slate-700 outline-none transition-all shadow-sm"
+                    className="w-full px-4 py-3 sm:px-6 sm:py-4 bg-white dark:bg-slate-900/50 border border-slate-200 dark:border-slate-800 rounded-xl text-xs sm:text-[13px] text-slate-900 dark:text-white font-bold focus:border-slate-400 dark:focus:border-slate-700 outline-none transition-all shadow-sm"
                   >
                     <option value="">Seleccionar Peligro...</option>
                     {customDangers.sort().map(d => <option key={d} value={d}>{d}</option>)}
@@ -1067,19 +1067,19 @@ export default function CreateIssueModal({ onClose, onSuccess }: CreateIssueModa
 
               {isFieldVisible('dangerDescription') && danger && (
                 <div className="md:col-span-3">
-                  <label className="block text-[9px] font-black uppercase tracking-[0.2em] text-slate-600 mb-3 px-1">
+                  <label className="block text-[9px] font-black uppercase tracking-[0.2em] text-slate-600 mb-2 px-1">
                     Descripción Específica del Peligro ({danger}) <span className="text-red-500">*</span>
                   </label>
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2.5">
                     {(customDangerDescriptions[danger] || []).map((desc) => (
                       <button
                         key={desc}
                         type="button"
                         onClick={() => setDangerDescription(desc)}
                         className={cn(
-                          "p-4 text-[9px] font-black uppercase tracking-[0.05em] rounded-xl border transition-all text-left shadow-sm min-h-[50px] flex items-center px-4",
+                          "p-3 sm:p-4 text-[8.5px] sm:text-[9px] font-black uppercase tracking-wider rounded-lg border transition-all text-left shadow-sm min-h-[44px] flex items-center px-3",
                           dangerDescription === desc 
-                            ? "bg-slate-900 dark:bg-white border-slate-900 dark:border-white text-white dark:text-slate-900 shadow-xl" 
+                            ? "bg-slate-900 dark:bg-white border-slate-900 dark:border-white text-white dark:text-slate-900 shadow-md" 
                             : "bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 text-slate-500 hover:border-slate-400 dark:hover:border-slate-700 hover:text-slate-900 dark:hover:text-white"
                         )}
                       >
@@ -1093,17 +1093,17 @@ export default function CreateIssueModal({ onClose, onSuccess }: CreateIssueModa
           )}
 
           {/* Section 2: Details & Description */}
-          <section className="grid grid-cols-1 lg:grid-cols-3 gap-10">
-            <div className="lg:col-span-2 space-y-8">
+          <section className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-8">
+            <div className="lg:col-span-2 space-y-4 sm:space-y-6">
               <div>
-                <label className="block text-[9px] font-black uppercase tracking-[0.2em] text-slate-600 mb-3 px-1 flex items-center justify-between">
+                <label className="block text-[9px] font-black uppercase tracking-[0.2em] text-slate-600 mb-2 px-1 flex items-center justify-between">
                   <span>Descripción Técnica <span className="text-red-500">*</span></span>
                   <button
                     type="button"
                     onClick={() => isListening ? stopSpeechRecognition() : startSpeechRecognition((text) => setDescription(prev => prev ? `${prev} ${text}` : text))}
                     className={cn(
-                      "flex items-center gap-1.5 px-3 py-1 rounded-full text-[8px] font-black uppercase tracking-widest transition-all",
-                      isListening ? "bg-red-500 text-white animate-pulse" : "bg-slate-100 text-slate-500 hover:bg-slate-200"
+                      "flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[8px] font-black uppercase tracking-wider transition-all",
+                      isListening ? "bg-red-500 text-white animate-pulse" : "bg-slate-100 dark:bg-slate-800 text-slate-500 hover:bg-slate-200"
                     )}
                   >
                     {isListening ? <MicOff className="w-3 h-3" /> : <Mic className="w-3 h-3" />}
@@ -1114,49 +1114,49 @@ export default function CreateIssueModal({ onClose, onSuccess }: CreateIssueModa
                   value={description}
                   onChange={(e) => setDescription(e.target.value)}
                   placeholder="Describa el hallazgo con precisión técnica..."
-                  className="w-full px-6 py-5 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-800 rounded-2xl text-[13px] text-slate-900 dark:text-white font-semibold focus:border-slate-400 dark:focus:border-slate-700 outline-none transition-all resize-none h-32 shadow-inner placeholder:text-slate-400 dark:placeholder:text-slate-700"
+                  className="w-full px-4 py-3 sm:px-6 sm:py-4 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-800 rounded-xl text-xs sm:text-[13px] text-slate-900 dark:text-white font-semibold focus:border-slate-400 dark:focus:border-slate-700 outline-none transition-all resize-none h-28 sm:h-32 shadow-inner placeholder:text-slate-400 dark:placeholder:text-slate-700"
                 />
               </div>
 
               {isFieldVisible('proposedActionPlan') && (
                 <div>
-                  <label className="block text-[9px] font-black uppercase tracking-[0.2em] text-slate-600 mb-3 px-1">
+                  <label className="block text-[9px] font-black uppercase tracking-[0.2em] text-slate-600 mb-2 px-1">
                     Plan de Acción Propuesto <span className="text-red-500">*</span>
                   </label>
                   <textarea
                     value={proposedActionPlan}
                     onChange={(e) => setProposedActionPlan(e.target.value)}
                     placeholder="Especifique las acciones sugeridas para mitigar o corregir el hallazgo..."
-                    className="w-full px-6 py-5 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-800 rounded-2xl text-[13px] text-slate-900 dark:text-white font-semibold focus:border-slate-400 dark:focus:border-slate-700 outline-none transition-all resize-none h-32 shadow-inner placeholder:text-slate-400 dark:placeholder:text-slate-700"
+                    className="w-full px-4 py-3 sm:px-6 sm:py-4 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-800 rounded-xl text-xs sm:text-[13px] text-slate-900 dark:text-white font-semibold focus:border-slate-400 dark:focus:border-slate-700 outline-none transition-all resize-none h-28 sm:h-32 shadow-inner placeholder:text-slate-400 dark:placeholder:text-slate-700"
                   />
                 </div>
               )}
             </div>
             {isFieldVisible('dueDate') && (
-              <div className="space-y-6">
+              <div className="space-y-4 sm:space-y-6">
                 <div>
-                  <label className="block text-[9px] font-black uppercase tracking-[0.2em] text-slate-600 mb-3 px-1">
+                  <label className="block text-[9px] font-black uppercase tracking-[0.2em] text-slate-600 mb-2 px-1">
                     Fecha de Vencimiento <span className="text-red-500">*</span>
                   </label>
-                  <div className="space-y-4">
-                    <div className="grid grid-cols-2 gap-3">
-                      <div className="space-y-2">
-                        <label className="block text-[8px] font-black uppercase tracking-widest text-slate-400 px-1">Cantidad de Días</label>
+                  <div className="space-y-3">
+                    <div className="grid grid-cols-2 gap-2">
+                      <div className="space-y-1">
+                        <label className="block text-[8px] font-black uppercase tracking-widest text-slate-400 px-1">Cantidad Días</label>
                         <input
                           type="number"
                           min="1"
                           max="365"
                           value={dueDateDays}
                           onChange={(e) => setDueDateDays(parseInt(e.target.value) || 0)}
-                          className="w-full px-4 py-3 bg-slate-900/50 border border-slate-800 rounded-xl text-xs text-white font-black group-focus-within:border-slate-600 outline-none transition-all shadow-inner"
+                          className="w-full px-3 py-2 bg-slate-900/50 border border-slate-800 rounded-lg text-xs text-white font-black outline-none transition-all shadow-inner"
                         />
                       </div>
-                      <div className="space-y-2">
-                        <label className="block text-[8px] font-black uppercase tracking-widest text-slate-400 px-1">Tipo de Días</label>
+                      <div className="space-y-1">
+                        <label className="block text-[8px] font-black uppercase tracking-widest text-slate-400 px-1">Tipo Días</label>
                         <select
                           value={dayType}
                           onChange={(e) => setDayType(e.target.value as DayType)}
-                          className="w-full px-4 py-3 bg-slate-900/50 border border-slate-800 rounded-xl text-[9px] text-white font-black uppercase tracking-widest outline-none transition-all shadow-inner appearance-none cursor-pointer"
+                          className="w-full px-3 py-2 bg-slate-900/50 border border-slate-800 rounded-lg text-[9px] text-white font-black uppercase tracking-wider outline-none transition-all shadow-inner appearance-none cursor-pointer"
                         >
                           <option value="OFICINA">Oficina (Lun-Vie)</option>
                           <option value="OBRA">Obra (Lun-Sab)</option>
@@ -1169,24 +1169,24 @@ export default function CreateIssueModal({ onClose, onSuccess }: CreateIssueModa
                          type="date"
                          value={dueDate}
                          onChange={(e) => setDueDate(e.target.value)}
-                         className="w-full px-6 py-4 bg-slate-900/50 border border-slate-800 rounded-2xl text-[13px] text-white font-black focus:border-slate-700 outline-none transition-all shadow-inner"
+                         className="w-full px-4 py-3 bg-slate-900/50 border border-slate-800 rounded-xl text-xs sm:text-[13px] text-white font-black focus:border-slate-700 outline-none transition-all shadow-inner"
                        />
-                       <div className="absolute right-6 top-1/2 -translate-y-1/2 pointer-events-none">
+                       <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none">
                          <Calendar className="w-4 h-4 text-slate-700 group-focus-within:text-white transition-colors" />
                        </div>
                     </div>
-                    <p className="px-2 text-[7px] font-bold text-slate-500 uppercase tracking-widest leading-relaxed">
+                    <p className="px-1 text-[7px] font-bold text-slate-500 uppercase tracking-wider leading-relaxed">
                       * El cálculo descuenta automáticamente los festivos de Colombia.
                     </p>
                   </div>
                 </div>
-                <div className="p-6 bg-blue-500/5 border border-blue-500/10 rounded-2xl space-y-3">
-                  <div className="flex items-center gap-2.5 text-blue-400">
+                <div className="p-4 bg-blue-500/5 border border-blue-500/10 rounded-xl space-y-2">
+                  <div className="flex items-center gap-2 text-blue-400">
                     <AlertCircle className="w-4 h-4 flex-shrink-0" />
-                    <span className="text-[9px] font-black uppercase tracking-widest">Información Crítica</span>
+                    <span className="text-[9px] font-black uppercase tracking-wider">Información Crítica</span>
                   </div>
-                  <p className="text-[11px] text-blue-400/60 leading-relaxed font-semibold">
-                    Esta fecha se utilizará para el seguimiento de entregas y el reporte de indicadores clave de desempeño (KPIs).
+                  <p className="text-[10px] text-blue-400/60 leading-relaxed font-semibold">
+                    Esta fecha se utilizará para el seguimiento de entregas y el reporte de KPIs.
                   </p>
                 </div>
               </div>
@@ -1194,21 +1194,21 @@ export default function CreateIssueModal({ onClose, onSuccess }: CreateIssueModa
           </section>
 
           {/* Section 3: Assignment & Roles */}
-          <section className="grid grid-cols-1 md:grid-cols-2 gap-10">
+          <section className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-8">
             {isFieldVisible('assignedPosition') && (
-              <div className="space-y-6">
+              <div className="space-y-4">
                  <div className="group">
-                  <label className="block text-[9px] font-black uppercase tracking-[0.2em] text-slate-600 mb-4 flex items-center justify-between px-1">
+                  <label className="block text-[9px] font-black uppercase tracking-[0.2em] text-slate-600 mb-2 flex items-center justify-between px-1">
                     <span className="flex items-center gap-2">Responsable Asignado <span className="text-red-500">*</span></span>
                     <UserIcon className="w-3.5 h-3.5 text-slate-800 group-focus-within:text-blue-500 transition-colors" />
                   </label>
-                  <div className="space-y-4">
+                  <div className="space-y-3">
                     <select
                       value={assignedPosition}
                       onChange={(e) => setAssignedPosition(e.target.value)}
                       disabled={type === 'Informe Ambiental'}
                       className={cn(
-                        "w-full px-6 py-4 border rounded-2xl text-[13px] font-bold outline-none transition-all shadow-inner",
+                        "w-full px-4 py-3 sm:px-6 sm:py-4 border rounded-xl text-xs sm:text-[13px] font-bold outline-none transition-all shadow-inner",
                         type === 'Informe Ambiental' 
                           ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-600 dark:text-emerald-400 cursor-not-allowed" 
                           : "bg-slate-50 dark:bg-slate-900/50 border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white focus:border-slate-400 dark:focus:border-slate-700"
@@ -1218,19 +1218,19 @@ export default function CreateIssueModal({ onClose, onSuccess }: CreateIssueModa
                       {sortedTeam.map(p => <option key={p.position} value={p.position}>{p.position}</option>)}
                     </select>
                     {type === 'Informe Ambiental' && (
-                      <p className="text-[9px] font-black uppercase tracking-wider text-emerald-550 mt-2 px-1">
+                      <p className="text-[9px] font-black uppercase tracking-wider text-emerald-550 mt-1 px-1">
                         🔒 Dirigido obligatoriamente al Director de Obra para incidencias ambientales formales.
                       </p>
                     )}
 
                     {isFieldVisible('responsibleCompany') && (
                       <div className="relative">
-                        <Building2 className="absolute left-6 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                        <Building2 className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
                         {customCompanies.length > 0 ? (
                           <select
                             value={responsibleCompany}
                             onChange={(e) => setResponsibleCompany(e.target.value)}
-                            className="w-full pl-14 pr-6 py-4 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-800 rounded-2xl text-[11px] text-slate-900 dark:text-white font-black uppercase tracking-widest focus:border-emerald-500 outline-none transition-all shadow-inner appearance-none cursor-pointer"
+                            className="w-full pl-11 pr-4 py-3 sm:py-4 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-800 rounded-xl text-[10px] sm:text-[11px] text-slate-900 dark:text-white font-black uppercase tracking-wider focus:border-emerald-500 outline-none transition-all shadow-inner appearance-none cursor-pointer"
                           >
                             <option value="">EMPRESA CORRESPONSABLE...</option>
                             {customCompanies.sort().map(c => <option key={c} value={c}>{c}</option>)}
@@ -1241,7 +1241,7 @@ export default function CreateIssueModal({ onClose, onSuccess }: CreateIssueModa
                             value={responsibleCompany}
                             onChange={(e) => setResponsibleCompany(e.target.value.toUpperCase())}
                             placeholder="EMPRESA CORRESPONSABLE..."
-                            className="w-full pl-14 pr-6 py-4 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-800 rounded-2xl text-[11px] text-slate-900 dark:text-white font-black uppercase tracking-widest focus:border-emerald-500 outline-none transition-all shadow-inner placeholder:text-slate-400"
+                            className="w-full pl-11 pr-4 py-3 sm:py-4 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-800 rounded-xl text-[10px] sm:text-[11px] text-slate-900 dark:text-white font-black uppercase tracking-wider focus:border-emerald-500 outline-none transition-all shadow-inner placeholder:text-slate-400"
                           />
                         )}
                       </div>
@@ -1252,13 +1252,13 @@ export default function CreateIssueModal({ onClose, onSuccess }: CreateIssueModa
                           initial={{ opacity: 0, y: -10 }} 
                           animate={{ opacity: 1, y: 0 }}
                           exit={{ opacity: 0, y: -10 }}
-                          className="px-5 py-3 bg-emerald-500/5 border border-emerald-500/10 rounded-xl flex items-center justify-between shadow-sm"
+                          className="px-4 py-2.5 bg-emerald-500/5 border border-emerald-500/10 rounded-lg flex items-center justify-between shadow-sm"
                         >
-                          <div className="flex items-center gap-3">
-                            <div className="w-7 h-7 bg-emerald-500 rounded-lg flex items-center justify-center text-white font-black text-[9px]">
+                          <div className="flex items-center gap-2.5">
+                            <div className="w-6 h-6 bg-emerald-500 rounded-md flex items-center justify-center text-white font-black text-[9px]">
                               {assignedName.slice(0,1)}
                             </div>
-                            <span className="text-[10px] font-black text-emerald-400 uppercase tracking-widest">{assignedName}</span>
+                            <span className="text-[9.5px] font-black text-emerald-400 uppercase tracking-wider">{assignedName}</span>
                           </div>
                           <span className="text-[8px] font-black text-emerald-500/40 uppercase tracking-widest">Verificado</span>
                         </motion.div>
@@ -1270,12 +1270,12 @@ export default function CreateIssueModal({ onClose, onSuccess }: CreateIssueModa
             )}
 
             {isFieldVisible('reviewers') && (
-              <div className="space-y-6">
-                <label className="block text-[9px] font-black uppercase tracking-[0.2em] text-slate-600 mb-4 px-1">Comité de Revisión</label>
-                <div className="flex gap-4">
+              <div className="space-y-4">
+                <label className="block text-[9px] font-black uppercase tracking-[0.2em] text-slate-600 mb-2 px-1">Comité de Revisión</label>
+                <div className="flex gap-2">
                   <select
                     id="rev-select"
-                    className="flex-1 px-6 py-4 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-800 rounded-2xl text-[13px] text-slate-900 dark:text-white font-bold focus:border-slate-400 dark:focus:border-slate-700 outline-none transition-all shadow-inner"
+                    className="flex-1 px-4 py-3 sm:px-6 sm:py-4 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-800 rounded-xl text-xs sm:text-[13px] text-slate-900 dark:text-white font-bold focus:border-slate-400 dark:focus:border-slate-700 outline-none transition-all shadow-inner"
                     onChange={(e) => {
                       addReviewer(e.target.value);
                       e.target.value = '';
@@ -1285,22 +1285,22 @@ export default function CreateIssueModal({ onClose, onSuccess }: CreateIssueModa
                     {sortedTeam.map(p => <option key={p.position} value={p.position}>{p.position}</option>)}
                   </select>
                 </div>
-                <div className="flex flex-wrap gap-2.5 p-5 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-900 border-dashed rounded-2xl min-h-[60px]">
+                <div className="flex flex-wrap gap-2 p-3.5 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-900 border-dashed rounded-xl min-h-[52px]">
                    {reviewers.map(r => (
                      <motion.div 
                         key={r} 
                         layout
                         initial={{ scale: 0.8, opacity: 0 }} 
                         animate={{ scale: 1, opacity: 1 }}
-                        className="flex items-center gap-2 px-3 py-1.5 bg-slate-900 border border-slate-800 rounded-lg shadow-sm"
+                        className="flex items-center gap-1.5 px-2.5 py-1 bg-slate-900 border border-slate-800 rounded-md shadow-sm"
                      >
-                       <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">{r}</span>
+                       <span className="text-[8.5px] font-black text-slate-300 uppercase tracking-wider">{r}</span>
                        <button type="button" onClick={() => removeReviewer(r)} className="hover:text-red-500 transition-colors">
                          <X className="w-3 h-3" />
                        </button>
                      </motion.div>
                    ))}
-                   {reviewers.length === 0 && <p className="text-[9px] text-slate-700 font-bold uppercase tracking-widest w-full text-center py-2 italic">Sin revisores definidos</p>}
+                   {reviewers.length === 0 && <p className="text-[9px] text-slate-500 font-bold uppercase tracking-widest w-full text-center py-1 italic">Sin revisores definidos</p>}
                 </div>
               </div>
             )}
@@ -1308,35 +1308,35 @@ export default function CreateIssueModal({ onClose, onSuccess }: CreateIssueModa
           
           {/* LOCATION HIERARCHY SECTION */}
           <section id="location-section" className={cn(
-            "bg-slate-50 dark:bg-slate-900/40 p-8 lg:p-10 rounded-[2.5rem] border transition-all duration-500 space-y-10",
+            "bg-slate-50 dark:bg-slate-900/40 p-4 sm:p-8 rounded-xl border transition-all duration-500 space-y-6 sm:space-y-8",
             showLocationError ? "border-red-500 shadow-lg shadow-red-500/10" : "border-slate-200 dark:border-slate-800"
           )}>
             <div className="flex items-center justify-between">
-              <div className="flex items-center gap-4">
+              <div className="flex items-center gap-3">
                 <div className={cn(
-                  "w-10 h-10 rounded-2xl flex items-center justify-center text-white shadow-lg transition-colors",
-                  showLocationError ? "bg-red-500 shadow-red-500/20" : "bg-emerald-500 shadow-emerald-500/20"
+                  "w-8 h-8 sm:w-10 sm:h-10 rounded-xl flex items-center justify-center text-white shadow-md transition-colors shrink-0",
+                  showLocationError ? "bg-red-500" : "bg-emerald-500"
                 )}>
-                  <MapPin className="w-5 h-5" />
+                  <MapPin className="w-4 h-4 sm:w-5 sm:h-5" />
                 </div>
                 <div>
-                  <h3 className={cn("text-sm font-black uppercase tracking-tight", showLocationError ? "text-red-500" : "text-slate-900 dark:text-white")}>
+                  <h3 className={cn("text-xs sm:text-sm font-black uppercase tracking-tight", showLocationError ? "text-red-500" : "text-slate-900 dark:text-white")}>
                     Ubicación del Hallazgo <span className="text-red-500 font-bold ml-1">*</span>
                   </h3>
-                  <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest mt-0.5">Define la zona de incidencia jerárquicamente</p>
+                  <p className="text-[9px] text-slate-500 font-bold uppercase tracking-wider mt-0.5">Define la zona de incidencia jerárquicamente</p>
                 </div>
               </div>
               {showLocationError && (
-                <div className="bg-red-500/10 text-red-500 text-[9px] font-black uppercase tracking-widest px-4 py-2 rounded-xl border border-red-500/20 animate-bounce">
+                <div className="bg-red-500/10 text-red-500 text-[8.5px] font-black uppercase tracking-wider px-3 py-1.5 rounded-lg border border-red-500/20 animate-bounce">
                   Selección obligatoria
                 </div>
               )}
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-6">
               {/* UNITY */}
-              <div className="space-y-4">
-                <label className="block text-[9px] font-black uppercase tracking-[0.2em] text-slate-400 dark:text-slate-600 px-1">Unidad Estructural</label>
+              <div className="space-y-2">
+                <label className="block text-[9px] font-black uppercase tracking-[0.2em] text-slate-400 dark:text-slate-500 px-1">Unidad Estructural</label>
                 <div className="relative group/select">
                   <select 
                     multiple
@@ -1349,25 +1349,25 @@ export default function CreateIssueModal({ onClose, onSuccess }: CreateIssueModa
                       if (values.length > 0) setShowLocationError(false);
                     }}
                     className={cn(
-                      "w-full bg-white dark:bg-slate-950 border rounded-2xl p-4 text-[11px] font-bold uppercase tracking-tight text-slate-900 dark:text-white min-h-[140px] focus:ring-2 focus:ring-emerald-500/20 transition-all outline-none",
+                      "w-full bg-white dark:bg-slate-950 border rounded-xl p-2.5 text-[10px] sm:text-[11px] font-bold uppercase tracking-tight text-slate-900 dark:text-white min-h-[110px] sm:min-h-[140px] focus:ring-2 focus:ring-emerald-500/20 transition-all outline-none",
                       showLocationError && selectedUnits.length === 0 ? "border-red-500" : "border-slate-200 dark:border-slate-800"
                     )}
                   >
-                    <option value="NINGUNA" className="p-2 rounded-lg m-1 checked:bg-slate-500/10 checked:text-slate-500 italic">NINGUNA</option>
+                    <option value="NINGUNA" className="p-1.5 rounded m-0.5 checked:bg-slate-500/10 checked:text-slate-500 italic">NINGUNA</option>
                     {hierarchyUnits
                       .sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' }))
                       .map(unit => (
-                        <option key={unit.id} value={unit.name} className="p-2 rounded-lg m-1 checked:bg-emerald-500/10 checked:text-emerald-500 transition-colors">
+                        <option key={unit.id} value={unit.name} className="p-1.5 rounded m-0.5 checked:bg-emerald-500/10 checked:text-emerald-500 transition-colors">
                           {unit.name}
                         </option>
                       ))}
                   </select>
-                  <p className="text-[8px] text-slate-500 mt-2 px-1 font-bold">MANTÉN CTRL/CMD PARA SELECCIÓN MÚLTIPLE</p>
+                  <p className="text-[7.5px] text-slate-500 mt-1 px-1 font-bold">MANTÉN CTRL/CMD PARA SELECCIÓN MÚLTIPLE</p>
                 </div>
               </div>
 
               {/* LEVEL */}
-              <div className="space-y-4">
+              <div className="space-y-2">
                 <label className="block text-[9px] font-black uppercase tracking-[0.2em] text-emerald-500 dark:text-emerald-400 px-1">Nivel / Piso</label>
                 <div className="relative">
                   <select 
@@ -1380,17 +1380,17 @@ export default function CreateIssueModal({ onClose, onSuccess }: CreateIssueModa
                       setSelectedSpaces([]); // Reset dependency
                     }}
                     className={cn(
-                      "w-full bg-white dark:bg-slate-950 border rounded-2xl p-4 text-[11px] font-bold uppercase tracking-tight text-slate-900 dark:text-white min-h-[140px] focus:ring-2 focus:ring-emerald-500/20 transition-all outline-none",
+                      "w-full bg-white dark:bg-slate-950 border rounded-xl p-2.5 text-[10px] sm:text-[11px] font-bold uppercase tracking-tight text-slate-900 dark:text-white min-h-[110px] sm:min-h-[140px] focus:ring-2 focus:ring-emerald-500/20 transition-all outline-none",
                       selectedUnits.length === 0 && "opacity-40 cursor-not-allowed",
                       showLocationError && selectedLevels.length === 0 ? "border-red-500" : "border-slate-200 dark:border-slate-800"
                     )}
                   >
                     {getAvailableLevels().map(level => (
-                      <option key={level} value={level} className={cn("p-2 rounded-lg m-1 checked:bg-emerald-500/10 checked:text-emerald-500", level === "NINGUNA" && "italic")}>{level}</option>
+                      <option key={level} value={level} className={cn("p-1.5 rounded m-0.5 checked:bg-emerald-500/10 checked:text-emerald-500", level === "NINGUNA" && "italic")}>{level}</option>
                     ))}
                   </select>
                   {selectedUnits.length === 0 && (
-                    <div className="absolute inset-0 flex items-center justify-center p-4 bg-white/10 dark:bg-black/10 backdrop-blur-[1px] rounded-2xl pointer-events-none">
+                    <div className="absolute inset-0 flex items-center justify-center p-2 bg-white/10 dark:bg-black/10 backdrop-blur-[1px] rounded-xl pointer-events-none">
                       <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest text-center">Seleccione una Unidad</span>
                     </div>
                   )}
@@ -1398,7 +1398,7 @@ export default function CreateIssueModal({ onClose, onSuccess }: CreateIssueModa
               </div>
 
               {/* SPACE */}
-              <div className="space-y-4">
+              <div className="space-y-2">
                 <label className="block text-[9px] font-black uppercase tracking-[0.2em] text-blue-500 dark:text-blue-400 px-1">Espacio Específico</label>
                 <div className="relative">
                   <select 
@@ -1410,17 +1410,17 @@ export default function CreateIssueModal({ onClose, onSuccess }: CreateIssueModa
                       setSelectedSpaces(values);
                     }}
                     className={cn(
-                      "w-full bg-white dark:bg-slate-950 border rounded-2xl p-4 text-[11px] font-bold uppercase tracking-tight text-slate-900 dark:text-white min-h-[140px] focus:ring-2 focus:ring-emerald-500/20 transition-all outline-none",
+                      "w-full bg-white dark:bg-slate-950 border rounded-xl p-2.5 text-[10px] sm:text-[11px] font-bold uppercase tracking-tight text-slate-900 dark:text-white min-h-[110px] sm:min-h-[140px] focus:ring-2 focus:ring-emerald-500/20 transition-all outline-none",
                       selectedLevels.length === 0 && "opacity-40 cursor-not-allowed",
                       showLocationError && selectedSpaces.length === 0 ? "border-red-500" : "border-slate-200 dark:border-slate-800"
                     )}
                   >
                     {getAvailableSpaces().map(space => (
-                      <option key={space} value={space} className={cn("p-2 rounded-lg m-1 checked:bg-blue-500/10 checked:text-blue-500", space === "NINGUNA" && "italic")}>{space}</option>
+                      <option key={space} value={space} className={cn("p-1.5 rounded m-0.5 checked:bg-blue-500/10 checked:text-blue-500", space === "NINGUNA" && "italic")}>{space}</option>
                     ))}
                   </select>
                   {selectedLevels.length === 0 && (
-                    <div className="absolute inset-0 flex items-center justify-center p-4 bg-white/10 dark:bg-black/10 backdrop-blur-[1px] rounded-2xl pointer-events-none">
+                    <div className="absolute inset-0 flex items-center justify-center p-2 bg-white/10 dark:bg-black/10 backdrop-blur-[1px] rounded-xl pointer-events-none">
                       <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest text-center">Seleccione un Nivel</span>
                     </div>
                   )}
@@ -1431,30 +1431,30 @@ export default function CreateIssueModal({ onClose, onSuccess }: CreateIssueModa
 
           {/* Section 5: Annexes */}
           {isFieldVisible('attachments') && (
-            <section className="space-y-8">
-              <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 px-1">
-                 <div className="flex items-center gap-3">
-                    <div className="w-9 h-9 bg-slate-50 dark:bg-slate-900 text-slate-400 rounded-xl flex items-center justify-center border border-slate-200 dark:border-slate-800">
-                      <Paperclip className="w-4.5 h-4.5" />
+            <section className="space-y-4 sm:space-y-6">
+              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 px-1">
+                 <div className="flex items-center gap-2.5">
+                    <div className="w-8 h-8 bg-slate-100 dark:bg-slate-900 text-slate-400 rounded-lg flex items-center justify-center border border-slate-200 dark:border-slate-800">
+                      <Paperclip className="w-4 h-4" />
                     </div>
                     <div>
-                      <label className="text-[10px] font-black uppercase tracking-[0.2em] text-white leading-none">Documentación y Evidencia</label>
-                      <p className="text-[8px] text-slate-600 font-black uppercase tracking-widest mt-1">Soporte Técnico y Anexos</p>
+                      <label className="text-[10px] font-black uppercase tracking-[0.15em] text-slate-900 dark:text-white leading-none">Documentación y Evidencia</label>
+                      <p className="text-[8px] text-slate-500 font-bold uppercase tracking-wider mt-0.5">Soporte Técnico y Anexos</p>
                     </div>
                  </div>
-                 <div className="flex flex-wrap gap-3">
+                 <div className="grid grid-cols-2 sm:flex flex-wrap gap-2 w-full sm:w-auto">
                    <button 
                      type="button" 
                      onClick={() => setIsCDEOpen(true)}
-                     className="flex items-center gap-2.5 px-5 py-2.5 bg-white text-[#020617] rounded-xl text-[9px] font-black uppercase tracking-widest hover:bg-slate-100 transition-all shadow-xl shadow-white/5 active:scale-95"
+                     className="flex items-center justify-center gap-1.5 px-3 py-2 bg-slate-900 dark:bg-white text-white dark:text-[#020617] rounded-lg text-[8.5px] font-black uppercase tracking-wider transition-all shadow-md active:scale-95"
                    >
                      <Package className="w-3.5 h-3.5" /> CDE HUB
                    </button>
-                   <label className="flex items-center gap-2.5 px-5 py-2.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl text-[9px] font-black uppercase tracking-widest text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 transition-all shadow-sm cursor-pointer active:scale-95">
+                   <label className="flex items-center justify-center gap-1.5 px-3 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg text-[8.5px] font-black uppercase tracking-wider text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 transition-all shadow-sm cursor-pointer active:scale-95">
                      <Plus className="w-3.5 h-3.5 text-blue-400" /> Cargar Local
                      <input type="file" multiple accept="image/*,video/*,application/pdf" className="hidden" onChange={handleFileUpload} />
                    </label>
-                   <label className="flex items-center gap-2.5 px-5 py-2.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl text-[9px] font-black uppercase tracking-widest text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 transition-all shadow-sm cursor-pointer active:scale-95">
+                   <label className="flex items-center justify-center gap-1.5 px-3 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg text-[8.5px] font-black uppercase tracking-wider text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 transition-all shadow-sm cursor-pointer active:scale-95">
                      <Video className="w-3.5 h-3.5 text-blue-400" /> Video
                      <input 
                       type="file" 
@@ -1476,7 +1476,7 @@ export default function CreateIssueModal({ onClose, onSuccess }: CreateIssueModa
                       }}
                      />
                    </label>
-                   <label className="flex items-center gap-2.5 px-5 py-2.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl text-[9px] font-black uppercase tracking-widest text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 transition-all shadow-sm cursor-pointer active:scale-95">
+                   <label className="flex items-center justify-center gap-1.5 px-3 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg text-[8.5px] font-black uppercase tracking-wider text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 transition-all shadow-sm cursor-pointer active:scale-95">
                      <Camera className="w-3.5 h-3.5 text-emerald-400" /> Foto
                      <input 
                       type="file" 
@@ -1501,51 +1501,51 @@ export default function CreateIssueModal({ onClose, onSuccess }: CreateIssueModa
                  </div>
               </div>
               
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
                 {attachments.map((att, index) => (
                   <motion.div 
                     key={index} 
                     initial={{ opacity: 0, scale: 0.9 }} 
                     animate={{ opacity: 1, scale: 1 }}
-                    className="p-6 bg-slate-950 border border-slate-900 rounded-[2rem] relative group shadow-2xl flex flex-col gap-5"
+                    className="p-4 bg-slate-950 border border-slate-900 rounded-xl relative group shadow-lg flex flex-col gap-3"
                   >
                     <div className="flex justify-between items-start">
-                      <div className="w-11 h-11 bg-slate-900 border border-slate-800 rounded-xl flex items-center justify-center text-slate-700 shadow-sm overflow-hidden bg-center bg-cover">
+                      <div className="w-9 h-9 bg-slate-900 border border-slate-800 rounded-lg flex items-center justify-center text-slate-700 shadow-sm overflow-hidden bg-center bg-cover">
                         {att.category === 'image' && att.url ? (
                           <img src={att.url} className="w-full h-full object-cover" />
                         ) : att.category === 'video' && att.url ? (
                           <video src={att.url} className="w-full h-full object-cover" muted playsInline />
                         ) : att.category === 'image' ? (
-                          <ImageIcon className="w-5 h-5" />
+                          <ImageIcon className="w-4 h-4" />
                         ) : (
-                          <FileText className="w-5 h-5" />
+                          <FileText className="w-4 h-4" />
                         )}
                       </div>
                       <button 
                         type="button"
                         onClick={() => removeAttachment(index)}
-                        className="p-2.5 bg-red-500/10 text-red-400 rounded-lg hover:bg-red-500 hover:text-white transition-all shadow-sm"
+                        className="p-2 bg-red-500/10 text-red-400 rounded-lg hover:bg-red-500 hover:text-white transition-all shadow-sm"
                       >
                         <Trash2 className="w-3.5 h-3.5" />
                       </button>
                     </div>
-                    <div className="space-y-4">
+                    <div className="space-y-3">
                       <input
                         type="text"
                         placeholder="Identificar recurso..."
                         value={att.name}
                         onChange={(e) => updateAttachment(index, 'name', e.target.value)}
-                        className="w-full px-4 py-2.5 bg-slate-900 border border-slate-800 rounded-lg text-[11px] text-white font-bold outline-none focus:border-slate-600 transition-all shadow-inner"
+                        className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-lg text-xs text-white font-bold outline-none focus:border-slate-600 transition-all shadow-inner"
                       />
-                      <div className="flex flex-wrap gap-1.5">
+                      <div className="flex flex-wrap gap-1">
                         {['file', 'image', 'video', 'bim_model', 'plan_pdf'].map((cat) => (
                           <button
                             key={cat}
                             type="button"
                             onClick={() => updateAttachment(index, 'category', cat as any)}
                             className={cn(
-                              "px-2.5 py-1 rounded-full border text-[7px] font-black uppercase tracking-widest transition-all",
-                              att.category === cat ? "bg-white border-white text-[#020617] shadow-lg shadow-white/5" : "bg-transparent border-slate-800 text-slate-600 hover:border-slate-700 hover:text-slate-400 shadow-sm"
+                              "px-2 py-0.5 rounded-full border text-[7px] font-black uppercase tracking-wider transition-all",
+                              att.category === cat ? "bg-white border-white text-[#020617] shadow" : "bg-transparent border-slate-800 text-slate-600 hover:border-slate-700 hover:text-slate-400"
                             )}
                           >
                             {cat.replace('_', ' ')}
@@ -1556,11 +1556,11 @@ export default function CreateIssueModal({ onClose, onSuccess }: CreateIssueModa
                   </motion.div>
                 ))}
                 {attachments.length === 0 && (
-                  <div className="col-span-full py-16 text-center border border-dashed border-slate-900 rounded-[2.5rem] bg-slate-950/50">
-                    <div className="w-16 h-16 bg-slate-900 rounded-[2rem] border border-slate-800 flex items-center justify-center mx-auto mb-4 shadow-sm">
-                      <Paperclip className="w-8 h-8 text-slate-800 rotate-45" />
+                  <div className="col-span-full py-8 text-center border border-dashed border-slate-300 dark:border-slate-800 rounded-xl bg-slate-50/50 dark:bg-slate-950/50">
+                    <div className="w-10 h-10 bg-slate-100 dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 flex items-center justify-center mx-auto mb-2 shadow-sm">
+                      <Paperclip className="w-5 h-5 text-slate-400 rotate-45" />
                     </div>
-                    <p className="text-[9px] text-slate-700 font-black uppercase tracking-[0.3em]">Sin documentación vinculada</p>
+                    <p className="text-[8.5px] text-slate-400 dark:text-slate-600 font-bold uppercase tracking-wider">Sin documentación vinculada</p>
                   </div>
                 )}
               </div>
@@ -2140,7 +2140,7 @@ export default function CreateIssueModal({ onClose, onSuccess }: CreateIssueModa
         </form>
 
         {/* Footer */}
-        <div className="p-8 lg:p-10 border-t border-slate-200 dark:border-slate-800 bg-white/80 dark:bg-white/80 dark:bg-[#020617]/80 backdrop-blur-xl flex flex-col md:flex-row justify-between items-center gap-6 transition-colors font-sans">
+        <div className="p-3.5 sm:p-6 lg:p-8 border-t border-slate-200 dark:border-slate-800 bg-white/95 dark:bg-[#020617]/95 backdrop-blur-xl flex flex-col md:flex-row justify-between items-center gap-3 sm:gap-6 transition-colors font-sans">
           <div className="hidden lg:flex flex-col">
             <span className="text-[9px] font-black text-slate-400 dark:text-slate-700 uppercase tracking-[0.3em] mb-1 leading-none">Certificación de Registro:</span>
             <div className="flex items-center gap-2.5">
@@ -2148,11 +2148,11 @@ export default function CreateIssueModal({ onClose, onSuccess }: CreateIssueModa
               <span className="text-[10px] text-slate-500 dark:text-slate-600 font-black uppercase tracking-widest">Protocolo de Verificación CDE (V2.1.0)</span>
             </div>
           </div>
-          <div className="flex gap-5 w-full md:w-auto">
+          <div className="flex gap-3 w-full md:w-auto">
             <button 
               type="button" 
               onClick={onClose}
-              className="flex-1 md:flex-none px-10 py-4 text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 hover:text-slate-900 dark:hover:text-white transition-colors active:scale-95"
+              className="flex-1 md:flex-none px-6 sm:px-10 py-3 text-xs sm:text-[10px] font-black uppercase tracking-wider text-slate-400 hover:text-slate-900 dark:hover:text-white transition-colors active:scale-95"
             >
               Cancelar
             </button>
@@ -2160,7 +2160,7 @@ export default function CreateIssueModal({ onClose, onSuccess }: CreateIssueModa
               onClick={activeMode === 'issue' ? handleSubmit : handleReportSubmit}
               disabled={(activeMode === 'issue' ? !title : !reportTitle) || isSubmitting}
               className={cn(
-                "flex-1 md:flex-none px-14 py-4 rounded-2xl text-[10px] font-black uppercase tracking-[0.2em] shadow-xl transition-all disabled:opacity-50 active:scale-95 flex items-center justify-center gap-3",
+                "flex-1 md:flex-none px-8 sm:px-14 py-3 sm:py-4 rounded-xl text-xs sm:text-[10px] font-black uppercase tracking-wider shadow-md transition-all disabled:opacity-50 active:scale-95 flex items-center justify-center gap-2.5",
                 activeMode === 'issue' 
                   ? "bg-slate-900 dark:bg-white text-white dark:text-[#020617] shadow-slate-900/10 dark:shadow-white/5 hover:bg-black dark:hover:bg-slate-100"
                   : "bg-indigo-600 text-white shadow-indigo-600/20 hover:bg-indigo-700"
