@@ -352,13 +352,22 @@ document.addEventListener('DOMContentLoaded', async () => {
   }
 
   function renderList() {
+    const rawSearch = searchInput ? searchInput.value.trim() : '';
+    // Si el valor fue autofilled por el navegador (ej: "empresa-1786..."), limpiarlo y no filtrar
+    const isAutofillId = rawSearch.startsWith('empresa-');
+    if (isAutofillId && searchInput) {
+      searchInput.value = '';
+      searchTerm = '';
+    }
+    const searchVal = isAutofillId ? '' : rawSearch.toLowerCase();
+
     listEl.innerHTML = empresas.map((emp, i) => {
       if (emp.deleted) return '';
       
-      const matchesSearch = searchTerm === '' || 
-        (emp.name && emp.name.toLowerCase().includes(searchTerm)) || 
-        (emp.razonSocial && emp.razonSocial.toLowerCase().includes(searchTerm)) || 
-        (emp.id && emp.id.toLowerCase().includes(searchTerm));
+      const matchesSearch = searchVal === '' || 
+        (emp.name && emp.name.toLowerCase().includes(searchVal)) || 
+        (emp.razonSocial && emp.razonSocial.toLowerCase().includes(searchVal)) || 
+        (emp.id && emp.id.toLowerCase().includes(searchVal));
       
       let hasAccess = true;
       if (userRole !== 'SUPER_ADMINISTRADOR') {
@@ -382,7 +391,8 @@ document.addEventListener('DOMContentLoaded', async () => {
         <div class="text-xs text-slate-500 mt-1 truncate">ID: ${emp.id || '---'}</div>
       </button>
       `;
-    }).join('');    }
+    }).join('');
+  }
 
   if (searchInput) {
     searchInput.addEventListener('input', (e) => {
