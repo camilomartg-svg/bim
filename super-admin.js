@@ -347,6 +347,10 @@ document.addEventListener('DOMContentLoaded', async () => {
       await Promise.all(activeCompanies.map(emp => loadCompanyConfig(emp)));
 
       renderList();
+      if (selectedIndex === -1 && empresas.length > 0) {
+        const firstActiveIdx = empresas.findIndex(e => !e.deleted);
+        if (firstActiveIdx > -1) selectEmpresa(firstActiveIdx);
+      }
     } catch (e) { showBanner('Error cargando datos', 'error'); }
   }
 
@@ -1517,7 +1521,43 @@ let contentBase = '';
     }
   };
 
-  // ── FUNCIONES DE GESTIÓN WOMPI (FACTURACIÓN Y LICENCIAS) ─────────────────────
+  // ── CONFIGURACIÓN GLOBAL WOMPI (EXCLUSIVO SÚPER ADMINISTRADOR) ─────────────────────
+  try {
+    window.globalWompiConfig = JSON.parse(localStorage.getItem('globalWompiConfig') || '{"envMode":"sandbox","pubKey":"pub_test_emCXbyxkJncOP6CaWEKk4UIJeTVRzjax","integritySecret":""}');
+  } catch(e) {
+    window.globalWompiConfig = { envMode: 'sandbox', pubKey: 'pub_test_emCXbyxkJncOP6CaWEKk4UIJeTVRzjax', integritySecret: '' };
+  }
+
+  window.openGlobalWompiModal = () => {
+    if (userRole !== 'SUPER_ADMINISTRADOR') {
+      alert('Solo los Súper Administradores pueden gestionar la configuración global de Wompi.');
+      return;
+    }
+    const modal = document.getElementById('global-wompi-modal');
+    if (!modal) return;
+    const envSelect = document.getElementById('global-wompi-env');
+    const pubKeyInput = document.getElementById('global-wompi-pubkey');
+    const secretInput = document.getElementById('global-wompi-secret');
+
+    if (envSelect) envSelect.value = window.globalWompiConfig.envMode || 'sandbox';
+    if (pubKeyInput) pubKeyInput.value = window.globalWompiConfig.pubKey || '';
+    if (secretInput) secretInput.value = window.globalWompiConfig.integritySecret || '';
+
+    modal.classList.remove('hidden');
+  };
+
+  window.closeGlobalWompiModal = () => {
+    const modal = document.getElementById('global-wompi-modal');
+    if (modal) modal.classList.add('hidden');
+  };
+
+  window.updateGlobalWompiConfig = (field, val) => {
+    if (!window.globalWompiConfig) window.globalWompiConfig = {};
+    window.globalWompiConfig[field] = (val || '').trim();
+    localStorage.setItem('globalWompiConfig', JSON.stringify(window.globalWompiConfig));
+  };
+
+  // ── FUNCIONES DE GESTIÓN WOMPI (FACTURACIÓN Y LICENCIAS POR EMPRESA) ─────────────────────
   window.updateWompiConfig = (field, val) => {
     if (selectedIndex === -1) return;
     const emp = empresas[selectedIndex];
@@ -1568,13 +1608,14 @@ let contentBase = '';
       return;
     }
 
+    const globalWompi = window.globalWompiConfig || {};
     const wompiConf = config.wompi || {};
-    const envMode = wompiConf.envMode || 'sandbox';
-    const pubKey = wompiConf.pubKey || (envMode === 'sandbox' ? 'pub_test_Q5y27N96sS7W8Z1pX7x7x7x7x7x7x7x7' : '');
-    const integritySecret = wompiConf.integritySecret || (envMode === 'sandbox' ? 'test_integrity_SecretKey12345' : '');
+    const envMode = wompiConf.envMode || globalWompi.envMode || 'sandbox';
+    const pubKey = wompiConf.pubKey || globalWompi.pubKey || (envMode === 'sandbox' ? 'pub_test_emCXbyxkJncOP6CaWEKk4UIJeTVRzjax' : '');
+    const integritySecret = wompiConf.integritySecret || globalWompi.integritySecret || '';
 
     if (!pubKey) {
-      alert('Por favor ingresa la Llave Pública (Public Key) de Wompi en la sección de Configuración Avanzada.');
+      alert('⚠️ No se ha configurado la Llave Pública (Public Key) de Wompi.\n\nPor favor haz clic en el botón "Credenciales Wompi" en la barra superior del panel para ingresar tus llaves.');
       return;
     }
 

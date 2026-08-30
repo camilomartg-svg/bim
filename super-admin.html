@@ -72,7 +72,10 @@
             </button>
         </div>
 
-        <div class="w-full md:w-1/3 flex justify-end">
+        <div class="w-full md:w-1/3 flex justify-end gap-2 items-center">
+          <button id="global-wompi-config-btn" onclick="openGlobalWompiModal()" type="button" class="rounded-xl bg-slate-900 hover:bg-slate-800 text-white px-4 py-2.5 text-xs font-bold shadow-md transition-all flex items-center gap-1.5 border border-slate-700">
+            <span class="material-symbols-outlined text-amber-400 text-base">key</span> Credenciales Wompi
+          </button>
           <button id="publish-github-btn"
             class="rounded-xl bg-blue-600 px-6 py-3 text-sm font-bold text-white hover:bg-blue-700 shadow-md">Guardar</button>
         </div>
@@ -660,6 +663,62 @@
             </div>
         </div>
     </div>
+
+  <!-- MODAL DE CONFIGURACIÓN GLOBAL WOMPI (EXCLUSIVO SÚPER ADMINISTRADOR) -->
+  <div id="global-wompi-modal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+    <div class="bg-white w-full max-w-lg rounded-2xl shadow-2xl border border-slate-200 overflow-hidden">
+      <div class="bg-slate-900 px-6 py-4 flex justify-between items-center text-white">
+        <div class="flex items-center gap-2">
+          <span class="material-symbols-outlined text-amber-400 text-xl">key</span>
+          <h3 class="font-bold text-base">Configuración Global Pasarela Wompi</h3>
+        </div>
+        <button type="button" onclick="closeGlobalWompiModal()" class="text-slate-400 hover:text-white transition-colors">
+          <span class="material-symbols-outlined text-xl">close</span>
+        </button>
+      </div>
+
+      <div class="p-6 space-y-4">
+        <p class="text-xs text-slate-600">
+          Esta configuración es <strong>exclusiva para el Súper Administrador</strong>. Define la cuenta Wompi receptora de los cobros de licencias de la plataforma <strong>nora BIM</strong>.
+        </p>
+
+        <div>
+          <label class="block text-xs font-bold text-slate-800 mb-1">Entorno de Operación</label>
+          <select id="global-wompi-env" class="w-full text-xs rounded-xl border-slate-300 font-bold text-slate-900 p-2.5 bg-slate-50" onchange="updateGlobalWompiConfig('envMode', this.value)">
+            <option value="sandbox">Sandbox (Pruebas con Tarjetas Simuladas)</option>
+            <option value="production">Producción (Pagos Reales con Bancolombia / Wompi)</option>
+          </select>
+        </div>
+
+        <div>
+          <label class="block text-xs font-bold text-slate-800 mb-1">Llave Pública (Public Key)</label>
+          <input type="text" id="global-wompi-pubkey" placeholder="pub_test_... o pub_prod_..." class="w-full text-xs rounded-xl border-slate-300 font-mono p-2.5 bg-slate-50" onchange="updateGlobalWompiConfig('pubKey', this.value)" />
+          <span class="text-[10px] text-slate-500 mt-1 block">Empieza por <code>pub_test_</code> en Sandbox o <code>pub_prod_</code> en Producción.</span>
+        </div>
+
+        <div>
+          <label class="block text-xs font-bold text-slate-800 mb-1">Secreto de Integridad (Integrity Secret)</label>
+          <input type="password" id="global-wompi-secret" placeholder="test_integrity_... o prod_integrity_..." class="w-full text-xs rounded-xl border-slate-300 font-mono p-2.5 bg-slate-50" onchange="updateGlobalWompiConfig('integritySecret', this.value)" />
+          <span class="text-[10px] text-slate-500 mt-1 block">Fila 'Integridad' en Wompi ➔ Clic en 'Mostrar' (empieza por <code>test_integrity_</code> o <code>prod_integrity_</code>).</span>
+        </div>
+
+        <div class="bg-blue-50 border border-blue-200 rounded-xl p-3 text-[11px] text-blue-900 flex gap-2 items-start">
+          <span class="material-symbols-outlined text-blue-600 text-base shrink-0">info</span>
+          <div>
+            <strong>URL de Eventos (Webhook) para Wompi:</strong><br />
+            Configura en tu panel Wompi la URL de eventos:<br />
+            <code class="bg-blue-100 px-1.5 py-0.5 rounded font-mono text-[10px] select-all block mt-1 break-all">https://script.google.com/macros/s/SU_ID_DE_DESPLIEGUE/exec?action=wompiWebhook</code>
+          </div>
+        </div>
+      </div>
+
+      <div class="bg-slate-50 px-6 py-3 flex justify-end">
+        <button type="button" onclick="closeGlobalWompiModal()" class="px-5 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs shadow-md transition-all">
+          Guardar y Cerrar
+        </button>
+      </div>
+    </div>
+  </div>
 
   </div>
   <!-- Wompi Checkout Widget SDK & Integration Module -->
