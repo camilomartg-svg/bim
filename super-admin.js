@@ -142,15 +142,6 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (gRes.ok) {
            const gCompanies = await gRes.json();
             
-            // Marcar como eliminadas las empresas locales que ya no existen en Google Sheets
-            empresas.forEach(emp => {
-                if (emp.deleted) return;
-                const exists = gCompanies.some(gc => gc.id === emp.id || (emp.name && gc.name && emp.name.toLowerCase().trim() === gc.name.toLowerCase().trim()));
-                if (!exists) {
-                    emp.deleted = true;
-                }
-            });
-
             let addedNew = false;
             gCompanies.forEach(gc => {
                if (gc.id && !empresas.find(e => e.id === gc.id || (e.name && gc.name && e.name.toLowerCase() === gc.name.toLowerCase()))) {
