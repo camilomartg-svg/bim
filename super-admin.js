@@ -1117,8 +1117,55 @@ let contentBase = '';
               <div class="flex flex-col gap-2">
                  ${projectMembersHTML}
               </div>
+            ${isSuperAdmin ? `
+            <section class="mt-8 border-t border-purple-200 pt-6 bg-purple-50/60 p-4 rounded-2xl border">
+              <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 mb-3">
+                <h3 class="text-xs font-extrabold uppercase tracking-wider text-purple-950 flex items-center gap-1.5">
+                  <span class="material-symbols-outlined text-purple-600 text-base">card_giftcard</span>
+                  Gestión de Licencia Tester / Periodo Gratuito (Super Admin)
+                </h3>
+                ${p.customTrialExpiry && new Date() < new Date(p.customTrialExpiry) ? `
+                  <span class="text-[10px] bg-purple-200 text-purple-950 font-bold px-2.5 py-1 rounded-lg flex items-center gap-1 border border-purple-300">
+                    <span class="w-2 h-2 rounded-full bg-purple-600 animate-pulse"></span>
+                    Tester Activo hasta ${new Date(p.customTrialExpiry).toLocaleDateString('es-CO')}
+                  </span>
+                ` : ''}
+              </div>
+
+              ${p.customTrialExpiry && new Date() < new Date(p.customTrialExpiry) ? `
+                <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 bg-white p-3.5 rounded-xl border border-purple-200 shadow-sm">
+                  <div class="text-xs text-purple-900">
+                    🎁 Este proyecto cuenta con <strong>servicio 100% gratuito</strong> hasta el <strong>${new Date(p.customTrialExpiry).toLocaleString('es-CO')}</strong>.
+                  </div>
+                  <button type="button" onclick="removeCustomTrial('${p.slug}')" class="text-xs bg-rose-50 hover:bg-rose-100 text-rose-700 font-bold px-3 py-1.5 rounded-lg border border-rose-200 shadow-sm transition-all shrink-0">
+                    Quitar Tester (Restablecer Cobro)
+                  </button>
+                </div>
+              ` : `
+                <div class="grid grid-cols-1 sm:grid-cols-4 gap-3 items-end">
+                  <div>
+                    <label class="block text-[11px] font-bold text-purple-950 mb-1">Duración</label>
+                    <input type="number" id="trial-val-base-${p.slug}" min="1" max="365" value="1" class="w-full text-xs rounded-xl border-purple-200 font-bold text-slate-900 bg-white" />
+                  </div>
+                  <div>
+                    <label class="block text-[11px] font-bold text-purple-950 mb-1">Unidad de Tiempo</label>
+                    <select id="trial-unit-base-${p.slug}" class="w-full text-xs rounded-xl border-purple-200 font-semibold text-slate-800 bg-white">
+                      <option value="days">Días</option>
+                      <option value="weeks">Semanas</option>
+                      <option value="months" selected>Meses</option>
+                    </select>
+                  </div>
+                  <div class="sm:col-span-2">
+                    <button type="button" onclick="grantCustomTrialFromBase('${p.slug}')" class="w-full bg-purple-600 hover:bg-purple-700 text-white font-bold text-xs py-2.5 px-4 rounded-xl shadow transition-all flex items-center justify-center gap-1.5">
+                      <span class="material-symbols-outlined text-base">verified</span>
+                      Otorgar Licencia Tester Gratuita
+                    </button>
+                  </div>
+                </div>
+              `}
             </section>
-            
+            ` : ''}
+
             </div>
           </div>`;
         }
@@ -1144,6 +1191,11 @@ let contentBase = '';
                   </span>
               </div>
               <div class="col-span-2 text-right flex justify-end gap-1 items-center" onclick="event.stopPropagation()">
+                ${isSuperAdmin ? `
+                  <button type="button" onclick="grantQuickTester('${p.slug}')" class="text-[11px] text-purple-700 hover:text-purple-900 px-2 py-1 bg-purple-50 hover:bg-purple-100 border border-purple-200 rounded-lg shadow-sm hover:shadow flex items-center gap-1 font-bold transition-all" title="Otorgar Licencia Tester / Gratuita (Super Admin)">
+                    <span class="material-symbols-outlined text-xs text-purple-600">card_giftcard</span> Tester
+                  </button>
+                ` : ''}
                 ${p.cancelledAt ? `
                   <span class="text-[10px] bg-amber-50 text-amber-800 px-1.5 py-0.5 rounded border border-amber-200 font-bold" title="Cancelado sin cobro posterior">Cancelado</span>
                 ` : `
@@ -1642,7 +1694,11 @@ let contentBase = '';
     }
   };
 
-  window.grantCustomTrial = (slug) => {
+  window.grantCustomTrialFromBase = (slug) => {
+    grantCustomTrial(slug, 'base');
+  };
+
+  window.grantCustomTrial = (slug, prefix = '') => {
     if (selectedIndex === -1) return;
     const emp = empresas[selectedIndex];
     const config = companyConfigs[emp.id];
@@ -1650,14 +1706,75 @@ let contentBase = '';
     const proj = config.projects.find(p => p.slug === slug);
     if (!proj) return;
 
-    const valEl = document.getElementById(`trial-val-${slug}`);
-    const unitEl = document.getElementById(`trial-unit-${slug}`);
+    const valEl = document.getElementById(prefix ? `trial-val-${prefix}-${slug}` : `trial-val-${slug}`);
+    const unitEl = document.getElementById(prefix ? `trial-unit-${prefix}-${slug}` : `trial-unit-${slug}`);
     const val = parseInt(valEl?.value || '1', 10);
     const unit = unitEl?.value || 'months';
 
     if (isNaN(val) || val <= 0) {
       alert('Por favor ingresa una cantidad válida mayor a 0.');
       return;
+    }
+
+    const now = new Date();
+    const expiry = new Date();
+
+    if (unit === 'days') {
+      expiry.setDate(now.getDate() + val);
+    } else if (unit === 'weeks') {
+      expiry.setDate(now.getDate() + (val * 7));
+    } else if (unit === 'months') {
+      expiry.setMonth(now.getMonth() + val);
+    }
+
+    expiry.setHours(23, 59, 59, 999);
+
+    proj.customTrialExpiry = expiry.toISOString();
+    proj.customTrialUnit = unit;
+    proj.customTrialValue = val;
+
+    const unitLabels = { days: 'día(s)', weeks: 'semana(s)', months: 'mes(es)' };
+    renderProjects();
+    showBanner(`Licencia Tester / Gratuita de ${val} ${unitLabels[unit]} otorgada con éxito para "${proj.name || proj.title}".`, 'success');
+  };
+
+  window.grantQuickTester = (slug) => {
+    if (selectedIndex === -1) return;
+    const emp = empresas[selectedIndex];
+    const config = companyConfigs[emp.id];
+    if (!config || !config.projects) return;
+    const proj = config.projects.find(p => p.slug === slug);
+    if (!proj) return;
+
+    if (proj.customTrialExpiry && new Date() < new Date(proj.customTrialExpiry)) {
+      const expDate = new Date(proj.customTrialExpiry).toLocaleDateString('es-CO');
+      if (confirm(`Este proyecto ya tiene una Licencia Tester gratuita activa hasta el ${expDate}.\n\n¿Deseas QUITAR la licencia tester y reactivar el esquema de cobro normal?`)) {
+        delete proj.customTrialExpiry;
+        delete proj.customTrialUnit;
+        delete proj.customTrialValue;
+        renderProjects();
+        showBanner('Licencia tester finalizada. El proyecto volverá a su esquema de cobro normal.', 'info');
+      }
+      return;
+    }
+
+    const input = prompt(`Otorgar Licencia Tester / Periodo Gratuito a "${proj.name || proj.title}":\n\nIngresa la cantidad y la unidad (días, semanas, meses).\nEjemplos:\n- 15 dias\n- 2 semanas\n- 1 mes\n- 3 meses`, '1 mes');
+    if (!input) return;
+
+    const parts = input.trim().toLowerCase().split(/\s+/);
+    const val = parseInt(parts[0], 10);
+    const unitText = parts[1] || 'mes';
+
+    if (isNaN(val) || val <= 0) {
+      alert('⚠️ Cantidad inválida. Debe ser un número mayor a 0 (ejemplo: 1 mes, 15 dias, 2 semanas).');
+      return;
+    }
+
+    let unit = 'months';
+    if (unitText.includes('dia') || unitText.includes('día') || unitText.includes('day')) {
+      unit = 'days';
+    } else if (unitText.includes('sem') || unitText.includes('week')) {
+      unit = 'weeks';
     }
 
     const now = new Date();
