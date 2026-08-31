@@ -52,15 +52,14 @@ window.WompiModule = (function () {
   }
 
   /**
-   * Obtiene la próxima fecha de corte de la empresa (día 3 o 18 del mes)
+   * Obtiene la próxima fecha de corte de la empresa (fija el día 3 del mes)
    */
   function getNextCutoffDate(cutoffDay = 3, fromDate = new Date()) {
-    const day = parseInt(cutoffDay) === 18 ? 18 : 3;
+    const day = 3; // Fecha fija unificada: Día 3
     const now = new Date(fromDate);
     let cutoff = new Date(now.getFullYear(), now.getMonth(), day);
     cutoff.setHours(0, 0, 0, 0);
 
-    // Si la fecha actual ya superó el día de corte de este mes, la próxima fecha es el próximo mes
     if (now >= cutoff) {
       cutoff = new Date(now.getFullYear(), now.getMonth() + 1, day);
       cutoff.setHours(0, 0, 0, 0);
@@ -69,13 +68,51 @@ window.WompiModule = (function () {
   }
 
   /**
+   * Obtiene el número de días restantes hasta la próxima fecha de corte (Día 3)
+   */
+  function getDaysRemainingUntilCutoff(cutoffDay = 3, fromDate = new Date()) {
+    const now = new Date(fromDate);
+    const nextCutoff = getNextCutoffDate(cutoffDay, now);
+    const diffTime = nextCutoff - now;
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+    return Math.max(1, Math.min(30, diffDays));
+  }
+
+  /**
+   * Calcula el monto a cobrar para un proyecto.
+   * Si es un proyecto nuevo (o sin pago previo) activado antes de la fecha de corte (día 3),
+   * el cobro es proporcional a los días que faltan para el corte: (Costo Total / 30) * Días Faltantes.
+   */
+  function getProjectBillingAmount(project, cutoffDay = 3, fromDate = new Date()) {
+    const monthlyRate = TOTAL_PRICE_PER_PROJECT_COP;
+    if (!project.paidUntil) {
+      const daysRemaining = getDaysRemainingUntilCutoff(cutoffDay, fromDate);
+      if (daysRemaining < 30) {
+        const proratedAmount = Math.round((monthlyRate / 30) * daysRemaining);
+        return {
+          isProrated: true,
+          daysRemaining: daysRemaining,
+          amountCOP: proratedAmount,
+          monthlyRate: monthlyRate
+        };
+      }
+    }
+    return {
+      isProrated: false,
+      daysRemaining: 30,
+      amountCOP: monthlyRate,
+      monthlyRate: monthlyRate
+    };
+  }
+
+  /**
    * Verifica si la solicitud de cancelación se hace con al menos 5 días hábiles colombianos
-   * antes de la próxima fecha de corte (día 3 o 18 del mes).
+   * antes de la próxima fecha de corte (día 3 del mes).
    */
   function canCancelBeforeNextCycle(cutoffDay = 3) {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
-    const nextCutoff = getNextCutoffDate(cutoffDay, today);
+    const nextCutoff = getNextCutoffDate(3, today);
     const businessDaysUntilCutoff = countBusinessDays(today, nextCutoff);
 
     return {
@@ -101,9 +138,9 @@ window.WompiModule = (function () {
   /**
    * Calcula el estado detallado de la licencia de un proyecto:
    * - ACTIVE: Licencia al día
-   * - GRACE_PERIOD: En mora (Días 1 a 5). Acceso continuo.
-   * - SUSPENDED: En mora (Días 6 a 95). Servicio interrumpido. Muestra días restantes hasta borrado (90 días).
-   * - PURGED_WARNING: Superados 90 días de mora.
+   * - GRACE_PERIOD: En mora o recién activado sin pago (Días 1 a 5). Acceso continuo.
+   * - SUSPENDED: Sin pago pasados 5 días. Servicio interrumpido / Inactivo.
+   * - EXPIRED_PURGE: Superados 90 días de mora.
    */
   function getProjectLicenseStatus(project, cutoffDay = 3) {
     if (project.hasLicense === false) {
@@ -129,8 +166,8 @@ window.WompiModule = (function () {
 
     const paidUntil = project.paidUntil ? new Date(project.paidUntil) : null;
 
-    if (!paidUntil || today <= paidUntil) {
-      const nextCutoff = getNextCutoffDate(cutoffDay, today);
+    if (paidUntil && today <= paidUntil) {
+      const nextCutoff = getNextCutoffDate(3, today);
       return {
         status: 'ACTIVE',
         badgeText: 'Licencia Activa',
@@ -139,41 +176,35 @@ window.WompiModule = (function () {
       };
     }
 
-    // Calcular días de mora transcurridos
-    const diffTime = Math.abs(today - paidUntil);
-    const overdueDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+    // Determinar fecha de referencia (paidUntil o fecha de creación/activación del proyecto)
+    const refDate = paidUntil || (project.createdAt ? new Date(project.createdAt) : today);
+    refDate.setHours(0, 0, 0, 0);
+
+    const diffTime = today - refDate;
+    const overdueDays = Math.max(0, Math.ceil(diffTime / (1000 * 60 * 60 * 24)));
 
     if (overdueDays <= 5) {
-      const remainingGraceDays = 5 - overdueDays + 1;
+      const remainingGraceDays = Math.max(1, 5 - overdueDays);
       return {
         status: 'GRACE_PERIOD',
         overdueDays: overdueDays,
         graceDaysLeft: remainingGraceDays,
-        badgeText: `Periodo de Gracia (${remainingGraceDays} días de 5)`,
+        badgeText: `Gracia de Pago (${remainingGraceDays} días de 5)`,
         badgeColor: 'bg-amber-100 text-amber-900 border-amber-400 font-bold',
-        message: `El cobro no se completó. Dispones de ${remainingGraceDays} días de gracia para estar al día sin interrupción.`
+        message: `El cobro no se ha procesado. Dispones de ${remainingGraceDays} días de gracia para efectuar el pago.`
       };
     }
 
     const daysInSuspension = overdueDays - 5;
     const daysLeftToPurge = Math.max(0, 90 - daysInSuspension);
 
-    if (daysLeftToPurge > 0) {
-      return {
-        status: 'SUSPENDED',
-        overdueDays: overdueDays,
-        daysLeftToPurge: daysLeftToPurge,
-        badgeText: `Servicio Suspendido (Conserva datos: ${daysLeftToPurge}d restantes)`,
-        badgeColor: 'bg-rose-100 text-rose-800 border-rose-400 font-bold',
-        message: `⚠️ Servicio suspendido por mora. Tus datos y proyectos se conservarán por ${daysLeftToPurge} días calendario antes de su eliminación permanente.`
-      };
-    }
-
     return {
-      status: 'EXPIRED_PURGE',
-      badgeText: 'Pendiente Purga Definitiva (90d superados)',
-      badgeColor: 'bg-rose-900 text-white font-black',
-      message: 'Ha transcurrido el periodo máximo de retención (90 días). Programado para purga.'
+      status: 'SUSPENDED',
+      overdueDays: overdueDays,
+      daysLeftToPurge: daysLeftToPurge,
+      badgeText: `Inactivo (Sin Pago - ${daysLeftToPurge}d retención)`,
+      badgeColor: 'bg-rose-100 text-rose-800 border-rose-400 font-bold',
+      message: `⚠️ Servicio inactivo por falta de pago. Tus datos se conservarán por ${daysLeftToPurge} días calendario antes de su eliminación permanente.`
     };
   }
 
@@ -218,7 +249,6 @@ window.WompiModule = (function () {
         console.log('Resultado del pago Wompi Widget:', result);
       });
     } else {
-      // Fallback a URL de Checkout Wompi si el Widget JS no ha cargado
       const params = new URLSearchParams({
         'public-key': publicKey,
         'currency': currency,
@@ -239,6 +269,8 @@ window.WompiModule = (function () {
     isColombianBusinessDay,
     countBusinessDays,
     getNextCutoffDate,
+    getDaysRemainingUntilCutoff,
+    getProjectBillingAmount,
     canCancelBeforeNextCycle,
     generateIntegritySignature,
     getProjectLicenseStatus,

@@ -430,11 +430,11 @@
                 <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
                   <div>
                     <label class="block text-xs font-bold text-blue-900 mb-1">Día de Corte Unificado</label>
-                    <select id="wompi-cutoff-day" class="w-full text-xs rounded-xl border-blue-200 bg-white font-bold text-blue-900 shadow-sm" onchange="updateWompiConfig('cutoffDay', this.value)">
-                      <option value="3">Día 3 de cada mes</option>
-                      <option value="18">Día 18 de cada mes</option>
-                    </select>
-                    <span class="text-[10px] text-blue-600 block mt-1">Todos los proyectos activos de la empresa se cobran en esta fecha.</span>
+                    <div class="w-full text-xs rounded-xl border border-blue-200 bg-white font-bold text-blue-900 py-2 px-3 shadow-sm flex items-center justify-between">
+                      <span>Día 3 de cada mes</span>
+                      <span class="material-symbols-outlined text-sm text-blue-500">calendar_month</span>
+                    </div>
+                    <span class="text-[10px] text-blue-600 block mt-1">Fecha fija de corte para la facturación unificada de todos los proyectos.</span>
                   </div>
 
                   <div>

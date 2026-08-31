@@ -1123,8 +1123,9 @@ let contentBase = '';
           </div>`;
         }
         
-        const cutoffDay = config.wompi?.cutoffDay || 3;
+        const cutoffDay = 3;
         const licInfo = window.WompiModule ? window.WompiModule.getProjectLicenseStatus(p, cutoffDay) : { badgeColor: 'bg-emerald-100 text-emerald-800', badgeText: 'Licencia Activa', message: '' };
+        const effectiveStatus = (licInfo.status === 'SUSPENDED') ? 'Inactivo' : (p.status || 'Activo');
 
         return `
           <div class="border-b border-slate-100 last:border-0 bg-slate-50">
@@ -1135,7 +1136,7 @@ let contentBase = '';
               </div>
               <div class="col-span-2 font-mono text-[10px] text-slate-500 truncate" title="${p.slug}">${p.slug}</div>
               <div class="col-span-2">
-                  <span class="text-[10px] px-2 py-0.5 rounded font-bold uppercase tracking-wider ${p.status==='Activo'?'bg-emerald-100 text-emerald-700':p.status==='Cerrado'?'bg-rose-100 text-rose-700':'bg-slate-200 text-slate-700'}">${p.status}</span>
+                  <span class="text-[10px] px-2 py-0.5 rounded font-bold uppercase tracking-wider ${effectiveStatus==='Activo'?'bg-emerald-100 text-emerald-700':effectiveStatus==='Cerrado'?'bg-rose-100 text-rose-700':'bg-slate-200 text-slate-700'}">${effectiveStatus}</span>
               </div>
               <div class="col-span-3 text-center" onclick="event.stopPropagation()">
                   <span class="inline-flex items-center gap-1 text-[10px] px-2 py-1 rounded-lg border font-bold ${licInfo.badgeColor}" title="${licInfo.message}">
@@ -1150,7 +1151,7 @@ let contentBase = '';
                     <span class="material-symbols-outlined text-xs">cancel</span> Cancelar
                   </button>
                 `}
-                <button onclick="deleteProject('${p.slug}')" class="text-rose-500 hover:text-rose-700 p-1 bg-white border border-rose-200 rounded-lg shadow-sm hover:shadow" title="Eliminar Proyecto"><span class="material-symbols-outlined text-sm">delete</span></button>
+                ${userRole === 'SUPER_ADMINISTRADOR' ? `<button onclick="deleteProject('${p.slug}')" class="text-rose-500 hover:text-rose-700 p-1 bg-white border border-rose-200 rounded-lg shadow-sm hover:shadow" title="Eliminar Proyecto"><span class="material-symbols-outlined text-sm">delete</span></button>` : ''}
               </div>
             </div>
             ${contentBase}
@@ -1271,7 +1272,7 @@ let contentBase = '';
                     <span class="text-[10px] px-2 py-0.5 rounded font-bold uppercase tracking-wider ${p.status==='Activo'?'bg-emerald-100 text-emerald-700':p.status==='Cerrado'?'bg-rose-100 text-rose-700':'bg-slate-200 text-slate-700'}">${p.status}</span>
                 </div>
                 <div class="col-span-3 text-right flex justify-end gap-2" onclick="event.stopPropagation()">
-                  <button onclick="deleteProject('${p.slug}')" class="text-rose-500 hover:text-rose-700 p-1 bg-white border border-rose-200 rounded shadow-sm hover:shadow"><span class="material-symbols-outlined text-sm">delete</span></button>
+                  ${userRole === 'SUPER_ADMINISTRADOR' ? `<button onclick="deleteProject('${p.slug}')" class="text-rose-500 hover:text-rose-700 p-1 bg-white border border-rose-200 rounded shadow-sm hover:shadow" title="Eliminar Proyecto"><span class="material-symbols-outlined text-sm">delete</span></button>` : ''}
                 </div>
               </div>
               ${contentConfig}
@@ -1281,21 +1282,26 @@ let contentBase = '';
       }
 
       // Calculate company billing summary
-      const licensedProjects = (config.projects || []).filter(p => p.hasLicense !== false);
+      const licensedProjects = (config.projects || []).filter(p => p.hasLicense !== false && !p.cancelledAt);
       const count = licensedProjects.length;
-      const basePrice = 115600;
-      const subtotal = count * basePrice;
-      const iva = subtotal * 0.19;
-      const total = subtotal + iva;
       
+      let totalAmountCOP = 0;
+      let proratedCount = 0;
+
+      licensedProjects.forEach(p => {
+        const bill = window.WompiModule ? window.WompiModule.getProjectBillingAmount(p, 3) : { amountCOP: 137564, isProrated: false };
+        totalAmountCOP += bill.amountCOP;
+        if (bill.isProrated) proratedCount++;
+      });
+
       const countEl = document.getElementById('company-billing-count');
       const totalEl = document.getElementById('company-billing-total');
       if (countEl && totalEl) {
         countEl.textContent = count;
         totalEl.innerHTML = `
-          <div class="text-lg font-black text-blue-950">$${total.toLocaleString('es-CO')} COP</div>
+          <div class="text-lg font-black text-blue-950">$${totalAmountCOP.toLocaleString('es-CO')} COP</div>
           <div class="text-[10px] text-blue-600 font-medium mt-0.5">
-            Subtotal: $${subtotal.toLocaleString('es-CO')} COP + IVA (19%): $${iva.toLocaleString('es-CO')} COP
+            ${proratedCount > 0 ? `* Incluye cobro proporcional por días faltantes al día de corte (Día 3)` : `Facturación mensual unificada el día 3 de cada mes ($137.564 COP con IVA por proyecto)`}
           </div>
         `;
       }
@@ -1626,8 +1632,11 @@ let contentBase = '';
       return;
     }
 
-    const pricePerProjectCOP = window.WompiModule ? window.WompiModule.TOTAL_PRICE_PER_PROJECT_COP : 137564;
-    const totalAmountCOP = activeLicensedProjects.length * pricePerProjectCOP;
+    let totalAmountCOP = 0;
+    activeLicensedProjects.forEach(p => {
+      const bill = window.WompiModule ? window.WompiModule.getProjectBillingAmount(p, 3) : { amountCOP: 137564 };
+      totalAmountCOP += bill.amountCOP;
+    });
     const amountInCents = totalAmountCOP * 100;
     const reference = `NORABIM-${emp.code || emp.id}-${Date.now()}`;
 
