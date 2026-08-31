@@ -1402,7 +1402,7 @@ let contentBase = '';
       if (countEl && totalEl) {
         countEl.textContent = count;
 
-        let subText = `Facturación mensual unificada el día 3 de cada mes ($137.564 COP con IVA por proyecto)`;
+        let subText = `Facturación mensual unificada el día 3 de cada mes ($137.564 COP por proyecto)`;
         if (trialCount > 0 && proratedCount > 0) {
           subText = `* Incluye ${trialCount} proyecto(s) en Licencia Tester Gratuita ($0 COP) y cobro proporcional por días faltantes.`;
         } else if (trialCount > 0) {

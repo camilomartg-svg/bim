@@ -5,9 +5,7 @@
  */
 
 window.WompiModule = (function () {
-  const BASE_PRICE_COP = 115600;
-  const IVA_RATE = 0.19;
-  const TOTAL_PRICE_PER_PROJECT_COP = Math.round(BASE_PRICE_COP * (1 + IVA_RATE)); // 137564 COP
+  const TOTAL_PRICE_PER_PROJECT_COP = 137564; // Precio total por proyecto por mes
 
   // Festivos Oficiales Colombia (2026 y 2027) en formato YYYY-MM-DD
   const COLOMBIAN_HOLIDAYS = [
