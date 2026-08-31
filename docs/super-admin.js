@@ -1256,6 +1256,55 @@ let contentBase = '';
                 <label class="block"><span class="mb-2 block text-sm font-semibold text-slate-700">Equipo</span><input class="w-full text-xs rounded-xl border-slate-200" type="text" value="${p.actions?.equipo || ''}" onchange="updateProjectDeepAct('${p.slug}', 'equipo', this.value)" /></label>
               </div>
             </section>
+
+            ${isSuperAdmin ? `
+            <section class="border-t border-purple-200 pt-4 mt-2 bg-purple-50/60 p-4 rounded-2xl border">
+              <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 mb-3">
+                <h3 class="text-xs font-extrabold uppercase tracking-wider text-purple-950 flex items-center gap-1.5">
+                  <span class="material-symbols-outlined text-purple-600 text-base">card_giftcard</span>
+                  Gestión de Licencia Tester / Periodo Gratuito (Super Admin)
+                </h3>
+                ${p.customTrialExpiry && new Date() < new Date(p.customTrialExpiry) ? `
+                  <span class="text-[10px] bg-purple-200 text-purple-950 font-bold px-2.5 py-1 rounded-lg flex items-center gap-1 border border-purple-300">
+                    <span class="w-2 h-2 rounded-full bg-purple-600 animate-pulse"></span>
+                    Tester Activo hasta ${new Date(p.customTrialExpiry).toLocaleDateString('es-CO')}
+                  </span>
+                ` : ''}
+              </div>
+
+              ${p.customTrialExpiry && new Date() < new Date(p.customTrialExpiry) ? `
+                <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 bg-white p-3.5 rounded-xl border border-purple-200 shadow-sm">
+                  <div class="text-xs text-purple-900">
+                    🎁 Este proyecto cuenta con <strong>servicio 100% gratuito</strong> hasta el <strong>${new Date(p.customTrialExpiry).toLocaleString('es-CO')}</strong>.
+                  </div>
+                  <button type="button" onclick="removeCustomTrial('${p.slug}')" class="text-xs bg-rose-50 hover:bg-rose-100 text-rose-700 font-bold px-3 py-1.5 rounded-lg border border-rose-200 shadow-sm transition-all shrink-0">
+                    Quitar Tester (Restablecer Cobro)
+                  </button>
+                </div>
+              ` : `
+                <div class="grid grid-cols-1 sm:grid-cols-4 gap-3 items-end">
+                  <div>
+                    <label class="block text-[11px] font-bold text-purple-950 mb-1">Duración</label>
+                    <input type="number" id="trial-val-${p.slug}" min="1" max="365" value="1" class="w-full text-xs rounded-xl border-purple-200 font-bold text-slate-900 bg-white" />
+                  </div>
+                  <div>
+                    <label class="block text-[11px] font-bold text-purple-950 mb-1">Unidad de Tiempo</label>
+                    <select id="trial-unit-${p.slug}" class="w-full text-xs rounded-xl border-purple-200 font-semibold text-slate-800 bg-white">
+                      <option value="days">Días</option>
+                      <option value="weeks">Semanas</option>
+                      <option value="months" selected>Meses</option>
+                    </select>
+                  </div>
+                  <div class="sm:col-span-2">
+                    <button type="button" onclick="grantCustomTrial('${p.slug}')" class="w-full bg-purple-600 hover:bg-purple-700 text-white font-bold text-xs py-2.5 px-4 rounded-xl shadow transition-all flex items-center justify-center gap-1.5">
+                      <span class="material-symbols-outlined text-base">verified</span>
+                      Otorgar Licencia Tester Gratuita
+                    </button>
+                  </div>
+                </div>
+              `}
+            </section>
+            ` : ''}
               </div>
             </div>`;
           }
@@ -1287,22 +1336,32 @@ let contentBase = '';
       
       let totalAmountCOP = 0;
       let proratedCount = 0;
+      let trialCount = 0;
 
       licensedProjects.forEach(p => {
-        const bill = window.WompiModule ? window.WompiModule.getProjectBillingAmount(p, 3) : { amountCOP: 137564, isProrated: false };
+        const bill = window.WompiModule ? window.WompiModule.getProjectBillingAmount(p, 3) : { amountCOP: 137564, isProrated: false, isTrial: false };
         totalAmountCOP += bill.amountCOP;
         if (bill.isProrated) proratedCount++;
+        if (bill.isTrial) trialCount++;
       });
 
       const countEl = document.getElementById('company-billing-count');
       const totalEl = document.getElementById('company-billing-total');
       if (countEl && totalEl) {
         countEl.textContent = count;
+
+        let subText = `Facturación mensual unificada el día 3 de cada mes ($137.564 COP con IVA por proyecto)`;
+        if (trialCount > 0 && proratedCount > 0) {
+          subText = `* Incluye ${trialCount} proyecto(s) en Licencia Tester Gratuita ($0 COP) y cobro proporcional por días faltantes.`;
+        } else if (trialCount > 0) {
+          subText = `* Incluye ${trialCount} proyecto(s) en Licencia Tester Gratuita ($0 COP).`;
+        } else if (proratedCount > 0) {
+          subText = `* Incluye cobro proporcional por días faltantes al día de corte (Día 3).`;
+        }
+
         totalEl.innerHTML = `
           <div class="text-lg font-black text-blue-950">$${totalAmountCOP.toLocaleString('es-CO')} COP</div>
-          <div class="text-[10px] text-blue-600 font-medium mt-0.5">
-            ${proratedCount > 0 ? `* Incluye cobro proporcional por días faltantes al día de corte (Día 3)` : `Facturación mensual unificada el día 3 de cada mes ($137.564 COP con IVA por proyecto)`}
-          </div>
+          <div class="text-[10px] text-blue-600 font-medium mt-0.5">${subText}</div>
         `;
       }
 
@@ -1580,6 +1639,63 @@ let contentBase = '';
     config.wompi[field] = val;
     if (field === 'cutoffDay') {
       renderProjects();
+    }
+  };
+
+  window.grantCustomTrial = (slug) => {
+    if (selectedIndex === -1) return;
+    const emp = empresas[selectedIndex];
+    const config = companyConfigs[emp.id];
+    if (!config || !config.projects) return;
+    const proj = config.projects.find(p => p.slug === slug);
+    if (!proj) return;
+
+    const valEl = document.getElementById(`trial-val-${slug}`);
+    const unitEl = document.getElementById(`trial-unit-${slug}`);
+    const val = parseInt(valEl?.value || '1', 10);
+    const unit = unitEl?.value || 'months';
+
+    if (isNaN(val) || val <= 0) {
+      alert('Por favor ingresa una cantidad válida mayor a 0.');
+      return;
+    }
+
+    const now = new Date();
+    const expiry = new Date();
+
+    if (unit === 'days') {
+      expiry.setDate(now.getDate() + val);
+    } else if (unit === 'weeks') {
+      expiry.setDate(now.getDate() + (val * 7));
+    } else if (unit === 'months') {
+      expiry.setMonth(now.getMonth() + val);
+    }
+
+    expiry.setHours(23, 59, 59, 999);
+
+    proj.customTrialExpiry = expiry.toISOString();
+    proj.customTrialUnit = unit;
+    proj.customTrialValue = val;
+
+    const unitLabels = { days: 'día(s)', weeks: 'semana(s)', months: 'mes(es)' };
+    renderProjects();
+    showBanner(`Licencia Tester / Gratuita de ${val} ${unitLabels[unit]} otorgada con éxito para "${proj.name || proj.title}".`, 'success');
+  };
+
+  window.removeCustomTrial = (slug) => {
+    if (selectedIndex === -1) return;
+    const emp = empresas[selectedIndex];
+    const config = companyConfigs[emp.id];
+    if (!config || !config.projects) return;
+    const proj = config.projects.find(p => p.slug === slug);
+    if (!proj) return;
+
+    if (confirm(`¿Deseas quitar la licencia gratuita/tester para "${proj.name || proj.title}" y restablecer los cobros ordinarios?`)) {
+      delete proj.customTrialExpiry;
+      delete proj.customTrialUnit;
+      delete proj.customTrialValue;
+      renderProjects();
+      showBanner('Licencia tester finalizada. El proyecto volverá a su esquema de cobro normal.', 'info');
     }
   };
 

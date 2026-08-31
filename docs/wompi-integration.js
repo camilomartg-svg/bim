@@ -85,6 +85,17 @@ window.WompiModule = (function () {
    */
   function getProjectBillingAmount(project, cutoffDay = 3, fromDate = new Date()) {
     const monthlyRate = TOTAL_PRICE_PER_PROJECT_COP;
+
+    if (project.customTrialExpiry && new Date() <= new Date(project.customTrialExpiry)) {
+      return {
+        isProrated: false,
+        isTrial: true,
+        daysRemaining: 0,
+        amountCOP: 0,
+        monthlyRate: monthlyRate
+      };
+    }
+
     if (!project.paidUntil) {
       const daysRemaining = getDaysRemainingUntilCutoff(cutoffDay, fromDate);
       if (daysRemaining < 30) {
@@ -150,6 +161,33 @@ window.WompiModule = (function () {
         badgeColor: 'bg-slate-200 text-slate-700',
         message: 'Proyecto desactivado manualmente.'
       };
+    }
+
+    // Verificar si el proyecto tiene un periodo de gracia / tester personalizado activo otorgado por el Super Admin
+    if (project.customTrialExpiry) {
+      const trialEnd = new Date(project.customTrialExpiry);
+      const now = new Date();
+      if (now <= trialEnd) {
+        const diffTime = trialEnd - now;
+        const totalDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+        
+        let label = `${totalDays} día(s)`;
+        if (totalDays > 30) {
+          const months = Math.round(totalDays / 30);
+          label = `${months} mes(es)`;
+        } else if (totalDays > 7) {
+          const weeks = Math.round(totalDays / 7);
+          label = `${weeks} semana(s)`;
+        }
+
+        return {
+          status: 'CUSTOM_TRIAL',
+          trialEnd: trialEnd,
+          badgeText: `🎁 Tester Gratuito (${label})`,
+          badgeColor: 'bg-purple-100 text-purple-900 border-purple-300 font-bold',
+          message: `Licencia Gratuita / Tester otorgada por Súper Admin activa hasta el ${trialEnd.toLocaleDateString('es-CO')}.`
+        };
+      }
     }
 
     if (project.cancelledAt) {
