@@ -236,9 +236,9 @@
         "enabled": true,
         "title": "NUEVO PROYECTO",
         "map": {
-          "lat": 4.60971,
-          "lng": -74.08175,
-          "zoom": 15
+          "lat": 4.616935,
+          "lng": -74.081084,
+          "zoom": 18
         },
         "eyebrow": "nora",
         "subtitle": "Accesos rápidos, seguimiento y contexto del proyecto.",
@@ -274,7 +274,9 @@
       },
       "customTrialExpiry": "2026-10-01T04:59:59.999Z",
       "customTrialUnit": "months",
-      "customTrialValue": 1
+      "customTrialValue": 1,
+      "members": [],
+      "equiposDeTarea": []
     }
   ],
   "portal": {
