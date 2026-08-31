@@ -224,6 +224,57 @@
         ],
         "directorDeObra": "ianeiara.oficial@gmail.com"
       }
+    },
+    {
+      "name": "Proyecto tester",
+      "title": "NUEVO PROYECTO",
+      "slug": "nuevo-proyecto-1788144083264",
+      "status": "Planeacion",
+      "enabled": true,
+      "hasLicense": true,
+      "landing": {
+        "enabled": true,
+        "title": "NUEVO PROYECTO",
+        "map": {
+          "lat": 4.60971,
+          "lng": -74.08175,
+          "zoom": 15
+        },
+        "eyebrow": "nora",
+        "subtitle": "Accesos rápidos, seguimiento y contexto del proyecto.",
+        "actionEyebrow": "Panel",
+        "actionTitle": "Acciones",
+        "actionDescription": "Atajos para equipo, incidencias y gestión del proyecto.",
+        "logoUrl": "https://i.postimg.cc/J4Fy2Qsx/LOGO-(1).jpg",
+        "portalLogoLight": "https://i.postimg.cc/tR3YSryT/LOGO-NORA-NEGRO.png",
+        "portalLogoDark": "https://i.postimg.cc/SQ6JTZqj/LOGO-NORA-BLANCO.png",
+        "viewerLogoLight": "https://i.postimg.cc/L4r0gSvV/LOGO-TEXTO-NORA-NEGRO.png",
+        "viewerLogoDark": "https://i.postimg.cc/FFfBKzb8/LOGO-TEXTO-NORA-BLANCO.png"
+      },
+      "modules": {
+        "ifc": "VSR_IFCA/",
+        "status": "STATUS/",
+        "cantidades": "CANTIDADES/",
+        "pdf": "VSR_PDFA/",
+        "dwg": "VSR_DWGA/"
+      },
+      "actions": {
+        "publicaciones": "Publicaciones.html",
+        "solicitudes": "index.html",
+        "equipo": "equipo.html"
+      },
+      "dataSources": {
+        "driveFolderName": "Proyecto tester",
+        "driveFolderId": "1oQdufjqUgtA13zBSbtyKmJSO4SR1k8mT",
+        "driveScriptUrl": "",
+        "statusSheetId": "",
+        "statusScriptUrl": "",
+        "cantidadesSheetId": "",
+        "cantidadesScriptUrl": ""
+      },
+      "customTrialExpiry": "2026-10-01T04:59:59.999Z",
+      "customTrialUnit": "months",
+      "customTrialValue": 1
     }
   ],
   "portal": {
