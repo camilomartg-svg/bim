@@ -299,8 +299,6 @@ window.WompiModule = (function () {
   }
 
   return {
-    BASE_PRICE_COP,
-    IVA_RATE,
     TOTAL_PRICE_PER_PROJECT_COP,
     isColombianBusinessDay,
     countBusinessDays,
