@@ -1623,9 +1623,9 @@ let contentBase = '';
 
     const globalWompi = window.globalWompiConfig || {};
     const wompiConf = config.wompi || {};
-    const envMode = wompiConf.envMode || globalWompi.envMode || 'sandbox';
-    const pubKey = wompiConf.pubKey || globalWompi.pubKey || (envMode === 'sandbox' ? 'pub_test_emCXbyxkJncOP6CaWEKk4UIJeTVRzjax' : '');
-    const integritySecret = wompiConf.integritySecret || globalWompi.integritySecret || '';
+    const envMode = 'production';
+    const pubKey = globalWompi.pubKey || wompiConf.pubKey || '';
+    const integritySecret = globalWompi.integritySecret || wompiConf.integritySecret || '';
 
     if (!pubKey) {
       alert('⚠️ No se ha configurado la Llave Pública (Public Key) de Wompi.\n\nPor favor haz clic en el botón "Credenciales Wompi" en la barra superior del panel para ingresar tus llaves.');

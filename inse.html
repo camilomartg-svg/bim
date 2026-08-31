@@ -68,11 +68,11 @@
                     <h2 class="text-3xl font-bold mb-2">Bienvenido a nora</h2>
                     <p class="text-gray-500 dark:text-gray-400 mb-8">Ingresa tus datos para acceder a la plataforma.</p>
 
-                <!-- Formulario Visual (Aún no funcional) -->
-                <form id="traditional-login-form" class="space-y-5" onsubmit="event.preventDefault();">
+                <!-- Formulario Visual -->
+                <form id="traditional-login-form" class="space-y-5" onsubmit="event.preventDefault();" autocomplete="off">
                     <div>
                         <label for="email" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Correo electrónico</label>
-                        <input type="email" id="email" name="email" class="w-full px-4 py-3 rounded-lg border border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-800 focus:ring-2 focus:ring-primary focus:border-primary transition duration-200" placeholder="tu@correo.com">
+                        <input type="email" id="email" name="user_login_email" autocomplete="off" value="" class="w-full px-4 py-3 rounded-lg border border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-800 focus:ring-2 focus:ring-primary focus:border-primary transition duration-200" placeholder="tu@correo.com">
                     </div>
                     
                     <div>
@@ -80,7 +80,7 @@
                             <label for="password" class="block text-sm font-medium text-gray-700 dark:text-gray-300">Contraseña</label>
                             <a href="#" class="text-sm text-gray-500 hover:text-primary dark:hover:text-white transition duration-200">¿Olvidaste tu contraseña?</a>
                         </div>
-                        <input type="password" id="password" name="password" class="w-full px-4 py-3 rounded-lg border border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-800 focus:ring-2 focus:ring-primary focus:border-primary transition duration-200" placeholder="••••••••">
+                        <input type="password" id="password" name="user_login_password" autocomplete="new-password" value="" class="w-full px-4 py-3 rounded-lg border border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-800 focus:ring-2 focus:ring-primary focus:border-primary transition duration-200" placeholder="••••••••">
                     </div>
 
                     <div class="flex items-center">
@@ -433,6 +433,14 @@
                 const randomImg = bgImages[Math.floor(Math.random() * bgImages.length)];
                 leftPanel.style.backgroundImage = `url('${randomImg}')`;
             }
+
+            // Limpiar posibles valores autocompletados por el navegador
+            setTimeout(() => {
+                const emailEl = document.getElementById('email');
+                const passEl = document.getElementById('password');
+                if (emailEl) emailEl.value = '';
+                if (passEl) passEl.value = '';
+            }, 100);
 
             // GESTIÓN DEL TEMA (MODO OSCURO/CLARO)
             const htmlEl = document.documentElement;
