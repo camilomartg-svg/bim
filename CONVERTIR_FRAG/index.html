@@ -58,16 +58,14 @@
             const baseName = String(filename || 'model').replace(/\.ifc$/i, '');
             const file = new File([bytes], filename || 'model.ifc', { type: 'application/octet-stream' });
 
-            let input = document.querySelector('input[type="file"]');
             let attempts = 0;
-            while (!input && attempts < 100) {
+            while (typeof window.__convertIfc !== 'function' && attempts < 100) {
               await new Promise(r => setTimeout(r, 100));
-              input = document.querySelector('input[type="file"]');
               attempts++;
             }
 
-            if (!input) {
-              throw new Error('El convertidor no está listo en el DOM.');
+            if (typeof window.__convertIfc !== 'function') {
+              throw new Error('El convertidor React no se pudo inicializar.');
             }
 
             lastFragBlob = null;
@@ -87,38 +85,8 @@
             });
             progressObserver.observe(document.body, { childList: true, subtree: true, characterData: true });
 
-            const dt = new DataTransfer();
-            dt.items.add(file);
-
-            let reactTriggered = false;
-            const reactPropsKey = Object.keys(input).find(k => k.startsWith('__reactProps$') || k.startsWith('__reactEventHandlers$'));
-            if (reactPropsKey && typeof input[reactPropsKey]?.onChange === 'function') {
-              try {
-                input[reactPropsKey].onChange({ target: { files: dt.files }, preventDefault: () => {}, stopPropagation: () => {} });
-                reactTriggered = true;
-              } catch (err) {
-                console.warn('React props onChange failed, falling back:', err);
-              }
-            }
-
-            if (!reactTriggered) {
-              const dropTarget = document.querySelector('div[class*="border-dashed"]') || input.parentElement || document.body;
-              const reactDropKey = Object.keys(dropTarget).find(k => k.startsWith('__reactProps$') || k.startsWith('__reactEventHandlers$'));
-              if (reactDropKey && typeof dropTarget[reactDropKey]?.onDrop === 'function') {
-                try {
-                  dropTarget[reactDropKey].onDrop({ dataTransfer: dt, preventDefault: () => {}, stopPropagation: () => {} });
-                  reactTriggered = true;
-                } catch (err) {
-                  console.warn('React props onDrop failed:', err);
-                }
-              }
-            }
-
-            if (!reactTriggered) {
-              const nativeFilesSetter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'files').set;
-              if (nativeFilesSetter) nativeFilesSetter.call(input, dt.files);
-              input.dispatchEvent(new Event('change', { bubbles: true }));
-            }
+            // Call React's internal conversion function directly
+            window.__convertIfc({ target: { files: [file] } });
 
             let completed = false;
             let errorMsg = null;
