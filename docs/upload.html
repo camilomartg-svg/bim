@@ -387,7 +387,7 @@
       // =====================================================================
       const _convFrame = document.createElement('iframe');
       _convFrame.src = new URL('/CONVERTIR_FRAG/index.html', window.location.origin).href;
-      _convFrame.style.cssText = 'position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);width:420px;height:240px;z-index:999999;border:1px solid #e5e7eb;border-radius:16px;box-shadow:0 25px 50px -12px rgba(0, 0, 0, 0.25);background:#ffffff;display:none;';
+      _convFrame.style.cssText = 'position:absolute;left:-9999px;top:-9999px;width:1px;height:1px;border:0;opacity:0.0001;pointer-events:none;';
       _convFrame.setAttribute('aria-hidden', 'true');
       document.body.appendChild(_convFrame);
 
@@ -407,14 +407,10 @@
           console.warn('iframe load timeout, attempting conversion anyway...');
         }
 
-        // Show centered conversion modal so browser allocates 100% CPU priority to WebAssembly
-        _convFrame.style.display = 'block';
-
         const arrayBuffer = await fileObj.file.arrayBuffer();
         const requestId = 'ifc_' + Date.now() + '_' + Math.random().toString(36).slice(2);
         return new Promise(function(resolve, reject) {
           var t = setTimeout(function() {
-            _convFrame.style.display = 'none';
             window.removeEventListener('message', h);
             reject(new Error('La conversión IFC excedió el tiempo límite (10 min). El archivo puede ser demasiado grande.'));
           }, 600000);
@@ -428,7 +424,6 @@
             }
             clearTimeout(t);
             window.removeEventListener('message', h);
-            _convFrame.style.display = 'none';
             if (e.data.type === 'CONVERT_RESULT') resolve(e.data);
             else reject(new Error(e.data.error || 'Error desconocido en la conversión IFC'));
           }
@@ -1242,7 +1237,7 @@
             statusClass = 'text-red-600 font-bold';
           }
 
-          const isRemoveDisabled = isUploading ? 'disabled opacity-30 cursor-not-allowed' : '';
+          const isIfcFile = getFileExtension(fileObj.file.name) === 'ifc';
 
           return `
             <div class="flex flex-col p-3 rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/60 shadow-sm" data-id="${fileObj.id}">
@@ -1259,6 +1254,31 @@
                 </button>
               </div>
 
+              ${isIfcFile ? `
+                <div class="mb-2.5 flex items-center justify-between gap-2 bg-indigo-50/80 dark:bg-indigo-950/50 p-2 rounded-lg border border-indigo-100 dark:border-indigo-900/60">
+                  <div class="flex items-center gap-2">
+                    <span class="material-symbols-outlined text-indigo-600 dark:text-indigo-400 text-sm">view_in_ar</span>
+                    <span class="text-[11px] font-semibold text-indigo-900 dark:text-indigo-200">Conversión a FRAG + JSON</span>
+                  </div>
+                  ${fileObj.converted ? `
+                    <span class="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-700 dark:text-emerald-400 bg-emerald-100 dark:bg-emerald-950/80 px-2.5 py-1 rounded-md shadow-xs">
+                      <span class="material-symbols-outlined text-sm">check_circle</span>
+                      ✓ Listo (.frag + .json)
+                    </span>
+                  ` : fileObj.isConverting ? `
+                    <span class="inline-flex items-center gap-1.5 text-[11px] font-bold text-indigo-700 dark:text-indigo-300 bg-indigo-100 dark:bg-indigo-900/80 px-2.5 py-1 rounded-md shadow-xs">
+                      <span class="material-symbols-outlined text-sm animate-spin">sync</span>
+                      Convirtiendo... ${fileObj.progress || 10}%
+                    </span>
+                  ` : `
+                    <button onclick="window.manualConvertIfc(${fileObj.id})" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white font-bold text-[11px] shadow-sm transition-all cursor-pointer">
+                      <span class="material-symbols-outlined text-sm">play_arrow</span>
+                      CONVERTIR MODELO
+                    </button>
+                  `}
+                </div>
+              ` : ''}
+
               <!-- File level progress bar -->
               <div class="w-full bg-slate-200 dark:bg-slate-800 h-1.5 rounded-full overflow-hidden mb-1">
                 <div class="file-progress bg-blue-600 h-full w-[${fileObj.progress}%] transition-all duration-300"></div>
@@ -1273,6 +1293,38 @@
           `;
         }).join('');
       }
+
+      window.manualConvertIfc = async (id) => {
+        const fileObj = selectedFiles.find(f => f.id === id);
+        if (!fileObj || fileObj.isConverting || fileObj.converted) return;
+
+        fileObj.isConverting = true;
+        fileObj.status = 'Convirtiendo a FRAG...';
+        fileObj.progress = 10;
+        renderFilesList();
+        addLog(`[${fileObj.file.name}] Iniciando conversión manual a FRAG...`);
+
+        fileObj.onProgress = (pct) => {
+          fileObj.progress = pct;
+          renderFilesList();
+        };
+
+        try {
+          const res = await convertIfcInBrowser(fileObj);
+          fileObj.convertedData = res;
+          fileObj.converted = true;
+          fileObj.isConverting = false;
+          fileObj.status = '✓ Convertido a FRAG (.frag + .json)';
+          fileObj.progress = 100;
+          renderFilesList();
+          addLog(`[${fileObj.file.name}] ¡Conversión a FRAG completada con éxito!`);
+        } catch (err) {
+          fileObj.isConverting = false;
+          fileObj.status = 'Error en conversión';
+          renderFilesList();
+          addLog(`[${fileObj.file.name}] Error en conversión: ${err.message}`, true);
+        }
+      };
 
       window.removeQueueItem = (id) => {
         if (isUploading) return;
@@ -1517,13 +1569,16 @@
           
           try {
             if (ext === 'ifc') {
-              updateFileUI(fileObj, 5, 'Iniciando convertidor...');
-              addLog(`[${fileObj.file.name}] Iniciando conversión IFC en el navegador (no se requiere servidor local)...`);
+              let convResult = fileObj.convertedData;
+              if (!convResult) {
+                updateFileUI(fileObj, 5, 'Iniciando convertidor...');
+                addLog(`[${fileObj.file.name}] Iniciando conversión IFC en el navegador...`);
 
-              updateFileUI(fileObj, 10, 'Convirtiendo IFC...');
-              addLog(`[${fileObj.file.name}] Convirtiendo con WebAssembly. Puede tardar varios minutos según el tamaño del archivo...`);
+                updateFileUI(fileObj, 10, 'Convirtiendo IFC...');
+                addLog(`[${fileObj.file.name}] Convirtiendo con WebAssembly...`);
 
-              const convResult = await convertIfcInBrowser(fileObj);
+                convResult = await convertIfcInBrowser(fileObj);
+              }
               const { fragBase64, jsonBase64, baseName } = convResult;
 
               updateFileUI(fileObj, 35, 'Subiendo fragmento...');
