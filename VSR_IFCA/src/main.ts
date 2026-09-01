@@ -2610,6 +2610,9 @@ async function applyFiltersToViewerGlobal() {
     if (hasHidden) {
         await hider.set(false, hiddenMap);
     }
+
+    // Trigger cross-filtering event for active data panels (Quantities and Avance)
+    window.dispatchEvent(new CustomEvent('classificationFilterChanged'));
 }
 
 function renderIntegratedClassificationUI(container: HTMLElement) {
@@ -3311,6 +3314,7 @@ function initSidebar() {
 
             if (newWidth > 200 && newWidth < 800) {
                 sidebar.style.width = `${newWidth}px`;
+                document.documentElement.style.setProperty('--sidebar-width', `${newWidth}px`);
             }
         });
 
@@ -4984,6 +4988,7 @@ function initPropertiesPanel() {
             const newWidth = window.innerWidth - e.clientX;
             if (newWidth > 200 && newWidth < 800) {
                 panel.style.width = `${newWidth}px`;
+                document.documentElement.style.setProperty('--properties-width', `${newWidth}px`);
             }
         });
 
@@ -5279,6 +5284,12 @@ function initQuantitiesPanel() {
             activeTab = btn.getAttribute('data-tab') || 'detalle';
             renderQuantitiesContent();
         });
+    });
+
+    window.addEventListener('classificationFilterChanged', () => {
+        if (qPanel && !qPanel.classList.contains('closed')) {
+            renderQuantitiesContent();
+        }
     });
 
     // Extract elements from model
@@ -6042,6 +6053,18 @@ function initQuantitiesPanel() {
         if (!contentArea) return;
 
         let filtered = elements;
+
+        // Apply global classification tree filters
+        if (selectedClassifications.size > 0) {
+            filtered = filtered.filter(e => selectedClassifications.has(e.classification));
+        }
+        if (selectedCategories.size > 0) {
+            filtered = filtered.filter(e => selectedCategories.has(e.name));
+        }
+        if (selectedLevels.size > 0) {
+            filtered = filtered.filter(e => selectedLevels.has(e.level));
+        }
+
         if (searchQuery.trim() !== '') {
             const q = searchQuery.toLowerCase();
             filtered = filtered.filter(e => e.id.includes(q) || e.name.toLowerCase().includes(q));
@@ -7769,6 +7792,12 @@ function initStatusPanel() {
         });
     });
 
+    window.addEventListener('classificationFilterChanged', () => {
+        if (sPanel && !sPanel.classList.contains('closed')) {
+            renderStatusContent();
+        }
+    });
+
     // Render logic
     function renderStatusContent() {
         if (!contentArea) return;
@@ -7881,6 +7910,18 @@ function initStatusPanel() {
         if (!contentArea) return;
 
         let filtered = elements;
+
+        // Apply global classification tree filters
+        if (selectedClassifications.size > 0) {
+            filtered = filtered.filter(e => selectedClassifications.has(e.classification));
+        }
+        if (selectedCategories.size > 0) {
+            filtered = filtered.filter(e => selectedCategories.has(e.name));
+        }
+        if (selectedLevels.size > 0) {
+            filtered = filtered.filter(e => selectedLevels.has(e.level));
+        }
+
         if (searchQuery.trim() !== '') {
             const q = searchQuery.toLowerCase();
             filtered = filtered.filter(e => e.id.includes(q) || e.name.toLowerCase().includes(q));

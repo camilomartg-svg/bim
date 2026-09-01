@@ -938,8 +938,27 @@ bim-label {
   flex-direction: column;
   box-shadow: 0 -2px 10px rgba(0,0,0,0.1);
   color: var(--text-dark-gray);
-  transition: transform 0.3s ease;
+  transition: transform 0.3s ease, left 0.3s ease, width 0.3s ease;
   transform: translateY(0);
+}
+
+/* Dynamic non-overlapping layout for bottom panels when sidebar or properties panels are open */
+@media (min-width: 769px) {
+  .sidebar:not(.closed) ~ .quantities-panel:not(.closed) {
+    left: var(--sidebar-width, 280px);
+    width: calc(100% - var(--sidebar-width, 280px));
+  }
+
+  .properties-panel:not(.closed) ~ .quantities-panel:not(.closed) {
+    right: var(--properties-width, 300px);
+    width: calc(100% - var(--properties-width, 300px));
+  }
+
+  .sidebar:not(.closed) ~ .properties-panel:not(.closed) ~ .quantities-panel:not(.closed) {
+    left: var(--sidebar-width, 280px);
+    right: var(--properties-width, 300px);
+    width: calc(100% - var(--sidebar-width, 280px) - var(--properties-width, 300px));
+  }
 }
 
 .quantities-panel.closed {
