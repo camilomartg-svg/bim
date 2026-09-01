@@ -44,12 +44,13 @@
         };
 
         function sendReady() {
-          window.parent.postMessage({ type: 'CONVERTER_READY' }, '*');
+          if (window.parent !== window) {
+            window.parent.postMessage({ type: 'CONVERTER_READY' }, '*');
+          }
         }
         if (document.readyState === 'complete') sendReady();
         else window.addEventListener('load', sendReady);
-        setTimeout(sendReady, 500);
-        setTimeout(sendReady, 1500);
+        setInterval(sendReady, 500);
 
         window.addEventListener('message', async function(e) {
           if (!e.data || e.data.type !== 'CONVERT_IFC') return;

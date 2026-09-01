@@ -35,3 +35,12 @@ filesToSync.forEach(file => {
     console.error(`Source file ${file} does not exist!`);
   }
 });
+
+// Sync CONVERTIR_FRAG/index.html
+const fragSrc = path.join(__dirname, 'CONVERTIR_FRAG', 'index.html');
+const fragDest = path.join(__dirname, 'docs', 'CONVERTIR_FRAG', 'index.html');
+if (fs.existsSync(fragSrc)) {
+  fs.mkdirSync(path.dirname(fragDest), { recursive: true });
+  fs.copyFileSync(fragSrc, fragDest);
+  console.log('Copied CONVERTIR_FRAG/index.html to docs/CONVERTIR_FRAG/index.html');
+}

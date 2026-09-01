@@ -431,6 +431,12 @@
           console.warn('iframe load timeout, attempting conversion anyway...');
         }
 
+        const convSection = document.getElementById('ifc-converter-section');
+        if (convSection) {
+          convSection.classList.remove('hidden');
+          convSection.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+
         const arrayBuffer = await fileObj.file.arrayBuffer();
         const requestId = 'ifc_' + Date.now() + '_' + Math.random().toString(36).slice(2);
         return new Promise(function(resolve, reject) {
@@ -454,8 +460,7 @@
           window.addEventListener('message', h);
           _convFrame.contentWindow.postMessage(
             { type: 'CONVERT_IFC', bytes: arrayBuffer, filename: fileObj.file.name, requestId: requestId },
-            '*',
-            [arrayBuffer]
+            '*'
           );
         });
       }
