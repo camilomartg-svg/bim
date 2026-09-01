@@ -164,6 +164,33 @@
       </div>
 
       <!-- ============================================================ -->
+      <!-- ORGANIC INTEGRATED IFC CONVERTER COMPONENT                   -->
+      <!-- ============================================================ -->
+      <div id="ifc-converter-section" class="w-full glass rounded-2xl p-6 shadow-xl transition-all duration-300">
+        <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-4">
+          <div class="flex items-center gap-3">
+            <div class="p-2.5 rounded-xl bg-indigo-50 dark:bg-indigo-950/60 border border-indigo-100 dark:border-indigo-900/60">
+              <span class="material-symbols-outlined text-indigo-600 dark:text-indigo-400 text-2xl">view_in_ar</span>
+            </div>
+            <div>
+              <h3 class="text-lg font-bold text-slate-900 dark:text-white">Convertidor IFC a FRAG (Motor Orgánico)</h3>
+              <p class="text-xs text-slate-500 dark:text-slate-400">Procesamiento WebAssembly cliente para generación de .frag y metadatos .json.</p>
+            </div>
+          </div>
+          <div class="flex items-center gap-2">
+            <span class="text-xs font-semibold text-emerald-700 dark:text-emerald-400 bg-emerald-100 dark:bg-emerald-950/80 px-3 py-1.5 rounded-lg border border-emerald-200 dark:border-emerald-800/60 flex items-center gap-2 shadow-xs">
+              <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+              Motor Activo (100% CPU)
+            </span>
+          </div>
+        </div>
+
+        <div class="w-full h-[620px] rounded-xl overflow-hidden border border-slate-200 dark:border-slate-800 shadow-inner bg-slate-950">
+          <iframe id="integrated-conv-iframe" src="/CONVERTIR_FRAG/index.html" class="w-full h-full border-0"></iframe>
+        </div>
+      </div>
+
+      <!-- ============================================================ -->
       <!-- UNIFIED PROJECT FILES & WORKFLOW CARD                        -->
       <!-- ============================================================ -->
       <div class="w-full glass rounded-2xl p-8 shadow-xl transition-all duration-300">
@@ -382,20 +409,17 @@
       const DEFAULT_DRIVE_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbx2RAQx_8K4o22xE0Mw-ETc7K_58vIoi6-PgVi64u80inuiw144ks3cgWSdCtXqIgB02g/exec';
 
       // =====================================================================
-      // IFC Converter iframe — runs @thatopen/fragments WASM in the browser
-      // No localhost server needed: conversion happens client-side.
+      // IFC Converter Organic Component — runs @thatopen/fragments WASM
       // =====================================================================
-      const _convFrame = document.createElement('iframe');
-      _convFrame.src = new URL('/CONVERTIR_FRAG/index.html', window.location.origin).href;
-      _convFrame.style.cssText = 'position:absolute;left:-9999px;top:-9999px;width:1px;height:1px;border:0;opacity:0.0001;pointer-events:none;';
-      _convFrame.setAttribute('aria-hidden', 'true');
-      document.body.appendChild(_convFrame);
+      const _convFrame = document.getElementById('integrated-conv-iframe');
 
       let _convReady = false;
       window.addEventListener('message', function(e) {
         if (e.data && e.data.type === 'CONVERTER_READY') { _convReady = true; }
       });
-      _convFrame.addEventListener('load', function() { _convReady = true; });
+      if (_convFrame) {
+        _convFrame.addEventListener('load', function() { _convReady = true; });
+      }
 
       async function convertIfcInBrowser(fileObj) {
         let readyAttempts = 0;
