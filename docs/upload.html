@@ -166,7 +166,7 @@
       <!-- ============================================================ -->
       <!-- ORGANIC INTEGRATED IFC CONVERTER COMPONENT                   -->
       <!-- ============================================================ -->
-      <div id="ifc-converter-section" class="w-full glass rounded-2xl p-6 shadow-xl transition-all duration-300">
+      <div id="ifc-converter-section" class="w-full glass rounded-2xl p-6 shadow-xl transition-all duration-300 hidden">
         <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-4">
           <div class="flex items-center gap-3">
             <div class="p-2.5 rounded-xl bg-indigo-50 dark:bg-indigo-950/60 border border-indigo-100 dark:border-indigo-900/60">
@@ -1217,6 +1217,16 @@
       }
 
       function renderFilesList() {
+        const convSection = document.getElementById('ifc-converter-section');
+        const hasIfc = selectedFiles.some(f => getFileExtension(f.file.name) === 'ifc');
+        if (convSection) {
+          if (hasIfc) {
+            convSection.classList.remove('hidden');
+          } else {
+            convSection.classList.add('hidden');
+          }
+        }
+
         if (selectedFiles.length === 0) {
           filesListContainer.classList.add('hidden');
           clearQueueBtn.classList.add('hidden');
@@ -1230,6 +1240,15 @@
           clearQueueBtn.classList.remove('hidden');
           uploadBtn.disabled = false;
         }
+
+        // Auto-trigger conversion for loaded IFC files
+        selectedFiles.forEach(fileObj => {
+          if (getFileExtension(fileObj.file.name) === 'ifc' && !fileObj.converted && !fileObj.isConverting) {
+            setTimeout(() => {
+              window.manualConvertIfc(fileObj.id);
+            }, 300);
+          }
+        });
 
         selectedFilesList.innerHTML = selectedFiles.map(fileObj => {
           const ext = fileObj.file.name.split('.').pop().toLowerCase();
