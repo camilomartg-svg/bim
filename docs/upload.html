@@ -1237,6 +1237,7 @@
             statusClass = 'text-red-600 font-bold';
           }
 
+          const isRemoveDisabled = isUploading ? 'disabled opacity-30 cursor-not-allowed' : '';
           const isIfcFile = getFileExtension(fileObj.file.name) === 'ifc';
 
           return `
