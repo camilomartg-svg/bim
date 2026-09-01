@@ -387,8 +387,8 @@
       // =====================================================================
       const _convFrame = document.createElement('iframe');
       _convFrame.src = new URL('/CONVERTIR_FRAG/index.html', window.location.origin).href;
-      _convFrame.style.cssText = 'position:fixed;top:0;left:0;width:500px;height:500px;opacity:0.001;pointer-events:none;z-index:-99999;border:0;overflow:hidden;';
-      _convFrame.setAttribute('aria-hidden', 'true');
+      _convFrame.style.cssText = 'position:fixed;bottom:20px;right:20px;width:340px;height:190px;z-index:99999;border:1px solid rgba(0,0,0,0.1);border-radius:12px;box-shadow:0 10px 30px rgba(0,0,0,0.2);overflow:hidden;background:#ffffff;display:none;';
+      _convFrame.setAttribute('aria-hidden', 'false');
       document.body.appendChild(_convFrame);
 
       let _convReady = false;
@@ -406,10 +406,15 @@
         if (!_convReady) {
           console.warn('iframe load timeout, attempting conversion anyway...');
         }
+
+        // Show iframe as visible widget during conversion so browser provides 100% CPU to WebAssembly worker
+        _convFrame.style.display = 'block';
+
         const arrayBuffer = await fileObj.file.arrayBuffer();
         const requestId = 'ifc_' + Date.now() + '_' + Math.random().toString(36).slice(2);
         return new Promise(function(resolve, reject) {
           var t = setTimeout(function() {
+            _convFrame.style.display = 'none';
             window.removeEventListener('message', h);
             reject(new Error('La conversión IFC excedió el tiempo límite (10 min). El archivo puede ser demasiado grande.'));
           }, 600000);
@@ -423,6 +428,7 @@
             }
             clearTimeout(t);
             window.removeEventListener('message', h);
+            _convFrame.style.display = 'none';
             if (e.data.type === 'CONVERT_RESULT') resolve(e.data);
             else reject(new Error(e.data.error || 'Error desconocido en la conversión IFC'));
           }
