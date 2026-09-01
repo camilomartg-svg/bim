@@ -387,24 +387,25 @@
       // =====================================================================
       const _convFrame = document.createElement('iframe');
       _convFrame.src = new URL('/CONVERTIR_FRAG/index.html', window.location.origin).href;
-      _convFrame.style.cssText = 'position:absolute;left:-9999px;width:1px;height:1px;border:0;overflow:hidden';
+      _convFrame.style.cssText = 'position:fixed;top:0;left:0;width:500px;height:500px;opacity:0.001;pointer-events:none;z-index:-99999;border:0;overflow:hidden;';
       _convFrame.setAttribute('aria-hidden', 'true');
       document.body.appendChild(_convFrame);
 
-      let _convReadyResolve;
-      const converterReadyPromise = new Promise(r => { _convReadyResolve = r; });
+      let _convReady = false;
       window.addEventListener('message', function(e) {
-        if (e.data && e.data.type === 'CONVERTER_READY') { _convReadyResolve(); }
+        if (e.data && e.data.type === 'CONVERTER_READY') { _convReady = true; }
       });
+      _convFrame.addEventListener('load', function() { _convReady = true; });
 
       async function convertIfcInBrowser(fileObj) {
-        // Wait up to 90 s for the iframe to load and initialize WebAssembly
-        await Promise.race([
-          converterReadyPromise,
-          new Promise(function(_, rej) {
-            setTimeout(function() { rej(new Error('El convertidor no pudo inicializar. Recarga la página e inténtalo de nuevo.')); }, 90000);
-          })
-        ]);
+        let readyAttempts = 0;
+        while (!_convReady && readyAttempts < 150) {
+          await new Promise(r => setTimeout(r, 200));
+          readyAttempts++;
+        }
+        if (!_convReady) {
+          console.warn('iframe load timeout, attempting conversion anyway...');
+        }
         const arrayBuffer = await fileObj.file.arrayBuffer();
         const requestId = 'ifc_' + Date.now() + '_' + Math.random().toString(36).slice(2);
         return new Promise(function(resolve, reject) {
@@ -414,13 +415,18 @@
           }, 600000);
           function h(e) {
             if (!e.data || e.data.requestId !== requestId) return;
+            if (e.data.type === 'CONVERT_PROGRESS') {
+              if (fileObj && typeof fileObj.onProgress === 'function') {
+                fileObj.onProgress(e.data.progress);
+              }
+              return;
+            }
             clearTimeout(t);
             window.removeEventListener('message', h);
             if (e.data.type === 'CONVERT_RESULT') resolve(e.data);
             else reject(new Error(e.data.error || 'Error desconocido en la conversión IFC'));
           }
           window.addEventListener('message', h);
-          // Transfer buffer (zero-copy) — the file object is untouched
           _convFrame.contentWindow.postMessage(
             { type: 'CONVERT_IFC', bytes: arrayBuffer, filename: fileObj.file.name, requestId: requestId },
             '*',

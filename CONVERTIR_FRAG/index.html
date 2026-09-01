@@ -8,6 +8,189 @@
     <link rel="stylesheet" crossorigin href="./assets/index-D9Hs6mHt.css">
   </head>
   <body>
-    <div id="root"></div>
+    <div id="root"></div>
+    <script>
+      (function() {
+        if (window.parent === window) return;
+
+        async function blobToBase64(blob) {
+          const buffer = await blob.arrayBuffer();
+          const u8 = new Uint8Array(buffer);
+          let bin = '';
+          const len = u8.byteLength;
+          for (let i = 0; i < len; i += 8192) {
+            bin += String.fromCharCode.apply(null, u8.subarray(i, i + 8192));
+          }
+          return btoa(bin);
+        }
+
+        function stringToBase64(str) {
+          return btoa(unescape(encodeURIComponent(str)));
+        }
+
+        let lastFragBlob = null;
+        let lastJsonBlob = null;
+
+        const origCreateObjectURL = URL.createObjectURL;
+        URL.createObjectURL = function(blob) {
+          if (blob instanceof Blob) {
+            if (blob.type === 'application/octet-stream' || blob.size > 500) {
+              if (!lastFragBlob) lastFragBlob = blob;
+            } else if (blob.type === 'application/json' || blob.type === 'text/plain') {
+              lastJsonBlob = blob;
+            }
+          }
+          return origCreateObjectURL.apply(this, arguments);
+        };
+
+        function sendReady() {
+          window.parent.postMessage({ type: 'CONVERTER_READY' }, '*');
+        }
+        if (document.readyState === 'complete') sendReady();
+        else window.addEventListener('load', sendReady);
+        setTimeout(sendReady, 500);
+        setTimeout(sendReady, 1500);
+
+        window.addEventListener('message', async function(e) {
+          if (!e.data || e.data.type !== 'CONVERT_IFC') return;
+          const { bytes, filename, requestId } = e.data;
+          try {
+            const baseName = String(filename || 'model').replace(/\.ifc$/i, '');
+            const file = new File([bytes], filename || 'model.ifc', { type: 'application/octet-stream' });
+
+            let input = document.querySelector('input[type="file"]');
+            let attempts = 0;
+            while (!input && attempts < 100) {
+              await new Promise(r => setTimeout(r, 100));
+              input = document.querySelector('input[type="file"]');
+              attempts++;
+            }
+
+            if (!input) {
+              throw new Error('El convertidor no está listo en el DOM.');
+            }
+
+            lastFragBlob = null;
+            lastJsonBlob = null;
+
+            const progressObserver = new MutationObserver(() => {
+              const text = document.body.innerText || '';
+              const match = text.match(/(\d+)%/);
+              if (match) {
+                const pct = parseInt(match[1], 10);
+                e.source?.postMessage({
+                  type: 'CONVERT_PROGRESS',
+                  requestId: requestId,
+                  progress: pct
+                }, '*');
+              }
+            });
+            progressObserver.observe(document.body, { childList: true, subtree: true, characterData: true });
+
+            const dt = new DataTransfer();
+            dt.items.add(file);
+
+            let reactTriggered = false;
+            const reactPropsKey = Object.keys(input).find(k => k.startsWith('__reactProps$') || k.startsWith('__reactEventHandlers$'));
+            if (reactPropsKey && typeof input[reactPropsKey]?.onChange === 'function') {
+              try {
+                input[reactPropsKey].onChange({ target: { files: dt.files }, preventDefault: () => {}, stopPropagation: () => {} });
+                reactTriggered = true;
+              } catch (err) {
+                console.warn('React props onChange failed, falling back:', err);
+              }
+            }
+
+            if (!reactTriggered) {
+              const dropTarget = document.querySelector('div[class*="border-dashed"]') || input.parentElement || document.body;
+              const reactDropKey = Object.keys(dropTarget).find(k => k.startsWith('__reactProps$') || k.startsWith('__reactEventHandlers$'));
+              if (reactDropKey && typeof dropTarget[reactDropKey]?.onDrop === 'function') {
+                try {
+                  dropTarget[reactDropKey].onDrop({ dataTransfer: dt, preventDefault: () => {}, stopPropagation: () => {} });
+                  reactTriggered = true;
+                } catch (err) {
+                  console.warn('React props onDrop failed:', err);
+                }
+              }
+            }
+
+            if (!reactTriggered) {
+              const nativeFilesSetter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'files').set;
+              if (nativeFilesSetter) nativeFilesSetter.call(input, dt.files);
+              input.dispatchEvent(new Event('change', { bubbles: true }));
+            }
+
+            let completed = false;
+            let errorMsg = null;
+            let checkAttempts = 0;
+
+            while (!completed && checkAttempts < 6000) {
+              await new Promise(r => setTimeout(r, 100));
+              checkAttempts++;
+
+              const buttons = Array.from(document.querySelectorAll('button'));
+              const hasFragBtn = buttons.some(b => (b.textContent || '').includes('.FRAG') || (b.textContent || '').includes('GEOMETRÍA'));
+              const hasJsonBtn = buttons.some(b => (b.textContent || '').includes('.JSON') || (b.textContent || '').includes('PROPIEDADES'));
+
+              const bodyText = document.body.innerText || '';
+              if (bodyText.includes('La conversión falló') || bodyText.includes('Error al leer')) {
+                errorMsg = 'Error en el procesamiento del modelo IFC';
+                break;
+              }
+
+              if ((hasFragBtn || lastFragBlob) && (hasJsonBtn || lastJsonBlob || bodyText.includes('completada'))) {
+                completed = true;
+                break;
+              }
+            }
+
+            progressObserver.disconnect();
+
+            if (!completed) {
+              throw new Error(errorMsg || 'La conversión excedió el tiempo límite');
+            }
+
+            if (!lastJsonBlob) {
+              const buttons = Array.from(document.querySelectorAll('button'));
+              const jsonBtn = buttons.find(b => (b.textContent || '').includes('.JSON') || (b.textContent || '').includes('PROPIEDADES'));
+              if (jsonBtn) {
+                jsonBtn.click();
+                await new Promise(r => setTimeout(r, 200));
+              }
+            }
+
+            if (!lastFragBlob) {
+              throw new Error('No se generó el archivo de geometría .frag');
+            }
+
+            const fragBase64 = await blobToBase64(lastFragBlob);
+
+            let jsonBase64 = '';
+            if (lastJsonBlob) {
+              const jsonText = await lastJsonBlob.text();
+              jsonBase64 = stringToBase64(jsonText);
+            } else {
+              jsonBase64 = stringToBase64('{}');
+            }
+
+            e.source?.postMessage({
+              type: 'CONVERT_RESULT',
+              requestId: requestId,
+              fragBase64: fragBase64,
+              jsonBase64: jsonBase64,
+              baseName: baseName
+            }, '*');
+
+          } catch (err) {
+            console.error('Iframe conversion error:', err);
+            e.source?.postMessage({
+              type: 'CONVERT_ERROR',
+              requestId: requestId,
+              error: String(err?.message || err)
+            }, '*');
+          }
+        });
+      })();
+    </script>
   </body>
 </html>
