@@ -163,31 +163,9 @@
         </div>
       </div>
 
-      <!-- ============================================================ -->
-      <!-- ORGANIC INTEGRATED IFC CONVERTER COMPONENT                   -->
-      <!-- ============================================================ -->
-      <div id="ifc-converter-section" class="w-full glass rounded-2xl p-6 shadow-xl transition-all duration-300 hidden">
-        <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-4">
-          <div class="flex items-center gap-3">
-            <div class="p-2.5 rounded-xl bg-indigo-50 dark:bg-indigo-950/60 border border-indigo-100 dark:border-indigo-900/60">
-              <span class="material-symbols-outlined text-indigo-600 dark:text-indigo-400 text-2xl">view_in_ar</span>
-            </div>
-            <div>
-              <h3 class="text-lg font-bold text-slate-900 dark:text-white">Convertidor IFC a FRAG (Motor Orgánico)</h3>
-              <p class="text-xs text-slate-500 dark:text-slate-400">Procesamiento WebAssembly cliente para generación de .frag y metadatos .json.</p>
-            </div>
-          </div>
-          <div class="flex items-center gap-2">
-            <span class="text-xs font-semibold text-emerald-700 dark:text-emerald-400 bg-emerald-100 dark:bg-emerald-950/80 px-3 py-1.5 rounded-lg border border-emerald-200 dark:border-emerald-800/60 flex items-center gap-2 shadow-xs">
-              <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-              Motor Activo (100% CPU)
-            </span>
-          </div>
-        </div>
-
-        <div class="w-full h-[620px] rounded-xl overflow-hidden border border-slate-200 dark:border-slate-800 shadow-inner bg-slate-950">
-          <iframe id="integrated-conv-iframe" src="/CONVERTIR_FRAG/index.html" class="w-full h-full border-0"></iframe>
-        </div>
+      <!-- IFC Converter background engine (Clean offscreen execution) -->
+      <div id="ifc-converter-section" class="fixed -left-[9999px] -top-[9999px] w-[800px] h-[600px] opacity-0 pointer-events-none z-[-9999]">
+        <iframe id="integrated-conv-iframe" src="/CONVERTIR_FRAG/index.html" class="w-full h-full border-0"></iframe>
       </div>
 
       <!-- ============================================================ -->
@@ -431,11 +409,7 @@
           console.warn('iframe load timeout, attempting conversion anyway...');
         }
 
-        const convSection = document.getElementById('ifc-converter-section');
-        if (convSection) {
-          convSection.classList.remove('hidden');
-          convSection.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        }
+
 
         const arrayBuffer = await fileObj.file.arrayBuffer();
         const requestId = 'ifc_' + Date.now() + '_' + Math.random().toString(36).slice(2);
@@ -1222,15 +1196,7 @@
       }
 
       function renderFilesList() {
-        const convSection = document.getElementById('ifc-converter-section');
-        const hasIfc = selectedFiles.some(f => getFileExtension(f.file.name) === 'ifc');
-        if (convSection) {
-          if (hasIfc) {
-            convSection.classList.remove('hidden');
-          } else {
-            convSection.classList.add('hidden');
-          }
-        }
+
 
         if (selectedFiles.length === 0) {
           filesListContainer.classList.add('hidden');
