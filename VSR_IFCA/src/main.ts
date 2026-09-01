@@ -2400,13 +2400,16 @@ function extractAllElementsGlobal() {
     for (const [modelUUID, model] of loadedModels.entries()) {
         const modelAny = model as any;
 
-        // Collect all expressIDs: from modelElementData (primary) + model.properties (fallback)
+        // Collect all expressIDs: from modelElementData (primary cache populated by classifyModel)
         const idsFromCache = modelElementData.get(modelUUID);
-        const propsKeys = modelAny.properties ? Object.keys(modelAny.properties) : [];
-
         const allIds = new Set<number>();
-        if (idsFromCache) for (const id of idsFromCache.keys()) allIds.add(id);
-        for (const k of propsKeys) { const n = parseInt(k, 10); if (!isNaN(n)) allIds.add(n); }
+
+        if (idsFromCache && idsFromCache.size > 0) {
+            for (const id of idsFromCache.keys()) allIds.add(id);
+        } else if (modelAny.properties) {
+            const propsKeys = Object.keys(modelAny.properties);
+            for (const k of propsKeys) { const n = parseInt(k, 10); if (!isNaN(n)) allIds.add(n); }
+        }
 
         for (const expressID of allIds) {
             // Try modelElementData first (populated by classifyModel from IFC data)
@@ -8415,8 +8418,9 @@ async function classifyModel(model: any) {
     // --- STRATEGY 1: fragments.getData() — same data source as the properties panel ---
     // The panel uses: const attrs = raw.data || raw.attributes || raw
     let gdataHits = 0;
+    let idsWithGeometry: number[] = [];
     try {
-        const idsWithGeometry: number[] = await model.getItemsIdsWithGeometry();
+        idsWithGeometry = await model.getItemsIdsWithGeometry().catch(() => []);
         if (idsWithGeometry && idsWithGeometry.length > 0) {
             logToScreen(`[Classify] getData para ${idsWithGeometry.length} elementos...`);
             const CHUNK = 1000;
@@ -8450,36 +8454,41 @@ async function classifyModel(model: any) {
         const jsonKeys = Object.keys(model.properties);
         logToScreen(`[Classify] Fallback JSON: ${jsonKeys.length} entradas...`);
         let jsonHits = 0;
+        const validGeomSet = new Set<number>(idsWithGeometry);
+
         for (const keyStr of jsonKeys) {
-            const entity: any = model.properties[keyStr];
-            if (!entity || typeof entity !== 'object') continue;
             const expressID = parseInt(keyStr, 10);
             if (isNaN(expressID)) continue;
+            // Only process expressIDs that are valid geometry elements if geometry IDs are known
+            if (validGeomSet.size > 0 && !validGeomSet.has(expressID)) continue;
+
+            const entity: any = model.properties[keyStr];
+            if (!entity || typeof entity !== 'object') continue;
             if (readFields(entity, expressID)) jsonHits++;
         }
         logToScreen(`[Classify] JSON hits: ${jsonHits}`);
     }
 
     // --- Build index ---
-    const allIds = new Set<number>([
+    // Strict element IDs set: strictly elements with geometry or explicit integrated metadata
+    const validGeomSet = new Set<number>(idsWithGeometry);
+    let allIds = new Set<number>([
         ...integratedClassById.keys(),
         ...integratedLevelById.keys(),
         ...integratedMaterialById.keys(),
         ...integratedNameById.keys(),
         ...integratedSubById.keys(),
-        ...elementFallbackById.keys(),
     ]);
 
-    // If still nothing, index all JSON keys as fallback
-    if (allIds.size === 0 && model.properties) {
-        for (const k of Object.keys(model.properties)) {
-            const id = parseInt(k, 10);
-            if (!isNaN(id)) allIds.add(id);
-        }
+    if (validGeomSet.size > 0) {
+        allIds = new Set<number>(Array.from(allIds).filter(id => validGeomSet.has(id)));
+    } else if (allIds.size === 0 && idsWithGeometry.length > 0) {
+        idsWithGeometry.forEach(id => allIds.add(id));
     }
 
     for (const id of allIds) {
-        addToIndex('CLASIFICACIÓN', modelUUID, normalizeValue(integratedClassById.get(id) ?? elementFallbackById.get(id) ?? 'Sin Tipo'), id);
+        const clasifVal = integratedClassById.get(id) ?? 'SIN CLASIFICAR';
+        addToIndex('CLASIFICACIÓN', modelUUID, normalizeValue(clasifVal), id);
         addToIndex('NIVEL INTEGRADO', modelUUID, normalizeValue(integratedLevelById.get(id) ?? 'Sin Nivel'), id);
         addToIndex('MATERIAL INTEGRADO', modelUUID, normalizeValue(integratedMaterialById.get(id) ?? 'Sin Material'), id);
         addToIndex('NOMBRE INTEGRADO', modelUUID, normalizeValue(integratedNameById.get(id) ?? ''), id);
@@ -8499,7 +8508,7 @@ async function classifyModel(model: any) {
         const lvl = integratedLevelById.get(id);
         const mat = integratedMaterialById.get(id);
         const nm = integratedNameById.get(id);
-        const cls = integratedClassById.get(id) ?? elementFallbackById.get(id);
+        const cls = integratedClassById.get(id) ?? 'SIN CLASIFICAR';
         const cat = integratedCategoryById.get(id) ?? cls;
         const det = integratedDetailById.get(id);
         
@@ -8509,20 +8518,17 @@ async function classifyModel(model: any) {
         const ar = integratedAreaById.get(id) ?? (propEntry ? parseNumGlobal(getValGlobal(propEntry, 'ÁREA INTEGRADO', 'Area', 'Área', 'AREA INTEGRADO')) : 0);
         const len = integratedLengthById.get(id) ?? (propEntry ? parseNumGlobal(getValGlobal(propEntry, 'LONGITUD INTEGRADO', 'Longitud', 'Length', 'LONGITUD', 'longitud')) : 0);
 
-        // Only add entries that have at least level or material or classification or name
-        if (lvl || mat || nm || cls) {
-            modelCache.set(id, {
-                level: lvl ?? 'SIN NIVEL',
-                material: mat ?? 'SIN MATERIAL',
-                name: nm ?? cls ?? `Elemento-${id}`,
-                classification: cls ?? 'SIN CLASIFICAR',
-                volume: vol,
-                area: ar,
-                length: len,
-                detail: det ?? '-',
-                category: cat ?? 'Elemento'
-            });
-        }
+        modelCache.set(id, {
+            level: lvl ?? 'SIN NIVEL',
+            material: mat ?? 'SIN MATERIAL',
+            name: nm ?? `${cls}-${id}`,
+            classification: cls,
+            volume: vol,
+            area: ar,
+            length: len,
+            detail: det ?? '-',
+            category: cat ?? 'Elemento'
+        });
     }
     modelElementData.set(modelUUID, modelCache);
 
