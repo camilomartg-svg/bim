@@ -887,6 +887,115 @@ if (simpleRaycaster.castRayFromVector) {
     };
 }
 
+// --- OFFICIAL THAT OPEN ENGINE LENGTH MEASUREMENT & SNAP CONFIG ---
+const measurer = components.get(OBF.LengthMeasurement);
+measurer.world = world;
+measurer.color = new THREE.Color("#494cb6");
+measurer.enabled = true;
+measurer.snapDistance = 0.5;
+measurer.snappings = [
+    FRAGS.SnappingClass.POINT,
+    FRAGS.SnappingClass.LINE,
+    FRAGS.SnappingClass.FACE
+];
+
+// Synchronous vertex picking setup for fast & accurate snapping
+const setupSynchronousPicking = async () => {
+    try {
+        const meshes: THREE.Mesh[] = [];
+        for (const [, model] of fragments.list) {
+            const idsWithGeometry = await model.getItemsIdsWithGeometry();
+            const allMeshesData = await model.getItemsGeometry(idsWithGeometry);
+            const geometries = new Map<number, THREE.BufferGeometry>();
+
+            for (const itemId in allMeshesData) {
+                const meshData = allMeshesData[itemId];
+                for (const geomData of meshData) {
+                    if (
+                        !geomData.positions ||
+                        !geomData.indices ||
+                        !geomData.transform ||
+                        !geomData.representationId
+                    ) {
+                        continue;
+                    }
+
+                    const representationId = geomData.representationId;
+                    if (!geometries.has(representationId)) {
+                        const geometry = new THREE.BufferGeometry();
+                        geometry.setAttribute(
+                            "position",
+                            new THREE.Float32BufferAttribute(geomData.positions, 3),
+                        );
+                        geometry.setIndex(Array.from(geomData.indices));
+                        geometries.set(representationId, geometry);
+                    }
+
+                    const geometry = geometries.get(representationId)!;
+                    const mesh = new THREE.Mesh(geometry);
+                    mesh.applyMatrix4(geomData.transform);
+                    mesh.applyMatrix4(model.object.matrixWorld);
+                    mesh.updateWorldMatrix(true, true);
+                    meshes.push(mesh);
+                }
+            }
+        }
+
+        if (meshes.length > 0) {
+            measurer.pickerMode = OBF.GraphicVertexPickerMode.SYNCHRONOUS;
+            measurer.delay = 0;
+            for (const mesh of meshes) {
+                world.meshes.add(mesh);
+            }
+        }
+    } catch (err) {
+        console.warn("[Synchronous Picking Setup]", err);
+    }
+};
+
+fragments.list.onItemSet.add(() => {
+    setupSynchronousPicking();
+});
+
+// Delete hovered measurement key handler
+window.addEventListener('keydown', (event) => {
+    if (event.code === 'Delete' || event.code === 'Backspace') {
+        measurer.delete();
+    }
+});
+
+// Double-click container to create dimension
+container.addEventListener('dblclick', () => {
+    if (measurer.enabled) {
+        measurer.create();
+    }
+});
+
+// Expose measurer globally for UI controls and debugging
+(window as any).measurer = measurer;
+(window as any).displayRectangleDimensions = () => {
+    for (const dimension of (measurer as any).lines) {
+        dimension.displayRectangularDimensions();
+    }
+};
+(window as any).invertRectangleDimensions = () => {
+    for (const dimension of (measurer as any).lines) {
+        dimension.invertRectangularDimensions();
+    }
+};
+(window as any).displayProjectionDimensions = () => {
+    for (const dimension of (measurer as any).lines) {
+        dimension.displayProjectionDimensions();
+    }
+};
+(window as any).removeComplementaryDimensions = () => {
+    for (const dimension of (measurer as any).lines) {
+        dimension.rectangleDimensions?.clear();
+        dimension.projectionDimensions?.clear();
+    }
+};
+
+
 
 // Monkey-patch Hider to sync hiddenItems globally
 const originalSet = hider.set.bind(hider);
