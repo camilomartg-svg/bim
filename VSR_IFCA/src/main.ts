@@ -766,7 +766,7 @@ const worlds = components.get(OBC.Worlds);
 const world = worlds.create<
     OBC.SimpleScene,
     OBC.OrthoPerspectiveCamera,
-    OBC.SimpleRenderer
+    OBF.PostproductionRenderer
 >();
 
 world.scene = new OBC.SimpleScene(components);
@@ -774,7 +774,7 @@ world.scene.setup();
 world.scene.three.background = new THREE.Color(0x202020); // Dark gray
 
 const container = document.getElementById('viewer-container') as HTMLElement;
-world.renderer = new OBC.SimpleRenderer(components, container);
+world.renderer = new OBF.PostproductionRenderer(components, container);
 world.camera = new OBC.OrthoPerspectiveCamera(components);
 world.camera.threePersp.near = 0.05;
 world.camera.threePersp.updateProjectionMatrix();
@@ -791,18 +791,6 @@ grids.create(world);
 // --- IFC & Fragments Setup ---
 
 const baseUrl = import.meta.env.BASE_URL || './';
-
-
-// --- v29-SmartSnap: GLOBAL INDEPENDENT SNAPPING LOOP ---
-container.addEventListener('mousemove', (event) => {
-    if (!world || !world.camera || !world.scene) return;
-    const snapped = getSnappedPointForMouse(event);
-    if (snapped) {
-        updateSnapIndicator(snapped.point, snapped.type);
-    } else {
-        updateSnapIndicator(null);
-    }
-});
 
 const debugConsole = document.getElementById('debug-console');
 if (debugConsole) {
@@ -10048,6 +10036,10 @@ function clearMeasurements() {
     measurementLabels.forEach(label => label.remove());
     measurementLabels.length = 0;
 
+    if (measurer && measurer.list) {
+        try { measurer.list.clear(); } catch {}
+    }
+
     resetCurrentMeasurement();
     completedMeasurements = [];
     logToScreen('Measurements cleared');
@@ -10204,36 +10196,11 @@ async function onMeasureClick(event: MouseEvent) {
             label: text,
             labelPosition: point.clone()
         });
-        logToScreen(`Point: ${text}`);
     } else if (measurementMode === 'length') {
-        measurementPoints.push(point);
-        createMarker(point, 0xffff00);
-
-        if (measurementPoints.length === 2) {
-            // Finish measurement
-            const p1 = measurementPoints[0];
-            const p2 = measurementPoints[1];
-            createLine(p1, p2);
-
-            const dist = p1.distanceTo(p2);
-            const mid = p1.clone().add(p2).multiplyScalar(0.5);
-            const labelText = `${dist.toFixed(3)}m`;
-            createLabel(labelText, mid, {
-                type: 'length',
-                points: [p1.clone(), p2.clone()],
-                label: labelText,
-                labelPosition: mid.clone()
-            });
-
-            logToScreen(`Distance: ${labelText}`);
-
-            // Reset for next measurement
-            measurementPoints = [];
-            if (tempMeasurementLine) {
-                world.scene.three.remove(tempMeasurementLine);
-                tempMeasurementLine = null;
-            }
+        if (measurer && measurer.enabled) {
+            measurer.create();
         }
+        return;
     } else if (measurementMode === 'area') {
         // Area Logic
         measurementPoints.push(point);
