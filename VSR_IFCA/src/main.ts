@@ -2321,7 +2321,7 @@ const selectedCategories = new Set<string>();
 const selectedLevels = new Set<string>();
 let selectedDiameter = 'Todos';
 
-const collapsedClassifications = new Set<string>();
+const expandedClassifications = new Set<string>();
 const collapsedSections = new Set<string>();
 
 function resetFilters() {
@@ -2330,7 +2330,7 @@ function resetFilters() {
     selectedLevels.clear();
     selectedDiameter = 'Todos';
 
-    collapsedClassifications.clear();
+    expandedClassifications.clear();
     collapsedSections.clear();
 }
 
@@ -2628,15 +2628,54 @@ function renderIntegratedClassificationUI(container: HTMLElement) {
     wrapper.style.gap = '15px';
     wrapper.style.padding = '10px';
 
+    const actionToolbar = document.createElement('div');
+    actionToolbar.style.display = 'flex';
+    actionToolbar.style.gap = '6px';
+    actionToolbar.style.width = '100%';
+
     const resetBtn = document.createElement('button');
     resetBtn.className = 'filter-reset-btn';
-    resetBtn.innerHTML = '<i class="fa-solid fa-filter-circle-xmark"></i> Limpiar Filtros';
+    resetBtn.style.flex = '1';
+    resetBtn.style.padding = '6px 4px';
+    resetBtn.style.fontSize = '10px';
+    resetBtn.innerHTML = '<i class="fa-solid fa-filter-circle-xmark"></i> Limpiar';
+    resetBtn.title = 'Limpiar todos los filtros';
     resetBtn.addEventListener('click', async () => {
         resetFilters();
         renderIntegratedClassificationUI(container);
         await applyFiltersToViewerGlobal();
     });
-    wrapper.appendChild(resetBtn);
+
+    const expandAllBtn = document.createElement('button');
+    expandAllBtn.className = 'filter-reset-btn';
+    expandAllBtn.style.flex = '1';
+    expandAllBtn.style.padding = '6px 4px';
+    expandAllBtn.style.fontSize = '10px';
+    expandAllBtn.innerHTML = '<i class="fa-solid fa-square-plus"></i> Expandir';
+    expandAllBtn.title = 'Expandir todas las categorías';
+    expandAllBtn.addEventListener('click', () => {
+        for (const n of tree) {
+            expandedClassifications.add(n.name);
+        }
+        renderIntegratedClassificationUI(container);
+    });
+
+    const collapseAllBtn = document.createElement('button');
+    collapseAllBtn.className = 'filter-reset-btn';
+    collapseAllBtn.style.flex = '1';
+    collapseAllBtn.style.padding = '6px 4px';
+    collapseAllBtn.style.fontSize = '10px';
+    collapseAllBtn.innerHTML = '<i class="fa-solid fa-square-minus"></i> Recoger';
+    collapseAllBtn.title = 'Recoger todas las categorías';
+    collapseAllBtn.addEventListener('click', () => {
+        expandedClassifications.clear();
+        renderIntegratedClassificationUI(container);
+    });
+
+    actionToolbar.appendChild(resetBtn);
+    actionToolbar.appendChild(expandAllBtn);
+    actionToolbar.appendChild(collapseAllBtn);
+    wrapper.appendChild(actionToolbar);
 
     const classSection = document.createElement('div');
     classSection.className = 'filter-section';
@@ -2668,7 +2707,8 @@ function renderIntegratedClassificationUI(container: HTMLElement) {
         const someCatsSelected = node.categories.some(cat => selectedCategories.has(cat));
         const isClassSelected = selectedClassifications.has(node.name) || allCatsSelected;
 
-        const isCollapsed = collapsedClassifications.has(node.name);
+        const isExpanded = expandedClassifications.has(node.name);
+        const isCollapsed = !isExpanded;
 
         const nodeHeader = document.createElement('div');
         nodeHeader.className = 'filter-tree-header';
@@ -2678,8 +2718,8 @@ function renderIntegratedClassificationUI(container: HTMLElement) {
         chevron.style.cursor = 'pointer';
         chevron.addEventListener('click', (e) => {
             e.stopPropagation();
-            if (isCollapsed) collapsedClassifications.delete(node.name);
-            else collapsedClassifications.add(node.name);
+            if (isExpanded) expandedClassifications.delete(node.name);
+            else expandedClassifications.add(node.name);
             renderIntegratedClassificationUI(container);
         });
         nodeHeader.appendChild(chevron);
@@ -2712,8 +2752,8 @@ function renderIntegratedClassificationUI(container: HTMLElement) {
         labelText.textContent = node.name;
         labelText.style.flex = '1';
         labelText.addEventListener('click', () => {
-            if (isCollapsed) collapsedClassifications.delete(node.name);
-            else collapsedClassifications.add(node.name);
+            if (isExpanded) expandedClassifications.delete(node.name);
+            else expandedClassifications.add(node.name);
             renderIntegratedClassificationUI(container);
         });
         nodeHeader.appendChild(labelText);
