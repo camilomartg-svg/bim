@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { LineMaterial } from 'three/examples/jsm/lines/LineMaterial.js';
+import CameraControls from 'camera-controls';
 import * as OBC from '@thatopen/components';
 import * as OBF from '@thatopen/components-front';
 import * as BUI from '@thatopen/ui';
@@ -801,6 +802,19 @@ world.camera.threePersp.near = 0.05;
 world.camera.threePersp.updateProjectionMatrix();
 world.camera.threeOrtho.near = 0.05;
 world.camera.threeOrtho.updateProjectionMatrix();
+
+// Configure Navigation Mouse Controls per User Request:
+// 1. Presionar la rueda del mouse (Middle click drag) -> Orbita (ROTATE)
+// 2. Click izquierdo del mouse (Left click drag) -> Paneo (TRUCK)
+// 3. Girar la rueda (Scroll wheel) -> Zoom (DOLLY)
+// 4. Click derecho (Right click drag) -> Zoom auxiliar (DOLLY)
+if (world.camera && world.camera.controls) {
+    world.camera.controls.mouseButtons.left = CameraControls.ACTION.TRUCK;
+    world.camera.controls.mouseButtons.middle = CameraControls.ACTION.ROTATE;
+    world.camera.controls.mouseButtons.right = CameraControls.ACTION.DOLLY;
+    world.camera.controls.mouseButtons.wheel = CameraControls.ACTION.DOLLY;
+    world.camera.controls.dollyToCursor = true;
+}
 
 components.init();
 BUI.Manager.init();
@@ -4484,11 +4498,87 @@ if (propertiesContent) {
 highlighter.events.select.onHighlight.add(async (modelIdMap) => {
     console.log('[DEBUG] Highlight event:', modelIdMap);
     await renderPropertiesTable(modelIdMap as any);
+    await centerCameraOnSelection(modelIdMap);
 });
 
 highlighter.events.select.onClear.add(async () => {
     await renderPropertiesTable({} as any);
 });
+
+async function centerCameraOnSelection(modelIdMap: any) {
+    if (!modelIdMap || !world || !world.camera || !world.camera.controls) return;
+
+    try {
+        const box = new THREE.Box3();
+        let hasPoint = false;
+
+        const entries = modelIdMap instanceof Map
+            ? Array.from(modelIdMap.entries())
+            : Object.entries(modelIdMap);
+
+        for (const [modelId, expressIdSet] of entries) {
+            const ids = expressIdSet instanceof Set
+                ? Array.from(expressIdSet)
+                : (Array.isArray(expressIdSet) ? expressIdSet : []);
+
+            if (ids.length === 0) continue;
+
+            const model = (fragments.groups instanceof Map)
+                ? fragments.groups.get(modelId)
+                : (fragments.groups as any)?.[modelId] || Array.from(loadedModels.values()).find((m: any) => m.uuid === modelId || m.name === modelId);
+
+            if (!model) continue;
+
+            if (model.getFragmentMap && typeof model.getFragmentMap === 'function') {
+                const fragmentIdMap = model.getFragmentMap(ids);
+                if (fragmentIdMap) {
+                    for (const [fragId, itemIds] of Object.entries(fragmentIdMap)) {
+                        const fragment = model.items?.find((f: any) => f.id === fragId) || (model.keyFragments as any)?.[fragId];
+                        if (fragment && fragment.mesh) {
+                            const mesh = fragment.mesh as THREE.InstancedMesh;
+                            const geom = mesh.geometry;
+                            if (!geom || !geom.attributes || !geom.attributes.position) continue;
+
+                            mesh.updateMatrixWorld();
+                            const pos = geom.attributes.position;
+                            const itemIdsSet = itemIds as Set<number>;
+
+                            for (const itemId of itemIdsSet) {
+                                let instIndex = -1;
+                                if (typeof fragment.getItemInstance === 'function') {
+                                    instIndex = fragment.getItemInstance(itemId);
+                                }
+                                if (instIndex !== undefined && instIndex >= 0) {
+                                    const matrix = new THREE.Matrix4();
+                                    mesh.getMatrixAt(instIndex, matrix);
+                                    matrix.premultiply(mesh.matrixWorld);
+
+                                    const step = Math.max(1, Math.floor(pos.count / 10));
+                                    for (let i = 0; i < pos.count; i += step) {
+                                        const v = new THREE.Vector3().fromBufferAttribute(pos, i).applyMatrix4(matrix);
+                                        box.expandByPoint(v);
+                                        hasPoint = true;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        if (hasPoint && !box.isEmpty()) {
+            const sphere = new THREE.Sphere();
+            box.getBoundingSphere(sphere);
+            if (sphere.radius > 0.01) {
+                // Set camera orbit target directly to the center of the selected element
+                await world.camera.controls.setTarget(sphere.center.x, sphere.center.y, sphere.center.z, true);
+            }
+        }
+    } catch (e) {
+        console.warn('Error centering camera target on selection:', e);
+    }
+}
 
 if (container) {
     container.addEventListener('click', () => {
