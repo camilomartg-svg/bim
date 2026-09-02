@@ -27,16 +27,17 @@
 }
 
 /* Dark Mode Overrides */
-.dark-mode {
-  --primary-color: #ffffff;
-  --bg-white: #111517;
-  --bg-light-gray: #1b2124;
-  --bg-darker: #0d1012;
-  --text-black: #ffffff;
-  --text-med-gray: #a4aba7;
-  --text-dark-gray: #e4e8e6;
-  --border-color: #2d3538;
-  --console-bg: rgba(0, 0, 0, 0.9);
+.dark-mode, .dark, [data-theme="dark"], html.dark, body.dark-mode, body.dark {
+  --primary-color: #3b82f6;
+  --secondary-color: #1e293b;
+  --bg-white: #0f172a;
+  --bg-light-gray: #1e293b;
+  --bg-darker: #020617;
+  --text-black: #f8fafc;
+  --text-med-gray: #94a3b8;
+  --text-dark-gray: #cbd5e1;
+  --border-color: #334155;
+  --console-bg: rgba(15, 23, 42, 0.95);
   
   color-scheme: dark;
 }
@@ -1406,7 +1407,7 @@ bim-label {
   gap: 12px;
   align-items: center;
   justify-content: space-between;
-  background: #f8fafc;
+  background: var(--bg-light-gray);
   padding: 10px 14px;
   border-bottom: 1px solid var(--border-color);
   border-radius: 6px 6px 0 0;
@@ -1440,7 +1441,7 @@ bim-label {
   font-size: 11px;
   border: 1px solid var(--border-color);
   border-radius: 4px;
-  background: white;
+  background: var(--bg-white);
   color: var(--text-black);
   outline: none;
   font-family: inherit;
@@ -1496,7 +1497,7 @@ bim-label {
   letter-spacing: 0.05em;
   border: 1px solid var(--border-color);
   border-radius: 4px;
-  background: white;
+  background: var(--bg-white);
   color: var(--text-dark-gray);
   cursor: pointer;
   text-transform: uppercase;
@@ -1504,8 +1505,8 @@ bim-label {
 }
 
 .q-btn-xs:hover {
-  background: #f1f5f9;
-  border-color: #cbd5e1;
+  background: var(--bg-light-gray);
+  border-color: var(--border-color);
 }
 
 .q-btn-xs.active {
@@ -1543,7 +1544,7 @@ bim-label {
 
 /* Cortes styles */
 .q-cortes-summary-header {
-  background: white;
+  background: var(--bg-white);
   border: 1px solid var(--border-color);
   border-radius: 6px;
   padding: 10px 14px;
@@ -1596,7 +1597,7 @@ bim-label {
 }
 
 .q-cortes-card {
-  background: white;
+  background: var(--bg-white);
   border: 1px solid var(--border-color);
   border-radius: 6px;
   overflow: hidden;
@@ -1609,12 +1610,12 @@ bim-label {
   justify-content: space-between;
   cursor: pointer;
   user-select: none;
-  background: #f8fafc;
+  background: var(--bg-light-gray);
   transition: background 0.15s;
 }
 
 .q-cortes-card-header:hover {
-  background: #f1f5f9;
+  background: var(--bg-darker);
 }
 
 .q-cortes-card-header-left {
@@ -1703,9 +1704,9 @@ bim-label {
 }
 
 /* Construction Status row and pill colors */
-.status-row-ninguno { background-color: #f8fafc !important; }
-.status-row-ninguno:hover { background-color: #f1f5f9 !important; }
-.status-pill-ninguno { background-color: #e2e8f0; color: #334155; }
+.status-row-ninguno { background-color: var(--bg-white) !important; }
+.status-row-ninguno:hover { background-color: var(--bg-light-gray) !important; }
+.status-pill-ninguno { background-color: var(--border-color); color: var(--text-dark-gray); }
 
 .status-row-en-progreso { background-color: #fffbeb !important; }
 .status-row-en-progreso:hover { background-color: #fef3c7 !important; }
@@ -1726,6 +1727,65 @@ bim-label {
 .status-row-rechazado { background-color: #fef2f2 !important; }
 .status-row-rechazado:hover { background-color: #fee2e2 !important; }
 .status-pill-rechazado { background-color: #fecaca; color: #7f1d1d; }
+
+/* Dark Mode status row overrides */
+.dark-mode .status-row-ninguno, .dark .status-row-ninguno, [data-theme="dark"] .status-row-ninguno,
+.dark-mode .status-row-pendiente, .dark .status-row-pendiente, [data-theme="dark"] .status-row-pendiente {
+  background-color: #0f172a !important;
+  color: #f8fafc !important;
+}
+.dark-mode .status-row-ninguno:hover, .dark .status-row-ninguno:hover, [data-theme="dark"] .status-row-ninguno:hover,
+.dark-mode .status-row-pendiente:hover, .dark .status-row-pendiente:hover, [data-theme="dark"] .status-row-pendiente:hover {
+  background-color: #1e293b !important;
+}
+
+.dark-mode .status-row-en-progreso, .dark .status-row-en-progreso, [data-theme="dark"] .status-row-en-progreso,
+.dark-mode .status-row-pedido, .dark .status-row-pedido, [data-theme="dark"] .status-row-pedido {
+  background-color: rgba(245, 158, 11, 0.15) !important;
+  color: #fef08a !important;
+}
+.dark-mode .status-row-en-progreso:hover, .dark .status-row-en-progreso:hover, [data-theme="dark"] .status-row-en-progreso:hover,
+.dark-mode .status-row-pedido:hover, .dark .status-row-pedido:hover, [data-theme="dark"] .status-row-pedido:hover {
+  background-color: rgba(245, 158, 11, 0.25) !important;
+}
+
+.dark-mode .status-row-para-inspeccion, .dark .status-row-para-inspeccion, [data-theme="dark"] .status-row-para-inspeccion,
+.dark-mode .status-row-comprado, .dark .status-row-comprado, [data-theme="dark"] .status-row-comprado {
+  background-color: rgba(59, 130, 246, 0.15) !important;
+  color: #bfdbfe !important;
+}
+.dark-mode .status-row-para-inspeccion:hover, .dark .status-row-para-inspeccion:hover, [data-theme="dark"] .status-row-para-inspeccion:hover,
+.dark-mode .status-row-comprado:hover, .dark .status-row-comprado:hover, [data-theme="dark"] .status-row-comprado:hover {
+  background-color: rgba(59, 130, 246, 0.25) !important;
+}
+
+.dark-mode .status-row-aprobado, .dark .status-row-aprobado, [data-theme="dark"] .status-row-aprobado,
+.dark-mode .status-row-almacen, .dark .status-row-almacen, [data-theme="dark"] .status-row-almacen {
+  background-color: rgba(16, 185, 129, 0.15) !important;
+  color: #a7f3d0 !important;
+}
+.dark-mode .status-row-aprobado:hover, .dark .status-row-aprobado:hover, [data-theme="dark"] .status-row-aprobado:hover,
+.dark-mode .status-row-almacen:hover, .dark .status-row-almacen:hover, [data-theme="dark"] .status-row-almacen:hover {
+  background-color: rgba(16, 185, 129, 0.25) !important;
+}
+
+.dark-mode .status-row-cerrado, .dark .status-row-cerrado, [data-theme="dark"] .status-row-cerrado,
+.dark-mode .status-row-instalado, .dark .status-row-instalado, [data-theme="dark"] .status-row-instalado {
+  background-color: rgba(34, 197, 94, 0.15) !important;
+  color: #bbf7d0 !important;
+}
+.dark-mode .status-row-cerrado:hover, .dark .status-row-cerrado:hover, [data-theme="dark"] .status-row-cerrado:hover,
+.dark-mode .status-row-instalado:hover, .dark .status-row-instalado:hover, [data-theme="dark"] .status-row-instalado:hover {
+  background-color: rgba(34, 197, 94, 0.25) !important;
+}
+
+.dark-mode .status-row-rechazado, .dark .status-row-rechazado, [data-theme="dark"] .status-row-rechazado {
+  background-color: rgba(239, 68, 68, 0.15) !important;
+  color: #fecaca !important;
+}
+.dark-mode .status-row-rechazado:hover, .dark .status-row-rechazado:hover, [data-theme="dark"] .status-row-rechazado:hover {
+  background-color: rgba(239, 68, 68, 0.25) !important;
+}
 
 /* Filter Panel Styles (CANTIDADES migration) */
 .filter-section {
