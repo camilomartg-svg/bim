@@ -480,41 +480,13 @@ const applyGlobalSnap = (intersects: THREE.Intersection[], mousePixelPos?: { x: 
     return intersects;
 };
 
-const getSnappedPointForMouse = (event: { clientX: number; clientY: number }): { point: THREE.Vector3; type: 'VERTEX' | 'EDGE' | 'SECTION'; object?: THREE.Object3D } | null => {
-    if (!world || !world.camera || !world.camera.three || !world.scene) return null;
-
-    const container = document.getElementById('viewer-container');
-    const rect = container ? container.getBoundingClientRect() : document.body.getBoundingClientRect();
-
-    const pixelX = event.clientX;
-    const pixelY = event.clientY;
-    lastMousePixelPos = { x: pixelX, y: pixelY };
-
-    const normX = ((pixelX - rect.left) / rect.width) * 2 - 1;
-    const normY = -((pixelY - rect.top) / rect.height) * 2 + 1;
-
-    const tempRaycaster = new THREE.Raycaster();
-    tempRaycaster.setFromCamera(new THREE.Vector2(normX, normY), world.camera.three);
-
-    const candidates: THREE.Mesh[] = [];
-    world.scene.three.traverse((child) => {
-        if (child instanceof THREE.Mesh || child instanceof THREE.InstancedMesh) {
-            if (child.name === 'debugSphere' || child === (window as any).debugSphere || child === snappingCursor || (child as any).userData?.isHelper) return;
-            candidates.push(child as THREE.Mesh);
-        }
-    });
-
-    if (candidates.length === 0) return null;
-
-    const intersects = tempRaycaster.intersectObjects(candidates, true);
-
-    if (intersects.length > 0) {
-        const snappedRes = applyGlobalSnap([intersects[0]], { x: pixelX, y: pixelY });
-        if (snappedRes && snappedRes.length > 0 && snappedRes[0].point) {
-            return { point: snappedRes[0].point, type: 'VERTEX', object: snappedRes[0].object };
-        }
+const getSnappedPointForMouse = async (event: { clientX: number; clientY: number }): Promise<{ point: THREE.Vector3; object?: THREE.Object3D } | null> => {
+    if (!simpleRaycaster) return null;
+    lastMousePixelPos = { x: event.clientX, y: event.clientY };
+    const result = await simpleRaycaster.castRay();
+    if (result && result.point) {
+        return { point: result.point, object: result.object };
     }
-
     return null;
 };
 
@@ -10034,13 +10006,12 @@ async function onMeasureMouseMove(event: MouseEvent) {
         return;
     }
 
-    const snapped = getSnappedPointForMouse(event);
+    lastMousePixelPos = { x: event.clientX, y: event.clientY };
+    const snapped = await getSnappedPointForMouse(event);
     if (!snapped || !snapped.point) {
-        updateSnapIndicator(null);
         return;
     }
 
-    updateSnapIndicator(snapped.point, snapped.type);
     const end = snapped.point;
 
     // If we have a start point, draw a temp line to current cursor
@@ -10109,7 +10080,8 @@ async function onMeasureClick(event: MouseEvent) {
     // Don't trigger if clicking on UI
     if ((event.target as HTMLElement).closest('button') || (event.target as HTMLElement).closest('.sidebar')) return;
 
-    const snapped = getSnappedPointForMouse(event);
+    lastMousePixelPos = { x: event.clientX, y: event.clientY };
+    const snapped = await getSnappedPointForMouse(event);
     if (!snapped || !snapped.point) return;
 
     const point = snapped.point;
