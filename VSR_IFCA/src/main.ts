@@ -900,7 +900,7 @@ if (simpleRaycaster.castRayFromVector) {
 const measurer = components.get(OBF.LengthMeasurement);
 measurer.world = world;
 measurer.color = new THREE.Color("#494cb6");
-measurer.enabled = true;
+measurer.enabled = false;
 
 updateSnappingModes = () => {
     const list: FRAGS.SnappingClass[] = [];
@@ -9925,19 +9925,29 @@ function setupMeasurementTools() {
         //    }
         // });
 
-        // Add keydown for volume finish and Escape to cancel
+        // Add keydown for Escape to cancel and release all tools
         window.addEventListener('keydown', (e) => {
             if (e.key === 'Escape') {
                 let anyAction = false;
 
-                // 1. Cancel Measurement
+                // 1. Cancel Active Measurement & Release Tools
                 if (measurementMode) {
-                    toggleMeasurementMode(measurementMode); // This resets mode, points, temp lines, and UI buttons
+                    toggleMeasurementMode(measurementMode); // Resets mode, points, temp lines, UI buttons
+                    anyAction = true;
+                }
+
+                if (measurer && measurer.enabled) {
+                    measurer.enabled = false;
+                    anyAction = true;
+                }
+
+                if (areaTool && areaTool.enabled) {
+                    areaTool.enabled = false;
                     anyAction = true;
                 }
 
                 // 2. Disable Clipper
-                if (clipper.enabled) {
+                if (clipper && clipper.enabled) {
                     clipper.enabled = false;
                     const btn = document.getElementById('clipper-toggle');
                     if (btn) btn.classList.remove('active');
@@ -9946,22 +9956,34 @@ function setupMeasurementTools() {
                     anyAction = true;
                 }
 
-                // 3. Hide Snapping Cursor
+                // 3. Hide Snapping Cursor & Indicator
+                updateSnapIndicator(null);
                 if (snappingCursor && snappingCursor.visible) {
                     snappingCursor.visible = false;
                     anyAction = true;
                 }
 
-                // 4. Clear Selection (Highlighter)
-                // Check if there is any selection in the 'select' group
-                const selection = highlighter.selection.select;
-                if (selection && Object.keys(selection).length > 0) {
-                    highlighter.clear('select');
+                // 4. Hide Snap Config Panel if open
+                const snapPanel = document.getElementById('snap-config-panel');
+                if (snapPanel && snapPanel.classList.contains('show')) {
+                    snapPanel.classList.remove('show');
                     anyAction = true;
                 }
 
+                // 5. Clear Selection (Highlighter)
+                if (highlighter && highlighter.selection && highlighter.selection.select) {
+                    const selection = highlighter.selection.select;
+                    if (Object.keys(selection).length > 0) {
+                        highlighter.clear('select');
+                        anyAction = true;
+                    }
+                }
+
+                // 6. Reset active state on UI buttons
+                setActiveButton(null);
+
                 if (anyAction) {
-                    logToScreen('Cancelled / Cleared');
+                    logToScreen('Todas las herramientas liberadas / Cancelado');
                 }
             }
         });
@@ -10087,16 +10109,20 @@ function setActiveButton(activeBtn: HTMLElement | null) {
 function toggleMeasurementMode(mode: 'length' | 'point' | 'area' | 'angle' | 'slope') {
     // Deactivate previous tools
     if (areaTool && areaTool.enabled) areaTool.enabled = false;
+    if (measurer) measurer.enabled = (mode === 'length' && measurementMode !== 'length');
 
     if (measurementMode === mode) {
         // Toggle off
         measurementMode = null;
+        if (measurer) measurer.enabled = false;
         resetCurrentMeasurement();
+        updateSnapIndicator(null);
         logToScreen('Measurement mode disabled');
         setActiveButton(null);
         if (snappingCursor) snappingCursor.visible = false;
     } else {
         measurementMode = mode;
+        if (measurer) measurer.enabled = (mode === 'length');
         resetCurrentMeasurement();
 
         let modeName = '';

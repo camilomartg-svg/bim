@@ -674,10 +674,37 @@ body {
     display: inline-block;
 }
 
+/* Top Controls Container (Auto-scroll & Fit) */
+.top-controls {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex: 1;
+    justify-content: flex-end;
+    overflow-x: auto;
+    overflow-y: hidden;
+    scrollbar-width: thin;
+    padding-right: 5px;
+    -webkit-overflow-scrolling: touch;
+}
+
+.top-controls::-webkit-scrollbar {
+    height: 4px;
+}
+
+.top-controls::-webkit-scrollbar-thumb {
+    background: rgba(0, 0, 0, 0.2);
+    border-radius: 4px;
+}
+
+.top-controls > * {
+    flex-shrink: 0;
+}
+
 /* View Dropdown */
 .view-dropdown-container {
     position: relative;
-    margin-right: 60px; /* Space for sidebar toggle if needed */
+    margin-right: 0;
 }
 
 .view-dropdown-btn {
