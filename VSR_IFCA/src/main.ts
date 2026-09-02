@@ -2483,6 +2483,7 @@ const addToIndex = (field: IntegratedClassificationField, modelUUID: string, val
 const selectedClassifications = new Set<string>();
 const selectedCategories = new Set<string>();
 const selectedLevels = new Set<string>();
+const selectedMaterials = new Set<string>();
 let selectedDiameter = 'Todos';
 
 const expandedClassifications = new Set<string>();
@@ -2492,6 +2493,7 @@ function resetFilters() {
     selectedClassifications.clear();
     selectedCategories.clear();
     selectedLevels.clear();
+    selectedMaterials.clear();
     selectedDiameter = 'Todos';
 
     expandedClassifications.clear();
@@ -2676,6 +2678,7 @@ function getFilterDataGlobal() {
 
     const classMap = new Map<string, Set<string>>();
     const levelsSet = new Set<string>();
+    const materialsSet = new Set<string>();
     const diametersSet = new Set<string>();
 
     for (const el of allElements) {
@@ -2689,6 +2692,10 @@ function getFilterDataGlobal() {
 
         if (el.level && el.level !== 'SIN NIVEL') {
             levelsSet.add(el.level);
+        }
+
+        if (el.material && el.material !== 'SIN MATERIAL' && el.material.trim() !== '') {
+            materialsSet.add(el.material.trim());
         }
 
         if (el.diameter && el.diameter.trim() !== '') {
@@ -2716,6 +2723,8 @@ function getFilterDataGlobal() {
         return a.localeCompare(b, 'es');
     });
 
+    const materials = Array.from(materialsSet).sort((a, b) => a.localeCompare(b, 'es'));
+
     const asNumber = (v: string) => {
         const n = Number(String(v).replace(',', '.').replace(/[^\d.\-]/g, ''));
         return Number.isFinite(n) ? n : null;
@@ -2729,7 +2738,7 @@ function getFilterDataGlobal() {
         return a.localeCompare(b, 'es');
     });
 
-    return { tree, levels, diameters };
+    return { tree, levels, materials, diameters };
 }
 
 async function applyFiltersToViewerGlobal() {
@@ -2742,9 +2751,10 @@ async function applyFiltersToViewerGlobal() {
     const visibleElements = allElements.filter(el => {
         const treeMatch = !isTreeFilterActive || selectedCategories.has(el.name) || selectedClassifications.has(el.classification);
         const levelMatch = selectedLevels.size === 0 || selectedLevels.has(el.level);
+        const materialMatch = selectedMaterials.size === 0 || selectedMaterials.has(el.material);
         const diameterMatch = !isSanitary || selectedDiameter === 'Todos' || el.diameter === selectedDiameter;
 
-        return treeMatch && levelMatch && diameterMatch;
+        return treeMatch && levelMatch && materialMatch && diameterMatch;
     });
 
     const visibleSet = new Set(visibleElements.map(e => e.id));
@@ -2781,7 +2791,7 @@ async function applyFiltersToViewerGlobal() {
 }
 
 function renderIntegratedClassificationUI(container: HTMLElement) {
-    const { tree, levels, diameters } = getFilterDataGlobal();
+    const { tree, levels, materials, diameters } = getFilterDataGlobal();
     const isSanitary = isSanitaryModelGlobal();
 
     container.innerHTML = '';
@@ -3012,6 +3022,55 @@ function renderIntegratedClassificationUI(container: HTMLElement) {
         levelsContent.appendChild(levelsGrid);
         levelsSection.appendChild(levelsContent);
         wrapper.appendChild(levelsSection);
+    }
+
+    if (materials.length > 0) {
+        const materialsSection = document.createElement('div');
+        materialsSection.className = 'filter-section';
+
+        const materialsHeader = document.createElement('div');
+        materialsHeader.className = 'filter-section-header';
+        const isMaterialsCollapsed = collapsedSections.has('materials');
+        if (isMaterialsCollapsed) materialsHeader.classList.add('collapsed');
+        materialsHeader.innerHTML = `
+            <span>Material Integrado</span>
+            <i class="fa-solid fa-chevron-down"></i>
+        `;
+        materialsHeader.addEventListener('click', () => {
+            if (isMaterialsCollapsed) collapsedSections.delete('materials');
+            else collapsedSections.add('materials');
+            renderIntegratedClassificationUI(container);
+        });
+        materialsSection.appendChild(materialsHeader);
+
+        const materialsContent = document.createElement('div');
+        materialsContent.className = 'filter-section-content';
+        if (isMaterialsCollapsed) materialsContent.classList.add('collapsed');
+
+        const materialsGrid = document.createElement('div');
+        materialsGrid.className = 'levels-grid';
+
+        for (const mat of materials) {
+            const matBtn = document.createElement('button');
+            matBtn.className = 'level-filter-btn';
+            if (selectedMaterials.has(mat)) matBtn.classList.add('active');
+            matBtn.textContent = mat;
+            matBtn.title = mat;
+            matBtn.addEventListener('click', async () => {
+                if (selectedMaterials.has(mat)) {
+                    selectedMaterials.delete(mat);
+                } else {
+                    selectedMaterials.add(mat);
+                }
+                renderIntegratedClassificationUI(container);
+                await applyFiltersToViewerGlobal();
+            });
+            materialsGrid.appendChild(matBtn);
+        }
+
+        materialsContent.appendChild(materialsGrid);
+        materialsSection.appendChild(materialsContent);
+        wrapper.appendChild(materialsSection);
     }
 
     if (isSanitary && diameters.length > 0) {
@@ -6346,6 +6405,9 @@ function initQuantitiesPanel() {
         if (selectedLevels.size > 0) {
             filtered = filtered.filter(e => selectedLevels.has(e.level));
         }
+        if (selectedMaterials.size > 0) {
+            filtered = filtered.filter(e => selectedMaterials.has(e.material));
+        }
 
         if (searchQuery.trim() !== '') {
             const q = searchQuery.toLowerCase();
@@ -8200,6 +8262,9 @@ function initStatusPanel() {
         }
         if (selectedLevels.size > 0) {
             filtered = filtered.filter(e => selectedLevels.has(e.level));
+        }
+        if (selectedMaterials.size > 0) {
+            filtered = filtered.filter(e => selectedMaterials.has(e.material));
         }
 
         if (searchQuery.trim() !== '') {
