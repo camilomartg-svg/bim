@@ -1954,6 +1954,54 @@ bim-label {
   box-shadow: 0 2px 4px rgba(2, 73, 89, 0.2);
 }
 
+/* Classification Colorization Styles */
+.filter-color-toggle-btn {
+  background: transparent;
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  padding: 2px 6px;
+  font-size: 11px;
+  color: var(--text-dark-gray);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.filter-color-toggle-btn:hover {
+  background: rgba(0, 0, 0, 0.06);
+  color: var(--primary-color);
+}
+
+.filter-color-toggle-btn.active {
+  background: #2563eb;
+  border-color: #1d4ed8;
+  color: #ffffff;
+  box-shadow: 0 1px 3px rgba(37, 99, 235, 0.3);
+}
+
+.color-dot-indicator {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  display: inline-block;
+  flex-shrink: 0;
+  border: 1px solid rgba(0, 0, 0, 0.2);
+  margin-left: 6px;
+}
+
+.level-color-bar {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  display: inline-block;
+  flex-shrink: 0;
+  margin-right: 5px;
+  vertical-align: middle;
+  border: 1px solid rgba(0, 0, 0, 0.2);
+}
+
 /* Diameter select styles */
 .diameter-select {
   width: 100%;

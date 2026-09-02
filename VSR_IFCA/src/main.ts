@@ -2490,6 +2490,127 @@ let selectedDiameter = 'Todos';
 const expandedClassifications = new Set<string>();
 const collapsedSections = new Set<string>();
 
+type ClassificationColorMode = 'none' | 'classification' | 'levels' | 'materials' | 'pilotes';
+let activeColorMode: ClassificationColorMode = 'none';
+const currentClassificationColorsMap = new Map<string, string>();
+let activeColorStyles: string[] = [];
+
+function generateDistinctColors(count: number): string[] {
+    const presetPalette = [
+        '#e11d48', '#2563eb', '#059669', '#d97706', '#9333ea', 
+        '#0891b2', '#ca8a04', '#4f46e5', '#be185d', '#0d9488',
+        '#65a30d', '#c026d3', '#ea580c', '#0284c7', '#7c3aed'
+    ];
+    const colors: string[] = [];
+    for (let i = 0; i < count; i++) {
+        if (i < presetPalette.length) {
+            colors.push(presetPalette[i]);
+        } else {
+            const hue = Math.round((i * 137.5) % 360);
+            colors.push(`hsl(${hue}, 80%, 55%)`);
+        }
+    }
+    return colors;
+}
+
+function clearClassificationColorization() {
+    const highlighter = components.get(OBF.Highlighter);
+    if (!highlighter) return;
+
+    for (const styleName of activeColorStyles) {
+        try {
+            highlighter.clear(styleName);
+        } catch {}
+    }
+    activeColorStyles = [];
+    currentClassificationColorsMap.clear();
+}
+
+function applyClassificationColorizationToViewer() {
+    clearClassificationColorization();
+
+    if (activeColorMode === 'none') return;
+
+    const highlighter = components.get(OBF.Highlighter);
+    if (!highlighter) return;
+
+    const allElements = extractAllElementsGlobal();
+    if (allElements.length === 0) return;
+
+    const { tree, levels, materials, pilotes } = getFilterDataGlobal();
+    let keys: string[] = [];
+
+    if (activeColorMode === 'classification') {
+        keys = tree.map(t => t.name);
+    } else if (activeColorMode === 'levels') {
+        keys = levels;
+    } else if (activeColorMode === 'materials') {
+        keys = materials;
+    } else if (activeColorMode === 'pilotes') {
+        keys = pilotes;
+    }
+
+    if (keys.length === 0) return;
+
+    const colors = generateDistinctColors(keys.length);
+    keys.forEach((key, idx) => {
+        currentClassificationColorsMap.set(key, colors[idx]);
+    });
+
+    const keyToElements = new Map<string, any[]>();
+    for (const key of keys) {
+        keyToElements.set(key, []);
+    }
+
+    for (const el of allElements) {
+        let elKey = '';
+        if (activeColorMode === 'classification') {
+            elKey = el.classification || 'SIN CLASIFICAR';
+        } else if (activeColorMode === 'levels') {
+            elKey = el.level || 'SIN NIVEL';
+        } else if (activeColorMode === 'materials') {
+            elKey = el.material ? el.material.trim() : 'SIN MATERIAL';
+        } else if (activeColorMode === 'pilotes') {
+            elKey = el.pilote ? el.pilote.trim() : '';
+        }
+
+        if (keyToElements.has(elKey)) {
+            keyToElements.get(elKey)!.push(el);
+        }
+    }
+
+    keys.forEach((key, idx) => {
+        const els = keyToElements.get(key) || [];
+        if (els.length === 0) return;
+
+        const styleName = `cls_color_${idx}`;
+        const colorCss = colors[idx];
+        const threeColor = new THREE.Color(colorCss);
+
+        try {
+            highlighter.styles.set(styleName, {
+                color: threeColor,
+                opacity: 1,
+                transparent: false,
+                depthTest: true,
+                depthWrite: true,
+                renderedFaces: FRAGS.RenderedFaces.ONE
+            });
+            activeColorStyles.push(styleName);
+
+            const map: Record<string, number[]> = {};
+            els.forEach(el => {
+                if (!map[el.modelUUID]) map[el.modelUUID] = [];
+                map[el.modelUUID].push(el.expressID);
+            });
+
+            highlighter.highlightByID(styleName, map as any, true, false);
+        } catch (err) {
+            console.error(`Error setting color style ${styleName}:`, err);
+        }
+    });
+}
+
 function resetFilters() {
     selectedClassifications.clear();
     selectedCategories.clear();
@@ -2497,6 +2618,9 @@ function resetFilters() {
     selectedMaterials.clear();
     selectedPilotes.clear();
     selectedDiameter = 'Todos';
+
+    activeColorMode = 'none';
+    clearClassificationColorization();
 
     expandedClassifications.clear();
     collapsedSections.clear();
@@ -2805,6 +2929,10 @@ async function applyFiltersToViewerGlobal() {
         await hider.set(false, hiddenMap);
     }
 
+    if (activeColorMode !== 'none') {
+        applyClassificationColorizationToViewer();
+    }
+
     // Trigger cross-filtering event for active data panels (Quantities and Avance)
     window.dispatchEvent(new CustomEvent('classificationFilterChanged'));
 }
@@ -2877,10 +3005,38 @@ function renderIntegratedClassificationUI(container: HTMLElement) {
     classHeader.className = 'filter-section-header';
     const isClassCollapsed = collapsedSections.has('classification');
     if (isClassCollapsed) classHeader.classList.add('collapsed');
-    classHeader.innerHTML = `
-        <span>Clasificación / Categoría</span>
-        <i class="fa-solid fa-chevron-down"></i>
-    `;
+
+    const classTitleDiv = document.createElement('div');
+    classTitleDiv.style.display = 'flex';
+    classTitleDiv.style.alignItems = 'center';
+    classTitleDiv.style.gap = '8px';
+
+    const classSpan = document.createElement('span');
+    classSpan.textContent = 'Clasificación / Categoría';
+    classTitleDiv.appendChild(classSpan);
+
+    const classColorBtn = document.createElement('button');
+    classColorBtn.className = `filter-color-toggle-btn ${activeColorMode === 'classification' ? 'active' : ''}`;
+    classColorBtn.title = 'Colorear modelo por Clasificación';
+    classColorBtn.innerHTML = '<i class="fa-solid fa-palette"></i>';
+    classColorBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (activeColorMode === 'classification') {
+            activeColorMode = 'none';
+            clearClassificationColorization();
+        } else {
+            activeColorMode = 'classification';
+            applyClassificationColorizationToViewer();
+        }
+        renderIntegratedClassificationUI(container);
+    });
+    classTitleDiv.appendChild(classColorBtn);
+
+    const classChevron = document.createElement('i');
+    classChevron.className = 'fa-solid fa-chevron-down';
+
+    classHeader.appendChild(classTitleDiv);
+    classHeader.appendChild(classChevron);
     classHeader.addEventListener('click', () => {
         if (isClassCollapsed) collapsedSections.delete('classification');
         else collapsedSections.add('classification');
@@ -2951,6 +3107,13 @@ function renderIntegratedClassificationUI(container: HTMLElement) {
         });
         nodeHeader.appendChild(labelText);
 
+        if (activeColorMode === 'classification' && currentClassificationColorsMap.has(node.name)) {
+            const dot = document.createElement('span');
+            dot.className = 'color-dot-indicator';
+            dot.style.backgroundColor = currentClassificationColorsMap.get(node.name)!;
+            nodeHeader.appendChild(dot);
+        }
+
         treeNode.appendChild(nodeHeader);
 
         const childrenDiv = document.createElement('div');
@@ -3002,10 +3165,38 @@ function renderIntegratedClassificationUI(container: HTMLElement) {
         levelsHeader.className = 'filter-section-header';
         const isLevelsCollapsed = collapsedSections.has('levels');
         if (isLevelsCollapsed) levelsHeader.classList.add('collapsed');
-        levelsHeader.innerHTML = `
-            <span>Niveles</span>
-            <i class="fa-solid fa-chevron-down"></i>
-        `;
+
+        const levelsTitleDiv = document.createElement('div');
+        levelsTitleDiv.style.display = 'flex';
+        levelsTitleDiv.style.alignItems = 'center';
+        levelsTitleDiv.style.gap = '8px';
+
+        const levelsSpan = document.createElement('span');
+        levelsSpan.textContent = 'Niveles';
+        levelsTitleDiv.appendChild(levelsSpan);
+
+        const levelsColorBtn = document.createElement('button');
+        levelsColorBtn.className = `filter-color-toggle-btn ${activeColorMode === 'levels' ? 'active' : ''}`;
+        levelsColorBtn.title = 'Colorear modelo por Niveles';
+        levelsColorBtn.innerHTML = '<i class="fa-solid fa-palette"></i>';
+        levelsColorBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            if (activeColorMode === 'levels') {
+                activeColorMode = 'none';
+                clearClassificationColorization();
+            } else {
+                activeColorMode = 'levels';
+                applyClassificationColorizationToViewer();
+            }
+            renderIntegratedClassificationUI(container);
+        });
+        levelsTitleDiv.appendChild(levelsColorBtn);
+
+        const levelsChevron = document.createElement('i');
+        levelsChevron.className = 'fa-solid fa-chevron-down';
+
+        levelsHeader.appendChild(levelsTitleDiv);
+        levelsHeader.appendChild(levelsChevron);
         levelsHeader.addEventListener('click', () => {
             if (isLevelsCollapsed) collapsedSections.delete('levels');
             else collapsedSections.add('levels');
@@ -3024,7 +3215,16 @@ function renderIntegratedClassificationUI(container: HTMLElement) {
             const levelBtn = document.createElement('button');
             levelBtn.className = 'level-filter-btn';
             if (selectedLevels.has(level)) levelBtn.classList.add('active');
-            levelBtn.textContent = level;
+
+            if (activeColorMode === 'levels' && currentClassificationColorsMap.has(level)) {
+                const dot = document.createElement('span');
+                dot.className = 'level-color-bar';
+                dot.style.backgroundColor = currentClassificationColorsMap.get(level)!;
+                levelBtn.appendChild(dot);
+            }
+
+            const levelText = document.createTextNode(level);
+            levelBtn.appendChild(levelText);
             levelBtn.title = level;
             levelBtn.addEventListener('click', async () => {
                 if (selectedLevels.has(level)) {
@@ -3051,10 +3251,38 @@ function renderIntegratedClassificationUI(container: HTMLElement) {
         materialsHeader.className = 'filter-section-header';
         const isMaterialsCollapsed = collapsedSections.has('materials');
         if (isMaterialsCollapsed) materialsHeader.classList.add('collapsed');
-        materialsHeader.innerHTML = `
-            <span>Material Integrado</span>
-            <i class="fa-solid fa-chevron-down"></i>
-        `;
+
+        const materialsTitleDiv = document.createElement('div');
+        materialsTitleDiv.style.display = 'flex';
+        materialsTitleDiv.style.alignItems = 'center';
+        materialsTitleDiv.style.gap = '8px';
+
+        const materialsSpan = document.createElement('span');
+        materialsSpan.textContent = 'Material Integrado';
+        materialsTitleDiv.appendChild(materialsSpan);
+
+        const materialsColorBtn = document.createElement('button');
+        materialsColorBtn.className = `filter-color-toggle-btn ${activeColorMode === 'materials' ? 'active' : ''}`;
+        materialsColorBtn.title = 'Colorear modelo por Material Integrado';
+        materialsColorBtn.innerHTML = '<i class="fa-solid fa-palette"></i>';
+        materialsColorBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            if (activeColorMode === 'materials') {
+                activeColorMode = 'none';
+                clearClassificationColorization();
+            } else {
+                activeColorMode = 'materials';
+                applyClassificationColorizationToViewer();
+            }
+            renderIntegratedClassificationUI(container);
+        });
+        materialsTitleDiv.appendChild(materialsColorBtn);
+
+        const materialsChevron = document.createElement('i');
+        materialsChevron.className = 'fa-solid fa-chevron-down';
+
+        materialsHeader.appendChild(materialsTitleDiv);
+        materialsHeader.appendChild(materialsChevron);
         materialsHeader.addEventListener('click', () => {
             if (isMaterialsCollapsed) collapsedSections.delete('materials');
             else collapsedSections.add('materials');
@@ -3073,7 +3301,16 @@ function renderIntegratedClassificationUI(container: HTMLElement) {
             const matBtn = document.createElement('button');
             matBtn.className = 'level-filter-btn';
             if (selectedMaterials.has(mat)) matBtn.classList.add('active');
-            matBtn.textContent = mat;
+
+            if (activeColorMode === 'materials' && currentClassificationColorsMap.has(mat)) {
+                const dot = document.createElement('span');
+                dot.className = 'level-color-bar';
+                dot.style.backgroundColor = currentClassificationColorsMap.get(mat)!;
+                matBtn.appendChild(dot);
+            }
+
+            const matText = document.createTextNode(mat);
+            matBtn.appendChild(matText);
             matBtn.title = mat;
             matBtn.addEventListener('click', async () => {
                 if (selectedMaterials.has(mat)) {
@@ -3100,10 +3337,38 @@ function renderIntegratedClassificationUI(container: HTMLElement) {
         pilotesHeader.className = 'filter-section-header';
         const isPilotesCollapsed = collapsedSections.has('pilotes');
         if (isPilotesCollapsed) pilotesHeader.classList.add('collapsed');
-        pilotesHeader.innerHTML = `
-            <span>Número de Pilote</span>
-            <i class="fa-solid fa-chevron-down"></i>
-        `;
+
+        const pilotesTitleDiv = document.createElement('div');
+        pilotesTitleDiv.style.display = 'flex';
+        pilotesTitleDiv.style.alignItems = 'center';
+        pilotesTitleDiv.style.gap = '8px';
+
+        const pilotesSpan = document.createElement('span');
+        pilotesSpan.textContent = 'Número de Pilote';
+        pilotesTitleDiv.appendChild(pilotesSpan);
+
+        const pilotesColorBtn = document.createElement('button');
+        pilotesColorBtn.className = `filter-color-toggle-btn ${activeColorMode === 'pilotes' ? 'active' : ''}`;
+        pilotesColorBtn.title = 'Colorear modelo por Número de Pilote';
+        pilotesColorBtn.innerHTML = '<i class="fa-solid fa-palette"></i>';
+        pilotesColorBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            if (activeColorMode === 'pilotes') {
+                activeColorMode = 'none';
+                clearClassificationColorization();
+            } else {
+                activeColorMode = 'pilotes';
+                applyClassificationColorizationToViewer();
+            }
+            renderIntegratedClassificationUI(container);
+        });
+        pilotesTitleDiv.appendChild(pilotesColorBtn);
+
+        const pilotesChevron = document.createElement('i');
+        pilotesChevron.className = 'fa-solid fa-chevron-down';
+
+        pilotesHeader.appendChild(pilotesTitleDiv);
+        pilotesHeader.appendChild(pilotesChevron);
         pilotesHeader.addEventListener('click', () => {
             if (isPilotesCollapsed) collapsedSections.delete('pilotes');
             else collapsedSections.add('pilotes');
@@ -3122,7 +3387,16 @@ function renderIntegratedClassificationUI(container: HTMLElement) {
             const pilBtn = document.createElement('button');
             pilBtn.className = 'level-filter-btn';
             if (selectedPilotes.has(pil)) pilBtn.classList.add('active');
-            pilBtn.textContent = pil;
+
+            if (activeColorMode === 'pilotes' && currentClassificationColorsMap.has(pil)) {
+                const dot = document.createElement('span');
+                dot.className = 'level-color-bar';
+                dot.style.backgroundColor = currentClassificationColorsMap.get(pil)!;
+                pilBtn.appendChild(dot);
+            }
+
+            const pilText = document.createTextNode(pil);
+            pilBtn.appendChild(pilText);
             pilBtn.title = `Pilote ${pil}`;
             pilBtn.addEventListener('click', async () => {
                 if (selectedPilotes.has(pil)) {
