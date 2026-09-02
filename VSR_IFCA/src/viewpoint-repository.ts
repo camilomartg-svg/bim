@@ -7,6 +7,7 @@ export interface ViewpointIndexItem {
     description: string;
     category: string;
     userId: string;
+    projectId?: string;
     date: number;
     file: string; // Path to full JSON file or URL
     sharedWith?: string[];

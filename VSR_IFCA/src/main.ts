@@ -3763,6 +3763,9 @@ async function loadModelList() {
                 const companyId = params.get('empresa') || '';
                 try {
                     activeSecurityContext = await loadSecurityContext(project, companyId);
+                    if (activeSecurityContext?.activeProject?.slug) {
+                        viewpointsManager?.setProjectId(activeSecurityContext.activeProject.slug);
+                    }
                 } catch (se) {
                     console.warn('Error loading security context in loadModelList:', se);
                 }
@@ -10642,7 +10645,7 @@ function setupViewpoints() {
         }
     };
 
-    viewpointsManager = new ViewpointsManager(components, world, provider);
+    viewpointsManager = new ViewpointsManager(components, world, provider, PROJECT_RUNTIME_KEY);
 
     // Connect UI
     const container = document.getElementById('viewpoints-list-container');

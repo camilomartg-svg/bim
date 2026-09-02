@@ -14,6 +14,7 @@ export interface ViewpointShareEntry {
 export interface ViewpointData {
     id: string;
     userId: string; // Foreign Key to User
+    projectId?: string; // Foreign Key / Key to Project context
     title: string;
     description: string;
     date: number;
@@ -60,6 +61,7 @@ export class ViewpointsManager extends OBC.Component implements OBC.Disposable {
     private _deletedViewpointIds = new Set<string>();
     private _stateProvider?: ViewpointStateProvider;
     private _currentUserId: string | null = null;
+    private _currentProjectId: string = 'default';
     private _activeViewpointId: string | null = null;
     private _activeLibraryTab: 'mine' | 'shared-with-me' | 'shared-by-me' = 'mine';
     private _isSyncing = false;
@@ -84,11 +86,12 @@ export class ViewpointsManager extends OBC.Component implements OBC.Disposable {
     private _container: HTMLElement | null = null;
     private _listContainer: HTMLElement | null = null;
 
-    constructor(components: OBC.Components, world: OBC.World, stateProvider?: ViewpointStateProvider) {
+    constructor(components: OBC.Components, world: OBC.World, stateProvider?: ViewpointStateProvider, projectId?: string) {
         super(components);
         this._components = components;
         this._world = world;
         this._stateProvider = stateProvider;
+        this._currentProjectId = projectId || this.detectProjectIdFromUrl();
         
         // Get required components
         this._viewpoints = components.get(OBC.Viewpoints);
@@ -414,6 +417,9 @@ export class ViewpointsManager extends OBC.Component implements OBC.Disposable {
                 if (itemId && this._deletedViewpointIds.has(itemId)) {
                     continue;
                 }
+                if (item.projectId && !this.belongsToCurrentProject(item as any)) {
+                    continue;
+                }
                 const me = String(this._currentUserId || '').trim().toLowerCase();
                 const isOwner = String(item.userId || '').trim().toLowerCase() === me;
                 const isShared = (
@@ -441,6 +447,7 @@ export class ViewpointsManager extends OBC.Component implements OBC.Disposable {
             }
             this._savedViewpoints = this._savedViewpoints.filter((view) => {
                 if (this._deletedViewpointIds.has(this.normalizeViewId(view.id))) return false;
+                if (!this.belongsToCurrentProject(view)) return false;
                 if (this.checkOwnership(view)) return true;
                 return accessibleCloudIds.has(String(view.id));
             });
@@ -529,6 +536,7 @@ export class ViewpointsManager extends OBC.Component implements OBC.Disposable {
         return {
             id: base?.id || THREE.MathUtils.generateUUID(),
             userId: base?.userId || this._currentUserId || 'guest',
+            projectId: base?.projectId || this._currentProjectId || 'default',
             title: base?.title || 'Sin título',
             description: base?.description || '',
             category: base?.category || 'General',
@@ -1028,11 +1036,61 @@ export class ViewpointsManager extends OBC.Component implements OBC.Disposable {
         this.renderList();
     }
 
+    public setProjectId(projectId: string) {
+        if (!projectId) return;
+        this._currentProjectId = projectId;
+        this.renderList();
+    }
+
+    public getProjectId(): string {
+        return this._currentProjectId;
+    }
+
+    private detectProjectIdFromUrl(): string {
+        if (typeof window === 'undefined' || !window.location || !window.location.search) return 'default';
+        const params = new URLSearchParams(window.location.search);
+        const proj = params.get('project') || params.get('driveFolderName') || params.get('driveFolderId') || 'default';
+        return proj;
+    }
+
+    private normalizeProjectId(id?: string | null): string {
+        return String(id || '')
+            .normalize('NFD')
+            .replace(/[\u0300-\u036f]/g, '')
+            .toLowerCase()
+            .replace(/[^a-z0-9]+/g, '-')
+            .replace(/^-+|-+$/g, '');
+    }
+
+    public belongsToCurrentProject(viewpoint: ViewpointData): boolean {
+        const currentNorm = this.normalizeProjectId(this._currentProjectId);
+        if (!currentNorm || currentNorm === 'default') {
+            return true;
+        }
+
+        if (viewpoint.projectId) {
+            const vpNorm = this.normalizeProjectId(viewpoint.projectId);
+            return vpNorm === currentNorm;
+        }
+
+        // Fallback for legacy viewpoints saved before projectId was introduced:
+        if (Array.isArray(viewpoint.loadedModels) && viewpoint.loadedModels.length > 0) {
+            const hasModelMatch = viewpoint.loadedModels.some(m => {
+                const modelNorm = this.normalizeProjectId(m.url || m.uuid || '');
+                return modelNorm.includes(currentNorm) || currentNorm.includes(modelNorm);
+            });
+            if (hasModelMatch) return true;
+            return false;
+        }
+
+        return true;
+    }
+
     private renderList(filterTerm: string = '') {
         if (!this._listContainer) return;
         this._listContainer.innerHTML = '';
         
-        let filtered = this._savedViewpoints;
+        let filtered = this._savedViewpoints.filter(v => this.belongsToCurrentProject(v));
         if (filterTerm) {
             filtered = filtered.filter(v => v.title.toLowerCase().includes(filterTerm) || v.category.toLowerCase().includes(filterTerm));
         }
