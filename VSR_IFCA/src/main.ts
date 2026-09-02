@@ -508,62 +508,11 @@ const getSnappedPointForMouse = (event: { clientX: number; clientY: number }): {
 
     const intersects = tempRaycaster.intersectObjects(candidates, true);
 
-    // Primary: process direct raycast intersections
     if (intersects.length > 0) {
         const snappedRes = applyGlobalSnap([intersects[0]], { x: pixelX, y: pixelY });
         if (snappedRes && snappedRes.length > 0 && snappedRes[0].point) {
             return { point: snappedRes[0].point, type: 'VERTEX', object: snappedRes[0].object };
         }
-    }
-
-    // Secondary: proximity search for nearby corner vertices when ray passes slightly outside face boundary
-    const ray = tempRaycaster.ray;
-    const candidateVertices: THREE.Vector3[] = [];
-
-    for (const mesh of candidates) {
-        if (!mesh.geometry) continue;
-        if (!mesh.geometry.boundingSphere) mesh.geometry.computeBoundingSphere();
-
-        const sphere = mesh.geometry.boundingSphere.clone();
-        mesh.updateMatrixWorld();
-        sphere.applyMatrix4(mesh.matrixWorld);
-
-        const distToRay = ray.distanceToPoint(sphere.center);
-        if (distToRay <= sphere.radius + 1.2) {
-            const pos = mesh.geometry.attributes.position;
-            if (!pos) continue;
-
-            // Collect edge / corner vertices
-            const step = Math.max(1, Math.floor(pos.count / 200));
-            for (let i = 0; i < pos.count; i += step) {
-                const v = new THREE.Vector3().fromBufferAttribute(pos, i);
-                mesh.updateMatrixWorld();
-                v.applyMatrix4(mesh.matrixWorld);
-                pushUniqueSnapPoint(candidateVertices, v);
-            }
-        }
-    }
-
-    const camera = world.camera.three;
-    let bestPoint: THREE.Vector3 | null = null;
-    let minPixelDist = 36; // 36px snap radius around mouse cursor!
-
-    for (const candidate of candidateVertices) {
-        const proj = candidate.clone().project(camera);
-        if (proj.z > 1 || proj.z < -1) continue;
-
-        const screenX = ((proj.x + 1) / 2) * rect.width + rect.left;
-        const screenY = ((-proj.y + 1) / 2) * rect.height + rect.top;
-        const pDist = Math.hypot(pixelX - screenX, pixelY - screenY);
-
-        if (pDist < minPixelDist) {
-            minPixelDist = pDist;
-            bestPoint = candidate;
-        }
-    }
-
-    if (bestPoint) {
-        return { point: bestPoint, type: 'VERTEX' };
     }
 
     return null;
