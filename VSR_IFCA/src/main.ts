@@ -10051,6 +10051,9 @@ function initSnapConfigUI() {
     if (btn && panel) {
         btn.addEventListener('click', (e) => {
             e.stopPropagation();
+            const rect = btn.getBoundingClientRect();
+            panel.style.top = `${rect.bottom + 6}px`;
+            panel.style.left = `${Math.max(10, Math.min(rect.left - 120, window.innerWidth - 280))}px`;
             panel.classList.toggle('show');
         });
 
@@ -10109,7 +10112,6 @@ function setActiveButton(activeBtn: HTMLElement | null) {
 function toggleMeasurementMode(mode: 'length' | 'point' | 'area' | 'angle' | 'slope') {
     // Deactivate previous tools
     if (areaTool && areaTool.enabled) areaTool.enabled = false;
-    if (measurer) measurer.enabled = (mode === 'length' && measurementMode !== 'length');
 
     if (measurementMode === mode) {
         // Toggle off
@@ -10122,7 +10124,8 @@ function toggleMeasurementMode(mode: 'length' | 'point' | 'area' | 'angle' | 'sl
         if (snappingCursor) snappingCursor.visible = false;
     } else {
         measurementMode = mode;
-        if (measurer) measurer.enabled = (mode === 'length');
+        // Enable snapping engine for all measurement modes (Length, Area, Angle, Slope, Point)
+        if (measurer) measurer.enabled = true;
         resetCurrentMeasurement();
 
         let modeName = '';
