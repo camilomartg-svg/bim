@@ -480,6 +480,95 @@ const applyGlobalSnap = (intersects: THREE.Intersection[], mousePixelPos?: { x: 
     return intersects;
 };
 
+const getSnappedPointForMouse = (event: { clientX: number; clientY: number }): { point: THREE.Vector3; type: 'VERTEX' | 'EDGE' | 'SECTION'; object?: THREE.Object3D } | null => {
+    if (!world || !world.camera || !world.camera.three || !world.scene) return null;
+
+    const container = document.getElementById('viewer-container');
+    const rect = container ? container.getBoundingClientRect() : document.body.getBoundingClientRect();
+
+    const pixelX = event.clientX;
+    const pixelY = event.clientY;
+    lastMousePixelPos = { x: pixelX, y: pixelY };
+
+    const normX = ((pixelX - rect.left) / rect.width) * 2 - 1;
+    const normY = -((pixelY - rect.top) / rect.height) * 2 + 1;
+
+    const tempRaycaster = new THREE.Raycaster();
+    tempRaycaster.setFromCamera(new THREE.Vector2(normX, normY), world.camera.three);
+
+    const candidates: THREE.Mesh[] = [];
+    world.scene.three.traverse((child) => {
+        if (child instanceof THREE.Mesh || child instanceof THREE.InstancedMesh) {
+            if (child.name === 'debugSphere' || child === (window as any).debugSphere || child === snappingCursor || (child as any).userData?.isHelper) return;
+            candidates.push(child as THREE.Mesh);
+        }
+    });
+
+    if (candidates.length === 0) return null;
+
+    const intersects = tempRaycaster.intersectObjects(candidates, true);
+
+    // Primary: process direct raycast intersections
+    if (intersects.length > 0) {
+        const snappedRes = applyGlobalSnap([intersects[0]], { x: pixelX, y: pixelY });
+        if (snappedRes && snappedRes.length > 0 && snappedRes[0].point) {
+            return { point: snappedRes[0].point, type: 'VERTEX', object: snappedRes[0].object };
+        }
+    }
+
+    // Secondary: proximity search for nearby corner vertices when ray passes slightly outside face boundary
+    const ray = tempRaycaster.ray;
+    const candidateVertices: THREE.Vector3[] = [];
+
+    for (const mesh of candidates) {
+        if (!mesh.geometry) continue;
+        if (!mesh.geometry.boundingSphere) mesh.geometry.computeBoundingSphere();
+
+        const sphere = mesh.geometry.boundingSphere.clone();
+        mesh.updateMatrixWorld();
+        sphere.applyMatrix4(mesh.matrixWorld);
+
+        const distToRay = ray.distanceToPoint(sphere.center);
+        if (distToRay <= sphere.radius + 1.2) {
+            const pos = mesh.geometry.attributes.position;
+            if (!pos) continue;
+
+            // Collect edge / corner vertices
+            const step = Math.max(1, Math.floor(pos.count / 200));
+            for (let i = 0; i < pos.count; i += step) {
+                const v = new THREE.Vector3().fromBufferAttribute(pos, i);
+                mesh.updateMatrixWorld();
+                v.applyMatrix4(mesh.matrixWorld);
+                pushUniqueSnapPoint(candidateVertices, v);
+            }
+        }
+    }
+
+    const camera = world.camera.three;
+    let bestPoint: THREE.Vector3 | null = null;
+    let minPixelDist = 36; // 36px snap radius around mouse cursor!
+
+    for (const candidate of candidateVertices) {
+        const proj = candidate.clone().project(camera);
+        if (proj.z > 1 || proj.z < -1) continue;
+
+        const screenX = ((proj.x + 1) / 2) * rect.width + rect.left;
+        const screenY = ((-proj.y + 1) / 2) * rect.height + rect.top;
+        const pDist = Math.hypot(pixelX - screenX, pixelY - screenY);
+
+        if (pDist < minPixelDist) {
+            minPixelDist = pDist;
+            bestPoint = candidate;
+        }
+    }
+
+    if (bestPoint) {
+        return { point: bestPoint, type: 'VERTEX' };
+    }
+
+    return null;
+};
+
 THREE.Raycaster.prototype.intersectObjects = function (objects, recursive, optionalTarget) {
     const res = originalIntersectObjects.call(this, objects, recursive, optionalTarget);
     return applyGlobalSnap(res);
@@ -786,34 +875,9 @@ const baseUrl = import.meta.env.BASE_URL || './';
 // --- v29-SmartSnap: GLOBAL INDEPENDENT SNAPPING LOOP ---
 container.addEventListener('mousemove', (event) => {
     if (!world || !world.camera || !world.scene) return;
-    const rect = container.getBoundingClientRect();
-    const pixelX = event.clientX;
-    const pixelY = event.clientY;
-    lastMousePixelPos = { x: pixelX, y: pixelY };
-
-    const normX = ((event.clientX - rect.left) / rect.width) * 2 - 1;
-    const normY = -((event.clientY - rect.top) / rect.height) * 2 + 1;
-
-    const tempRaycaster = new THREE.Raycaster();
-    tempRaycaster.setFromCamera(new THREE.Vector2(normX, normY), world.camera.three);
-
-    const candidates: THREE.Object3D[] = [];
-    world.scene.three.traverse((child) => {
-        if (child instanceof THREE.Mesh || child instanceof THREE.InstancedMesh) {
-            if (child.name === 'debugSphere' || child === (window as any).debugSphere || child === snappingCursor || (child as any).userData?.isHelper) return;
-            candidates.push(child);
-        }
-    });
-
-    if (candidates.length === 0) {
-        updateSnapIndicator(null);
-        return;
-    }
-
-    const intersects = tempRaycaster.intersectObjects(candidates, true);
-
-    if (intersects.length > 0) {
-        applyGlobalSnap([intersects[0]], { x: pixelX, y: pixelY });
+    const snapped = getSnappedPointForMouse(event);
+    if (snapped) {
+        updateSnapIndicator(snapped.point, snapped.type);
     } else {
         updateSnapIndicator(null);
     }
@@ -10016,88 +10080,77 @@ function createLabel(text: string, position: THREE.Vector3, data?: MeasurementDa
 }
 
 async function onMeasureMouseMove(event: MouseEvent) {
-    // Debug for v21
-    if (Math.random() < 0.05 && measurementMode) {
-        // console.log("Measure Mouse Move Active");
-    }
-
     if (!measurementMode) {
-        if (snappingCursor) snappingCursor.visible = false;
+        updateSnapIndicator(null);
         return;
     }
 
-    // Use the simpleRaycaster which we monkey-patched to have snapping!
-    const result = await simpleRaycaster.castRay();
+    const snapped = getSnappedPointForMouse(event);
+    if (!snapped || !snapped.point) {
+        updateSnapIndicator(null);
+        return;
+    }
 
-    if (result && result.point) {
-        if (snappingCursor) {
-            snappingCursor.visible = false;
+    updateSnapIndicator(snapped.point, snapped.type);
+    const end = snapped.point;
+
+    // If we have a start point, draw a temp line to current cursor
+    if (measurementMode === 'length' && measurementPoints.length === 1) {
+        const start = measurementPoints[0];
+
+        if (!tempMeasurementLine) {
+            const geometry = new THREE.BufferGeometry().setFromPoints([start, end]);
+            const material = new THREE.LineBasicMaterial({ color: 0xffff00, depthTest: false, opacity: 0.5, transparent: true });
+            tempMeasurementLine = new THREE.Line(geometry, material);
+            world.scene.three.add(tempMeasurementLine);
+        } else {
+            const positions = tempMeasurementLine.geometry.attributes.position;
+            positions.setXYZ(0, start.x, start.y, start.z);
+            positions.setXYZ(1, end.x, end.y, end.z);
+            positions.needsUpdate = true;
         }
+    } else if (measurementMode === 'area' && measurementPoints.length > 0) {
+        const start = measurementPoints[measurementPoints.length - 1];
 
-        // If we have a start point, draw a temp line to current cursor
-        if (measurementMode === 'length' && measurementPoints.length === 1) {
-            const start = measurementPoints[0];
-            const end = result.point;
-
-            if (!tempMeasurementLine) {
-                const geometry = new THREE.BufferGeometry().setFromPoints([start, end]);
-                const material = new THREE.LineBasicMaterial({ color: 0xffff00, depthTest: false, opacity: 0.5, transparent: true });
-                tempMeasurementLine = new THREE.Line(geometry, material);
-                world.scene.three.add(tempMeasurementLine);
-            } else {
-                const positions = tempMeasurementLine.geometry.attributes.position;
-                positions.setXYZ(0, start.x, start.y, start.z);
-                positions.setXYZ(1, end.x, end.y, end.z);
-                positions.needsUpdate = true;
-            }
-        } else if (measurementMode === 'area' && measurementPoints.length > 0) {
-            const start = measurementPoints[measurementPoints.length - 1];
-            const end = result.point;
-
-            if (!tempMeasurementLine) {
-                const geometry = new THREE.BufferGeometry().setFromPoints([start, end]);
-                const material = new THREE.LineBasicMaterial({ color: 0x00ffff, depthTest: false, opacity: 0.5, transparent: true });
-                tempMeasurementLine = new THREE.Line(geometry, material);
-                world.scene.three.add(tempMeasurementLine);
-            } else {
-                const positions = tempMeasurementLine.geometry.attributes.position;
-                positions.setXYZ(0, start.x, start.y, start.z);
-                positions.setXYZ(1, end.x, end.y, end.z);
-                positions.needsUpdate = true;
-            }
-        } else if (measurementMode === 'angle' && measurementPoints.length > 0) {
-            const start = measurementPoints[measurementPoints.length - 1];
-            const end = result.point;
-
-            if (!tempMeasurementLine) {
-                const geometry = new THREE.BufferGeometry().setFromPoints([start, end]);
-                const material = new THREE.LineBasicMaterial({ color: 0xffa500, depthTest: false, opacity: 0.5, transparent: true });
-                tempMeasurementLine = new THREE.Line(geometry, material);
-                world.scene.three.add(tempMeasurementLine);
-            } else {
-                const positions = tempMeasurementLine.geometry.attributes.position;
-                positions.setXYZ(0, start.x, start.y, start.z);
-                positions.setXYZ(1, end.x, end.y, end.z);
-                positions.needsUpdate = true;
-            }
-        } else if (measurementMode === 'slope' && measurementPoints.length === 1) {
-            const start = measurementPoints[0];
-            const end = result.point;
-
-            if (!tempMeasurementLine) {
-                const geometry = new THREE.BufferGeometry().setFromPoints([start, end]);
-                const material = new THREE.LineBasicMaterial({ color: 0x0000ff, depthTest: false, opacity: 0.5, transparent: true });
-                tempMeasurementLine = new THREE.Line(geometry, material);
-                world.scene.three.add(tempMeasurementLine);
-            } else {
-                const positions = tempMeasurementLine.geometry.attributes.position;
-                positions.setXYZ(0, start.x, start.y, start.z);
-                positions.setXYZ(1, end.x, end.y, end.z);
-                positions.needsUpdate = true;
-            }
+        if (!tempMeasurementLine) {
+            const geometry = new THREE.BufferGeometry().setFromPoints([start, end]);
+            const material = new THREE.LineBasicMaterial({ color: 0x00ffff, depthTest: false, opacity: 0.5, transparent: true });
+            tempMeasurementLine = new THREE.Line(geometry, material);
+            world.scene.three.add(tempMeasurementLine);
+        } else {
+            const positions = tempMeasurementLine.geometry.attributes.position;
+            positions.setXYZ(0, start.x, start.y, start.z);
+            positions.setXYZ(1, end.x, end.y, end.z);
+            positions.needsUpdate = true;
         }
-    } else {
-        if (snappingCursor) snappingCursor.visible = false;
+    } else if (measurementMode === 'angle' && measurementPoints.length > 0) {
+        const start = measurementPoints[measurementPoints.length - 1];
+
+        if (!tempMeasurementLine) {
+            const geometry = new THREE.BufferGeometry().setFromPoints([start, end]);
+            const material = new THREE.LineBasicMaterial({ color: 0xffa500, depthTest: false, opacity: 0.5, transparent: true });
+            tempMeasurementLine = new THREE.Line(geometry, material);
+            world.scene.three.add(tempMeasurementLine);
+        } else {
+            const positions = tempMeasurementLine.geometry.attributes.position;
+            positions.setXYZ(0, start.x, start.y, start.z);
+            positions.setXYZ(1, end.x, end.y, end.z);
+            positions.needsUpdate = true;
+        }
+    } else if (measurementMode === 'slope' && measurementPoints.length === 1) {
+        const start = measurementPoints[0];
+
+        if (!tempMeasurementLine) {
+            const geometry = new THREE.BufferGeometry().setFromPoints([start, end]);
+            const material = new THREE.LineBasicMaterial({ color: 0x0000ff, depthTest: false, opacity: 0.5, transparent: true });
+            tempMeasurementLine = new THREE.Line(geometry, material);
+            world.scene.three.add(tempMeasurementLine);
+        } else {
+            const positions = tempMeasurementLine.geometry.attributes.position;
+            positions.setXYZ(0, start.x, start.y, start.z);
+            positions.setXYZ(1, end.x, end.y, end.z);
+            positions.needsUpdate = true;
+        }
     }
 }
 
@@ -10107,10 +10160,10 @@ async function onMeasureClick(event: MouseEvent) {
     // Don't trigger if clicking on UI
     if ((event.target as HTMLElement).closest('button') || (event.target as HTMLElement).closest('.sidebar')) return;
 
-    const result = await simpleRaycaster.castRay();
-    if (!result || !result.point) return;
+    const snapped = getSnappedPointForMouse(event);
+    if (!snapped || !snapped.point) return;
 
-    const point = result.point;
+    const point = snapped.point;
 
     if (measurementMode === 'point') {
         createMarker(point, 0x00ff00);
