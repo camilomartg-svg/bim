@@ -804,16 +804,43 @@ world.camera.threeOrtho.near = 0.05;
 world.camera.threeOrtho.updateProjectionMatrix();
 
 // Configure Navigation Mouse Controls per User Request:
-// 1. Presionar la rueda del mouse (Middle click drag) -> Orbita (ROTATE)
-// 2. Click izquierdo del mouse (Left click drag) -> Paneo (TRUCK)
-// 3. Girar la rueda (Scroll wheel) -> Zoom (DOLLY)
-// 4. Click derecho (Right click drag) -> Zoom auxiliar (DOLLY)
+// 1. Presionar la rueda del mouse (Middle click drag): Paneo (TRUCK)
+// 2. Mayús + Presionar la rueda (Shift + Middle click drag): Órbita (ROTATE)
+// 3. Click izquierdo: Quitado el paneo (NONE)
+// 4. Girar la rueda (Scroll wheel): Zoom (DOLLY)
+// 5. Click derecho (Right click drag): Zoom auxiliar (DOLLY)
 if (world.camera && world.camera.controls) {
-    world.camera.controls.mouseButtons.left = CameraControls.ACTION.TRUCK;
-    world.camera.controls.mouseButtons.middle = CameraControls.ACTION.ROTATE;
+    world.camera.controls.mouseButtons.left = CameraControls.ACTION.NONE;
+    world.camera.controls.mouseButtons.middle = CameraControls.ACTION.TRUCK;
     world.camera.controls.mouseButtons.right = CameraControls.ACTION.DOLLY;
     world.camera.controls.mouseButtons.wheel = CameraControls.ACTION.DOLLY;
     world.camera.controls.dollyToCursor = true;
+
+    const updateMiddleButtonAction = (isShiftPressed: boolean) => {
+        if (world.camera && world.camera.controls) {
+            world.camera.controls.mouseButtons.middle = isShiftPressed
+                ? CameraControls.ACTION.ROTATE
+                : CameraControls.ACTION.TRUCK;
+        }
+    };
+
+    window.addEventListener('keydown', (e) => {
+        if (e.key === 'Shift') updateMiddleButtonAction(true);
+    });
+
+    window.addEventListener('keyup', (e) => {
+        if (e.key === 'Shift') updateMiddleButtonAction(false);
+    });
+
+    window.addEventListener('pointerdown', (e) => {
+        updateMiddleButtonAction(e.shiftKey);
+    });
+
+    window.addEventListener('pointermove', (e) => {
+        if (e.buttons === 4) { // Middle mouse button held down
+            updateMiddleButtonAction(e.shiftKey);
+        }
+    });
 }
 
 components.init();
