@@ -335,9 +335,9 @@ export const snapConfig = {
     enablePoint: true,    // Corner / Vertex / Endpoint snap
     enableLine: true,     // Edge / Line snap
     enableFace: true,     // Surface / Face snap
-    snapRadiusPx: 55,     // Screen magnet radius (55px for strong magnet pull!)
-    snapDistance3D: 1.20, // 3D magnet distance (1.20m)
-    pickerSize: 26,       // Marker size (26px)
+    snapRadiusPx: 100,    // Default max magnet radius (100px)
+    snapDistance3D: 1.20, // 3D magnet distance
+    pickerSize: 16,       // Default marker size (16px)
 };
 
 let updateSnappingModes = () => {};
