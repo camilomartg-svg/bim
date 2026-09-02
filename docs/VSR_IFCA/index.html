@@ -84,9 +84,9 @@
             padding: 10px 12px
         }
     </style>
-  <script type="module" crossorigin src="./assets/main-BHV7KD9F.js"></script>
-  <link rel="modulepreload" crossorigin href="./assets/viewpoints-manager-I_Krb1EL.js">
-  <link rel="stylesheet" crossorigin href="./assets/main-BVfvE_t3.css">
+  <script type="module" crossorigin src="./assets/main-BYlutv8m.js"></script>
+  <link rel="modulepreload" crossorigin href="./assets/viewpoints-manager-MOXpmbEi.js">
+  <link rel="stylesheet" crossorigin href="./assets/main-PVtTjN62.css">
 </head>
 
 <body>
@@ -279,7 +279,7 @@
                 </div>
 
                 <div class="toolbar-group measure-group"
-                    style="display: flex; gap: 5px; margin: 0 10px; border-left: 1px solid #ccc; border-right: 1px solid #ccc; padding: 0 10px;">
+                    style="display: flex; gap: 5px; margin: 0 10px; border-left: 1px solid #ccc; border-right: 1px solid #ccc; padding: 0 10px; position: relative;">
                     <button id="btn-measure-length" class="projection-toggle-btn" title="Medir Longitud">
                         <span class="material-symbols-outlined">straighten</span>
                     </button>
@@ -296,10 +296,47 @@
                     <button id="btn-measure-point" class="projection-toggle-btn" title="Coordenada Punto">
                         <span class="material-symbols-outlined">my_location</span>
                     </button>
+                    <button id="btn-snap-config" class="projection-toggle-btn" title="Configurar Imán de Snapping">
+                        <span class="material-symbols-outlined">center_focus_strong</span>
+                    </button>
                     <button id="btn-measure-delete" class="projection-toggle-btn" title="Borrar Medidas"
                         style="color: #ff0000;">
                         <span class="material-symbols-outlined">delete</span>
                     </button>
+
+                    <!-- Snap Config Dropdown Panel -->
+                    <div id="snap-config-panel" class="snap-config-panel">
+                        <div class="snap-config-header">
+                            <span>Opciones de Snapping</span>
+                            <span class="material-symbols-outlined" style="font-size: 16px;">tune</span>
+                        </div>
+                        <label class="snap-config-item">
+                            <span>Puntos Finales / Esquinas</span>
+                            <input type="checkbox" id="chk-snap-point" checked>
+                        </label>
+                        <label class="snap-config-item">
+                            <span>Bordes / Aristas</span>
+                            <input type="checkbox" id="chk-snap-line" checked>
+                        </label>
+                        <label class="snap-config-item">
+                            <span>Superficies / Caras</span>
+                            <input type="checkbox" id="chk-snap-face" checked>
+                        </label>
+                        <div class="snap-config-slider">
+                            <label>
+                                <span>Fuerza del Imán</span>
+                                <span id="snap-radius-val">55px</span>
+                            </label>
+                            <input type="range" id="slider-snap-radius" min="20" max="100" value="55">
+                        </div>
+                        <div class="snap-config-slider">
+                            <label>
+                                <span>Tamaño del Marcador</span>
+                                <span id="snap-size-val">26px</span>
+                            </label>
+                            <input type="range" id="slider-snap-size" min="16" max="40" value="26">
+                        </div>
+                    </div>
                 </div>
 
                 <button id="grid-toggle" class="projection-toggle-btn active" title="Mostrar/Ocultar Rejilla">

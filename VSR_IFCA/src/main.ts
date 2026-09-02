@@ -330,6 +330,18 @@ const getAllNeighborVertices = (intersection: THREE.Intersection): THREE.Vector3
     return worldVertices;
 };
 
+// --- GLOBAL SNAP CONFIGURATION & MAGNET CONTROLS ---
+export const snapConfig = {
+    enablePoint: true,    // Corner / Vertex / Endpoint snap
+    enableLine: true,     // Edge / Line snap
+    enableFace: true,     // Surface / Face snap
+    snapRadiusPx: 55,     // Screen magnet radius (55px for strong magnet pull!)
+    snapDistance3D: 1.20, // 3D magnet distance (1.20m)
+    pickerSize: 26,       // Marker size (26px)
+};
+
+let updateSnappingModes = () => {};
+
 const applyGlobalSnap = (intersects: THREE.Intersection[], mousePixelPos?: { x: number; y: number }) => {
     if (!intersects || intersects.length === 0) {
         updateSnapIndicator(null);
@@ -395,37 +407,41 @@ const applyGlobalSnap = (intersects: THREE.Intersection[], mousePixelPos?: { x: 
 
         let bestPoint: THREE.Vector3 | null = null;
         let bestType: 'VERTEX' | 'EDGE' | 'SECTION' = 'VERTEX';
-        let minPixelDist = 30; // 30px screen-space snap radius
-        let min3dDist = 0.20;
+        let minPixelDist = snapConfig.snapRadiusPx; // Strong magnet radius
+        let min3dDist = snapConfig.snapDistance3D;
 
         const mX = mousePixelPos ? mousePixelPos.x : (lastMousePixelPos ? lastMousePixelPos.x : null);
         const mY = mousePixelPos ? mousePixelPos.y : (lastMousePixelPos ? lastMousePixelPos.y : null);
 
-        for (const candidate of candidatePool) {
-            const d3d = candidate.distanceTo(closest.point);
-            let pDist = Infinity;
+        // 1. CORNER / VERTEX SNAPPING (If enabled)
+        if (snapConfig.enablePoint) {
+            for (const candidate of candidatePool) {
+                const d3d = candidate.distanceTo(closest.point);
+                let pDist = Infinity;
 
-            if (camera && mX !== null && mY !== null) {
-                const proj = candidate.clone().project(camera);
-                if (proj.z <= 1 && proj.z >= -1) {
-                    const screenX = ((proj.x + 1) / 2) * rect.width + rect.left;
-                    const screenY = ((-proj.y + 1) / 2) * rect.height + rect.top;
-                    pDist = Math.hypot(mX - screenX, mY - screenY);
+                if (camera && mX !== null && mY !== null) {
+                    const proj = candidate.clone().project(camera);
+                    if (proj.z <= 1 && proj.z >= -1) {
+                        const screenX = ((proj.x + 1) / 2) * rect.width + rect.left;
+                        const screenY = ((-proj.y + 1) / 2) * rect.height + rect.top;
+                        pDist = Math.hypot(mX - screenX, mY - screenY);
+                    }
                 }
-            }
 
-            if (pDist <= minPixelDist) {
-                minPixelDist = pDist;
-                bestPoint = candidate;
-                bestType = sectionCandidates.includes(candidate) ? 'SECTION' : 'VERTEX';
-            } else if (mX === null && d3d < min3dDist) {
-                min3dDist = d3d;
-                bestPoint = candidate;
-                bestType = sectionCandidates.includes(candidate) ? 'SECTION' : 'VERTEX';
+                if (pDist <= minPixelDist) {
+                    minPixelDist = pDist;
+                    bestPoint = candidate;
+                    bestType = sectionCandidates.includes(candidate) ? 'SECTION' : 'VERTEX';
+                } else if (mX === null && d3d < min3dDist) {
+                    min3dDist = d3d;
+                    bestPoint = candidate;
+                    bestType = sectionCandidates.includes(candidate) ? 'SECTION' : 'VERTEX';
+                }
             }
         }
 
-        if (!bestPoint) {
+        // 2. EDGE / LINE SNAPPING (If enabled and no vertex matched)
+        if (!bestPoint && snapConfig.enableLine) {
             const edges = [
                 new THREE.Line3(va, vb),
                 new THREE.Line3(vb, vc),
@@ -433,8 +449,8 @@ const applyGlobalSnap = (intersects: THREE.Intersection[], mousePixelPos?: { x: 
             ];
 
             let bestEdgePoint: THREE.Vector3 | null = null;
-            let minEdgePixelDist = 16;
-            let minEdge3dDist = 0.08;
+            let minEdgePixelDist = Math.max(25, snapConfig.snapRadiusPx * 0.65);
+            let minEdge3dDist = snapConfig.snapDistance3D * 0.5;
 
             for (const edge of edges) {
                 const target = new THREE.Vector3();
@@ -466,10 +482,15 @@ const applyGlobalSnap = (intersects: THREE.Intersection[], mousePixelPos?: { x: 
             }
         }
 
+        // 3. FACE / SURFACE SNAPPING
         if (bestPoint) {
             closest.point.copy(bestPoint);
             updateSnapIndicator(bestPoint, bestType);
+        } else if (snapConfig.enableFace) {
+            // Face snap enabled: snap to surface point
+            updateSnapIndicator(closest.point, 'EDGE');
         } else {
+            // Face snap disabled and no edge/vertex matched -> clear snap indicator
             updateSnapIndicator(null);
         }
     } catch (e) {
@@ -880,12 +901,20 @@ const measurer = components.get(OBF.LengthMeasurement);
 measurer.world = world;
 measurer.color = new THREE.Color("#494cb6");
 measurer.enabled = true;
-measurer.snapDistance = 0.5;
-measurer.snappings = [
-    FRAGS.SnappingClass.POINT,
-    FRAGS.SnappingClass.LINE,
-    FRAGS.SnappingClass.FACE
-];
+
+updateSnappingModes = () => {
+    const list: FRAGS.SnappingClass[] = [];
+    if (snapConfig.enablePoint) list.push(FRAGS.SnappingClass.POINT);
+    if (snapConfig.enableLine) list.push(FRAGS.SnappingClass.LINE);
+    if (snapConfig.enableFace) list.push(FRAGS.SnappingClass.FACE);
+    if (measurer) {
+        measurer.snappings = list;
+        measurer.pickerSize = snapConfig.pickerSize;
+        measurer.snapDistance = snapConfig.snapDistance3D;
+    }
+};
+
+updateSnappingModes();
 
 // Synchronous vertex picking setup for fast & accurate snapping
 const setupSynchronousPicking = async () => {
@@ -9791,6 +9820,8 @@ function setupMeasurementTools() {
     const btnSlope = document.getElementById('btn-measure-slope');
     const btnDelete = document.getElementById('btn-measure-delete');
 
+    initSnapConfigUI();
+
     if (btnLength) {
         btnLength.addEventListener('click', () => {
             toggleMeasurementMode('length');
@@ -9982,6 +10013,66 @@ function setupMeasurementTools() {
             }
         });
     }
+}
+
+function initSnapConfigUI() {
+    const btn = document.getElementById('btn-snap-config');
+    const panel = document.getElementById('snap-config-panel');
+    const chkPoint = document.getElementById('chk-snap-point') as HTMLInputElement | null;
+    const chkLine = document.getElementById('chk-snap-line') as HTMLInputElement | null;
+    const chkFace = document.getElementById('chk-snap-face') as HTMLInputElement | null;
+    const sliderRadius = document.getElementById('slider-snap-radius') as HTMLInputElement | null;
+    const sliderSize = document.getElementById('slider-snap-size') as HTMLInputElement | null;
+    const valRadius = document.getElementById('snap-radius-val');
+    const valSize = document.getElementById('snap-size-val');
+
+    if (btn && panel) {
+        btn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            panel.classList.toggle('show');
+        });
+
+        document.addEventListener('click', (e) => {
+            if (!panel.contains(e.target as Node) && e.target !== btn && !btn.contains(e.target as Node)) {
+                panel.classList.remove('show');
+            }
+        });
+    }
+
+    const applyUI = () => {
+        if (chkPoint) snapConfig.enablePoint = chkPoint.checked;
+        if (chkLine) snapConfig.enableLine = chkLine.checked;
+        if (chkFace) snapConfig.enableFace = chkFace.checked;
+
+        if (sliderRadius) {
+            snapConfig.snapRadiusPx = parseFloat(sliderRadius.value);
+            if (valRadius) valRadius.innerText = `${sliderRadius.value}px`;
+        }
+
+        if (sliderSize) {
+            snapConfig.pickerSize = parseFloat(sliderSize.value);
+            if (valSize) valSize.innerText = `${sliderSize.value}px`;
+
+            const marker = document.getElementById('snap-indicator-2d');
+            if (marker) {
+                const s = `${sliderSize.value}px`;
+                marker.style.width = s;
+                marker.style.height = s;
+            }
+        }
+
+        if (typeof updateSnappingModes === 'function') {
+            updateSnappingModes();
+        }
+    };
+
+    if (chkPoint) chkPoint.addEventListener('change', applyUI);
+    if (chkLine) chkLine.addEventListener('change', applyUI);
+    if (chkFace) chkFace.addEventListener('change', applyUI);
+    if (sliderRadius) sliderRadius.addEventListener('input', applyUI);
+    if (sliderSize) sliderSize.addEventListener('input', applyUI);
+
+    applyUI();
 }
 
 function setActiveButton(activeBtn: HTMLElement | null) {

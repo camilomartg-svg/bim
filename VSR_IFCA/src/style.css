@@ -1965,20 +1965,21 @@ bim-label {
   color: var(--text-black);
 }
 
-/* CAD/BIM Green Square Snap Marker */
+/* CAD/BIM High-Visibility Snap Marker */
 .snap-square-marker {
   position: fixed;
-  width: 16px;
-  height: 16px;
-  border: 2px solid #00FF00;
-  background-color: rgba(0, 255, 0, 0.25);
-  box-shadow: 0 0 10px #00FF00, inset 0 0 5px #00FF00;
+  width: 26px;
+  height: 26px;
+  border: 3px solid #00FF88;
+  background-color: rgba(0, 255, 136, 0.35);
+  box-shadow: 0 0 16px rgba(0, 255, 136, 0.95), inset 0 0 8px rgba(0, 255, 136, 0.6);
   transform: translate(-50%, -50%);
   pointer-events: none;
   z-index: 999999;
   display: none;
   box-sizing: border-box;
-  border-radius: 2px;
+  border-radius: 4px;
+  transition: width 0.15s ease, height 0.15s ease;
 }
 
 .snap-square-marker::after {
@@ -1986,23 +1987,107 @@ bim-label {
   position: absolute;
   top: 50%;
   left: 50%;
-  width: 4px;
-  height: 4px;
-  background-color: #00FF00;
+  width: 6px;
+  height: 6px;
+  background-color: #00FF88;
   transform: translate(-50%, -50%);
   border-radius: 50%;
 }
 
 .snap-square-marker.edge {
-  width: 14px;
-  height: 14px;
+  width: 24px;
+  height: 24px;
   border-color: #FFEA00;
-  background-color: rgba(255, 234, 0, 0.25);
-  box-shadow: 0 0 10px #FFEA00, inset 0 0 5px #FFEA00;
+  background-color: rgba(255, 234, 0, 0.35);
+  box-shadow: 0 0 16px rgba(255, 234, 0, 0.95), inset 0 0 8px rgba(255, 234, 0, 0.6);
   border-radius: 50%;
 }
 
 .snap-square-marker.edge::after {
   background-color: #FFEA00;
 }
+
+.snap-square-marker.section {
+  width: 26px;
+  height: 26px;
+  border-color: #00E5FF;
+  background-color: rgba(0, 229, 255, 0.35);
+  box-shadow: 0 0 16px rgba(0, 229, 255, 0.95);
+  border-radius: 4px;
+}
+
+/* Snap Settings Control Dropdown Panel */
+.snap-config-panel {
+  position: absolute;
+  top: 110%;
+  right: 0;
+  width: 260px;
+  background: #ffffff;
+  border: 1px solid var(--border-color, #e2e8f0);
+  border-radius: 8px;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
+  padding: 14px;
+  z-index: 2000;
+  display: none;
+  font-family: system-ui, -apple-system, sans-serif;
+  color: #1e293b;
+}
+
+.dark-mode .snap-config-panel {
+  background: #1e293b;
+  border-color: #334155;
+  color: #f8fafc;
+}
+
+.snap-config-panel.show {
+  display: block;
+}
+
+.snap-config-header {
+  font-weight: 700;
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 10px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid rgba(128, 128, 128, 0.2);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.snap-config-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.snap-config-item input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
+  accent-color: #2563eb;
+}
+
+.snap-config-slider {
+  margin-top: 10px;
+}
+
+.snap-config-slider label {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+
+.snap-config-slider input[type="range"] {
+  width: 100%;
+  accent-color: #2563eb;
+  cursor: pointer;
+}
+
 
