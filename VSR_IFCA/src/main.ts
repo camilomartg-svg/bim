@@ -2484,6 +2484,7 @@ const selectedClassifications = new Set<string>();
 const selectedCategories = new Set<string>();
 const selectedLevels = new Set<string>();
 const selectedMaterials = new Set<string>();
+const selectedPilotes = new Set<string>();
 let selectedDiameter = 'Todos';
 
 const expandedClassifications = new Set<string>();
@@ -2494,6 +2495,7 @@ function resetFilters() {
     selectedCategories.clear();
     selectedLevels.clear();
     selectedMaterials.clear();
+    selectedPilotes.clear();
     selectedDiameter = 'Todos';
 
     expandedClassifications.clear();
@@ -2548,7 +2550,7 @@ const parseNumGlobal = (value: unknown): number => {
 };
 
 // Global cache populated by classifyModel — lets extractAllElementsGlobal read integrated
-// values (level, material, name, classification, volumes, detail, category) without relying on external JSON.
+// values (level, material, name, classification, volumes, detail, category, pilote) without relying on external JSON.
 const modelElementData = new Map<string, Map<number, {
     level: string;
     material: string;
@@ -2559,6 +2561,7 @@ const modelElementData = new Map<string, Map<number, {
     length: number;
     detail: string;
     category: string;
+    pilote: string;
 }>>();
 
 function extractAllElementsGlobal() {
@@ -2582,7 +2585,7 @@ function extractAllElementsGlobal() {
             const cached = idsFromCache?.get(expressID);
 
             let level: string, material: string, name: string, classification: string;
-            let volume: number, area: number, length: number, detail: string, category: string;
+            let volume: number, area: number, length: number, detail: string, category: string, pilote: string;
 
             if (cached) {
                 level = cached.level;
@@ -2594,6 +2597,7 @@ function extractAllElementsGlobal() {
                 length = cached.length;
                 detail = cached.detail;
                 category = cached.category;
+                pilote = cached.pilote || '';
             } else if (modelAny.properties) {
                 const attrs = modelAny.properties[String(expressID)];
                 if (!attrs || typeof attrs !== 'object') continue;
@@ -2606,6 +2610,7 @@ function extractAllElementsGlobal() {
                 area = parseNumGlobal(getValGlobal(attrs, 'ÁREA INTEGRADO', 'Area', 'Area integrado', 'Área', 'Área integrado', 'AREA INTEGRADO'));
                 length = parseNumGlobal(getValGlobal(attrs, 'LONGITUD INTEGRADO', 'Longitud', 'Length', 'Longitud integrado', 'Longitud integrado', 'LONGITUD', 'longitud'));
                 detail = getValGlobal(attrs, 'DETALLE', 'Detalle', 'detalle') || '-';
+                pilote = getValGlobal(attrs, 'NÚMERO DE PILOTE', 'NUMERO DE PILOTE', 'Número de pilote', 'Numero de pilote', 'NÚMERO PILOTE', 'NUMERO PILOTE', 'Número Pilote', 'Numero Pilote', 'N° PILOTE', 'Nº PILOTE', 'N° Pilote', 'Nº Pilote', 'PILOTE', 'Pilote', 'pilote') || '';
             } else {
                 continue;
             }
@@ -2630,6 +2635,7 @@ function extractAllElementsGlobal() {
                 area,
                 length,
                 diameter,
+                pilote,
                 isPipe,
                 isUnion
             });
@@ -2679,6 +2685,7 @@ function getFilterDataGlobal() {
     const classMap = new Map<string, Set<string>>();
     const levelsSet = new Set<string>();
     const materialsSet = new Set<string>();
+    const pilotesSet = new Set<string>();
     const diametersSet = new Set<string>();
 
     for (const el of allElements) {
@@ -2696,6 +2703,10 @@ function getFilterDataGlobal() {
 
         if (el.material && el.material !== 'SIN MATERIAL' && el.material.trim() !== '') {
             materialsSet.add(el.material.trim());
+        }
+
+        if (el.pilote && el.pilote.trim() !== '') {
+            pilotesSet.add(el.pilote.trim());
         }
 
         if (el.diameter && el.diameter.trim() !== '') {
@@ -2725,6 +2736,13 @@ function getFilterDataGlobal() {
 
     const materials = Array.from(materialsSet).sort((a, b) => a.localeCompare(b, 'es'));
 
+    const pilotes = Array.from(pilotesSet).sort((a, b) => {
+        const na = parseInt(a, 10);
+        const nb = parseInt(b, 10);
+        if (!isNaN(na) && !isNaN(nb)) return na - nb;
+        return a.localeCompare(b, 'es');
+    });
+
     const asNumber = (v: string) => {
         const n = Number(String(v).replace(',', '.').replace(/[^\d.\-]/g, ''));
         return Number.isFinite(n) ? n : null;
@@ -2738,7 +2756,7 @@ function getFilterDataGlobal() {
         return a.localeCompare(b, 'es');
     });
 
-    return { tree, levels, materials, diameters };
+    return { tree, levels, materials, pilotes, diameters };
 }
 
 async function applyFiltersToViewerGlobal() {
@@ -2752,9 +2770,10 @@ async function applyFiltersToViewerGlobal() {
         const treeMatch = !isTreeFilterActive || selectedCategories.has(el.name) || selectedClassifications.has(el.classification);
         const levelMatch = selectedLevels.size === 0 || selectedLevels.has(el.level);
         const materialMatch = selectedMaterials.size === 0 || selectedMaterials.has(el.material);
+        const piloteMatch = selectedPilotes.size === 0 || selectedPilotes.has(el.pilote);
         const diameterMatch = !isSanitary || selectedDiameter === 'Todos' || el.diameter === selectedDiameter;
 
-        return treeMatch && levelMatch && materialMatch && diameterMatch;
+        return treeMatch && levelMatch && materialMatch && piloteMatch && diameterMatch;
     });
 
     const visibleSet = new Set(visibleElements.map(e => e.id));
@@ -2791,7 +2810,7 @@ async function applyFiltersToViewerGlobal() {
 }
 
 function renderIntegratedClassificationUI(container: HTMLElement) {
-    const { tree, levels, materials, diameters } = getFilterDataGlobal();
+    const { tree, levels, materials, pilotes, diameters } = getFilterDataGlobal();
     const isSanitary = isSanitaryModelGlobal();
 
     container.innerHTML = '';
@@ -3071,6 +3090,55 @@ function renderIntegratedClassificationUI(container: HTMLElement) {
         materialsContent.appendChild(materialsGrid);
         materialsSection.appendChild(materialsContent);
         wrapper.appendChild(materialsSection);
+    }
+
+    if (pilotes.length > 0) {
+        const pilotesSection = document.createElement('div');
+        pilotesSection.className = 'filter-section';
+
+        const pilotesHeader = document.createElement('div');
+        pilotesHeader.className = 'filter-section-header';
+        const isPilotesCollapsed = collapsedSections.has('pilotes');
+        if (isPilotesCollapsed) pilotesHeader.classList.add('collapsed');
+        pilotesHeader.innerHTML = `
+            <span>Número de Pilote</span>
+            <i class="fa-solid fa-chevron-down"></i>
+        `;
+        pilotesHeader.addEventListener('click', () => {
+            if (isPilotesCollapsed) collapsedSections.delete('pilotes');
+            else collapsedSections.add('pilotes');
+            renderIntegratedClassificationUI(container);
+        });
+        pilotesSection.appendChild(pilotesHeader);
+
+        const pilotesContent = document.createElement('div');
+        pilotesContent.className = 'filter-section-content';
+        if (isPilotesCollapsed) pilotesContent.classList.add('collapsed');
+
+        const pilotesGrid = document.createElement('div');
+        pilotesGrid.className = 'levels-grid';
+
+        for (const pil of pilotes) {
+            const pilBtn = document.createElement('button');
+            pilBtn.className = 'level-filter-btn';
+            if (selectedPilotes.has(pil)) pilBtn.classList.add('active');
+            pilBtn.textContent = pil;
+            pilBtn.title = `Pilote ${pil}`;
+            pilBtn.addEventListener('click', async () => {
+                if (selectedPilotes.has(pil)) {
+                    selectedPilotes.delete(pil);
+                } else {
+                    selectedPilotes.add(pil);
+                }
+                renderIntegratedClassificationUI(container);
+                await applyFiltersToViewerGlobal();
+            });
+            pilotesGrid.appendChild(pilBtn);
+        }
+
+        pilotesContent.appendChild(pilotesGrid);
+        pilotesSection.appendChild(pilotesContent);
+        wrapper.appendChild(pilotesSection);
     }
 
     if (isSanitary && diameters.length > 0) {
@@ -6408,6 +6476,9 @@ function initQuantitiesPanel() {
         if (selectedMaterials.size > 0) {
             filtered = filtered.filter(e => selectedMaterials.has(e.material));
         }
+        if (selectedPilotes.size > 0) {
+            filtered = filtered.filter(e => selectedPilotes.has(e.pilote));
+        }
 
         if (searchQuery.trim() !== '') {
             const q = searchQuery.toLowerCase();
@@ -8265,6 +8336,9 @@ function initStatusPanel() {
         }
         if (selectedMaterials.size > 0) {
             filtered = filtered.filter(e => selectedMaterials.has(e.material));
+        }
+        if (selectedPilotes.size > 0) {
+            filtered = filtered.filter(e => selectedPilotes.has(e.pilote));
         }
 
         if (searchQuery.trim() !== '') {
