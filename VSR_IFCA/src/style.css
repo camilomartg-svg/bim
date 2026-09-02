@@ -1967,15 +1967,15 @@ bim-label {
 
 /* CAD/BIM Green Square Snap Marker */
 .snap-square-marker {
-  position: absolute;
+  position: fixed;
   width: 16px;
   height: 16px;
   border: 2px solid #00FF00;
   background-color: rgba(0, 255, 0, 0.25);
-  box-shadow: 0 0 8px #00FF00, inset 0 0 4px #00FF00;
+  box-shadow: 0 0 10px #00FF00, inset 0 0 5px #00FF00;
   transform: translate(-50%, -50%);
   pointer-events: none;
-  z-index: 100000;
+  z-index: 999999;
   display: none;
   box-sizing: border-box;
   border-radius: 2px;
@@ -1986,8 +1986,8 @@ bim-label {
   position: absolute;
   top: 50%;
   left: 50%;
-  width: 2px;
-  height: 2px;
+  width: 4px;
+  height: 4px;
   background-color: #00FF00;
   transform: translate(-50%, -50%);
   border-radius: 50%;
@@ -1998,7 +1998,7 @@ bim-label {
   height: 14px;
   border-color: #FFEA00;
   background-color: rgba(255, 234, 0, 0.25);
-  box-shadow: 0 0 8px #FFEA00, inset 0 0 4px #FFEA00;
+  box-shadow: 0 0 10px #FFEA00, inset 0 0 5px #FFEA00;
   border-radius: 50%;
 }
 

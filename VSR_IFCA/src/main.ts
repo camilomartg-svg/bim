@@ -244,45 +244,45 @@ const updateSnapIndicator = (worldPoint: THREE.Vector3 | null, type: 'VERTEX' | 
         el = document.createElement('div');
         el.id = 'snap-indicator-2d';
         el.className = 'snap-square-marker';
-        const container = document.getElementById('viewer-container') || document.body;
-        container.appendChild(el);
+        document.body.appendChild(el);
+    }
+
+    if ((window as any).debugSphere) {
+        (window as any).debugSphere.visible = false;
+    }
+    if (typeof snappingCursor !== 'undefined' && snappingCursor) {
+        snappingCursor.visible = false;
     }
 
     if (!worldPoint || !world || !world.camera || !world.camera.three) {
         el.style.display = 'none';
-        if ((window as any).debugSphere) (window as any).debugSphere.visible = false;
-        if (typeof snappingCursor !== 'undefined' && snappingCursor) snappingCursor.visible = false;
         return;
     }
 
     const camera = world.camera.three;
-    const container = document.getElementById('viewer-container') || document.body;
-    const rect = container.getBoundingClientRect();
+    const container = document.getElementById('viewer-container');
+    const rect = container ? container.getBoundingClientRect() : document.body.getBoundingClientRect();
 
     const proj = worldPoint.clone().project(camera);
     if (proj.z > 1 || proj.z < -1) {
         el.style.display = 'none';
-        if ((window as any).debugSphere) (window as any).debugSphere.visible = false;
         return;
     }
 
-    const px = ((proj.x + 1) * rect.width) / 2;
-    const py = ((-proj.y + 1) * rect.height) / 2;
+    const screenX = ((proj.x + 1) / 2) * rect.width + rect.left;
+    const screenY = ((-proj.y + 1) / 2) * rect.height + rect.top;
 
-    el.style.left = `${px}px`;
-    el.style.top = `${py}px`;
+    el.style.position = 'fixed';
+    el.style.left = `${screenX}px`;
+    el.style.top = `${screenY}px`;
+    el.style.transform = 'translate(-50%, -50%)';
+    el.style.zIndex = '999999';
     el.style.display = 'block';
 
     if (type === 'VERTEX' || type === 'SECTION') {
         el.className = 'snap-square-marker vertex';
     } else {
         el.className = 'snap-square-marker edge';
-    }
-
-    if ((window as any).debugSphere) {
-        (window as any).debugSphere.position.copy(worldPoint);
-        (window as any).debugSphere.visible = true;
-        ((window as any).debugSphere.material as THREE.MeshBasicMaterial).color.setHex(type === 'EDGE' ? 0xffff00 : 0x00ff00);
     }
 };
 
@@ -336,7 +336,12 @@ const applyGlobalSnap = (intersects: THREE.Intersection[], mousePixelPos?: { x: 
         return intersects;
     }
 
-    const closest = intersects.find(i => i.object instanceof THREE.Mesh || i.object instanceof THREE.InstancedMesh);
+    const closest = intersects.find(i => {
+        if (!i.object) return false;
+        if (i.object === (window as any).debugSphere || i.object === snappingCursor || i.object.name === 'debugSphere' || (i.object as any).userData?.isHelper) return false;
+        return (i.object instanceof THREE.Mesh || i.object instanceof THREE.InstancedMesh);
+    });
+
     if (!closest || !closest.point || !closest.face) {
         updateSnapIndicator(null);
         return intersects;
@@ -350,13 +355,33 @@ const applyGlobalSnap = (intersects: THREE.Intersection[], mousePixelPos?: { x: 
             return intersects;
         }
 
+        const getVertexWorld = (idx: number) => {
+            const v = new THREE.Vector3();
+            if (idx >= 0 && idx < pos.count) {
+                v.fromBufferAttribute(pos, idx);
+                if (closest.object instanceof THREE.InstancedMesh && closest.instanceId !== undefined) {
+                    const instanceMatrix = new THREE.Matrix4();
+                    closest.object.getMatrixAt(closest.instanceId, instanceMatrix);
+                    v.applyMatrix4(instanceMatrix);
+                }
+                closest.object.updateMatrixWorld();
+                v.applyMatrix4(closest.object.matrixWorld);
+            }
+            return v;
+        };
+
+        const va = getVertexWorld(closest.face.a);
+        const vb = getVertexWorld(closest.face.b);
+        const vc = getVertexWorld(closest.face.c);
+
+        const candidatePool: THREE.Vector3[] = [va, vb, vc];
         const neighborVertices = getAllNeighborVertices(closest);
-        const coplanarVertices = getConnectedCoplanarVertices(closest);
-        const candidatePool: THREE.Vector3[] = [];
         neighborVertices.forEach(v => pushUniqueSnapPoint(candidatePool, v));
+
+        const coplanarVertices = getConnectedCoplanarVertices(closest);
         coplanarVertices.forEach(v => pushUniqueSnapPoint(candidatePool, v));
 
-        const sectionCandidates = getSectionSnapCandidates(candidatePool.slice(0, 3), closest.point);
+        const sectionCandidates = getSectionSnapCandidates([va, vb, vc], closest.point);
         sectionCandidates.forEach(v => pushUniqueSnapPoint(candidatePool, v));
 
         if (candidatePool.length === 0) {
@@ -365,57 +390,42 @@ const applyGlobalSnap = (intersects: THREE.Intersection[], mousePixelPos?: { x: 
         }
 
         const camera = world?.camera?.three;
-        const container = document.getElementById('viewer-container') || document.body;
-        const rect = container.getBoundingClientRect();
+        const container = document.getElementById('viewer-container');
+        const rect = container ? container.getBoundingClientRect() : document.body.getBoundingClientRect();
 
         let bestPoint: THREE.Vector3 | null = null;
         let bestType: 'VERTEX' | 'EDGE' | 'SECTION' = 'VERTEX';
-        let minPixelDist = 32;
-        let min3dDist = 0.25;
+        let minPixelDist = 30; // 30px screen-space snap radius
+        let min3dDist = 0.20;
 
         const mX = mousePixelPos ? mousePixelPos.x : (lastMousePixelPos ? lastMousePixelPos.x : null);
         const mY = mousePixelPos ? mousePixelPos.y : (lastMousePixelPos ? lastMousePixelPos.y : null);
 
-        for (const v of candidatePool) {
-            const d3d = v.distanceTo(closest.point);
+        for (const candidate of candidatePool) {
+            const d3d = candidate.distanceTo(closest.point);
             let pDist = Infinity;
 
             if (camera && mX !== null && mY !== null) {
-                const proj = v.clone().project(camera);
+                const proj = candidate.clone().project(camera);
                 if (proj.z <= 1 && proj.z >= -1) {
-                    const vx = ((proj.x + 1) * rect.width) / 2;
-                    const vy = ((-proj.y + 1) * rect.height) / 2;
-                    pDist = Math.hypot(mX - vx, mY - vy);
+                    const screenX = ((proj.x + 1) / 2) * rect.width + rect.left;
+                    const screenY = ((-proj.y + 1) / 2) * rect.height + rect.top;
+                    pDist = Math.hypot(mX - screenX, mY - screenY);
                 }
             }
 
             if (pDist <= minPixelDist) {
                 minPixelDist = pDist;
-                bestPoint = v;
-                bestType = sectionCandidates.includes(v) ? 'SECTION' : 'VERTEX';
+                bestPoint = candidate;
+                bestType = sectionCandidates.includes(candidate) ? 'SECTION' : 'VERTEX';
             } else if (mX === null && d3d < min3dDist) {
                 min3dDist = d3d;
-                bestPoint = v;
-                bestType = sectionCandidates.includes(v) ? 'SECTION' : 'VERTEX';
+                bestPoint = candidate;
+                bestType = sectionCandidates.includes(candidate) ? 'SECTION' : 'VERTEX';
             }
         }
 
         if (!bestPoint) {
-            const indices = [closest.face.a, closest.face.b, closest.face.c];
-            const getV = (idx: number) => {
-                const v = new THREE.Vector3().fromBufferAttribute(pos, idx);
-                if (closest.object instanceof THREE.InstancedMesh && closest.instanceId !== undefined) {
-                    const m = new THREE.Matrix4();
-                    closest.object.getMatrixAt(closest.instanceId, m);
-                    v.applyMatrix4(m);
-                }
-                closest.object.updateMatrixWorld();
-                v.applyMatrix4(closest.object.matrixWorld);
-                return v;
-            };
-            const va = getV(indices[0]);
-            const vb = getV(indices[1]);
-            const vc = getV(indices[2]);
             const edges = [
                 new THREE.Line3(va, vb),
                 new THREE.Line3(vb, vc),
@@ -423,7 +433,7 @@ const applyGlobalSnap = (intersects: THREE.Intersection[], mousePixelPos?: { x: 
             ];
 
             let bestEdgePoint: THREE.Vector3 | null = null;
-            let minEdgePixelDist = 20;
+            let minEdgePixelDist = 16;
             let minEdge3dDist = 0.08;
 
             for (const edge of edges) {
@@ -435,9 +445,9 @@ const applyGlobalSnap = (intersects: THREE.Intersection[], mousePixelPos?: { x: 
                 if (camera && mX !== null && mY !== null) {
                     const proj = target.clone().project(camera);
                     if (proj.z <= 1 && proj.z >= -1) {
-                        const vx = ((proj.x + 1) * rect.width) / 2;
-                        const vy = ((-proj.y + 1) * rect.height) / 2;
-                        pDist = Math.hypot(mX - vx, mY - vy);
+                        const screenX = ((proj.x + 1) / 2) * rect.width + rect.left;
+                        const screenY = ((-proj.y + 1) / 2) * rect.height + rect.top;
+                        pDist = Math.hypot(mX - screenX, mY - screenY);
                     }
                 }
 
@@ -499,10 +509,12 @@ const setupDebugSphere = (scene: THREE.Scene) => {
     if (debugSphere) return; // Already setup
     const geom = new THREE.SphereGeometry(0.3, 16, 16);
     const mat = new THREE.MeshBasicMaterial({ color: 0x00ff00, depthTest: false, transparent: true, opacity: 0.8 });
-    debugSphere = new THREE.Mesh(geom, mat); (window as any).debugSphere = debugSphere;
+    debugSphere = new THREE.Mesh(geom, mat);
+    debugSphere.raycast = () => {};
+    (debugSphere as any).userData = { isHelper: true };
+    (window as any).debugSphere = debugSphere;
     debugSphere.renderOrder = 9999;
     debugSphere.visible = false;
-    scene.add(debugSphere);
 
     // Also setup log
     const debugConsole = document.getElementById('debug-console');
@@ -771,33 +783,24 @@ grids.create(world);
 const baseUrl = import.meta.env.BASE_URL || './';
 
 
-// --- DEBUG VISUALIZATION ---
-const debugSphereGeom = new THREE.SphereGeometry(0.5, 32, 32); // Increased size for v21
-const debugSphereMat = new THREE.MeshBasicMaterial({ color: 0xff0000, depthTest: false, transparent: true, opacity: 0.8 });
-debugSphere = new THREE.Mesh(debugSphereGeom, debugSphereMat);
-(window as any).debugSphere = debugSphere; // CRITICAL FIX: Expose to global scope for applyGlobalSnap
-debugSphere.renderOrder = 999;
-debugSphere.visible = false;
-// Correctly add to the scene using the world object
-world.scene.three.add(debugSphere);
-
 // --- v29-SmartSnap: GLOBAL INDEPENDENT SNAPPING LOOP ---
 container.addEventListener('mousemove', (event) => {
     if (!world || !world.camera || !world.scene) return;
     const rect = container.getBoundingClientRect();
-    const pixelX = event.clientX - rect.left;
-    const pixelY = event.clientY - rect.top;
+    const pixelX = event.clientX;
+    const pixelY = event.clientY;
     lastMousePixelPos = { x: pixelX, y: pixelY };
 
-    const x = (pixelX / rect.width) * 2 - 1;
-    const y = -(pixelY / rect.height) * 2 + 1;
+    const normX = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+    const normY = -((event.clientY - rect.top) / rect.height) * 2 + 1;
 
     const tempRaycaster = new THREE.Raycaster();
-    tempRaycaster.setFromCamera(new THREE.Vector2(x, y), world.camera.three);
+    tempRaycaster.setFromCamera(new THREE.Vector2(normX, normY), world.camera.three);
 
     const candidates: THREE.Object3D[] = [];
     world.scene.three.traverse((child) => {
         if (child instanceof THREE.Mesh || child instanceof THREE.InstancedMesh) {
+            if (child.name === 'debugSphere' || child === (window as any).debugSphere || child === snappingCursor || (child as any).userData?.isHelper) return;
             candidates.push(child);
         }
     });
@@ -9692,6 +9695,8 @@ function setupMeasurementTools() {
         const cursorGeom = new THREE.SphereGeometry(0.15, 16, 16);
         const cursorMat = new THREE.MeshBasicMaterial({ color: 0xff00ff, transparent: true, opacity: 0.8, depthTest: false });
         snappingCursor = new THREE.Mesh(cursorGeom, cursorMat);
+        snappingCursor.raycast = () => {}; // Never raycast helper cursor
+        (snappingCursor as any).userData = { isHelper: true };
         snappingCursor.renderOrder = 2000;
         world.scene.three.add(snappingCursor);
         snappingCursor.visible = false;
@@ -10026,8 +10031,7 @@ async function onMeasureMouseMove(event: MouseEvent) {
 
     if (result && result.point) {
         if (snappingCursor) {
-            snappingCursor.position.copy(result.point);
-            snappingCursor.visible = true;
+            snappingCursor.visible = false;
         }
 
         // If we have a start point, draw a temp line to current cursor
