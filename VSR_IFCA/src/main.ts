@@ -2573,13 +2573,14 @@ async function applyFiltersToViewerGlobal() {
     if (allElements.length === 0) return;
 
     const isSanitary = isSanitaryModelGlobal();
+    const isTreeFilterActive = selectedClassifications.size > 0 || selectedCategories.size > 0;
+
     const visibleElements = allElements.filter(el => {
-        const classificationMatch = selectedClassifications.size === 0 || selectedClassifications.has(el.classification);
-        const categoryMatch = selectedCategories.size === 0 || selectedCategories.has(el.name);
+        const treeMatch = !isTreeFilterActive || selectedCategories.has(el.name) || selectedClassifications.has(el.classification);
         const levelMatch = selectedLevels.size === 0 || selectedLevels.has(el.level);
         const diameterMatch = !isSanitary || selectedDiameter === 'Todos' || el.diameter === selectedDiameter;
 
-        return classificationMatch && categoryMatch && levelMatch && diameterMatch;
+        return treeMatch && levelMatch && diameterMatch;
     });
 
     const visibleSet = new Set(visibleElements.map(e => e.id));
@@ -6055,11 +6056,9 @@ function initQuantitiesPanel() {
         let filtered = elements;
 
         // Apply global classification tree filters
-        if (selectedClassifications.size > 0) {
-            filtered = filtered.filter(e => selectedClassifications.has(e.classification));
-        }
-        if (selectedCategories.size > 0) {
-            filtered = filtered.filter(e => selectedCategories.has(e.name));
+        const isTreeFilterActive = selectedClassifications.size > 0 || selectedCategories.size > 0;
+        if (isTreeFilterActive) {
+            filtered = filtered.filter(e => selectedCategories.has(e.name) || selectedClassifications.has(e.classification));
         }
         if (selectedLevels.size > 0) {
             filtered = filtered.filter(e => selectedLevels.has(e.level));
@@ -7912,11 +7911,9 @@ function initStatusPanel() {
         let filtered = elements;
 
         // Apply global classification tree filters
-        if (selectedClassifications.size > 0) {
-            filtered = filtered.filter(e => selectedClassifications.has(e.classification));
-        }
-        if (selectedCategories.size > 0) {
-            filtered = filtered.filter(e => selectedCategories.has(e.name));
+        const isTreeFilterActive = selectedClassifications.size > 0 || selectedCategories.size > 0;
+        if (isTreeFilterActive) {
+            filtered = filtered.filter(e => selectedCategories.has(e.name) || selectedClassifications.has(e.classification));
         }
         if (selectedLevels.size > 0) {
             filtered = filtered.filter(e => selectedLevels.has(e.level));
