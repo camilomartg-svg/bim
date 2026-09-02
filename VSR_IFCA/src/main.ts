@@ -236,119 +236,235 @@ const getConnectedCoplanarVertices = (intersection: THREE.Intersection): THREE.V
     return worldVertices;
 };
 
-const applyGlobalSnap = (intersects: THREE.Intersection[]) => {
-    if (!intersects || intersects.length === 0) return intersects;
+let lastMousePixelPos: { x: number; y: number } | null = null;
+
+const updateSnapIndicator = (worldPoint: THREE.Vector3 | null, type: 'VERTEX' | 'EDGE' | 'SECTION' = 'VERTEX') => {
+    let el = document.getElementById('snap-indicator-2d');
+    if (!el) {
+        el = document.createElement('div');
+        el.id = 'snap-indicator-2d';
+        el.className = 'snap-square-marker';
+        const container = document.getElementById('viewer-container') || document.body;
+        container.appendChild(el);
+    }
+
+    if (!worldPoint || !world || !world.camera || !world.camera.three) {
+        el.style.display = 'none';
+        if ((window as any).debugSphere) (window as any).debugSphere.visible = false;
+        if (typeof snappingCursor !== 'undefined' && snappingCursor) snappingCursor.visible = false;
+        return;
+    }
+
+    const camera = world.camera.three;
+    const container = document.getElementById('viewer-container') || document.body;
+    const rect = container.getBoundingClientRect();
+
+    const proj = worldPoint.clone().project(camera);
+    if (proj.z > 1 || proj.z < -1) {
+        el.style.display = 'none';
+        if ((window as any).debugSphere) (window as any).debugSphere.visible = false;
+        return;
+    }
+
+    const px = ((proj.x + 1) * rect.width) / 2;
+    const py = ((-proj.y + 1) * rect.height) / 2;
+
+    el.style.left = `${px}px`;
+    el.style.top = `${py}px`;
+    el.style.display = 'block';
+
+    if (type === 'VERTEX' || type === 'SECTION') {
+        el.className = 'snap-square-marker vertex';
+    } else {
+        el.className = 'snap-square-marker edge';
+    }
+
+    if ((window as any).debugSphere) {
+        (window as any).debugSphere.position.copy(worldPoint);
+        (window as any).debugSphere.visible = true;
+        ((window as any).debugSphere.material as THREE.MeshBasicMaterial).color.setHex(type === 'EDGE' ? 0xffff00 : 0x00ff00);
+    }
+};
+
+const getAllNeighborVertices = (intersection: THREE.Intersection): THREE.Vector3[] => {
+    if (!intersection.face) return [];
+    const geom = (intersection.object as any)?.geometry as THREE.BufferGeometry | undefined;
+    const pos = geom?.attributes?.position;
+    if (!geom || !pos) return [];
+
+    const cache = getSnapTriangleCache(geom);
+    if (!cache) return [];
+
+    const seedIndices = [intersection.face.a, intersection.face.b, intersection.face.c];
+    const neighborTriangles = new Set<number>();
+    for (const idx of seedIndices) {
+        const list = cache.vertexToTriangles.get(idx) || [];
+        for (const triIdx of list) neighborTriangles.add(triIdx);
+    }
+
+    const collectedIndices = new Set<number>(seedIndices);
+    for (const triIdx of neighborTriangles) {
+        const tri = cache.triangles[triIdx];
+        if (tri) {
+            for (const idx of tri.indices) collectedIndices.add(idx);
+        }
+    }
+
+    const worldVertices: THREE.Vector3[] = [];
+    const transformVertex = (idx: number) => {
+        const v = new THREE.Vector3().fromBufferAttribute(pos, idx);
+        if (intersection.object instanceof THREE.InstancedMesh && intersection.instanceId !== undefined) {
+            const instanceMatrix = new THREE.Matrix4();
+            intersection.object.getMatrixAt(intersection.instanceId, instanceMatrix);
+            v.applyMatrix4(instanceMatrix);
+        }
+        intersection.object.updateMatrixWorld();
+        v.applyMatrix4(intersection.object.matrixWorld);
+        return v;
+    };
+
+    for (const idx of collectedIndices) {
+        pushUniqueSnapPoint(worldVertices, transformVertex(idx));
+    }
+
+    return worldVertices;
+};
+
+const applyGlobalSnap = (intersects: THREE.Intersection[], mousePixelPos?: { x: number; y: number }) => {
+    if (!intersects || intersects.length === 0) {
+        updateSnapIndicator(null);
+        return intersects;
+    }
 
     const closest = intersects.find(i => i.object instanceof THREE.Mesh || i.object instanceof THREE.InstancedMesh);
-    if (!closest) return intersects;
+    if (!closest || !closest.point || !closest.face) {
+        updateSnapIndicator(null);
+        return intersects;
+    }
 
     try {
-        const VERTEX_THRESHOLD = 0.18;
-        const EDGE_THRESHOLD = 0.08;
+        const geom = (closest.object as any).geometry;
+        const pos = geom?.attributes?.position;
+        if (!pos) {
+            updateSnapIndicator(null);
+            return intersects;
+        }
 
-        if (closest.face && (closest.object as any).geometry) {
-            const geom = (closest.object as any).geometry;
-            const pos = geom.attributes.position;
+        const neighborVertices = getAllNeighborVertices(closest);
+        const coplanarVertices = getConnectedCoplanarVertices(closest);
+        const candidatePool: THREE.Vector3[] = [];
+        neighborVertices.forEach(v => pushUniqueSnapPoint(candidatePool, v));
+        coplanarVertices.forEach(v => pushUniqueSnapPoint(candidatePool, v));
 
-            if (pos) {
-                const a = closest.face.a;
-                const b = closest.face.b;
-                const c = closest.face.c;
+        const sectionCandidates = getSectionSnapCandidates(candidatePool.slice(0, 3), closest.point);
+        sectionCandidates.forEach(v => pushUniqueSnapPoint(candidatePool, v));
 
-                const getV = (idx: number) => {
-                    const v = new THREE.Vector3();
-                    v.fromBufferAttribute(pos, idx);
-                    if (closest.object instanceof THREE.InstancedMesh && closest.instanceId !== undefined) {
-                        const m = new THREE.Matrix4();
-                        closest.object.getMatrixAt(closest.instanceId, m);
-                        v.applyMatrix4(m);
-                    }
-                    closest.object.updateMatrixWorld();
-                    v.applyMatrix4(closest.object.matrixWorld);
-                    return v;
-                };
+        if (candidatePool.length === 0) {
+            updateSnapIndicator(null);
+            return intersects;
+        }
 
-                const va = getV(a);
-                const vb = getV(b);
-                const vc = getV(c);
-                const coplanarVertices = getConnectedCoplanarVertices(closest);
+        const camera = world?.camera?.three;
+        const container = document.getElementById('viewer-container') || document.body;
+        const rect = container.getBoundingClientRect();
 
-                let bestPoint: THREE.Vector3 | null = null;
-                let minD = Infinity;
-                let type = '';
+        let bestPoint: THREE.Vector3 | null = null;
+        let bestType: 'VERTEX' | 'EDGE' | 'SECTION' = 'VERTEX';
+        let minPixelDist = 32;
+        let min3dDist = 0.25;
 
-                // 1. Check Vertices
-                const vertexPool = coplanarVertices.length > 0 ? coplanarVertices : [va, vb, vc];
-                vertexPool.forEach(v => {
-                    const d = v.distanceTo(closest.point);
-                    if (d < minD) {
-                        minD = d;
-                        bestPoint = v;
-                        type = 'VERTEX';
-                    }
-                });
+        const mX = mousePixelPos ? mousePixelPos.x : (lastMousePixelPos ? lastMousePixelPos.x : null);
+        const mY = mousePixelPos ? mousePixelPos.y : (lastMousePixelPos ? lastMousePixelPos.y : null);
 
-                // Only stick to vertex if within threshold
-                if (minD > VERTEX_THRESHOLD) {
-                    // 2. Check Edges if vertex is too far
-                    // Edges: va-vb, vb-vc, vc-va
-                    const edges = [
-                        new THREE.Line3(va, vb),
-                        new THREE.Line3(vb, vc),
-                        new THREE.Line3(vc, va)
-                    ];
+        for (const v of candidatePool) {
+            const d3d = v.distanceTo(closest.point);
+            let pDist = Infinity;
 
-                    let bestEdgeDist = Infinity;
-                    let bestEdgePoint: THREE.Vector3 | null = null;
-
-                    edges.forEach(edge => {
-                        const target = new THREE.Vector3();
-                        edge.closestPointToPoint(closest.point, true, target);
-                        const d = target.distanceTo(closest.point);
-                        if (d < bestEdgeDist) {
-                            bestEdgeDist = d;
-                            bestEdgePoint = target;
-                        }
-                    });
-
-                    if (bestEdgeDist < EDGE_THRESHOLD) {
-                        bestPoint = bestEdgePoint;
-                        minD = bestEdgeDist;
-                        type = 'EDGE';
-                    } else {
-                        // Reset if neither match
-                        bestPoint = null;
-                    }
-                }
-
-                if (bestPoint) {
-                    closest.point.copy(bestPoint);
-
-                    // Visual Update
-                    if ((window as any).debugSphere) {
-                        (window as any).debugSphere.position.copy(bestPoint);
-                        (window as any).debugSphere.visible = true;
-
-                        // Color Code: Green = Vertex, Yellow = Edge
-                        if (type === 'VERTEX') {
-                            ((window as any).debugSphere.material as THREE.MeshBasicMaterial).color.setHex(0x00ff00);
-                            (window as any).debugSphere.scale.set(1, 1, 1);
-                        } else {
-                            ((window as any).debugSphere.material as THREE.MeshBasicMaterial).color.setHex(0xffff00);
-                            (window as any).debugSphere.scale.set(0.5, 0.5, 0.5);
-                        }
-                    }
-
-                    if ((window as any).debugLog && Math.random() < 0.05) {
-                        (window as any).debugLog(`Snap: ${type} (${minD.toFixed(3)})`);
-                    }
-                } else {
-                    if ((window as any).debugSphere) (window as any).debugSphere.visible = false;
+            if (camera && mX !== null && mY !== null) {
+                const proj = v.clone().project(camera);
+                if (proj.z <= 1 && proj.z >= -1) {
+                    const vx = ((proj.x + 1) * rect.width) / 2;
+                    const vy = ((-proj.y + 1) * rect.height) / 2;
+                    pDist = Math.hypot(mX - vx, mY - vy);
                 }
             }
+
+            if (pDist <= minPixelDist) {
+                minPixelDist = pDist;
+                bestPoint = v;
+                bestType = sectionCandidates.includes(v) ? 'SECTION' : 'VERTEX';
+            } else if (mX === null && d3d < min3dDist) {
+                min3dDist = d3d;
+                bestPoint = v;
+                bestType = sectionCandidates.includes(v) ? 'SECTION' : 'VERTEX';
+            }
+        }
+
+        if (!bestPoint) {
+            const indices = [closest.face.a, closest.face.b, closest.face.c];
+            const getV = (idx: number) => {
+                const v = new THREE.Vector3().fromBufferAttribute(pos, idx);
+                if (closest.object instanceof THREE.InstancedMesh && closest.instanceId !== undefined) {
+                    const m = new THREE.Matrix4();
+                    closest.object.getMatrixAt(closest.instanceId, m);
+                    v.applyMatrix4(m);
+                }
+                closest.object.updateMatrixWorld();
+                v.applyMatrix4(closest.object.matrixWorld);
+                return v;
+            };
+            const va = getV(indices[0]);
+            const vb = getV(indices[1]);
+            const vc = getV(indices[2]);
+            const edges = [
+                new THREE.Line3(va, vb),
+                new THREE.Line3(vb, vc),
+                new THREE.Line3(vc, va)
+            ];
+
+            let bestEdgePoint: THREE.Vector3 | null = null;
+            let minEdgePixelDist = 20;
+            let minEdge3dDist = 0.08;
+
+            for (const edge of edges) {
+                const target = new THREE.Vector3();
+                edge.closestPointToPoint(closest.point, true, target);
+                const d3d = target.distanceTo(closest.point);
+                let pDist = Infinity;
+
+                if (camera && mX !== null && mY !== null) {
+                    const proj = target.clone().project(camera);
+                    if (proj.z <= 1 && proj.z >= -1) {
+                        const vx = ((proj.x + 1) * rect.width) / 2;
+                        const vy = ((-proj.y + 1) * rect.height) / 2;
+                        pDist = Math.hypot(mX - vx, mY - vy);
+                    }
+                }
+
+                if (pDist <= minEdgePixelDist) {
+                    minEdgePixelDist = pDist;
+                    bestEdgePoint = target;
+                } else if (mX === null && d3d < minEdge3dDist) {
+                    minEdge3dDist = d3d;
+                    bestEdgePoint = target;
+                }
+            }
+
+            if (bestEdgePoint) {
+                bestPoint = bestEdgePoint;
+                bestType = 'EDGE';
+            }
+        }
+
+        if (bestPoint) {
+            closest.point.copy(bestPoint);
+            updateSnapIndicator(bestPoint, bestType);
+        } else {
+            updateSnapIndicator(null);
         }
     } catch (e) {
         console.error("Snap Error", e);
+        updateSnapIndicator(null);
     }
 
     return intersects;
@@ -669,13 +785,16 @@ world.scene.three.add(debugSphere);
 container.addEventListener('mousemove', (event) => {
     if (!world || !world.camera || !world.scene) return;
     const rect = container.getBoundingClientRect();
-    const x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
-    const y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+    const pixelX = event.clientX - rect.left;
+    const pixelY = event.clientY - rect.top;
+    lastMousePixelPos = { x: pixelX, y: pixelY };
+
+    const x = (pixelX / rect.width) * 2 - 1;
+    const y = -(pixelY / rect.height) * 2 + 1;
 
     const tempRaycaster = new THREE.Raycaster();
     tempRaycaster.setFromCamera(new THREE.Vector2(x, y), world.camera.three);
 
-    // NUCLEAR DEBUG: Raycast against EVERYTHING in scene
     const candidates: THREE.Object3D[] = [];
     world.scene.three.traverse((child) => {
         if (child instanceof THREE.Mesh || child instanceof THREE.InstancedMesh) {
@@ -683,14 +802,17 @@ container.addEventListener('mousemove', (event) => {
         }
     });
 
-    if (candidates.length === 0) return;
+    if (candidates.length === 0) {
+        updateSnapIndicator(null);
+        return;
+    }
 
     const intersects = tempRaycaster.intersectObjects(candidates, true);
 
     if (intersects.length > 0) {
-        applyGlobalSnap([intersects[0]]);
+        applyGlobalSnap([intersects[0]], { x: pixelX, y: pixelY });
     } else {
-        if (debugSphere) debugSphere.visible = false;
+        updateSnapIndicator(null);
     }
 });
 
@@ -732,126 +854,13 @@ const simpleRaycaster = raycasters.get(world);
 
 const originalCastRayToObjects = simpleRaycaster.castRayToObjects.bind(simpleRaycaster);
 
-// Helper to perform Vertex/Edge snapping on a raw intersection
 const applySnappingToIntersection = (valid: THREE.Intersection | null) => {
-    // Debug logging for raycast attempts (throttle to avoid spam if needed, but we need to see if it fires)
-    // if (window.debugLog && Math.random() < 0.1) window.debugLog("Raycast hit checking...");
-
     if (!valid || !valid.point) {
-        if (debugSphere) debugSphere.visible = false;
+        updateSnapIndicator(null);
         return valid;
     }
-
-    try {
-        // Section/vertex-first snapping: prefer section corners on active cuts,
-        // then exact mesh corners, then edges as fallback.
-        // NOTE: Threshold is in world units (meters in typical IFC scenes).
-        const SNAP_SECTION_THRESHOLD = 0.08;
-        const SNAP_VERTEX_THRESHOLD = 0.12;
-        const SNAP_EDGE_THRESHOLD = 0.025;
-
-        if (valid.face && (valid.object instanceof THREE.Mesh || valid.object instanceof THREE.InstancedMesh)) {
-            const geom = (valid.object as any).geometry;
-            if (!geom || !geom.attributes.position) return valid;
-
-            const pos = geom.attributes.position;
-            const indices = [valid.face.a, valid.face.b, valid.face.c];
-
-            // Helper to get world coordinates
-            const getVertexWorld = (idx: number) => {
-                const tempV = new THREE.Vector3();
-                if (idx >= 0 && idx < pos.count) {
-                    tempV.fromBufferAttribute(pos, idx);
-                    if (valid.object instanceof THREE.InstancedMesh && valid.instanceId !== undefined) {
-                        const instanceMatrix = new THREE.Matrix4();
-                        valid.object.getMatrixAt(valid.instanceId, instanceMatrix);
-                        tempV.applyMatrix4(instanceMatrix);
-                    }
-                    // Ensure World Matrix is up to date
-                    valid.object.updateMatrixWorld();
-                    tempV.applyMatrix4(valid.object.matrixWorld);
-                }
-                return tempV;
-            };
-
-            const va = getVertexWorld(indices[0]);
-            const vb = getVertexWorld(indices[1]);
-            const vc = getVertexWorld(indices[2]);
-            const coplanarVertices = getConnectedCoplanarVertices(valid);
-            const vertexPool = coplanarVertices.length > 0 ? coplanarVertices : [va, vb, vc];
-            const sectionCandidates = getSectionSnapCandidates(vertexPool.slice(0, 3), valid.point);
-            let closestSection: THREE.Vector3 | null = null;
-            let minSectionDist = SNAP_SECTION_THRESHOLD;
-            for (const candidate of sectionCandidates) {
-                const dist = candidate.distanceTo(valid.point);
-                if (dist < minSectionDist) {
-                    minSectionDist = dist;
-                    closestSection = candidate;
-                }
-            }
-
-            let closestVertex: THREE.Vector3 | null = null;
-            let minDist = SNAP_VERTEX_THRESHOLD;
-
-            // Check only the 3 vertices of the hit triangle
-            for (const vertex of vertexPool) {
-                const dist = vertex.distanceTo(valid.point); // 3D Distance
-
-                // Debug distance
-                // if (window.debugLog) window.debugLog(`Dist to v${idx}: ${dist.toFixed(3)}`);
-
-                if (dist < minDist) {
-                    minDist = dist;
-                    closestVertex = vertex;
-                }
-            }
-
-            if (closestSection && minSectionDist <= SNAP_SECTION_THRESHOLD) {
-                valid.point.copy(closestSection);
-                return valid;
-            }
-
-            if (closestVertex && minDist <= SNAP_VERTEX_THRESHOLD) {
-                valid.point.copy(closestVertex);
-
-                // Visual Debug
-                if (typeof debugSphere !== 'undefined') {
-                    debugSphere.position.copy(closestVertex);
-                    debugSphere.visible = true;
-                    debugSphere.material.color.setHex(0x00ff00); // Green for Snap
-                    debugSphere.scale.set(0.8, 0.8, 0.8); // Big sphere
-                }
-
-                if (window.debugLog) window.debugLog(`SNAP! Vertex (Dist: ${minDist.toFixed(3)})`);
-            } else {
-                // Edge fallback if neither section corner nor vertex is within threshold.
-                const edges = [
-                    new THREE.Line3(va, vb),
-                    new THREE.Line3(vb, vc),
-                    new THREE.Line3(vc, va)
-                ];
-                let bestEdgeDist = Infinity;
-                let bestEdgePoint: THREE.Vector3 | null = null;
-                for (const edge of edges) {
-                    const target = new THREE.Vector3();
-                    edge.closestPointToPoint(valid.point, true, target);
-                    const d = target.distanceTo(valid.point);
-                    if (d < bestEdgeDist) {
-                        bestEdgeDist = d;
-                        bestEdgePoint = target;
-                    }
-                }
-                if (bestEdgePoint && bestEdgeDist <= SNAP_EDGE_THRESHOLD) {
-                    valid.point.copy(bestEdgePoint);
-                }
-                if (typeof debugSphere !== 'undefined') debugSphere.visible = false;
-            }
-        }
-    } catch (e) {
-        console.warn("Snapping failed:", e);
-        if (window.debugLog) window.debugLog(`Snap Error: ${e}`);
-    }
-    return valid;
+    const res = applyGlobalSnap([valid]);
+    return res && res.length > 0 ? res[0] : valid;
 };
 
 // Override castRayToObjects
