@@ -126,4 +126,91 @@
             console.log('nora BIM PWA instalada con éxito.');
         });
     });
+
+    // 3. Centralized Traffic & GeoIP Logger
+    (async function initTrafficTracker() {
+        try {
+            const lastTrackTime = sessionStorage.getItem('nora_last_traffic_track');
+            const now = Date.now();
+            // Throttle duplicate tracking within 10 seconds in same session
+            if (lastTrackTime && (now - parseInt(lastTrackTime, 10)) < 10000) {
+                return;
+            }
+            sessionStorage.setItem('nora_last_traffic_track', now.toString());
+
+            let userEmail = 'Anónimo';
+            let userRole = 'Visitante';
+            try {
+                const ua = JSON.parse(sessionStorage.getItem('userAccount') || localStorage.getItem('userAccount') || 'null');
+                if (ua) {
+                    userEmail = ua.username || ua.email || 'Usuario Registrado';
+                    userRole = ua.role || 'MIEMBRO';
+                }
+            } catch(e) {}
+
+            let geoData = { ip: '181.135.24.102', city: 'Bogotá', region: 'Cundinamarca', country_name: 'Colombia', country_code: 'CO', latitude: 4.6097, longitude: -74.0817 };
+            try {
+                const controller = new AbortController();
+                const timeoutId = setTimeout(() => controller.abort(), 3000);
+                const res = await fetch('https://ipapi.co/json/', { signal: controller.signal });
+                clearTimeout(timeoutId);
+                if (res.ok) {
+                    const data = await res.json();
+                    if (data.ip) {
+                        geoData = data;
+                    }
+                }
+            } catch(e) {
+                try {
+                    const res2 = await fetch('https://ip-api.com/json/');
+                    if (res2.ok) {
+                        const data2 = await res2.json();
+                        if (data2.query) {
+                            geoData = {
+                                ip: data2.query,
+                                city: data2.city || 'Bogotá',
+                                region: data2.regionName || '',
+                                country_name: data2.country || 'Colombia',
+                                country_code: data2.countryCode || 'CO',
+                                latitude: data2.lat || 4.6,
+                                longitude: data2.lon || -74.08
+                            };
+                        }
+                    }
+                } catch(e2) {}
+            }
+
+            const visitLog = {
+                id: 'log_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5),
+                ip: geoData.ip || 'Desconocida',
+                city: geoData.city || 'Bogotá',
+                region: geoData.region || '',
+                country: geoData.country_name || 'Colombia',
+                countryCode: geoData.country_code || 'CO',
+                latitude: geoData.latitude || 4.6097,
+                longitude: geoData.longitude || -74.0817,
+                page: window.location.pathname.split('/').pop() || 'index.html',
+                pageTitle: document.title || 'nora BIM',
+                timestamp: new Date().toISOString(),
+                userAgent: navigator.userAgent,
+                userEmail: userEmail,
+                userRole: userRole
+            };
+
+            const existingLogs = JSON.parse(localStorage.getItem('nora_traffic_logs') || '[]');
+            existingLogs.unshift(visitLog);
+            if (existingLogs.length > 500) existingLogs.pop();
+            localStorage.setItem('nora_traffic_logs', JSON.stringify(existingLogs));
+
+            fetch('https://script.google.com/macros/s/AKfycbx2RAQx_8K4o22xE0Mw-ETc7K_58vIoi6-PgVi64u80inuiw144ks3cgWSdCtXqIgB02g/exec?action=logTraffic', {
+                method: 'POST',
+                mode: 'no-cors',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(visitLog)
+            }).catch(() => {});
+
+        } catch (err) {
+            console.warn('Traffic tracking silent notice:', err);
+        }
+    })();
 })();

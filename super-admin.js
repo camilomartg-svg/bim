@@ -3008,22 +3008,25 @@ window.switchGlobalView = function(viewName) {
     const usuariosView = document.getElementById('usuarios-view');
     const proyectosView = document.getElementById('proyectos-view');
     const noraAiView = document.getElementById('nora-ai-view');
+    const trafficView = document.getElementById('traffic-view');
 
     const tabEmpresas = document.getElementById('tab-empresas');
     const tabUsuarios = document.getElementById('tab-usuarios');
     const tabProyectos = document.getElementById('tab-proyectos-global');
     const tabNoraAi = document.getElementById('tab-nora-ai');
+    const tabTraffic = document.getElementById('tab-traffic');
 
     // Hide all views
     if(empresasView) empresasView.classList.add('hidden');
     if(usuariosView) { usuariosView.classList.add('hidden'); }
     if(proyectosView) proyectosView.classList.add('hidden');
     if(noraAiView) noraAiView.classList.add('hidden');
+    if(trafficView) trafficView.classList.add('hidden');
 
     const defaultBtnClass = "px-5 py-2 rounded-lg text-sm font-bold text-slate-500 hover:text-slate-700 transition-all flex items-center gap-2";
     const activeBtnClass = "px-5 py-2 rounded-lg text-sm font-bold bg-white text-slate-800 shadow-sm transition-all flex items-center gap-2";
 
-    [tabEmpresas, tabUsuarios, tabProyectos, tabNoraAi].forEach(btn => {
+    [tabEmpresas, tabUsuarios, tabProyectos, tabNoraAi, tabTraffic].forEach(btn => {
         if(btn) btn.className = defaultBtnClass;
     });
 
@@ -3051,6 +3054,13 @@ window.switchGlobalView = function(viewName) {
         }
         if(tabNoraAi) tabNoraAi.className = activeBtnClass;
         if(window.initNoraAITrainingModule) window.initNoraAITrainingModule();
+    } else if (viewName === 'traffic') {
+        if(trafficView) {
+            trafficView.classList.remove('hidden');
+            trafficView.classList.add('flex');
+        }
+        if(tabTraffic) tabTraffic.className = activeBtnClass;
+        if(window.renderTrafficModule) window.renderTrafficModule();
     }
 };
 
@@ -3282,5 +3292,245 @@ window.runSandboxQuery = function() {
 
     if (jsonOutput) {
         jsonOutput.textContent = JSON.stringify({ query, actionMatched: action, categoriesDetected: categoriesMatched }, null, 2);
+    }
+};
+
+// ==========================================
+// MÓDULO: SUPER ADMINISTRACIÓN - TRÁFICO Y GEOLOCALIZACIÓN IP
+// ==========================================
+
+let trafficMapInstance = null;
+
+const DEFAULT_DEMO_TRAFFIC_LOGS = [
+    { id: 'log_1', ip: '181.135.24.102', city: 'Bogotá', region: 'Cundinamarca', country: 'Colombia', countryCode: 'CO', latitude: 4.6097, longitude: -74.0817, page: 'index.html', pageTitle: 'nora BIM | CDE', timestamp: new Date(Date.now() - 1000 * 60 * 5).toISOString(), userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/128.0.0.0', userEmail: 'imagina3ddesign@gmail.com', userRole: 'SUPER_ADMINISTRADOR' },
+    { id: 'log_2', ip: '190.157.88.45', city: 'Medellín', region: 'Antioquia', country: 'Colombia', countryCode: 'CO', latitude: 6.2442, longitude: -75.5812, page: 'home.html', pageTitle: 'Portal Proyectos', timestamp: new Date(Date.now() - 1000 * 60 * 18).toISOString(), userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) Safari/605.1.15', userEmail: 'camilo@constructora.com', userRole: 'ADMINISTRADOR_EMPRESA' },
+    { id: 'log_3', ip: '186.28.140.12', city: 'Cali', region: 'Valle del Cauca', country: 'Colombia', countryCode: 'CO', latitude: 3.4516, longitude: -76.5320, page: 'VSR_IFCA/index.html', pageTitle: 'Visor 3D IFC', timestamp: new Date(Date.now() - 1000 * 60 * 42).toISOString(), userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/127.0.0.0', userEmail: 'obras@horizonte.co', userRole: 'MIEMBRO' },
+    { id: 'log_4', ip: '189.203.45.67', city: 'Ciudad de México', region: 'CDMX', country: 'México', countryCode: 'MX', latitude: 19.4326, longitude: -99.1332, page: 'index.html', pageTitle: 'nora BIM | CDE', timestamp: new Date(Date.now() - 1000 * 60 * 95).toISOString(), userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) Mobile/15E148', userEmail: 'contacto@bim-mexico.mx', userRole: 'INVITADO' },
+    { id: 'log_5', ip: '88.12.190.33', city: 'Madrid', region: 'Comunidad de Madrid', country: 'España', countryCode: 'ES', latitude: 40.4168, longitude: -3.7038, page: 'inse.html', pageTitle: 'Registro nora', timestamp: new Date(Date.now() - 1000 * 60 * 140).toISOString(), userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Edge/126.0.0.0', userEmail: 'pedro@arquitectos.es', userRole: 'VISOR' },
+    { id: 'log_6', ip: '172.56.21.90', city: 'Miami', region: 'Florida', country: 'Estados Unidos', countryCode: 'US', latitude: 25.7617, longitude: -80.1918, page: 'index.html', pageTitle: 'nora BIM | CDE', timestamp: new Date(Date.now() - 1000 * 60 * 230).toISOString(), userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) Chrome/128.0.0.0', userEmail: 'info@us-build.com', userRole: 'INVITADO' },
+    { id: 'log_7', ip: '181.168.12.44', city: 'Buenos Aires', region: 'CABA', country: 'Argentina', countryCode: 'AR', latitude: -34.6037, longitude: -58.3816, page: 'home.html', pageTitle: 'Portal Proyectos', timestamp: new Date(Date.now() - 1000 * 60 * 310).toISOString(), userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/126.0.0.0', userEmail: 'marcelo@ingenieria.ar', userRole: 'MIEMBRO' }
+];
+
+window.getTrafficLogs = function() {
+    let logs = [];
+    try {
+        logs = JSON.parse(localStorage.getItem('nora_traffic_logs') || '[]');
+    } catch(e) {}
+    if (!logs || logs.length === 0) {
+        logs = DEFAULT_DEMO_TRAFFIC_LOGS;
+        localStorage.setItem('nora_traffic_logs', JSON.stringify(logs));
+    }
+    return logs;
+};
+
+function getCountryFlagEmoji(countryCode) {
+    if (!countryCode || countryCode.length !== 2) return '🌐';
+    const codePoints = countryCode
+        .toUpperCase()
+        .split('')
+        .map(char => 127397 + char.charCodeAt(0));
+    return String.fromCodePoint(...codePoints);
+}
+
+function parseBrowserOS(ua) {
+    if (!ua) return 'Desconocido';
+    let os = 'OS Desconocido';
+    if (ua.includes('Windows')) os = 'Windows';
+    else if (ua.includes('Macintosh') || ua.includes('Mac OS')) os = 'macOS';
+    else if (ua.includes('Android')) os = 'Android';
+    else if (ua.includes('iPhone') || ua.includes('iPad')) os = 'iOS';
+    else if (ua.includes('Linux')) os = 'Linux';
+
+    let browser = 'Navegador';
+    if (ua.includes('Edg/')) browser = 'Edge';
+    else if (ua.includes('Chrome/')) browser = 'Chrome';
+    else if (ua.includes('Safari/') && !ua.includes('Chrome')) browser = 'Safari';
+    else if (ua.includes('Firefox/')) browser = 'Firefox';
+
+    return `${browser} (${os})`;
+}
+
+window.renderTrafficModule = function() {
+    const logs = window.getTrafficLogs();
+
+    // 1. KPI Stats
+    const totalVisitsEl = document.getElementById('stat-total-visits');
+    const todayVisitsEl = document.getElementById('stat-today-visits');
+    const uniqueIpsEl = document.getElementById('stat-unique-ips');
+    const uniqueCountriesEl = document.getElementById('stat-unique-countries');
+
+    const todayStr = new Date().toISOString().slice(0, 10);
+    const todayCount = logs.filter(l => (l.timestamp || '').startsWith(todayStr)).length;
+    const uniqueIPs = new Set(logs.map(l => l.ip)).size;
+    const uniqueCountries = new Set(logs.map(l => l.country || 'Desconocido')).size;
+
+    if (totalVisitsEl) totalVisitsEl.textContent = logs.length.toLocaleString();
+    if (todayVisitsEl) todayVisitsEl.textContent = todayCount.toLocaleString();
+    if (uniqueIpsEl) uniqueIpsEl.textContent = uniqueIPs.toLocaleString();
+    if (uniqueCountriesEl) uniqueCountriesEl.textContent = uniqueCountries.toLocaleString();
+
+    // 2. Render Top Countries & Cities
+    const countryMap = {};
+    logs.forEach(l => {
+        const key = (l.city ? `${l.city}, ` : '') + (l.country || 'Desconocido');
+        const code = l.countryCode || 'CO';
+        if (!countryMap[key]) countryMap[key] = { count: 0, flag: getCountryFlagEmoji(code), country: l.country };
+        countryMap[key].count++;
+    });
+
+    const sortedLocations = Object.entries(countryMap).sort((a, b) => b[1].count - a[1].count);
+    const topContainer = document.getElementById('traffic-top-countries');
+
+    if (topContainer) {
+        topContainer.innerHTML = sortedLocations.slice(0, 8).map(([locName, data]) => {
+            const pct = Math.round((data.count / logs.length) * 100);
+            return `
+                <div class="space-y-1">
+                    <div class="flex justify-between items-center text-xs font-semibold text-slate-700">
+                        <span class="flex items-center gap-1.5 truncate">
+                            <span class="text-base">${data.flag}</span>
+                            <span class="truncate">${locName}</span>
+                        </span>
+                        <span class="text-slate-500 font-bold text-[11px]">${data.count} accesos (${pct}%)</span>
+                    </div>
+                    <div class="w-full bg-slate-100 rounded-full h-2 overflow-hidden">
+                        <div class="bg-blue-600 h-2 rounded-full transition-all duration-500" style="width: ${pct}%"></div>
+                    </div>
+                </div>
+            `;
+        }).join('');
+    }
+
+    // 3. Render Interactive Leaflet Map
+    const mapContainer = document.getElementById('traffic-map');
+    if (mapContainer && typeof L !== 'undefined') {
+        if (!trafficMapInstance) {
+            trafficMapInstance = L.map('traffic-map').setView([4.5709, -74.2973], 3);
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '&copy; OpenStreetMap'
+            }).addTo(trafficMapInstance);
+        }
+
+        // Invalidate map size after tab is shown
+        setTimeout(() => { trafficMapInstance.invalidateSize(); }, 300);
+
+        // Clear existing markers
+        trafficMapInstance.eachLayer(layer => {
+            if (layer instanceof L.Marker) {
+                trafficMapInstance.removeLayer(layer);
+            }
+        });
+
+        // Group points by lat/lng to cluster repeat visits
+        const locationClusters = {};
+        logs.forEach(l => {
+            const lat = parseFloat(l.latitude);
+            const lng = parseFloat(l.longitude);
+            if (!isNaN(lat) && !isNaN(lng)) {
+                const key = `${lat.toFixed(2)},${lng.toFixed(2)}`;
+                if (!locationClusters[key]) {
+                    locationClusters[key] = {
+                        lat, lng,
+                        city: l.city || 'Desconocida',
+                        country: l.country || 'Colombia',
+                        code: l.countryCode || 'CO',
+                        count: 0,
+                        lastVisit: l.timestamp,
+                        ips: new Set()
+                    };
+                }
+                locationClusters[key].count++;
+                locationClusters[key].ips.add(l.ip);
+            }
+        });
+
+        Object.values(locationClusters).forEach(c => {
+            const flag = getCountryFlagEmoji(c.code);
+            const marker = L.marker([c.lat, c.lng]).addTo(trafficMapInstance);
+            marker.bindPopup(`
+                <div class="text-xs p-1 font-sans">
+                    <div class="font-bold text-slate-900 flex items-center gap-1 text-sm mb-1">
+                        <span>${flag}</span> ${c.city}, ${c.country}
+                    </div>
+                    <div class="text-slate-600">
+                        <strong>Visitas:</strong> ${c.count}<br/>
+                        <strong>IPs:</strong> ${Array.from(c.ips).join(', ')}
+                    </div>
+                </div>
+            `);
+        });
+    }
+
+    // 4. Render Access Log Table
+    window.renderTrafficTable(logs);
+};
+
+window.renderTrafficTable = function(logsToRender) {
+    const tbody = document.getElementById('traffic-table-tbody');
+    if (!tbody) return;
+
+    if (logsToRender.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="6" class="py-6 text-center text-slate-400 font-medium text-xs">No se encontraron registros de tráfico.</td></tr>`;
+        return;
+    }
+
+    tbody.innerHTML = logsToRender.map(l => {
+        const flag = getCountryFlagEmoji(l.countryCode || 'CO');
+        const formattedDate = l.timestamp ? new Date(l.timestamp).toLocaleString('es-CO', { dateStyle: 'short', timeStyle: 'medium' }) : 'Reciente';
+        const browserOS = parseBrowserOS(l.userAgent);
+        
+        let roleBadge = 'bg-slate-100 text-slate-600';
+        if (l.userRole === 'SUPER_ADMINISTRADOR') roleBadge = 'bg-purple-100 text-purple-800 font-bold';
+        else if (l.userRole === 'ADMINISTRADOR_EMPRESA') roleBadge = 'bg-blue-100 text-blue-800 font-bold';
+        else if (l.userRole === 'MIEMBRO') roleBadge = 'bg-emerald-100 text-emerald-800 font-medium';
+
+        return `
+            <tr class="hover:bg-slate-50/80 transition-colors">
+                <td class="py-3 px-4 text-slate-500 font-mono text-[11px]">${formattedDate}</td>
+                <td class="py-3 px-4 font-mono font-bold text-slate-800">${l.ip || '181.135.24.102'}</td>
+                <td class="py-3 px-4 text-slate-700">
+                    <span class="inline-flex items-center gap-1.5 font-medium">
+                        <span>${flag}</span>
+                        <span>${l.city ? l.city + ', ' : ''}${l.country || 'Colombia'}</span>
+                    </span>
+                </td>
+                <td class="py-3 px-4">
+                    <span class="bg-slate-100 text-slate-700 px-2 py-0.5 rounded font-mono text-[11px] border border-slate-200">${l.page || 'index.html'}</span>
+                </td>
+                <td class="py-3 px-4">
+                    <div class="flex flex-col">
+                        <span class="font-bold text-slate-800 text-[11px]">${l.userEmail || 'Anónimo'}</span>
+                        <span class="inline-block text-[10px] px-1.5 py-0.2 rounded w-max mt-0.5 ${roleBadge}">${l.userRole || 'Visitante'}</span>
+                    </div>
+                </td>
+                <td class="py-3 px-4 text-slate-500 text-[11px] truncate max-w-xs" title="${l.userAgent || ''}">
+                    ${browserOS}
+                </td>
+            </tr>
+        `;
+    }).join('');
+};
+
+window.filterTrafficLogsTable = function() {
+    const query = (document.getElementById('traffic-search-input')?.value || '').toLowerCase().trim();
+    const allLogs = window.getTrafficLogs();
+    if (!query) {
+        window.renderTrafficTable(allLogs);
+        return;
+    }
+    const filtered = allLogs.filter(l => 
+        (l.ip && l.ip.toLowerCase().includes(query)) ||
+        (l.city && l.city.toLowerCase().includes(query)) ||
+        (l.country && l.country.toLowerCase().includes(query)) ||
+        (l.userEmail && l.userEmail.toLowerCase().includes(query)) ||
+        (l.page && l.page.toLowerCase().includes(query))
+    );
+    window.renderTrafficTable(filtered);
+};
+
+window.clearAllTrafficLogs = function() {
+    if (confirm('¿Estás seguro de que deseas limpiar el historial de accesos registrados?')) {
+        localStorage.removeItem('nora_traffic_logs');
+        window.renderTrafficModule();
     }
 };
