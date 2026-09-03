@@ -1056,11 +1056,18 @@ container.addEventListener('dblclick', () => {
 
 
 // Monkey-patch Hider to sync hiddenItems globally
+const isNonEmptyMapOrObj = (items: any) => {
+    if (!items) return false;
+    if (items instanceof Map) return items.size > 0;
+    if (typeof items === 'object') return Object.keys(items).length > 0;
+    return false;
+};
+
 const originalSet = hider.set.bind(hider);
 hider.set = async (visible: boolean, items?: any) => {
     await originalSet(visible, items);
 
-    if (items && Object.keys(items).length > 0) {
+    if (isNonEmptyMapOrObj(items)) {
         updateHiddenItems(items, visible);
     } else if (visible) {
         // Show All case
@@ -1077,7 +1084,7 @@ hider.isolate = async (selection: any) => {
     // Sync hiddenItems for Isolate
     try {
         console.warn("[DEBUG] Global Isolate Triggered. Syncing hiddenItems...");
-        console.log("[DEBUG] Selection keys:", Object.keys(selection));
+        const entries = selection instanceof Map ? Array.from(selection.entries()) : (typeof selection === 'object' ? Object.entries(selection) : []);
 
         for (const [uuid, model] of fragments.list) {
             const allIds = await model.getItemsIdsWithGeometry();
@@ -1085,27 +1092,21 @@ hider.isolate = async (selection: any) => {
             // Collect visible IDs for this model
             const visibleIDsForThisModel = new Set<number>();
 
-            // Selection is Record<FragmentID, Iterable<ExpressID>>
-            for (const [fragID, idSet] of Object.entries(selection)) {
-                // Check if this fragment belongs to the current model
-                // 1. Check if fragID IS the model UUID
+            // Selection is Record<FragmentID, Iterable<ExpressID>> or Map<FragmentID, Iterable<ExpressID>>
+            for (const [fragID, idSet] of entries) {
                 let belongs = (fragID === uuid);
 
-                // 2. Check if fragID is one of the fragments in the model
                 if (!belongs) {
-                    if (model.items && model.items.length > 0) {
+                    if (model.items && Array.isArray(model.items) && model.items.length > 0) {
                         belongs = model.items.some((f: any) => f.id === fragID);
-                    } else if (model.children && model.children.length > 0) {
-                        // Fallback: check Three.js children (Meshes/Fragments)
-                        // Fragment objects usually have 'id' matching the fragment ID
+                    } else if (model.children && Array.isArray(model.children) && model.children.length > 0) {
                         belongs = model.children.some((child: any) => child.uuid === fragID);
                     }
                 }
 
                 if (belongs) {
-                    console.log(`[DEBUG] Fragment ${fragID} belongs to model ${uuid}`);
-                    const items = idSet instanceof Set ? idSet : (Array.isArray(idSet) ? idSet : []);
-                    for (const id of (items as any)) visibleIDsForThisModel.add(id);
+                    const items = idSet instanceof Set ? Array.from(idSet) : (Array.isArray(idSet) ? idSet : []);
+                    for (const id of items) visibleIDsForThisModel.add(Number(id));
                 }
             }
 
@@ -1118,7 +1119,7 @@ hider.isolate = async (selection: any) => {
                 if (visibleIDsForThisModel.has(id)) {
                     // It's visible
                 } else {
-                    hiddenSet.add(id);
+                    hiddenSet.add(Number(id));
                     hiddenCount++;
                 }
             }
@@ -2964,7 +2965,7 @@ function renderIntegratedClassificationUI(container: HTMLElement) {
     resetBtn.addEventListener('click', async () => {
         resetFilters();
         await hider.set(true);
-        renderIntegratedClassificationUI(container);
+        await updateClassificationUI();
         await applyFiltersToViewerGlobal();
         window.dispatchEvent(new CustomEvent('classificationFilterChanged'));
     });
@@ -3540,15 +3541,18 @@ async function applyIntegratedFilterFromClassification(classification: Map<strin
     }
 }
 
-function updateHiddenItems(map: Record<string, any>, visible: boolean) {
-    for (const id in map) {
+function updateHiddenItems(map: Record<string, any> | Map<string, any>, visible: boolean) {
+    if (!map) return;
+    const entries = map instanceof Map ? Array.from(map.entries()) : Object.entries(map);
+
+    for (const [id, targetSet] of entries) {
         // Resolve Model UUID (id could be FragmentID or ModelUUID)
         let modelUUID = id;
 
         // If id is NOT a direct Model UUID, try to find which model it belongs to
         if (!fragments.list.has(id)) {
             for (const [uuid, model] of fragments.list) {
-                if (model.items.some(f => f.id === id)) {
+                if (model.items && Array.isArray(model.items) && model.items.some((f: any) => f.id === id)) {
                     modelUUID = uuid;
                     break;
                 }
@@ -3557,17 +3561,34 @@ function updateHiddenItems(map: Record<string, any>, visible: boolean) {
 
         if (!hiddenItems[modelUUID]) hiddenItems[modelUUID] = new Set();
         const currentSet = hiddenItems[modelUUID];
-        const targetSet = map[id];
 
         // Iterate over Set or Array
-        const items = targetSet instanceof Set ? targetSet : (Array.isArray(targetSet) ? targetSet : []);
+        const items = targetSet instanceof Set ? Array.from(targetSet) : (Array.isArray(targetSet) ? targetSet : []);
 
         if (!visible) {
-            for (const item of items) currentSet.add(item);
+            for (const item of items) currentSet.add(Number(item));
         } else {
-            for (const item of items) currentSet.delete(item);
+            for (const item of items) currentSet.delete(Number(item));
         }
     }
+}
+
+function isElementHidden(e: any): boolean {
+    if (!e || e.expressID === undefined) return false;
+    const expressID = Number(e.expressID);
+    if (isNaN(expressID)) return false;
+
+    if (e.modelUUID && hiddenItems[e.modelUUID]?.has(expressID)) {
+        return true;
+    }
+
+    for (const key in hiddenItems) {
+        if (hiddenItems[key]?.has(expressID)) {
+            return true;
+        }
+    }
+
+    return false;
 }
 
 async function updateClassificationUI() {
@@ -6742,7 +6763,7 @@ function initQuantitiesPanel() {
         let filtered = elements;
 
         // Exclude elements that are hidden in 3D viewer (via Apagar / Aislar)
-        filtered = filtered.filter(e => !hiddenItems[e.modelUUID]?.has(e.expressID));
+        filtered = filtered.filter(e => !isElementHidden(e));
 
         // Apply global classification tree filters
         const isTreeFilterActive = selectedClassifications.size > 0 || selectedCategories.size > 0;
@@ -8606,7 +8627,7 @@ function initStatusPanel() {
         let filtered = elements;
 
         // Exclude elements that are hidden in 3D viewer (via Apagar / Aislar)
-        filtered = filtered.filter(e => !hiddenItems[e.modelUUID]?.has(e.expressID));
+        filtered = filtered.filter(e => !isElementHidden(e));
 
         // Apply global classification tree filters
         const isTreeFilterActive = selectedClassifications.size > 0 || selectedCategories.size > 0;
@@ -9287,6 +9308,19 @@ async function classifyModel(model: any) {
 
 
 
+function getCurrentSelection(): any {
+    if (!highlighter) return null;
+    const sel = (highlighter as any).selection?.select;
+    if (!sel) return null;
+    if (sel instanceof Map) {
+        return sel.size > 0 ? sel : null;
+    }
+    if (typeof sel === 'object') {
+        return Object.keys(sel).length > 0 ? sel : null;
+    }
+    return null;
+}
+
 function setupVisibilityToolbar() {
     const hideBtn = document.getElementById('btn-hide');
     const isolateBtn = document.getElementById('btn-isolate');
@@ -9294,8 +9328,8 @@ function setupVisibilityToolbar() {
 
     if (hideBtn) {
         hideBtn.addEventListener('click', async () => {
-            const selection = highlighter.selection.select;
-            if (selection && Object.keys(selection).length > 0) {
+            const selection = getCurrentSelection();
+            if (selection) {
                 await hider.set(false, selection);
                 highlighter.clear('select');
                 window.dispatchEvent(new CustomEvent('classificationFilterChanged'));
@@ -9305,8 +9339,8 @@ function setupVisibilityToolbar() {
 
     if (isolateBtn) {
         isolateBtn.addEventListener('click', async () => {
-            const selection = highlighter.selection.select;
-            if (selection && Object.keys(selection).length > 0) {
+            const selection = getCurrentSelection();
+            if (selection) {
                 await hider.isolate(selection);
                 highlighter.clear('select');
                 window.dispatchEvent(new CustomEvent('classificationFilterChanged'));
@@ -9321,10 +9355,7 @@ function setupVisibilityToolbar() {
 
             // Reset sidebar category filters and re-render sidebar UI
             resetFilters();
-            const classContainer = document.getElementById('classification-list');
-            if (classContainer) {
-                renderIntegratedClassificationUI(classContainer);
-            }
+            await updateClassificationUI();
             await applyFiltersToViewerGlobal();
             window.dispatchEvent(new CustomEvent('classificationFilterChanged'));
         });
