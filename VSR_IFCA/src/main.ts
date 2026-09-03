@@ -2963,8 +2963,10 @@ function renderIntegratedClassificationUI(container: HTMLElement) {
     resetBtn.title = 'Limpiar todos los filtros';
     resetBtn.addEventListener('click', async () => {
         resetFilters();
+        await hider.set(true);
         renderIntegratedClassificationUI(container);
         await applyFiltersToViewerGlobal();
+        window.dispatchEvent(new CustomEvent('classificationFilterChanged'));
     });
 
     const expandAllBtn = document.createElement('button');
@@ -6739,6 +6741,9 @@ function initQuantitiesPanel() {
 
         let filtered = elements;
 
+        // Exclude elements that are hidden in 3D viewer (via Apagar / Aislar)
+        filtered = filtered.filter(e => !hiddenItems[e.modelUUID]?.has(e.expressID));
+
         // Apply global classification tree filters
         const isTreeFilterActive = selectedClassifications.size > 0 || selectedCategories.size > 0;
         if (isTreeFilterActive) {
@@ -8600,6 +8605,9 @@ function initStatusPanel() {
 
         let filtered = elements;
 
+        // Exclude elements that are hidden in 3D viewer (via Apagar / Aislar)
+        filtered = filtered.filter(e => !hiddenItems[e.modelUUID]?.has(e.expressID));
+
         // Apply global classification tree filters
         const isTreeFilterActive = selectedClassifications.size > 0 || selectedCategories.size > 0;
         if (isTreeFilterActive) {
@@ -9290,6 +9298,7 @@ function setupVisibilityToolbar() {
             if (selection && Object.keys(selection).length > 0) {
                 await hider.set(false, selection);
                 highlighter.clear('select');
+                window.dispatchEvent(new CustomEvent('classificationFilterChanged'));
             }
         });
     }
@@ -9300,6 +9309,7 @@ function setupVisibilityToolbar() {
             if (selection && Object.keys(selection).length > 0) {
                 await hider.isolate(selection);
                 highlighter.clear('select');
+                window.dispatchEvent(new CustomEvent('classificationFilterChanged'));
             }
         });
     }
@@ -9308,6 +9318,15 @@ function setupVisibilityToolbar() {
         showAllBtn.addEventListener('click', async () => {
             await hider.set(true);
             highlighter.clear('select');
+
+            // Reset sidebar category filters and re-render sidebar UI
+            resetFilters();
+            const classContainer = document.getElementById('classification-list');
+            if (classContainer) {
+                renderIntegratedClassificationUI(classContainer);
+            }
+            await applyFiltersToViewerGlobal();
+            window.dispatchEvent(new CustomEvent('classificationFilterChanged'));
         });
     }
 }
