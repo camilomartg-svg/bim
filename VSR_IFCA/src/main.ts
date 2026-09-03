@@ -4947,12 +4947,6 @@ const [propsTable] = CUI.tables.itemsData({
 
 propsTable.preserveStructureOnFilter = true;
 
-const propertiesContent = document.getElementById('properties-content');
-if (propertiesContent) {
-    propertiesContent.innerHTML = '';
-    propertiesContent.appendChild(propsTable);
-}
-
 highlighter.events.select.onHighlight.add(async (modelIdMap) => {
     console.log('[DEBUG] Highlight event:', modelIdMap);
     await renderPropertiesTable(modelIdMap as any);
@@ -9526,19 +9520,27 @@ function setupNoraAI() {
         const tabNora = document.getElementById('right-tab-nora');
         const contentProp = document.getElementById('properties-content');
         const contentNora = document.getElementById('nora-ai-container');
+        const rightPanel = document.getElementById('properties-panel');
 
         if (tabProp && tabNora && contentProp && contentNora) {
-            tabProp.addEventListener('click', () => {
+            tabProp.addEventListener('click', (e) => {
+                e.preventDefault();
+                if (rightPanel) rightPanel.classList.remove('closed');
                 tabProp.classList.add('active');
                 tabNora.classList.remove('active');
                 contentProp.style.display = 'flex';
                 contentNora.style.display = 'none';
             });
-            tabNora.addEventListener('click', () => {
+            tabNora.addEventListener('click', (e) => {
+                e.preventDefault();
+                if (rightPanel) rightPanel.classList.remove('closed');
                 tabNora.classList.add('active');
                 tabProp.classList.remove('active');
                 contentNora.style.display = 'flex';
                 contentProp.style.display = 'none';
+                if (noraAIWidgetInstance) {
+                    noraAIWidgetInstance.open();
+                }
             });
         }
 

@@ -259,11 +259,11 @@ export class NoraAIWidget {
 
     public close() {
         this.isOpen = false;
-        const rightPanel = document.getElementById('properties-panel');
-        if (rightPanel) {
-            rightPanel.classList.add('closed');
-        } else {
-            this.drawerEl.classList.remove('open');
+        const noraContainer = document.getElementById('nora-ai-container');
+        if (!noraContainer) {
+            const rightPanel = document.getElementById('properties-panel');
+            if (rightPanel) rightPanel.classList.add('closed');
+            if (this.drawerEl) this.drawerEl.classList.remove('open');
         }
     }
 
