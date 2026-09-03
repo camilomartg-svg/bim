@@ -5065,10 +5065,12 @@ async function renderPropertiesTable(modelIdMap: Record<string, Set<number>>) {
     if (entries.length > 0 && panel) {
         panel.classList.remove('closed');
         if (tabProp && tabNora && contentNora) {
-            tabProp.classList.add('active');
-            tabNora.classList.remove('active');
-            content.style.display = 'flex';
-            contentNora.style.display = 'none';
+            if (!tabNora.classList.contains('active')) {
+                tabProp.classList.add('active');
+                tabNora.classList.remove('active');
+                content.style.display = 'flex';
+                contentNora.style.display = 'none';
+            }
         }
     }
 
@@ -9510,6 +9512,7 @@ async function executeNoraAI3DAction(action: NoraAIAction): Promise<string> {
 let noraAIWidgetInstance: NoraAIWidget | null = null;
 
 function setupNoraAI() {
+    if (noraAIWidgetInstance) return;
     try {
         noraAIWidgetInstance = new NoraAIWidget({
             getBIMContext: () => buildBIMContextForAI(),
@@ -9549,6 +9552,7 @@ function setupNoraAI() {
         console.error('[nora AI] Initialization error:', e);
     }
 }
+(window as any).setupNoraAI = setupNoraAI;
 
 function setupMeasurementTools_Deprecated() {
     const lengthBtn = document.getElementById('btn-measure-length');
@@ -11796,6 +11800,12 @@ function renderGuestMode(container: HTMLElement) {
 // Call it
 enforceAuthenticatedAccess();
 setupUserAuthentication();
+
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', () => setupNoraAI());
+} else {
+    setupNoraAI();
+}
 
 // --- Test Runner (solo bajo flag; evita incluir vitest en build) ---
 if (window.location.search.includes('test=auth')) {
