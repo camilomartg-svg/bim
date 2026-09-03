@@ -2998,3 +2998,289 @@ window.renderGlobalProjects = function() {
         `;
     }
 };
+
+// ==========================================
+// MÓDULO: SUPER ADMINISTRACIÓN - ENTRENAMIENTO NORA AI
+// ==========================================
+
+window.switchGlobalView = function(viewName) {
+    const empresasView = document.getElementById('empresas-view');
+    const usuariosView = document.getElementById('usuarios-view');
+    const proyectosView = document.getElementById('proyectos-view');
+    const noraAiView = document.getElementById('nora-ai-view');
+
+    const tabEmpresas = document.getElementById('tab-empresas');
+    const tabUsuarios = document.getElementById('tab-usuarios');
+    const tabProyectos = document.getElementById('tab-proyectos-global');
+    const tabNoraAi = document.getElementById('tab-nora-ai');
+
+    // Hide all views
+    if(empresasView) empresasView.classList.add('hidden');
+    if(usuariosView) { usuariosView.classList.add('hidden'); }
+    if(proyectosView) proyectosView.classList.add('hidden');
+    if(noraAiView) noraAiView.classList.add('hidden');
+
+    const defaultBtnClass = "px-5 py-2 rounded-lg text-sm font-bold text-slate-500 hover:text-slate-700 transition-all flex items-center gap-2";
+    const activeBtnClass = "px-5 py-2 rounded-lg text-sm font-bold bg-white text-slate-800 shadow-sm transition-all flex items-center gap-2";
+
+    [tabEmpresas, tabUsuarios, tabProyectos, tabNoraAi].forEach(btn => {
+        if(btn) btn.className = defaultBtnClass;
+    });
+
+    if (viewName === 'empresas') {
+        if(empresasView) empresasView.classList.remove('hidden');
+        if(tabEmpresas) tabEmpresas.className = activeBtnClass;
+    } else if (viewName === 'usuarios') {
+        if(usuariosView) {
+            usuariosView.classList.remove('hidden');
+            usuariosView.classList.add('flex');
+        }
+        if(tabUsuarios) tabUsuarios.className = activeBtnClass;
+        if(window.fetchGlobalUsers) window.fetchGlobalUsers();
+    } else if (viewName === 'proyectos') {
+        if(proyectosView) {
+            proyectosView.classList.remove('hidden');
+            proyectosView.classList.add('flex');
+        }
+        if(tabProyectos) tabProyectos.className = activeBtnClass;
+        if(window.renderGlobalProjects) window.renderGlobalProjects();
+    } else if (viewName === 'nora-ai') {
+        if(noraAiView) {
+            noraAiView.classList.remove('hidden');
+            noraAiView.classList.add('flex');
+        }
+        if(tabNoraAi) tabNoraAi.className = activeBtnClass;
+        if(window.initNoraAITrainingModule) window.initNoraAITrainingModule();
+    }
+};
+
+const DEFAULT_NORA_SYNONYMS = [
+    { term: 'columnas, columnas de concreto, colum, pilares', ifcCategory: 'IfcColumn' },
+    { term: 'pisos, losas, placas, forjados, fundaciones', ifcCategory: 'IfcSlab' },
+    { term: 'muros, paredes, cerramientos, muros de contención', ifcCategory: 'IfcWall' },
+    { term: 'vigas, trabes, dinteles, correas', ifcCategory: 'IfcBeam' },
+    { term: 'puertas, portones, accesos', ifcCategory: 'IfcDoor' },
+    { term: 'ventanas, ventanales, tragaluces', ifcCategory: 'IfcWindow' },
+    { term: 'pilotes, pilotaje, zapatas, cimentaciones profundas', ifcCategory: 'IfcFooting' },
+    { term: 'cubiertas, techos, tejas', ifcCategory: 'IfcRoof' }
+];
+
+window.initNoraAITrainingModule = function() {
+    let rawRules = localStorage.getItem('NORA_TRAINING_RULES');
+    let data = { synonyms: DEFAULT_NORA_SYNONYMS, customPrompt: '', apiKey: localStorage.getItem('NORA_GEMINI_KEY') || '' };
+    if (rawRules) {
+        try { data = { ...data, ...JSON.parse(rawRules) }; } catch(e) {}
+    }
+
+    // Populate Key
+    const keyInput = document.getElementById('nora-gemini-key-input');
+    if (keyInput) keyInput.value = data.apiKey || '';
+
+    // Populate Prompt
+    const promptText = document.getElementById('nora-custom-prompt-text');
+    if (promptText) promptText.value = data.customPrompt || '';
+
+    // Populate Table
+    renderSynonymTable(data.synonyms);
+    updateRulesKPI(data.synonyms.length);
+};
+
+function renderSynonymTable(synonyms) {
+    const tbody = document.getElementById('synonyms-tbody');
+    if (!tbody) return;
+    tbody.innerHTML = synonyms.map((s, idx) => `
+        <tr class="hover:bg-slate-50 transition-colors">
+            <td class="py-2 px-3">
+                <input type="text" class="w-full text-xs border border-slate-200 rounded p-1 font-sans" value="${s.term}" data-idx="${idx}" data-field="term" placeholder="ej: pilotes, cimentación">
+            </td>
+            <td class="py-2 px-3">
+                <select class="w-full text-xs border border-slate-200 rounded p-1 font-mono font-bold text-slate-700" data-idx="${idx}" data-field="ifcCategory">
+                    <option value="IfcColumn" ${s.ifcCategory==='IfcColumn'?'selected':''}>IfcColumn (Columnas / Pilotes)</option>
+                    <option value="IfcSlab" ${s.ifcCategory==='IfcSlab'?'selected':''}>IfcSlab (Losas / Pisos / Placas)</option>
+                    <option value="IfcWall" ${s.ifcCategory==='IfcWall'?'selected':''}>IfcWall (Muros / Paredes)</option>
+                    <option value="IfcBeam" ${s.ifcCategory==='IfcBeam'?'selected':''}>IfcBeam (Vigas / Dinteles)</option>
+                    <option value="IfcDoor" ${s.ifcCategory==='IfcDoor'?'selected':''}>IfcDoor (Puertas)</option>
+                    <option value="IfcWindow" ${s.ifcCategory==='IfcWindow'?'selected':''}>IfcWindow (Ventanas)</option>
+                    <option value="IfcFooting" ${s.ifcCategory==='IfcFooting'?'selected':''}>IfcFooting (Zapatas / Pilotes)</option>
+                    <option value="IfcRoof" ${s.ifcCategory==='IfcRoof'?'selected':''}>IfcRoof (Cubiertas)</option>
+                    <option value="IfcMember" ${s.ifcCategory==='IfcMember'?'selected':''}>IfcMember (Elementos Estructurales)</option>
+                    <option value="IfcCovering" ${s.ifcCategory==='IfcCovering'?'selected':''}>IfcCovering (Acabados / Revestimientos)</option>
+                </select>
+            </td>
+            <td class="py-2 px-3 text-right">
+                <button onclick="deleteSynonymRow(${idx})" class="text-slate-400 hover:text-rose-600 transition-colors p-1" title="Eliminar mapeo">
+                    <span class="material-symbols-outlined text-base">delete</span>
+                </button>
+            </td>
+        </tr>
+    `).join('');
+}
+
+window.addSynonymRow = function() {
+    const tbody = document.getElementById('synonyms-tbody');
+    if (!tbody) return;
+    const tr = document.createElement('tr');
+    const idx = tbody.children.length;
+    tr.className = "hover:bg-slate-50 transition-colors";
+    tr.innerHTML = `
+        <td class="py-2 px-3">
+            <input type="text" class="w-full text-xs border border-slate-200 rounded p-1 font-sans" value="" data-idx="${idx}" data-field="term" placeholder="ej: zócalos, pasamanos">
+        </td>
+        <td class="py-2 px-3">
+            <select class="w-full text-xs border border-slate-200 rounded p-1 font-mono font-bold text-slate-700" data-idx="${idx}" data-field="ifcCategory">
+                <option value="IfcColumn">IfcColumn (Columnas / Pilotes)</option>
+                <option value="IfcSlab">IfcSlab (Losas / Pisos / Placas)</option>
+                <option value="IfcWall">IfcWall (Muros / Paredes)</option>
+                <option value="IfcBeam">IfcBeam (Vigas / Dinteles)</option>
+                <option value="IfcDoor">IfcDoor (Puertas)</option>
+                <option value="IfcWindow">IfcWindow (Ventanas)</option>
+                <option value="IfcFooting">IfcFooting (Zapatas / Pilotes)</option>
+                <option value="IfcRoof">IfcRoof (Cubiertas)</option>
+            </select>
+        </td>
+        <td class="py-2 px-3 text-right">
+            <button onclick="this.closest('tr').remove()" class="text-slate-400 hover:text-rose-600 transition-colors p-1">
+                <span class="material-symbols-outlined text-base">delete</span>
+            </button>
+        </td>
+    `;
+    tbody.appendChild(tr);
+};
+
+window.deleteSynonymRow = function(idx) {
+    const tbody = document.getElementById('synonyms-tbody');
+    if (tbody && tbody.children[idx]) {
+        tbody.children[idx].remove();
+    }
+};
+
+window.loadDefaultSynonyms = function() {
+    renderSynonymTable(DEFAULT_NORA_SYNONYMS);
+};
+
+window.saveNoraAITrainingRules = function() {
+    const tbody = document.getElementById('synonyms-tbody');
+    const synonyms = [];
+    if (tbody) {
+        const rows = tbody.querySelectorAll('tr');
+        rows.forEach(r => {
+            const termInput = r.querySelector('[data-field="term"]');
+            const catSelect = r.querySelector('[data-field="ifcCategory"]');
+            if (termInput && catSelect && termInput.value.trim() !== '') {
+                synonyms.push({
+                    term: termInput.value.trim(),
+                    ifcCategory: catSelect.value
+                });
+            }
+        });
+    }
+
+    const customPrompt = (document.getElementById('nora-custom-prompt-text')?.value || '').trim();
+    const apiKey = (document.getElementById('nora-gemini-key-input')?.value || '').trim();
+
+    const rules = { synonyms, customPrompt, apiKey };
+    localStorage.setItem('NORA_TRAINING_RULES', JSON.stringify(rules));
+    if (apiKey) localStorage.setItem('NORA_GEMINI_KEY', apiKey);
+
+    updateRulesKPI(synonyms.length);
+    alert('✅ Reglas de entrenamiento guardadas exitosamente. El motor CDE nora AI usará estos mapeos inmediatamente.');
+};
+
+function updateRulesKPI(count) {
+    const kpi = document.getElementById('nora-ai-rules-count');
+    if (kpi) kpi.textContent = `${count} Reglas Cargadas`;
+}
+
+window.testGeminiKeyInAdmin = async function() {
+    const key = document.getElementById('nora-gemini-key-input')?.value?.trim();
+    if (!key) {
+        alert('Ingresa una API Key para probar la conexión.');
+        return;
+    }
+    try {
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${key}`;
+        const res = await fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ contents: [{ parts: [{ text: 'Hola responder corto ok' }] }] })
+        });
+        if (res.ok) {
+            alert('🎉 Conexión exitosa con Google Gemini 2.0 Flash!');
+        } else {
+            alert(`⚠️ La API Key respondió con error HTTP ${res.status}. Verifica que la clave sea válida.`);
+        }
+    } catch(e) {
+        alert('❌ Error al conectar con la API de Gemini: ' + e.message);
+    }
+};
+
+window.runSandboxQuery = function() {
+    const input = document.getElementById('sandbox-input');
+    const chatBox = document.getElementById('sandbox-chat-box');
+    const jsonOutput = document.getElementById('sandbox-json-output');
+    if (!input || !chatBox || !input.value.trim()) return;
+
+    const query = input.value.trim();
+    input.value = '';
+
+    // Append user msg
+    chatBox.innerHTML += `
+        <div class="bg-indigo-50 border border-indigo-200 p-2.5 rounded-xl text-indigo-900 font-semibold text-right">
+            🧑‍💻 <strong>Admin:</strong> ${query}
+        </div>
+    `;
+
+    // Local Heuristic parsing test
+    let categoriesMatched = [];
+    const lower = query.toLowerCase();
+
+    // Check custom synonyms
+    let rawRules = localStorage.getItem('NORA_TRAINING_RULES');
+    let synonyms = DEFAULT_NORA_SYNONYMS;
+    if (rawRules) {
+        try { synonyms = JSON.parse(rawRules).synonyms || DEFAULT_NORA_SYNONYMS; } catch(e) {}
+    }
+
+    synonyms.forEach(s => {
+        const terms = s.term.split(',').map(t => t.trim().toLowerCase());
+        for (const t of terms) {
+            if (t && lower.includes(t)) {
+                if (!categoriesMatched.includes(s.ifcCategory)) {
+                    categoriesMatched.push(s.ifcCategory);
+                }
+            }
+        }
+    });
+
+    let action = { type: 'none' };
+    let replyMsg = '';
+
+    if (lower.includes('aisl') || lower.includes('ver') || lower.includes('muestra') || lower.includes('filtr')) {
+        if (categoriesMatched.length > 0) {
+            action = {
+                type: 'isolate',
+                categories: categoriesMatched,
+                message: `Elemento(s) ${categoriesMatched.join(', ')} aislado(s) determinísticamente en el visor 3D.`
+            };
+            replyMsg = `✅ Acción interpretada: Aislando las categorías IFC <b>${categoriesMatched.join(', ')}</b> en el visor 3D.`;
+        } else {
+            replyMsg = `⚠️ No se detectaron categorías específicas en el diccionario. Se usará respuesta generativa.`;
+        }
+    } else if (lower.includes('todo') || lower.includes('restablecer') || lower.includes('limpia')) {
+        action = { type: 'show_all', message: 'Restablecer vista 3D completa.' };
+        replyMsg = `🔄 Vista 3D restablecida a estado completo.`;
+    } else {
+        replyMsg = `🤖 Nora AI responderá según las directrices y base de conocimiento corporativa.`;
+    }
+
+    chatBox.innerHTML += `
+        <div class="bg-white border border-slate-200 p-2.5 rounded-xl text-slate-800">
+            🤖 <strong>nora AI (Sandbox):</strong> ${replyMsg}
+        </div>
+    `;
+    chatBox.scrollTop = chatBox.scrollHeight;
+
+    if (jsonOutput) {
+        jsonOutput.textContent = JSON.stringify({ query, actionMatched: action, categoriesDetected: categoriesMatched }, null, 2);
+    }
+};

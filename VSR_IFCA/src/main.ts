@@ -9506,6 +9506,27 @@ function setupNoraAI() {
             getBIMContext: () => buildBIMContextForAI(),
             execute3DAction: async (action) => executeNoraAI3DAction(action)
         });
+
+        const tabProp = document.getElementById('right-tab-properties');
+        const tabNora = document.getElementById('right-tab-nora');
+        const contentProp = document.getElementById('properties-content');
+        const contentNora = document.getElementById('nora-ai-container');
+
+        if (tabProp && tabNora && contentProp && contentNora) {
+            tabProp.addEventListener('click', () => {
+                tabProp.classList.add('active');
+                tabNora.classList.remove('active');
+                contentProp.style.display = 'block';
+                contentNora.style.display = 'none';
+            });
+            tabNora.addEventListener('click', () => {
+                tabNora.classList.add('active');
+                tabProp.classList.remove('active');
+                contentNora.style.display = 'flex';
+                contentProp.style.display = 'none';
+            });
+        }
+
         console.log('[nora AI] Copilot initialized successfully.');
     } catch (e) {
         console.error('[nora AI] Initialization error:', e);

@@ -121,7 +121,14 @@ export class NoraAIWidget {
         `;
 
         document.body.appendChild(this.fabEl);
-        document.body.appendChild(this.drawerEl);
+        
+        const container = document.getElementById('nora-ai-container');
+        if (container) {
+            this.drawerEl.className = 'nora-ai-docked';
+            container.appendChild(this.drawerEl);
+        } else {
+            document.body.appendChild(this.drawerEl);
+        }
 
         this.bodyEl = this.drawerEl.querySelector('#nora-ai-messages') as HTMLElement;
         this.inputEl = this.drawerEl.querySelector('#nora-ai-input') as HTMLInputElement;
@@ -228,13 +235,34 @@ export class NoraAIWidget {
 
     public open() {
         this.isOpen = true;
-        this.drawerEl.classList.add('open');
+        const rightPanel = document.getElementById('properties-panel');
+        const noraTabBtn = document.getElementById('right-tab-nora');
+        const propTabBtn = document.getElementById('right-tab-properties');
+        const noraContainer = document.getElementById('nora-ai-container');
+        const propContent = document.getElementById('properties-content');
+
+        if (rightPanel) {
+            rightPanel.classList.remove('closed');
+        }
+        if (noraTabBtn && propTabBtn && noraContainer && propContent) {
+            noraTabBtn.classList.add('active');
+            propTabBtn.classList.remove('active');
+            noraContainer.style.display = 'flex';
+            propContent.style.display = 'none';
+        } else {
+            this.drawerEl.classList.add('open');
+        }
         this.inputEl.focus();
     }
 
     public close() {
         this.isOpen = false;
-        this.drawerEl.classList.remove('open');
+        const rightPanel = document.getElementById('properties-panel');
+        if (rightPanel) {
+            rightPanel.classList.add('closed');
+        } else {
+            this.drawerEl.classList.remove('open');
+        }
     }
 
     public clearChat() {
@@ -441,10 +469,34 @@ INSTRUCCIONES DE RESPUESTA:
             };
         }
 
-        // 3. Multi-Category Extraction supporting standard IFC entity types and Spanish terms
+        // 3. Multi-Category Extraction supporting standard IFC entity types, Spanish terms and Super Admin trained synonyms
         const matchedCategories: string[] = [];
         if (bimContext && bimContext.categories) {
             const catKeys = Object.keys(bimContext.categories);
+
+            // Check Super Admin Trained Synonyms first
+            try {
+                const rawRules = localStorage.getItem('NORA_TRAINING_RULES');
+                if (rawRules) {
+                    const parsed = JSON.parse(rawRules);
+                    if (Array.isArray(parsed.synonyms)) {
+                        parsed.synonyms.forEach((s: any) => {
+                            if (!s.term || !s.ifcCategory) return;
+                            const terms = s.term.split(',').map((t: string) => t.trim().toLowerCase());
+                            for (const term of terms) {
+                                if (term && qClean.includes(term)) {
+                                    const matchingKey = catKeys.find(k => k.toLowerCase() === s.ifcCategory.toLowerCase() || k.toLowerCase().includes(s.ifcCategory.toLowerCase()));
+                                    if (matchingKey && !matchedCategories.includes(matchingKey)) {
+                                        matchedCategories.push(matchingKey);
+                                    } else if (!matchedCategories.includes(s.ifcCategory)) {
+                                        matchedCategories.push(s.ifcCategory);
+                                    }
+                                }
+                            }
+                        });
+                    }
+                }
+            } catch(e) {}
 
             const categoryPatterns: Array<{ userRegex: RegExp; keyRegex: RegExp }> = [
                 { userRegex: /colum/i, keyRegex: /column|colum/i },

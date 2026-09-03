@@ -176,11 +176,18 @@
         <!-- Properties Panel (Right) -->
         <div id="properties-panel" class="properties-panel">
             <div class="resizer-left" id="properties-resizer"></div>
-            <div class="properties-header">
-                <h3><span class="material-symbols-outlined">info</span> Propiedades</h3>
+            <div class="properties-header-tabs">
+                <button class="right-tab-btn active" id="right-tab-properties" data-tab="properties" title="Ver propiedades del elemento">
+                    <span class="material-symbols-outlined" style="font-size: 16px;">info</span> <span>Propiedades</span>
+                </button>
+                <button class="right-tab-btn" id="right-tab-nora" data-tab="nora-ai" title="nora AI Copilot">
+                    <i class="fa-solid fa-wand-magic-sparkles" style="font-size: 13px;"></i> <span>nora AI</span>
+                </button>
             </div>
-            <div class="properties-content" id="properties-content">
+            <div class="properties-content right-tab-content active" id="properties-content">
                 <div class="no-selection">Selecciona un elemento para ver sus propiedades</div>
+            </div>
+            <div class="right-tab-content" id="nora-ai-container" style="display: none; flex: 1; flex-direction: column; overflow: hidden; height: calc(100% - 48px);">
             </div>
         </div>
 
