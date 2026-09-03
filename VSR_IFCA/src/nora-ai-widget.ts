@@ -120,13 +120,15 @@ export class NoraAIWidget {
             </div>
         `;
 
-        document.body.appendChild(this.fabEl);
-        
         const container = document.getElementById('nora-ai-container');
         if (container) {
             this.drawerEl.className = 'nora-ai-docked';
             container.appendChild(this.drawerEl);
+            // Hide close button when docked inside tab
+            const closeBtn = this.drawerEl.querySelector('#nora-ai-close') as HTMLElement;
+            if (closeBtn) closeBtn.style.display = 'none';
         } else {
+            document.body.appendChild(this.fabEl);
             document.body.appendChild(this.drawerEl);
         }
 

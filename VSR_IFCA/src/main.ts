@@ -5056,12 +5056,27 @@ function resolveRemote(ref: any, model: any) {
 async function renderPropertiesTable(modelIdMap: Record<string, Set<number>>) {
     console.log('[DEBUG] renderPropertiesTable called with:', modelIdMap);
     const content = document.getElementById('properties-content');
+    const panel = document.getElementById('properties-panel');
+    const tabProp = document.getElementById('right-tab-properties');
+    const tabNora = document.getElementById('right-tab-nora');
+    const contentNora = document.getElementById('nora-ai-container');
+
     if (!content) return;
     content.innerHTML = '';
 
     const entries = modelIdMap instanceof Map
         ? Array.from(modelIdMap.entries())
         : Object.entries(modelIdMap);
+
+    if (entries.length > 0 && panel) {
+        panel.classList.remove('closed');
+        if (tabProp && tabNora && contentNora) {
+            tabProp.classList.add('active');
+            tabNora.classList.remove('active');
+            content.style.display = 'flex';
+            contentNora.style.display = 'none';
+        }
+    }
 
     if (entries.length === 0) {
         content.innerHTML = '<div style="padding: 15px; color: #666; text-align: center;">Selecciona un elemento para ver sus propiedades</div>';
@@ -9516,7 +9531,7 @@ function setupNoraAI() {
             tabProp.addEventListener('click', () => {
                 tabProp.classList.add('active');
                 tabNora.classList.remove('active');
-                contentProp.style.display = 'block';
+                contentProp.style.display = 'flex';
                 contentNora.style.display = 'none';
             });
             tabNora.addEventListener('click', () => {
