@@ -3302,6 +3302,31 @@ window.insertVariableIntoPrompt = function(varName) {
     }
 };
 
+function stripTypeScriptTypes(tsCode) {
+    if (!tsCode) return '';
+    let js = tsCode;
+
+    // 1. Remove export interface / type / enum declarations
+    js = js.replace(/export\s+(interface|type|enum)\s+[\s\S]*?}/g, '');
+    js = js.replace(/(interface|type)\s+[A-Za-z0-9_]+\s*=?\s*[\s\S]*?(};|;|\n(?=[a-zA-Z]))/g, '');
+
+    // 2. Remove function return type annotations, e.g. ): any { or ): { primary: string, candidates: string[] } {
+    js = js.replace(/\)\s*:\s*([A-Za-z0-9_<>\[\]\{\}\s|&]+|\{[\s\S]*?\})\s*\{/g, ') {');
+
+    // 3. Remove parameter / variable type annotations
+    // Remove : keyof typeof ...
+    js = js.replace(/:\s*keyof\s+typeof\s+[A-Za-z0-9_]+/g, '');
+    // Remove inline object type annotations like : { primary: string, candidates: string[] }
+    js = js.replace(/:\s*\{[^\}]*\}/g, '');
+    // Remove primitive and array types
+    js = js.replace(/:\s*(string|any|boolean|number|void|never|object|unknown|string\[\]|any\[\]|number\[\]|\([^\)]+\)|[A-Za-z0-9_<>]+)(\s*\|\s*[A-Za-z0-9_<>\[\]]+)*/g, '');
+
+    // 4. Remove 'as Type' assertions
+    js = js.replace(/\s+as\s+[A-Za-z0-9_<>\[\]]+/g, '');
+
+    return js;
+}
+
 window.testCustomTSCodeSyntax = function() {
     const tsCode = (document.getElementById('nora-custom-ts-code')?.value || '').trim();
     const statusEl = document.getElementById('nora-ts-syntax-status');
@@ -3317,7 +3342,7 @@ window.testCustomTSCodeSyntax = function() {
     }
 
     try {
-        const cleanJS = tsCode.replace(/:\s*string/g, '').replace(/:\s*any/g, '').replace(/:\s*boolean/g, '').replace(/:\s*number/g, '');
+        const cleanJS = stripTypeScriptTypes(tsCode);
         new Function('query', 'result', `${cleanJS}\n return noraBrainCustomPipeline(query, result);`);
 
         if (statusEl) {
@@ -3507,7 +3532,7 @@ window.parseNoraCommand = function(query) {
     let rawTSCode = localStorage.getItem('NORA_CUSTOM_TS_CODE');
     if (rawTSCode && rawTSCode.trim()) {
         try {
-            const cleanJS = rawTSCode.replace(/:\s*string/g, '').replace(/:\s*any/g, '').replace(/:\s*boolean/g, '').replace(/:\s*number/g, '');
+            const cleanJS = stripTypeScriptTypes(rawTSCode);
             const customHook = new Function('query', 'result', `${cleanJS}\n return noraBrainCustomPipeline(query, result);`);
             const transformedResult = customHook(query, result);
             if (transformedResult) {

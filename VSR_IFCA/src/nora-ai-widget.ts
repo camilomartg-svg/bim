@@ -446,8 +446,109 @@ INSTRUCCIONES DE RESPUESTA:
         return fallbackResult;
     }
 
+    private stripTypeScriptTypes(tsCode: string): string {
+        if (!tsCode) return '';
+        let js = tsCode;
+
+        // 1. Remove export interface / type / enum declarations
+        js = js.replace(/export\s+(interface|type|enum)\s+[\s\S]*?}/g, '');
+        js = js.replace(/(interface|type)\s+[A-Za-z0-9_]+\s*=?\s*[\s\S]*?(};|;|\n(?=[a-zA-Z]))/g, '');
+
+        // 2. Remove function return type annotations, e.g. ): any { or ): { primary: string, candidates: string[] } {
+        js = js.replace(/\)\s*:\s*([A-Za-z0-9_<>\[\]\{\}\s|&]+|\{[\s\S]*?\})\s*\{/g, ') {');
+
+        // 3. Remove parameter / variable type annotations
+        js = js.replace(/:\s*keyof\s+typeof\s+[A-Za-z0-9_]+/g, '');
+        js = js.replace(/:\s*\{[^\}]*\}/g, '');
+        js = js.replace(/:\s*(string|any|boolean|number|void|never|object|unknown|string\[\]|any\[\]|number\[\]|\([^\)]+\)|[A-Za-z0-9_<>]+)(\s*\|\s*[A-Za-z0-9_<>\[\]]+)*/g, '');
+
+        // 4. Remove 'as Type' assertions
+        js = js.replace(/\s+as\s+[A-Za-z0-9_<>\[\]]+/g, '');
+
+        return js;
+    }
+
     private localHeuristicFallback(query: string, bimContext: any): { answer: string; action: NoraAIAction } {
         const qClean = query.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+
+        // 0. Custom TypeScript Brain Pipeline Execution from Super Admin
+        try {
+            const rawTSCode = localStorage.getItem('NORA_CUSTOM_TS_CODE');
+            if (rawTSCode && rawTSCode.trim()) {
+                const availableLevelsInModel = bimContext?.levels ? Object.keys(bimContext.levels) : [
+                    "PISO 1 NE",
+                    "ED ADMIN P2 NF",
+                    "ED ADMIN P1 NF",
+                    "ED ADMIN P1 NC",
+                    "SOTANO NF"
+                ];
+
+                const resultContext: any = {
+                    query: query,
+                    availableLevels: availableLevelsInModel,
+                    categoriesMatched: [],
+                    detectedAction: 'none',
+                    levelMatched: null,
+                    parsedJSON: {
+                        action: 'none',
+                        categories: [],
+                        levelMatched: [],
+                        filters: [],
+                        message: ''
+                    }
+                };
+
+                const cleanJS = this.stripTypeScriptTypes(rawTSCode);
+                const customHook = new Function('query', 'result', `${cleanJS}\n return noraBrainCustomPipeline(query, result);`);
+                const tsResult = customHook(query, resultContext);
+
+                if (tsResult && tsResult.parsedJSON) {
+                    const pj = tsResult.parsedJSON;
+
+                    // Identity response
+                    if (pj.action === 'system_info' && pj.message) {
+                        return {
+                            answer: pj.message,
+                            action: { type: 'none' }
+                        };
+                    }
+
+                    // Level matching from custom TS hook
+                    const matchedLevels: string[] = pj.levelMatched || (pj.filters?.find((f: any) => f.targetProperty === 'NIVEL INTEGRADO')?.values) || [];
+                    const matchedCats: string[] = pj.categories || tsResult.categoriesMatched || [];
+
+                    if (matchedLevels.length > 0) {
+                        let totalCount = 0;
+                        let totalVol = 0;
+                        let totalArea = 0;
+
+                        for (const lvl of matchedLevels) {
+                            const stats = bimContext?.levels?.[lvl];
+                            if (stats) {
+                                totalCount += stats.count || 0;
+                                totalVol += stats.volume || 0;
+                                totalArea += stats.area || 0;
+                            }
+                        }
+
+                        const lvlStr = matchedLevels.join(', ');
+                        const catStr = matchedCats.length > 0 ? ` (categorías: ${matchedCats.join(', ')})` : '';
+
+                        return {
+                            answer: `Aislando nivel(es) <b>${lvlStr}</b>${catStr}:<br>• <b>Total elementos:</b> ${totalCount || 'en el nivel'}<br>• <b>Volumen acumulado:</b> ${Math.round(totalVol * 100) / 100} m³<br>• <b>Área acumulada:</b> ${Math.round(totalArea * 100) / 100} m²`,
+                            action: {
+                                type: 'isolate',
+                                levels: matchedLevels,
+                                categories: matchedCats.length > 0 ? matchedCats : undefined,
+                                message: `Aislada(s) vista por nivel: ${lvlStr}`
+                            }
+                        };
+                    }
+                }
+            }
+        } catch (err) {
+            console.warn('[nora AI] Error al ejecutar Hook TS del Cerebro:', err);
+        }
 
         // 1. Greetings & Casual questions
         const greetings = ['hola', 'buenas', 'buenos dias', 'buenas tardes', 'buenas noches', 'saludos', 'quien eres', 'que haces', 'que puedes hacer', 'ayuda', 'help'];
@@ -582,11 +683,12 @@ INSTRUCCIONES DE RESPUESTA:
 
             const catListStr = matchedCategories.join(', ');
             return {
-                answer: `Aislando categoría(s) <b>${catListStr}</b>:<br>• <b>Total elementos:</b> ${totalCount}<br>• <b>Volumen acumulado:</b> ${Math.round(totalVol * 100) / 100} m³<br>• <b>Área acumulada:</b> ${Math.round(totalArea * 100) / 100} m²`,
+                answer: `Aislando categoría(s) <b>${catListStr}</b>${targetLevelKey ? ' en nivel <b>' + targetLevelKey + '</b>' : ''}:<br>• <b>Total elementos:</b> ${totalCount}<br>• <b>Volumen acumulado:</b> ${Math.round(totalVol * 100) / 100} m³<br>• <b>Área acumulada:</b> ${Math.round(totalArea * 100) / 100} m²`,
                 action: {
                     type: 'isolate',
                     categories: matchedCategories,
-                    message: `Aislada(s) categoría(s): ${catListStr}`
+                    levels: targetLevelKey ? [targetLevelKey] : undefined,
+                    message: `Aislada(s) categoría(s): ${catListStr}${targetLevelKey ? ' en ' + targetLevelKey : ''}`
                 }
             };
         }
