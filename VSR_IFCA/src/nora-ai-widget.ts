@@ -457,12 +457,13 @@ INSTRUCCIONES DE RESPUESTA:
         // 2. Remove function return type annotations, e.g. ): any { or ): { primary: string, candidates: string[] } {
         js = js.replace(/\)\s*:\s*([A-Za-z0-9_<>\[\]\{\}\s|&]+|\{[\s\S]*?\})\s*\{/g, ') {');
 
-        // 3. Remove parameter / variable type annotations
-        js = js.replace(/:\s*keyof\s+typeof\s+[A-Za-z0-9_]+/g, '');
-        js = js.replace(/:\s*\{[^\}]*\}/g, '');
-        js = js.replace(/:\s*(string|any|boolean|number|void|never|object|unknown|string\[\]|any\[\]|number\[\]|\([^\)]+\)|[A-Za-z0-9_<>]+)(\s*\|\s*[A-Za-z0-9_<>\[\]]+)*/g, '');
+        // 3. Remove parameter type annotations in function signatures: (query: string, result: any)
+        js = js.replace(/(\b[A-Za-z0-9_]+)\s*:\s*(string|any|boolean|number|void|never|object|unknown|string\[\]|any\[\]|number\[\]|keyof\s+typeof\s+[A-Za-z0-9_]+|[A-Za-z0-9_<>\[\]|&\s]+)(?=[,\)\s=])/g, '$1');
 
-        // 4. Remove 'as Type' assertions
+        // 4. Remove variable type annotations: const x: string[] = ..., let y: string | null = ...
+        js = js.replace(/(\b(?:const|let|var)\s+[A-Za-z0-9_]+)\s*:\s*(string|any|boolean|number|object|unknown|string\[\]|any\[\]|number\[\]|[A-Za-z0-9_<>\[\]|&\s]+)(?=\s*=)/g, '$1');
+
+        // 5. Remove 'as Type' assertions
         js = js.replace(/\s+as\s+[A-Za-z0-9_<>\[\]]+/g, '');
 
         return js;
