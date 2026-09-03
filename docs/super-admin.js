@@ -3075,12 +3075,30 @@ const DEFAULT_NORA_SYNONYMS = [
     { term: 'cubiertas, techos, tejas', ifcCategory: 'IfcRoof' }
 ];
 
+const DEFAULT_NORA_VERB_ACTIONS = [
+    { verbs: 'ocultar, apagar, esconder, quitar, invisible', action: 'hide' },
+    { verbs: 'aislar, dejar solo, solo ver, enfocar, aisla, ver solo', action: 'isolate' },
+    { verbs: 'llevarme a, hacer zoom a, volar a, centrar, enfoca', action: 'flyTo' },
+    { verbs: 'resaltar en rojo, colorear, pintar, resalta', action: 'colorize' },
+    { verbs: 'cuantos, cuantas, volumen, cantidad, metros cubicos, cubicaje', action: 'quantities' },
+    { verbs: 'restablecer, mostrar todo, limpiar, resetea, vista completa', action: 'show_all' }
+];
+
 window.initNoraAITrainingModule = function() {
     let rawRules = localStorage.getItem('NORA_TRAINING_RULES');
     let data = { synonyms: DEFAULT_NORA_SYNONYMS, customPrompt: '', apiKey: localStorage.getItem('NORA_GEMINI_KEY') || '' };
     if (rawRules) {
         try { data = { ...data, ...JSON.parse(rawRules) }; } catch(e) {}
     }
+
+    let rawVerbs = localStorage.getItem('NORA_VERB_ACTIONS');
+    let verbData = DEFAULT_NORA_VERB_ACTIONS;
+    if (rawVerbs) {
+        try { verbData = JSON.parse(rawVerbs); } catch(e) {}
+    }
+
+    let rawSchema = localStorage.getItem('NORA_LEVEL_SCHEMA');
+    const schemaText = rawSchema || "piso 1, primer nivel -> NIVEL +0.00\npiso 2, segundo nivel -> NIVEL +3.20\npiso 3, tercer nivel -> NIVEL +6.40\ntecho, cubierta, terraza -> CUBIERTA";
 
     // Populate Key
     const keyInput = document.getElementById('nora-gemini-key-input');
@@ -3090,9 +3108,15 @@ window.initNoraAITrainingModule = function() {
     const promptText = document.getElementById('nora-custom-prompt-text');
     if (promptText) promptText.value = data.customPrompt || '';
 
-    // Populate Table
+    // Populate Level Schema
+    const levelText = document.getElementById('nora-level-schema-text');
+    if (levelText) levelText.value = schemaText;
+
+    // Populate Tables
     renderSynonymTable(data.synonyms);
-    updateRulesKPI(data.synonyms.length);
+    renderVerbsTable(verbData);
+
+    updateRulesKPI(data.synonyms.length, verbData.length);
 };
 
 function renderSynonymTable(synonyms) {
@@ -3119,6 +3143,33 @@ function renderSynonymTable(synonyms) {
             </td>
             <td class="py-2 px-3 text-right">
                 <button onclick="deleteSynonymRow(${idx})" class="text-slate-400 hover:text-rose-600 transition-colors p-1" title="Eliminar mapeo">
+                    <span class="material-symbols-outlined text-base">delete</span>
+                </button>
+            </td>
+        </tr>
+    `).join('');
+}
+
+function renderVerbsTable(verbs) {
+    const tbody = document.getElementById('verbs-tbody');
+    if (!tbody) return;
+    tbody.innerHTML = verbs.map((v, idx) => `
+        <tr class="hover:bg-slate-50 transition-colors">
+            <td class="py-2 px-3">
+                <input type="text" class="w-full text-xs border border-slate-200 rounded p-1 font-sans" value="${v.verbs}" data-idx="${idx}" data-field="verbs" placeholder="ej: apagar, esconder">
+            </td>
+            <td class="py-2 px-3">
+                <select class="w-full text-xs border border-slate-200 rounded p-1 font-mono font-bold text-slate-700" data-idx="${idx}" data-field="action">
+                    <option value="hide" ${v.action==='hide'?'selected':''}>hide (Ocultar elementos)</option>
+                    <option value="isolate" ${v.action==='isolate'?'selected':''}>isolate (Aislar / Ver solo)</option>
+                    <option value="flyTo" ${v.action==='flyTo'?'selected':''}>flyTo (Hacer zoom / Centrar)</option>
+                    <option value="colorize" ${v.action==='colorize'?'selected':''}>colorize (Colorear / Resaltar)</option>
+                    <option value="quantities" ${v.action==='quantities'?'selected':''}>quantities (Consultar volumen/cantidades)</option>
+                    <option value="show_all" ${v.action==='show_all'?'selected':''}>show_all (Restablecer vista completa)</option>
+                </select>
+            </td>
+            <td class="py-2 px-3 text-right">
+                <button onclick="deleteVerbRow(${idx})" class="text-slate-400 hover:text-rose-600 transition-colors p-1" title="Eliminar verbo">
                     <span class="material-symbols-outlined text-base">delete</span>
                 </button>
             </td>
@@ -3164,41 +3215,104 @@ window.deleteSynonymRow = function(idx) {
     }
 };
 
+window.addVerbRow = function() {
+    const tbody = document.getElementById('verbs-tbody');
+    if (!tbody) return;
+    const tr = document.createElement('tr');
+    const idx = tbody.children.length;
+    tr.className = "hover:bg-slate-50 transition-colors";
+    tr.innerHTML = `
+        <td class="py-2 px-3">
+            <input type="text" class="w-full text-xs border border-slate-200 rounded p-1 font-sans" value="" data-idx="${idx}" data-field="verbs" placeholder="ej: apagar, esconder">
+        </td>
+        <td class="py-2 px-3">
+            <select class="w-full text-xs border border-slate-200 rounded p-1 font-mono font-bold text-slate-700" data-idx="${idx}" data-field="action">
+                <option value="hide">hide (Ocultar elementos)</option>
+                <option value="isolate">isolate (Aislar / Ver solo)</option>
+                <option value="flyTo">flyTo (Hacer zoom / Centrar)</option>
+                <option value="colorize">colorize (Colorear / Resaltar)</option>
+                <option value="quantities">quantities (Consultar volumen/cantidades)</option>
+                <option value="show_all">show_all (Restablecer vista completa)</option>
+            </select>
+        </td>
+        <td class="py-2 px-3 text-right">
+            <button onclick="this.closest('tr').remove()" class="text-slate-400 hover:text-rose-600 transition-colors p-1">
+                <span class="material-symbols-outlined text-base">delete</span>
+            </button>
+        </td>
+    `;
+    tbody.appendChild(tr);
+};
+
+window.deleteVerbRow = function(idx) {
+    const tbody = document.getElementById('verbs-tbody');
+    if (tbody && tbody.children[idx]) {
+        tbody.children[idx].remove();
+    }
+};
+
 window.loadDefaultSynonyms = function() {
     renderSynonymTable(DEFAULT_NORA_SYNONYMS);
 };
 
+window.loadDefaultVerbs = function() {
+    renderVerbsTable(DEFAULT_NORA_VERB_ACTIONS);
+};
+
+window.insertVariableIntoPrompt = function(varName) {
+    const promptText = document.getElementById('nora-custom-prompt-text');
+    if (promptText) {
+        promptText.value += (promptText.value ? '\n' : '') + `Contexto dinámico: ${varName}`;
+        promptText.focus();
+    }
+};
+
 window.saveNoraAITrainingRules = function() {
-    const tbody = document.getElementById('synonyms-tbody');
+    // 1. Synonyms
+    const synonymsTbody = document.getElementById('synonyms-tbody');
     const synonyms = [];
-    if (tbody) {
-        const rows = tbody.querySelectorAll('tr');
-        rows.forEach(r => {
+    if (synonymsTbody) {
+        synonymsTbody.querySelectorAll('tr').forEach(r => {
             const termInput = r.querySelector('[data-field="term"]');
             const catSelect = r.querySelector('[data-field="ifcCategory"]');
             if (termInput && catSelect && termInput.value.trim() !== '') {
-                synonyms.push({
-                    term: termInput.value.trim(),
-                    ifcCategory: catSelect.value
-                });
+                synonyms.push({ term: termInput.value.trim(), ifcCategory: catSelect.value });
+            }
+        });
+    }
+
+    // 2. Verbs
+    const verbsTbody = document.getElementById('verbs-tbody');
+    const verbs = [];
+    if (verbsTbody) {
+        verbsTbody.querySelectorAll('tr').forEach(r => {
+            const verbsInput = r.querySelector('[data-field="verbs"]');
+            const actionSelect = r.querySelector('[data-field="action"]');
+            if (verbsInput && actionSelect && verbsInput.value.trim() !== '') {
+                verbs.push({ verbs: verbsInput.value.trim(), action: actionSelect.value });
             }
         });
     }
 
     const customPrompt = (document.getElementById('nora-custom-prompt-text')?.value || '').trim();
+    const levelSchema = (document.getElementById('nora-level-schema-text')?.value || '').trim();
     const apiKey = (document.getElementById('nora-gemini-key-input')?.value || '').trim();
 
     const rules = { synonyms, customPrompt, apiKey };
     localStorage.setItem('NORA_TRAINING_RULES', JSON.stringify(rules));
+    localStorage.setItem('NORA_VERB_ACTIONS', JSON.stringify(verbs));
+    localStorage.setItem('NORA_LEVEL_SCHEMA', levelSchema);
     if (apiKey) localStorage.setItem('NORA_GEMINI_KEY', apiKey);
 
-    updateRulesKPI(synonyms.length);
-    alert('✅ Reglas de entrenamiento guardadas exitosamente. El motor CDE nora AI usará estos mapeos inmediatamente.');
+    updateRulesKPI(synonyms.length, verbs.length);
+    alert('✅ Reglas de entrenamiento, mapeo de verbos y esquema RAG guardados exitosamente.');
 };
 
-function updateRulesKPI(count) {
-    const kpi = document.getElementById('nora-ai-rules-count');
-    if (kpi) kpi.textContent = `${count} Reglas Cargadas`;
+function updateRulesKPI(synCount, verbCount) {
+    const rulesKpi = document.getElementById('nora-ai-rules-count');
+    const verbsKpi = document.getElementById('nora-ai-verbs-count');
+    if (rulesKpi) rulesKpi.textContent = `${synCount} Entidades`;
+    if (verbsKpi) verbsKpi.textContent = `${verbCount} Métodos`;
 }
 
 window.testGeminiKeyInAdmin = async function() {
@@ -3224,33 +3338,43 @@ window.testGeminiKeyInAdmin = async function() {
     }
 };
 
-window.runSandboxQuery = function() {
-    const input = document.getElementById('sandbox-input');
-    const chatBox = document.getElementById('sandbox-chat-box');
-    const jsonOutput = document.getElementById('sandbox-json-output');
-    if (!input || !chatBox || !input.value.trim()) return;
-
-    const query = input.value.trim();
-    input.value = '';
-
-    // Append user msg
-    chatBox.innerHTML += `
-        <div class="bg-indigo-50 border border-indigo-200 p-2.5 rounded-xl text-indigo-900 font-semibold text-right">
-            🧑‍💻 <strong>Admin:</strong> ${query}
-        </div>
-    `;
-
-    // Local Heuristic parsing test
-    let categoriesMatched = [];
+window.parseNoraCommand = function(query) {
     const lower = query.toLowerCase();
 
-    // Check custom synonyms
+    // 1. Match Verb Actions
+    let rawVerbs = localStorage.getItem('NORA_VERB_ACTIONS');
+    let verbRules = DEFAULT_NORA_VERB_ACTIONS;
+    if (rawVerbs) {
+        try { verbRules = JSON.parse(rawVerbs); } catch(e) {}
+    }
+
+    let detectedAction = 'none';
+    for (const rule of verbRules) {
+        const verbs = rule.verbs.split(',').map(v => v.trim().toLowerCase());
+        if (verbs.some(v => v && lower.includes(v))) {
+            detectedAction = rule.action;
+            break;
+        }
+    }
+
+    // Heuristic fallbacks for verb
+    if (detectedAction === 'none') {
+        if (lower.includes('aisl') || lower.includes('ver solo') || lower.includes('deja solo')) detectedAction = 'isolate';
+        else if (lower.includes('ocult') || lower.includes('apaga') || lower.includes('escond')) detectedAction = 'hide';
+        else if (lower.includes('vuela') || lower.includes('centra') || lower.includes('zoom')) detectedAction = 'flyTo';
+        else if (lower.includes('colorea') || lower.includes('pinta') || lower.includes('resalta')) detectedAction = 'colorize';
+        else if (lower.includes('cuant') || lower.includes('volumen') || lower.includes('metroc') || lower.includes('cantidad')) detectedAction = 'quantities';
+        else if (lower.includes('todo') || lower.includes('restablece') || lower.includes('limpia')) detectedAction = 'show_all';
+    }
+
+    // 2. Match Entity Synonyms
     let rawRules = localStorage.getItem('NORA_TRAINING_RULES');
     let synonyms = DEFAULT_NORA_SYNONYMS;
     if (rawRules) {
         try { synonyms = JSON.parse(rawRules).synonyms || DEFAULT_NORA_SYNONYMS; } catch(e) {}
     }
 
+    let categoriesMatched = [];
     synonyms.forEach(s => {
         const terms = s.term.split(',').map(t => t.trim().toLowerCase());
         for (const t of terms) {
@@ -3262,37 +3386,164 @@ window.runSandboxQuery = function() {
         }
     });
 
-    let action = { type: 'none' };
-    let replyMsg = '';
+    // 3. Match Level / Storey (Dynamic RAG)
+    let levelMatched = null;
+    if (lower.includes('piso 2') || lower.includes('segundo nivel')) levelMatched = 'NIVEL +3.20 (PISO 2)';
+    else if (lower.includes('piso 3') || lower.includes('tercer nivel')) levelMatched = 'NIVEL +6.40 (PISO 3)';
+    else if (lower.includes('piso 1') || lower.includes('primer nivel')) levelMatched = 'NIVEL +0.00 (PISO 1)';
+    else if (lower.includes('techo') || lower.includes('cubierta') || lower.includes('terraza')) levelMatched = 'CUBIERTA';
 
-    if (lower.includes('aisl') || lower.includes('ver') || lower.includes('muestra') || lower.includes('filtr')) {
-        if (categoriesMatched.length > 0) {
-            action = {
-                type: 'isolate',
-                categories: categoriesMatched,
-                message: `Elemento(s) ${categoriesMatched.join(', ')} aislado(s) determinísticamente en el visor 3D.`
-            };
-            replyMsg = `✅ Acción interpretada: Aislando las categorías IFC <b>${categoriesMatched.join(', ')}</b> en el visor 3D.`;
-        } else {
-            replyMsg = `⚠️ No se detectaron categorías específicas en el diccionario. Se usará respuesta generativa.`;
-        }
-    } else if (lower.includes('todo') || lower.includes('restablecer') || lower.includes('limpia')) {
-        action = { type: 'show_all', message: 'Restablecer vista 3D completa.' };
-        replyMsg = `🔄 Vista 3D restablecida a estado completo.`;
+    let message = '';
+    if (detectedAction === 'isolate') {
+        message = `Acción 'isolate' interpretada: Aislando las categorías [${categoriesMatched.join(', ')}]${levelMatched ? ' en ' + levelMatched : ''}.`;
+    } else if (detectedAction === 'hide') {
+        message = `Acción 'hide' interpretada: Ocultando categorías [${categoriesMatched.join(', ')}].`;
+    } else if (detectedAction === 'flyTo') {
+        message = `Acción 'flyTo' interpretada: Centrando cámara sobre [${categoriesMatched.join(', ')}].`;
+    } else if (detectedAction === 'colorize') {
+        message = `Acción 'colorize' interpretada: Resaltando en color [${categoriesMatched.join(', ')}].`;
+    } else if (detectedAction === 'quantities') {
+        message = `Consulta de cantidades: Generando resumen de métricas para [${categoriesMatched.join(', ')}].`;
+    } else if (detectedAction === 'show_all') {
+        message = `Restableciendo visor 3D al estado completo original.`;
     } else {
-        replyMsg = `🤖 Nora AI responderá según las directrices y base de conocimiento corporativa.`;
+        message = `Consulta generativa procesada por nora AI.`;
     }
+
+    return {
+        query,
+        detectedAction,
+        categoriesMatched,
+        levelMatched,
+        parsedJSON: {
+            action: detectedAction,
+            categories: categoriesMatched,
+            levelFilter: levelMatched,
+            message: message
+        }
+    };
+};
+
+window.runSandboxQuery = function() {
+    const input = document.getElementById('sandbox-input');
+    const chatBox = document.getElementById('sandbox-chat-box');
+    const jsonOutput = document.getElementById('sandbox-json-output');
+    if (!input || !chatBox || !input.value.trim()) return;
+
+    const query = input.value.trim();
+    input.value = '';
+
+    chatBox.innerHTML += `
+        <div class="bg-indigo-50 border border-indigo-200 p-2.5 rounded-xl text-indigo-900 font-semibold text-right">
+            🧑‍💻 <strong>Admin:</strong> ${query}
+        </div>
+    `;
+
+    const result = window.parseNoraCommand(query);
 
     chatBox.innerHTML += `
         <div class="bg-white border border-slate-200 p-2.5 rounded-xl text-slate-800">
-            🤖 <strong>nora AI (Sandbox):</strong> ${replyMsg}
+            🤖 <strong>nora AI (Sandbox):</strong> ${result.parsedJSON.message}
         </div>
     `;
     chatBox.scrollTop = chatBox.scrollHeight;
 
     if (jsonOutput) {
-        jsonOutput.textContent = JSON.stringify({ query, actionMatched: action, categoriesDetected: categoriesMatched }, null, 2);
+        jsonOutput.textContent = JSON.stringify(result.parsedJSON, null, 2);
     }
+};
+
+const NORA_TEST_SUITE_DATASET = [
+    { prompt: "¿Cuántos metros cúbicos de concreto hay en zapatas?", expectedCategory: "IfcFooting", expectedAction: "quantities" },
+    { prompt: "Aísla las columnas del piso 2", expectedCategory: "IfcColumn", expectedAction: "isolate" },
+    { prompt: "Oculta toda la arquitectura y deja solo hidrosanitario", expectedCategory: "IfcWall", expectedAction: "hide" },
+    { prompt: "Vuela al techo y centra la vista", expectedCategory: "IfcRoof", expectedAction: "flyTo" },
+    { prompt: "Colorea los muros de rojo", expectedCategory: "IfcWall", expectedAction: "colorize" },
+    { prompt: "Muestra las losas del piso 3", expectedCategory: "IfcSlab", expectedAction: "isolate" },
+    { prompt: "Esconde las ventanas", expectedCategory: "IfcWindow", expectedAction: "hide" },
+    { prompt: "Muestra todo el modelo de nuevo", expectedAction: "show_all" },
+    { prompt: "¿Cuántas puertas hay en el proyecto?", expectedCategory: "IfcDoor", expectedAction: "quantities" },
+    { prompt: "Resalta las vigas principales", expectedCategory: "IfcBeam", expectedAction: "colorize" }
+];
+
+window.runTestSuiteEvaluation = function() {
+    const modal = document.getElementById('modal-test-suite');
+    const tbody = document.getElementById('test-suite-tbody');
+    const scoreBadge = document.getElementById('suite-score-badge');
+    const passedCountEl = document.getElementById('suite-passed-count');
+    const kpiAccuracyEl = document.getElementById('nora-ai-accuracy-status');
+    const sandboxBadgeEl = document.getElementById('sandbox-status-badge');
+
+    let passed = 0;
+    const total = NORA_TEST_SUITE_DATASET.length;
+    const results = [];
+
+    NORA_TEST_SUITE_DATASET.forEach((tc, idx) => {
+        const res = window.parseNoraCommand(tc.prompt);
+        const actionMatch = res.detectedAction === tc.expectedAction;
+        const catMatch = !tc.expectedCategory || res.categoriesMatched.includes(tc.expectedCategory);
+        const isSuccess = actionMatch && catMatch;
+
+        if (isSuccess) passed++;
+
+        results.push({
+            idx: idx + 1,
+            prompt: tc.prompt,
+            expectedAction: `${tc.expectedAction} ${tc.expectedCategory ? '('+tc.expectedCategory+')' : ''}`,
+            detectedAction: `${res.detectedAction} ${res.categoriesMatched.length ? '('+res.categoriesMatched.join(',')+')' : ''}`,
+            isSuccess: isSuccess
+        });
+    });
+
+    const accuracyPct = Math.round((passed / total) * 100);
+    let trafficLight = '🟢';
+    let colorClass = 'text-emerald-600';
+    if (accuracyPct < 70) {
+        trafficLight = '🔴';
+        colorClass = 'text-rose-600';
+    } else if (accuracyPct < 90) {
+        trafficLight = '🟡';
+        colorClass = 'text-amber-600';
+    }
+
+    if (scoreBadge) {
+        scoreBadge.className = `text-2xl font-black ${colorClass} flex items-center gap-2`;
+        scoreBadge.innerHTML = `${trafficLight} ${accuracyPct}% Precisión`;
+    }
+
+    if (passedCountEl) {
+        passedCountEl.textContent = `${passed} de ${total} Pasados`;
+    }
+
+    if (kpiAccuracyEl) {
+        kpiAccuracyEl.className = `text-lg font-extrabold ${colorClass} flex items-center gap-1`;
+        kpiAccuracyEl.innerHTML = `<span>${trafficLight} ${accuracyPct}%</span> <span class="text-xs text-slate-400 font-normal">(${passed}/${total})</span>`;
+    }
+
+    if (sandboxBadgeEl) {
+        sandboxBadgeEl.textContent = `${trafficLight} Precisión: ${accuracyPct}%`;
+    }
+
+    if (tbody) {
+        tbody.innerHTML = results.map(r => `
+            <tr class="hover:bg-slate-50 transition-colors">
+                <td class="py-2.5 px-3 font-mono font-bold text-slate-500">${r.idx}</td>
+                <td class="py-2.5 px-3 font-medium text-slate-800">${r.prompt}</td>
+                <td class="py-2.5 px-3 text-slate-600 font-mono text-[11px]">${r.expectedAction}</td>
+                <td class="py-2.5 px-3 font-mono text-[11px] ${r.isSuccess ? 'text-emerald-700 font-bold' : 'text-rose-600 font-bold'}">${r.detectedAction}</td>
+                <td class="py-2.5 px-3 text-center font-bold">
+                    ${r.isSuccess ? '<span class="px-2 py-0.5 rounded bg-emerald-100 text-emerald-800 text-[10px]">PASÓ</span>' : '<span class="px-2 py-0.5 rounded bg-rose-100 text-rose-800 text-[10px]">FALLÓ</span>'}
+                </td>
+            </tr>
+        `).join('');
+    }
+
+    if (modal) modal.classList.remove('hidden');
+};
+
+window.closeTestSuiteModal = function() {
+    const modal = document.getElementById('modal-test-suite');
+    if (modal) modal.classList.add('hidden');
 };
 
 // ==========================================

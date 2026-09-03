@@ -580,14 +580,14 @@
     <!-- VISTA DE ENTRENAMIENTO NORA AI -->
     <div id="nora-ai-view" class="hidden h-[calc(100vh-80px)] w-full overflow-y-auto bg-slate-50 p-4 md:p-8 flex-col space-y-6">
         <!-- KPI Summary Header -->
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-4 shrink-0">
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 shrink-0">
             <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-200 flex items-center gap-4">
                 <div class="p-3 bg-indigo-50 text-indigo-600 rounded-xl">
                     <span class="material-symbols-outlined text-2xl">psychology</span>
                 </div>
                 <div>
                     <p class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Motor Activo</p>
-                    <h3 id="nora-ai-engine-status" class="text-lg font-extrabold text-slate-900">Gemini 2.0 Flash + Heurística</h3>
+                    <h3 id="nora-ai-engine-status" class="text-sm font-extrabold text-slate-900">Gemini 2.0 Flash + Dynamic RAG</h3>
                 </div>
             </div>
             <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-200 flex items-center gap-4">
@@ -595,38 +595,49 @@
                     <span class="material-symbols-outlined text-2xl">translate</span>
                 </div>
                 <div>
-                    <p class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Reglas & Sinónimos</p>
-                    <h3 id="nora-ai-rules-count" class="text-2xl font-extrabold text-slate-900">6 Reglas Cargadas</h3>
+                    <p class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Entidades & Sinónimos</p>
+                    <h3 id="nora-ai-rules-count" class="text-2xl font-extrabold text-slate-900">8 Reglas</h3>
+                </div>
+            </div>
+            <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-200 flex items-center gap-4">
+                <div class="p-3 bg-blue-50 text-blue-600 rounded-xl">
+                    <span class="material-symbols-outlined text-2xl">videocam</span>
+                </div>
+                <div>
+                    <p class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Verbos / Acciones 3D</p>
+                    <h3 id="nora-ai-verbs-count" class="text-2xl font-extrabold text-slate-900">6 Métodos</h3>
                 </div>
             </div>
             <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-200 flex items-center gap-4">
                 <div class="p-3 bg-emerald-50 text-emerald-600 rounded-xl">
-                    <span class="material-symbols-outlined text-2xl">key</span>
+                    <span class="material-symbols-outlined text-2xl">fact_check</span>
                 </div>
                 <div>
-                    <p class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Estado API Key</p>
-                    <h3 id="nora-ai-key-status" class="text-lg font-extrabold text-emerald-700">Configurada</h3>
+                    <p class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Precisión Suite</p>
+                    <h3 id="nora-ai-accuracy-status" class="text-lg font-extrabold text-emerald-600 flex items-center gap-1">
+                        <span>🟢 100%</span> <span class="text-xs text-slate-400 font-normal">(10/10)</span>
+                    </h3>
                 </div>
             </div>
         </div>
 
         <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <!-- Card 1: Diccionario de Sinónimos y Términos Personalizados -->
+            <!-- Card 1: Diccionario de Sinónimos y Términos Personalizados (Entidades IFC) -->
             <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 space-y-4 flex flex-col">
                 <div class="flex justify-between items-center border-b border-slate-100 pb-3">
                     <div>
                         <h3 class="text-base font-bold text-slate-900 flex items-center gap-2">
                             <span class="material-symbols-outlined text-indigo-600">manage_search</span>
-                            Mapeo de Términos y Sinónimos IFC
+                            1. Entidades y Sinónimos IFC
                         </h3>
-                        <p class="text-xs text-slate-500">Mapea expresiones coloquiales del usuario a entidades IFC estándar del modelo 3D.</p>
+                        <p class="text-xs text-slate-500">Mapea expresiones del usuario a categorías IFC del modelo 3D.</p>
                     </div>
                     <button onclick="addSynonymRow()" class="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold transition-all flex items-center gap-1 shadow-sm">
                         <span class="material-symbols-outlined text-sm">add</span> Mapeo
                     </button>
                 </div>
 
-                <div class="overflow-x-auto flex-1 max-h-[350px]">
+                <div class="overflow-x-auto flex-1 max-h-[300px]">
                     <table class="w-full text-left text-xs">
                         <thead class="bg-slate-50 text-slate-500 font-bold uppercase tracking-wider sticky top-0 border-b border-slate-200">
                             <tr>
@@ -645,25 +656,99 @@
                         <span class="material-symbols-outlined text-sm">restart_alt</span> Cargar predeterminados
                     </button>
                     <button onclick="saveNoraAITrainingRules()" class="px-4 py-2 bg-slate-900 hover:bg-black text-white text-xs font-bold rounded-xl shadow-md transition-all">
-                        Guardar Mapeos
+                        Guardar Entidades
                     </button>
                 </div>
             </div>
 
-            <!-- Card 2: Instrucciones Corporativas y Base de Conocimiento -->
+            <!-- Card 2: Mapeo Bidireccional de Verbos a Métodos del Visor (Acciones 3D) -->
+            <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 space-y-4 flex flex-col">
+                <div class="flex justify-between items-center border-b border-slate-100 pb-3">
+                    <div>
+                        <h3 class="text-base font-bold text-slate-900 flex items-center gap-2">
+                            <span class="material-symbols-outlined text-blue-600">movie</span>
+                            2. Mapeo de Verbos a Métodos 3D
+                        </h3>
+                        <p class="text-xs text-slate-500">Mapea verbos coloquiales a comandos de cámara y visibilidad del visor.</p>
+                    </div>
+                    <button onclick="addVerbRow()" class="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold transition-all flex items-center gap-1 shadow-sm">
+                        <span class="material-symbols-outlined text-sm">add</span> Verbo
+                    </button>
+                </div>
+
+                <div class="overflow-x-auto flex-1 max-h-[300px]">
+                    <table class="w-full text-left text-xs">
+                        <thead class="bg-slate-50 text-slate-500 font-bold uppercase tracking-wider sticky top-0 border-b border-slate-200">
+                            <tr>
+                                <th class="py-2.5 px-3">Verbos Coloquiales (Separados por coma)</th>
+                                <th class="py-2.5 px-3">Método / Acción Visor 3D</th>
+                                <th class="py-2.5 px-3 text-right">Acción</th>
+                            </tr>
+                        </thead>
+                        <tbody id="verbs-tbody" class="divide-y divide-slate-100 font-medium">
+                            <!-- Injected by JS -->
+                        </tbody>
+                    </table>
+                </div>
+                <div class="pt-2 border-t border-slate-100 flex justify-between items-center">
+                    <button onclick="loadDefaultVerbs()" class="text-xs text-blue-600 hover:underline font-semibold flex items-center gap-1">
+                        <span class="material-symbols-outlined text-sm">restart_alt</span> Cargar verbos predeterminados
+                    </button>
+                    <button onclick="saveNoraAITrainingRules()" class="px-4 py-2 bg-slate-900 hover:bg-black text-white text-xs font-bold rounded-xl shadow-md transition-all">
+                        Guardar Verbos
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <!-- Card 3: Inyector de Contexto del Proyecto Actual (Dynamic RAG / Schema Injection) -->
+            <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 space-y-4 flex flex-col">
+                <div class="border-b border-slate-100 pb-3">
+                    <h3 class="text-base font-bold text-slate-900 flex items-center gap-2">
+                        <span class="material-symbols-outlined text-amber-500">schema</span>
+                        3. Inyector de Esquema Dinámico (Dynamic RAG)
+                    </h3>
+                    <p class="text-xs text-slate-500">Inyecta variables dinámicas extraídas del modelo IFC abierto en el CDE.</p>
+                </div>
+
+                <div class="space-y-3 text-xs flex-1">
+                    <div>
+                        <span class="font-bold text-slate-700 block mb-1">Variables de Esquema Disponibles:</span>
+                        <div class="flex flex-wrap gap-1.5">
+                            <span class="px-2.5 py-1 bg-amber-50 text-amber-800 rounded-lg font-mono text-[11px] border border-amber-200 cursor-pointer font-bold" onclick="insertVariableIntoPrompt('{{niveles_proyecto}}')">&#123;&#123;niveles_proyecto&#125;&#125;</span>
+                            <span class="px-2.5 py-1 bg-amber-50 text-amber-800 rounded-lg font-mono text-[11px] border border-amber-200 cursor-pointer font-bold" onclick="insertVariableIntoPrompt('{{fases}}')">&#123;&#123;fases&#125;&#125;</span>
+                            <span class="px-2.5 py-1 bg-amber-50 text-amber-800 rounded-lg font-mono text-[11px] border border-amber-200 cursor-pointer font-bold" onclick="insertVariableIntoPrompt('{{disciplinas_presentes}}')">&#123;&#123;disciplinas_presentes&#125;&#125;</span>
+                        </div>
+                    </div>
+
+                    <div>
+                        <label class="block font-bold text-slate-700 mb-1">Equivalencias de Niveles / Pisos Reales (IfcBuildingStorey)</label>
+                        <textarea id="nora-level-schema-text" rows="4" class="w-full rounded-xl border-slate-200 text-xs p-3 font-mono leading-relaxed" placeholder="piso 1, primer nivel -> NIVEL +0.00&#10;piso 2, segundo nivel -> NIVEL +3.20&#10;piso 3, tercer nivel -> NIVEL +6.40&#10;techo, cubierta, terraza -> CUBIERTA"></textarea>
+                    </div>
+                </div>
+
+                <div class="pt-2 border-t border-slate-100 flex justify-end">
+                    <button onclick="saveNoraAITrainingRules()" class="px-4 py-2 bg-slate-900 hover:bg-black text-white text-xs font-bold rounded-xl shadow-md transition-all">
+                        Guardar Esquema
+                    </button>
+                </div>
+            </div>
+
+            <!-- Card 4: Instrucciones Corporativas y Key Gemini -->
             <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 space-y-4 flex flex-col">
                 <div class="border-b border-slate-100 pb-3">
                     <h3 class="text-base font-bold text-slate-900 flex items-center gap-2">
                         <span class="material-symbols-outlined text-purple-600">article</span>
-                        Instrucciones y Contexto Corporativo
+                        4. Directrices Corporativas y API Key Gemini
                     </h3>
-                    <p class="text-xs text-slate-500">Define respuestas estándar, normativas internas, personas de contacto y directrices para nora AI.</p>
+                    <p class="text-xs text-slate-500">Define respuestas estándar, normativas internas y clave API para el motor LLM.</p>
                 </div>
 
                 <div class="flex-1 space-y-3">
                     <label class="block">
                         <span class="text-xs font-bold text-slate-700 block mb-1">Directrices del Sistema (System Prompt Extension)</span>
-                        <textarea id="nora-custom-prompt-text" rows="7" class="w-full rounded-xl border-slate-200 text-xs p-3 focus:ring-purple-500 focus:border-purple-500 font-mono leading-relaxed" placeholder="Ejemplo:&#10;- El BIM Manager del proyecto es Camilo Martínez (contacto: camilo@norabim.com).&#10;- Las vigas principales tienen resistencia de 4000 PSI.&#10;- El horario de atención en obra es de 7:00 AM a 5:00 PM."></textarea>
+                        <textarea id="nora-custom-prompt-text" rows="4" class="w-full rounded-xl border-slate-200 text-xs p-3 focus:ring-purple-500 focus:border-purple-500 font-mono leading-relaxed" placeholder="Ejemplo:&#10;- El BIM Manager del proyecto es Camilo Martínez (contacto: camilo@norabim.com).&#10;- Las vigas principales tienen resistencia de 4000 PSI."></textarea>
                     </label>
                     
                     <div>
@@ -671,7 +756,7 @@
                         <div class="flex gap-2">
                             <input type="password" id="nora-gemini-key-input" class="flex-1 rounded-xl border-slate-200 text-xs p-2.5 font-mono" placeholder="AIzaSy..." />
                             <button onclick="testGeminiKeyInAdmin()" class="px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-all flex items-center gap-1 shadow-sm shrink-0">
-                                <span class="material-symbols-outlined text-sm">bolt</span> Probando
+                                <span class="material-symbols-outlined text-sm">bolt</span> Probar
                             </button>
                         </div>
                     </div>
@@ -685,19 +770,25 @@
             </div>
         </div>
 
-        <!-- Card 3: Interactive Prompt Sandbox / Testing Console -->
+        <!-- Card 5: Interactive Prompt Sandbox / Testing Console + Test Suite Evaluator -->
         <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 space-y-4">
-            <div class="flex justify-between items-center border-b border-slate-100 pb-3">
+            <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center border-b border-slate-100 pb-3 gap-2">
                 <div>
                     <h3 class="text-base font-bold text-slate-900 flex items-center gap-2">
                         <span class="material-symbols-outlined text-emerald-600">terminal</span>
-                        Simulador Interactivo de Entrenamiento (Sandbox)
+                        Simulador Interactivo y Suite de Pruebas (Sandbox)
                     </h3>
-                    <p class="text-xs text-slate-500">Prueba preguntas en tiempo real para verificar cómo interpreta nora AI los comandos antes de publicarlos a los usuarios.</p>
+                    <p class="text-xs text-slate-500">Prueba comandos individuales o ejecuta la suite completa con semáforo de precisión para validar la producción.</p>
                 </div>
-                <span class="px-3 py-1 bg-emerald-50 text-emerald-700 text-xs font-bold rounded-full border border-emerald-200">
-                    Entorno Sandbox
-                </span>
+                <div class="flex items-center gap-2">
+                    <button onclick="runTestSuiteEvaluation()" class="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white font-bold text-xs rounded-xl shadow-md transition-all flex items-center gap-1.5 shrink-0">
+                        <span class="material-symbols-outlined text-sm">science</span>
+                        Ejecutar Suite de Pruebas (10 Casos)
+                    </button>
+                    <span id="sandbox-status-badge" class="px-3 py-1 bg-emerald-50 text-emerald-700 text-xs font-bold rounded-full border border-emerald-200 shrink-0">
+                        🟢 Precisión: 100%
+                    </span>
+                </div>
             </div>
 
             <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -705,7 +796,7 @@
                 <div class="space-y-3">
                     <div id="sandbox-chat-box" class="h-64 border border-slate-200 rounded-xl p-3 bg-slate-50 overflow-y-auto space-y-3 text-xs">
                         <div class="bg-white border border-slate-200 p-3 rounded-xl">
-                            👋 <strong>Simulador nora AI:</strong> Escribe cualquier consulta como <em>"aisla las columnas"</em> o <em>"¿quién es el BIM Manager?"</em> para probar las reglas de entrenamiento.
+                            👋 <strong>Simulador nora AI:</strong> Escribe cualquier consulta como <em>"aisla las columnas del piso 2"</em> o <em>"oculta toda la arquitectura"</em> para probar las reglas de entrenamiento.
                         </div>
                     </div>
                     <div class="flex gap-2">
@@ -726,9 +817,65 @@
                     </div>
                     <div class="pt-3 border-t border-slate-800 text-[10px] text-slate-500 flex justify-between">
                         <span>Parser status: OK</span>
-                        <span>Multi-category matching: Active</span>
+                        <span>Verbs + Entities + RAG: Synced</span>
                     </div>
                 </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL INFORME SUITE DE PRUEBAS -->
+    <div id="modal-test-suite" class="fixed inset-0 z-[110] flex items-center justify-center hidden">
+        <div class="absolute inset-0 bg-slate-900/50 backdrop-blur-sm" onclick="closeTestSuiteModal()"></div>
+        <div class="relative w-full max-w-2xl rounded-2xl bg-white shadow-2xl overflow-hidden flex flex-col max-h-[85vh]">
+            <div class="flex items-center justify-between border-b border-slate-100 px-6 py-4 bg-slate-900 text-white">
+                <div class="flex items-center gap-2">
+                    <span class="material-symbols-outlined text-purple-400">science</span>
+                    <div>
+                        <h3 class="text-sm font-bold">Informe de Precisión - Suite de Pruebas nora AI</h3>
+                        <p class="text-[11px] text-slate-400">Evaluación de 10 casos de prueba típicos para el visor 3D</p>
+                    </div>
+                </div>
+                <button onclick="closeTestSuiteModal()" class="text-slate-400 hover:text-white transition-colors">
+                    <span class="material-symbols-outlined text-lg">close</span>
+                </button>
+            </div>
+
+            <div class="p-6 space-y-4 overflow-y-auto">
+                <div class="flex items-center justify-between bg-slate-50 p-4 rounded-xl border border-slate-200">
+                    <div>
+                        <p class="text-xs text-slate-500 font-medium">Semáforo de Producción</p>
+                        <h4 id="suite-score-badge" class="text-2xl font-black text-emerald-600 flex items-center gap-2">
+                            🟢 100% Precisión
+                        </h4>
+                    </div>
+                    <div class="text-right">
+                        <span id="suite-passed-count" class="text-xs font-bold text-slate-800 bg-emerald-100 text-emerald-800 px-3 py-1 rounded-full">10 de 10 Pasados</span>
+                    </div>
+                </div>
+
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left text-xs border-collapse">
+                        <thead class="bg-slate-100 text-slate-600 font-bold uppercase tracking-wider">
+                            <tr>
+                                <th class="py-2.5 px-3">#</th>
+                                <th class="py-2.5 px-3">Prompt de Prueba</th>
+                                <th class="py-2.5 px-3">Acción Esperada</th>
+                                <th class="py-2.5 px-3">Acción Detectada</th>
+                                <th class="py-2.5 px-3 text-center">Estado</th>
+                            </tr>
+                        </thead>
+                        <tbody id="test-suite-tbody" class="divide-y divide-slate-100 font-medium">
+                            <!-- Injected by JS -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div class="bg-slate-50 px-6 py-3 flex justify-end border-t border-slate-100">
+                <button onclick="closeTestSuiteModal()" class="px-4 py-2 bg-slate-900 hover:bg-black text-white text-xs font-bold rounded-xl transition-all">
+                    Cerrar Informe
+                </button>
             </div>
         </div>
     </div>
