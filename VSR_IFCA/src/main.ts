@@ -9372,9 +9372,9 @@ function setupVisibilityToolbar() {
 function buildBIMContextForAI() {
     const elements = extractAllElementsGlobal();
     const categories: Record<string, { count: number; area: number; volume: number }> = {};
-    const levels: Record<string, { count: number }> = {};
-    const materials: Record<string, { count: number }> = {};
-    const pilotes: Record<string, { count: number }> = {};
+    const levels: Record<string, { count: number; area: number; volume: number }> = {};
+    const materials: Record<string, { count: number; area: number; volume: number }> = {};
+    const pilotes: Record<string, { count: number; area: number; volume: number }> = {};
 
     for (const el of elements) {
         const catKey = el.category || el.name || 'Sin Categoría';
@@ -9384,24 +9384,38 @@ function buildBIMContextForAI() {
         categories[catKey].volume += (el.volume || 0);
 
         if (el.level && el.level !== 'SIN NIVEL') {
-            if (!levels[el.level]) levels[el.level] = { count: 0 };
+            if (!levels[el.level]) levels[el.level] = { count: 0, area: 0, volume: 0 };
             levels[el.level].count++;
+            levels[el.level].area += (el.area || 0);
+            levels[el.level].volume += (el.volume || 0);
         }
 
         if (el.material && el.material !== 'SIN MATERIAL') {
-            if (!materials[el.material]) materials[el.material] = { count: 0 };
+            if (!materials[el.material]) materials[el.material] = { count: 0, area: 0, volume: 0 };
             materials[el.material].count++;
+            materials[el.material].area += (el.area || 0);
+            materials[el.material].volume += (el.volume || 0);
         }
 
         if (el.pilote) {
-            if (!pilotes[el.pilote]) pilotes[el.pilote] = { count: 0 };
+            if (!pilotes[el.pilote]) pilotes[el.pilote] = { count: 0, area: 0, volume: 0 };
             pilotes[el.pilote].count++;
+            pilotes[el.pilote].area += (el.area || 0);
+            pilotes[el.pilote].volume += (el.volume || 0);
         }
     }
 
     for (const k in categories) {
         categories[k].area = Math.round(categories[k].area * 100) / 100;
         categories[k].volume = Math.round(categories[k].volume * 100) / 100;
+    }
+    for (const k in levels) {
+        levels[k].area = Math.round(levels[k].area * 100) / 100;
+        levels[k].volume = Math.round(levels[k].volume * 100) / 100;
+    }
+    for (const k in materials) {
+        materials[k].area = Math.round(materials[k].area * 100) / 100;
+        materials[k].volume = Math.round(materials[k].volume * 100) / 100;
     }
 
     return {

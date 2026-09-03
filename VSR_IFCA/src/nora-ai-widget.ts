@@ -154,9 +154,13 @@ export class NoraAIWidget {
 
     private configureApiKey() {
         const currentKey = this.userApiKey || this.options.apiKey || '';
-        const inputKey = prompt('Configurar Google Gemini API Key (deja en blanco para usar el motor local BIM):', currentKey);
+        const inputKey = prompt('Configurar Google Gemini API Key (deja en blanco para usar el motor local BIM):\n\nRecuerda: Una API Key válida de Google Gemini siempre empieza con "AIzaSy..."', currentKey);
         if (inputKey !== null) {
-            this.userApiKey = inputKey.trim();
+            const trimmed = inputKey.trim();
+            if (trimmed && !trimmed.startsWith('AIzaSy')) {
+                alert('⚠️ La clave ingresada no parece una Google Gemini API Key válida.\n\nLas claves de Google Gemini siempre comienzan con "AIzaSy...".\n\nPuedes obtener una 100% gratuita en:\nhttps://aistudio.google.com/app/apikey');
+            }
+            this.userApiKey = trimmed;
             if (this.userApiKey) {
                 localStorage.setItem('NORA_GEMINI_KEY', this.userApiKey);
             } else {
@@ -384,7 +388,14 @@ INSTRUCCIONES DE RESPUESTA:
         });
 
         if (!res.ok) {
-            console.warn(`[nora AI] Fallback due to API error ${res.status}`);
+            console.warn(`[nora AI] API error ${res.status}`);
+            if (res.status === 400 || res.status === 403) {
+                const localResp = this.localHeuristicFallback(userQuery, bimContext);
+                return {
+                    answer: `⚠️ <b>API Key no válida</b> (Google Gemini devolvió error ${res.status}).<br>Una clave válida debe empezar por <code>AIzaSy...</code> (consíguela gratis en <a href="https://aistudio.google.com/app/apikey" target="_blank">Google AI Studio</a>).<br><br>${localResp.answer}`,
+                    action: localResp.action
+                };
+            }
             return this.localHeuristicFallback(userQuery, bimContext);
         }
 
@@ -491,22 +502,47 @@ INSTRUCCIONES DE RESPUESTA:
             }
         }
 
-        // 5. Material search
+        // 5. Material search with PSI / strength matching
         if (bimContext && bimContext.materials) {
             const matKeys = Object.keys(bimContext.materials);
-            for (const matKey of matKeys) {
-                const matNorm = matKey.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
-                if (q.includes(matNorm) || (q.includes('hormigon') && matNorm.includes('hormigon')) || (q.includes('concreto') && matNorm.includes('con'))) {
-                    const stats = bimContext.materials[matKey];
-                    return {
-                        answer: `El material <b>${matKey}</b> está presente en <b>${stats.count} elementos</b> del modelo.`,
-                        action: {
-                            type: 'isolate',
-                            materials: [matKey],
-                            message: `Aislado material ${matKey}`
-                        }
-                    };
+            let bestMatchMatKey: string | null = null;
+            
+            // Check specific numbers in query from last mentioned to first
+            const numbersInQuery = (q.match(/\d+/g) || []).reverse();
+            for (const num of numbersInQuery) {
+                if (num === '3' || num === '2' || num === '1') continue; // ignore single digits like '3' in m3
+                for (const matKey of matKeys) {
+                    const matNorm = matKey.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+                    if (matNorm.includes(num)) {
+                        bestMatchMatKey = matKey;
+                        break;
+                    }
                 }
+                if (bestMatchMatKey) break;
+            }
+
+            if (!bestMatchMatKey) {
+                for (const matKey of matKeys) {
+                    const matNorm = matKey.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+                    if (q.includes(matNorm) || (q.includes('hormigon') && matNorm.includes('hormigon')) || (q.includes('concreto') && matNorm.includes('con'))) {
+                        bestMatchMatKey = matKey;
+                        break;
+                    }
+                }
+            }
+
+            if (bestMatchMatKey) {
+                const stats = bimContext.materials[bestMatchMatKey];
+                const wantsIsolate = q.includes('aisla') || q.includes('filtr') || q.includes('muestra') || q.includes('ver') || q.includes('solo');
+
+                return {
+                    answer: `El material <b>${bestMatchMatKey}</b> está presente en <b>${stats.count} elementos</b> del modelo.<br>• <b>Volumen acumulado:</b> ${stats.volume || 0} m³<br>• <b>Área acumulada:</b> ${stats.area || 0} m²`,
+                    action: wantsIsolate ? {
+                        type: 'isolate',
+                        materials: [bestMatchMatKey],
+                        message: `Aislado material ${bestMatchMatKey}`
+                    } : { type: 'none' }
+                };
             }
         }
 
