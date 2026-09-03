@@ -3084,6 +3084,33 @@ const DEFAULT_NORA_VERB_ACTIONS = [
     { verbs: 'restablecer, mostrar todo, limpiar, resetea, vista completa', action: 'show_all' }
 ];
 
+const DEFAULT_TS_BRAIN_CODE_TEMPLATE = `/**
+ * Extensión de Código TypeScript / JS para el Cerebro de nora AI
+ * 
+ * @param query string - La consulta del usuario en lenguaje natural
+ * @param result object - El resultado parseado determinísticamente
+ * @returns object - El objeto 'result' transformado o enriquecido
+ */
+function noraBrainCustomPipeline(query: string, result: any) {
+    const lower = query.toLowerCase();
+
+    // 1. Regla TS: Marcar Prioridad Alta si incluye palabras críticas
+    if (lower.includes('urgente') || lower.includes('crítico') || lower.includes('alerta')) {
+        result.parsedJSON.priority = 'CRITICAL';
+        result.parsedJSON.message = '🚨 [REGLA TS: ATENCIÓN REQUERIDA] ' + result.parsedJSON.message;
+    }
+
+    // 2. Regla TS: Enriquecer categoría de fontanería/sanitario
+    if (lower.includes('hidrosanitario') || lower.includes('tubos') || lower.includes('tubería')) {
+        if (!result.categoriesMatched.includes('IfcPipeSegment')) {
+            result.categoriesMatched.push('IfcPipeSegment');
+            result.parsedJSON.categories.push('IfcPipeSegment');
+        }
+    }
+
+    return result;
+}`;
+
 window.initNoraAITrainingModule = function() {
     let rawRules = localStorage.getItem('NORA_TRAINING_RULES');
     let data = { synonyms: DEFAULT_NORA_SYNONYMS, customPrompt: '', apiKey: localStorage.getItem('NORA_GEMINI_KEY') || '' };
@@ -3100,6 +3127,9 @@ window.initNoraAITrainingModule = function() {
     let rawSchema = localStorage.getItem('NORA_LEVEL_SCHEMA');
     const schemaText = rawSchema || "piso 1, primer nivel -> NIVEL +0.00\npiso 2, segundo nivel -> NIVEL +3.20\npiso 3, tercer nivel -> NIVEL +6.40\ntecho, cubierta, terraza -> CUBIERTA";
 
+    let rawTSCode = localStorage.getItem('NORA_CUSTOM_TS_CODE');
+    const tsCode = rawTSCode !== null ? rawTSCode : DEFAULT_TS_BRAIN_CODE_TEMPLATE;
+
     // Populate Key
     const keyInput = document.getElementById('nora-gemini-key-input');
     if (keyInput) keyInput.value = data.apiKey || '';
@@ -3112,11 +3142,16 @@ window.initNoraAITrainingModule = function() {
     const levelText = document.getElementById('nora-level-schema-text');
     if (levelText) levelText.value = schemaText;
 
+    // Populate TS Code Editor
+    const tsTextarea = document.getElementById('nora-custom-ts-code');
+    if (tsTextarea) tsTextarea.value = tsCode;
+
     // Populate Tables
     renderSynonymTable(data.synonyms);
     renderVerbsTable(verbData);
 
     updateRulesKPI(data.synonyms.length, verbData.length);
+    window.testCustomTSCodeSyntax();
 };
 
 function renderSynonymTable(synonyms) {
@@ -3267,6 +3302,48 @@ window.insertVariableIntoPrompt = function(varName) {
     }
 };
 
+window.testCustomTSCodeSyntax = function() {
+    const tsCode = (document.getElementById('nora-custom-ts-code')?.value || '').trim();
+    const statusEl = document.getElementById('nora-ts-syntax-status');
+    const statusKpi = document.getElementById('nora-ai-ts-status');
+
+    if (!tsCode) {
+        if (statusEl) {
+            statusEl.className = 'px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-200';
+            statusEl.textContent = '🟡 Vacío (Sin Hook)';
+        }
+        if (statusKpi) statusKpi.textContent = 'Sin Hook';
+        return true;
+    }
+
+    try {
+        const cleanJS = tsCode.replace(/:\s*string/g, '').replace(/:\s*any/g, '').replace(/:\s*boolean/g, '').replace(/:\s*number/g, '');
+        new Function('query', 'result', `${cleanJS}\n return noraBrainCustomPipeline(query, result);`);
+
+        if (statusEl) {
+            statusEl.className = 'px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200';
+            statusEl.textContent = '🟢 Sintaxis Válida / Transpilador Activo';
+        }
+        if (statusKpi) statusKpi.textContent = 'Hook Habilitado';
+        return true;
+    } catch(err) {
+        if (statusEl) {
+            statusEl.className = 'px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-rose-50 text-rose-700 border border-rose-200';
+            statusEl.textContent = `🔴 Error Sintaxis: ${err.message}`;
+        }
+        if (statusKpi) statusKpi.textContent = 'Error Sintaxis';
+        return false;
+    }
+};
+
+window.resetDefaultTSCodeTemplate = function() {
+    const textarea = document.getElementById('nora-custom-ts-code');
+    if (textarea) {
+        textarea.value = DEFAULT_TS_BRAIN_CODE_TEMPLATE;
+        window.testCustomTSCodeSyntax();
+    }
+};
+
 window.saveNoraAITrainingRules = function() {
     // 1. Synonyms
     const synonymsTbody = document.getElementById('synonyms-tbody');
@@ -3297,15 +3374,18 @@ window.saveNoraAITrainingRules = function() {
     const customPrompt = (document.getElementById('nora-custom-prompt-text')?.value || '').trim();
     const levelSchema = (document.getElementById('nora-level-schema-text')?.value || '').trim();
     const apiKey = (document.getElementById('nora-gemini-key-input')?.value || '').trim();
+    const customTSCode = (document.getElementById('nora-custom-ts-code')?.value || '').trim();
 
     const rules = { synonyms, customPrompt, apiKey };
     localStorage.setItem('NORA_TRAINING_RULES', JSON.stringify(rules));
     localStorage.setItem('NORA_VERB_ACTIONS', JSON.stringify(verbs));
     localStorage.setItem('NORA_LEVEL_SCHEMA', levelSchema);
+    localStorage.setItem('NORA_CUSTOM_TS_CODE', customTSCode);
     if (apiKey) localStorage.setItem('NORA_GEMINI_KEY', apiKey);
 
     updateRulesKPI(synonyms.length, verbs.length);
-    alert('✅ Reglas de entrenamiento, mapeo de verbos y esquema RAG guardados exitosamente.');
+    window.testCustomTSCodeSyntax();
+    alert('✅ Reglas de entrenamiento, mapeo de verbos, esquema RAG y Código TypeScript del Cerebro guardados exitosamente.');
 };
 
 function updateRulesKPI(synCount, verbCount) {
@@ -3410,7 +3490,7 @@ window.parseNoraCommand = function(query) {
         message = `Consulta generativa procesada por nora AI.`;
     }
 
-    return {
+    let result = {
         query,
         detectedAction,
         categoriesMatched,
@@ -3422,6 +3502,23 @@ window.parseNoraCommand = function(query) {
             message: message
         }
     };
+
+    // Execute Custom TypeScript / JS Brain Pipeline Hook
+    let rawTSCode = localStorage.getItem('NORA_CUSTOM_TS_CODE');
+    if (rawTSCode && rawTSCode.trim()) {
+        try {
+            const cleanJS = rawTSCode.replace(/:\s*string/g, '').replace(/:\s*any/g, '').replace(/:\s*boolean/g, '').replace(/:\s*number/g, '');
+            const customHook = new Function('query', 'result', `${cleanJS}\n return noraBrainCustomPipeline(query, result);`);
+            const transformedResult = customHook(query, result);
+            if (transformedResult) {
+                result = transformedResult;
+            }
+        } catch(err) {
+            console.warn('⚠️ Excepción en Hook de TypeScript Personalizado:', err);
+        }
+    }
+
+    return result;
 };
 
 window.runSandboxQuery = function() {
