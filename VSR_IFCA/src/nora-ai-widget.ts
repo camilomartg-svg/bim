@@ -86,14 +86,14 @@ export class NoraAIWidget {
 
             <div class="nora-ai-body" id="nora-ai-messages">
                 <div class="nora-ai-prompts">
-                    <button class="nora-ai-prompt-pill" data-prompt="¿Volumen de concreto 3000psi en el piso 2?">
-                        <i class="fa-solid fa-cube"></i> Concreto Piso 2
+                    <button class="nora-ai-prompt-pill" data-prompt="Aísla columnas y pisos en el modelo 3D">
+                        <i class="fa-solid fa-eye"></i> Columnas y Pisos
                     </button>
                     <button class="nora-ai-prompt-pill" data-prompt="Aísla la categoría TRAMOS en el modelo 3D">
                         <i class="fa-solid fa-eye"></i> Aislar TRAMOS
                     </button>
-                    <button class="nora-ai-prompt-pill" data-prompt="Aísla los elementos del Piso 1">
-                        <i class="fa-solid fa-layer-group"></i> Nivel 1
+                    <button class="nora-ai-prompt-pill" data-prompt="¿Volumen de concreto 3000psi en el piso 2?">
+                        <i class="fa-solid fa-cube"></i> Concreto Piso 2
                     </button>
                     <button class="nora-ai-prompt-pill" data-prompt="Muéstrame todo el modelo y limpia los filtros">
                         <i class="fa-solid fa-rotate-left"></i> Restablecer 3D
@@ -372,7 +372,7 @@ INSTRUCCIONES DE RESPUESTA:
             ...this.chatHistory
         ];
 
-        // Try official Gemini models sequentially
+        // Try official Gemini models sequentially WITHOUT custom CORS headers
         for (const modelName of ['gemini-2.0-flash', 'gemini-1.5-flash', 'gemini-1.5-pro']) {
             const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`;
             const payload = {
@@ -387,8 +387,7 @@ INSTRUCCIONES DE RESPUESTA:
                 const res = await fetch(url, {
                     method: 'POST',
                     headers: {
-                        'Content-Type': 'application/json',
-                        'x-goog-api-key': apiKey
+                        'Content-Type': 'application/json'
                     },
                     body: JSON.stringify(payload)
                 });
@@ -408,51 +407,33 @@ INSTRUCCIONES DE RESPUESTA:
                     console.warn(`[nora AI] Model ${modelName} returned status ${res.status}:`, await res.text());
                 }
             } catch (err) {
-                console.warn(`[nora AI] Model ${modelName} error:`, err);
+                console.warn(`[nora AI] Model ${modelName} fetch error:`, err);
             }
         }
 
-        // If Gemini API calls fail or run out of quota, fallback seamlessly
+        // If Gemini API calls fail or run out of quota, fallback seamlessly to local heuristic
         const fallbackResult = this.localHeuristicFallback(userQuery, bimContext);
         this.chatHistory.push({ role: 'model', parts: [{ text: JSON.stringify(fallbackResult) }] });
         return fallbackResult;
     }
 
     private localHeuristicFallback(query: string, bimContext: any): { answer: string; action: NoraAIAction } {
-        const q = query.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
-
-        // Check recent conversation history for context (e.g. material mentioned in previous turn)
-        let lastMaterial: string | null = null;
-        let lastLevel: string | null = null;
-        let lastCategory: string | null = null;
-
-        for (let i = this.chatHistory.length - 2; i >= 0; i--) {
-            const text = (this.chatHistory[i].parts[0]?.text || '').toLowerCase();
-            if (!lastMaterial) {
-                if (text.includes('3000') || text.includes('210')) lastMaterial = 'CON-210-3000PSI';
-                else if (text.includes('3500') || text.includes('245')) lastMaterial = 'CON-245-3500PSI';
-                else if (text.includes('4000') || text.includes('280')) lastMaterial = 'CON-280-4000PSI';
-            }
-            if (!lastLevel) {
-                if (text.includes('piso 2') || text.includes('p2') || text.includes('psio 2')) lastLevel = 'ED ADMIN P2 NE';
-                else if (text.includes('piso 1') || text.includes('p1')) lastLevel = 'PISO 1 NE';
-                else if (text.includes('piso 3') || text.includes('p3')) lastLevel = 'ED ADMIN P3 NE';
-            }
-        }
+        // Clean query text, keeping words intact
+        const qClean = query.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
 
         // 1. Greetings & Casual questions
         const greetings = ['hola', 'buenas', 'buenos dias', 'buenas tardes', 'buenas noches', 'saludos', 'quien eres', 'que haces', 'que puedes hacer', 'ayuda', 'help', 'solo sabes decir eso'];
-        if (greetings.some(g => q.includes(g))) {
+        if (greetings.some(g => qClean.includes(g))) {
             const total = bimContext?.totalElements || 0;
             const catCount = Object.keys(bimContext?.categories || {}).length;
             return {
-                answer: `¡Hola! 👋 Soy <b>nora AI Copilot</b>. Estoy conectada en tiempo real a tu modelo 3D (${total} elementos en ${catCount} categorías).<br><br>Puedo responderte sobre:<br>• <b>Cantidades por nivel y material</b> ("¿Volumen de concreto 3000psi en el piso 2?")<br>• <b>Aislamientos 3D combinados</b> ("Aísla columnas del piso 1")<br>• <b>Restablecer visor</b> ("Muéstrame todo el modelo")`,
+                answer: `¡Hola! 👋 Soy <b>nora AI Copilot</b>. Estoy conectada en tiempo real a tu modelo 3D (${total} elementos en ${catCount} categorías).<br><br>Puedo responderte sobre:<br>• <b>Cantidades por nivel y material</b> ("¿Volumen de concreto 3000psi en el piso 2?")<br>• <b>Aislamientos 3D combinados</b> ("Aísla columnas y pisos")<br>• <b>Restablecer visor</b> ("Muéstrame todo el modelo")`,
                 action: { type: 'none' }
             };
         }
 
-        // 2. Reset / Show All
-        if (q.includes('mostrar todo') || q.includes('limpiar') || q.includes('restablecer') || q.includes('reset') || q.includes('encender todo')) {
+        // 2. Reset / Show All / Turn on everything
+        if (qClean.includes('mostrar todo') || qClean.includes('limpiar') || qClean.includes('restablecer') || qClean.includes('reset') || qClean.includes('encender todo') || qClean.includes('prendo todo')) {
             return {
                 answer: 'Se han restablecido todos los filtros y la visibilidad completa del modelo 3D.',
                 action: {
@@ -462,65 +443,102 @@ INSTRUCCIONES DE RESPUESTA:
             };
         }
 
-        // 3. Extract Level mention (including typos like "psio 2", "p2", "piso 2")
+        // 3. Multi-Category Extraction
+        const matchedCategories: string[] = [];
+        if (bimContext && bimContext.categories) {
+            const catKeys = Object.keys(bimContext.categories);
+
+            const categorySynonyms: Record<string, string[]> = {
+                "tramos": ["tramo", "tramos"],
+                "columnas": ["columna", "columnas"],
+                "pisos / placas": ["piso", "pisos", "placa", "placas", "losa", "losas", "slabs"],
+                "vigas": ["viga", "vigas", "beams"],
+                "muros": ["muro", "muros", "walls"],
+                "descansillos": ["descansillo", "descansillos", "landings"],
+                "cimentación estructural": ["cimentacion", "zapata", "zapatas", "foundations"],
+                "pilotes": ["pilote", "pilotes", "piles"]
+            };
+
+            for (const catKey of catKeys) {
+                const normCatKey = catKey.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+                
+                // Direct match
+                if (qClean.includes(normCatKey)) {
+                    if (!matchedCategories.includes(catKey)) matchedCategories.push(catKey);
+                    continue;
+                }
+
+                // Synonym match
+                for (const mainKey in categorySynonyms) {
+                    if (normCatKey.includes(mainKey) || mainKey.includes(normCatKey)) {
+                        const syns = categorySynonyms[mainKey];
+                        if (syns.some(syn => qClean.includes(syn))) {
+                            if (!matchedCategories.includes(catKey)) matchedCategories.push(catKey);
+                        }
+                    }
+                }
+            }
+        }
+
+        // 4. Level Extraction (Ignoring isolated "3D" / "3d")
         let targetLevelKey: string | null = null;
         if (bimContext && bimContext.levels) {
             const levelKeys = Object.keys(bimContext.levels);
             
-            if (q.includes('piso 2') || q.includes('psio 2') || q.includes('p2') || q.includes('nivel 2')) {
+            if (qClean.includes('piso 2') || qClean.includes('psio 2') || qClean.includes('p2') || qClean.includes('nivel 2')) {
                 targetLevelKey = levelKeys.find(l => l.includes('P2') || l.includes('2')) || null;
-            } else if (q.includes('piso 1') || q.includes('psio 1') || q.includes('p1') || q.includes('nivel 1')) {
+            } else if (qClean.includes('piso 1') || qClean.includes('psio 1') || qClean.includes('p1') || qClean.includes('nivel 1')) {
                 targetLevelKey = levelKeys.find(l => l.includes('P1') || l.includes('1')) || null;
-            } else if (q.includes('piso 3') || q.includes('psio 3') || q.includes('p3') || q.includes('nivel 3')) {
+            } else if (qClean.includes('piso 3') || qClean.includes('psio 3') || qClean.includes('p3') || qClean.includes('nivel 3')) {
                 targetLevelKey = levelKeys.find(l => l.includes('P3') || l.includes('3')) || null;
-            } else if (q.includes('sotano')) {
+            } else if (qClean.includes('sotano')) {
                 targetLevelKey = levelKeys.find(l => l.toLowerCase().includes('sotano')) || null;
-            } else {
-                for (const l of levelKeys) {
-                    if (q.includes(l.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, ''))) {
-                        targetLevelKey = l;
-                        break;
-                    }
-                }
             }
         }
-        if (!targetLevelKey && (q.includes('solo el') || q.includes('este piso') || q.includes('en ese piso'))) {
-            targetLevelKey = lastLevel;
-        }
 
-        // 4. Extract Material mention
+        // 5. Material Extraction
         let targetMaterialKey: string | null = null;
         if (bimContext && bimContext.materials) {
             const matKeys = Object.keys(bimContext.materials);
             
-            const numbersInQuery = (q.match(/\d+/g) || []).reverse();
-            for (const num of numbersInQuery) {
-                if (num === '3' || num === '2' || num === '1') continue;
-                for (const matKey of matKeys) {
-                    const matNorm = matKey.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
-                    if (matNorm.includes(num)) {
-                        targetMaterialKey = matKey;
-                        break;
-                    }
-                }
-                if (targetMaterialKey) break;
-            }
-
-            if (!targetMaterialKey) {
-                for (const matKey of matKeys) {
-                    const matNorm = matKey.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
-                    if (q.includes(matNorm) || (q.includes('hormigon') && matNorm.includes('hormigon')) || (q.includes('concreto') && matNorm.includes('con'))) {
-                        targetMaterialKey = matKey;
-                        break;
-                    }
-                }
+            if (qClean.includes('3000') || qClean.includes('210')) {
+                targetMaterialKey = matKeys.find(m => m.includes('3000') || m.includes('210')) || null;
+            } else if (qClean.includes('3500') || qClean.includes('245')) {
+                targetMaterialKey = matKeys.find(m => m.includes('3500') || m.includes('245')) || null;
+            } else if (qClean.includes('4000') || qClean.includes('280')) {
+                targetMaterialKey = matKeys.find(m => m.includes('4000') || m.includes('280')) || null;
             }
         }
-        if (!targetMaterialKey && (q.includes('cuanto') || q.includes('volumen') || q.includes('ese') || q.includes('solo el'))) {
-            targetMaterialKey = lastMaterial;
+
+        const isActionRequested = qClean.includes('aisla') || qClean.includes('filtr') || qClean.includes('muestra') || qClean.includes('ver') || qClean.includes('solo') || qClean.includes('quiero');
+
+        // Evaluate Matched Categories
+        if (matchedCategories.length > 0) {
+            let totalCount = 0;
+            let totalVol = 0;
+            let totalArea = 0;
+
+            for (const cat of matchedCategories) {
+                const stats = bimContext.categories[cat];
+                if (stats) {
+                    totalCount += stats.count || 0;
+                    totalVol += stats.volume || 0;
+                    totalArea += stats.area || 0;
+                }
+            }
+
+            const catListStr = matchedCategories.join(', ');
+            return {
+                answer: `Categoría(s) <b>${catListStr}</b>:<br>• <b>Total elementos:</b> ${totalCount}<br>• <b>Volumen acumulado:</b> ${Math.round(totalVol * 100) / 100} m³<br>• <b>Área acumulada:</b> ${Math.round(totalArea * 100) / 100} m²`,
+                action: {
+                    type: 'isolate',
+                    categories: matchedCategories,
+                    message: `Aislada(s) categoría(s): ${catListStr}`
+                }
+            };
         }
 
-        // 5. Combined Level x Material query
+        // Evaluate Level x Material
         if (targetLevelKey && targetMaterialKey && bimContext?.matrixByLevelAndMaterial) {
             const stats = bimContext.matrixByLevelAndMaterial[targetLevelKey]?.[targetMaterialKey];
             if (stats) {
@@ -536,7 +554,7 @@ INSTRUCCIONES DE RESPUESTA:
             }
         }
 
-        // 6. Level-only query
+        // Evaluate Level only
         if (targetLevelKey && bimContext?.levels?.[targetLevelKey]) {
             const stats = bimContext.levels[targetLevelKey];
             return {
@@ -549,7 +567,7 @@ INSTRUCCIONES DE RESPUESTA:
             };
         }
 
-        // 7. Material-only query
+        // Evaluate Material only
         if (targetMaterialKey && bimContext?.materials?.[targetMaterialKey]) {
             const stats = bimContext.materials[targetMaterialKey];
             return {
@@ -562,29 +580,10 @@ INSTRUCCIONES DE RESPUESTA:
             };
         }
 
-        // 8. Category search
-        if (bimContext && bimContext.categories) {
-            const categoryKeys = Object.keys(bimContext.categories);
-            for (const catKey of categoryKeys) {
-                const catNorm = catKey.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
-                if (q.includes(catNorm)) {
-                    const stats = bimContext.categories[catKey];
-                    return {
-                        answer: `La categoría <b>${catKey}</b> cuenta con <b>${stats.count} elementos</b> (Volumen: ${stats.volume} m³, Área: ${stats.area} m²).`,
-                        action: {
-                            type: 'isolate',
-                            categories: [catKey],
-                            message: `Aislada categoría ${catKey}`
-                        }
-                    };
-                }
-            }
-        }
-
-        // Fallback response
+        // Final Default Fallback Response
         const total = bimContext?.totalElements || 0;
         return {
-            answer: `El modelo cargado cuenta con <b>${total} elementos</b>.<br><br>Puedes preguntarme por combinaciones como:<br>• <i>"¿Cuánto concreto de 3000psi hay en el piso 2?"</i><br>• <i>"Aísla las vigas del nivel 1"</i>`,
+            answer: `El modelo cargado cuenta con <b>${total} elementos</b>.<br><br>Puedes pedirme acciones como:<br>• <i>"Aísla la categoría TRAMOS"</i><br>• <i>"Quiero aislar columnas y pisos"</i><br>• <i>"¿Cuánto concreto de 3000psi hay en el piso 2?"</i>`,
             action: { type: 'none' }
         };
     }
