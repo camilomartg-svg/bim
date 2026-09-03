@@ -154,12 +154,9 @@ export class NoraAIWidget {
 
     private configureApiKey() {
         const currentKey = this.userApiKey || this.options.apiKey || '';
-        const inputKey = prompt('Configurar Google Gemini API Key (deja en blanco para usar el motor local BIM):\n\nRecuerda: Una API Key válida de Google Gemini siempre empieza con "AIzaSy..."', currentKey);
+        const inputKey = prompt('Configurar Google Gemini API Key (deja en blanco para usar el motor local BIM):', currentKey);
         if (inputKey !== null) {
             const trimmed = inputKey.trim();
-            if (trimmed && !trimmed.startsWith('AIzaSy')) {
-                alert('⚠️ La clave ingresada no parece una Google Gemini API Key válida.\n\nLas claves de Google Gemini siempre comienzan con "AIzaSy...".\n\nPuedes obtener una 100% gratuita en:\nhttps://aistudio.google.com/app/apikey');
-            }
             this.userApiKey = trimmed;
             if (this.userApiKey) {
                 localStorage.setItem('NORA_GEMINI_KEY', this.userApiKey);
@@ -381,21 +378,35 @@ INSTRUCCIONES DE RESPUESTA:
             }
         };
 
-        const res = await fetch(url, {
+        let res = await fetch(url, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: {
+                'Content-Type': 'application/json',
+                'x-goog-api-key': apiKey
+            },
             body: JSON.stringify(payload)
         });
 
-        if (!res.ok) {
-            console.warn(`[nora AI] API error ${res.status}`);
-            if (res.status === 400 || res.status === 403) {
-                const localResp = this.localHeuristicFallback(userQuery, bimContext);
-                return {
-                    answer: `⚠️ <b>API Key no válida</b> (Google Gemini devolvió error ${res.status}).<br>Una clave válida debe empezar por <code>AIzaSy...</code> (consíguela gratis en <a href="https://aistudio.google.com/app/apikey" target="_blank">Google AI Studio</a>).<br><br>${localResp.answer}`,
-                    action: localResp.action
-                };
+        // Retry without responseMimeType if model throws 400 on mime parameter
+        if (!res.ok && res.status === 400) {
+            const retryPayload = { ...payload, generationConfig: { temperature: 0.2 } };
+            const retryRes = await fetch(url, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'x-goog-api-key': apiKey
+                },
+                body: JSON.stringify(retryPayload)
+            });
+            if (retryRes.ok) {
+                res = retryRes;
             }
+        }
+
+        if (!res.ok) {
+            const errBody = await res.text();
+            console.warn(`[nora AI] Gemini API error ${res.status}:`, errBody);
+            // Fallback to intelligent local heuristic if API key has quota/access restrictions
             return this.localHeuristicFallback(userQuery, bimContext);
         }
 
