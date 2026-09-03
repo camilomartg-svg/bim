@@ -86,11 +86,11 @@ export class NoraAIWidget {
 
             <div class="nora-ai-body" id="nora-ai-messages">
                 <div class="nora-ai-prompts">
-                    <button class="nora-ai-prompt-pill" data-prompt="Aísla columnas y pisos en el modelo 3D">
-                        <i class="fa-solid fa-eye"></i> Columnas y Pisos
+                    <button class="nora-ai-prompt-pill" data-prompt="Quiero ver solo las columnas">
+                        <i class="fa-solid fa-eye"></i> Aislar Columnas
                     </button>
-                    <button class="nora-ai-prompt-pill" data-prompt="Aísla la categoría TRAMOS en el modelo 3D">
-                        <i class="fa-solid fa-eye"></i> Aislar TRAMOS
+                    <button class="nora-ai-prompt-pill" data-prompt="Aísla columnas y pisos en el modelo 3D">
+                        <i class="fa-solid fa-layer-group"></i> Columnas y Pisos
                     </button>
                     <button class="nora-ai-prompt-pill" data-prompt="¿Volumen de concreto 3000psi en el piso 2?">
                         <i class="fa-solid fa-cube"></i> Concreto Piso 2
@@ -349,8 +349,8 @@ ${JSON.stringify(bimContext, null, 2)}
 
 INSTRUCCIONES DE RESPUESTA:
 1. Responde de forma precisa, amable y fluida a la conversación. Usa HTML básico (<b>, <i>, <br>).
-2. Tienes acceso a matrices combinadas (Nivel x Material, Nivel x Categoría) en bimContext. Si te preguntan por un material en un piso específico (ej. "concreto 3000psi en el piso 2"), busca en matrixByLevelAndMaterial.
-3. Si la orden implica aislar o filtrar en el 3D, incluye la orden en "action".
+2. Tienes acceso a categorías, niveles, materiales y matrices combinadas (Nivel x Material, Nivel x Categoría) en bimContext.
+3. Si el usuario pide ver/aislar elementos (ej. "quiero ver solo las columnas", "aisla las columnas", "aisla columnas y pisos"), debes incluir "action" con las categorías exactas encontradas en bimContext.categories.
 4. SIEMPRE responde ÚNICAMENTE en JSON estricto:
 
 {
@@ -372,7 +372,7 @@ INSTRUCCIONES DE RESPUESTA:
             ...this.chatHistory
         ];
 
-        // Try official Gemini models sequentially WITHOUT custom CORS headers
+        // Try official Gemini models sequentially WITHOUT custom headers to avoid browser CORS preflight blocks
         for (const modelName of ['gemini-2.0-flash', 'gemini-1.5-flash', 'gemini-1.5-pro']) {
             const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`;
             const payload = {
@@ -386,9 +386,7 @@ INSTRUCCIONES DE RESPUESTA:
             try {
                 const res = await fetch(url, {
                     method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
+                    headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(payload)
                 });
 
@@ -404,30 +402,30 @@ INSTRUCCIONES DE RESPUESTA:
                         }
                     }
                 } else {
-                    console.warn(`[nora AI] Model ${modelName} returned status ${res.status}:`, await res.text());
+                    const errTxt = await res.text();
+                    console.warn(`[nora AI] Model ${modelName} returned status ${res.status}:`, errTxt);
                 }
             } catch (err) {
                 console.warn(`[nora AI] Model ${modelName} fetch error:`, err);
             }
         }
 
-        // If Gemini API calls fail or run out of quota, fallback seamlessly to local heuristic
+        // Fallback to robust local heuristic engine
         const fallbackResult = this.localHeuristicFallback(userQuery, bimContext);
         this.chatHistory.push({ role: 'model', parts: [{ text: JSON.stringify(fallbackResult) }] });
         return fallbackResult;
     }
 
     private localHeuristicFallback(query: string, bimContext: any): { answer: string; action: NoraAIAction } {
-        // Clean query text, keeping words intact
         const qClean = query.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
 
         // 1. Greetings & Casual questions
-        const greetings = ['hola', 'buenas', 'buenos dias', 'buenas tardes', 'buenas noches', 'saludos', 'quien eres', 'que haces', 'que puedes hacer', 'ayuda', 'help', 'solo sabes decir eso'];
+        const greetings = ['hola', 'buenas', 'buenos dias', 'buenas tardes', 'buenas noches', 'saludos', 'quien eres', 'que haces', 'que puedes hacer', 'ayuda', 'help'];
         if (greetings.some(g => qClean.includes(g))) {
             const total = bimContext?.totalElements || 0;
             const catCount = Object.keys(bimContext?.categories || {}).length;
             return {
-                answer: `¡Hola! 👋 Soy <b>nora AI Copilot</b>. Estoy conectada en tiempo real a tu modelo 3D (${total} elementos en ${catCount} categorías).<br><br>Puedo responderte sobre:<br>• <b>Cantidades por nivel y material</b> ("¿Volumen de concreto 3000psi en el piso 2?")<br>• <b>Aislamientos 3D combinados</b> ("Aísla columnas y pisos")<br>• <b>Restablecer visor</b> ("Muéstrame todo el modelo")`,
+                answer: `¡Hola! 👋 Soy <b>nora AI Copilot</b>. Estoy conectada en tiempo real a tu modelo 3D (${total} elementos en ${catCount} categorías).<br><br>Puedo responderte sobre:<br>• <b>Aislamiento 3D por categorías</b> ("Quiero ver solo las columnas", "Aísla tramos")<br>• <b>Cantidades por nivel y material</b> ("¿Volumen de concreto 3000psi en el piso 2?")<br>• <b>Restablecer visor</b> ("Muéstrame todo el modelo")`,
                 action: { type: 'none' }
             };
         }
@@ -443,38 +441,41 @@ INSTRUCCIONES DE RESPUESTA:
             };
         }
 
-        // 3. Multi-Category Extraction
+        // 3. Multi-Category Extraction supporting standard IFC entity types and Spanish terms
         const matchedCategories: string[] = [];
         if (bimContext && bimContext.categories) {
             const catKeys = Object.keys(bimContext.categories);
 
-            const categorySynonyms: Record<string, string[]> = {
-                "tramos": ["tramo", "tramos"],
-                "columnas": ["columna", "columnas"],
-                "pisos / placas": ["piso", "pisos", "placa", "placas", "losa", "losas", "slabs"],
-                "vigas": ["viga", "vigas", "beams"],
-                "muros": ["muro", "muros", "walls"],
-                "descansillos": ["descansillo", "descansillos", "landings"],
-                "cimentación estructural": ["cimentacion", "zapata", "zapatas", "foundations"],
-                "pilotes": ["pilote", "pilotes", "piles"]
-            };
+            const categoryPatterns: Array<{ userRegex: RegExp; keyRegex: RegExp }> = [
+                { userRegex: /colum/i, keyRegex: /column|colum/i },
+                { userRegex: /piso|placa|losa|slab/i, keyRegex: /slab|piso|placa|losa/i },
+                { userRegex: /viga|beam/i, keyRegex: /beam|viga/i },
+                { userRegex: /muro|wall/i, keyRegex: /wall|muro/i },
+                { userRegex: /tram|member/i, keyRegex: /member|tram/i },
+                { userRegex: /ciment|zapat|footing/i, keyRegex: /footing|ciment|zapat/i },
+                { userRegex: /escaler|stair/i, keyRegex: /stair|escaler/i },
+                { userRegex: /pilot|pile/i, keyRegex: /pilot|pile/i }
+            ];
 
-            for (const catKey of catKeys) {
-                const normCatKey = catKey.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
-                
-                // Direct match
-                if (qClean.includes(normCatKey)) {
-                    if (!matchedCategories.includes(catKey)) matchedCategories.push(catKey);
-                    continue;
-                }
-
-                // Synonym match
-                for (const mainKey in categorySynonyms) {
-                    if (normCatKey.includes(mainKey) || mainKey.includes(normCatKey)) {
-                        const syns = categorySynonyms[mainKey];
-                        if (syns.some(syn => qClean.includes(syn))) {
-                            if (!matchedCategories.includes(catKey)) matchedCategories.push(catKey);
+            for (const pattern of categoryPatterns) {
+                if (pattern.userRegex.test(qClean)) {
+                    for (const catKey of catKeys) {
+                        const normKey = catKey.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+                        if (pattern.keyRegex.test(normKey)) {
+                            if (!matchedCategories.includes(catKey)) {
+                                matchedCategories.push(catKey);
+                            }
                         }
+                    }
+                }
+            }
+
+            // Fallback direct match if category is custom-named
+            if (matchedCategories.length === 0) {
+                for (const catKey of catKeys) {
+                    const normKey = catKey.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+                    if (qClean.includes(normKey)) {
+                        matchedCategories.push(catKey);
                     }
                 }
             }
@@ -510,8 +511,6 @@ INSTRUCCIONES DE RESPUESTA:
             }
         }
 
-        const isActionRequested = qClean.includes('aisla') || qClean.includes('filtr') || qClean.includes('muestra') || qClean.includes('ver') || qClean.includes('solo') || qClean.includes('quiero');
-
         // Evaluate Matched Categories
         if (matchedCategories.length > 0) {
             let totalCount = 0;
@@ -529,7 +528,7 @@ INSTRUCCIONES DE RESPUESTA:
 
             const catListStr = matchedCategories.join(', ');
             return {
-                answer: `Categoría(s) <b>${catListStr}</b>:<br>• <b>Total elementos:</b> ${totalCount}<br>• <b>Volumen acumulado:</b> ${Math.round(totalVol * 100) / 100} m³<br>• <b>Área acumulada:</b> ${Math.round(totalArea * 100) / 100} m²`,
+                answer: `Aislando categoría(s) <b>${catListStr}</b>:<br>• <b>Total elementos:</b> ${totalCount}<br>• <b>Volumen acumulado:</b> ${Math.round(totalVol * 100) / 100} m³<br>• <b>Área acumulada:</b> ${Math.round(totalArea * 100) / 100} m²`,
                 action: {
                     type: 'isolate',
                     categories: matchedCategories,
@@ -583,7 +582,7 @@ INSTRUCCIONES DE RESPUESTA:
         // Final Default Fallback Response
         const total = bimContext?.totalElements || 0;
         return {
-            answer: `El modelo cargado cuenta con <b>${total} elementos</b>.<br><br>Puedes pedirme acciones como:<br>• <i>"Aísla la categoría TRAMOS"</i><br>• <i>"Quiero aislar columnas y pisos"</i><br>• <i>"¿Cuánto concreto de 3000psi hay en el piso 2?"</i>`,
+            answer: `El modelo cargado cuenta con <b>${total} elementos</b>.<br><br>Puedes pedirme acciones como:<br>• <i>"Quiero ver solo las columnas"</i><br>• <i>"Aísla columnas y pisos"</i><br>• <i>"¿Cuánto concreto de 3000psi hay en el piso 2?"</i>`,
             action: { type: 'none' }
         };
     }
