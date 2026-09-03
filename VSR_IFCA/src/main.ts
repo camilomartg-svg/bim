@@ -2899,7 +2899,7 @@ async function applyFiltersToViewerGlobal() {
     const isTreeFilterActive = selectedClassifications.size > 0 || selectedCategories.size > 0;
 
     const visibleElements = allElements.filter(el => {
-        const treeMatch = !isTreeFilterActive || selectedCategories.has(el.name) || selectedClassifications.has(el.classification);
+        const treeMatch = !isTreeFilterActive || selectedCategories.has(el.category) || selectedCategories.has(el.name) || selectedClassifications.has(el.classification);
         const levelMatch = selectedLevels.size === 0 || selectedLevels.has(el.level);
         const materialMatch = selectedMaterials.size === 0 || selectedMaterials.has(el.material);
         const piloteMatch = selectedPilotes.size === 0 || selectedPilotes.has(el.pilote);
@@ -9526,11 +9526,13 @@ async function executeNoraAI3DAction(action: NoraAIAction): Promise<string> {
                 }
                 matchingExpressIdsByModel[el.modelUUID].push(el.expressID);
                 matchCount++;
-            }
-        }
 
-        if (matchCount > 0 && hider) {
-            await hider.isolate(matchingExpressIdsByModel as any);
+                if (cats.length > 0) {
+                    if (el.category) selectedCategories.add(el.category);
+                    if (el.classification) selectedClassifications.add(el.classification);
+                    if (el.name) selectedCategories.add(el.name);
+                }
+            }
         }
 
         for (const cat of cats) selectedCategories.add(cat);
