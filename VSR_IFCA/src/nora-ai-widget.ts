@@ -29,6 +29,7 @@ export class NoraAIWidget {
     private isOpen: boolean = false;
     private isRecording: boolean = false;
     private recognition: any = null;
+    private userApiKey: string = localStorage.getItem('NORA_GEMINI_KEY') || '';
 
     private drawerEl!: HTMLElement;
     private fabEl!: HTMLElement;
@@ -52,6 +53,9 @@ export class NoraAIWidget {
         this.fabEl.innerHTML = '<i class="fa-solid fa-wand-magic-sparkles"></i> <span>nora AI</span>';
         this.fabEl.addEventListener('click', () => this.toggle());
 
+        const isApiKeyActive = !!(this.options.apiKey || this.userApiKey || (window as any).NORA_GEMINI_API_KEY);
+        const subTitleText = isApiKeyActive ? 'Gemini 2.5 Flash (Online)' : 'BIM AI Engine (Local)';
+
         // Drawer
         this.drawerEl = document.createElement('div');
         this.drawerEl.className = 'nora-ai-drawer';
@@ -63,10 +67,15 @@ export class NoraAIWidget {
                     </div>
                     <div>
                         <div class="nora-ai-title">nora AI Copilot</div>
-                        <div class="nora-ai-subtitle"><i class="fa-solid fa-circle" style="color: #34d399; font-size: 8px;"></i> Gemini 2.5 Flash</div>
+                        <div class="nora-ai-subtitle" id="nora-ai-status-text">
+                            <i class="fa-solid fa-circle" style="color: ${isApiKeyActive ? '#34d399' : '#f59e0b'}; font-size: 8px;"></i> ${subTitleText}
+                        </div>
                     </div>
                 </div>
                 <div class="nora-ai-header-actions">
+                    <button class="nora-ai-header-btn" id="nora-ai-key" title="Configurar Gemini API Key">
+                        <i class="fa-solid fa-key"></i>
+                    </button>
                     <button class="nora-ai-header-btn" id="nora-ai-clear" title="Limpiar conversación">
                         <i class="fa-solid fa-trash-can"></i>
                     </button>
@@ -78,14 +87,14 @@ export class NoraAIWidget {
 
             <div class="nora-ai-body" id="nora-ai-messages">
                 <div class="nora-ai-prompts">
-                    <button class="nora-ai-prompt-pill" data-prompt="¿Cuáles son las cantidades y volúmenes por categoría?">
-                        <i class="fa-solid fa-chart-pie"></i> Cantidades por categoría
+                    <button class="nora-ai-prompt-pill" data-prompt="¿Cuántas columnas y vigas hay?">
+                        <i class="fa-solid fa-chart-pie"></i> Columnas y Vigas
                     </button>
                     <button class="nora-ai-prompt-pill" data-prompt="Aísla la categoría TRAMOS en el modelo 3D">
                         <i class="fa-solid fa-eye"></i> Aislar TRAMOS
                     </button>
-                    <button class="nora-ai-prompt-pill" data-prompt="¿Qué porcentaje de avance está en estado INSTALADO?">
-                        <i class="fa-solid fa-list-check"></i> Avance de obra
+                    <button class="nora-ai-prompt-pill" data-prompt="Aísla los elementos del Piso 1">
+                        <i class="fa-solid fa-layer-group"></i> Nivel 1
                     </button>
                     <button class="nora-ai-prompt-pill" data-prompt="Muéstrame todo el modelo y limpia los filtros">
                         <i class="fa-solid fa-rotate-left"></i> Restablecer 3D
@@ -94,7 +103,7 @@ export class NoraAIWidget {
 
                 <div class="nora-ai-msg bot">
                     <div class="nora-ai-bubble">
-                        👋 ¡Hola! Soy <b>nora AI Copilot</b>. Puedo responder preguntas sobre las cantidades de tu modelo IFC, avance de obra, materiales y <b>ejecutar filtros y aislamientos directamente en la escena 3D</b>. ¿En qué te ayudo hoy?
+                        👋 ¡Hola! Soy <b>nora AI Copilot</b>. Puedo responder preguntas sobre las cantidades de tu modelo IFC, niveles, materiales y <b>ejecutar aislamientos directamente en el visor 3D</b>. ¿Qué te gustaría consultar?
                     </div>
                 </div>
             </div>
@@ -123,6 +132,7 @@ export class NoraAIWidget {
         // Events
         this.drawerEl.querySelector('#nora-ai-close')?.addEventListener('click', () => this.close());
         this.drawerEl.querySelector('#nora-ai-clear')?.addEventListener('click', () => this.clearChat());
+        this.drawerEl.querySelector('#nora-ai-key')?.addEventListener('click', () => this.configureApiKey());
 
         this.sendBtnEl.addEventListener('click', () => this.handleSend());
         this.inputEl.addEventListener('keydown', (e) => {
@@ -140,6 +150,30 @@ export class NoraAIWidget {
                 }
             }
         });
+    }
+
+    private configureApiKey() {
+        const currentKey = this.userApiKey || this.options.apiKey || '';
+        const inputKey = prompt('Configurar Google Gemini API Key (deja en blanco para usar el motor local BIM):', currentKey);
+        if (inputKey !== null) {
+            this.userApiKey = inputKey.trim();
+            if (this.userApiKey) {
+                localStorage.setItem('NORA_GEMINI_KEY', this.userApiKey);
+            } else {
+                localStorage.removeItem('NORA_GEMINI_KEY');
+            }
+            this.updateStatusText();
+        }
+    }
+
+    private updateStatusText() {
+        const statusEl = this.drawerEl.querySelector('#nora-ai-status-text');
+        const activeKey = this.userApiKey || this.options.apiKey || (window as any).NORA_GEMINI_API_KEY;
+        if (statusEl) {
+            statusEl.innerHTML = activeKey
+                ? `<i class="fa-solid fa-circle" style="color: #34d399; font-size: 8px;"></i> Gemini 2.5 Flash (Online)`
+                : `<i class="fa-solid fa-circle" style="color: #f59e0b; font-size: 8px;"></i> BIM AI Engine (Local)`;
+        }
     }
 
     private initSpeechRecognition() {
@@ -290,15 +324,21 @@ export class NoraAIWidget {
         } catch (err: any) {
             console.error('[nora AI] Query error:', err);
             this.removeTypingIndicator();
-            this.appendBotMessage(`⚠️ Lo siento, ocurrió un error al procesar tu consulta: ${err.message || err}`);
+            this.appendBotMessage(`⚠️ Ocurrió un inconveniente al procesar la consulta: ${err.message || err}`);
         }
     }
 
     private async queryLLM(userQuery: string, bimContext: any): Promise<{ answer: string; action: NoraAIAction }> {
-        const systemPrompt = `
-Eres "nora AI", un Asistente experto en BIM (Building Information Modeling) y CDE (Common Data Environment) para la plataforma nora BIM.
+        const apiKey = this.userApiKey || this.options.apiKey || (window as any).NORA_GEMINI_API_KEY || '';
 
-CONTEXTO ACTUAL DEL MODELO CORTADO/CARGADO EN PANTALLA:
+        if (!apiKey) {
+            return this.localHeuristicFallback(userQuery, bimContext);
+        }
+
+        const systemPrompt = `
+Eres "nora AI", un Asistente experto en BIM y CDE para nora BIM.
+
+CONTEXTO DEL MODELO CORTADO/CARGADO EN PANTALLA:
 ${JSON.stringify(bimContext, null, 2)}
 
 INSTRUCCIONES DE RESPUESTA:
@@ -319,14 +359,6 @@ INSTRUCCIONES DE RESPUESTA:
   }
 }
         `;
-
-        // If user provided an API Key or environment key
-        const apiKey = this.options.apiKey || (window as any).NORA_GEMINI_API_KEY || '';
-
-        if (!apiKey) {
-            // Smart local heuristic fallback if no API key is set
-            return this.localHeuristicFallback(userQuery, bimContext);
-        }
 
         const url = `${DEFAULT_GEMINI_ENDPOINT}?key=${apiKey}`;
         const payload = {
@@ -352,7 +384,8 @@ INSTRUCCIONES DE RESPUESTA:
         });
 
         if (!res.ok) {
-            throw new Error(`Error API Gemini (${res.status}): ${await res.text()}`);
+            console.warn(`[nora AI] Fallback due to API error ${res.status}`);
+            return this.localHeuristicFallback(userQuery, bimContext);
         }
 
         const data = await res.json();
@@ -369,10 +402,21 @@ INSTRUCCIONES DE RESPUESTA:
     }
 
     private localHeuristicFallback(query: string, bimContext: any): { answer: string; action: NoraAIAction } {
-        const q = query.toLowerCase();
+        const q = query.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
 
-        // 1. Show all / Reset
-        if (q.includes('mostrar todo') || q.includes('limpiar') || q.includes('restablecer') || q.includes('reset')) {
+        // 1. Greetings & Casual questions
+        const greetings = ['hola', 'buenas', 'buenos dias', 'buenas tardes', 'buenas noches', 'saludos', 'quien eres', 'que haces', 'que puedes hacer', 'ayuda', 'help', 'solo sabes decir eso'];
+        if (greetings.some(g => q.includes(g))) {
+            const total = bimContext?.totalElements || 0;
+            const catCount = Object.keys(bimContext?.categories || {}).length;
+            return {
+                answer: `¡Hola! 👋 Soy <b>nora AI Copilot</b>. Estoy conectada en tiempo real a tu modelo 3D (${total} elementos en ${catCount} categorías).<br><br>Puedo responderte sobre:<br>• <b>Cantidades y volúmenes</b> ("¿Cuántas columnas hay?", "Volumen de TRAMOS")<br>• <b>Niveles y materiales</b> ("Aísla Piso 1", "Elementos de Hormigón")<br>• <b>Acciones 3D</b> ("Aísla vigas", "Muéstrame todo el modelo")<br><br><i>💡 Tip: Presiona el ícono 🔑 en la cabecera si deseas vincular una API Key de Gemini.</i>`,
+                action: { type: 'none' }
+            };
+        }
+
+        // 2. Reset / Show All
+        if (q.includes('mostrar todo') || q.includes('limpiar') || q.includes('restablecer') || q.includes('reset') || q.includes('encender todo')) {
             return {
                 answer: 'Se han restablecido todos los filtros y la visibilidad completa del modelo 3D.',
                 action: {
@@ -382,56 +426,106 @@ INSTRUCCIONES DE RESPUESTA:
             };
         }
 
-        // 2. Search category isolation
+        // 3. Category search with rich synonyms & plural forms
         if (bimContext && bimContext.categories) {
-            const categories = Object.keys(bimContext.categories);
-            for (const cat of categories) {
-                if (q.includes(cat.toLowerCase())) {
-                    const stats = bimContext.categories[cat];
-                    return {
-                        answer: `La categoría <b>${cat}</b> cuenta con <b>${stats.count} elementos</b> (Área: ${stats.area} m², Volumen: ${stats.volume} m³).`,
-                        action: {
-                            type: 'isolate',
-                            categories: [cat],
-                            message: `Aislada categoría ${cat} (${stats.count} elementos)`
+            const categoryKeys = Object.keys(bimContext.categories);
+
+            // Synonym mapping
+            const catMap: Record<string, string[]> = {
+                'columnas': ['columna', 'columnas', 'column'],
+                'muros': ['muro', 'muros', 'wall', 'pared'],
+                'pisos': ['piso', 'pisos', 'placa', 'placas', 'slab'],
+                'tramos': ['tramo', 'tramos', 'escalera', 'escaleras', 'stair'],
+                'vigas': ['viga', 'vigas', 'beam'],
+                'cimentacion': ['cimentacion', 'zapata', 'zapatas', 'footing'],
+                'pilotes': ['pilote', 'pilotes', 'pile'],
+                'descansillos': ['descansillo', 'descansillos', 'landing']
+            };
+
+            for (const catKey of categoryKeys) {
+                const catNorm = catKey.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+                
+                // Check direct key inclusion or synonyms
+                let matched = q.includes(catNorm);
+                if (!matched) {
+                    for (const group in catMap) {
+                        if (catNorm.includes(group) && catMap[group].some(word => q.includes(word))) {
+                            matched = true;
+                            break;
                         }
+                    }
+                }
+
+                if (matched) {
+                    const stats = bimContext.categories[catKey];
+                    const wantsIsolate = q.includes('aisla') || q.includes('filtr') || q.includes('muestra') || q.includes('ver') || q.includes('solo');
+
+                    return {
+                        answer: `La categoría <b>${catKey}</b> cuenta con <b>${stats.count} elementos</b>.<br>• <b>Volumen total:</b> ${stats.volume} m³<br>• <b>Área total:</b> ${stats.area} m²`,
+                        action: wantsIsolate ? {
+                            type: 'isolate',
+                            categories: [catKey],
+                            message: `Aislada categoría ${catKey} (${stats.count} elementos)`
+                        } : { type: 'none' }
                     };
                 }
             }
         }
 
-        // 3. Search level isolation
+        // 4. Level search
         if (bimContext && bimContext.levels) {
-            const levels = Object.keys(bimContext.levels);
-            for (const lvl of levels) {
-                if (q.includes(lvl.toLowerCase())) {
-                    const stats = bimContext.levels[lvl];
+            const levelKeys = Object.keys(bimContext.levels);
+            for (const lvlKey of levelKeys) {
+                const lvlNorm = lvlKey.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+                if (q.includes(lvlNorm) || (q.includes('piso 1') && lvlNorm.includes('piso 1')) || (q.includes('sotano') && lvlNorm.includes('sotano'))) {
+                    const stats = bimContext.levels[lvlKey];
                     return {
-                        answer: `En el nivel <b>${lvl}</b> hay un total de <b>${stats.count} elementos</b>.`,
+                        answer: `En el nivel <b>${lvlKey}</b> hay <b>${stats.count} elementos registrados</b>.`,
                         action: {
                             type: 'isolate',
-                            levels: [lvl],
-                            message: `Aislado nivel ${lvl}`
+                            levels: [lvlKey],
+                            message: `Aislado nivel ${lvlKey}`
                         }
                     };
                 }
             }
         }
 
-        // 4. Progress / Status
-        if (q.includes('avance') || q.includes('instalado') || q.includes('estado')) {
+        // 5. Material search
+        if (bimContext && bimContext.materials) {
+            const matKeys = Object.keys(bimContext.materials);
+            for (const matKey of matKeys) {
+                const matNorm = matKey.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+                if (q.includes(matNorm) || (q.includes('hormigon') && matNorm.includes('hormigon')) || (q.includes('concreto') && matNorm.includes('con'))) {
+                    const stats = bimContext.materials[matKey];
+                    return {
+                        answer: `El material <b>${matKey}</b> está presente en <b>${stats.count} elementos</b> del modelo.`,
+                        action: {
+                            type: 'isolate',
+                            materials: [matKey],
+                            message: `Aislado material ${matKey}`
+                        }
+                    };
+                }
+            }
+        }
+
+        // 6. Total Quantities query
+        if (q.includes('cuantida') || q.includes('volumen') || q.includes('cuantos') || q.includes('total')) {
             const total = bimContext?.totalElements || 0;
+            const categories = bimContext?.categories || {};
+            const catList = Object.keys(categories).map(c => `• <b>${c}:</b> ${categories[c].count} elementos (${categories[c].volume} m³)`).join('<br>');
             return {
-                answer: `El modelo actual tiene <b>${total} elementos registrados</b>. Puedes inspeccionar el desglose en el panel inferior de Avance (STATUS).`,
+                answer: `<b>Resumen Total del Modelo:</b><br>Total de elementos: <b>${total}</b><br><br>${catList}`,
                 action: { type: 'none' }
             };
         }
 
-        // General overview
+        // Fallback response for unhandled queries
         const catCount = Object.keys(bimContext?.categories || {}).length;
         const total = bimContext?.totalElements || 0;
         return {
-            answer: `El modelo cargado contiene <b>${total} elementos</b> distribuidos en <b>${catCount} categorías</b> principales.<br><br>💡 <i>Tip: Puedes pedirme "Aísla TRAMOS" o "Muéstrame todo el modelo"</i>.`,
+            answer: `El modelo cargado cuenta con <b>${total} elementos</b> distribuidos en <b>${catCount} categorías</b>.<br><br>Prueba consultando por una categoría como <i>"¿Cuántas columnas hay?"</i>, <i>"Aísla vigas"</i> o <i>"Resumen de cantidades"</i>.`,
             action: { type: 'none' }
         };
     }
