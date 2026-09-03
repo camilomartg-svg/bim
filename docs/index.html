@@ -202,10 +202,10 @@
         <div class="max-w-7xl mx-auto px-6 lg:px-8 relative z-20 flex h-full items-center pointer-events-none">
             <div class="w-full lg:w-1/2">
                 <h2 class="text-3xl lg:text-5xl font-medium tracking-tight text-white mb-6">
-                    Tus modelos, <br/>vivos en la web.
+                    Inteligencia Artificial <br/>para tus modelos BIM.
                 </h2>
                 <p class="text-lg text-gray-400 font-light mb-8 max-w-md">
-                    Experimenta el modelo de arquitectura interactuando directamente en el navegador. Gira, acerca y explora cada detalle sin instalar software adicional.
+                    Conversa con nora AI Copilot para consultar cantidades, aislar elementos en el visor 3D, analizar niveles y tomar decisiones en tiempo real sobre tu proyecto.
                 </p>
                 <a href="#precios" class="inline-flex items-center text-white border border-white/30 rounded-full px-6 py-3 text-sm font-medium hover:bg-white hover:text-black transition pointer-events-auto">
                     Conoce nuestros planes
@@ -272,9 +272,9 @@
                 <h3 class="text-2xl font-semibold text-white">Plan Enterprise</h3>
                 <p class="text-gray-400 text-sm mt-2 font-medium">Corporativo / Para Empresas</p>
                 <div class="my-8">
-                    <span class="text-5xl font-bold tracking-tight text-white" id="price-enterprise">$115.600</span>
-                    <span class="text-gray-400 font-medium ml-1" id="price-currency-label">COP / proyecto / mes (antes de IVA)</span>
-                    <p class="text-xs text-gray-300 mt-2 font-semibold">* Valor no incluye IVA</p>
+                    <span class="text-5xl font-bold tracking-tight text-white" id="price-enterprise">$137.564</span>
+                    <span class="text-gray-400 font-medium ml-1" id="price-currency-label">COP / proyecto / mes (IVA incluido)</span>
+                    <p class="text-xs text-gray-300 mt-2 font-semibold">* Valor incluye IVA</p>
                 </div>
                 <p class="text-sm text-gray-300 mb-8 leading-relaxed">
                     Diseñado para constructoras, gerencias de proyecto y firmas de ingeniería que administran sus propios ecosistemas de trabajo. Usuarios Pro invitados ilimitados y gratuitos.
@@ -454,7 +454,7 @@
             const labelCurrencyEl = document.getElementById('price-currency-label');
 
             let currentCurrency = 'COP';
-            const priceCOP = 115600;
+            const priceCOP = 137564;
             let currentTRM = 4000; // Valor por defecto en caso de fallo de API
 
             // Función para obtener la TRM del día
@@ -482,7 +482,7 @@
                     labelUsd.classList.replace('text-gray-900', 'text-gray-400');
                     
                     priceEl.textContent = `$${priceCOP.toLocaleString('es-CO')}`;
-                    labelCurrencyEl.textContent = 'COP / proyecto / mes (antes de IVA)';
+                    labelCurrencyEl.textContent = 'COP / proyecto / mes (IVA incluido)';
                 } else {
                     // UI para USD
                     knob.classList.remove('translate-x-1');
@@ -494,7 +494,7 @@
                     
                     const priceUSD = Math.round(priceCOP / currentTRM);
                     priceEl.textContent = `$${priceUSD}`;
-                    labelCurrencyEl.textContent = 'USD / proyecto / mes (sin IVA)';
+                    labelCurrencyEl.textContent = 'USD / proyecto / mes (IVA incluido)';
                 }
             }
 

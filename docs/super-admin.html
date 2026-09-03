@@ -70,6 +70,9 @@
             <button id="tab-proyectos-global" onclick="switchGlobalView('proyectos')" class="px-5 py-2 rounded-lg text-sm font-bold text-slate-500 hover:text-slate-700 transition-all flex items-center gap-2">
                 <span class="material-symbols-outlined text-sm">workspaces</span> Proyectos
             </button>
+            <button id="tab-nora-ai" onclick="switchGlobalView('nora-ai')" class="px-5 py-2 rounded-lg text-sm font-bold text-slate-500 hover:text-slate-700 transition-all flex items-center gap-2">
+                <span class="material-symbols-outlined text-sm">psychology</span> Entrenar nora AI
+            </button>
         </div>
 
         <div class="w-full md:w-1/3 flex justify-end gap-2 items-center">
@@ -567,6 +570,162 @@
             <div id="global-projects-loading" class="absolute inset-0 bg-white/90 flex flex-col items-center justify-center z-20 hidden">
                 <span class="material-symbols-outlined animate-spin text-4xl text-blue-500 mb-4">autorenew</span>
                 <span class="text-sm font-semibold text-slate-600">Cargando proyectos y facturación...</span>
+            </div>
+        </div>
+    </div>
+    
+    <!-- VISTA DE ENTRENAMIENTO NORA AI -->
+    <div id="nora-ai-view" class="hidden h-[calc(100vh-80px)] w-full overflow-y-auto bg-slate-50 p-4 md:p-8 flex-col space-y-6">
+        <!-- KPI Summary Header -->
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4 shrink-0">
+            <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-200 flex items-center gap-4">
+                <div class="p-3 bg-indigo-50 text-indigo-600 rounded-xl">
+                    <span class="material-symbols-outlined text-2xl">psychology</span>
+                </div>
+                <div>
+                    <p class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Motor Activo</p>
+                    <h3 id="nora-ai-engine-status" class="text-lg font-extrabold text-slate-900">Gemini 2.0 Flash + Heurística</h3>
+                </div>
+            </div>
+            <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-200 flex items-center gap-4">
+                <div class="p-3 bg-purple-50 text-purple-600 rounded-xl">
+                    <span class="material-symbols-outlined text-2xl">translate</span>
+                </div>
+                <div>
+                    <p class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Reglas & Sinónimos</p>
+                    <h3 id="nora-ai-rules-count" class="text-2xl font-extrabold text-slate-900">6 Reglas Cargadas</h3>
+                </div>
+            </div>
+            <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-200 flex items-center gap-4">
+                <div class="p-3 bg-emerald-50 text-emerald-600 rounded-xl">
+                    <span class="material-symbols-outlined text-2xl">key</span>
+                </div>
+                <div>
+                    <p class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Estado API Key</p>
+                    <h3 id="nora-ai-key-status" class="text-lg font-extrabold text-emerald-700">Configurada</h3>
+                </div>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <!-- Card 1: Diccionario de Sinónimos y Términos Personalizados -->
+            <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 space-y-4 flex flex-col">
+                <div class="flex justify-between items-center border-b border-slate-100 pb-3">
+                    <div>
+                        <h3 class="text-base font-bold text-slate-900 flex items-center gap-2">
+                            <span class="material-symbols-outlined text-indigo-600">manage_search</span>
+                            Mapeo de Términos y Sinónimos IFC
+                        </h3>
+                        <p class="text-xs text-slate-500">Mapea expresiones coloquiales del usuario a entidades IFC estándar del modelo 3D.</p>
+                    </div>
+                    <button onclick="addSynonymRow()" class="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold transition-all flex items-center gap-1 shadow-sm">
+                        <span class="material-symbols-outlined text-sm">add</span> Mapeo
+                    </button>
+                </div>
+
+                <div class="overflow-x-auto flex-1 max-h-[350px]">
+                    <table class="w-full text-left text-xs">
+                        <thead class="bg-slate-50 text-slate-500 font-bold uppercase tracking-wider sticky top-0 border-b border-slate-200">
+                            <tr>
+                                <th class="py-2.5 px-3">Término Usuario (Español/Inglés)</th>
+                                <th class="py-2.5 px-3">Categoría / Entidad IFC</th>
+                                <th class="py-2.5 px-3 text-right">Acción</th>
+                            </tr>
+                        </thead>
+                        <tbody id="synonyms-tbody" class="divide-y divide-slate-100 font-medium">
+                            <!-- Injected by JS -->
+                        </tbody>
+                    </table>
+                </div>
+                <div class="pt-2 border-t border-slate-100 flex justify-between items-center">
+                    <button onclick="loadDefaultSynonyms()" class="text-xs text-indigo-600 hover:underline font-semibold flex items-center gap-1">
+                        <span class="material-symbols-outlined text-sm">restart_alt</span> Cargar predeterminados
+                    </button>
+                    <button onclick="saveNoraAITrainingRules()" class="px-4 py-2 bg-slate-900 hover:bg-black text-white text-xs font-bold rounded-xl shadow-md transition-all">
+                        Guardar Mapeos
+                    </button>
+                </div>
+            </div>
+
+            <!-- Card 2: Instrucciones Corporativas y Base de Conocimiento -->
+            <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 space-y-4 flex flex-col">
+                <div class="border-b border-slate-100 pb-3">
+                    <h3 class="text-base font-bold text-slate-900 flex items-center gap-2">
+                        <span class="material-symbols-outlined text-purple-600">article</span>
+                        Instrucciones y Contexto Corporativo
+                    </h3>
+                    <p class="text-xs text-slate-500">Define respuestas estándar, normativas internas, personas de contacto y directrices para nora AI.</p>
+                </div>
+
+                <div class="flex-1 space-y-3">
+                    <label class="block">
+                        <span class="text-xs font-bold text-slate-700 block mb-1">Directrices del Sistema (System Prompt Extension)</span>
+                        <textarea id="nora-custom-prompt-text" rows="7" class="w-full rounded-xl border-slate-200 text-xs p-3 focus:ring-purple-500 focus:border-purple-500 font-mono leading-relaxed" placeholder="Ejemplo:&#10;- El BIM Manager del proyecto es Camilo Martínez (contacto: camilo@norabim.com).&#10;- Las vigas principales tienen resistencia de 4000 PSI.&#10;- El horario de atención en obra es de 7:00 AM a 5:00 PM."></textarea>
+                    </label>
+                    
+                    <div>
+                        <label class="block text-xs font-bold text-slate-700 mb-1">API Key Corporativa Gemini (Opcional)</label>
+                        <div class="flex gap-2">
+                            <input type="password" id="nora-gemini-key-input" class="flex-1 rounded-xl border-slate-200 text-xs p-2.5 font-mono" placeholder="AIzaSy..." />
+                            <button onclick="testGeminiKeyInAdmin()" class="px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-all flex items-center gap-1 shadow-sm shrink-0">
+                                <span class="material-symbols-outlined text-sm">bolt</span> Probando
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="pt-2 border-t border-slate-100 flex justify-end">
+                    <button onclick="saveNoraAITrainingRules()" class="px-4 py-2 bg-slate-900 hover:bg-black text-white text-xs font-bold rounded-xl shadow-md transition-all">
+                        Guardar Configuración AI
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Card 3: Interactive Prompt Sandbox / Testing Console -->
+        <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 space-y-4">
+            <div class="flex justify-between items-center border-b border-slate-100 pb-3">
+                <div>
+                    <h3 class="text-base font-bold text-slate-900 flex items-center gap-2">
+                        <span class="material-symbols-outlined text-emerald-600">terminal</span>
+                        Simulador Interactivo de Entrenamiento (Sandbox)
+                    </h3>
+                    <p class="text-xs text-slate-500">Prueba preguntas en tiempo real para verificar cómo interpreta nora AI los comandos antes de publicarlos a los usuarios.</p>
+                </div>
+                <span class="px-3 py-1 bg-emerald-50 text-emerald-700 text-xs font-bold rounded-full border border-emerald-200">
+                    Entorno Sandbox
+                </span>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <!-- Left: Input & History -->
+                <div class="space-y-3">
+                    <div id="sandbox-chat-box" class="h-64 border border-slate-200 rounded-xl p-3 bg-slate-50 overflow-y-auto space-y-3 text-xs">
+                        <div class="bg-white border border-slate-200 p-3 rounded-xl">
+                            👋 <strong>Simulador nora AI:</strong> Escribe cualquier consulta como <em>"aisla las columnas"</em> o <em>"¿quién es el BIM Manager?"</em> para probar las reglas de entrenamiento.
+                        </div>
+                    </div>
+                    <div class="flex gap-2">
+                        <input type="text" id="sandbox-input" class="flex-1 rounded-xl border-slate-200 text-xs p-2.5 focus:ring-emerald-500 focus:border-emerald-500" placeholder="Escribe un mensaje de prueba..." onkeydown="if(event.key==='Enter') runSandboxQuery()" />
+                        <button onclick="runSandboxQuery()" class="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-xs shadow-md transition-all flex items-center gap-1">
+                            <span class="material-symbols-outlined text-sm">send</span> Probar
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Right: Action Dispatch Inspector -->
+                <div class="bg-slate-900 text-slate-100 p-4 rounded-xl font-mono text-xs flex flex-col justify-between">
+                    <div>
+                        <div class="text-slate-400 font-bold uppercase tracking-wider text-[10px] mb-2 flex items-center gap-1">
+                            <span class="material-symbols-outlined text-xs text-amber-400">code</span> Inspector de Acción 3D / JSON
+                        </div>
+                        <pre id="sandbox-json-output" class="text-emerald-400 whitespace-pre-wrap overflow-auto max-h-48">Esperando prueba...</pre>
+                    </div>
+                    <div class="pt-3 border-t border-slate-800 text-[10px] text-slate-500 flex justify-between">
+                        <span>Parser status: OK</span>
+                        <span>Multi-category matching: Active</span>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
