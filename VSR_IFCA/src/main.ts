@@ -8650,7 +8650,7 @@ function initStatusPanel() {
         // Apply global classification tree filters
         const isTreeFilterActive = selectedClassifications.size > 0 || selectedCategories.size > 0;
         if (isTreeFilterActive) {
-            filtered = filtered.filter(e => selectedCategories.has(e.name) || selectedClassifications.has(e.classification));
+            filtered = filtered.filter(e => selectedCategories.has(e.category) || selectedCategories.has(e.name) || selectedClassifications.has(e.classification));
         }
         if (selectedLevels.size > 0) {
             filtered = filtered.filter(e => selectedLevels.has(e.level));
@@ -9476,7 +9476,9 @@ async function executeNoraAI3DAction(action: NoraAIAction): Promise<string> {
 
     if (action.type === 'show_all') {
         resetFilters();
-        await hider.set(true);
+        if (hider) {
+            await hider.set(true);
+        }
         await updateClassificationUI();
         await applyFiltersToViewerGlobal();
         window.dispatchEvent(new CustomEvent('classificationFilterChanged'));
@@ -9486,24 +9488,61 @@ async function executeNoraAI3DAction(action: NoraAIAction): Promise<string> {
     if (action.type === 'isolate' || action.type === 'filter') {
         resetFilters();
 
-        if (action.categories && action.categories.length > 0) {
-            for (const cat of action.categories) selectedCategories.add(cat);
+        const allElements = extractAllElementsGlobal();
+        const cats = action.categories || [];
+        const lvls = action.levels || [];
+        const mats = action.materials || [];
+        const pils = action.pilotes || [];
+
+        const matchingExpressIdsByModel: Record<string, number[]> = {};
+        let matchCount = 0;
+
+        for (const el of allElements) {
+            const matchesCat = cats.length === 0 || cats.some(c => {
+                const lowerC = c.toLowerCase();
+                return (el.category && el.category.toLowerCase().includes(lowerC)) ||
+                       (el.classification && el.classification.toLowerCase().includes(lowerC)) ||
+                       (el.name && el.name.toLowerCase().includes(lowerC));
+            });
+
+            const matchesLvl = lvls.length === 0 || lvls.some(l => {
+                const lowerL = l.toLowerCase();
+                return el.level && el.level.toLowerCase().includes(lowerL);
+            });
+
+            const matchesMat = mats.length === 0 || mats.some(m => {
+                const lowerM = m.toLowerCase();
+                return el.material && el.material.toLowerCase().includes(lowerM);
+            });
+
+            const matchesPil = pils.length === 0 || pils.some(p => {
+                const lowerP = p.toLowerCase();
+                return el.pilote && el.pilote.toLowerCase().includes(lowerP);
+            });
+
+            if (matchesCat && matchesLvl && matchesMat && matchesPil) {
+                if (!matchingExpressIdsByModel[el.modelUUID]) {
+                    matchingExpressIdsByModel[el.modelUUID] = [];
+                }
+                matchingExpressIdsByModel[el.modelUUID].push(el.expressID);
+                matchCount++;
+            }
         }
-        if (action.levels && action.levels.length > 0) {
-            for (const lvl of action.levels) selectedLevels.add(lvl);
+
+        if (matchCount > 0 && hider) {
+            await hider.isolate(matchingExpressIdsByModel as any);
         }
-        if (action.materials && action.materials.length > 0) {
-            for (const mat of action.materials) selectedMaterials.add(mat);
-        }
-        if (action.pilotes && action.pilotes.length > 0) {
-            for (const p of action.pilotes) selectedPilotes.add(p);
-        }
+
+        for (const cat of cats) selectedCategories.add(cat);
+        for (const lvl of lvls) selectedLevels.add(lvl);
+        for (const mat of mats) selectedMaterials.add(mat);
+        for (const p of pils) selectedPilotes.add(p);
 
         await updateClassificationUI();
         await applyFiltersToViewerGlobal();
         window.dispatchEvent(new CustomEvent('classificationFilterChanged'));
 
-        return action.message || `Filtro 3D aplicado correctamente`;
+        return action.message || `Aislado(s) ${matchCount} elementos en el visor 3D`;
     }
 
     return '';
