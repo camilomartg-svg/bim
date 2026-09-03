@@ -9375,55 +9375,88 @@ function buildBIMContextForAI() {
     const levels: Record<string, { count: number; area: number; volume: number }> = {};
     const materials: Record<string, { count: number; area: number; volume: number }> = {};
     const pilotes: Record<string, { count: number; area: number; volume: number }> = {};
+    const matrixByLevelAndMaterial: Record<string, Record<string, { count: number; area: number; volume: number }>> = {};
+    const matrixByLevelAndCategory: Record<string, Record<string, { count: number; area: number; volume: number }>> = {};
 
     for (const el of elements) {
         const catKey = el.category || el.name || 'Sin Categoría';
+        const lvlKey = el.level || 'SIN NIVEL';
+        const matKey = el.material || 'SIN MATERIAL';
+        const vol = el.volume || 0;
+        const area = el.area || 0;
+
         if (!categories[catKey]) categories[catKey] = { count: 0, area: 0, volume: 0 };
         categories[catKey].count++;
-        categories[catKey].area += (el.area || 0);
-        categories[catKey].volume += (el.volume || 0);
+        categories[catKey].area += area;
+        categories[catKey].volume += vol;
 
-        if (el.level && el.level !== 'SIN NIVEL') {
-            if (!levels[el.level]) levels[el.level] = { count: 0, area: 0, volume: 0 };
-            levels[el.level].count++;
-            levels[el.level].area += (el.area || 0);
-            levels[el.level].volume += (el.volume || 0);
+        if (lvlKey !== 'SIN NIVEL') {
+            if (!levels[lvlKey]) levels[lvlKey] = { count: 0, area: 0, volume: 0 };
+            levels[lvlKey].count++;
+            levels[lvlKey].area += area;
+            levels[lvlKey].volume += vol;
         }
 
-        if (el.material && el.material !== 'SIN MATERIAL') {
-            if (!materials[el.material]) materials[el.material] = { count: 0, area: 0, volume: 0 };
-            materials[el.material].count++;
-            materials[el.material].area += (el.area || 0);
-            materials[el.material].volume += (el.volume || 0);
+        if (matKey !== 'SIN MATERIAL') {
+            if (!materials[matKey]) materials[matKey] = { count: 0, area: 0, volume: 0 };
+            materials[matKey].count++;
+            materials[matKey].area += area;
+            materials[matKey].volume += vol;
         }
 
         if (el.pilote) {
             if (!pilotes[el.pilote]) pilotes[el.pilote] = { count: 0, area: 0, volume: 0 };
             pilotes[el.pilote].count++;
-            pilotes[el.pilote].area += (el.area || 0);
-            pilotes[el.pilote].volume += (el.volume || 0);
+            pilotes[el.pilote].area += area;
+            pilotes[el.pilote].volume += vol;
+        }
+
+        // Matrix level x material
+        if (lvlKey !== 'SIN NIVEL' && matKey !== 'SIN MATERIAL') {
+            if (!matrixByLevelAndMaterial[lvlKey]) matrixByLevelAndMaterial[lvlKey] = {};
+            if (!matrixByLevelAndMaterial[lvlKey][matKey]) matrixByLevelAndMaterial[lvlKey][matKey] = { count: 0, area: 0, volume: 0 };
+            matrixByLevelAndMaterial[lvlKey][matKey].count++;
+            matrixByLevelAndMaterial[lvlKey][matKey].area += area;
+            matrixByLevelAndMaterial[lvlKey][matKey].volume += vol;
+        }
+
+        // Matrix level x category
+        if (lvlKey !== 'SIN NIVEL') {
+            if (!matrixByLevelAndCategory[lvlKey]) matrixByLevelAndCategory[lvlKey] = {};
+            if (!matrixByLevelAndCategory[lvlKey][catKey]) matrixByLevelAndCategory[lvlKey][catKey] = { count: 0, area: 0, volume: 0 };
+            matrixByLevelAndCategory[lvlKey][catKey].count++;
+            matrixByLevelAndCategory[lvlKey][catKey].area += area;
+            matrixByLevelAndCategory[lvlKey][catKey].volume += vol;
         }
     }
 
-    for (const k in categories) {
-        categories[k].area = Math.round(categories[k].area * 100) / 100;
-        categories[k].volume = Math.round(categories[k].volume * 100) / 100;
-    }
-    for (const k in levels) {
-        levels[k].area = Math.round(levels[k].area * 100) / 100;
-        levels[k].volume = Math.round(levels[k].volume * 100) / 100;
-    }
-    for (const k in materials) {
-        materials[k].area = Math.round(materials[k].area * 100) / 100;
-        materials[k].volume = Math.round(materials[k].volume * 100) / 100;
-    }
+    const roundStats = (obj: any) => {
+        for (const k in obj) {
+            if (typeof obj[k] === 'object' && obj[k] !== null) {
+                if ('area' in obj[k]) {
+                    obj[k].area = Math.round(obj[k].area * 100) / 100;
+                    obj[k].volume = Math.round(obj[k].volume * 100) / 100;
+                } else {
+                    roundStats(obj[k]);
+                }
+            }
+        }
+    };
+
+    roundStats(categories);
+    roundStats(levels);
+    roundStats(materials);
+    roundStats(matrixByLevelAndMaterial);
+    roundStats(matrixByLevelAndCategory);
 
     return {
         totalElements: elements.length,
         categories,
         levels,
         materials,
-        pilotes
+        pilotes,
+        matrixByLevelAndMaterial,
+        matrixByLevelAndCategory
     };
 }
 

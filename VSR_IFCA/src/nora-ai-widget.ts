@@ -22,14 +22,13 @@ export interface NoraAIAction {
     message?: string;
 }
 
-const DEFAULT_GEMINI_ENDPOINT = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent';
-
 export class NoraAIWidget {
     private options: NoraAIOptions;
     private isOpen: boolean = false;
     private isRecording: boolean = false;
     private recognition: any = null;
     private userApiKey: string = localStorage.getItem('NORA_GEMINI_KEY') || '';
+    private chatHistory: Array<{ role: 'user' | 'model'; parts: Array<{ text: string }> }> = [];
 
     private drawerEl!: HTMLElement;
     private fabEl!: HTMLElement;
@@ -54,7 +53,7 @@ export class NoraAIWidget {
         this.fabEl.addEventListener('click', () => this.toggle());
 
         const isApiKeyActive = !!(this.options.apiKey || this.userApiKey || (window as any).NORA_GEMINI_API_KEY);
-        const subTitleText = isApiKeyActive ? 'Gemini 2.5 Flash (Online)' : 'BIM AI Engine (Local)';
+        const subTitleText = isApiKeyActive ? 'Gemini 2.0 Flash (Online)' : 'BIM AI Engine (Local)';
 
         // Drawer
         this.drawerEl = document.createElement('div');
@@ -87,8 +86,8 @@ export class NoraAIWidget {
 
             <div class="nora-ai-body" id="nora-ai-messages">
                 <div class="nora-ai-prompts">
-                    <button class="nora-ai-prompt-pill" data-prompt="¿Cuántas columnas y vigas hay?">
-                        <i class="fa-solid fa-chart-pie"></i> Columnas y Vigas
+                    <button class="nora-ai-prompt-pill" data-prompt="¿Volumen de concreto 3000psi en el piso 2?">
+                        <i class="fa-solid fa-cube"></i> Concreto Piso 2
                     </button>
                     <button class="nora-ai-prompt-pill" data-prompt="Aísla la categoría TRAMOS en el modelo 3D">
                         <i class="fa-solid fa-eye"></i> Aislar TRAMOS
@@ -156,8 +155,7 @@ export class NoraAIWidget {
         const currentKey = this.userApiKey || this.options.apiKey || '';
         const inputKey = prompt('Configurar Google Gemini API Key (deja en blanco para usar el motor local BIM):', currentKey);
         if (inputKey !== null) {
-            const trimmed = inputKey.trim();
-            this.userApiKey = trimmed;
+            this.userApiKey = inputKey.trim();
             if (this.userApiKey) {
                 localStorage.setItem('NORA_GEMINI_KEY', this.userApiKey);
             } else {
@@ -172,7 +170,7 @@ export class NoraAIWidget {
         const activeKey = this.userApiKey || this.options.apiKey || (window as any).NORA_GEMINI_API_KEY;
         if (statusEl) {
             statusEl.innerHTML = activeKey
-                ? `<i class="fa-solid fa-circle" style="color: #34d399; font-size: 8px;"></i> Gemini 2.5 Flash (Online)`
+                ? `<i class="fa-solid fa-circle" style="color: #34d399; font-size: 8px;"></i> Gemini 2.0 Flash (Online)`
                 : `<i class="fa-solid fa-circle" style="color: #f59e0b; font-size: 8px;"></i> BIM AI Engine (Local)`;
         }
     }
@@ -240,6 +238,7 @@ export class NoraAIWidget {
     }
 
     public clearChat() {
+        this.chatHistory = [];
         this.bodyEl.innerHTML = `
             <div class="nora-ai-msg bot">
                 <div class="nora-ai-bubble">
@@ -332,99 +331,114 @@ export class NoraAIWidget {
     private async queryLLM(userQuery: string, bimContext: any): Promise<{ answer: string; action: NoraAIAction }> {
         const apiKey = this.userApiKey || this.options.apiKey || (window as any).NORA_GEMINI_API_KEY || '';
 
+        // Store query in chatHistory for conversational continuity
+        this.chatHistory.push({ role: 'user', parts: [{ text: userQuery }] });
+        if (this.chatHistory.length > 20) this.chatHistory = this.chatHistory.slice(-20);
+
         if (!apiKey) {
-            return this.localHeuristicFallback(userQuery, bimContext);
+            const result = this.localHeuristicFallback(userQuery, bimContext);
+            this.chatHistory.push({ role: 'model', parts: [{ text: JSON.stringify(result) }] });
+            return result;
         }
 
         const systemPrompt = `
-Eres "nora AI", un Asistente experto en BIM y CDE para nora BIM.
+Eres "nora AI", la asistente experta de IA para la plataforma nora BIM.
 
-CONTEXTO DEL MODELO CORTADO/CARGADO EN PANTALLA:
+CONTEXTO DEL MODELO IFC CARGADO EN PANTALLA:
 ${JSON.stringify(bimContext, null, 2)}
 
 INSTRUCCIONES DE RESPUESTA:
-1. Responde de forma precisa, amable y concisa en formato texto HTML/Markdown básico. Usa negritas para destacar números o valores clave.
-2. Si el usuario pide aislaciones, ocultamientos, filtrados o mostrar todo (ej. "Aísla las columnas del piso 1", "Muéstrame solo TRAMOS", "Limpiar filtros"), debes incluir una propiedad "action" en la respuesta JSON.
-3. SIEMPRE debes responder ÚNICAMENTE en el siguiente formato JSON estricto:
+1. Responde de forma precisa, amable y fluida a la conversación. Usa HTML básico (<b>, <i>, <br>).
+2. Tienes acceso a matrices combinadas (Nivel x Material, Nivel x Categoría) en bimContext. Si te preguntan por un material en un piso específico (ej. "concreto 3000psi en el piso 2"), busca en matrixByLevelAndMaterial.
+3. Si la orden implica aislar o filtrar en el 3D, incluye la orden en "action".
+4. SIEMPRE responde ÚNICAMENTE en JSON estricto:
 
 {
-  "answer": "Explicación o respuesta directa al usuario aquí...",
+  "answer": "Respuesta clara al usuario...",
   "action": {
     "type": "isolate" | "hide" | "show_all" | "filter" | "color" | "none",
     "categories": ["NOMBRE_CATEGORIA"],
     "levels": ["NOMBRE_NIVEL"],
     "materials": ["NOMBRE_MATERIAL"],
     "pilotes": ["NUMERO_PILOTE"],
-    "colorMode": "category" | "level" | "material" | "pilote" | "none",
     "message": "Mensaje descriptivo de la acción ejecutada"
   }
 }
         `;
 
-        const url = `${DEFAULT_GEMINI_ENDPOINT}?key=${apiKey}`;
-        const payload = {
-            contents: [
-                {
-                    role: 'user',
-                    parts: [
-                        { text: systemPrompt },
-                        { text: `Pregunta del usuario: "${userQuery}"` }
-                    ]
+        const contents = [
+            { role: 'user', parts: [{ text: systemPrompt }] },
+            { role: 'model', parts: [{ text: '{"answer": "Entendido. Estoy lista para responder y ejecutar acciones en el visor 3D.", "action": {"type": "none"}}' }] },
+            ...this.chatHistory
+        ];
+
+        // Try official Gemini models sequentially
+        for (const modelName of ['gemini-2.0-flash', 'gemini-1.5-flash', 'gemini-1.5-pro']) {
+            const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`;
+            const payload = {
+                contents,
+                generationConfig: {
+                    temperature: 0.2,
+                    responseMimeType: "application/json"
                 }
-            ],
-            generationConfig: {
-                temperature: 0.2,
-                responseMimeType: "application/json"
-            }
-        };
-
-        let res = await fetch(url, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'x-goog-api-key': apiKey
-            },
-            body: JSON.stringify(payload)
-        });
-
-        // Retry without responseMimeType if model throws 400 on mime parameter
-        if (!res.ok && res.status === 400) {
-            const retryPayload = { ...payload, generationConfig: { temperature: 0.2 } };
-            const retryRes = await fetch(url, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'x-goog-api-key': apiKey
-                },
-                body: JSON.stringify(retryPayload)
-            });
-            if (retryRes.ok) {
-                res = retryRes;
-            }
-        }
-
-        if (!res.ok) {
-            const errBody = await res.text();
-            console.warn(`[nora AI] Gemini API error ${res.status}:`, errBody);
-            // Fallback to intelligent local heuristic if API key has quota/access restrictions
-            return this.localHeuristicFallback(userQuery, bimContext);
-        }
-
-        const data = await res.json();
-        const rawText = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
-        
-        try {
-            return JSON.parse(rawText);
-        } catch (e) {
-            return {
-                answer: rawText,
-                action: { type: 'none' }
             };
+
+            try {
+                const res = await fetch(url, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'x-goog-api-key': apiKey
+                    },
+                    body: JSON.stringify(payload)
+                });
+
+                if (res.ok) {
+                    const data = await res.json();
+                    const rawText = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+                    if (rawText) {
+                        this.chatHistory.push({ role: 'model', parts: [{ text: rawText }] });
+                        try {
+                            return JSON.parse(rawText);
+                        } catch (e) {
+                            return { answer: rawText, action: { type: 'none' } };
+                        }
+                    }
+                } else {
+                    console.warn(`[nora AI] Model ${modelName} returned status ${res.status}:`, await res.text());
+                }
+            } catch (err) {
+                console.warn(`[nora AI] Model ${modelName} error:`, err);
+            }
         }
+
+        // If Gemini API calls fail or run out of quota, fallback seamlessly
+        const fallbackResult = this.localHeuristicFallback(userQuery, bimContext);
+        this.chatHistory.push({ role: 'model', parts: [{ text: JSON.stringify(fallbackResult) }] });
+        return fallbackResult;
     }
 
     private localHeuristicFallback(query: string, bimContext: any): { answer: string; action: NoraAIAction } {
         const q = query.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+
+        // Check recent conversation history for context (e.g. material mentioned in previous turn)
+        let lastMaterial: string | null = null;
+        let lastLevel: string | null = null;
+        let lastCategory: string | null = null;
+
+        for (let i = this.chatHistory.length - 2; i >= 0; i--) {
+            const text = (this.chatHistory[i].parts[0]?.text || '').toLowerCase();
+            if (!lastMaterial) {
+                if (text.includes('3000') || text.includes('210')) lastMaterial = 'CON-210-3000PSI';
+                else if (text.includes('3500') || text.includes('245')) lastMaterial = 'CON-245-3500PSI';
+                else if (text.includes('4000') || text.includes('280')) lastMaterial = 'CON-280-4000PSI';
+            }
+            if (!lastLevel) {
+                if (text.includes('piso 2') || text.includes('p2') || text.includes('psio 2')) lastLevel = 'ED ADMIN P2 NE';
+                else if (text.includes('piso 1') || text.includes('p1')) lastLevel = 'PISO 1 NE';
+                else if (text.includes('piso 3') || text.includes('p3')) lastLevel = 'ED ADMIN P3 NE';
+            }
+        }
 
         // 1. Greetings & Casual questions
         const greetings = ['hola', 'buenas', 'buenos dias', 'buenas tardes', 'buenas noches', 'saludos', 'quien eres', 'que haces', 'que puedes hacer', 'ayuda', 'help', 'solo sabes decir eso'];
@@ -432,7 +446,7 @@ INSTRUCCIONES DE RESPUESTA:
             const total = bimContext?.totalElements || 0;
             const catCount = Object.keys(bimContext?.categories || {}).length;
             return {
-                answer: `¡Hola! 👋 Soy <b>nora AI Copilot</b>. Estoy conectada en tiempo real a tu modelo 3D (${total} elementos en ${catCount} categorías).<br><br>Puedo responderte sobre:<br>• <b>Cantidades y volúmenes</b> ("¿Cuántas columnas hay?", "Volumen de TRAMOS")<br>• <b>Niveles y materiales</b> ("Aísla Piso 1", "Elementos de Hormigón")<br>• <b>Acciones 3D</b> ("Aísla vigas", "Muéstrame todo el modelo")<br><br><i>💡 Tip: Presiona el ícono 🔑 en la cabecera si deseas vincular una API Key de Gemini.</i>`,
+                answer: `¡Hola! 👋 Soy <b>nora AI Copilot</b>. Estoy conectada en tiempo real a tu modelo 3D (${total} elementos en ${catCount} categorías).<br><br>Puedo responderte sobre:<br>• <b>Cantidades por nivel y material</b> ("¿Volumen de concreto 3000psi en el piso 2?")<br>• <b>Aislamientos 3D combinados</b> ("Aísla columnas del piso 1")<br>• <b>Restablecer visor</b> ("Muéstrame todo el modelo")`,
                 action: { type: 'none' }
             };
         }
@@ -448,131 +462,129 @@ INSTRUCCIONES DE RESPUESTA:
             };
         }
 
-        // 3. Category search with rich synonyms & plural forms
-        if (bimContext && bimContext.categories) {
-            const categoryKeys = Object.keys(bimContext.categories);
-
-            // Synonym mapping
-            const catMap: Record<string, string[]> = {
-                'columnas': ['columna', 'columnas', 'column'],
-                'muros': ['muro', 'muros', 'wall', 'pared'],
-                'pisos': ['piso', 'pisos', 'placa', 'placas', 'slab'],
-                'tramos': ['tramo', 'tramos', 'escalera', 'escaleras', 'stair'],
-                'vigas': ['viga', 'vigas', 'beam'],
-                'cimentacion': ['cimentacion', 'zapata', 'zapatas', 'footing'],
-                'pilotes': ['pilote', 'pilotes', 'pile'],
-                'descansillos': ['descansillo', 'descansillos', 'landing']
-            };
-
-            for (const catKey of categoryKeys) {
-                const catNorm = catKey.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
-                
-                // Check direct key inclusion or synonyms
-                let matched = q.includes(catNorm);
-                if (!matched) {
-                    for (const group in catMap) {
-                        if (catNorm.includes(group) && catMap[group].some(word => q.includes(word))) {
-                            matched = true;
-                            break;
-                        }
-                    }
-                }
-
-                if (matched) {
-                    const stats = bimContext.categories[catKey];
-                    const wantsIsolate = q.includes('aisla') || q.includes('filtr') || q.includes('muestra') || q.includes('ver') || q.includes('solo');
-
-                    return {
-                        answer: `La categoría <b>${catKey}</b> cuenta con <b>${stats.count} elementos</b>.<br>• <b>Volumen total:</b> ${stats.volume} m³<br>• <b>Área total:</b> ${stats.area} m²`,
-                        action: wantsIsolate ? {
-                            type: 'isolate',
-                            categories: [catKey],
-                            message: `Aislada categoría ${catKey} (${stats.count} elementos)`
-                        } : { type: 'none' }
-                    };
-                }
-            }
-        }
-
-        // 4. Level search
+        // 3. Extract Level mention (including typos like "psio 2", "p2", "piso 2")
+        let targetLevelKey: string | null = null;
         if (bimContext && bimContext.levels) {
             const levelKeys = Object.keys(bimContext.levels);
-            for (const lvlKey of levelKeys) {
-                const lvlNorm = lvlKey.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
-                if (q.includes(lvlNorm) || (q.includes('piso 1') && lvlNorm.includes('piso 1')) || (q.includes('sotano') && lvlNorm.includes('sotano'))) {
-                    const stats = bimContext.levels[lvlKey];
-                    return {
-                        answer: `En el nivel <b>${lvlKey}</b> hay <b>${stats.count} elementos registrados</b>.`,
-                        action: {
-                            type: 'isolate',
-                            levels: [lvlKey],
-                            message: `Aislado nivel ${lvlKey}`
-                        }
-                    };
+            
+            if (q.includes('piso 2') || q.includes('psio 2') || q.includes('p2') || q.includes('nivel 2')) {
+                targetLevelKey = levelKeys.find(l => l.includes('P2') || l.includes('2')) || null;
+            } else if (q.includes('piso 1') || q.includes('psio 1') || q.includes('p1') || q.includes('nivel 1')) {
+                targetLevelKey = levelKeys.find(l => l.includes('P1') || l.includes('1')) || null;
+            } else if (q.includes('piso 3') || q.includes('psio 3') || q.includes('p3') || q.includes('nivel 3')) {
+                targetLevelKey = levelKeys.find(l => l.includes('P3') || l.includes('3')) || null;
+            } else if (q.includes('sotano')) {
+                targetLevelKey = levelKeys.find(l => l.toLowerCase().includes('sotano')) || null;
+            } else {
+                for (const l of levelKeys) {
+                    if (q.includes(l.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, ''))) {
+                        targetLevelKey = l;
+                        break;
+                    }
                 }
             }
         }
+        if (!targetLevelKey && (q.includes('solo el') || q.includes('este piso') || q.includes('en ese piso'))) {
+            targetLevelKey = lastLevel;
+        }
 
-        // 5. Material search with PSI / strength matching
+        // 4. Extract Material mention
+        let targetMaterialKey: string | null = null;
         if (bimContext && bimContext.materials) {
             const matKeys = Object.keys(bimContext.materials);
-            let bestMatchMatKey: string | null = null;
             
-            // Check specific numbers in query from last mentioned to first
             const numbersInQuery = (q.match(/\d+/g) || []).reverse();
             for (const num of numbersInQuery) {
-                if (num === '3' || num === '2' || num === '1') continue; // ignore single digits like '3' in m3
+                if (num === '3' || num === '2' || num === '1') continue;
                 for (const matKey of matKeys) {
                     const matNorm = matKey.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
                     if (matNorm.includes(num)) {
-                        bestMatchMatKey = matKey;
+                        targetMaterialKey = matKey;
                         break;
                     }
                 }
-                if (bestMatchMatKey) break;
+                if (targetMaterialKey) break;
             }
 
-            if (!bestMatchMatKey) {
+            if (!targetMaterialKey) {
                 for (const matKey of matKeys) {
                     const matNorm = matKey.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
                     if (q.includes(matNorm) || (q.includes('hormigon') && matNorm.includes('hormigon')) || (q.includes('concreto') && matNorm.includes('con'))) {
-                        bestMatchMatKey = matKey;
+                        targetMaterialKey = matKey;
                         break;
                     }
                 }
             }
+        }
+        if (!targetMaterialKey && (q.includes('cuanto') || q.includes('volumen') || q.includes('ese') || q.includes('solo el'))) {
+            targetMaterialKey = lastMaterial;
+        }
 
-            if (bestMatchMatKey) {
-                const stats = bimContext.materials[bestMatchMatKey];
-                const wantsIsolate = q.includes('aisla') || q.includes('filtr') || q.includes('muestra') || q.includes('ver') || q.includes('solo');
-
+        // 5. Combined Level x Material query
+        if (targetLevelKey && targetMaterialKey && bimContext?.matrixByLevelAndMaterial) {
+            const stats = bimContext.matrixByLevelAndMaterial[targetLevelKey]?.[targetMaterialKey];
+            if (stats) {
                 return {
-                    answer: `El material <b>${bestMatchMatKey}</b> está presente en <b>${stats.count} elementos</b> del modelo.<br>• <b>Volumen acumulado:</b> ${stats.volume || 0} m³<br>• <b>Área acumulada:</b> ${stats.area || 0} m²`,
-                    action: wantsIsolate ? {
+                    answer: `En el nivel <b>${targetLevelKey}</b>, el concreto <b>${targetMaterialKey}</b> cuenta con <b>${stats.count} elementos</b>.<br>• <b>Volumen acumulado:</b> ${stats.volume} m³<br>• <b>Área acumulada:</b> ${stats.area} m²`,
+                    action: {
                         type: 'isolate',
-                        materials: [bestMatchMatKey],
-                        message: `Aislado material ${bestMatchMatKey}`
-                    } : { type: 'none' }
+                        levels: [targetLevelKey],
+                        materials: [targetMaterialKey],
+                        message: `Aislado ${targetMaterialKey} en ${targetLevelKey}`
+                    }
                 };
             }
         }
 
-        // 6. Total Quantities query
-        if (q.includes('cuantida') || q.includes('volumen') || q.includes('cuantos') || q.includes('total')) {
-            const total = bimContext?.totalElements || 0;
-            const categories = bimContext?.categories || {};
-            const catList = Object.keys(categories).map(c => `• <b>${c}:</b> ${categories[c].count} elementos (${categories[c].volume} m³)`).join('<br>');
+        // 6. Level-only query
+        if (targetLevelKey && bimContext?.levels?.[targetLevelKey]) {
+            const stats = bimContext.levels[targetLevelKey];
             return {
-                answer: `<b>Resumen Total del Modelo:</b><br>Total de elementos: <b>${total}</b><br><br>${catList}`,
-                action: { type: 'none' }
+                answer: `En el nivel <b>${targetLevelKey}</b> hay <b>${stats.count} elementos registrados</b>.<br>• <b>Volumen acumulado:</b> ${stats.volume} m³<br>• <b>Área acumulada:</b> ${stats.area} m²`,
+                action: {
+                    type: 'isolate',
+                    levels: [targetLevelKey],
+                    message: `Aislado nivel ${targetLevelKey}`
+                }
             };
         }
 
-        // Fallback response for unhandled queries
-        const catCount = Object.keys(bimContext?.categories || {}).length;
+        // 7. Material-only query
+        if (targetMaterialKey && bimContext?.materials?.[targetMaterialKey]) {
+            const stats = bimContext.materials[targetMaterialKey];
+            return {
+                answer: `El material <b>${targetMaterialKey}</b> está presente en <b>${stats.count} elementos</b> del modelo.<br>• <b>Volumen acumulado:</b> ${stats.volume} m³<br>• <b>Área acumulada:</b> ${stats.area} m²`,
+                action: {
+                    type: 'isolate',
+                    materials: [targetMaterialKey],
+                    message: `Aislado material ${targetMaterialKey}`
+                }
+            };
+        }
+
+        // 8. Category search
+        if (bimContext && bimContext.categories) {
+            const categoryKeys = Object.keys(bimContext.categories);
+            for (const catKey of categoryKeys) {
+                const catNorm = catKey.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+                if (q.includes(catNorm)) {
+                    const stats = bimContext.categories[catKey];
+                    return {
+                        answer: `La categoría <b>${catKey}</b> cuenta con <b>${stats.count} elementos</b> (Volumen: ${stats.volume} m³, Área: ${stats.area} m²).`,
+                        action: {
+                            type: 'isolate',
+                            categories: [catKey],
+                            message: `Aislada categoría ${catKey}`
+                        }
+                    };
+                }
+            }
+        }
+
+        // Fallback response
         const total = bimContext?.totalElements || 0;
         return {
-            answer: `El modelo cargado cuenta con <b>${total} elementos</b> distribuidos en <b>${catCount} categorías</b>.<br><br>Prueba consultando por una categoría como <i>"¿Cuántas columnas hay?"</i>, <i>"Aísla vigas"</i> o <i>"Resumen de cantidades"</i>.`,
+            answer: `El modelo cargado cuenta con <b>${total} elementos</b>.<br><br>Puedes preguntarme por combinaciones como:<br>• <i>"¿Cuánto concreto de 3000psi hay en el piso 2?"</i><br>• <i>"Aísla las vigas del nivel 1"</i>`,
             action: { type: 'none' }
         };
     }
