@@ -13,6 +13,7 @@ import {
 } from './config';
 import './style.css';
 import { loadSecurityContext, isUserAuthorizedForFile } from './securityUtils';
+import { NoraAIWidget, NoraAIAction } from './nora-ai-widget';
 
 
 const currentUrl = typeof window !== 'undefined' ? new URL(window.location.href) : null;
@@ -1325,6 +1326,12 @@ try {
     setupVisibilityToolbar();
 } catch (e) {
     console.error("Error setting up visibility toolbar:", e);
+}
+
+try {
+    setupNoraAI();
+} catch (e) {
+    console.error("Error setting up nora AI Copilot:", e);
 }
 
 try {
@@ -9359,6 +9366,102 @@ function setupVisibilityToolbar() {
             await applyFiltersToViewerGlobal();
             window.dispatchEvent(new CustomEvent('classificationFilterChanged'));
         });
+    }
+}
+
+function buildBIMContextForAI() {
+    const elements = extractAllElementsGlobal();
+    const categories: Record<string, { count: number; area: number; volume: number }> = {};
+    const levels: Record<string, { count: number }> = {};
+    const materials: Record<string, { count: number }> = {};
+    const pilotes: Record<string, { count: number }> = {};
+
+    for (const el of elements) {
+        const catKey = el.category || el.name || 'Sin Categoría';
+        if (!categories[catKey]) categories[catKey] = { count: 0, area: 0, volume: 0 };
+        categories[catKey].count++;
+        categories[catKey].area += (el.area || 0);
+        categories[catKey].volume += (el.volume || 0);
+
+        if (el.level && el.level !== 'SIN NIVEL') {
+            if (!levels[el.level]) levels[el.level] = { count: 0 };
+            levels[el.level].count++;
+        }
+
+        if (el.material && el.material !== 'SIN MATERIAL') {
+            if (!materials[el.material]) materials[el.material] = { count: 0 };
+            materials[el.material].count++;
+        }
+
+        if (el.pilote) {
+            if (!pilotes[el.pilote]) pilotes[el.pilote] = { count: 0 };
+            pilotes[el.pilote].count++;
+        }
+    }
+
+    for (const k in categories) {
+        categories[k].area = Math.round(categories[k].area * 100) / 100;
+        categories[k].volume = Math.round(categories[k].volume * 100) / 100;
+    }
+
+    return {
+        totalElements: elements.length,
+        categories,
+        levels,
+        materials,
+        pilotes
+    };
+}
+
+async function executeNoraAI3DAction(action: NoraAIAction): Promise<string> {
+    if (!action || action.type === 'none') return '';
+
+    if (action.type === 'show_all') {
+        resetFilters();
+        await hider.set(true);
+        await updateClassificationUI();
+        await applyFiltersToViewerGlobal();
+        window.dispatchEvent(new CustomEvent('classificationFilterChanged'));
+        return 'Modelo 3D y filtros restablecidos a la vista completa';
+    }
+
+    if (action.type === 'isolate' || action.type === 'filter') {
+        resetFilters();
+
+        if (action.categories && action.categories.length > 0) {
+            for (const cat of action.categories) selectedCategories.add(cat);
+        }
+        if (action.levels && action.levels.length > 0) {
+            for (const lvl of action.levels) selectedLevels.add(lvl);
+        }
+        if (action.materials && action.materials.length > 0) {
+            for (const mat of action.materials) selectedMaterials.add(mat);
+        }
+        if (action.pilotes && action.pilotes.length > 0) {
+            for (const p of action.pilotes) selectedPilotes.add(p);
+        }
+
+        await updateClassificationUI();
+        await applyFiltersToViewerGlobal();
+        window.dispatchEvent(new CustomEvent('classificationFilterChanged'));
+
+        return action.message || `Filtro 3D aplicado correctamente`;
+    }
+
+    return '';
+}
+
+let noraAIWidgetInstance: NoraAIWidget | null = null;
+
+function setupNoraAI() {
+    try {
+        noraAIWidgetInstance = new NoraAIWidget({
+            getBIMContext: () => buildBIMContextForAI(),
+            execute3DAction: async (action) => executeNoraAI3DAction(action)
+        });
+        console.log('[nora AI] Copilot initialized successfully.');
+    } catch (e) {
+        console.error('[nora AI] Initialization error:', e);
     }
 }
 

@@ -1,0 +1,375 @@
+/* nora AI Copilot - Modern Glassmorphism Styling */
+
+:root {
+    --nora-ai-primary: #6366f1;
+    --nora-ai-primary-hover: #4f46e5;
+    --nora-ai-gradient: linear-gradient(135deg, #6366f1 0%, #a855f7 50%, #ec4899 100%);
+    --nora-ai-bg-glass: rgba(255, 255, 255, 0.92);
+    --nora-ai-bg-dark-glass: rgba(17, 24, 39, 0.92);
+    --nora-ai-border: rgba(99, 102, 241, 0.2);
+    --nora-ai-shadow: 0 20px 40px rgba(0, 0, 0, 0.25);
+}
+
+body.dark-mode .nora-ai-drawer {
+    background: var(--nora-ai-bg-dark-glass);
+    color: #f3f4f6;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+/* Floating Trigger Button (FAB) */
+.nora-ai-fab {
+    position: fixed;
+    bottom: 24px;
+    right: 24px;
+    z-index: 2000;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 12px 20px;
+    background: var(--nora-ai-gradient);
+    color: #ffffff;
+    border: none;
+    border-radius: 30px;
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    font-weight: 700;
+    font-size: 14px;
+    cursor: pointer;
+    box-shadow: 0 8px 24px rgba(99, 102, 241, 0.4);
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    backdrop-filter: blur(8px);
+}
+
+.nora-ai-fab:hover {
+    transform: translateY(-3px) scale(1.03);
+    box-shadow: 0 12px 32px rgba(168, 85, 247, 0.5);
+}
+
+.nora-ai-fab i {
+    font-size: 16px;
+    animation: nora-ai-pulse 2s infinite;
+}
+
+@keyframes nora-ai-pulse {
+    0%, 100% { transform: scale(1); opacity: 1; }
+    50% { transform: scale(1.2); opacity: 0.8; }
+}
+
+/* Drawer Container */
+.nora-ai-drawer {
+    position: fixed;
+    bottom: 80px;
+    right: 24px;
+    width: 420px;
+    max-width: calc(100vw - 32px);
+    height: 580px;
+    max-height: calc(100vh - 120px);
+    z-index: 2001;
+    display: flex;
+    flex-direction: column;
+    background: var(--nora-ai-bg-glass);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border: 1px solid var(--nora-ai-border);
+    border-radius: 20px;
+    box-shadow: var(--nora-ai-shadow);
+    overflow: hidden;
+    transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+    opacity: 0;
+    transform: translateY(20px) scale(0.95);
+    pointer-events: none;
+}
+
+.nora-ai-drawer.open {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+    pointer-events: all;
+}
+
+/* Header */
+.nora-ai-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 14px 18px;
+    background: var(--nora-ai-gradient);
+    color: #ffffff;
+}
+
+.nora-ai-title-area {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.nora-ai-avatar {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.25);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 16px;
+    box-shadow: inset 0 0 8px rgba(255, 255, 255, 0.4);
+}
+
+.nora-ai-title {
+    font-weight: 700;
+    font-size: 15px;
+    margin: 0;
+    line-height: 1.2;
+}
+
+.nora-ai-subtitle {
+    font-size: 11px;
+    opacity: 0.9;
+    font-weight: 500;
+}
+
+.nora-ai-header-actions {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.nora-ai-header-btn {
+    background: rgba(255, 255, 255, 0.15);
+    border: none;
+    color: #ffffff;
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 13px;
+    transition: background 0.2s ease;
+}
+
+.nora-ai-header-btn:hover {
+    background: rgba(255, 255, 255, 0.3);
+}
+
+/* Content Area */
+.nora-ai-body {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow-y: auto;
+    padding: 16px;
+    gap: 12px;
+    scroll-behavior: smooth;
+}
+
+/* Quick Prompts Container */
+.nora-ai-prompts {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-bottom: 8px;
+}
+
+.nora-ai-prompt-pill {
+    padding: 6px 12px;
+    background: rgba(99, 102, 241, 0.08);
+    border: 1px solid rgba(99, 102, 241, 0.2);
+    border-radius: 16px;
+    font-size: 12px;
+    color: var(--nora-ai-primary);
+    cursor: pointer;
+    transition: all 0.2s ease;
+    font-weight: 500;
+}
+
+body.dark-mode .nora-ai-prompt-pill {
+    background: rgba(168, 85, 247, 0.15);
+    border-color: rgba(168, 85, 247, 0.3);
+    color: #c084fc;
+}
+
+.nora-ai-prompt-pill:hover {
+    background: var(--nora-ai-primary);
+    color: #ffffff;
+    transform: translateY(-1px);
+}
+
+/* Chat Messages */
+.nora-ai-msg {
+    display: flex;
+    flex-direction: column;
+    max-width: 85%;
+    animation: nora-ai-fadeIn 0.25s ease-out forwards;
+}
+
+@keyframes nora-ai-fadeIn {
+    from { opacity: 0; transform: translateY(6px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+.nora-ai-msg.user {
+    align-self: flex-end;
+}
+
+.nora-ai-msg.bot {
+    align-self: flex-start;
+}
+
+.nora-ai-bubble {
+    padding: 10px 14px;
+    border-radius: 16px;
+    font-size: 13px;
+    line-height: 1.45;
+    word-break: break-word;
+}
+
+.nora-ai-msg.user .nora-ai-bubble {
+    background: var(--nora-ai-gradient);
+    color: #ffffff;
+    border-bottom-right-radius: 4px;
+    box-shadow: 0 4px 12px rgba(99, 102, 241, 0.25);
+}
+
+.nora-ai-msg.bot .nora-ai-bubble {
+    background: rgba(243, 244, 246, 0.9);
+    color: #1f2937;
+    border-bottom-left-radius: 4px;
+    border: 1px solid rgba(0, 0, 0, 0.05);
+}
+
+body.dark-mode .nora-ai-msg.bot .nora-ai-bubble {
+    background: rgba(31, 41, 55, 0.9);
+    color: #f3f4f6;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+/* Action Executed Badge */
+.nora-ai-action-badge {
+    margin-top: 6px;
+    padding: 8px 12px;
+    background: rgba(16, 185, 129, 0.1);
+    border: 1px solid rgba(16, 185, 129, 0.3);
+    border-radius: 8px;
+    color: #059669;
+    font-size: 12px;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+body.dark-mode .nora-ai-action-badge {
+    background: rgba(16, 185, 129, 0.2);
+    color: #34d399;
+}
+
+/* Input Bar */
+.nora-ai-footer {
+    padding: 12px;
+    border-top: 1px solid rgba(0, 0, 0, 0.06);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: rgba(255, 255, 255, 0.5);
+}
+
+body.dark-mode .nora-ai-footer {
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
+    background: rgba(17, 24, 39, 0.5);
+}
+
+.nora-ai-input-wrapper {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    background: rgba(243, 244, 246, 0.8);
+    border: 1px solid rgba(0, 0, 0, 0.1);
+    border-radius: 24px;
+    padding: 4px 12px;
+    transition: border-color 0.2s ease;
+}
+
+body.dark-mode .nora-ai-input-wrapper {
+    background: rgba(31, 41, 55, 0.8);
+    border-color: rgba(255, 255, 255, 0.12);
+}
+
+.nora-ai-input-wrapper:focus-within {
+    border-color: var(--nora-ai-primary);
+}
+
+.nora-ai-input {
+    width: 100%;
+    border: none;
+    background: transparent;
+    padding: 8px 4px;
+    font-size: 13px;
+    color: inherit;
+    outline: none;
+}
+
+.nora-ai-voice-btn, .nora-ai-send-btn {
+    width: 34px;
+    height: 34px;
+    border-radius: 50%;
+    border: none;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+    transition: all 0.2s ease;
+}
+
+.nora-ai-voice-btn {
+    background: transparent;
+    color: #6b7280;
+}
+
+.nora-ai-voice-btn:hover {
+    color: var(--nora-ai-primary);
+    background: rgba(99, 102, 241, 0.1);
+}
+
+.nora-ai-voice-btn.recording {
+    color: #ef4444;
+    animation: nora-ai-pulse 1s infinite;
+}
+
+.nora-ai-send-btn {
+    background: var(--nora-ai-gradient);
+    color: #ffffff;
+    box-shadow: 0 4px 10px rgba(99, 102, 241, 0.3);
+}
+
+.nora-ai-send-btn:hover {
+    transform: scale(1.05);
+}
+
+.nora-ai-send-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+/* Typing Indicator */
+.nora-ai-typing {
+    display: flex;
+    gap: 4px;
+    padding: 6px 10px;
+}
+
+.nora-ai-typing-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: #9ca3af;
+    animation: nora-ai-typing-bounce 1.4s infinite ease-in-out both;
+}
+
+.nora-ai-typing-dot:nth-child(1) { animation-delay: -0.32s; }
+.nora-ai-typing-dot:nth-child(2) { animation-delay: -0.16s; }
+
+@keyframes nora-ai-typing-bounce {
+    0%, 80%, 100% { transform: scale(0); }
+    40% { transform: scale(1); }
+}
