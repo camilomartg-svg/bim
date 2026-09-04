@@ -9454,6 +9454,41 @@ function buildBIMContextForAI() {
         }
     };
 
+    const selectedElements: any[] = [];
+    try {
+        const selectedIdSet = new Set<number>();
+        if (highlighter && highlighter.selection && highlighter.selection.select) {
+            const selMap = highlighter.selection.select;
+            for (const modelUUID in selMap) {
+                const ids = selMap[modelUUID];
+                const arr = ids instanceof Set ? Array.from(ids) : Array.isArray(ids) ? ids : [];
+                arr.forEach((id: number) => selectedIdSet.add(Number(id)));
+            }
+        }
+        
+        if (selectedIdSet.size > 0) {
+            for (const el of elements) {
+                if (selectedIdSet.has(Number(el.expressID))) {
+                    selectedElements.push({
+                        expressID: el.expressID,
+                        name: el.name || el.category || 'Elemento',
+                        category: el.category || '',
+                        classification: el.classification || '',
+                        level: el.level || '',
+                        material: el.material || '',
+                        detail: el.detail || '',
+                        area: Math.round((el.area || 0) * 100) / 100,
+                        volume: Math.round((el.volume || 0) * 100) / 100,
+                        length: Math.round((el.length || 0) * 100) / 100,
+                        pilote: el.pilote || ''
+                    });
+                }
+            }
+        }
+    } catch (e) {
+        console.warn('Error reading selected elements for AI context:', e);
+    }
+
     roundStats(categories);
     roundStats(levels);
     roundStats(materials);
@@ -9462,6 +9497,8 @@ function buildBIMContextForAI() {
 
     return {
         totalElements: elements.length,
+        selectedElements,
+        hasSelection: selectedElements.length > 0,
         categories,
         levels,
         materials,

@@ -413,11 +413,12 @@ ${JSON.stringify(bimContext, null, 2)}
 ESTADO DE FILTROS Y CONTEXTO ACTIVO EN LA CONVERSACIÓN ACTUAL:
 ${JSON.stringify(this.activeContext, null, 2)}
 
-REGLAS DE CONTINUIDAD Y HILO CONVERSACIONAL:
-1. MANTÉN LA CONTINUIDAD CONVERSACIONAL: Si el usuario realiza una pregunta de seguimiento (ej. "solo las columnas", "y en el piso 2?", "cuánto volumen hay?"), COMBINA o REFINA los filtros activos previos con los nuevos parámetros solicitados.
-2. Ejemplo: si activeLevels es ["PISO 2"] y el usuario pide "solo las columnas", tu JSON action DEBE incluir {"type": "isolate", "levels": ["PISO 2"], "categories": ["IfcColumn"]}.
-3. Ejemplo: si activeCategories es ["IfcColumn"] y el usuario pide "dejame ver el nivel 2", tu JSON action DEBE incluir {"type": "isolate", "levels": ["PISO 2"], "categories": ["IfcColumn"]}.
-4. Solo descarta los filtros previos si el usuario indica explícitamente "mostrar todo", "restablecer", "limpiar" o cambia de tema radicalmente.
+REGLAS DE CONTINUIDAD Y OBJETO SELECCIONADO:
+1. REGLA DE OBJETO SELECCIONADO (PRIORIDAD MÁXIMA): Si el usuario usa palabras como "seleccionado", "este elemento", "el que toque", "este muro" o si hay elementos en bimContext.selectedElements, responde mostrando ÚNICAMENTE el área, volumen, nivel y datos del objeto seleccionado individualmente. NO sumes todos los objetos de esa categoría en el proyecto.
+2. MANTÉN LA CONTINUIDAD CONVERSACIONAL: Si el usuario realiza una pregunta de seguimiento (ej. "solo las columnas", "y en el piso 2?", "cuánto volumen hay?"), COMBINA o REFINA los filtros activos previos con los nuevos parámetros solicitados.
+3. Ejemplo: si activeLevels es ["PISO 2"] y el usuario pide "solo las columnas", tu JSON action DEBE incluir {"type": "isolate", "levels": ["PISO 2"], "categories": ["IfcColumn"]}.
+4. Ejemplo: si activeCategories es ["IfcColumn"] y el usuario pide "dejame ver el nivel 2", tu JSON action DEBE incluir {"type": "isolate", "levels": ["PISO 2"], "categories": ["IfcColumn"]}.
+5. Solo descarta los filtros previos si el usuario indica explícitamente "mostrar todo", "restablecer", "limpiar" o cambia de tema radicalmente.
 
 INSTRUCCIONES DE RESPUESTA:
 1. Responde de forma precisa, amable y fluida a la conversación. Usa HTML básico (<b>, <i>, <br>).
@@ -513,6 +514,49 @@ INSTRUCCIONES DE RESPUESTA:
 
     private localHeuristicFallback(query: string, bimContext: any): { answer: string; action: NoraAIAction } {
         const qClean = query.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+
+        // 0.0 Inspection of Currently Selected Elements (Prioridad Absoluta)
+        const selectedEls: any[] = bimContext?.selectedElements || [];
+        const isSelectionQuery = ['seleccionad', 'este', 'esta', 'tocado', 'marcado', 'que toque', 'actual'].some(k => qClean.includes(k));
+
+        if (selectedEls.length > 0 && (isSelectionQuery || qClean.includes('area') || qClean.includes('volumen') || qClean.includes('longitud') || qClean.includes('medida') || qClean.includes('cuanto') || qClean.includes('informacion') || qClean.includes('detalle'))) {
+            if (selectedEls.length === 1) {
+                const el = selectedEls[0];
+                const detailLines: string[] = [];
+                if (el.name) detailLines.push(`• <b>Nombre / Tipo:</b> ${el.name}`);
+                if (el.category) detailLines.push(`• <b>Categoría:</b> ${el.category}${el.classification ? ' (' + el.classification + ')' : ''}`);
+                if (el.level) detailLines.push(`• <b>Ubicación (Nivel):</b> ${el.level}`);
+                if (el.material) detailLines.push(`• <b>Material:</b> ${el.material}`);
+                if (el.area > 0) detailLines.push(`• <b>Área Individual:</b> ${el.area} m²`);
+                if (el.volume > 0) detailLines.push(`• <b>Volumen Individual:</b> ${el.volume} m³`);
+                if (el.length > 0) detailLines.push(`• <b>Longitud Individual:</b> ${el.length} m`);
+                if (el.pilote) detailLines.push(`• <b>Pilote N°:</b> ${el.pilote}`);
+
+                return {
+                    answer: `📌 <b>Información del Objeto Seleccionado:</b><br>${detailLines.join('<br>')}`,
+                    action: { type: 'none' }
+                };
+            } else {
+                let sumArea = 0, sumVol = 0, sumLen = 0;
+                const catSet = new Set<string>();
+                selectedEls.forEach((el: any) => {
+                    sumArea += el.area || 0;
+                    sumVol += el.volume || 0;
+                    sumLen += el.length || 0;
+                    if (el.category) catSet.add(el.category);
+                });
+
+                return {
+                    answer: `📌 <b>Información de los ${selectedEls.length} Elementos Seleccionados:</b><br>• <b>Categoría(s):</b> ${Array.from(catSet).join(', ') || 'Varios'}<br>• <b>Área Acumulada Seleccionada:</b> ${Math.round(sumArea * 100) / 100} m²<br>• <b>Volumen Acumulado Seleccionado:</b> ${Math.round(sumVol * 100) / 100} m³${sumLen > 0 ? `<br>• <b>Longitud Acumulada Seleccionada:</b> ${Math.round(sumLen * 100) / 100} m` : ''}`,
+                    action: { type: 'none' }
+                };
+            }
+        } else if (isSelectionQuery && selectedEls.length === 0) {
+            return {
+                answer: `💡 No hay ningún elemento seleccionado actualmente en el visor 3D. Haz clic sobre una entidad en el modelo 3D o en la tabla de cantidades para ver sus métricas individuales.`,
+                action: { type: 'none' }
+            };
+        }
 
         // 0. Custom TypeScript Brain Pipeline Execution from Super Admin
         try {
