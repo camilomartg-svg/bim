@@ -267,12 +267,27 @@ export class NoraAIWidget {
         }
     }
 
+    private activeContext: {
+        activeLevels: string[];
+        activeCategories: string[];
+        activeMaterials: string[];
+        activePilotes: string[];
+        lastActionType: string;
+    } = {
+        activeLevels: [],
+        activeCategories: [],
+        activeMaterials: [],
+        activePilotes: [],
+        lastActionType: 'none'
+    };
+
     public clearChat() {
         this.chatHistory = [];
+        this.activeContext = { activeLevels: [], activeCategories: [], activeMaterials: [], activePilotes: [], lastActionType: 'none' };
         this.bodyEl.innerHTML = `
             <div class="nora-ai-msg bot">
                 <div class="nora-ai-bubble">
-                    Conversación reiniciada. ¿En qué puedo ayudarte?
+                    Conversación y contexto reiniciados. ¿En qué puedo ayudarte?
                 </div>
             </div>
         `;
@@ -346,6 +361,24 @@ export class NoraAIWidget {
 
             let actionBadge: string | undefined;
             if (response.action && response.action.type !== 'none') {
+                if (response.action.type === 'show_all') {
+                    this.activeContext = { activeLevels: [], activeCategories: [], activeMaterials: [], activePilotes: [], lastActionType: 'show_all' };
+                } else {
+                    if (response.action.levels && response.action.levels.length > 0) {
+                        this.activeContext.activeLevels = response.action.levels;
+                    }
+                    if (response.action.categories && response.action.categories.length > 0) {
+                        this.activeContext.activeCategories = response.action.categories;
+                    }
+                    if (response.action.materials && response.action.materials.length > 0) {
+                        this.activeContext.activeMaterials = response.action.materials;
+                    }
+                    if (response.action.pilotes && response.action.pilotes.length > 0) {
+                        this.activeContext.activePilotes = response.action.pilotes;
+                    }
+                    this.activeContext.lastActionType = response.action.type;
+                }
+
                 const actionResult = await this.options.execute3DAction(response.action);
                 actionBadge = response.action.message || (typeof actionResult === 'string' ? actionResult : `Acción 3D ejecutada: ${response.action.type}`);
             }
@@ -377,6 +410,15 @@ Eres "nora AI", la asistente experta de IA para la plataforma nora BIM.
 CONTEXTO DEL MODELO IFC CARGADO EN PANTALLA:
 ${JSON.stringify(bimContext, null, 2)}
 
+ESTADO DE FILTROS Y CONTEXTO ACTIVO EN LA CONVERSACIÓN ACTUAL:
+${JSON.stringify(this.activeContext, null, 2)}
+
+REGLAS DE CONTINUIDAD Y HILO CONVERSACIONAL:
+1. MANTÉN LA CONTINUIDAD CONVERSACIONAL: Si el usuario realiza una pregunta de seguimiento (ej. "solo las columnas", "y en el piso 2?", "cuánto volumen hay?"), COMBINA o REFINA los filtros activos previos con los nuevos parámetros solicitados.
+2. Ejemplo: si activeLevels es ["PISO 2"] y el usuario pide "solo las columnas", tu JSON action DEBE incluir {"type": "isolate", "levels": ["PISO 2"], "categories": ["IfcColumn"]}.
+3. Ejemplo: si activeCategories es ["IfcColumn"] y el usuario pide "dejame ver el nivel 2", tu JSON action DEBE incluir {"type": "isolate", "levels": ["PISO 2"], "categories": ["IfcColumn"]}.
+4. Solo descarta los filtros previos si el usuario indica explícitamente "mostrar todo", "restablecer", "limpiar" o cambia de tema radicalmente.
+
 INSTRUCCIONES DE RESPUESTA:
 1. Responde de forma precisa, amable y fluida a la conversación. Usa HTML básico (<b>, <i>, <br>).
 2. Tienes acceso a categorías, niveles, materiales y matrices combinadas (Nivel x Material, Nivel x Categoría) en bimContext.
@@ -398,7 +440,7 @@ INSTRUCCIONES DE RESPUESTA:
 
         const contents = [
             { role: 'user', parts: [{ text: systemPrompt }] },
-            { role: 'model', parts: [{ text: '{"answer": "Entendido. Estoy lista para responder y ejecutar acciones en el visor 3D.", "action": {"type": "none"}}' }] },
+            { role: 'model', parts: [{ text: '{"answer": "Entendido. Estoy lista para responder manteniendo la continuidad de la conversación y ejecutar acciones en el visor 3D.", "action": {"type": "none"}}' }] },
             ...this.chatHistory
         ];
 
@@ -487,6 +529,7 @@ INSTRUCCIONES DE RESPUESTA:
                 const resultContext: any = {
                     query: query,
                     availableLevels: availableLevelsInModel,
+                    activeContext: this.activeContext,
                     categoriesMatched: [],
                     detectedAction: 'none',
                     levelMatched: null,
@@ -515,15 +558,22 @@ INSTRUCCIONES DE RESPUESTA:
                     }
 
                     // Level matching from custom TS hook
-                    const matchedLevels: string[] = pj.levelMatched || (pj.filters?.find((f: any) => f.targetProperty === 'NIVEL INTEGRADO')?.values) || [];
-                    const matchedCats: string[] = pj.categories || tsResult.categoriesMatched || [];
+                    let matchedLevels: string[] = pj.levelMatched || (pj.filters?.find((f: any) => f.targetProperty === 'NIVEL INTEGRADO')?.values) || [];
+                    let matchedCats: string[] = pj.categories || tsResult.categoriesMatched || [];
 
-                    if (matchedLevels.length > 0) {
+                    if (matchedLevels.length === 0 && this.activeContext.activeLevels.length > 0) {
+                        matchedLevels = [...this.activeContext.activeLevels];
+                    }
+                    if (matchedCats.length === 0 && this.activeContext.activeCategories.length > 0 && matchedLevels.length > 0) {
+                        matchedCats = [...this.activeContext.activeCategories];
+                    }
+
+                    if (matchedLevels.length > 0 || matchedCats.length > 0) {
                         let totalCount = 0;
                         let totalVol = 0;
                         let totalArea = 0;
 
-                        for (const lvl of matchedLevels) {
+                        for (const lvl of (matchedLevels.length > 0 ? matchedLevels : Object.keys(bimContext?.levels || {}))) {
                             const stats = bimContext?.levels?.[lvl];
                             if (stats) {
                                 totalCount += stats.count || 0;
@@ -533,15 +583,15 @@ INSTRUCCIONES DE RESPUESTA:
                         }
 
                         const lvlStr = matchedLevels.join(', ');
-                        const catStr = matchedCats.length > 0 ? ` (categorías: ${matchedCats.join(', ')})` : '';
+                        const catStr = matchedCats.length > 0 ? matchedCats.join(', ') : '';
 
                         return {
-                            answer: `Aislando nivel(es) <b>${lvlStr}</b>${catStr}:<br>• <b>Total elementos:</b> ${totalCount || 'en el nivel'}<br>• <b>Volumen acumulado:</b> ${Math.round(totalVol * 100) / 100} m³<br>• <b>Área acumulada:</b> ${Math.round(totalArea * 100) / 100} m²`,
+                            answer: `Aislando ${catStr ? 'categoría(s) <b>' + catStr + '</b>' : ''}${lvlStr ? (catStr ? ' en ' : '') + 'nivel(es) <b>' + lvlStr + '</b>' : ''}:<br>• <b>Total elementos:</b> ${totalCount || 'en la selección'}<br>• <b>Volumen acumulado:</b> ${Math.round(totalVol * 100) / 100} m³<br>• <b>Área acumulada:</b> ${Math.round(totalArea * 100) / 100} m²`,
                             action: {
                                 type: 'isolate',
-                                levels: matchedLevels,
+                                levels: matchedLevels.length > 0 ? matchedLevels : undefined,
                                 categories: matchedCats.length > 0 ? matchedCats : undefined,
-                                message: `Aislada(s) vista por nivel: ${lvlStr}`
+                                message: `Aislado: ${catStr} ${lvlStr}`.trim()
                             }
                         };
                     }
@@ -557,13 +607,14 @@ INSTRUCCIONES DE RESPUESTA:
             const total = bimContext?.totalElements || 0;
             const catCount = Object.keys(bimContext?.categories || {}).length;
             return {
-                answer: `¡Hola! 👋 Soy <b>nora AI Copilot</b>. Estoy conectada en tiempo real a tu modelo 3D (${total} elementos en ${catCount} categorías).<br><br>Puedo responderte sobre:<br>• <b>Aislamiento 3D por categorías</b> ("Quiero ver solo las columnas", "Aísla tramos")<br>• <b>Cantidades por nivel y material</b> ("¿Volumen de concreto 3000psi en el piso 2?")<br>• <b>Restablecer visor</b> ("Muéstrame todo el modelo")`,
+                answer: `¡Hola! 👋 Soy <b>nora AI Copilot</b>. Estoy conectada en tiempo real a tu modelo 3D (${total} elementos en ${catCount} categorías).<br><br>Puedo responderte sobre:<br>• <b>Aislamiento 3D por categorías y niveles</b> ("Quiero ver solo las columnas", "dejame ver el nivel 2")<br>• <b>Cantidades por nivel y material</b> ("¿Volumen de concreto 3000psi en el piso 2?")<br>• <b>Restablecer visor</b> ("Muéstrame todo el modelo")`,
                 action: { type: 'none' }
             };
         }
 
         // 2. Reset / Show All / Turn on everything
         if (qClean.includes('mostrar todo') || qClean.includes('limpiar') || qClean.includes('restablecer') || qClean.includes('reset') || qClean.includes('encender todo') || qClean.includes('prendo todo')) {
+            this.activeContext = { activeLevels: [], activeCategories: [], activeMaterials: [], activePilotes: [], lastActionType: 'show_all' };
             return {
                 answer: 'Se han restablecido todos los filtros y la visibilidad completa del modelo 3D.',
                 action: {
@@ -667,14 +718,25 @@ INSTRUCCIONES DE RESPUESTA:
             }
         }
 
-        // Evaluate Matched Categories
-        if (matchedCategories.length > 0) {
+        // CONTEXT CONTINUITY RESOLUTION:
+        // Effective Level: use explicit query match, otherwise fallback to active context level
+        const effectiveLevels: string[] = targetLevelKey 
+            ? [targetLevelKey] 
+            : [...this.activeContext.activeLevels];
+
+        // Effective Category: use explicit query match, otherwise fallback to active context category
+        const effectiveCategories: string[] = matchedCategories.length > 0 
+            ? matchedCategories 
+            : (targetLevelKey && this.activeContext.activeCategories.length > 0 ? [...this.activeContext.activeCategories] : []);
+
+        // Evaluate Matched Categories or Combined Category + Level
+        if (effectiveCategories.length > 0 || effectiveLevels.length > 0) {
             let totalCount = 0;
             let totalVol = 0;
             let totalArea = 0;
 
-            for (const cat of matchedCategories) {
-                const stats = bimContext.categories[cat];
+            for (const cat of (effectiveCategories.length > 0 ? effectiveCategories : Object.keys(bimContext?.categories || {}))) {
+                const stats = bimContext?.categories?.[cat];
                 if (stats) {
                     totalCount += stats.count || 0;
                     totalVol += stats.volume || 0;
@@ -682,14 +744,25 @@ INSTRUCCIONES DE RESPUESTA:
                 }
             }
 
-            const catListStr = matchedCategories.join(', ');
+            const catListStr = effectiveCategories.join(', ');
+            const lvlListStr = effectiveLevels.join(', ');
+
+            let answerStr = '';
+            if (catListStr && lvlListStr) {
+                answerStr = `Aislando categoría(s) <b>${catListStr}</b> en nivel <b>${lvlListStr}</b>:<br>• <b>Total elementos:</b> ${totalCount}<br>• <b>Volumen acumulado:</b> ${Math.round(totalVol * 100) / 100} m³<br>• <b>Área acumulada:</b> ${Math.round(totalArea * 100) / 100} m²`;
+            } else if (catListStr) {
+                answerStr = `Aislando categoría(s) <b>${catListStr}</b>:<br>• <b>Total elementos:</b> ${totalCount}<br>• <b>Volumen acumulado:</b> ${Math.round(totalVol * 100) / 100} m³<br>• <b>Área acumulada:</b> ${Math.round(totalArea * 100) / 100} m²`;
+            } else {
+                answerStr = `Aislando nivel <b>${lvlListStr}</b>:<br>• <b>Total elementos:</b> ${totalCount}<br>• <b>Volumen acumulado:</b> ${Math.round(totalVol * 100) / 100} m³<br>• <b>Área acumulada:</b> ${Math.round(totalArea * 100) / 100} m²`;
+            }
+
             return {
-                answer: `Aislando categoría(s) <b>${catListStr}</b>${targetLevelKey ? ' en nivel <b>' + targetLevelKey + '</b>' : ''}:<br>• <b>Total elementos:</b> ${totalCount}<br>• <b>Volumen acumulado:</b> ${Math.round(totalVol * 100) / 100} m³<br>• <b>Área acumulada:</b> ${Math.round(totalArea * 100) / 100} m²`,
+                answer: answerStr,
                 action: {
                     type: 'isolate',
-                    categories: matchedCategories,
-                    levels: targetLevelKey ? [targetLevelKey] : undefined,
-                    message: `Aislada(s) categoría(s): ${catListStr}${targetLevelKey ? ' en ' + targetLevelKey : ''}`
+                    categories: effectiveCategories.length > 0 ? effectiveCategories : undefined,
+                    levels: effectiveLevels.length > 0 ? effectiveLevels : undefined,
+                    message: `Aislado: ${catListStr} ${lvlListStr}`.trim()
                 }
             };
         }
