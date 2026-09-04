@@ -613,12 +613,12 @@
           attribution: '&copy; OpenStreetMap contributors',
         }).addTo(projectMap);
 
-        const projectLogo = project.landing.logoUrl || DEFAULT_PROJECT.landing.logoUrl;
+        const mapIconUrl = 'https://i.postimg.cc/W3trgjZX/FAVICON-NORA-NEGRO.png';
         const GreenIIcon = window.L.divIcon({
-          html: `<img src="${escapeHtml(projectLogo)}" class="w-12 h-12 object-contain drop-shadow-lg pointer-events-none" />`,
+          html: `<img src="${mapIconUrl}" class="w-10 h-10 object-contain drop-shadow-lg pointer-events-none" />`,
           className: 'flex items-center justify-center bg-transparent border-none',
-          iconSize: [48, 48],
-          iconAnchor: [24, 24]
+          iconSize: [40, 40],
+          iconAnchor: [20, 20]
         });
         window.L.marker([lat, lng], { icon: GreenIIcon }).addTo(projectMap).bindPopup(escapeHtml(project.name));
 

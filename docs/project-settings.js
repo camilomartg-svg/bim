@@ -625,13 +625,10 @@
                 attribution: '© OpenStreetMap contributors'
             }).addTo(leafletMap);
 
-            const customIcon = L.divIcon({
-                className: 'custom-pin',
-                html: `<div style="background-color:#171717; width:28px; height:28px; border-radius:50%; border:3px solid white; display:flex; align-items:center; justify-content:center; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.3);">
-                        <span class="material-symbols-outlined" style="font-size:16px; color:white;">apartment</span>
-                       </div>`,
-                iconSize: [28, 28],
-                iconAnchor: [14, 14]
+            const customIcon = L.icon({
+                iconUrl: 'https://i.postimg.cc/W3trgjZX/FAVICON-NORA-NEGRO.png',
+                iconSize: [32, 32],
+                iconAnchor: [16, 16]
             });
 
             mapMarker = L.marker(coords, { draggable: true, icon: customIcon }).addTo(leafletMap);

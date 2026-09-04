@@ -565,14 +565,7 @@ const App: React.FC = () => {
               onToolChange={setActiveTool}
               onZoom={setScale}
             />
-            <div className="pointer-events-none fixed left-3 bottom-3 opacity-70">
-              <img 
-                src={theme === 'dark' ? 'https://i.postimg.cc/yY0XpLzW/LOGO_BIM_BLANCO_ICO.png' : 'https://i.postimg.cc/jdyQ3Mr2/LOGO_BIM_NEGRO_ICO.png'} 
-                alt="BIM" 
-                className="h-8"
-                draggable={false}
-              />
-            </div>
+
             {isLoadingDrawing && (
               <div className="absolute inset-0 bg-[#000000]/80 flex items-center justify-center z-40">
                 <div className="px-4 py-3 rounded-xl bg-[#0D0D0D] border border-[#605E62]/60 shadow-2xl flex items-center gap-3">
