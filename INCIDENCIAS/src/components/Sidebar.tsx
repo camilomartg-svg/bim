@@ -69,13 +69,13 @@ export default function Sidebar({
           <img 
             src="https://i.postimg.cc/L4r0gSvV/LOGO-TEXTO-NORA-NEGRO.png" 
             alt="nora CDE" 
-            className="h-8 w-auto object-contain dark:hidden"
+            className="h-12 lg:h-16 w-auto max-w-full object-contain dark:hidden transition-all duration-300"
             referrerPolicy="no-referrer"
           />
           <img 
             src="https://i.postimg.cc/FFfBKzb8/LOGO-TEXTO-NORA-BLANCO.png" 
             alt="nora CDE" 
-            className="h-8 w-auto object-contain hidden dark:block"
+            className="h-12 lg:h-16 w-auto max-w-full object-contain hidden dark:block transition-all duration-300"
             referrerPolicy="no-referrer"
           />
         </div>

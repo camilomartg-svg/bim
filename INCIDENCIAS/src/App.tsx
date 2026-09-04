@@ -11,7 +11,7 @@ import QualityReportList from './components/QualityReportList';
 import EnvironmentalReportList from './components/EnvironmentalReportList';
 import ConfigPanel from './components/ConfigPanel';
 import { Issue } from './types';
-import { LogIn, Box, Layers, Workflow, Package, Plus, Bell, Calendar, ChevronRight, Moon, Sun, AlertCircle, ClipboardList, MessageSquare } from 'lucide-react';
+import { LogIn, Box, Layers, Workflow, Package, Plus, Bell, Calendar, ChevronRight, Moon, Sun, AlertCircle, ClipboardList, MessageSquare, ArrowLeft } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { cn } from './lib/utils';
 import { format } from 'date-fns';
@@ -364,6 +364,19 @@ function Dashboard() {
         {/* Superior Navigation / Breadcrumbs */}
         <header className="min-h-10 border-b border-slate-200 dark:border-[#1a1a1a] flex items-center justify-between px-3 md:px-6 py-1.5 bg-white/80 dark:bg-black/80 backdrop-blur-md z-50 shrink-0 transition-colors duration-200 gap-2">
           <div className="flex items-center gap-2">
+             <button 
+               onClick={() => {
+                 if (window.history.length > 1) {
+                   window.history.back();
+                 } else {
+                   window.location.href = '../project-landing.html' + window.location.search;
+                 }
+               }}
+               className="p-1.5 rounded-lg border border-slate-200 dark:border-[#1a1a1a] hover:bg-slate-100 dark:hover:bg-[#111111] transition-all text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white flex items-center justify-center mr-1 group active:scale-95"
+               title="Volver al proyecto"
+             >
+               <ArrowLeft className="w-3.5 h-3.5 group-hover:-translate-x-0.5 transition-transform" />
+             </button>
              <span className="text-[8px] font-black text-slate-400 dark:text-slate-600 uppercase tracking-[0.2em]">Portal BIM</span>
              <ChevronRight className="w-2 h-2 text-slate-300 dark:text-slate-700" />
              <span className="text-[8px] font-black text-slate-900 dark:text-white uppercase tracking-[0.2em]">Nora</span>
