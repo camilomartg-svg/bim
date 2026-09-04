@@ -119,6 +119,22 @@ const PdfRenderer: React.FC<PdfRendererProps> = ({
         canvas.height = viewport.height;
         canvas.width = viewport.width;
         await page.render({ canvasContext: context, viewport: viewport }).promise;
+
+        if (containerRef.current && canvasContainerRef.current) {
+          if (panXRef.current === 0 && panYRef.current === 0) {
+            const containerRect = containerRef.current.getBoundingClientRect();
+            if (containerRect.width > 0 && containerRect.height > 0) {
+              const initX = Math.max(20, (containerRect.width - viewport.width) / 2);
+              const initY = Math.max(20, (containerRect.height - viewport.height) / 2);
+              panXRef.current = initX;
+              panYRef.current = initY;
+            }
+          }
+          canvasContainerRef.current.style.willChange = 'transform';
+          canvasContainerRef.current.style.transition = 'none';
+          canvasContainerRef.current.style.transformOrigin = '0 0';
+          canvasContainerRef.current.style.transform = `translate3d(${panXRef.current}px, ${panYRef.current}px, 0)`;
+        }
       }
     } catch (error) {
       console.error("Error rendering page:", error);
@@ -295,36 +311,34 @@ const PdfRenderer: React.FC<PdfRendererProps> = ({
       onWheel={handleWheel}
       className={`relative flex-1 overflow-hidden viewer-panel h-full no-scrollbar touch-none ${tool === 'hand' ? (isDragging ? 'cursor-grabbing' : 'cursor-grab') : 'cursor-crosshair'}`}
     >
-      <div className="relative w-fit min-w-full min-h-full flex p-20">
-        <div 
-          ref={canvasContainerRef}
-          className={`relative m-auto ${isBlueprint ? 'invert hue-rotate-180 brightness-110 contrast-125' : ''}`}
-        >
-          <canvas ref={canvasRef} className="bg-white shadow-[0_0_60px_rgba(0,0,0,0.6)] border border-[#605E62]" />
-          
-          {showGrid && (
-            <div className="absolute inset-0 pointer-events-none opacity-20" 
-                 style={{ backgroundImage: 'linear-gradient(#605E62 1px, transparent 1px), linear-gradient(90deg, #605E62 1px, transparent 1px)', backgroundSize: `${50 * scale}px ${50 * scale}px` }}>
-            </div>
-          )}
+      <div 
+        ref={canvasContainerRef}
+        className={`absolute top-0 left-0 ${isBlueprint ? 'invert hue-rotate-180 brightness-110 contrast-125' : ''}`}
+      >
+        <canvas ref={canvasRef} className="bg-white shadow-[0_0_60px_rgba(0,0,0,0.6)] border border-[#605E62]" />
+        
+        {showGrid && (
+          <div className="absolute inset-0 pointer-events-none opacity-20" 
+               style={{ backgroundImage: 'linear-gradient(#605E62 1px, transparent 1px), linear-gradient(90deg, #605E62 1px, transparent 1px)', backgroundSize: `${50 * scale}px ${50 * scale}px` }}>
+          </div>
+        )}
 
-          <svg className="absolute inset-0 pointer-events-none w-full h-full">
-            {points.map((p, i) => (
-              <circle key={i} cx={p.x} cy={p.y} r="6" fill="#333333" stroke="#000" strokeWidth="2" />
-            ))}
-            {points.length === 2 && (
-              <>
-                <line x1={points[0].x} y1={points[0].y} x2={points[1].x} y2={points[1].y} stroke="#333333" strokeWidth="3" strokeDasharray="6,4" />
-                <g transform={`translate(${(points[0].x + points[1].x) / 2}, ${(points[0].y + points[1].y) / 2 - 20})`}>
-                  <rect x="-50" y="-12" width="100" height="24" rx="12" fill="#000" stroke="#333333" strokeWidth="2" />
-                  <text fontSize="12" fontWeight="900" textAnchor="middle" fill="#333333" dy="5" className="font-mono">
-                    {displayDist}
-                  </text>
-                </g>
-              </>
-            )}
-          </svg>
-        </div>
+        <svg className="absolute inset-0 pointer-events-none w-full h-full">
+          {points.map((p, i) => (
+            <circle key={i} cx={p.x} cy={p.y} r="6" fill="#333333" stroke="#000" strokeWidth="2" />
+          ))}
+          {points.length === 2 && (
+            <>
+              <line x1={points[0].x} y1={points[0].y} x2={points[1].x} y2={points[1].y} stroke="#333333" strokeWidth="3" strokeDasharray="6,4" />
+              <g transform={`translate(${(points[0].x + points[1].x) / 2}, ${(points[0].y + points[1].y) / 2 - 20})`}>
+                <rect x="-50" y="-12" width="100" height="24" rx="12" fill="#000" stroke="#333333" strokeWidth="2" />
+                <text fontSize="12" fontWeight="900" textAnchor="middle" fill="#333333" dy="5" className="font-mono">
+                  {displayDist}
+                </text>
+              </g>
+            </>
+          )}
+        </svg>
       </div>
 
       {loading && (

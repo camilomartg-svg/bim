@@ -502,7 +502,7 @@ function LoginScreen() {
           
           <div className="relative z-10 flex items-center gap-5 mt-16 opacity-30">
             <img 
-              src="https://i.postimg.cc/DhDLzDMQ/LOGO-NORA-BLANCO.png" 
+              src="https://i.postimg.cc/FFfBKzb8/LOGO-TEXTO-NORA-BLANCO.png" 
               alt="Nora Logo" 
               className="h-5 object-contain"
               referrerPolicy="no-referrer"

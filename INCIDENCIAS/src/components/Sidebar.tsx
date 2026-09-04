@@ -65,19 +65,19 @@ export default function Sidebar({
   return (
     <div className="hidden md:flex w-20 lg:w-[240px] bg-white dark:bg-[#050505] border-r border-slate-200 dark:border-[#1a1a1a] flex-col h-screen overflow-hidden transition-all duration-500 z-[60]">
       <div className="p-5 lg:p-6 flex flex-col items-center lg:items-start gap-5">
-        <div className="flex items-center gap-3 group cursor-pointer">
-          <div className="w-8 h-8 bg-slate-900 dark:bg-white border border-slate-900 dark:border-white rounded-lg flex items-center justify-center shadow-lg group-hover:scale-105 transition-transform duration-500 overflow-hidden p-1.5">
-            <img 
-              src="https://i.postimg.cc/yY0XpLzW/LOGO-BIM-BLANCO-ICO.png" 
-              alt="BIM Logo" 
-              className="w-full h-full object-contain dark:invert opacity-95"
-              referrerPolicy="no-referrer"
-            />
-          </div>
-          <div className="hidden lg:flex flex-col">
-            <span className="font-display font-black text-sm tracking-tight text-slate-900 dark:text-white leading-none">NORA</span>
-            <span className="text-[7px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-[0.2em] mt-1">Ecosystem CDE</span>
-          </div>
+        <div className="flex items-center group cursor-pointer">
+          <img 
+            src="https://i.postimg.cc/L4r0gSvV/LOGO-TEXTO-NORA-NEGRO.png" 
+            alt="nora CDE" 
+            className="h-8 w-auto object-contain dark:hidden"
+            referrerPolicy="no-referrer"
+          />
+          <img 
+            src="https://i.postimg.cc/FFfBKzb8/LOGO-TEXTO-NORA-BLANCO.png" 
+            alt="nora CDE" 
+            className="h-8 w-auto object-contain hidden dark:block"
+            referrerPolicy="no-referrer"
+          />
         </div>
 
         <div className="w-full h-[0.5px] bg-slate-100 dark:bg-[#1a1a1a]" />
