@@ -445,7 +445,7 @@ INSTRUCCIONES DE RESPUESTA:
         ];
 
         // Try official Gemini models sequentially WITHOUT custom headers to avoid browser CORS preflight blocks
-        for (const modelName of ['gemini-2.0-flash', 'gemini-1.5-flash', 'gemini-1.5-pro']) {
+        for (const modelName of ['gemini-1.5-flash', 'gemini-2.0-flash', 'gemini-1.5-pro', 'gemini-2.5-flash']) {
             const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`;
             const payload = {
                 contents,

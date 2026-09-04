@@ -3449,20 +3449,58 @@ window.testGeminiKeyInAdmin = async function() {
         alert('Ingresa una API Key para probar la conexión.');
         return;
     }
-    try {
-        const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${key}`;
-        const res = await fetch(url, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ contents: [{ parts: [{ text: 'Hola responder corto ok' }] }] })
-        });
-        if (res.ok) {
-            alert('🎉 Conexión exitosa con Google Gemini 2.0 Flash!');
-        } else {
-            alert(`⚠️ La API Key respondió con error HTTP ${res.status}. Verifica que la clave sea válida.`);
+
+    const testBtn = document.querySelector('button[onclick="testGeminiKeyInAdmin()"]');
+    if (testBtn) {
+        testBtn.disabled = true;
+        testBtn.innerHTML = `<span class="material-symbols-outlined text-sm animate-spin">sync</span> Probando...`;
+    }
+
+    const modelsToTry = ['gemini-1.5-flash', 'gemini-2.0-flash', 'gemini-1.5-pro', 'gemini-2.5-flash'];
+    let lastErrorDetails = '';
+    let successModel = null;
+
+    for (const modelName of modelsToTry) {
+        try {
+            const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${key}`;
+            const res = await fetch(url, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ contents: [{ parts: [{ text: 'Hola, prueba de conexion' }] }] })
+            });
+
+            if (res.ok) {
+                successModel = modelName;
+                break;
+            } else {
+                let errJson = {};
+                try { errJson = await res.json(); } catch(e) {}
+                const errMsg = errJson?.error?.message || `HTTP ${res.status}`;
+                lastErrorDetails = `[Modelo ${modelName}]: ${errMsg}`;
+                console.warn(`[Gemini Test ${modelName}] Error ${res.status}:`, errJson);
+            }
+        } catch(e) {
+            lastErrorDetails = e.message || 'Error de red';
         }
-    } catch(e) {
-        alert('❌ Error al conectar con la API de Gemini: ' + e.message);
+    }
+
+    if (testBtn) {
+        testBtn.disabled = false;
+        testBtn.innerHTML = `<span class="material-symbols-outlined text-sm">bolt</span> Probar`;
+    }
+
+    if (successModel) {
+        alert(`🎉 Conexión exitosa con Google Gemini (${successModel})!\n\nTu API Key es válida y está lista para usarse.`);
+    } else {
+        let hint = '';
+        if (lastErrorDetails.includes('API key not valid') || lastErrorDetails.includes('API_KEY_INVALID')) {
+            hint = '\n\n👉 Causa probable: La API Key ingresada no existe o está mal copiada. Genera una clave válida en https://aistudio.google.com/';
+        } else if (lastErrorDetails.includes('404')) {
+            hint = '\n\n👉 Causa probable: El nombre del modelo o la API no están activos en tu proyecto de Google AI Studio.';
+        } else if (lastErrorDetails.includes('quota') || lastErrorDetails.includes('429')) {
+            hint = '\n\n👉 Causa probable: Límite de cuota excedido temporalmente en tu cuenta de Gemini.';
+        }
+        alert(`⚠️ No se pudo conectar con Gemini.\nDetalle: ${lastErrorDetails}${hint}`);
     }
 };
 
