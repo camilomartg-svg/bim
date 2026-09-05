@@ -1,7 +1,6 @@
 /**
  * nora AI Copilot - BIM & CDE Assistant Component
  * Integrates Google Gemini API with live BIM context and 3D viewer action dispatching.
- * Soporta elementos estructurales, arquitectónicos e hidrosanitarios (MEP).
  */
 
 import './nora-ai-widget.css';
@@ -85,13 +84,13 @@ export class NoraAIWidget {
 
             <div class="nora-ai-body" id="nora-ai-messages">
                 <div class="nora-ai-prompts">
-                    <button class="nora-ai-prompt-pill" data-prompt="Quiero ver solo las columnas">
-                        <i class="fa-solid fa-eye"></i> Aislar Columnas
-                    </button>
                     <button class="nora-ai-prompt-pill" data-prompt="Aísla la tubería sanitaria">
                         <i class="fa-solid fa-faucet-drip"></i> Tubería Sanitaria
                     </button>
-                    <button class="nora-ai-prompt-pill" data-prompt="¿Volumen de concreto 3000psi en el piso 2?">
+                    <button class="nora-ai-prompt-pill" data-prompt="Quiero ver solo las columnas">
+                        <i class="fa-solid fa-eye"></i> Aislar Columnas
+                    </button>
+                    <button class="nora-ai-prompt-pill" data-prompt="¿Volumen de concreto en piso 2?">
                         <i class="fa-solid fa-cube"></i> Concreto Piso 2
                     </button>
                     <button class="nora-ai-prompt-pill" data-prompt="Muéstrame todo el modelo y limpia los filtros">
@@ -101,7 +100,7 @@ export class NoraAIWidget {
 
                 <div class="nora-ai-msg bot">
                     <div class="nora-ai-bubble">
-                        👋 ¡Hola! Soy <b>nora AI Copilot</b>. Puedo responder preguntas sobre cantidades, redes hidrosanitarias, elementos estructurales y <b>ejecutar aislamientos directamente en el visor 3D</b>. ¿Qué te gustaría consultar?
+                        👋 ¡Hola! Soy <b>nora AI Copilot</b>. Puedo responder preguntas sobre cantidades, redes hidrosanitarias, estructuras y <b>ejecutar aislamientos directamente en el visor 3D</b>. ¿Qué te gustaría consultar?
                     </div>
                 </div>
             </div>
@@ -383,14 +382,10 @@ export class NoraAIWidget {
 
         this.chatHistory.push({ role: 'user', parts: [{ text: userQuery }] });
         if (this.chatHistory.length > 20) this.chatHistory = this.chatHistory.slice(-20);
-        
-        if (!apiKey) {
-            const result = this.localHeuristicFallback(userQuery, bimContext);
-            this.chatHistory.push({ role: 'model', parts: [{ text: JSON.stringify(result) }] });
-            return result;
-        }
 
-        const systemPrompt = `
+        // Si hay API key, intentamos consultar Gemini en la nube
+        if (apiKey) {
+            const systemPrompt = `
 Eres "nora AI", la asistente experta de IA para la plataforma nora BIM CDE.
 
 CONTEXTO DEL MODELO IFC CARGADO EN PANTALLA:
@@ -400,67 +395,68 @@ ESTADO DE FILTROS Y CONTEXTO ACTIVO EN LA CONVERSACIÓN ACTUAL:
 ${JSON.stringify(this.activeContext, null, 2)}
 
 REGLAS CRÍTICAS:
-1. REGLA DE OBJETO SELECCIONADO (PRIORIDAD MÁXIMA): Si el usuario usa palabras como "seleccionado", "este elemento", "el que toque", "este muro", "esta tuberia" o consulta por las dimensiones de un elemento activo, responde mostrando ÚNICAMENTE el área, volumen, longitud, nivel y material del objeto individual. NO sumes todos los objetos de esa categoría en el proyecto.
+1. OBJETO SELECCIONADO: Si el usuario pregunta por un elemento seleccionado o activo, responde ÚNICAMENTE con sus datos individuales (área, volumen, longitud, nivel). NO sumes toda la categoría.
 2. CONTINUIDAD: Combina filtros de niveles y categorías si la conversación es secuencial.
-3. HIDROSANITARIO Y MEP: Reconoce tuberías (IfcPipeSegment / TUBERÍAS), uniones (IfcPipeFitting / UNIONES) y aparatos sanitarios (IfcSanitaryTerminal / APARATOS SANITARIOS).
+3. MAPEO MEP / HIDROSANITARIO: Reconoce TUBERÍAS (IfcPipeSegment), UNIONES (IfcPipeFitting) y APARATOS SANITARIOS (IfcSanitaryTerminal).
 
-SIEMPRE responde ÚNICAMENTE en JSON estricto:
+SIEMPRE responde ÚNICAMENTE en formato JSON:
 {
   "answer": "Respuesta clara al usuario...",
   "action": {
     "type": "isolate" | "hide" | "show_all" | "filter" | "color" | "none",
-    "categories": ["NOMBRE_CATEGORIA"],
-    "levels": ["NOMBRE_NIVEL"],
-    "materials": ["NOMBRE_MATERIAL"],
-    "pilotes": ["NUMERO_PILOTE"],
+    "categories": ["NOMBRE_CATEGORIA_EXACTA_DEL_CONTEXTO"],
+    "levels": ["NOMBRE_NIVEL_EXACTO_DEL_CONTEXTO"],
+    "materials": ["NOMBRE_MATERIAL_EXACTO_DEL_CONTEXTO"],
     "message": "Mensaje descriptivo de la acción ejecutada"
   }
 }
-        `;
+            `;
 
-        const contents = [
-            { role: 'user', parts: [{ text: systemPrompt }] },
-            { role: 'model', parts: [{ text: '{"answer": "Entendido.", "action": {"type": "none"}}' }] },
-            ...this.chatHistory
-        ];
+            const contents = [
+                { role: 'user', parts: [{ text: systemPrompt }] },
+                { role: 'model', parts: [{ text: '{"answer": "Entendido.", "action": {"type": "none"}}' }] },
+                ...this.chatHistory
+            ];
 
-        for (const modelName of ['gemini-2.5-flash', 'gemini-2.5-pro']) {
-            const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`;
-            const payload = {
-                contents,
-                generationConfig: {
-                    temperature: 0.2,
-                    responseMimeType: "application/json"
-                }
-            };
-
-            try {
-                const res = await fetch(url, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(payload)
-                });
-
-                if (res.ok) {
-                    const data = await res.json();
-                    const rawText = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
-                    if (rawText) {
-                        this.chatHistory.push({ role: 'model', parts: [{ text: rawText }] });
-                        try {
-                            return JSON.parse(rawText);
-                        } catch (e) {
-                            return { answer: rawText, action: { type: 'none' } };
-                        }
+            // Intentar modelos compatibles vigentes
+            for (const modelName of ['gemini-2.5-flash', 'gemini-2.5-pro']) {
+                const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`;
+                const payload = {
+                    contents,
+                    generationConfig: {
+                        temperature: 0.1,
+                        responseMimeType: "application/json"
                     }
-                } else {
-                    const errTxt = await res.text();
-                    console.warn(`[nora AI] Model ${modelName} returned status ${res.status}:`, errTxt);
+                };
+
+                try {
+                    const res = await fetch(url, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload)
+                    });
+
+                    if (res.ok) {
+                        const data = await res.json();
+                        const rawText = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+                        if (rawText) {
+                            this.chatHistory.push({ role: 'model', parts: [{ text: rawText }] });
+                            try {
+                                return JSON.parse(rawText);
+                            } catch (e) {
+                                return { answer: rawText, action: { type: 'none' } };
+                            }
+                        }
+                    } else {
+                        console.warn(`[nora AI] Model ${modelName} returned status ${res.status}`);
+                    }
+                } catch (err) {
+                    console.warn(`[nora AI] Model ${modelName} fetch error:`, err);
                 }
-            } catch (err) {
-                console.warn(`[nora AI] Model ${modelName} fetch error:`, err);
             }
         }
 
+        // Fallback robusto local garantizado
         const fallbackResult = this.localHeuristicFallback(userQuery, bimContext);
         this.chatHistory.push({ role: 'model', parts: [{ text: JSON.stringify(fallbackResult) }] });
         return fallbackResult;
@@ -482,17 +478,16 @@ SIEMPRE responde ÚNICAMENTE en JSON estricto:
         const qClean = query.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
 
         // =========================================================================
-        // 0.0 Inspección de Objetos Seleccionados (Prioridad Absoluta)
+        // 0. Inspección de Selección Activa (DOM o Memoria)
         // =========================================================================
         let selectedEls: any[] = bimContext?.selectedElements || [];
 
-        // Si bimContext viene vacío, inspeccionamos directamente el DOM de la tabla de cantidades
         if (selectedEls.length === 0 && typeof document !== 'undefined') {
             const tableRows = document.querySelectorAll('table tbody tr');
             for (let i = 0; i < tableRows.length; i++) {
                 const r = tableRows[i] as HTMLElement;
-                const isSelected = r.classList.contains('selected') || r.classList.contains('active') || r.querySelector('input:checked') || (r.getAttribute('style') || '').includes('rgb');
-                if (isSelected || tableRows.length === 1) {
+                const isSelected = r.classList.contains('selected') || r.classList.contains('active') || r.querySelector('input:checked');
+                if (isSelected) {
                     const cells = r.querySelectorAll('td');
                     if (cells.length >= 8) {
                         selectedEls.push({
@@ -509,27 +504,11 @@ SIEMPRE responde ÚNICAMENTE en JSON estricto:
                     }
                 }
             }
-            if (selectedEls.length === 0 && tableRows.length > 0) {
-                const r = tableRows[0] as HTMLElement;
-                const cells = r.querySelectorAll('td');
-                if (cells.length >= 8) {
-                    selectedEls.push({
-                        name: cells[4]?.innerText?.trim() || cells[2]?.innerText?.trim() || 'Elemento seleccionado',
-                        category: cells[3]?.innerText?.trim() || '',
-                        classification: cells[1]?.innerText?.trim() || '',
-                        material: cells[6]?.innerText?.trim() || '',
-                        level: cells[7]?.innerText?.trim() || '',
-                        area: parseFloat(cells[8]?.innerText?.replace(',', '.') || '0') || 0,
-                        length: parseFloat(cells[9]?.innerText?.replace(',', '.') || '0') || 0,
-                        volume: parseFloat(cells[10]?.innerText?.replace(',', '.') || '0') || 0
-                    });
-                }
-            }
         }
 
         const isSelectionQuery = ['seleccionad', 'este', 'esta', 'tocado', 'marcado', 'que toque', 'actual'].some(k => qClean.includes(k));
 
-        if (selectedEls.length > 0 && (isSelectionQuery || qClean.includes('area') || qClean.includes('volumen') || qClean.includes('longitud') || qClean.includes('medida'))) {
+        if (selectedEls.length > 0 && isSelectionQuery) {
             const el = selectedEls[0];
             const detailLines: string[] = [];
             if (el.name) detailLines.push(`• <b>Nombre / Tipo:</b> ${el.name}`);
@@ -547,160 +526,92 @@ SIEMPRE responde ÚNICAMENTE en JSON estricto:
         }
 
         // =========================================================================
-        // 0.1 Ejecución del Hook TypeScript / JS del Super Admin
+        // 1. Hook TS del Super Admin (Si existe)
         // =========================================================================
         try {
             const rawTSCode = localStorage.getItem('NORA_CUSTOM_TS_CODE');
             if (rawTSCode && rawTSCode.trim()) {
-                const availableLevelsInModel = bimContext?.levels ? Object.keys(bimContext.levels) : [
-                    "PISO 1 NE", "ED ADMIN P2 NF", "ED ADMIN P2 NE", "ED ADMIN P1 NF", "ED ADMIN P1 NC", "SOTANO NF", "LEVEL 2", "LEVEL 3", "LEVEL 4"
-                ];
-
+                const availableLevels = bimContext?.levels ? Object.keys(bimContext.levels) : [];
                 const resultContext: any = {
                     query: query,
-                    availableLevels: availableLevelsInModel,
+                    availableLevels: availableLevels,
                     activeContext: this.activeContext,
-                    categoriesMatched: [],
-                    detectedAction: 'none',
-                    levelMatched: null,
-                    parsedJSON: {
-                        action: 'none',
-                        categories: [],
-                        levelMatched: [],
-                        filters: [],
-                        message: ''
-                    }
+                    parsedJSON: { action: 'none', filters: [] }
                 };
 
                 const cleanJS = this.stripTypeScriptTypes(rawTSCode);
                 const customHook = new Function('query', 'result', `${cleanJS}\n return noraBrainCustomPipeline(query, result);`);
                 const tsResult = customHook(query, resultContext);
 
-                if (tsResult) {
-                    const pj = tsResult.parsedJSON || {};
-                    const customMessage = pj.message || tsResult.message || tsResult.feedback;
-
-                    if (customMessage) {
-                        return {
-                            answer: customMessage,
-                            action: {
-                                type: (pj.action === 'isolate' || tsResult.action === 'isolate') ? 'isolate' : 'none',
-                                categories: pj.categories || tsResult.categories,
-                                levels: pj.levelMatched || tsResult.levelMatched,
-                                message: customMessage
-                            }
-                        };
-                    }
-
-                    let matchedLevels: string[] = pj.levelMatched || (pj.filters?.find((f: any) => f.targetProperty === 'NIVEL INTEGRADO')?.values) || [];
-                    let matchedCats: string[] = pj.categories || tsResult.categoriesMatched || [];
-
-                    if (matchedLevels.length > 0 || matchedCats.length > 0) {
-                        let totalCount = 0, totalVol = 0, totalArea = 0;
-                        for (const lvl of (matchedLevels.length > 0 ? matchedLevels : Object.keys(bimContext?.levels || {}))) {
-                            const stats = bimContext?.levels?.[lvl];
-                            if (stats) {
-                                totalCount += stats.count || 0;
-                                totalVol += stats.volume || 0;
-                                totalArea += stats.area || 0;
-                            }
+                if (tsResult && (tsResult.message || tsResult.parsedJSON?.message)) {
+                    const msg = tsResult.parsedJSON?.message || tsResult.message;
+                    return {
+                        answer: msg,
+                        action: {
+                            type: tsResult.action || tsResult.parsedJSON?.action || 'none',
+                            categories: tsResult.categoriesMatched || tsResult.parsedJSON?.categories,
+                            levels: tsResult.levelMatched || tsResult.parsedJSON?.levelMatched,
+                            message: msg
                         }
-
-                        const lvlStr = matchedLevels.join(', ');
-                        const catStr = matchedCats.join(', ');
-
-                        return {
-                            answer: `Aislando ${catStr ? 'categoría(s) <b>' + catStr + '</b>' : ''}${lvlStr ? (catStr ? ' en ' : '') + 'nivel(es) <b>' + lvlStr + '</b>' : ''}:<br>• <b>Total elementos:</b> ${totalCount}<br>• <b>Volumen acumulado:</b> ${Math.round(totalVol * 100) / 100} m³<br>• <b>Área acumulada:</b> ${Math.round(totalArea * 100) / 100} m²`,
-                            action: {
-                                type: 'isolate',
-                                levels: matchedLevels.length > 0 ? matchedLevels : undefined,
-                                categories: matchedCats.length > 0 ? matchedCats : undefined,
-                                message: `Aislado: ${catStr} ${lvlStr}`.trim()
-                            }
-                        };
-                    }
+                    };
                 }
             }
         } catch (err) {
-            console.warn('[nora AI] Error al ejecutar Hook TS del Cerebro:', err);
-        }
-
-        // =========================================================================
-        // 1. Saludos & Ayuda General
-        // =========================================================================
-        const greetings = ['hola', 'buenas', 'buenos dias', 'buenas tardes', 'buenas noches', 'saludos', 'quien eres', 'que haces', 'que puedes hacer', 'ayuda', 'help'];
-        if (greetings.some(g => qClean.includes(g))) {
-            const total = bimContext?.totalElements || 0;
-            const catCount = Object.keys(bimContext?.categories || {}).length;
-            return {
-                answer: `¡Hola! 👋 Soy <b>nora AI Copilot</b>. Estoy conectada en tiempo real a tu modelo 3D (${total} elementos en ${catCount} categorías).<br><br>Puedo ayudarte a:<br>• <b>Aislar elementos estructurales e hidrosanitarios</b> ("Quiero ver solo las columnas", "Aísla la tubería sanitaria")<br>• <b>Consultar cantidades y longitudes</b> ("¿Longitud de tubería en Level 4?")<br>• <b>Consultar objetos seleccionados</b> ("Dame el área del muro seleccionado")`,
-                action: { type: 'none' }
-            };
+            console.warn('[nora AI] Error en Hook TS:', err);
         }
 
         // =========================================================================
         // 2. Restablecer / Mostrar todo
         // =========================================================================
-        if (qClean.includes('mostrar todo') || qClean.includes('limpiar') || qClean.includes('restablecer') || qClean.includes('reset') || qClean.includes('encender todo')) {
+        if (qClean.includes('mostrar todo') || qClean.includes('limpiar') || qClean.includes('restablecer') || qClean.includes('reset')) {
             this.activeContext = { activeLevels: [], activeCategories: [], activeMaterials: [], activePilotes: [], lastActionType: 'show_all' };
             return {
                 answer: 'Se han restablecido todos los filtros y la visibilidad completa del modelo 3D.',
-                action: {
-                    type: 'show_all',
-                    message: 'Modelo 3D y filtros restablecidos'
-                }
+                action: { type: 'show_all', message: 'Modelo restablecido' }
             };
         }
 
         // =========================================================================
-        // 3. Extracción de Categorías (Estructural + Arquitectura + MEP / Hidrosanitario)
+        // 3. Extracción de Categorías (Match Directo con bimContext.categories)
         // =========================================================================
         const matchedCategories: string[] = [];
         if (bimContext && bimContext.categories) {
             const catKeys = Object.keys(bimContext.categories);
 
-            const categoryPatterns: Array<{ userRegex: RegExp; keyRegex: RegExp }> = [
-                // Estructura y Obra Gris
-                { userRegex: /colum/i, keyRegex: /column|colum/i },
-                { userRegex: /viga|beam/i, keyRegex: /beam|viga/i },
-                { userRegex: /muro|wall/i, keyRegex: /wall|muro/i },
-                { userRegex: /tram|member/i, keyRegex: /member|tram/i },
-                { userRegex: /ciment|zapat|footing/i, keyRegex: /footing|ciment|zapat/i },
-                { userRegex: /escaler|stair/i, keyRegex: /stair|escaler/i },
-                { userRegex: /pilot|pile/i, keyRegex: /pilot|pile/i },
-                { userRegex: /\b(?:losa|losas|placa|placas|slab)\b/i, keyRegex: /slab|piso|placa|losa/i },
+            // Mapeo de términos coloquiales a nombres reales del árbol
+            const synonymsMap: Record<string, string[]> = {
+                "tuberi": ["tuberia", "tuberias", "tubo", "tubos", "pipe"],
+                "union": ["union", "uniones", "accesorio", "accesorios", "codo", "codos", "tee", "fitting"],
+                "sanitari": ["sanitario", "sanitarios", "aparato", "aparatos", "inodoro", "inodoros", "lavamanos"],
+                "colum": ["columna", "columnas", "colum", "pilar", "pilares"],
+                "viga": ["viga", "vigas", "dintel", "beam"],
+                "muro": ["muro", "muros", "pared", "paredes", "wall"],
+                "slab": ["losa", "losas", "placa", "placas", "forjado"]
+            };
 
-                // Hidrosanitario / MEP
-                { userRegex: /tub[eo]|pipe/i, keyRegex: /tuberi|pipe|conducc/i },
-                { userRegex: /union|accesorio|codo|tee|yee|fitting/i, keyRegex: /union|fitting|accesori/i },
-                { userRegex: /sanitari|inodoro|lavaman|orinal|aparato|terminal/i, keyRegex: /sanitari|aparato|terminal/i }
-            ];
+            for (const catKey of catKeys) {
+                const normCat = catKey.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
 
-            for (const pattern of categoryPatterns) {
-                if (pattern.userRegex.test(qClean)) {
-                    for (const catKey of catKeys) {
-                        const normKey = catKey.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
-                        if (pattern.keyRegex.test(normKey)) {
-                            if (!matchedCategories.includes(catKey)) {
-                                matchedCategories.push(catKey);
-                            }
-                        }
-                    }
+                // 1. Coincidencia directa con el nombre en el árbol (ej. "tuberias", "muros")
+                if (qClean.includes(normCat)) {
+                    if (!matchedCategories.includes(catKey)) matchedCategories.push(catKey);
+                    continue;
                 }
-            }
 
-            if (matchedCategories.length === 0) {
-                for (const catKey of catKeys) {
-                    const normKey = catKey.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
-                    if (qClean.includes(normKey)) {
-                        matchedCategories.push(catKey);
+                // 2. Coincidencia por sinónimos
+                for (const rootKey of Object.keys(synonymsMap)) {
+                    if (normCat.includes(rootKey)) {
+                        const words = synonymsMap[rootKey];
+                        if (words.some(w => qClean.includes(w))) {
+                            if (!matchedCategories.includes(catKey)) matchedCategories.push(catKey);
+                        }
                     }
                 }
             }
         }
 
         // =========================================================================
-        // 4. Extracción de Niveles (Español / Inglés / Cotas de Obra)
+        // 4. Extracción de Niveles (Match Directo con bimContext.levels)
         // =========================================================================
         let targetLevelKey: string | null = null;
         if (bimContext && bimContext.levels) {
@@ -722,24 +633,20 @@ SIEMPRE responde ÚNICAMENTE en JSON estricto:
                     }
                 }
             }
-            if (!targetLevelKey && qClean.includes('sotano')) {
-                targetLevelKey = levelKeys.find(l => l.toLowerCase().includes('sotano')) || null;
-            }
         }
 
         // =========================================================================
-        // 5. Extracción Dinámica de Material (Concretos, PVC Sanitaria, Ventilación)
+        // 5. Extracción de Materiales (Match Directo con bimContext.materials)
         // =========================================================================
         let targetMaterialKey: string | null = null;
         if (bimContext && bimContext.materials) {
             const matKeys = Object.keys(bimContext.materials);
-
             for (const mKey of matKeys) {
                 const normMat = mKey.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
-                const matTokens = normMat.split(/[\s\-_/]+/);
-                const hasMatch = matTokens.some(token => token.length > 2 && qClean.includes(token));
-
-                if (hasMatch || qClean.includes(normMat)) {
+                const tokens = normMat.split(/[\s\-_/]+/);
+                
+                // Si el usuario dijo "sanitaria", "ventilacion", "pvc", "pavco"
+                if (tokens.some(t => t.length > 2 && qClean.includes(t)) || qClean.includes(normMat)) {
                     targetMaterialKey = mKey;
                     break;
                 }
@@ -747,7 +654,7 @@ SIEMPRE responde ÚNICAMENTE en JSON estricto:
         }
 
         // =========================================================================
-        // 6. Resolución y Respuesta de Visibilidad 3D
+        // 6. Ejecución y Generación de Respuesta
         // =========================================================================
         const effectiveLevels: string[] = targetLevelKey ? [targetLevelKey] : [...this.activeContext.activeLevels];
         const effectiveCategories: string[] = matchedCategories.length > 0 ? matchedCategories : (targetLevelKey && this.activeContext.activeCategories.length > 0 ? [...this.activeContext.activeCategories] : []);
@@ -788,9 +695,10 @@ SIEMPRE responde ÚNICAMENTE en JSON estricto:
             };
         }
 
+        // Si realmente nada coincidió
         const total = bimContext?.totalElements || 0;
         return {
-            answer: `El modelo cargado cuenta con <b>${total} elementos</b>.<br><br>Puedes pedirme:<br>• <i>"Aísla la tubería sanitaria"</i><br>• <i>"Quiero ver solo las columnas del nivel 2"</i><br>• <i>"Dame el área del muro seleccionado"</i>`,
+            answer: `El modelo cargado cuenta con <b>${total} elementos</b>.<br><br>Puedes pedirme:<br>• <i>"Aísla la tubería sanitaria"</i><br>• <i>"Quiero ver solo aparatos sanitarios"</i><br>• <i>"Aísla Level 4"</i>`,
             action: { type: 'none' }
         };
     }
