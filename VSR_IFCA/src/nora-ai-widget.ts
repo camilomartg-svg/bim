@@ -1,6 +1,7 @@
 /**
  * nora AI Copilot - BIM & CDE Assistant Component
  * Integrates Google Gemini API with live BIM context and 3D viewer action dispatching.
+ * Soporta elementos estructurales, arquitectónicos e hidrosanitarios (MEP).
  */
 
 import './nora-ai-widget.css';
@@ -44,7 +45,6 @@ export class NoraAIWidget {
     }
 
     private initUI() {
-        // Floating Action Button
         this.fabEl = document.createElement('button');
         this.fabEl.className = 'nora-ai-fab';
         this.fabEl.id = 'nora-ai-trigger';
@@ -53,9 +53,8 @@ export class NoraAIWidget {
         this.fabEl.addEventListener('click', () => this.toggle());
 
         const isApiKeyActive = !!(this.options.apiKey || this.userApiKey || (window as any).NORA_GEMINI_API_KEY);
-        const subTitleText = isApiKeyActive ? 'Gemini 2.0 Flash (Online)' : 'BIM AI Engine (Local)';
+        const subTitleText = isApiKeyActive ? 'Gemini Copilot (Online)' : 'BIM AI Engine (Local)';
 
-        // Drawer
         this.drawerEl = document.createElement('div');
         this.drawerEl.className = 'nora-ai-drawer';
         this.drawerEl.innerHTML = `
@@ -89,8 +88,8 @@ export class NoraAIWidget {
                     <button class="nora-ai-prompt-pill" data-prompt="Quiero ver solo las columnas">
                         <i class="fa-solid fa-eye"></i> Aislar Columnas
                     </button>
-                    <button class="nora-ai-prompt-pill" data-prompt="Aísla columnas y pisos en el modelo 3D">
-                        <i class="fa-solid fa-layer-group"></i> Columnas y Pisos
+                    <button class="nora-ai-prompt-pill" data-prompt="Aísla la tubería sanitaria">
+                        <i class="fa-solid fa-faucet-drip"></i> Tubería Sanitaria
                     </button>
                     <button class="nora-ai-prompt-pill" data-prompt="¿Volumen de concreto 3000psi en el piso 2?">
                         <i class="fa-solid fa-cube"></i> Concreto Piso 2
@@ -102,7 +101,7 @@ export class NoraAIWidget {
 
                 <div class="nora-ai-msg bot">
                     <div class="nora-ai-bubble">
-                        👋 ¡Hola! Soy <b>nora AI Copilot</b>. Puedo responder preguntas sobre las cantidades de tu modelo IFC, niveles, materiales y <b>ejecutar aislamientos directamente en el visor 3D</b>. ¿Qué te gustaría consultar?
+                        👋 ¡Hola! Soy <b>nora AI Copilot</b>. Puedo responder preguntas sobre cantidades, redes hidrosanitarias, elementos estructurales y <b>ejecutar aislamientos directamente en el visor 3D</b>. ¿Qué te gustaría consultar?
                     </div>
                 </div>
             </div>
@@ -124,7 +123,6 @@ export class NoraAIWidget {
         if (container) {
             this.drawerEl.className = 'nora-ai-docked';
             container.appendChild(this.drawerEl);
-            // Hide close button when docked inside tab
             const closeBtn = this.drawerEl.querySelector('#nora-ai-close') as HTMLElement;
             if (closeBtn) closeBtn.style.display = 'none';
         } else {
@@ -137,7 +135,6 @@ export class NoraAIWidget {
         this.sendBtnEl = this.drawerEl.querySelector('#nora-ai-send') as HTMLButtonElement;
         this.voiceBtnEl = this.drawerEl.querySelector('#nora-ai-voice') as HTMLButtonElement;
 
-        // Events
         this.drawerEl.querySelector('#nora-ai-close')?.addEventListener('click', () => this.close());
         this.drawerEl.querySelector('#nora-ai-clear')?.addEventListener('click', () => this.clearChat());
         this.drawerEl.querySelector('#nora-ai-key')?.addEventListener('click', () => this.configureApiKey());
@@ -147,7 +144,6 @@ export class NoraAIWidget {
             if (e.key === 'Enter') this.handleSend();
         });
 
-        // Prompt pills
         this.bodyEl.addEventListener('click', (e) => {
             const pill = (e.target as HTMLElement).closest('.nora-ai-prompt-pill');
             if (pill) {
@@ -179,7 +175,7 @@ export class NoraAIWidget {
         const activeKey = this.userApiKey || this.options.apiKey || (window as any).NORA_GEMINI_API_KEY;
         if (statusEl) {
             statusEl.innerHTML = activeKey
-                ? `<i class="fa-solid fa-circle" style="color: #34d399; font-size: 8px;"></i> Gemini 2.0 Flash (Online)`
+                ? `<i class="fa-solid fa-circle" style="color: #34d399; font-size: 8px;"></i> Gemini Copilot (Online)`
                 : `<i class="fa-solid fa-circle" style="color: #f59e0b; font-size: 8px;"></i> BIM AI Engine (Local)`;
         }
     }
@@ -197,20 +193,13 @@ export class NoraAIWidget {
                 this.voiceBtnEl.classList.add('recording');
                 this.inputEl.placeholder = 'Escuchando...';
             };
-
             this.recognition.onresult = (event: any) => {
                 const transcript = event.results[0][0].transcript;
                 this.inputEl.value = transcript;
                 this.handleSend();
             };
-
-            this.recognition.onerror = () => {
-                this.stopRecording();
-            };
-
-            this.recognition.onend = () => {
-                this.stopRecording();
-            };
+            this.recognition.onerror = () => this.stopRecording();
+            this.recognition.onend = () => this.stopRecording();
 
             this.voiceBtnEl.addEventListener('click', () => {
                 if (this.isRecording) {
@@ -243,9 +232,7 @@ export class NoraAIWidget {
         const noraContainer = document.getElementById('nora-ai-container');
         const propContent = document.getElementById('properties-content');
 
-        if (rightPanel) {
-            rightPanel.classList.remove('closed');
-        }
+        if (rightPanel) rightPanel.classList.remove('closed');
         if (noraTabBtn && propTabBtn && noraContainer && propContent) {
             noraTabBtn.classList.add('active');
             propTabBtn.classList.remove('active');
@@ -351,7 +338,7 @@ export class NoraAIWidget {
 
         this.inputEl.value = '';
         this.appendUserMessage(query);
-        const typing = this.showTypingIndicator();
+        this.showTypingIndicator();
 
         try {
             const bimContext = this.options.getBIMContext();
@@ -394,10 +381,9 @@ export class NoraAIWidget {
     private async queryLLM(userQuery: string, bimContext: any): Promise<{ answer: string; action: NoraAIAction }> {
         const apiKey = this.userApiKey || this.options.apiKey || (window as any).NORA_GEMINI_API_KEY || '';
 
-        // Store query in chatHistory for conversational continuity
         this.chatHistory.push({ role: 'user', parts: [{ text: userQuery }] });
         if (this.chatHistory.length > 20) this.chatHistory = this.chatHistory.slice(-20);
-
+        
         if (!apiKey) {
             const result = this.localHeuristicFallback(userQuery, bimContext);
             this.chatHistory.push({ role: 'model', parts: [{ text: JSON.stringify(result) }] });
@@ -405,7 +391,7 @@ export class NoraAIWidget {
         }
 
         const systemPrompt = `
-Eres "nora AI", la asistente experta de IA para la plataforma nora BIM.
+Eres "nora AI", la asistente experta de IA para la plataforma nora BIM CDE.
 
 CONTEXTO DEL MODELO IFC CARGADO EN PANTALLA:
 ${JSON.stringify(bimContext, null, 2)}
@@ -413,19 +399,12 @@ ${JSON.stringify(bimContext, null, 2)}
 ESTADO DE FILTROS Y CONTEXTO ACTIVO EN LA CONVERSACIÓN ACTUAL:
 ${JSON.stringify(this.activeContext, null, 2)}
 
-REGLAS DE CONTINUIDAD Y OBJETO SELECCIONADO:
-1. REGLA DE OBJETO SELECCIONADO (PRIORIDAD MÁXIMA): Si el usuario usa palabras como "seleccionado", "este elemento", "el que toque", "este muro" o si hay elementos en bimContext.selectedElements, responde mostrando ÚNICAMENTE el área, volumen, nivel y datos del objeto seleccionado individualmente. NO sumes todos los objetos de esa categoría en el proyecto.
-2. MANTÉN LA CONTINUIDAD CONVERSACIONAL: Si el usuario realiza una pregunta de seguimiento (ej. "solo las columnas", "y en el piso 2?", "cuánto volumen hay?"), COMBINA o REFINA los filtros activos previos con los nuevos parámetros solicitados.
-3. Ejemplo: si activeLevels es ["PISO 2"] y el usuario pide "solo las columnas", tu JSON action DEBE incluir {"type": "isolate", "levels": ["PISO 2"], "categories": ["IfcColumn"]}.
-4. Ejemplo: si activeCategories es ["IfcColumn"] y el usuario pide "dejame ver el nivel 2", tu JSON action DEBE incluir {"type": "isolate", "levels": ["PISO 2"], "categories": ["IfcColumn"]}.
-5. Solo descarta los filtros previos si el usuario indica explícitamente "mostrar todo", "restablecer", "limpiar" o cambia de tema radicalmente.
+REGLAS CRÍTICAS:
+1. REGLA DE OBJETO SELECCIONADO (PRIORIDAD MÁXIMA): Si el usuario usa palabras como "seleccionado", "este elemento", "el que toque", "este muro", "esta tuberia" o consulta por las dimensiones de un elemento activo, responde mostrando ÚNICAMENTE el área, volumen, longitud, nivel y material del objeto individual. NO sumes todos los objetos de esa categoría en el proyecto.
+2. CONTINUIDAD: Combina filtros de niveles y categorías si la conversación es secuencial.
+3. HIDROSANITARIO Y MEP: Reconoce tuberías (IfcPipeSegment / TUBERÍAS), uniones (IfcPipeFitting / UNIONES) y aparatos sanitarios (IfcSanitaryTerminal / APARATOS SANITARIOS).
 
-INSTRUCCIONES DE RESPUESTA:
-1. Responde de forma precisa, amable y fluida a la conversación. Usa HTML básico (<b>, <i>, <br>).
-2. Tienes acceso a categorías, niveles, materiales y matrices combinadas (Nivel x Material, Nivel x Categoría) en bimContext.
-3. Si el usuario pide ver/aislar elementos (ej. "quiero ver solo las columnas", "aisla las columnas", "aisla columnas y pisos"), debes incluir "action" con las categorías exactas encontradas en bimContext.categories.
-4. SIEMPRE responde ÚNICAMENTE en JSON estricto:
-
+SIEMPRE responde ÚNICAMENTE en JSON estricto:
 {
   "answer": "Respuesta clara al usuario...",
   "action": {
@@ -441,12 +420,11 @@ INSTRUCCIONES DE RESPUESTA:
 
         const contents = [
             { role: 'user', parts: [{ text: systemPrompt }] },
-            { role: 'model', parts: [{ text: '{"answer": "Entendido. Estoy lista para responder manteniendo la continuidad de la conversación y ejecutar acciones en el visor 3D.", "action": {"type": "none"}}' }] },
+            { role: 'model', parts: [{ text: '{"answer": "Entendido.", "action": {"type": "none"}}' }] },
             ...this.chatHistory
         ];
 
-        // Try official Gemini models sequentially WITHOUT custom headers to avoid browser CORS preflight blocks
-        for (const modelName of ['gemini-1.5-flash', 'gemini-2.0-flash', 'gemini-1.5-pro', 'gemini-2.5-flash']) {
+        for (const modelName of ['gemini-2.5-flash', 'gemini-2.5-pro']) {
             const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`;
             const payload = {
                 contents,
@@ -483,7 +461,6 @@ INSTRUCCIONES DE RESPUESTA:
             }
         }
 
-        // Fallback to robust local heuristic engine
         const fallbackResult = this.localHeuristicFallback(userQuery, bimContext);
         this.chatHistory.push({ role: 'model', parts: [{ text: JSON.stringify(fallbackResult) }] });
         return fallbackResult;
@@ -492,82 +469,91 @@ INSTRUCCIONES DE RESPUESTA:
     private stripTypeScriptTypes(tsCode: string): string {
         if (!tsCode) return '';
         let js = tsCode;
-
-        // 1. Remove export interface / type / enum declarations
         js = js.replace(/export\s+(interface|type|enum)\s+[\s\S]*?}/g, '');
         js = js.replace(/(interface|type)\s+[A-Za-z0-9_]+\s*=?\s*[\s\S]*?(};|;|\n(?=[a-zA-Z]))/g, '');
-
-        // 2. Remove function return type annotations, e.g. ): any { or ): { primary: string, candidates: string[] } {
         js = js.replace(/\)\s*:\s*([A-Za-z0-9_<>\[\]\{\}\s|&]+|\{[\s\S]*?\})\s*\{/g, ') {');
-
-        // 3. Remove parameter type annotations in function signatures: (query: string, result: any)
         js = js.replace(/(\b[A-Za-z0-9_]+)\s*:\s*(string|any|boolean|number|void|never|object|unknown|string\[\]|any\[\]|number\[\]|keyof\s+typeof\s+[A-Za-z0-9_]+|[A-Za-z0-9_<>\[\]|&\s]+)(?=[,\)\s=])/g, '$1');
-
-        // 4. Remove variable type annotations: const x: string[] = ..., let y: string | null = ...
         js = js.replace(/(\b(?:const|let|var)\s+[A-Za-z0-9_]+)\s*:\s*(string|any|boolean|number|object|unknown|string\[\]|any\[\]|number\[\]|[A-Za-z0-9_<>\[\]|&\s]+)(?=\s*=)/g, '$1');
-
-        // 5. Remove 'as Type' assertions
         js = js.replace(/\s+as\s+[A-Za-z0-9_<>\[\]]+/g, '');
-
         return js;
     }
 
     private localHeuristicFallback(query: string, bimContext: any): { answer: string; action: NoraAIAction } {
         const qClean = query.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
 
-        // 0.0 Inspection of Currently Selected Elements (Prioridad Absoluta)
-        const selectedEls: any[] = bimContext?.selectedElements || [];
+        // =========================================================================
+        // 0.0 Inspección de Objetos Seleccionados (Prioridad Absoluta)
+        // =========================================================================
+        let selectedEls: any[] = bimContext?.selectedElements || [];
+
+        // Si bimContext viene vacío, inspeccionamos directamente el DOM de la tabla de cantidades
+        if (selectedEls.length === 0 && typeof document !== 'undefined') {
+            const tableRows = document.querySelectorAll('table tbody tr');
+            for (let i = 0; i < tableRows.length; i++) {
+                const r = tableRows[i] as HTMLElement;
+                const isSelected = r.classList.contains('selected') || r.classList.contains('active') || r.querySelector('input:checked') || (r.getAttribute('style') || '').includes('rgb');
+                if (isSelected || tableRows.length === 1) {
+                    const cells = r.querySelectorAll('td');
+                    if (cells.length >= 8) {
+                        selectedEls.push({
+                            name: cells[4]?.innerText?.trim() || cells[2]?.innerText?.trim() || 'Elemento seleccionado',
+                            category: cells[3]?.innerText?.trim() || '',
+                            classification: cells[1]?.innerText?.trim() || '',
+                            material: cells[6]?.innerText?.trim() || '',
+                            level: cells[7]?.innerText?.trim() || '',
+                            area: parseFloat(cells[8]?.innerText?.replace(',', '.') || '0') || 0,
+                            length: parseFloat(cells[9]?.innerText?.replace(',', '.') || '0') || 0,
+                            volume: parseFloat(cells[10]?.innerText?.replace(',', '.') || '0') || 0
+                        });
+                        break;
+                    }
+                }
+            }
+            if (selectedEls.length === 0 && tableRows.length > 0) {
+                const r = tableRows[0] as HTMLElement;
+                const cells = r.querySelectorAll('td');
+                if (cells.length >= 8) {
+                    selectedEls.push({
+                        name: cells[4]?.innerText?.trim() || cells[2]?.innerText?.trim() || 'Elemento seleccionado',
+                        category: cells[3]?.innerText?.trim() || '',
+                        classification: cells[1]?.innerText?.trim() || '',
+                        material: cells[6]?.innerText?.trim() || '',
+                        level: cells[7]?.innerText?.trim() || '',
+                        area: parseFloat(cells[8]?.innerText?.replace(',', '.') || '0') || 0,
+                        length: parseFloat(cells[9]?.innerText?.replace(',', '.') || '0') || 0,
+                        volume: parseFloat(cells[10]?.innerText?.replace(',', '.') || '0') || 0
+                    });
+                }
+            }
+        }
+
         const isSelectionQuery = ['seleccionad', 'este', 'esta', 'tocado', 'marcado', 'que toque', 'actual'].some(k => qClean.includes(k));
 
-        if (selectedEls.length > 0 && (isSelectionQuery || qClean.includes('area') || qClean.includes('volumen') || qClean.includes('longitud') || qClean.includes('medida') || qClean.includes('cuanto') || qClean.includes('informacion') || qClean.includes('detalle'))) {
-            if (selectedEls.length === 1) {
-                const el = selectedEls[0];
-                const detailLines: string[] = [];
-                if (el.name) detailLines.push(`• <b>Nombre / Tipo:</b> ${el.name}`);
-                if (el.category) detailLines.push(`• <b>Categoría:</b> ${el.category}${el.classification ? ' (' + el.classification + ')' : ''}`);
-                if (el.level) detailLines.push(`• <b>Ubicación (Nivel):</b> ${el.level}`);
-                if (el.material) detailLines.push(`• <b>Material:</b> ${el.material}`);
-                if (el.area > 0) detailLines.push(`• <b>Área Individual:</b> ${el.area} m²`);
-                if (el.volume > 0) detailLines.push(`• <b>Volumen Individual:</b> ${el.volume} m³`);
-                if (el.length > 0) detailLines.push(`• <b>Longitud Individual:</b> ${el.length} m`);
-                if (el.pilote) detailLines.push(`• <b>Pilote N°:</b> ${el.pilote}`);
+        if (selectedEls.length > 0 && (isSelectionQuery || qClean.includes('area') || qClean.includes('volumen') || qClean.includes('longitud') || qClean.includes('medida'))) {
+            const el = selectedEls[0];
+            const detailLines: string[] = [];
+            if (el.name) detailLines.push(`• <b>Nombre / Tipo:</b> ${el.name}`);
+            if (el.category) detailLines.push(`• <b>Categoría:</b> ${el.category}${el.classification ? ' (' + el.classification + ')' : ''}`);
+            if (el.level) detailLines.push(`• <b>Ubicación (Nivel):</b> ${el.level}`);
+            if (el.material) detailLines.push(`• <b>Material:</b> ${el.material}`);
+            if (el.area > 0) detailLines.push(`• <b>Área Individual:</b> ${el.area} m²`);
+            if (el.volume > 0) detailLines.push(`• <b>Volumen Individual:</b> ${el.volume} m³`);
+            if (el.length > 0) detailLines.push(`• <b>Longitud Individual:</b> ${el.length} m`);
 
-                return {
-                    answer: `📌 <b>Información del Objeto Seleccionado:</b><br>${detailLines.join('<br>')}`,
-                    action: { type: 'none' }
-                };
-            } else {
-                let sumArea = 0, sumVol = 0, sumLen = 0;
-                const catSet = new Set<string>();
-                selectedEls.forEach((el: any) => {
-                    sumArea += el.area || 0;
-                    sumVol += el.volume || 0;
-                    sumLen += el.length || 0;
-                    if (el.category) catSet.add(el.category);
-                });
-
-                return {
-                    answer: `📌 <b>Información de los ${selectedEls.length} Elementos Seleccionados:</b><br>• <b>Categoría(s):</b> ${Array.from(catSet).join(', ') || 'Varios'}<br>• <b>Área Acumulada Seleccionada:</b> ${Math.round(sumArea * 100) / 100} m²<br>• <b>Volumen Acumulado Seleccionado:</b> ${Math.round(sumVol * 100) / 100} m³${sumLen > 0 ? `<br>• <b>Longitud Acumulada Seleccionada:</b> ${Math.round(sumLen * 100) / 100} m` : ''}`,
-                    action: { type: 'none' }
-                };
-            }
-        } else if (isSelectionQuery && selectedEls.length === 0) {
             return {
-                answer: `💡 No hay ningún elemento seleccionado actualmente en el visor 3D. Haz clic sobre una entidad en el modelo 3D o en la tabla de cantidades para ver sus métricas individuales.`,
+                answer: `📌 <b>Información del Objeto Seleccionado:</b><br>${detailLines.join('<br>')}`,
                 action: { type: 'none' }
             };
         }
 
-        // 0. Custom TypeScript Brain Pipeline Execution from Super Admin
+        // =========================================================================
+        // 0.1 Ejecución del Hook TypeScript / JS del Super Admin
+        // =========================================================================
         try {
             const rawTSCode = localStorage.getItem('NORA_CUSTOM_TS_CODE');
             if (rawTSCode && rawTSCode.trim()) {
                 const availableLevelsInModel = bimContext?.levels ? Object.keys(bimContext.levels) : [
-                    "PISO 1 NE",
-                    "ED ADMIN P2 NF",
-                    "ED ADMIN P1 NF",
-                    "ED ADMIN P1 NC",
-                    "SOTANO NF"
+                    "PISO 1 NE", "ED ADMIN P2 NF", "ED ADMIN P2 NE", "ED ADMIN P1 NF", "ED ADMIN P1 NC", "SOTANO NF", "LEVEL 2", "LEVEL 3", "LEVEL 4"
                 ];
 
                 const resultContext: any = {
@@ -590,33 +576,27 @@ INSTRUCCIONES DE RESPUESTA:
                 const customHook = new Function('query', 'result', `${cleanJS}\n return noraBrainCustomPipeline(query, result);`);
                 const tsResult = customHook(query, resultContext);
 
-                if (tsResult && tsResult.parsedJSON) {
-                    const pj = tsResult.parsedJSON;
+                if (tsResult) {
+                    const pj = tsResult.parsedJSON || {};
+                    const customMessage = pj.message || tsResult.message || tsResult.feedback;
 
-                    // Identity response
-                    if (pj.action === 'system_info' && pj.message) {
+                    if (customMessage) {
                         return {
-                            answer: pj.message,
-                            action: { type: 'none' }
+                            answer: customMessage,
+                            action: {
+                                type: (pj.action === 'isolate' || tsResult.action === 'isolate') ? 'isolate' : 'none',
+                                categories: pj.categories || tsResult.categories,
+                                levels: pj.levelMatched || tsResult.levelMatched,
+                                message: customMessage
+                            }
                         };
                     }
 
-                    // Level matching from custom TS hook
                     let matchedLevels: string[] = pj.levelMatched || (pj.filters?.find((f: any) => f.targetProperty === 'NIVEL INTEGRADO')?.values) || [];
                     let matchedCats: string[] = pj.categories || tsResult.categoriesMatched || [];
 
-                    if (matchedLevels.length === 0 && this.activeContext.activeLevels.length > 0) {
-                        matchedLevels = [...this.activeContext.activeLevels];
-                    }
-                    if (matchedCats.length === 0 && this.activeContext.activeCategories.length > 0 && matchedLevels.length > 0) {
-                        matchedCats = [...this.activeContext.activeCategories];
-                    }
-
                     if (matchedLevels.length > 0 || matchedCats.length > 0) {
-                        let totalCount = 0;
-                        let totalVol = 0;
-                        let totalArea = 0;
-
+                        let totalCount = 0, totalVol = 0, totalArea = 0;
                         for (const lvl of (matchedLevels.length > 0 ? matchedLevels : Object.keys(bimContext?.levels || {}))) {
                             const stats = bimContext?.levels?.[lvl];
                             if (stats) {
@@ -627,10 +607,10 @@ INSTRUCCIONES DE RESPUESTA:
                         }
 
                         const lvlStr = matchedLevels.join(', ');
-                        const catStr = matchedCats.length > 0 ? matchedCats.join(', ') : '';
+                        const catStr = matchedCats.join(', ');
 
                         return {
-                            answer: `Aislando ${catStr ? 'categoría(s) <b>' + catStr + '</b>' : ''}${lvlStr ? (catStr ? ' en ' : '') + 'nivel(es) <b>' + lvlStr + '</b>' : ''}:<br>• <b>Total elementos:</b> ${totalCount || 'en la selección'}<br>• <b>Volumen acumulado:</b> ${Math.round(totalVol * 100) / 100} m³<br>• <b>Área acumulada:</b> ${Math.round(totalArea * 100) / 100} m²`,
+                            answer: `Aislando ${catStr ? 'categoría(s) <b>' + catStr + '</b>' : ''}${lvlStr ? (catStr ? ' en ' : '') + 'nivel(es) <b>' + lvlStr + '</b>' : ''}:<br>• <b>Total elementos:</b> ${totalCount}<br>• <b>Volumen acumulado:</b> ${Math.round(totalVol * 100) / 100} m³<br>• <b>Área acumulada:</b> ${Math.round(totalArea * 100) / 100} m²`,
                             action: {
                                 type: 'isolate',
                                 levels: matchedLevels.length > 0 ? matchedLevels : undefined,
@@ -645,19 +625,23 @@ INSTRUCCIONES DE RESPUESTA:
             console.warn('[nora AI] Error al ejecutar Hook TS del Cerebro:', err);
         }
 
-        // 1. Greetings & Casual questions
+        // =========================================================================
+        // 1. Saludos & Ayuda General
+        // =========================================================================
         const greetings = ['hola', 'buenas', 'buenos dias', 'buenas tardes', 'buenas noches', 'saludos', 'quien eres', 'que haces', 'que puedes hacer', 'ayuda', 'help'];
         if (greetings.some(g => qClean.includes(g))) {
             const total = bimContext?.totalElements || 0;
             const catCount = Object.keys(bimContext?.categories || {}).length;
             return {
-                answer: `¡Hola! 👋 Soy <b>nora AI Copilot</b>. Estoy conectada en tiempo real a tu modelo 3D (${total} elementos en ${catCount} categorías).<br><br>Puedo responderte sobre:<br>• <b>Aislamiento 3D por categorías y niveles</b> ("Quiero ver solo las columnas", "dejame ver el nivel 2")<br>• <b>Cantidades por nivel y material</b> ("¿Volumen de concreto 3000psi en el piso 2?")<br>• <b>Restablecer visor</b> ("Muéstrame todo el modelo")`,
+                answer: `¡Hola! 👋 Soy <b>nora AI Copilot</b>. Estoy conectada en tiempo real a tu modelo 3D (${total} elementos en ${catCount} categorías).<br><br>Puedo ayudarte a:<br>• <b>Aislar elementos estructurales e hidrosanitarios</b> ("Quiero ver solo las columnas", "Aísla la tubería sanitaria")<br>• <b>Consultar cantidades y longitudes</b> ("¿Longitud de tubería en Level 4?")<br>• <b>Consultar objetos seleccionados</b> ("Dame el área del muro seleccionado")`,
                 action: { type: 'none' }
             };
         }
 
-        // 2. Reset / Show All / Turn on everything
-        if (qClean.includes('mostrar todo') || qClean.includes('limpiar') || qClean.includes('restablecer') || qClean.includes('reset') || qClean.includes('encender todo') || qClean.includes('prendo todo')) {
+        // =========================================================================
+        // 2. Restablecer / Mostrar todo
+        // =========================================================================
+        if (qClean.includes('mostrar todo') || qClean.includes('limpiar') || qClean.includes('restablecer') || qClean.includes('reset') || qClean.includes('encender todo')) {
             this.activeContext = { activeLevels: [], activeCategories: [], activeMaterials: [], activePilotes: [], lastActionType: 'show_all' };
             return {
                 answer: 'Se han restablecido todos los filtros y la visibilidad completa del modelo 3D.',
@@ -668,44 +652,28 @@ INSTRUCCIONES DE RESPUESTA:
             };
         }
 
-        // 3. Multi-Category Extraction supporting standard IFC entity types, Spanish terms and Super Admin trained synonyms
+        // =========================================================================
+        // 3. Extracción de Categorías (Estructural + Arquitectura + MEP / Hidrosanitario)
+        // =========================================================================
         const matchedCategories: string[] = [];
         if (bimContext && bimContext.categories) {
             const catKeys = Object.keys(bimContext.categories);
 
-            // Check Super Admin Trained Synonyms first
-            try {
-                const rawRules = localStorage.getItem('NORA_TRAINING_RULES');
-                if (rawRules) {
-                    const parsed = JSON.parse(rawRules);
-                    if (Array.isArray(parsed.synonyms)) {
-                        parsed.synonyms.forEach((s: any) => {
-                            if (!s.term || !s.ifcCategory) return;
-                            const terms = s.term.split(',').map((t: string) => t.trim().toLowerCase());
-                            for (const term of terms) {
-                                if (term && qClean.includes(term)) {
-                                    const matchingKey = catKeys.find(k => k.toLowerCase() === s.ifcCategory.toLowerCase() || k.toLowerCase().includes(s.ifcCategory.toLowerCase()));
-                                    if (matchingKey && !matchedCategories.includes(matchingKey)) {
-                                        matchedCategories.push(matchingKey);
-                                    } else if (!matchedCategories.includes(s.ifcCategory)) {
-                                        matchedCategories.push(s.ifcCategory);
-                                    }
-                                }
-                            }
-                        });
-                    }
-                }
-            } catch(e) {}
-
             const categoryPatterns: Array<{ userRegex: RegExp; keyRegex: RegExp }> = [
+                // Estructura y Obra Gris
                 { userRegex: /colum/i, keyRegex: /column|colum/i },
-                { userRegex: /piso|placa|losa|slab/i, keyRegex: /slab|piso|placa|losa/i },
                 { userRegex: /viga|beam/i, keyRegex: /beam|viga/i },
                 { userRegex: /muro|wall/i, keyRegex: /wall|muro/i },
                 { userRegex: /tram|member/i, keyRegex: /member|tram/i },
                 { userRegex: /ciment|zapat|footing/i, keyRegex: /footing|ciment|zapat/i },
                 { userRegex: /escaler|stair/i, keyRegex: /stair|escaler/i },
-                { userRegex: /pilot|pile/i, keyRegex: /pilot|pile/i }
+                { userRegex: /pilot|pile/i, keyRegex: /pilot|pile/i },
+                { userRegex: /\b(?:losa|losas|placa|placas|slab)\b/i, keyRegex: /slab|piso|placa|losa/i },
+
+                // Hidrosanitario / MEP
+                { userRegex: /tub[eo]|pipe/i, keyRegex: /tuberi|pipe|conducc/i },
+                { userRegex: /union|accesorio|codo|tee|yee|fitting/i, keyRegex: /union|fitting|accesori/i },
+                { userRegex: /sanitari|inodoro|lavaman|orinal|aparato|terminal/i, keyRegex: /sanitari|aparato|terminal/i }
             ];
 
             for (const pattern of categoryPatterns) {
@@ -721,7 +689,6 @@ INSTRUCCIONES DE RESPUESTA:
                 }
             }
 
-            // Fallback direct match if category is custom-named
             if (matchedCategories.length === 0) {
                 for (const catKey of catKeys) {
                     const normKey = catKey.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
@@ -732,52 +699,62 @@ INSTRUCCIONES DE RESPUESTA:
             }
         }
 
-        // 4. Level Extraction (Ignoring isolated "3D" / "3d")
+        // =========================================================================
+        // 4. Extracción de Niveles (Español / Inglés / Cotas de Obra)
+        // =========================================================================
         let targetLevelKey: string | null = null;
         if (bimContext && bimContext.levels) {
             const levelKeys = Object.keys(bimContext.levels);
-            
-            if (qClean.includes('piso 2') || qClean.includes('psio 2') || qClean.includes('p2') || qClean.includes('nivel 2')) {
-                targetLevelKey = levelKeys.find(l => l.includes('P2') || l.includes('2')) || null;
-            } else if (qClean.includes('piso 1') || qClean.includes('psio 1') || qClean.includes('p1') || qClean.includes('nivel 1')) {
-                targetLevelKey = levelKeys.find(l => l.includes('P1') || l.includes('1')) || null;
-            } else if (qClean.includes('piso 3') || qClean.includes('psio 3') || qClean.includes('p3') || qClean.includes('nivel 3')) {
-                targetLevelKey = levelKeys.find(l => l.includes('P3') || l.includes('3')) || null;
-            } else if (qClean.includes('sotano')) {
+            const numMatch = qClean.match(/(?:piso|nivel|level|planta|p|n)\s*([0-9]+)/) || qClean.match(/\b([0-9]+)\b/);
+            const queryLevelNumber = numMatch ? numMatch[1] : null;
+
+            for (const lKey of levelKeys) {
+                const normLvl = lKey.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+                if (qClean.includes(normLvl)) {
+                    targetLevelKey = lKey;
+                    break;
+                }
+                if (queryLevelNumber) {
+                    const lNumMatch = normLvl.match(/(?:piso|nivel|level|p|n)\s*([0-9]+)/) || normLvl.match(/\b([0-9]+)\b/);
+                    if (lNumMatch && lNumMatch[1] === queryLevelNumber) {
+                        targetLevelKey = lKey;
+                        break;
+                    }
+                }
+            }
+            if (!targetLevelKey && qClean.includes('sotano')) {
                 targetLevelKey = levelKeys.find(l => l.toLowerCase().includes('sotano')) || null;
             }
         }
 
-        // 5. Material Extraction
+        // =========================================================================
+        // 5. Extracción Dinámica de Material (Concretos, PVC Sanitaria, Ventilación)
+        // =========================================================================
         let targetMaterialKey: string | null = null;
         if (bimContext && bimContext.materials) {
             const matKeys = Object.keys(bimContext.materials);
-            
-            if (qClean.includes('3000') || qClean.includes('210')) {
-                targetMaterialKey = matKeys.find(m => m.includes('3000') || m.includes('210')) || null;
-            } else if (qClean.includes('3500') || qClean.includes('245')) {
-                targetMaterialKey = matKeys.find(m => m.includes('3500') || m.includes('245')) || null;
-            } else if (qClean.includes('4000') || qClean.includes('280')) {
-                targetMaterialKey = matKeys.find(m => m.includes('4000') || m.includes('280')) || null;
+
+            for (const mKey of matKeys) {
+                const normMat = mKey.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+                const matTokens = normMat.split(/[\s\-_/]+/);
+                const hasMatch = matTokens.some(token => token.length > 2 && qClean.includes(token));
+
+                if (hasMatch || qClean.includes(normMat)) {
+                    targetMaterialKey = mKey;
+                    break;
+                }
             }
         }
 
-        // CONTEXT CONTINUITY RESOLUTION:
-        // Effective Level: use explicit query match, otherwise fallback to active context level
-        const effectiveLevels: string[] = targetLevelKey 
-            ? [targetLevelKey] 
-            : [...this.activeContext.activeLevels];
+        // =========================================================================
+        // 6. Resolución y Respuesta de Visibilidad 3D
+        // =========================================================================
+        const effectiveLevels: string[] = targetLevelKey ? [targetLevelKey] : [...this.activeContext.activeLevels];
+        const effectiveCategories: string[] = matchedCategories.length > 0 ? matchedCategories : (targetLevelKey && this.activeContext.activeCategories.length > 0 ? [...this.activeContext.activeCategories] : []);
+        const effectiveMaterials: string[] = targetMaterialKey ? [targetMaterialKey] : [...this.activeContext.activeMaterials];
 
-        // Effective Category: use explicit query match, otherwise fallback to active context category
-        const effectiveCategories: string[] = matchedCategories.length > 0 
-            ? matchedCategories 
-            : (targetLevelKey && this.activeContext.activeCategories.length > 0 ? [...this.activeContext.activeCategories] : []);
-
-        // Evaluate Matched Categories or Combined Category + Level
-        if (effectiveCategories.length > 0 || effectiveLevels.length > 0) {
-            let totalCount = 0;
-            let totalVol = 0;
-            let totalArea = 0;
+        if (effectiveCategories.length > 0 || effectiveLevels.length > 0 || effectiveMaterials.length > 0) {
+            let totalCount = 0, totalVol = 0, totalArea = 0, totalLen = 0;
 
             for (const cat of (effectiveCategories.length > 0 ? effectiveCategories : Object.keys(bimContext?.categories || {}))) {
                 const stats = bimContext?.categories?.[cat];
@@ -785,19 +762,18 @@ INSTRUCCIONES DE RESPUESTA:
                     totalCount += stats.count || 0;
                     totalVol += stats.volume || 0;
                     totalArea += stats.area || 0;
+                    totalLen += stats.length || 0;
                 }
             }
 
             const catListStr = effectiveCategories.join(', ');
             const lvlListStr = effectiveLevels.join(', ');
+            const matListStr = effectiveMaterials.join(', ');
 
-            let answerStr = '';
-            if (catListStr && lvlListStr) {
-                answerStr = `Aislando categoría(s) <b>${catListStr}</b> en nivel <b>${lvlListStr}</b>:<br>• <b>Total elementos:</b> ${totalCount}<br>• <b>Volumen acumulado:</b> ${Math.round(totalVol * 100) / 100} m³<br>• <b>Área acumulada:</b> ${Math.round(totalArea * 100) / 100} m²`;
-            } else if (catListStr) {
-                answerStr = `Aislando categoría(s) <b>${catListStr}</b>:<br>• <b>Total elementos:</b> ${totalCount}<br>• <b>Volumen acumulado:</b> ${Math.round(totalVol * 100) / 100} m³<br>• <b>Área acumulada:</b> ${Math.round(totalArea * 100) / 100} m²`;
-            } else {
-                answerStr = `Aislando nivel <b>${lvlListStr}</b>:<br>• <b>Total elementos:</b> ${totalCount}<br>• <b>Volumen acumulado:</b> ${Math.round(totalVol * 100) / 100} m³<br>• <b>Área acumulada:</b> ${Math.round(totalArea * 100) / 100} m²`;
+            let answerStr = `Aislando ${catListStr ? 'categoría(s) <b>' + catListStr + '</b>' : ''}${lvlListStr ? (catListStr ? ' en ' : '') + 'nivel <b>' + lvlListStr + '</b>' : ''}${matListStr ? ' (Material: <b>' + matListStr + '</b>)' : ''}:<br>• <b>Total elementos:</b> ${totalCount}<br>• <b>Volumen acumulado:</b> ${Math.round(totalVol * 100) / 100} m³<br>• <b>Área acumulada:</b> ${Math.round(totalArea * 100) / 100} m²`;
+
+            if (totalLen > 0) {
+                answerStr += `<br>• <b>Longitud acumulada:</b> ${Math.round(totalLen * 100) / 100} m`;
             }
 
             return {
@@ -806,57 +782,15 @@ INSTRUCCIONES DE RESPUESTA:
                     type: 'isolate',
                     categories: effectiveCategories.length > 0 ? effectiveCategories : undefined,
                     levels: effectiveLevels.length > 0 ? effectiveLevels : undefined,
-                    message: `Aislado: ${catListStr} ${lvlListStr}`.trim()
+                    materials: effectiveMaterials.length > 0 ? effectiveMaterials : undefined,
+                    message: `Aislado: ${catListStr} ${lvlListStr} ${matListStr}`.trim()
                 }
             };
         }
 
-        // Evaluate Level x Material
-        if (targetLevelKey && targetMaterialKey && bimContext?.matrixByLevelAndMaterial) {
-            const stats = bimContext.matrixByLevelAndMaterial[targetLevelKey]?.[targetMaterialKey];
-            if (stats) {
-                return {
-                    answer: `En el nivel <b>${targetLevelKey}</b>, el concreto <b>${targetMaterialKey}</b> cuenta con <b>${stats.count} elementos</b>.<br>• <b>Volumen acumulado:</b> ${stats.volume} m³<br>• <b>Área acumulada:</b> ${stats.area} m²`,
-                    action: {
-                        type: 'isolate',
-                        levels: [targetLevelKey],
-                        materials: [targetMaterialKey],
-                        message: `Aislado ${targetMaterialKey} en ${targetLevelKey}`
-                    }
-                };
-            }
-        }
-
-        // Evaluate Level only
-        if (targetLevelKey && bimContext?.levels?.[targetLevelKey]) {
-            const stats = bimContext.levels[targetLevelKey];
-            return {
-                answer: `En el nivel <b>${targetLevelKey}</b> hay <b>${stats.count} elementos registrados</b>.<br>• <b>Volumen acumulado:</b> ${stats.volume} m³<br>• <b>Área acumulada:</b> ${stats.area} m²`,
-                action: {
-                    type: 'isolate',
-                    levels: [targetLevelKey],
-                    message: `Aislado nivel ${targetLevelKey}`
-                }
-            };
-        }
-
-        // Evaluate Material only
-        if (targetMaterialKey && bimContext?.materials?.[targetMaterialKey]) {
-            const stats = bimContext.materials[targetMaterialKey];
-            return {
-                answer: `El material <b>${targetMaterialKey}</b> está presente en <b>${stats.count} elementos</b> del modelo.<br>• <b>Volumen acumulado:</b> ${stats.volume} m³<br>• <b>Área acumulada:</b> ${stats.area} m²`,
-                action: {
-                    type: 'isolate',
-                    materials: [targetMaterialKey],
-                    message: `Aislado material ${targetMaterialKey}`
-                }
-            };
-        }
-
-        // Final Default Fallback Response
         const total = bimContext?.totalElements || 0;
         return {
-            answer: `El modelo cargado cuenta con <b>${total} elementos</b>.<br><br>Puedes pedirme acciones como:<br>• <i>"Quiero ver solo las columnas"</i><br>• <i>"Aísla columnas y pisos"</i><br>• <i>"¿Cuánto concreto de 3000psi hay en el piso 2?"</i>`,
+            answer: `El modelo cargado cuenta con <b>${total} elementos</b>.<br><br>Puedes pedirme:<br>• <i>"Aísla la tubería sanitaria"</i><br>• <i>"Quiero ver solo las columnas del nivel 2"</i><br>• <i>"Dame el área del muro seleccionado"</i>`,
             action: { type: 'none' }
         };
     }
