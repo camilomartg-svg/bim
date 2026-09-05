@@ -13,14 +13,14 @@ async function startServer() {
   // API upload route that proxies to Google Apps Script Web App securely and bypasses CORS
   app.post("/api/upload-to-drive", async (req, res) => {
     try {
-      const { base64, mimeType, name } = req.body;
+      const { base64, mimeType, name, folderId } = req.body;
       if (!base64 || !name) {
         return res.status(400).json({ status: "error", message: "Faltan parámetros requeridos: base64 o name." });
       }
 
       console.log(`[Server Proxy] Forwarding upload to Google Apps Script Gateway: ${name} (${mimeType})`);
 
-      const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbyyLCpq_hpHt5Bwj6OL3LNDORhQDGLJGHXYM0Cacyqv0Y9T3tShij6-QCVLMPBleKOn/exec";
+      const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbx2RAQx_8K4o22xE0Mw-ETc7K_58vIoi6-PgVi64u80inuiw144ks3cgWSdCtXqIgB02g/exec";
 
       // Server-to-server fetch request has no CORS, iframe blocks, or third-party cookie restrictions
       const googleResponse = await fetch(APPS_SCRIPT_URL, {
@@ -29,9 +29,11 @@ async function startServer() {
           "Content-Type": "text/plain;charset=utf-8"
         },
         body: JSON.stringify({
-          base64: base64,
-          mimeType: mimeType || "image/jpeg",
-          name: name
+          action: "uploadFile",
+          content: base64,
+          contentType: mimeType || "image/jpeg",
+          filename: name,
+          folderId: folderId
         })
       });
 

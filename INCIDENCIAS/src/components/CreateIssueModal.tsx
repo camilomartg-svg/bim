@@ -28,6 +28,7 @@ import {
 import { X, Paperclip, Send, AlertCircle, Box, Map as MapIcon, Image as ImageIcon, FileText, Link, Plus, Trash2, Camera, User as UserIcon, MapPin, Package, ShieldCheck, Building2, ClipboardList, ChevronRight, CheckCircle2, Calendar, Zap, ArrowRight, Mic, MicOff, Video } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { cn } from '../lib/utils';
+import { uploadFileToDrive } from '../utils/googleDriveUtils';
 
 interface CreateIssueModalProps {
   onClose: () => void;
@@ -521,15 +522,12 @@ export default function CreateIssueModal({ onClose, onSuccess }: CreateIssueModa
          sourceReportTitle: reportTitle || 'INFORME DE OBRA'
        };
 
-       const docRef = await addDoc(collection(db, 'issues'), {
-         ...issueData,
-         createdAt: new Date().toISOString(),
-         updatedAt: new Date().toISOString()
-       });
+        const issueId = await saveIssue(issueData);
+        if (!issueId) throw new Error('No se pudo guardar la incidencia convertida.');
 
        // Update block with issue link
        updateReportBlock(blockId, { 
-         issueId: docRef.id, 
+          issueId,
          issueStatus: 'ACTIVO' 
        });
 
@@ -549,23 +547,29 @@ export default function CreateIssueModal({ onClose, onSuccess }: CreateIssueModa
       addReportBlock();
     }
   }, [activeMode]);
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (files) {
-      Array.from(files).forEach(file => {
-        const url = URL.createObjectURL(file);
-        const isImage = file.type.startsWith('image/');
-        const isVideo = file.type.startsWith('video/');
-        
-        setAttachments(prev => [...prev, { 
-          id: Math.random().toString(36).substr(2, 9), 
-          name: file.name, 
-          url: url, 
-          type: file.type || 'application/octet-stream',
-          category: isImage ? 'image' : (isVideo ? 'video' : 'file')
-        }]);
-      });
+      try {
+        const uploaded = await Promise.all(Array.from(files).map(async file => {
+          const driveFile = await uploadFileToDrive(file, file.name, file.type || 'application/octet-stream');
+          const isImage = file.type.startsWith('image/');
+          const isVideo = file.type.startsWith('video/');
+          return {
+           id: Math.random().toString(36).substr(2, 9),
+           name: file.name,
+           url: driveFile.webViewLink || driveFile.url,
+           type: file.type || 'application/octet-stream',
+           category: isImage ? 'image' : (isVideo ? 'video' : 'file')
+          } as Partial<Attachment>;
+        }));
+        setAttachments(prev => [...prev, ...uploaded]);
+      } catch (error: any) {
+        console.error('Error uploading issue attachment to Drive:', error);
+        alert(`No fue posible guardar el archivo en Google Drive. La incidencia no se creó para evitar adjuntos locales.\n\n${error?.message || String(error)}`);
+      }
     }
+    e.target.value = '';
   };
 
   const handleCDEFilePick = (file: any) => {

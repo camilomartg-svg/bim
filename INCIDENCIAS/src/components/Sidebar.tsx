@@ -40,7 +40,7 @@ export default function Sidebar({
                     user?.position?.toUpperCase().includes('BIM') ||
                     user?.email?.toLowerCase() === 'imagina3ddesign@gmail.com';
 
-  const isAdmin = user?.role === 'admin' || user?.role === 'super admin' || Boolean((user as any)?.isSuperAdmin);
+  const isAdmin = user?.role === 'admin' || (user?.role as string) === 'super admin' || Boolean((user as any)?.isSuperAdmin);
 
   const fullMenuItems = [
     { id: 'dashboard', icon: LayoutDashboard, label: 'Dashboard' },

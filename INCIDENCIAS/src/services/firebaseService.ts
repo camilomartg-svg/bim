@@ -14,6 +14,7 @@ import {
   serverTimestamp
 } from 'firebase/firestore';
 import { db, auth } from './firebase';
+import { archiveIncidentsRecord } from '../utils/googleDriveUtils';
 import { handleFirestoreError, OperationType } from './firestore-errors';
 import { 
   Issue, 
@@ -305,21 +306,25 @@ export const saveIssue = async (issue: Omit<Issue, 'id'> & { id?: string }) => {
   const { projectId, companyId } = getProjectAndCompany();
   try {
     if (issue.id) {
-      await setDoc(doc(db, path, issue.id), {
+      const savedIssue = {
         ...issue,
         projectId,
         companyId,
         updatedAt: new Date().toISOString()
-      }, { merge: true });
+      };
+      await setDoc(doc(db, path, issue.id), savedIssue, { merge: true });
+      await archiveIncidentsRecord('incidencia', savedIssue, issue.id);
       return issue.id;
     } else {
-      const docRef = await addDoc(collection(db, path), {
+      const savedIssue = {
         ...issue,
         projectId,
         companyId,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString()
-      });
+      };
+      const docRef = await addDoc(collection(db, path), savedIssue);
+      await archiveIncidentsRecord('incidencia', { id: docRef.id, ...savedIssue }, docRef.id);
       return docRef.id;
     }
   } catch (error) {
@@ -665,6 +670,11 @@ export const saveProjectConfig = async (config: any) => {
       projectId,
       companyId
     }, { merge: true });
+    await archiveIncidentsRecord('configuracion', {
+      ...config,
+      projectId,
+      companyId
+    }, configDocId);
     try {
       localStorage.setItem('cached_project_config', JSON.stringify(config));
     } catch (cacheStoreErr) {

@@ -8,7 +8,12 @@ interface DriveUploadResult {
   url: string;
 }
 
-const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbyyLCpq_hpHt5Bwj6OL3LNDORhQDGLJGHXYM0Cacyqv0Y9T3tShij6-QCVLMPBleKOn/exec";
+const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbx2RAQx_8K4o22xE0Mw-ETc7K_58vIoi6-PgVi64u80inuiw144ks3cgWSdCtXqIgB02g/exec";
+
+// Shared project repository. The Apps Script gateway owns the Drive access,
+// so each user can save records without connecting a personal Google account.
+export const INCIDENTS_DRIVE_FOLDER_ID =
+  '1-9SumRefiih81mc_eASsswy_W_U0-qe5';
 
 /**
  * Gets or creates a folder on Google Drive.
@@ -61,9 +66,11 @@ export async function uploadFileToDrive(
           "Content-Type": "application/json"
         },
         body: JSON.stringify({
-          base64: base64,
-          mimeType: fileType,
-          name: fileName
+          action: 'uploadFile',
+          content: base64,
+          contentType: fileType,
+          filename: fileName,
+          folderId: folderId || INCIDENTS_DRIVE_FOLDER_ID
         })
       });
 
@@ -82,9 +89,11 @@ export async function uploadFileToDrive(
           "Content-Type": "text/plain;charset=utf-8"
         },
         body: JSON.stringify({
-          base64: base64,
-          mimeType: fileType,
-          name: fileName
+          action: 'uploadFile',
+          content: base64,
+          contentType: fileType,
+          filename: fileName,
+          folderId: folderId || INCIDENTS_DRIVE_FOLDER_ID
         })
       });
     }
@@ -98,7 +107,8 @@ export async function uploadFileToDrive(
       throw new Error(payload.message || "Error desconocido devuelto por Google Apps Script.");
     }
 
-    const fileId = payload.id;
+    const fileId = payload.id || payload.fileId;
+    if (!fileId) throw new Error(payload.message || 'El gateway no devolvió el ID del archivo guardado.');
     console.log(`[Drive Gateway Upload] Completed successfully! File ID: ${fileId}`);
 
     // Create immediate renderable thumbnail/image link using our secure Node.js proxy endpoint
@@ -116,6 +126,27 @@ export async function uploadFileToDrive(
   }
 }
 
+/** Stores a JSON snapshot of an Incidencias record in the shared Drive folder. */
+export async function archiveIncidentsRecord(
+  kind: 'configuracion' | 'incidencia',
+  record: unknown,
+  id: string
+): Promise<DriveUploadResult> {
+  const safeId = String(id || 'sin-id').replace(/[^a-zA-Z0-9_-]/g, '_');
+  const payload = JSON.stringify({
+    schema: 'nora-incidencias/v1',
+    kind,
+    archivedAt: new Date().toISOString(),
+    record
+  }, null, 2);
+  return uploadFileToDrive(
+    new Blob([payload], { type: 'application/json' }),
+    `${kind}_${safeId}_${Date.now()}.json`,
+    'application/json',
+    INCIDENTS_DRIVE_FOLDER_ID
+  );
+}
+
 /**
  * Extends any Google Drive proxy images with an active Bearer Token to access 100% private Google Drive files server-side.
  */
@@ -130,5 +161,3 @@ export function getAuthenticatedDriveUrl(url: string | undefined, token: string 
   }
   return url;
 }
-
-

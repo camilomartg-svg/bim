@@ -49,7 +49,7 @@ function Dashboard() {
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [summaryFilter, setSummaryFilter] = useState<'author' | 'responsible' | 'reviewer' | 'bim'>('author');
   const [mobileTab, setMobileTab] = useState<'summary' | 'chat'>('summary');
-  const { user, googleAccessToken, connectGoogleDrive } = useAuth();
+  const { user } = useAuth();
   const { theme, toggleTheme } = useTheme();
   const [currentTime, setCurrentTime] = useState(new Date());
   const [isMobilePhone, setIsMobilePhone] = useState<boolean>(() => {
@@ -96,7 +96,7 @@ function Dashboard() {
 
   const userTeam = (user?.team || "").toUpperCase().trim();
   const userPosition = user?.position || "";
-  const isAdmin = user?.role === 'admin' || user?.role === 'super admin' || Boolean((user as any)?.isSuperAdmin);
+  const isAdmin = user?.role === 'admin' || (user?.role as string) === 'super admin' || Boolean((user as any)?.isSuperAdmin);
 
   const siteAllowed: string[] = projectConfig?.siteReportsAllowedTeams || projectConfig?.siteReportsAllowedProfiles || [];
   const qualityAllowed: string[] = projectConfig?.qualityReportsAllowedTeams || projectConfig?.qualityReportsAllowedProfiles || [];
@@ -405,38 +405,14 @@ function Dashboard() {
                )}
              </button>
 
-             {/* Google Drive Status & Connection Button */}
-             <button
-               type="button"
-               onClick={async () => {
-                 if (googleAccessToken) {
-                   alert("Su cuenta de Google Drive ya está vinculada correctamente.");
-                 } else {
-                   const confirmConnect = window.confirm(
-                     "¿Desea conectar y vincular su cuenta de Google Drive ahora para asegurar que los informes ambientales y fotografías queden almacenados en la carpeta pública?"
-                   );
-                   if (confirmConnect) {
-                     try {
-                       await connectGoogleDrive();
-                       alert("¡Google Drive se ha conectado correctamente!");
-                     } catch (err: any) {
-                       alert("No se pudo conectar a Google Drive: " + (err?.message || String(err)));
-                     }
-                   }
-                 }
-               }}
-               className={cn(
-                 "p-1 px-2 rounded-lg border text-[7.5px] font-black uppercase tracking-wider flex items-center gap-1.5 active:scale-95 transition-all outline-none",
-                 googleAccessToken
-                   ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/20"
-                   : "bg-red-500/10 border-red-500/20 text-red-500 hover:bg-red-500/20"
-               )}
-               title={googleAccessToken ? "Google Drive Vinculado" : "Google Drive Desconectado"}
-             >
-               <span className={cn("w-1.5 h-1.5 rounded-full", googleAccessToken ? "bg-emerald-500 animate-pulse" : "bg-red-500")} />
-               <span className="hidden sm:inline">Drive: {googleAccessToken ? "VINCULADO" : "CONECTAR"}</span>
-               <span className="sm:hidden">{googleAccessToken ? "DRIVE OK" : "CONECTAR"}</span>
-             </button>
+              <div
+                className="p-1 px-2 rounded-lg border text-[7.5px] font-black uppercase tracking-wider flex items-center gap-1.5 bg-emerald-500/10 border-emerald-500/20 text-emerald-600 dark:text-emerald-400"
+                title="Guardado automático en Google Drive"
+              >
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                <span className="hidden sm:inline">Drive: automático</span>
+                <span className="sm:hidden">DRIVE OK</span>
+              </div>
 
              <div className="flex items-center gap-2">
                <div className="text-right hidden sm:block">
