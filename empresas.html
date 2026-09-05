@@ -22,7 +22,9 @@
                     colors: {
                         primary: "#171717",
                         "background-light": "#F2F2F2",
+                        "background-dark": "#171717",
                         "text-light": "#111827",
+                        "text-dark": "#F3F4F6",
                     },
                     fontFamily: {
                         sans: ['Inter', 'sans-serif'],
@@ -43,6 +45,12 @@
             font-family: 'Inter', sans-serif;
             background-color: #F4F4F4;
             color: #111;
+        }
+
+        /* Tailwind's dark utilities need a concrete base for the page itself. */
+        html.dark body {
+            background-color: #171717;
+            color: #F3F4F6;
         }
 
         .material-symbols-outlined {
