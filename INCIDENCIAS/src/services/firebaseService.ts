@@ -695,10 +695,20 @@ export const saveProjectConfig = async (config: any) => {
       companyId
     }, { merge: true });
     projectConfigCache.set(configDocId, config);
+    const unitsSnapshot = await getDocs(query(
+      collection(db, 'units'),
+      where('projectId', '==', projectId),
+      where('companyId', '==', companyId)
+    ));
+    const locations = unitsSnapshot.docs.map((unitDoc) => ({
+      id: unitDoc.id,
+      ...unitDoc.data()
+    }));
     await saveIncidentsConfigToSheet({
       ...config,
       projectId,
-      companyId
+      companyId,
+      locations
     }, companyId, projectId);
     try {
       localStorage.setItem(`cached_project_config_${configDocId}`, JSON.stringify(config));

@@ -54,6 +54,23 @@ function getOrCreateIncidentsSpreadsheet_(projectFolder) {
   return spreadsheet;
 }
 
+function writeIncidentsLocations_(spreadsheet, units) {
+  let sheet = spreadsheet.getSheetByName('Ubicaciones');
+  if (!sheet) sheet = spreadsheet.insertSheet('Ubicaciones');
+  sheet.clearContents();
+  sheet.getRange(1, 1, 1, 2).setValues([['ID de unidad', 'Ubicación JSON']]);
+  const validUnits = Array.isArray(units) ? units.filter(function(unit) { return unit && unit.id && unit.name; }) : [];
+  if (validUnits.length > 0) {
+    sheet.getRange(2, 1, validUnits.length, 2).setValues(validUnits.map(function(unit) {
+      return [String(unit.id), JSON.stringify(unit)];
+    }));
+  }
+  sheet.getRange(1, 1, 1, 2).setFontWeight('bold');
+  sheet.setFrozenRows(1);
+  sheet.autoResizeColumns(1, 2);
+  return sheet;
+}
+
 function provisionIncidentsProject_(company, project, config) {
   const root = DriveApp.getFolderById(INCIDENTS_ROOT_FOLDER_ID);
   const companyName = String(company.name || company.id || 'Empresa sin nombre').trim();
@@ -63,18 +80,26 @@ function provisionIncidentsProject_(company, project, config) {
   const spreadsheet = getOrCreateIncidentsSpreadsheet_(projectFolder);
 
   let sheet = spreadsheet.getSheetByName('Configuración');
-  if (!sheet) sheet = spreadsheet.insertSheet('Configuración');
+  if (!sheet) {
+    const sheets = spreadsheet.getSheets();
+    sheet = sheets.length === 1 ? sheets[0] : spreadsheet.insertSheet('Configuración');
+    sheet.setName('Configuración');
+  }
+  const configToStore = Object.assign({}, config || {});
+  const locations = configToStore.locations;
+  delete configToStore.locations;
   sheet.clear();
   sheet.getRange(1, 1, 1, 2).setValues([['Campo', 'Valor']]);
   sheet.getRange(2, 1, 4, 2).setValues([
     ['Actualizado', new Date().toISOString()],
     ['Empresa', companyName],
     ['Proyecto', projectName],
-    ['Configuración JSON', JSON.stringify(config || {})]
+    ['Configuración JSON', JSON.stringify(configToStore)]
   ]);
   sheet.getRange(1, 1, 1, 2).setFontWeight('bold');
   sheet.setFrozenRows(1);
   sheet.autoResizeColumns(1, 2);
+  if (Array.isArray(locations)) writeIncidentsLocations_(spreadsheet, locations);
 
   return {
     companyFolderId: companyFolder.getId(),
@@ -110,12 +135,7 @@ function saveIncidentsLocation_(data) {
   if (!company || !(company.name || company.id) || !project || !(project.name || project.slug || project.id) || !unit.id) return { status: 'error', message: 'Faltan datos para guardar la ubicación.' };
   const spreadsheet = getIncidentsProjectSpreadsheet_(company, project);
   let sheet = spreadsheet.getSheetByName('Ubicaciones');
-  if (!sheet) {
-    sheet = spreadsheet.insertSheet('Ubicaciones');
-    sheet.getRange(1, 1, 1, 2).setValues([['ID de unidad', 'Ubicación JSON']]);
-    sheet.getRange(1, 1, 1, 2).setFontWeight('bold');
-    sheet.setFrozenRows(1);
-  }
+  if (!sheet) sheet = writeIncidentsLocations_(spreadsheet, []);
   const lastRow = sheet.getLastRow();
   const ids = lastRow > 1 ? sheet.getRange(2, 1, lastRow - 1, 1).getValues().map(function(row) { return String(row[0]); }) : [];
   const row = ids.indexOf(String(unit.id));

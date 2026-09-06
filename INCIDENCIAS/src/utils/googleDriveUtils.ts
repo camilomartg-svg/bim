@@ -16,6 +16,29 @@ export type StoredStructuralUnit = {
 };
 
 const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbx2RAQx_8K4o22xE0Mw-ETc7K_58vIoi6-PgVi64u80inuiw144ks3cgWSdCtXqIgB02g/exec";
+const APPS_SCRIPT_TIMEOUT_MS = 15_000;
+
+async function postToAppsScript(payload: unknown): Promise<any> {
+  const controller = new AbortController();
+  const timeout = window.setTimeout(() => controller.abort(), APPS_SCRIPT_TIMEOUT_MS);
+  try {
+    const response = await fetch(APPS_SCRIPT_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify(payload),
+      signal: controller.signal
+    });
+    if (!response.ok) throw new Error(`Google Drive respondió con código ${response.status}.`);
+    return await response.json();
+  } catch (error: any) {
+    if (error?.name === 'AbortError') {
+      throw new Error('Drive tardó más de 15 segundos en responder. La configuración local sí se guardó; verifica el despliegue del Apps Script.');
+    }
+    throw error;
+  } finally {
+    window.clearTimeout(timeout);
+  }
+}
 
 // Shared project repository. The Apps Script gateway owns the Drive access,
 // so each user can save records without connecting a personal Google account.
@@ -27,18 +50,12 @@ export async function saveIncidentsConfigToSheet(
   companyId: string,
   projectId: string
 ): Promise<{ spreadsheetUrl: string }> {
-  const response = await fetch(APPS_SCRIPT_URL, {
-    method: 'POST',
-    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-    body: JSON.stringify({
-      action: 'saveIncidentsProjectConfig',
-      company: { id: companyId, name: companyId },
-      project: { id: projectId, slug: projectId, name: projectId },
-      config
-    })
+  const result = await postToAppsScript({
+    action: 'saveIncidentsProjectConfig',
+    company: { id: companyId, name: companyId },
+    project: { id: projectId, slug: projectId, name: projectId },
+    config
   });
-  if (!response.ok) throw new Error(`Google Drive respondió con código ${response.status}.`);
-  const result = await response.json();
   if (result.status !== 'success') throw new Error(result.message || 'No se pudo guardar la configuración en Drive.');
   return result.storage;
 }
@@ -50,17 +67,11 @@ export async function saveIncidentsLocationsToSheet(
   companyId: string,
   projectId: string
 ): Promise<void> {
-  const response = await fetch(APPS_SCRIPT_URL, {
-    method: 'POST',
-    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-    body: JSON.stringify({
-      action: 'saveIncidentsLocation', operation, unit,
-      company: { id: companyId, name: companyId },
-      project: { id: projectId, slug: projectId, name: projectId }
-    })
+  const result = await postToAppsScript({
+    action: 'saveIncidentsLocation', operation, unit,
+    company: { id: companyId, name: companyId },
+    project: { id: projectId, slug: projectId, name: projectId }
   });
-  if (!response.ok) throw new Error(`Google Drive respondió con código ${response.status}.`);
-  const result = await response.json();
   if (result.status !== 'success') throw new Error(result.message || 'No se pudo guardar la ubicación en Drive.');
 }
 
