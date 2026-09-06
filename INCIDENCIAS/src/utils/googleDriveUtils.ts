@@ -15,14 +15,21 @@ export type StoredStructuralUnit = {
   spaces: Array<{ id: string; name: string; levelName?: string }>;
 };
 
-const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbx2RAQx_8K4o22xE0Mw-ETc7K_58vIoi6-PgVi64u80inuiw144ks3cgWSdCtXqIgB02g/exec";
+// This existing gateway is exclusively for file uploads and must not receive
+// Incidencias configuration traffic.
+const FILES_GATEWAY_URL = "https://script.google.com/macros/s/AKfycbx2RAQx_8K4o22xE0Mw-ETc7K_58vIoi6-PgVi64u80inuiw144ks3cgWSdCtXqIgB02g/exec";
+// A separately deployed Apps Script, dedicated to the per-project settings sheet.
+const INCIDENCES_CONFIG_SCRIPT_URL = import.meta.env.VITE_INCIDENCIAS_CONFIG_SCRIPT_URL?.trim() || '';
 const APPS_SCRIPT_TIMEOUT_MS = 15_000;
 
 async function postToAppsScript(payload: unknown): Promise<any> {
+  if (!INCIDENCES_CONFIG_SCRIPT_URL) {
+    throw new Error('Falta configurar VITE_INCIDENCIAS_CONFIG_SCRIPT_URL con la URL del Apps Script exclusivo de Configuración de Incidencias.');
+  }
   const controller = new AbortController();
   const timeout = window.setTimeout(() => controller.abort(), APPS_SCRIPT_TIMEOUT_MS);
   try {
-    const response = await fetch(APPS_SCRIPT_URL, {
+    const response = await fetch(INCIDENCES_CONFIG_SCRIPT_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'text/plain;charset=utf-8' },
       body: JSON.stringify(payload),
@@ -76,7 +83,8 @@ export async function saveIncidentsLocationsToSheet(
 }
 
 export async function loadIncidentsLocationsFromSheet(companyId: string, projectId: string): Promise<StoredStructuralUnit[]> {
-  const url = new URL(APPS_SCRIPT_URL);
+  if (!INCIDENCES_CONFIG_SCRIPT_URL) return [];
+  const url = new URL(INCIDENCES_CONFIG_SCRIPT_URL);
   url.searchParams.set('action', 'getIncidentsLocations');
   url.searchParams.set('empresa', companyId);
   url.searchParams.set('proyecto', projectId);
@@ -155,7 +163,7 @@ export async function uploadFileToDrive(
     }
 
     if (fallbackToDirect) {
-      res = await fetch(APPS_SCRIPT_URL, {
+      res = await fetch(FILES_GATEWAY_URL, {
         method: "POST",
         headers: {
           "Content-Type": "text/plain;charset=utf-8"
