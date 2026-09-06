@@ -14,7 +14,12 @@ import {
   serverTimestamp
 } from 'firebase/firestore';
 import { db, auth } from './firebase';
-import { archiveIncidentsRecord } from '../utils/googleDriveUtils';
+import {
+  archiveIncidentsRecord,
+  loadIncidentsLocationsFromSheet,
+  saveIncidentsConfigToSheet,
+  saveIncidentsLocationsToSheet
+} from '../utils/googleDriveUtils';
 import { handleFirestoreError, OperationType } from './firestore-errors';
 import { 
   Issue, 
@@ -27,7 +32,7 @@ import {
 } from '../types';
 
 // Helper to get active project and company context
-const getProjectAndCompany = () => {
+export const getProjectAndCompany = () => {
   const urlParams = new URLSearchParams(window.location.search);
   const projectId = urlParams.get('project') || 'default';
   
@@ -42,6 +47,10 @@ const getProjectAndCompany = () => {
   }
   return { projectId, companyId };
 };
+
+const projectConfigCache = new Map<string, any>();
+const platformConfigCache = new Map<string, PlatformConfig | null>();
+const platformTeamCache = new Map<string, Promise<any[] | null>>();
 
 // Reports
 export const subscribeToReports = (callback: (reports: SiteReport[]) => void) => {
@@ -366,14 +375,16 @@ interface PlatformConfig {
 const GOOGLE_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbx2RAQx_8K4o22xE0Mw-ETc7K_58vIoi6-PgVi64u80inuiw144ks3cgWSdCtXqIgB02g/exec';
 
 export const getPlatformConfig = async (companyId: string): Promise<PlatformConfig | null> => {
+  const { projectId } = getProjectAndCompany();
+  const cacheKey = `${companyId}_${projectId}`;
+  if (platformConfigCache.has(cacheKey)) return platformConfigCache.get(cacheKey) ?? null;
   try {
-    const { projectId } = getProjectAndCompany();
     const companiesSet = new Set<string>();
     const teamsSet = new Set<string>();
     
     // 1. Fetch empresas.json
     try {
-      const empresasRes = await fetch(`../empresas.json?t=${Date.now()}`);
+        const empresasRes = await fetch('../empresas.json');
       if (empresasRes.ok) {
         const empresas = await empresasRes.json();
         const company = empresas.find((e: any) => e && !e.deleted && (e.id === companyId || e.id?.toLowerCase() === companyId?.toLowerCase() || e.name?.toLowerCase() === companyId?.toLowerCase()));
@@ -397,7 +408,7 @@ export const getPlatformConfig = async (companyId: string): Promise<PlatformConf
     let hasProjectTeams = false;
     if (projectId && projectId !== 'default' && companyId && companyId !== 'default') {
       try {
-        const configRes = await fetch(`../config-${companyId}.json?t=${Date.now()}`);
+        const configRes = await fetch(`../config-${companyId}.json`);
         if (configRes.ok) {
           const configData = await configRes.json();
           const project = configData.projects?.find((p: any) => p.slug === projectId || p.name === projectId || p.id === projectId);
@@ -417,7 +428,7 @@ export const getPlatformConfig = async (companyId: string): Promise<PlatformConf
       
       // Also query Google Sheets endpoint if needed
       try {
-        const teamsRes = await fetch(`${GOOGLE_SCRIPT_URL}?action=getTeams&empresa=${encodeURIComponent(companyId)}&proyecto=${encodeURIComponent(projectId)}&t=${Date.now()}`);
+        const teamsRes = await fetch(`${GOOGLE_SCRIPT_URL}?action=getTeams&empresa=${encodeURIComponent(companyId)}&proyecto=${encodeURIComponent(projectId)}`);
         if (teamsRes.ok) {
           const remoteTeams = await teamsRes.json();
           if (Array.isArray(remoteTeams) && remoteTeams.length > 0) {
@@ -440,20 +451,27 @@ export const getPlatformConfig = async (companyId: string): Promise<PlatformConf
       ['AMBIENTAL', 'ARQUITECTURA', 'BIM', 'CALIDAD', 'COORDINACIÓN TÉCNICA', 'ESTRUCTURA', 'INSTALACIONES', 'SST'].forEach(t => teamsSet.add(t));
     }
     
-    return {
+    const result = {
       responsibleCompanies: Array.from(companiesSet).sort(),
       teams: Array.from(teamsSet).sort()
     };
+    platformConfigCache.set(cacheKey, result);
+    return result;
   } catch (error) {
     console.warn("Could not load platform configuration:", error);
+    platformConfigCache.set(cacheKey, null);
     return null;
   }
 };
 
 export const getPlatformTeam = async (companyId: string, projectId: string): Promise<any[] | null> => {
+  const cacheKey = `${companyId}_${projectId}`;
+  const cached = platformTeamCache.get(cacheKey);
+  if (cached) return cached;
+  const request = (async () => {
   try {
     // 1. Fetch empresas.json
-    const empresasRes = await fetch(`../empresas.json?t=${Date.now()}`);
+    const empresasRes = await fetch('../empresas.json');
     if (!empresasRes.ok) {
       throw new Error(`Failed to fetch empresas.json: ${empresasRes.statusText}`);
     }
@@ -471,7 +489,7 @@ export const getPlatformTeam = async (companyId: string, projectId: string): Pro
     let projectMembersEmails: string[] = [];
     let equiposDeTarea: any[] = [];
     try {
-      const configRes = await fetch(`../config-${companyId}.json?t=${Date.now()}`);
+        const configRes = await fetch(`../config-${companyId}.json`);
       if (configRes.ok) {
         const configData = await configRes.json();
         const project = configData.projects?.find((p: any) => p.slug === projectId || p.name === projectId);
@@ -528,6 +546,9 @@ export const getPlatformTeam = async (companyId: string, projectId: string): Pro
     console.warn("Error loading platform team: ", error);
     return null;
   }
+  })();
+  platformTeamCache.set(cacheKey, request);
+  return request;
 };
 
 // Team
@@ -615,6 +636,8 @@ export const deleteTeamMember = async (id: string) => {
 export const getProjectConfig = async () => {
   const { projectId, companyId } = getProjectAndCompany();
   const configDocId = `${companyId}_${projectId}`;
+  const cachedInMemory = projectConfigCache.get(configDocId);
+  if (cachedInMemory) return cachedInMemory;
   let fbConfig: any = null;
   
   try {
@@ -625,7 +648,7 @@ export const getProjectConfig = async () => {
   } catch (error) {
     console.warn("Firestore error reading config/project. Attempting local storage fallback:", error);
     try {
-      const cached = localStorage.getItem('cached_project_config');
+      const cached = localStorage.getItem(`cached_project_config_${configDocId}`) || localStorage.getItem('cached_project_config');
       if (cached) {
         fbConfig = JSON.parse(cached);
       }
@@ -652,7 +675,8 @@ export const getProjectConfig = async () => {
 
   if (fbConfig) {
     try {
-      localStorage.setItem('cached_project_config', JSON.stringify(fbConfig));
+      projectConfigCache.set(configDocId, fbConfig);
+      localStorage.setItem(`cached_project_config_${configDocId}`, JSON.stringify(fbConfig));
     } catch (cacheStoreErr) {
       console.warn("Could not save merged project config to local cache", cacheStoreErr);
     }
@@ -670,13 +694,14 @@ export const saveProjectConfig = async (config: any) => {
       projectId,
       companyId
     }, { merge: true });
-    await archiveIncidentsRecord('configuracion', {
+    projectConfigCache.set(configDocId, config);
+    await saveIncidentsConfigToSheet({
       ...config,
       projectId,
       companyId
-    }, configDocId);
+    }, companyId, projectId);
     try {
-      localStorage.setItem('cached_project_config', JSON.stringify(config));
+      localStorage.setItem(`cached_project_config_${configDocId}`, JSON.stringify(config));
     } catch (cacheStoreErr) {
       console.warn("Could not write project config to local cache on save", cacheStoreErr);
     }
@@ -688,6 +713,14 @@ export const saveProjectConfig = async (config: any) => {
 // Structural Units
 export const subscribeToUnits = (callback: (units: StructuralUnit[]) => void) => {
   const { projectId, companyId } = getProjectAndCompany();
+  let remoteUnits: StructuralUnit[] = [];
+  let lastFirestoreUnits: StructuralUnit[] | null = null;
+  loadIncidentsLocationsFromSheet(companyId, projectId)
+    .then((units) => {
+      remoteUnits = units as StructuralUnit[];
+      if (!lastFirestoreUnits || lastFirestoreUnits.length === 0) callback(remoteUnits);
+    })
+    .catch((error) => console.warn('No se pudieron cargar las ubicaciones desde Drive:', error));
   const q = query(
     collection(db, 'units'),
     where('projectId', '==', projectId),
@@ -695,7 +728,8 @@ export const subscribeToUnits = (callback: (units: StructuralUnit[]) => void) =>
   );
   return onSnapshot(q, (snapshot) => {
     const units = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as StructuralUnit));
-    callback(units);
+    lastFirestoreUnits = units;
+    callback(units.length > 0 ? units : remoteUnits);
   }, (error) => {
     handleFirestoreError(error, OperationType.GET, 'units');
   });
@@ -705,6 +739,7 @@ export const saveUnit = async (unit: Omit<StructuralUnit, 'id'> & { id?: string 
   const path = 'units';
   const { projectId, companyId } = getProjectAndCompany();
   try {
+    let savedUnit: StructuralUnit;
     if (unit.id) {
       const { id, ...rest } = unit;
       await setDoc(doc(db, path, id), {
@@ -712,21 +747,26 @@ export const saveUnit = async (unit: Omit<StructuralUnit, 'id'> & { id?: string 
         projectId,
         companyId
       }, { merge: true });
+      savedUnit = unit as StructuralUnit;
     } else {
-      await addDoc(collection(db, path), {
+      const docRef = await addDoc(collection(db, path), {
         ...unit,
         projectId,
         companyId
       });
+      savedUnit = { ...unit, id: docRef.id } as StructuralUnit;
     }
+    await saveIncidentsLocationsToSheet('upsert', savedUnit, companyId, projectId);
   } catch (error) {
     handleFirestoreError(error, OperationType.WRITE, path);
   }
 };
 
 export const deleteUnit = async (id: string) => {
+  const { projectId, companyId } = getProjectAndCompany();
   try {
     await deleteDoc(doc(db, 'units', id));
+    await saveIncidentsLocationsToSheet('delete', { id }, companyId, projectId);
   } catch (error) {
     handleFirestoreError(error, OperationType.DELETE, `units/${id}`);
   }

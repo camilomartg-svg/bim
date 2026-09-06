@@ -1,9 +1,9 @@
 import React, { useEffect, useState } from 'react';
-import { collection, query, orderBy, onSnapshot, updateDoc, doc, addDoc, getDocs, getDoc, setDoc } from 'firebase/firestore';
+import { collection, query, where, updateDoc, doc, addDoc, getDocs, getDoc, setDoc } from 'firebase/firestore';
 import { db } from '../services/firebase';
 import { Issue, DEGREE_OF_ACTION, Comment, Attachment, IMPACT_OPTIONS, TeamMember } from '../types';
 import { useAuth } from '../context/AuthContext';
-import { getProjectConfig, subscribeToTeam, deleteIssue } from '../services/firebaseService';
+import { getProjectAndCompany, getProjectConfig, subscribeToIssues, subscribeToTeam, deleteIssue } from '../services/firebaseService';
 import { 
   Search, Filter, ClipboardList, Clock, User, ArrowRight, AlertCircle, 
   ChevronDown, ChevronUp, MapPin, Tag, ShieldCheck, Zap, Paperclip, Layers, Box,
@@ -100,9 +100,7 @@ export default function DashboardSummary({ onSelectIssue, onOpenReport, selected
   };
 
   useEffect(() => {
-    const q = query(collection(db, 'issues'), orderBy('updatedAt', 'desc'));
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const issuesData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Issue));
+    const unsubscribe = subscribeToIssues((issuesData) => {
       setIssues(issuesData);
       setLoading(false);
     });
@@ -133,7 +131,12 @@ export default function DashboardSummary({ onSelectIssue, onOpenReport, selected
         const currentMonth = now.getMonth();
 
         // Fetch reports to find active Aprovechamiento report
-        const reportsSnap = await getDocs(collection(db, 'reports'));
+        const { projectId, companyId } = getProjectAndCompany();
+        const reportsSnap = await getDocs(query(
+          collection(db, 'reports'),
+          where('projectId', '==', projectId),
+          where('companyId', '==', companyId)
+        ));
         const reportsData = reportsSnap.docs.map(doc => ({ id: doc.id, ...doc.data() } as any));
         
         const activeReport = reportsData.find(r => {
@@ -1365,7 +1368,12 @@ function StatusManager({ issue, isBimPanel }: { issue: Issue, isBimPanel?: boole
   const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
 
   useEffect(() => {
-    const q = query(collection(db, 'team'));
+    const { projectId, companyId } = getProjectAndCompany();
+    const q = query(
+      collection(db, 'team'),
+      where('projectId', '==', projectId),
+      where('companyId', '==', companyId)
+    );
     getDocs(q).then(snapshot => {
       setTeamMembers(snapshot.docs.map(d => ({ id: d.id, ...d.data() } as TeamMember)));
     });
@@ -1791,5 +1799,3 @@ function StatusManager({ issue, isBimPanel }: { issue: Issue, isBimPanel?: boole
     </div>
   );
 }
-
-

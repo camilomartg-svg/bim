@@ -3,6 +3,8 @@
 // =========================================================================
 
 const DRIVE_ROOT_FOLDER_ID = "1aWUNnLgjWBkA6wdCM99XMY9SU7eSDP-H";
+// Repositorio exclusivo del módulo de incidencias.
+const INCIDENTS_ROOT_FOLDER_ID = "1-9SumRefiih81mc_eASsswy_W_U0-qe5";
 const SPREADSHEET_ID = "1OczWRlaefMY5RQon8K3va91H8TInJlp9RuBJeTPLiiA";
 
 const COMPANY_HEADERS = ['fecha', 'id', 'name', 'legalName', 'type', 'website', 'email', 'phone', 'country', 'state', 'city', 'zip', 'address', 'sectors', 'specialties', 'logoBase64', 'code', 'driveFolderId'];
@@ -34,6 +36,108 @@ function getOrCreateFolder(parentFolder, name) {
     return folders.next();
   }
   return parentFolder.createFolder(name);
+}
+
+function getOrCreateIncidentsSpreadsheet_(projectFolder) {
+  const name = 'Configuración de Incidencias';
+  const files = projectFolder.getFilesByName(name);
+  if (files.hasNext()) return SpreadsheetApp.open(files.next());
+
+  const spreadsheet = SpreadsheetApp.create(name);
+  const file = DriveApp.getFileById(spreadsheet.getId());
+  projectFolder.addFile(file);
+  const parents = file.getParents();
+  while (parents.hasNext()) {
+    const parent = parents.next();
+    if (parent.getId() !== projectFolder.getId()) parent.removeFile(file);
+  }
+  return spreadsheet;
+}
+
+function provisionIncidentsProject_(company, project, config) {
+  const root = DriveApp.getFolderById(INCIDENTS_ROOT_FOLDER_ID);
+  const companyName = String(company.name || company.id || 'Empresa sin nombre').trim();
+  const projectName = String(project.name || project.slug || project.id || 'Proyecto sin nombre').trim();
+  const companyFolder = getOrCreateFolder(root, companyName);
+  const projectFolder = getOrCreateFolder(companyFolder, projectName);
+  const spreadsheet = getOrCreateIncidentsSpreadsheet_(projectFolder);
+
+  let sheet = spreadsheet.getSheetByName('Configuración');
+  if (!sheet) sheet = spreadsheet.insertSheet('Configuración');
+  sheet.clear();
+  sheet.getRange(1, 1, 1, 2).setValues([['Campo', 'Valor']]);
+  sheet.getRange(2, 1, 4, 2).setValues([
+    ['Actualizado', new Date().toISOString()],
+    ['Empresa', companyName],
+    ['Proyecto', projectName],
+    ['Configuración JSON', JSON.stringify(config || {})]
+  ]);
+  sheet.getRange(1, 1, 1, 2).setFontWeight('bold');
+  sheet.setFrozenRows(1);
+  sheet.autoResizeColumns(1, 2);
+
+  return {
+    companyFolderId: companyFolder.getId(),
+    projectFolderId: projectFolder.getId(),
+    spreadsheetId: spreadsheet.getId(),
+    spreadsheetUrl: spreadsheet.getUrl()
+  };
+}
+
+function getIncidentsProjectSpreadsheet_(company, project) {
+  const root = DriveApp.getFolderById(INCIDENTS_ROOT_FOLDER_ID);
+  const companyName = String(company.name || company.id || 'Empresa sin nombre').trim();
+  const projectName = String(project.name || project.slug || project.id || 'Proyecto sin nombre').trim();
+  return getOrCreateIncidentsSpreadsheet_(getOrCreateFolder(getOrCreateFolder(root, companyName), projectName));
+}
+
+function getIncidentsLocations_(data) {
+  const company = data.company || { id: data.empresa, name: data.empresa };
+  const project = data.project || { id: data.proyecto, slug: data.proyecto, name: data.proyecto };
+  if (!company || !(company.name || company.id) || !project || !(project.name || project.slug || project.id)) return { status: 'error', message: 'Faltan los datos de empresa o proyecto para cargar las ubicaciones.' };
+  const sheet = getIncidentsProjectSpreadsheet_(company, project).getSheetByName('Ubicaciones');
+  if (!sheet || sheet.getLastRow() <= 1) return { status: 'success', units: [] };
+  const units = sheet.getRange(2, 1, sheet.getLastRow() - 1, 2).getValues().map(function(row) {
+    try { return JSON.parse(String(row[1] || '')); } catch (_) { return null; }
+  }).filter(function(unit) { return unit && unit.id && unit.name; });
+  return { status: 'success', units: units };
+}
+
+function saveIncidentsLocation_(data) {
+  const company = data.company || { id: data.companyId, name: data.companyName };
+  const project = data.project || { id: data.projectId, slug: data.projectId, name: data.projectName };
+  const unit = data.unit || {};
+  if (!company || !(company.name || company.id) || !project || !(project.name || project.slug || project.id) || !unit.id) return { status: 'error', message: 'Faltan datos para guardar la ubicación.' };
+  const spreadsheet = getIncidentsProjectSpreadsheet_(company, project);
+  let sheet = spreadsheet.getSheetByName('Ubicaciones');
+  if (!sheet) {
+    sheet = spreadsheet.insertSheet('Ubicaciones');
+    sheet.getRange(1, 1, 1, 2).setValues([['ID de unidad', 'Ubicación JSON']]);
+    sheet.getRange(1, 1, 1, 2).setFontWeight('bold');
+    sheet.setFrozenRows(1);
+  }
+  const lastRow = sheet.getLastRow();
+  const ids = lastRow > 1 ? sheet.getRange(2, 1, lastRow - 1, 1).getValues().map(function(row) { return String(row[0]); }) : [];
+  const row = ids.indexOf(String(unit.id));
+  if (String(data.operation || 'upsert') === 'delete') {
+    if (row >= 0) sheet.deleteRow(row + 2);
+  } else {
+    const value = [[String(unit.id), JSON.stringify(unit)]];
+    if (row >= 0) sheet.getRange(row + 2, 1, 1, 2).setValues(value);
+    else sheet.getRange(lastRow + 1, 1, 1, 2).setValues(value);
+  }
+  sheet.autoResizeColumns(1, 2);
+  return { status: 'success', spreadsheetUrl: spreadsheet.getUrl() };
+}
+
+function saveIncidentsProjectConfig_(data) {
+  const company = data.company || { id: data.companyId, name: data.companyName };
+  const project = data.project || { id: data.projectId, slug: data.projectId, name: data.projectName };
+  if (!company || !(company.name || company.id) || !project || !(project.name || project.slug || project.id)) {
+    return { status: 'error', message: 'Faltan los datos de empresa o proyecto para guardar la configuración.' };
+  }
+  const storage = provisionIncidentsProject_(company, project, data.config || {});
+  return { status: 'success', storage: storage };
 }
 
 function serializeDeliveryTeams_(value) {
@@ -142,6 +246,12 @@ function doPost(e) {
     }
     if (action === 'uploadFile') {
       return output_(uploadFile_(e, data), callback);
+    }
+    if (action === 'saveIncidentsProjectConfig') {
+      return output_(saveIncidentsProjectConfig_(data || {}), callback);
+    }
+    if (action === 'saveIncidentsLocation') {
+      return output_(saveIncidentsLocation_(data || {}), callback);
     }
     if (action === 'initResumableUpload') {
       return output_(initResumableUpload_(e, data), callback);
@@ -557,6 +667,15 @@ function doPost(e) {
           if (projFolderId) {
             responseFolders[comp.id].projects[proj.slug] = projFolderId;
           }
+          // Incidencias has its own Drive tree and a Google Sheet per project.
+          try {
+            const incidentsStorage = provisionIncidentsProject_(comp, proj, {});
+            responseFolders[comp.id].incidents = responseFolders[comp.id].incidents || {};
+            responseFolders[comp.id].incidents[proj.slug] = incidentsStorage;
+          } catch (incidentsError) {
+            responseFolders[comp.id].incidents = responseFolders[comp.id].incidents || {};
+            responseFolders[comp.id].incidents[proj.slug] = { error: incidentsError.toString() };
+          }
         });
       });
       
@@ -712,6 +831,9 @@ function doGet(e) {
     }
     if (action === 'listStatus') {
       return output_(listStatus_(e, null), callback);
+    }
+    if (action === 'getIncidentsLocations') {
+      return output_(getIncidentsLocations_({ empresa: e.parameter.empresa, proyecto: e.parameter.proyecto }), callback);
     }
 
     let doc;

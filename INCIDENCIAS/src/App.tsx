@@ -22,6 +22,7 @@ import DashboardChat from './components/DashboardChat';
 
 import { db } from './services/firebase';
 import { doc, getDoc, onSnapshot } from 'firebase/firestore';
+import { getProjectAndCompany } from './services/firebaseService';
 
 // Component for displaying standard restricted access view to matching style
 function RestrictedView({ title, onBack }: { title: string; onBack: () => void }) {
@@ -86,7 +87,8 @@ function Dashboard() {
                     user?.email?.toLowerCase() === 'imagina3ddesign@gmail.com';
 
   useEffect(() => {
-    const unsub = onSnapshot(doc(db, 'config', 'project'), (snap) => {
+    const { companyId, projectId } = getProjectAndCompany();
+    const unsub = onSnapshot(doc(db, 'config', `${companyId}_${projectId}`), (snap) => {
       if (snap.exists()) {
         setProjectConfig(snap.data());
       }

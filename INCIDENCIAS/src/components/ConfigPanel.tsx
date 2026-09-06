@@ -571,6 +571,7 @@ export default function ConfigPanel() {
   });
 
   const [showSaved, setShowSaved] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
@@ -781,6 +782,9 @@ export default function ConfigPanel() {
   }, [selectedConfigKey, configMode, isLoading, globalTeam]);
 
   const handleSave = async () => {
+    if (isSaving) return;
+    setIsSaving(true);
+    try {
     const currentVisibility = config.reduce((acc, f) => ({ ...acc, [f.id]: f.visible }), {});
     const impactData = impacts.map(i => i.name).filter(i => i.trim() !== '');
     const typeData = types.map(t => t.name).filter(t => t.trim() !== '');
@@ -862,7 +866,7 @@ export default function ConfigPanel() {
     // Get existing config to preserve roleOverrides if any exist in DB
     const fbConfig = await getProjectConfig();
     
-    await saveProjectConfig({
+    const configToSave = {
       ...fbConfig,
       fieldVisibility: newGlobalFields.reduce((acc, f) => ({ ...acc, [f.id]: f.visible }), {}),
       impactOptions: newGlobalImpacts,
@@ -883,7 +887,8 @@ export default function ConfigPanel() {
       siteReportsAllowedProfiles: siteReportsAllowedTeams,
       qualityReportsAllowedProfiles: qualityReportsAllowedTeams,
       environmentalReportsAllowedProfiles: environmentalReportsAllowedTeams
-    });
+    };
+    await saveProjectConfig(configToSave);
 
     // Note: team members saved above in the GLOBAL check or if needed individually
     // If we are in an override, we only saved to projectConfig.typeOverrides.team
@@ -891,6 +896,12 @@ export default function ConfigPanel() {
     setShowSaved(true);
     setTimeout(() => setShowSaved(false), 2000);
     window.dispatchEvent(new Event('storage_settings_updated'));
+    } catch (error: any) {
+      console.error('Error saving Incidencias configuration:', error);
+      alert(`No se pudo guardar la configuración en Google Drive.\n\n${error?.message || String(error)}`);
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const handleBulkGenerate = async () => {
@@ -1085,10 +1096,11 @@ const addItem = (type: 'impact' | 'type' | 'team' | 'activity' | 'danger' | 'com
             
             <button 
               onClick={handleSave}
-              className="bg-slate-900 dark:bg-white text-white dark:text-slate-900 px-8 py-3.5 rounded-2xl font-black text-[10px] uppercase tracking-[0.2em] shadow-xl shadow-slate-900/10 dark:shadow-white/5 flex items-center justify-center gap-3 hover:bg-slate-800 dark:hover:bg-slate-100 transition-all active:scale-95"
+              disabled={isSaving}
+              className="bg-slate-900 disabled:opacity-60 dark:bg-white text-white dark:text-slate-900 px-8 py-3.5 rounded-2xl font-black text-[10px] uppercase tracking-[0.2em] shadow-xl shadow-slate-900/10 dark:shadow-white/5 flex items-center justify-center gap-3 hover:bg-slate-800 dark:hover:bg-slate-100 transition-all active:scale-95"
             >
               <Save className="w-4 h-4" />
-              Guardar Configuración
+              {isSaving ? 'Guardando en Drive…' : 'Guardar Configuración'}
             </button>
           </div>
         </header>

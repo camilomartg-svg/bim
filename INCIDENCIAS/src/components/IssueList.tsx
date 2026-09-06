@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { collection, query, orderBy, onSnapshot, addDoc, serverTimestamp, updateDoc, doc } from 'firebase/firestore';
+import { addDoc, serverTimestamp, updateDoc, doc } from 'firebase/firestore';
 import { db } from '../services/firebase';
 import { Issue, IssueStatus, DEGREE_OF_ACTION } from '../types';
 import { useAuth } from '../context/AuthContext';
@@ -7,6 +7,7 @@ import { Plus, Search, Filter, MoreVertical, Paperclip, MessageSquare, Clock, Al
 import { motion, AnimatePresence } from 'motion/react';
 import { cn } from '../lib/utils';
 import { format } from 'date-fns';
+import { subscribeToIssues } from '../services/firebaseService';
 
 interface IssueListProps {
   onSelectIssue: (issue: Issue) => void;
@@ -22,14 +23,8 @@ export default function IssueList({ onSelectIssue, view = 'active', onOpenReport
   const { user } = useAuth();
 
   useEffect(() => {
-    const q = query(collection(db, 'issues'), orderBy('updatedAt', 'desc'));
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const issuesData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Issue));
+    const unsubscribe = subscribeToIssues((issuesData) => {
       setIssues(issuesData);
-      setLoading(false);
-    }, (error) => {
-      console.error("Snapshot error:", error);
-      // We don't want to crash the UI, but let's log it
       setLoading(false);
     });
     return () => unsubscribe();
