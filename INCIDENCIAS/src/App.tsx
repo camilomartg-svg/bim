@@ -412,7 +412,7 @@ function Dashboard() {
                 title="Guardado automático en Google Drive"
               >
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                <span className="hidden sm:inline">Drive: automático</span>
+                <span className="hidden sm:inline">En linea</span>
                 <span className="sm:hidden">DRIVE OK</span>
               </div>
 
