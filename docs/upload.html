@@ -167,9 +167,10 @@
         </div>
       </div>
 
-      <!-- Convertidor FRAG Access Card -->
-      <div class="w-full glass rounded-2xl p-5 shadow-lg transition-all duration-300 border border-amber-200/60 dark:border-amber-800/30 bg-gradient-to-r from-amber-50/50 to-transparent dark:from-amber-950/20">
-        <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+      <!-- Convertidor IFC a FRAG — Panel Colapsable con Iframe Incrustado -->
+      <div id="frag-converter-panel" class="w-full glass rounded-2xl shadow-lg transition-all duration-300 border border-amber-200/60 dark:border-amber-800/30 bg-gradient-to-r from-amber-50/50 to-transparent dark:from-amber-950/20 overflow-hidden">
+        <!-- Persistent Header -->
+        <div class="p-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
           <div class="flex items-start gap-4">
             <div class="flex-shrink-0 w-12 h-12 rounded-xl bg-amber-500/10 dark:bg-amber-500/20 flex items-center justify-center">
               <span class="material-symbols-outlined text-2xl text-amber-600 dark:text-amber-400">change_circle</span>
@@ -177,8 +178,8 @@
             <div>
               <h3 class="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
                 Convertidor IFC a FRAG
-                <span class="inline-flex items-center px-2 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300">
-                  Nuevo
+                <span id="frag-converter-badge" class="inline-flex items-center px-2 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider bg-slate-200/70 dark:bg-slate-700/60 text-slate-600 dark:text-slate-300">
+                  Esperando IFC
                 </span>
               </h3>
               <p class="text-xs text-slate-500 dark:text-slate-400 mt-1">
@@ -187,18 +188,33 @@
             </div>
           </div>
           <div class="flex items-center gap-2 w-full sm:w-auto">
-            <a href="/CONVERTIR_FRAG/index.html" target="_blank" rel="noopener noreferrer" class="flex-1 sm:flex-none inline-flex items-center justify-center gap-2 rounded-lg bg-amber-600 hover:bg-amber-700 text-white font-bold text-[11px] uppercase tracking-widest px-5 py-3 shadow-md transition-all">
+            <button id="frag-toggle-btn" onclick="window.toggleFragConverterPanel()" aria-label="Mostrar / ocultar convertidor incrustado" class="flex-1 sm:flex-none inline-flex items-center justify-center gap-2 rounded-lg border border-amber-600/30 hover:bg-amber-100 dark:hover:bg-amber-950/40 text-amber-700 dark:text-amber-300 font-bold text-[11px] uppercase tracking-widest px-4 py-3 transition-all">
+              <span id="frag-toggle-icon" class="material-symbols-outlined text-[18px]">visibility</span>
+              <span id="frag-toggle-label">Mostrar Panel</span>
+            </button>
+            <a href="/CONVERTIR_FRAG/index.html" target="_blank" rel="noopener noreferrer" aria-label="Abrir en nueva pestaña" title="Abrir en pestaña nueva" class="hidden sm:inline-flex items-center justify-center gap-1.5 rounded-lg border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 px-3 py-3 transition-all">
               <span class="material-symbols-outlined text-[18px]">open_in_new</span>
-              Abrir Convertidor
             </a>
           </div>
         </div>
-      </div>
 
-      <!-- IFC Converter background engine (Clean offscreen execution) -->
-      <div id="ifc-converter-section" class="fixed -left-[9999px] -top-[9999px] w-[800px] h-[600px] opacity-0 pointer-events-none z-[-9999]">
-        <iframe id="integrated-conv-iframe" src="/CONVERTIR_FRAG/index.html" class="w-full h-full border-0"></iframe>
+        <!-- Collapsible Iframe Section -->
+        <div id="frag-converter-body" class="hidden border-t border-amber-200/50 dark:border-amber-900/40 bg-white/40 dark:bg-slate-900/20 transition-all duration-300">
+          <div id="frag-converter-body-inner" class="p-3 sm:p-4">
+            <!-- Iframe was here previously; we now mount it dynamically to preserve load state -->
+            <div id="integrated-conv-wrap" class="w-full rounded-xl overflow-hidden bg-white border border-slate-200 dark:bg-slate-950 dark:border-slate-800" style="min-height: 720px;">
+              <!-- Loading placeholder -->
+              <div id="integrated-conv-placeholder" class="flex flex-col items-center justify-center h-[720px] text-center p-6 hidden">
+                <div class="w-14 h-14 border-4 border-amber-200 dark:border-amber-800 border-t-amber-500 rounded-full animate-spin mb-4"></div>
+                <p class="text-sm font-semibold text-slate-700 dark:text-slate-200 mb-1">Cargando convertidor…</p>
+                <p class="text-xs text-slate-500 dark:text-slate-400">Por favor espera un momento.</p>
+              </div>
+              <iframe id="integrated-conv-iframe" src="/CONVERTIR_FRAG/index.html" class="w-full border-0" style="height: 720px; display: block;"></iframe>
+            </div>
+          </div>
+        </div>
       </div>
+      <!-- End of Converter Panel -->
 
       <!-- ============================================================ -->
       <!-- UNIFIED PROJECT FILES & WORKFLOW CARD                        -->
@@ -469,6 +485,64 @@
             '*'
           );
         });
+      }
+      // =====================================================================
+      // FRAG Converter — Embedded Panel Controller (Collapsible / Auto-expand)
+      // =====================================================================
+      let _fragPanelOpen = false;
+      const fragPanelBody = document.getElementById('frag-converter-body');
+      const fragToggleLabel = document.getElementById('frag-toggle-label');
+      const fragToggleIcon = document.getElementById('frag-toggle-icon');
+      const fragConverterBadge = document.getElementById('frag-converter-badge');
+
+      window.toggleFragConverterPanel = function(forceState) {
+        const willOpen = typeof forceState === 'boolean'
+          ? forceState
+          : !_fragPanelOpen;
+        _fragPanelOpen = willOpen;
+        if (fragPanelBody) {
+          if (willOpen) fragPanelBody.classList.remove('hidden');
+          else fragPanelBody.classList.add('hidden');
+        }
+        if (fragToggleLabel) {
+          fragToggleLabel.textContent = willOpen ? 'Ocultar Panel' : 'Mostrar Panel';
+        }
+        if (fragToggleIcon) {
+          fragToggleIcon.textContent = willOpen ? 'visibility_off' : 'visibility';
+        }
+      };
+
+      function syncFragConverterPanelState() {
+        const ifcItems = (selectedFiles || []).filter(
+          f => getFileExtension(f.file?.name || '') === 'ifc'
+        );
+        const ifcCount = ifcItems.length;
+        const converting = ifcItems.some(f => f.isConverting);
+        const converted = ifcItems.filter(f => f.converted).length;
+
+        if (fragConverterBadge) {
+          if (ifcCount === 0) {
+            fragConverterBadge.textContent = 'Esperando IFC';
+            fragConverterBadge.className = 'inline-flex items-center px-2 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider bg-slate-200/70 dark:bg-slate-700/60 text-slate-600 dark:text-slate-300';
+          } else if (converting) {
+            fragConverterBadge.textContent = `Convirtiendo (${ifcCount})`;
+            fragConverterBadge.className = 'inline-flex items-center px-2 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider bg-amber-100 dark:bg-amber-900/60 text-amber-800 dark:text-amber-300 animate-pulse';
+          } else if (converted === ifcCount && ifcCount > 0) {
+            fragConverterBadge.textContent = `${converted}/${ifcCount} Listo`;
+            fragConverterBadge.className = 'inline-flex items-center px-2 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider bg-emerald-100 dark:bg-emerald-900/60 text-emerald-700 dark:text-emerald-300';
+          } else {
+            const pending = ifcCount - converted;
+            fragConverterBadge.textContent = `${pending} IFC${pending > 1 ? 's' : ''} pendiente${pending > 1 ? 's' : ''}`;
+            fragConverterBadge.className = 'inline-flex items-center px-2 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider bg-indigo-100 dark:bg-indigo-900/60 text-indigo-700 dark:text-indigo-300';
+          }
+        }
+
+        // Auto-expand when there is at least one IFC in the queue
+        if (ifcCount > 0 && !_fragPanelOpen) {
+          window.toggleFragConverterPanel(true);
+        }
+        // Auto-collapse only if user hasn't explicitly toggled and queue is empty
+        // (We keep it open so the user can still interact if they want)
       }
       // =====================================================================
       const DEFAULT_PORTAL_CONFIG = {
@@ -1229,6 +1303,8 @@
 
       function renderFilesList() {
 
+        // Sync the embedded converter panel with the current queue state
+        if (typeof syncFragConverterPanelState === 'function') syncFragConverterPanelState();
 
         if (selectedFiles.length === 0) {
           filesListContainer.classList.add('hidden');
@@ -1344,6 +1420,11 @@
       window.manualConvertIfc = async (id) => {
         const fileObj = selectedFiles.find(f => f.id === id);
         if (!fileObj || fileObj.isConverting || fileObj.converted) return;
+
+        // Ensure the embedded converter panel is visible so the user can watch the process
+        if (typeof window.toggleFragConverterPanel === 'function') {
+          window.toggleFragConverterPanel(true);
+        }
 
         fileObj.isConverting = true;
         fileObj.status = 'Convirtiendo a FRAG...';
