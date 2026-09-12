@@ -28,8 +28,134 @@
           return btoa(unescape(encodeURIComponent(str)));
         }
 
+        function findIfcFileInput() {
+          const inputs = Array.from(document.querySelectorAll('input[type="file"]'));
+          return inputs.find(inp => inp && (inp.accept || '').toLowerCase().includes('.ifc')) || inputs[0] || null;
+        }
+
+        function findConvertReadyCheckbox() {
+          // The "Listo para convertir tu archivo IFC." checkbox triggers the actual conversion
+          const boxes = Array.from(document.querySelectorAll('input[type="checkbox"]'));
+          return boxes.find(cb => {
+            const text = (cb.closest('label')?.textContent || cb.parentElement?.textContent || '').trim().toLowerCase();
+            return text.includes('listo para convertir');
+          }) || null;
+        }
+
+        function fireReactChangeEvent(inputEl, filesList) {
+          try {
+            const dt = new DataTransfer();
+            for (const f of filesList) dt.items.add(f);
+            inputEl.files = dt.files;
+          } catch (_) {
+            inputEl.files = filesList;
+          }
+          // React 17/18 synthetic event injection
+          const nativeSetter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value');
+          const ev = new Event('change', { bubbles: true, cancelable: true });
+          if (nativeSetter && nativeSetter.set) {
+            try { nativeSetter.set.call(inputEl, (filesList[0]?.name) || ''); } catch (_) {}
+          }
+          inputEl.dispatchEvent(ev);
+          const ie = new Event('input', { bubbles: true, cancelable: true });
+          inputEl.dispatchEvent(ie);
+          const cl = new Event('click', { bubbles: true, cancelable: true });
+          try { inputEl.dispatchEvent(cl); } catch (_) {}
+        }
+
         let lastFragBlob = null;
         let lastJsonBlob = null;
+
+        // User-driven conversion tracking (for LOAD_IFC_FILE -> UI convert flow)
+        let userConversionInProgress = false;
+        let lastLoadedBaseName = null;
+        let userConvertChecker = null;
+
+        function clearUserConvertChecker() {
+          if (userConvertChecker) {
+            clearInterval(userConvertChecker);
+            userConvertChecker = null;
+          }
+        }
+
+        async function finalizeUserConversion(baseNameOverride) {
+          if (!lastFragBlob) return; // wait for geom
+          clearUserConvertChecker();
+
+          const baseName = baseNameOverride || lastLoadedBaseName || 'model';
+          const fragBase64 = await blobToBase64(lastFragBlob);
+          let jsonBase64 = '';
+          if (lastJsonBlob) {
+            const jsonText = await lastJsonBlob.text();
+            jsonBase64 = stringToBase64(jsonText);
+          } else {
+            jsonBase64 = stringToBase64('{}');
+          }
+
+          window.parent.postMessage({
+            type: 'CONVERT_RESULT_USER',
+            fragBase64: fragBase64,
+            jsonBase64: jsonBase64,
+            baseName: baseName,
+            filename: (lastLoadedBaseName ? lastLoadedBaseName + '.ifc' : 'model.ifc')
+          }, '*');
+
+          userConversionInProgress = false;
+        }
+
+        function startUserConvertPolling(baseNameOverride) {
+          clearUserConvertChecker();
+          let checkAttempts = 0;
+          userConversionInProgress = true;
+          // Reset blob capture so we know these blobs are from the user-initiated conversion
+          // (don't actually reset; user may have just clicked the button and blobs come next)
+          userConvertChecker = setInterval(() => {
+            checkAttempts++;
+            // Detect errors
+            const bodyText = document.body.innerText || '';
+            if (bodyText.includes('La conversión falló') || bodyText.includes('Error al leer')) {
+              clearUserConvertChecker();
+              userConversionInProgress = false;
+              window.parent.postMessage({
+                type: 'CONVERT_ERROR_USER',
+                baseName: baseNameOverride || lastLoadedBaseName,
+                error: 'Error en el procesamiento del modelo IFC'
+              }, '*');
+              return;
+            }
+
+            const buttons = Array.from(document.querySelectorAll('button'));
+            const hasFragBtn = buttons.some(b => (b.textContent || '').includes('.FRAG') || (b.textContent || '').includes('GEOMETRÍA'));
+            const hasJsonBtn = buttons.some(b => (b.textContent || '').includes('.JSON') || (b.textContent || '').includes('PROPIEDADES'));
+
+            if ((hasFragBtn || lastFragBlob) && (hasJsonBtn || lastJsonBlob || bodyText.includes('completada'))) {
+              finalizeUserConversion(baseNameOverride);
+            } else if (checkAttempts > 6000) { // ~10min max
+              clearUserConvertChecker();
+              userConversionInProgress = false;
+              window.parent.postMessage({
+                type: 'CONVERT_ERROR_USER',
+                baseName: baseNameOverride || lastLoadedBaseName,
+                error: 'La conversión excedió el tiempo límite'
+              }, '*');
+            }
+          }, 100);
+        }
+
+        // Observe checkbox interactions -> when user checks "Listo para convertir"
+        function startUiConversionObserver() {
+          const obs = new MutationObserver(() => {
+            if (userConversionInProgress) return;
+            const cb = findConvertReadyCheckbox();
+            if (cb && cb.checked) {
+              // User clicked "ready" on a UI-loaded IFC; wait for blobs
+              startUserConvertPolling();
+            }
+          });
+          obs.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['checked'] });
+        }
+        if (document.body) startUiConversionObserver();
+        else window.addEventListener('DOMContentLoaded', startUiConversionObserver);
 
         // Prevent automatic browser file downloads to disk
         const origAnchorClick = HTMLAnchorElement.prototype.click;
@@ -49,9 +175,12 @@
             if (blob.type === 'application/octet-stream' || (blob.size > 1000 && !blob.type.includes('json'))) {
               lastFragBlob = blob;
               console.log('✅ Captured FRAG Blob:', blob.size, 'bytes');
+              // If waiting for user conversion, try finalizing once both blobs arrive
+              if (userConversionInProgress && lastJsonBlob) finalizeUserConversion();
             } else if (blob.type === 'application/json' || blob.type.includes('json') || blob.type === 'text/plain') {
               lastJsonBlob = blob;
               console.log('✅ Captured JSON Blob:', blob.size, 'bytes');
+              if (userConversionInProgress && lastFragBlob) finalizeUserConversion();
             }
           }
           return url;
@@ -67,120 +196,175 @@
         setInterval(sendReady, 500);
 
         window.addEventListener('message', async function(e) {
-          if (!e.data || e.data.type !== 'CONVERT_IFC') return;
-          const { bytes, filename, requestId } = e.data;
-          try {
-            const baseName = String(filename || 'model').replace(/\.ifc$/i, '');
-            const file = new File([bytes], filename || 'model.ifc', { type: 'application/octet-stream' });
+          if (!e || !e.data || !e.data.type) return;
 
-            let attempts = 0;
-            while (typeof window.__convertIfc !== 'function' && attempts < 100) {
-              await new Promise(r => setTimeout(r, 100));
-              attempts++;
-            }
+          // ----------------------------------------------------------------
+          // 1) SILENT API: Original organic conversion, triggered via requestId.
+          // ----------------------------------------------------------------
+          if (e.data.type === 'CONVERT_IFC') {
+            const { bytes, filename, requestId } = e.data;
+            try {
+              const baseName = String(filename || 'model').replace(/\.ifc$/i, '');
+              const file = new File([bytes], filename || 'model.ifc', { type: 'application/octet-stream' });
 
-            if (typeof window.__convertIfc !== 'function') {
-              throw new Error('El convertidor React no se pudo inicializar.');
-            }
-
-            lastFragBlob = null;
-            lastJsonBlob = null;
-
-            const progressObserver = new MutationObserver(() => {
-              const text = document.body.innerText || '';
-              const match = text.match(/(\d+)%/);
-              if (match) {
-                const pct = parseInt(match[1], 10);
-                e.source?.postMessage({
-                  type: 'CONVERT_PROGRESS',
-                  requestId: requestId,
-                  progress: pct
-                }, '*');
-              }
-            });
-            progressObserver.observe(document.body, { childList: true, subtree: true, characterData: true });
-
-            // Call React's internal conversion function directly
-            window.__convertIfc({ target: { files: [file] } });
-
-            let completed = false;
-            let errorMsg = null;
-            let checkAttempts = 0;
-
-            while (!completed && checkAttempts < 6000) {
-              await new Promise(r => setTimeout(r, 100));
-              checkAttempts++;
-
-              const buttons = Array.from(document.querySelectorAll('button'));
-              const hasFragBtn = buttons.some(b => (b.textContent || '').includes('.FRAG') || (b.textContent || '').includes('GEOMETRÍA'));
-              const hasJsonBtn = buttons.some(b => (b.textContent || '').includes('.JSON') || (b.textContent || '').includes('PROPIEDADES'));
-
-              const bodyText = document.body.innerText || '';
-              if (bodyText.includes('La conversión falló') || bodyText.includes('Error al leer')) {
-                errorMsg = 'Error en el procesamiento del modelo IFC';
-                break;
+              let attempts = 0;
+              while (typeof window.__convertIfc !== 'function' && attempts < 100) {
+                await new Promise(r => setTimeout(r, 100));
+                attempts++;
               }
 
-              if ((hasFragBtn || lastFragBlob) && (hasJsonBtn || lastJsonBlob || bodyText.includes('completada'))) {
-                completed = true;
-                break;
+              if (typeof window.__convertIfc !== 'function') {
+                throw new Error('El convertidor React no se pudo inicializar.');
               }
-            }
 
-            progressObserver.disconnect();
+              lastFragBlob = null;
+              lastJsonBlob = null;
 
-            if (!completed) {
-              throw new Error(errorMsg || 'La conversión excedió el tiempo límite');
-            }
+              const progressObserver = new MutationObserver(() => {
+                const text = document.body.innerText || '';
+                const match = text.match(/(\d+)%/);
+                if (match) {
+                  const pct = parseInt(match[1], 10);
+                  e.source?.postMessage({
+                    type: 'CONVERT_PROGRESS',
+                    requestId: requestId,
+                    progress: pct
+                  }, '*');
+                }
+              });
+              progressObserver.observe(document.body, { childList: true, subtree: true, characterData: true });
 
-            if (!lastFragBlob) {
-              const buttons = Array.from(document.querySelectorAll('button'));
-              const fragBtn = buttons.find(b => (b.textContent || '').includes('.FRAG') || (b.textContent || '').includes('GEOMETRÍA'));
-              if (fragBtn) {
-                fragBtn.click();
-                await new Promise(r => setTimeout(r, 300));
+              // Call React's internal conversion function directly
+              window.__convertIfc({ target: { files: [file] } });
+
+              let completed = false;
+              let errorMsg = null;
+              let checkAttempts = 0;
+
+              while (!completed && checkAttempts < 6000) {
+                await new Promise(r => setTimeout(r, 100));
+                checkAttempts++;
+
+                const buttons = Array.from(document.querySelectorAll('button'));
+                const hasFragBtn = buttons.some(b => (b.textContent || '').includes('.FRAG') || (b.textContent || '').includes('GEOMETRÍA'));
+                const hasJsonBtn = buttons.some(b => (b.textContent || '').includes('.JSON') || (b.textContent || '').includes('PROPIEDADES'));
+
+                const bodyText = document.body.innerText || '';
+                if (bodyText.includes('La conversión falló') || bodyText.includes('Error al leer')) {
+                  errorMsg = 'Error en el procesamiento del modelo IFC';
+                  break;
+                }
+
+                if ((hasFragBtn || lastFragBlob) && (hasJsonBtn || lastJsonBlob || bodyText.includes('completada'))) {
+                  completed = true;
+                  break;
+                }
               }
-            }
 
-            if (!lastJsonBlob) {
-              const buttons = Array.from(document.querySelectorAll('button'));
-              const jsonBtn = buttons.find(b => (b.textContent || '').includes('.JSON') || (b.textContent || '').includes('PROPIEDADES'));
-              if (jsonBtn) {
-                jsonBtn.click();
-                await new Promise(r => setTimeout(r, 300));
+              progressObserver.disconnect();
+
+              if (!completed) {
+                throw new Error(errorMsg || 'La conversión excedió el tiempo límite');
               }
+
+              if (!lastFragBlob) {
+                const buttons = Array.from(document.querySelectorAll('button'));
+                const fragBtn = buttons.find(b => (b.textContent || '').includes('.FRAG') || (b.textContent || '').includes('GEOMETRÍA'));
+                if (fragBtn) {
+                  fragBtn.click();
+                  await new Promise(r => setTimeout(r, 300));
+                }
+              }
+
+              if (!lastJsonBlob) {
+                const buttons = Array.from(document.querySelectorAll('button'));
+                const jsonBtn = buttons.find(b => (b.textContent || '').includes('.JSON') || (b.textContent || '').includes('PROPIEDADES'));
+                if (jsonBtn) {
+                  jsonBtn.click();
+                  await new Promise(r => setTimeout(r, 300));
+                }
+              }
+
+              if (!lastFragBlob) {
+                throw new Error('No se generó el archivo de geometría .frag');
+              }
+
+              const fragBase64 = await blobToBase64(lastFragBlob);
+
+              let jsonBase64 = '';
+              if (lastJsonBlob) {
+                const jsonText = await lastJsonBlob.text();
+                jsonBase64 = stringToBase64(jsonText);
+              } else {
+                jsonBase64 = stringToBase64('{}');
+              }
+
+              e.source?.postMessage({
+                type: 'CONVERT_RESULT',
+                requestId: requestId,
+                fragBase64: fragBase64,
+                jsonBase64: jsonBase64,
+                baseName: baseName
+              }, '*');
+
+            } catch (err) {
+              console.error('Iframe conversion error:', err);
+              e.source?.postMessage({
+                type: 'CONVERT_ERROR',
+                requestId: requestId,
+                error: String(err?.message || err)
+              }, '*');
             }
-
-            if (!lastFragBlob) {
-              throw new Error('No se generó el archivo de geometría .frag');
-            }
-
-            const fragBase64 = await blobToBase64(lastFragBlob);
-
-            let jsonBase64 = '';
-            if (lastJsonBlob) {
-              const jsonText = await lastJsonBlob.text();
-              jsonBase64 = stringToBase64(jsonText);
-            } else {
-              jsonBase64 = stringToBase64('{}');
-            }
-
-            e.source?.postMessage({
-              type: 'CONVERT_RESULT',
-              requestId: requestId,
-              fragBase64: fragBase64,
-              jsonBase64: jsonBase64,
-              baseName: baseName
-            }, '*');
-
-          } catch (err) {
-            console.error('Iframe conversion error:', err);
-            e.source?.postMessage({
-              type: 'CONVERT_ERROR',
-              requestId: requestId,
-              error: String(err?.message || err)
-            }, '*');
+            return;
           }
+
+          // ----------------------------------------------------------------
+          // 2) UI API: Load IFC into the iframe UI so user can configure.
+          // ----------------------------------------------------------------
+          if (e.data.type === 'LOAD_IFC_FILE') {
+            const { bytes, filename } = e.data;
+            try {
+              const baseName = String(filename || 'model').replace(/\.ifc$/i, '');
+              lastLoadedBaseName = baseName;
+              userConversionInProgress = false;
+              clearUserConvertChecker();
+              lastFragBlob = null;
+              lastJsonBlob = null;
+
+              const file = new File([bytes], filename || 'model.ifc', { type: 'application/octet-stream' });
+
+              // Wait for React UI to be ready & the file input to exist
+              let attempts = 0;
+              let inputEl = null;
+              while (attempts < 100 && !inputEl) {
+                inputEl = findIfcFileInput();
+                if (!inputEl) {
+                  await new Promise(r => setTimeout(r, 100));
+                  attempts++;
+                }
+              }
+              if (!inputEl) {
+                throw new Error('No se encontró el selector de archivos en el convertidor.');
+              }
+
+              fireReactChangeEvent(inputEl, [file]);
+
+              window.parent.postMessage({
+                type: 'LOAD_IFC_OK',
+                filename: filename || 'model.ifc',
+                baseName: baseName
+              }, '*');
+            } catch (err) {
+              console.error('LOAD_IFC_FILE error:', err);
+              window.parent.postMessage({
+                type: 'LOAD_IFC_ERROR',
+                filename: filename || 'model.ifc',
+                error: String(err?.message || err)
+              }, '*');
+            }
+            return;
+          }
+
         });
       })();
     </script>

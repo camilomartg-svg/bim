@@ -440,11 +440,123 @@
       const _convFrame = document.getElementById('integrated-conv-iframe');
 
       let _convReady = false;
+
+      async function blobFromBase64(b64, mimeType = 'application/octet-stream') {
+        const bin = atob(b64);
+        const u8 = new Uint8Array(bin.length);
+        for (let i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i);
+        return new Blob([u8], { type: mimeType });
+      }
+
+      function findIfcFileObjByBaseName(baseName, strictFilename) {
+        const norm = v => String(v || '').replace(/\.ifc$/i, '').toLowerCase();
+        const need = norm(baseName);
+        return (selectedFiles || []).find(f => {
+          if (strictFilename && f.file && norm(f.file.name) === need) return true;
+          return f.file && norm(f.file.name) === need;
+        }) || (selectedFiles || []).find(f => {
+          const other = norm(f._uiBaseName);
+          return other === need;
+        }) || null;
+      }
+
+      function syncIfcUiFileObj(fileObj) {
+        if (!fileObj) return;
+        if (!fileObj.converted && fileObj.isConverting) {
+          fileObj.status = fileObj.status || 'Convirtiendo desde panel incrustado...';
+        } else if (fileObj.loadedInUi && !fileObj.converted && !fileObj.isConverting) {
+          fileObj.status = 'Configurar en el panel inferior → Listo para convertir';
+          if (fileObj.progress < 10) fileObj.progress = 10;
+        }
+        if (typeof renderFilesList === 'function') renderFilesList();
+      }
+
       window.addEventListener('message', function(e) {
-        if (e.data && e.data.type === 'CONVERTER_READY') { _convReady = true; }
+        if (!e || !e.data || !e.data.type) return;
+        if (e.data.type === 'CONVERTER_READY') { _convReady = true; }
+
+        if (e.data.type === 'LOAD_IFC_OK') {
+          const fileObj = findIfcFileObjByBaseName(e.data.baseName, e.data.filename);
+          if (fileObj) {
+            fileObj.loadedInUi = true;
+            fileObj._uiBaseName = e.data.baseName;
+            fileObj.isConverting = false;
+            syncIfcUiFileObj(fileObj);
+          }
+          return;
+        }
+
+        if (e.data.type === 'LOAD_IFC_ERROR') {
+          const fileObj = findIfcFileObjByBaseName(null, e.data.filename);
+          if (fileObj && !fileObj.converted) {
+            fileObj.loadedInUi = false;
+            fileObj.isConverting = false;
+            fileObj.status = 'Error al cargar en el convertidor: ' + String(e.data.error || 'desconocido');
+            if (typeof renderFilesList === 'function') renderFilesList();
+          }
+          return;
+        }
+
+        if (e.data.type === 'CONVERT_RESULT_USER') {
+          const fileObj = findIfcFileObjByBaseName(e.data.baseName, e.data.filename);
+          if (!fileObj) return;
+          // Re-use the existing helper to attach frag + json to the queue item
+          convResultToFileObj({
+            fragBase64: e.data.fragBase64,
+            jsonBase64: e.data.jsonBase64,
+            baseName: e.data.baseName
+          }, fileObj);
+          fileObj.isConverting = false;
+          fileObj.converted = true;
+          fileObj.progress = 100;
+          fileObj.status = 'Completado en panel incrustado ✓';
+          if (typeof addLog === 'function') addLog(`[${fileObj.file.name}] Conversión completada desde el panel incrustado.`);
+          if (typeof renderFilesList === 'function') renderFilesList();
+          return;
+        }
+
+        if (e.data.type === 'CONVERT_ERROR_USER') {
+          const fileObj = findIfcFileObjByBaseName(e.data.baseName);
+          if (!fileObj || fileObj.converted) return;
+          fileObj.isConverting = false;
+          fileObj.status = 'Error en conversión: ' + String(e.data.error || 'desconocido');
+          if (typeof addLog === 'function') addLog(`[${fileObj.file.name}] Error en conversión del panel: ${e.data.error || 'desconocido'}`);
+          if (typeof renderFilesList === 'function') renderFilesList();
+        }
       });
+
       if (_convFrame) {
         _convFrame.addEventListener('load', function() { _convReady = true; });
+      }
+
+      async function loadIfcInConverterUi(fileObj) {
+        if (!_convFrame) return false;
+        if (!fileObj || !fileObj.file) return false;
+        if (fileObj.loadedInUi || fileObj.converted) return true;
+        // Guard against double-sends
+        if (fileObj._loadingInUi) return false;
+        fileObj._loadingInUi = true;
+
+        try {
+          let attempts = 0;
+          while (!_convReady && attempts < 150) {
+            await new Promise(r => setTimeout(r, 200));
+            attempts++;
+          }
+          const arrayBuffer = await fileObj.file.arrayBuffer();
+          _convFrame.contentWindow.postMessage(
+            { type: 'LOAD_IFC_FILE', bytes: arrayBuffer, filename: fileObj.file.name },
+            '*'
+          );
+          fileObj.status = 'Cargando en convertidor incrustado...';
+          fileObj.progress = 5;
+          if (typeof renderFilesList === 'function') renderFilesList();
+          return true;
+        } catch (err) {
+          fileObj._loadingInUi = false;
+          if (typeof addLog === 'function') addLog(`[${fileObj.file.name}] Error al enviar al convertidor UI: ${err?.message || err}`);
+          return false;
+        }
       }
 
       async function convertIfcInBrowser(fileObj) {
@@ -1320,12 +1432,26 @@
           uploadBtn.disabled = false;
         }
 
-        // Auto-trigger conversion for loaded IFC files
+        // Auto-load IFCs in the embedded converter UI (user configures then converts)
         selectedFiles.forEach(fileObj => {
-          if (getFileExtension(fileObj.file.name) === 'ifc' && !fileObj.converted && !fileObj.isConverting) {
-            setTimeout(() => {
-              window.manualConvertIfc(fileObj.id);
-            }, 300);
+          if (getFileExtension(fileObj.file?.name || '') === 'ifc' && !fileObj.converted && !fileObj.isConverting) {
+            if (!fileObj.loadedInUi && !fileObj._loadingInUi) {
+              setTimeout(() => {
+                if (typeof loadIfcInConverterUi === 'function') {
+                  loadIfcInConverterUi(fileObj);
+                }
+                // Auto-scroll & open the converter panel for visibility
+                if (typeof window.toggleFragConverterPanel === 'function') {
+                  window.toggleFragConverterPanel(true);
+                  setTimeout(() => {
+                    const panel = document.getElementById('frag-converter-panel');
+                    if (panel && typeof panel.scrollIntoView === 'function') {
+                      panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                    }
+                  }, 200);
+                }
+              }, 400);
+            }
           }
         });
 
@@ -1393,11 +1519,16 @@
                       <span class="material-symbols-outlined text-sm animate-spin">sync</span>
                       Convirtiendo... ${fileObj.progress || 10}%
                     </span>
-                  ` : `
-                    <button onclick="window.manualConvertIfc(${fileObj.id})" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white font-bold text-[11px] shadow-sm transition-all cursor-pointer">
-                      <span class="material-symbols-outlined text-sm">play_arrow</span>
-                      CONVERTIR MODELO
+                  ` : fileObj.loadedInUi ? `
+                    <button onclick="(function(){ if (window.toggleFragConverterPanel) { window.toggleFragConverterPanel(true); setTimeout(()=>{ var p = document.getElementById('frag-converter-panel'); if (p && p.scrollIntoView) p.scrollIntoView({behavior:'smooth',block:'start'}); }, 150); } })()" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-indigo-300 dark:border-indigo-800 bg-white dark:bg-indigo-950/40 hover:bg-indigo-100 dark:hover:bg-indigo-900/60 text-indigo-700 dark:text-indigo-300 font-bold text-[11px] shadow-sm transition-all cursor-pointer">
+                      <span class="material-symbols-outlined text-sm">tune</span>
+                      CONFIGURAR Y CONVERTIR ↓
                     </button>
+                  ` : `
+                    <span class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-indigo-100 dark:bg-indigo-900/80 text-indigo-700 dark:text-indigo-300 font-bold text-[11px] shadow-sm">
+                      <span class="material-symbols-outlined text-sm">progress_activity</span>
+                      CARGANDO EN PANEL...
+                    </span>
                   `}
                 </div>
               ` : ''}
