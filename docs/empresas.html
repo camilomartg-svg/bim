@@ -364,7 +364,7 @@
                                     email: uEmailClean,
                                     role: u.rol || 'INVITADO',
                                     empresaUsuario: u.empresa,
-                                    cargo: u.cargo || (u.rol === 'ADMINISTRADOR_EMPRESA' ? 'Administrador de Empresa' : '')
+                                    cargo: (JSON.parse(localStorage.getItem('nora_company_users_override') || '{}'))[uEmailClean]?.cargo || u.cargo || (u.rol === 'ADMINISTRADOR_EMPRESA' ? 'Administrador de Empresa' : '')
                                 };
                                 if (mIdx > -1) {
                                     comp.members[mIdx] = { ...comp.members[mIdx], ...memberObj };

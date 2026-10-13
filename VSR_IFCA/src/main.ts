@@ -1815,6 +1815,57 @@ const loadDriveJsonProps = async (jsonId: string): Promise<any | null> => {
     }
 };
 
+/**
+ * JSON exports are normally indexed by IFC ExpressID, whereas Fragments v3
+ * addresses picked geometry by localId.  Keep the original index (relations
+ * can still refer to ExpressIDs) and add aliases indexed by the localId.
+ * GUID is the stable join key between the two formats.
+ */
+const attachExternalPropertiesToLocalIds = async (model: any, externalProperties: any) => {
+    if (!externalProperties || typeof externalProperties !== 'object' || Array.isArray(externalProperties)) {
+        return { properties: externalProperties, matched: 0, localIds: 0 };
+    }
+
+    const unwrapValue = (value: any): any => (
+        value && typeof value === 'object' && 'value' in value ? value.value : value
+    );
+    const getGuid = (entity: any): string | null => {
+        if (!entity || typeof entity !== 'object') return null;
+        const raw = entity.GlobalId ?? entity.GlobalID ?? entity.globalId ?? entity.guid ?? entity.Guid ?? entity.GUID;
+        const value = unwrapValue(raw);
+        return value === undefined || value === null || String(value).trim() === '' ? null : String(value).trim();
+    };
+
+    const properties = { ...externalProperties };
+    const propertiesByGuid = new Map<string, any>();
+    for (const entity of Object.values(externalProperties)) {
+        const guid = getGuid(entity);
+        if (guid && !propertiesByGuid.has(guid)) propertiesByGuid.set(guid, entity);
+    }
+    if (propertiesByGuid.size === 0) return { properties, matched: 0, localIds: 0 };
+
+    try {
+        const localIds: number[] = await model.getLocalIds();
+        const fragmentGuids: unknown = await model.getGuidsByLocalIds(localIds);
+        const guidList = Array.isArray(fragmentGuids) ? fragmentGuids : [];
+        let matched = 0;
+
+        localIds.forEach((localId, index) => {
+            const guid = guidList[index] === undefined || guidList[index] === null ? '' : String(guidList[index]).trim();
+            const entity = propertiesByGuid.get(guid);
+            if (entity && properties[String(localId)] !== entity) {
+                properties[String(localId)] = entity;
+                matched++;
+            }
+        });
+
+        return { properties, matched, localIds: localIds.length };
+    } catch (error) {
+        console.warn('[JSON bridge] Could not map external properties to fragment localIds:', error);
+        return { properties, matched: 0, localIds: 0 };
+    }
+};
+
 
 // --- Model Loading Logic ---
 
@@ -2027,9 +2078,10 @@ async function loadModel(url: string, path: string, options?: { propertiesUrl?: 
             try {
                 const keys = Object.keys(options.propertiesJson);
                 if (keys.length > 0) {
-                    modelAny.properties = options.propertiesJson;
+                    const mapped = await attachExternalPropertiesToLocalIds(model, options.propertiesJson);
+                    modelAny.properties = mapped.properties;
                     hasProps = true;
-                    logToScreen(`Loaded external properties from JSON (${keys.length} items).`);
+                    logToScreen(`Loaded external properties from JSON (${keys.length} items; ${mapped.matched} linked to fragment localIds).`);
                     // --- DIAGNOSTIC: log first entry structure ---
                     const firstKey = keys[0];
                     const firstEntry = options.propertiesJson[firstKey];
@@ -2054,9 +2106,10 @@ async function loadModel(url: string, path: string, options?: { propertiesUrl?: 
                 if (response.ok) {
                     const jsonProps = await response.json();
                     if (jsonProps && Object.keys(jsonProps).length > 0) {
-                        modelAny.properties = jsonProps;
+                        const mapped = await attachExternalPropertiesToLocalIds(model, jsonProps);
+                        modelAny.properties = mapped.properties;
                         hasProps = true;
-                        logToScreen(`Loaded external properties from JSON (${Object.keys(jsonProps).length} items). Overriding embedded properties.`);
+                        logToScreen(`Loaded external properties from JSON (${Object.keys(jsonProps).length} items; ${mapped.matched} linked to fragment localIds). Overriding embedded properties.`);
                     }
                 } else {
                     if (!hasProps) logToScreen(`Properties file not found at ${jsonPath} (Status: ${response.status}).`);
