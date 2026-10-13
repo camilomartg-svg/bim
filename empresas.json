@@ -67,6 +67,22 @@
         "empresaUsuario": "Mesh Estudio",
         "cargo": "",
         "especialidad": ""
+      },
+      {
+        "name": "Esteban Zamudio Mendoza",
+        "email": "esteban.zamudio@meshestudio.com",
+        "role": "MIEMBRO",
+        "empresaUsuario": "Mesh Estudio",
+        "especialidad": "",
+        "cargo": "Coordinador BIM"
+      },
+      {
+        "name": "Eduardo Martinez",
+        "email": "kamikong@hotmail.com",
+        "role": "MIEMBRO",
+        "empresaUsuario": "Mesh Estudio",
+        "especialidad": "",
+        "cargo": "Modelador BIM"
       }
     ],
     "razonSocial": "Mesh Estudio SAS",
