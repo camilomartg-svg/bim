@@ -24,9 +24,14 @@
             if (curCompMember.empresaUsuario && curCompMember.empresaUsuario.trim() !== '') {
                 return curCompMember.empresaUsuario.trim();
             }
-            if (curCompMember.role === 'ADMINISTRADOR_EMPRESA') {
+            if (curCompMember.role === 'ADMINISTRADOR_EMPRESA' || curCompMember.role === 'MIEMBRO' || curCompMember.role === 'ADMINISTRADOR') {
                 return currentCompany?.name || 'Empresa';
             }
+        }
+
+        // Si es administrador configurado de la empresa actual
+        if (Array.isArray(currentCompany?.admins) && currentCompany.admins.some(a => a.toLowerCase().trim() === cleanEmail)) {
+            return currentCompany?.name || 'Empresa';
         }
 
         // 2. Prioridad: Buscar en todas las empresas de Super Admin (empresas.json)
@@ -55,6 +60,11 @@
                     }
                 }
             }
+        }
+
+        // Fallback para miembros de la empresa actual sin empresaUsuario asignada
+        if (curCompMember) {
+            return currentCompany?.name || 'Empresa';
         }
 
         // 3. Fallback: Sin empresa asignada
@@ -671,23 +681,16 @@
         el.projectMembersCount.textContent = `${(activeProject.members || []).length} Miembros Asignados`;
         const query = (el.directorySearch ? el.directorySearch.value : '').toLowerCase().trim();
 
-        // Build the definitive list of users that can be assigned to this project.
-        // SOURCES (in priority order):
-        //   1) currentCompany.members — EVERY person explicitly added to the company
-        //                                (they MUST appear in this list regardless of directory status)
-        //   2) ALL allDirectoryUsers  — EVERY person registered in Nora Global Directory
-        //                                (external companies / collaborators)
-        //   3) ALL companies in allCompaniesList — members of OTHER companies that have
-        //                                been invited to Nora (to allow cross-company access)
-        //   4) activeProject.members  — already-assigned users that must remain visible
+        // Construir la lista de usuarios elegibles para este proyecto:
+        // Únicamente miembros y administradores previamente agregados a la empresa actual (currentCompany),
+        // más cualquier usuario que ya esté asignado al proyecto.
         const userMap = new Map();
-        const alreadyAdded = new Set();
 
         const upsertUser = (entry) => {
             if (!entry || !entry.email) return;
             const email = String(entry.email).toLowerCase().trim();
             if (!email) return;
-            if (alreadyAdded.has(email)) {
+            if (userMap.has(email)) {
                 // Merge only if new fields are provided
                 const existing = userMap.get(email);
                 userMap.set(email, {
@@ -702,12 +705,11 @@
                 });
                 return;
             }
-            alreadyAdded.add(email);
             userMap.set(email, { ...entry, email });
         };
 
         // ---------------------------------------------------------------
-        // 1) First and foremost: EVERY member of the CURRENT company
+        // 1) Miembros explícitos de la empresa actual
         // ---------------------------------------------------------------
         const companyMembers = Array.isArray(currentCompany?.members) ? currentCompany.members : [];
         companyMembers.forEach(m => {
@@ -724,74 +726,57 @@
         });
 
         // ---------------------------------------------------------------
-        // 2) Every user in the Global Nora Directory (cross-company)
+        // 2) Administradores de la empresa actual (en caso de no figurar en members)
+        // ---------------------------------------------------------------
+        const companyAdmins = Array.isArray(currentCompany?.admins) ? currentCompany.admins : [];
+        companyAdmins.forEach(adminEmail => {
+            if (!adminEmail) return;
+            const email = String(adminEmail).toLowerCase().trim();
+            upsertUser({
+                email,
+                nombre:       getUserRegisteredName(email),
+                empresa:      currentCompany?.name || 'Empresa',
+                rol:          'ADMINISTRADOR_EMPRESA',
+                especialidad: '',
+                cargo:        'Administrador de Empresa'
+            });
+        });
+
+        // ---------------------------------------------------------------
+        // 3) Enriquecer datos con el Directorio Global (Google Sheets) SOLO para usuarios ya incluidos
         // ---------------------------------------------------------------
         if (Array.isArray(allDirectoryUsers)) {
             allDirectoryUsers.forEach(du => {
                 if (!du.email) return;
                 const email = String(du.email).toLowerCase().trim();
+                if (userMap.has(email)) {
+                    const existing = userMap.get(email);
+                    userMap.set(email, {
+                        ...existing,
+                        nombre:       (existing.nombre && existing.nombre !== email.split('@')[0]) ? existing.nombre : (du.nombre || existing.nombre),
+                        especialidad: existing.especialidad || du.especialidad || '',
+                        cargo:        existing.cargo || du.cargo || '',
+                        rol:          existing.rol && existing.rol !== 'INVITADO' ? existing.rol : (du.rol || existing.rol)
+                    });
+                }
+            });
+        }
+
+        // ---------------------------------------------------------------
+        // 4) Asegurar que miembros ya asignados al proyecto permanezcan visibles (para poder desasignarlos)
+        // ---------------------------------------------------------------
+        (activeProject.members || []).forEach(pm => {
+            const email = String(pm).toLowerCase().trim();
+            if (!userMap.has(email)) {
                 upsertUser({
                     email,
                     nombre:       getUserRegisteredName(email),
                     empresa:      getUserRegisteredCompany(email),
-                    rol:          du.rol          || 'INVITADO',
-                    especialidad: du.especialidad || '',
-                    cargo:        du.cargo        || ''
+                    rol:          'Colaborador',
+                    especialidad: '',
+                    cargo:        ''
                 });
-            });
-        }
-
-        // ---------------------------------------------------------------
-        // 3) Members of EVERY company in Super Admin (cross-company invites)
-        // ---------------------------------------------------------------
-        if (Array.isArray(allCompaniesList)) {
-            allCompaniesList.forEach(comp => {
-                if (comp.deleted) return;
-                const members = Array.isArray(comp.members) ? comp.members : [];
-                members.forEach(m => {
-                    if (!m.email) return;
-                    const email = String(m.email).toLowerCase().trim();
-                    // Skip self company (already covered above to preserve first-source metadata)
-                    if (comp.id && comp.id === (currentCompany?.id || '')) return;
-                    upsertUser({
-                        email,
-                        nombre:       getUserRegisteredName(email),
-                        empresa:      getUserRegisteredCompany(email),
-                        rol:          m.role           || 'INVITADO',
-                        especialidad: m.especialidad   || '',
-                        cargo:        m.cargo          || ''
-                    });
-                });
-                const admins = Array.isArray(comp.admins) ? comp.admins : [];
-                admins.forEach(adminEmail => {
-                    if (!adminEmail) return;
-                    const email = String(adminEmail).toLowerCase().trim();
-                    if (comp.id && comp.id === (currentCompany?.id || '')) return;
-                    upsertUser({
-                        email,
-                        nombre:       getUserRegisteredName(email),
-                        empresa:      comp.name || 'Empresa Invitada',
-                        rol:          'ADMINISTRADOR_EMPRESA',
-                        especialidad: '',
-                        cargo:        ''
-                    });
-                });
-            });
-        }
-
-        // ---------------------------------------------------------------
-        // 4) Ensure project-assigned members are always present (fallback)
-        // ---------------------------------------------------------------
-        (activeProject.members || []).forEach(pm => {
-            const email = String(pm).toLowerCase().trim();
-            upsertUser({
-                email,
-                nombre:       getUserRegisteredName(email),
-                empresa:      getUserRegisteredCompany(email),
-                rol:          'Colaborador',
-                especialidad: '',
-                cargo:        ''
-            });
+            }
         });
 
         const availableUsers = Array.from(userMap.values());
