@@ -335,7 +335,11 @@
       "client": "IMI",
       "customTrialExpiry": "2027-07-03T04:59:59.999Z",
       "customTrialUnit": "months",
-      "customTrialValue": 10
+      "customTrialValue": 10,
+      "members": [
+        "kamikong@hotmail.com"
+      ],
+      "equiposDeTarea": []
     },
     {
       "name": "10 de septiembre",
