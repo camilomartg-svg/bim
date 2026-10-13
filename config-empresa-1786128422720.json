@@ -339,7 +339,14 @@
       "members": [
         "kamikong@hotmail.com"
       ],
-      "equiposDeTarea": []
+      "equiposDeTarea": [
+        {
+          "name": "ARQUITECTURA",
+          "members": [
+            "kamikong@hotmail.com"
+          ]
+        }
+      ]
     },
     {
       "name": "10 de septiembre",
