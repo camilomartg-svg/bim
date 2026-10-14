@@ -337,21 +337,22 @@
       "customTrialUnit": "months",
       "customTrialValue": 10,
       "members": [
-        "kamikong@hotmail.com",
         "esteban.zamudio@meshestudio.com"
       ],
       "equiposDeTarea": [
         {
           "name": "ARQUITECTURA",
-          "members": [
-            "kamikong@hotmail.com"
-          ]
+          "members": []
         },
         {
           "name": "BIM OBRA",
           "members": [
             "esteban.zamudio@meshestudio.com"
           ]
+        },
+        {
+          "name": "INTERVENTORÍA",
+          "members": []
         }
       ]
     },

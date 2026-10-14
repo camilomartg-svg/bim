@@ -74,7 +74,7 @@
         "role": "MIEMBRO",
         "empresaUsuario": "Mesh Estudio",
         "especialidad": "",
-        "cargo": "Coordinador BIM"
+        "cargo": ""
       },
       {
         "name": "Eduardo Martinez",
@@ -82,7 +82,14 @@
         "role": "MIEMBRO",
         "empresaUsuario": "Mesh Estudio",
         "especialidad": "",
-        "cargo": "Modelador BIM"
+        "cargo": ""
+      },
+      {
+        "name": "data guardar",
+        "email": "dataguardar@gmail.com",
+        "role": "INVITADO",
+        "empresaUsuario": "",
+        "cargo": ""
       }
     ],
     "razonSocial": "Mesh Estudio SAS",
