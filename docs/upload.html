@@ -1090,12 +1090,26 @@
             };
             updateProjectUI();
             await hydrateProjectTeams();
-            renderFileVisibilityConfigPanel();
+            try {
+              renderFileVisibilityConfigPanel();
+            } catch (errPanel) {
+              console.error('Error al renderizar panel de visibilidad:', errPanel);
+            }
             loadProjectFiles();
           }
         });
 
         // Helper functions for ISO 19650 Team Silos & Permissions
+        function escapeHtml(text) {
+          if (text === null || text === undefined) return '';
+          return String(text)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#039;');
+        }
+
         function normalizeTeamName(name) {
           return String(name || '')
             .normalize('NFD')
@@ -1924,7 +1938,11 @@
 
         updateProjectUI();
         await hydrateProjectTeams();
-        renderFileVisibilityConfigPanel();
+        try {
+          renderFileVisibilityConfigPanel();
+        } catch (errPanel) {
+          console.error('Error al renderizar panel de visibilidad:', errPanel);
+        }
         loadProjectFiles();
 
       } catch (err) {
