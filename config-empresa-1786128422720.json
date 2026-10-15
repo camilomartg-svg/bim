@@ -366,9 +366,7 @@
             "name": "ARQUITECTURA",
             "leadEmail": "",
             "description": "Equipo de entrega asignado a la producción de información.",
-            "members": [
-              "kamikong@hotmail.com"
-            ],
+            "members": [],
             "taskTeams": []
           },
           {
@@ -384,7 +382,7 @@
           {
             "id": "deliv-int-1788356587555",
             "name": "INTERVENTORÍA",
-            "leadEmail": "",
+            "leadEmail": "dataguardar@gmail.com",
             "description": "Equipo de entrega asignado a la producción de información.",
             "members": [
               "dataguardar@gmail.com"
@@ -398,10 +396,12 @@
             "name": "EQUIPO RECEPTOR / OBRA",
             "leadEmail": "",
             "description": "Equipo receptor para coordinación y seguimiento de obra.",
-            "members": []
+            "members": [],
+            "taskTeams": []
           }
         ],
-        "directorDeObra": ""
+        "directorDeObra": "esteban.zamudio@meshestudio.com",
+        "liderEquipoEntrega": ""
       },
       "fileVisibilityConfig": {
         "task:ARQUITECTURA": {
