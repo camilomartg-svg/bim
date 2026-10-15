@@ -491,22 +491,26 @@
         <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-200/60 dark:border-slate-800 pb-5">
           <div>
             <div class="flex items-center gap-2">
-              <span class="px-2 py-0.5 rounded-md bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-300 font-black text-[10px]">ROL A</span>
-              <h2 class="text-lg font-black text-slate-900 dark:text-white">Administradores de Proyecto (Adjudicadores)</h2>
+              <span class="px-2 py-0.5 rounded-md bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-300 font-black text-[10px]">LIDERAZGO DEL PROYECTO</span>
+              <h2 class="text-lg font-black text-slate-900 dark:text-white">Gobernanza y Líderes del Proyecto</h2>
             </div>
             <p class="text-xs text-slate-500 dark:text-slate-400 mt-1">
-              Designados por el <strong>Administrador de Empresa</strong>. Tienen la facultad de organizar y nombrar al resto de los participantes del proyecto. Se pueden designar uno o más administradores.
+              Designa a los tres perfiles clave de liderazgo: <strong>Administrador de Proyecto (Adjudicador)</strong>, <strong>Líder de Equipo de Entrega</strong> y <strong>Líder de Equipo de Obra (Receptor)</strong>.
             </p>
           </div>
 
-          <div id="admin-action-controls" class="flex items-center gap-2">
-            <button onclick="openAddProjectAdminModal()" class="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold uppercase tracking-wider shadow-sm transition-all">
-              <span class="material-symbols-outlined text-[16px]">person_add</span>
-              <span>Designar Administrador</span>
+          <div id="admin-action-controls" class="flex flex-wrap items-center gap-2">
+            <button id="btn-designate-project-admin" onclick="openAddProjectAdminModal()" class="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold uppercase tracking-wider shadow-sm transition-all cursor-pointer">
+              <span class="material-symbols-outlined text-[16px]">shield_person</span>
+              <span>Designar Admin. Proyecto</span>
             </button>
-            <button onclick="openAddProjectDirectorModal()" class="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold uppercase tracking-wider shadow-sm transition-all">
+            <button id="btn-designate-delivery-leader" onclick="openAddDeliveryLeaderModal()" class="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold uppercase tracking-wider shadow-sm transition-all cursor-pointer">
+              <span class="material-symbols-outlined text-[16px]">hub</span>
+              <span>Designar Líder de Entrega</span>
+            </button>
+            <button id="btn-designate-obra-director" onclick="openAddProjectDirectorModal()" class="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold uppercase tracking-wider shadow-sm transition-all cursor-pointer">
               <span class="material-symbols-outlined text-[16px]">engineering</span>
-              <span>Designar Director de Obra</span>
+              <span>Designar Líder de Obra</span>
             </button>
           </div>
         </div>
@@ -651,10 +655,14 @@
             </p>
           </div>
 
-          <div id="receiver-action-controls" class="flex items-center gap-2">
-            <button onclick="openCreateReceiverTeamModal()" class="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold uppercase tracking-wider shadow-sm transition-all">
+          <div id="receiver-action-controls" class="flex flex-wrap items-center gap-2">
+            <button onclick="openCreateReceiverTeamModal()" class="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold uppercase tracking-wider shadow-sm transition-all cursor-pointer">
               <span class="material-symbols-outlined text-[16px]">add_circle</span>
               <span>Crear Equipo Receptor</span>
+            </button>
+            <button onclick="openCreateReceiverTaskTeamModal()" class="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-amber-700 hover:bg-amber-800 text-white text-xs font-bold uppercase tracking-wider shadow-sm transition-all cursor-pointer">
+              <span class="material-symbols-outlined text-[16px]">construction</span>
+              <span>Crear Tarea de Obra</span>
             </button>
           </div>
         </div>
@@ -808,6 +816,41 @@
     </div>
   </div>
 
+  <!-- Modal 1C: Designar Líder de Equipo de Entrega -->
+  <div id="modal-delivery-leader" class="fixed inset-0 z-50 hidden bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+    <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-6 max-w-lg w-full shadow-2xl space-y-4">
+      <div class="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
+        <div class="flex items-center gap-2">
+          <span class="flex h-8 w-8 items-center justify-center rounded-xl bg-indigo-50 dark:bg-indigo-950 text-indigo-600 dark:text-indigo-400">
+            <span class="material-symbols-outlined text-[18px]">hub</span>
+          </span>
+          <div>
+            <h3 class="text-sm font-black text-slate-900 dark:text-white uppercase tracking-wider">Designar Líder de Equipo de Entrega</h3>
+            <p class="text-[11px] text-slate-400">Rol Adjudicatario Principal B (ISO 19650)</p>
+          </div>
+        </div>
+        <button onclick="closeModal('modal-delivery-leader')" class="text-slate-400 hover:text-slate-600 dark:hover:text-white">
+          <span class="material-symbols-outlined text-[20px]">close</span>
+        </button>
+      </div>
+
+      <div class="space-y-3 text-xs">
+        <label class="block font-bold text-slate-700 dark:text-slate-300">Seleccionar usuario de la empresa:</label>
+        <select id="select-delivery-leader-user" class="w-full py-2 px-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 dark:text-white font-medium focus:ring-2 focus:ring-indigo-500">
+          <!-- Populated by JS -->
+        </select>
+        <p class="text-[11px] text-slate-400 leading-normal">
+          Nota: El Líder de Equipo de Entrega tiene la facultad de crear y gestionar sus Equipos de Entrega y Equipos de Tarea.
+        </p>
+      </div>
+
+      <div class="flex items-center justify-end gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
+        <button onclick="closeModal('modal-delivery-leader')" class="px-4 py-2 rounded-xl text-xs font-bold text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">Cancelar</button>
+        <button onclick="confirmAddDeliveryLeader()" class="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold uppercase tracking-wider shadow-sm transition-all cursor-pointer">Asignar Líder</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Modal 2: Crear / Editar Equipo de Entrega -->
   <div id="modal-delivery-team" class="fixed inset-0 z-50 hidden bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
     <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-6 max-w-lg w-full shadow-2xl space-y-4">
@@ -941,6 +984,50 @@
       <div class="flex items-center justify-end gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
         <button onclick="closeModal('modal-task-team')" class="px-4 py-2 rounded-xl text-xs font-bold text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">Cancelar</button>
         <button onclick="confirmSaveTaskTeam()" class="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold uppercase tracking-wider shadow-sm transition-all">Guardar Equipo</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal 3B: Crear Equipo de Tarea de Obra -->
+  <div id="modal-receiver-task-team" class="fixed inset-0 z-50 hidden bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+    <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-6 max-w-lg w-full shadow-2xl space-y-4">
+      <div class="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
+        <div class="flex items-center gap-2">
+          <span class="flex h-8 w-8 items-center justify-center rounded-xl bg-amber-50 dark:bg-amber-950 text-amber-600 dark:text-amber-400">
+            <span class="material-symbols-outlined text-[18px]">construction</span>
+          </span>
+          <div>
+            <h3 class="text-sm font-black text-slate-900 dark:text-white uppercase tracking-wider">Crear Equipo de Tarea de Obra</h3>
+            <p class="text-[11px] text-slate-400">Especialidad y disciplina en obra</p>
+          </div>
+        </div>
+        <button onclick="closeModal('modal-receiver-task-team')" class="text-slate-400 hover:text-slate-600 dark:hover:text-white">
+          <span class="material-symbols-outlined text-[20px]">close</span>
+        </button>
+      </div>
+
+      <div class="space-y-4 text-xs">
+        <div>
+          <label class="block font-bold text-slate-700 dark:text-slate-300 mb-1">Nombre del Equipo de Tarea de Obra:</label>
+          <input id="receiver-task-name" type="text" placeholder="Ej: Replanteo Topográfico, Armado de Acero, Encofrados..." class="w-full py-2 px-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 dark:text-white font-medium focus:ring-2 focus:ring-amber-500" />
+        </div>
+
+        <div>
+          <label class="block font-bold text-slate-700 dark:text-slate-300 mb-1">Equipo de Entrega de Obra Perteneciente:</label>
+          <select id="receiver-task-parent-select" class="w-full py-2 px-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 dark:text-white font-medium focus:ring-2 focus:ring-amber-500">
+            <!-- Populated by JS -->
+          </select>
+        </div>
+
+        <div>
+          <label class="block font-bold text-slate-700 dark:text-slate-300 mb-1">Disciplina / Especialidad en Obra:</label>
+          <input id="receiver-task-discipline" type="text" placeholder="Ej: Obra Civil, Redes Eléctricas, Acabados, Supervisión..." class="w-full py-2 px-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 dark:text-white font-medium focus:ring-2 focus:ring-amber-500" />
+        </div>
+      </div>
+
+      <div class="flex items-center justify-end gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
+        <button onclick="closeModal('modal-receiver-task-team')" class="px-4 py-2 rounded-xl text-xs font-bold text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">Cancelar</button>
+        <button onclick="confirmSaveReceiverTaskTeam()" class="px-4 py-2 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold uppercase tracking-wider shadow-sm transition-all cursor-pointer">Guardar Tarea de Obra</button>
       </div>
     </div>
   </div>
