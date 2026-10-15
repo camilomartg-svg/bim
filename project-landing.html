@@ -431,7 +431,23 @@
       }
 
       const projects = Array.isArray(config.projects) ? config.projects.map(normalizeProject) : [];
-      const activeProject = projects.find((project) => project.slug === requestedProject) || projects.find((project) => project.slug === 'green-i') || projects[0] || DEFAULT_PROJECT;
+      let activeProject = projects.find((project) => project.slug === requestedProject) || projects.find((project) => project.slug === 'green-i') || projects[0] || DEFAULT_PROJECT;
+
+      // Intentar obtener la versión más reciente del proyecto directamente desde Google Drive
+      try {
+        const driveApiUrl = 'https://script.google.com/macros/s/AKfycbx2RAQx_8K4o22xE0Mw-ETc7K_58vIoi6-PgVi64u80inuiw144ks3cgWSdCtXqIgB02g/exec';
+        const urlParams = new URLSearchParams(window.location.search);
+        const empParam = urlParams.get('empresa') || '';
+        const driveRes = await fetch(`${driveApiUrl}?action=getProjectConfig&empresa=${encodeURIComponent(empParam)}&proyecto=${encodeURIComponent(requestedProject || '')}`);
+        if (driveRes.ok) {
+          const driveData = await driveRes.json();
+          if (driveData && driveData.status === 'success' && driveData.data) {
+            activeProject = { ...activeProject, ...driveData.data };
+          }
+        }
+      } catch (err) {
+        console.warn('Carga directa de proyecto desde Google Drive omitida:', err);
+      }
 
       const project = normalizeProject(activeProject);
       const footerText = String(config.portal?.footerText || DEFAULT_PORTAL_CONFIG.portal.footerText);

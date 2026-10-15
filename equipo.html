@@ -167,13 +167,13 @@
           <span class="material-symbols-outlined text-[20px]">dark_mode</span>
         </button>
 
-        <!-- Save Button (Cloud / GitHub) -->
+        <!-- Save Button (Google Drive Cloud Sync) -->
         <div class="flex items-center gap-1.5">
-          <button id="save-btn" class="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-slate-900 hover:bg-black text-white dark:bg-white dark:text-slate-900 dark:hover:bg-slate-100 text-xs font-bold uppercase tracking-wider shadow-sm transition-all">
-            <span class="material-symbols-outlined text-[16px]">cloud_sync</span>
-            <span class="hidden sm:inline">Guardar Cambios</span>
+          <button id="save-btn" class="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-slate-900 hover:bg-black text-white dark:bg-white dark:text-slate-900 dark:hover:bg-slate-100 text-xs font-bold uppercase tracking-wider shadow-sm transition-all" title="Guardar cambios directamente en Google Drive">
+            <span class="material-symbols-outlined text-[16px]">cloud_upload</span>
+            <span class="hidden sm:inline">Guardar en Drive</span>
           </button>
-          <button id="github-token-btn" class="p-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white transition-colors" title="Configurar Token GitHub (PAT)">
+          <button id="github-token-btn" class="p-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white transition-colors" title="Configurar Token GitHub (Opcional)">
             <span class="material-symbols-outlined text-[18px]">key</span>
           </button>
         </div>
@@ -1096,7 +1096,7 @@
         </button>
       </div>
       <p class="text-xs text-slate-500 dark:text-slate-400 leading-normal">
-        Para guardar los cambios de configuración del equipo directamente en el repositorio en la nube, ingresa tu GitHub Personal Access Token con permisos de lectura/escritura de contenidos.
+        <strong>Nota:</strong> Nora CDE ahora guarda y sincroniza la información de equipos directamente en Google Drive sin demoras. Si también deseas mantener una copia de respaldo sincronizada con tu repositorio GitHub, puedes ingresar tu GitHub Personal Access Token opcionalmente.
       </p>
       <input id="github-pat-input" type="password" placeholder="ghp_xxxxxxxxxxxx" class="w-full py-2 px-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 dark:text-white text-xs font-mono" />
       <div class="flex items-center justify-end gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">

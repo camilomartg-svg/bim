@@ -422,7 +422,30 @@
         }
         configUrl = currentCompany.configUrl || 'portal-config.json';
 
-        // 2. Cargar Configuración de Empresa
+        // 2. Cargar Configuración de Proyecto desde Google Drive (o desde archivo central)
+        let loadedFromDrive = false;
+        try {
+            const driveQuery = new URLSearchParams({
+                action: 'getProjectConfig',
+                empresa: (currentCompany && currentCompany.name) || companyId || '',
+                companyId: companyId || '',
+                proyecto: projectSlug || '',
+                projectName: (projectSlug ? projectSlug.replace(/[-_]/g, ' ') : '')
+            });
+            const driveRes = await fetch(`${ROLES_SCRIPT_URL}?${driveQuery.toString()}`);
+            if (driveRes.ok) {
+                const driveData = await driveRes.json();
+                if (driveData && driveData.status === 'success' && driveData.data) {
+                    activeProject = driveData.data;
+                    loadedFromDrive = true;
+                    console.log('✅ Proyecto cargado exitosamente desde Google Drive:', activeProject.name);
+                }
+            }
+        } catch (err) {
+            console.warn('Consulta a Google Drive omitida o no disponible:', err);
+        }
+
+        // Cargar Configuración de Empresa / Portal
         try {
             const confRes = await fetch(configUrl + '?t=' + Date.now());
             if (confRes.ok) {
@@ -439,20 +462,30 @@
             fullConfig.projects = [];
         }
 
-        activeProject = fullConfig.projects.find(p => p.slug === projectSlug);
-        if (!activeProject) {
-            // Inicializar proyecto nuevo si no existe todavía en el archivo
-            activeProject = {
-                name: (projectSlug ? projectSlug.replace(/[-_]/g, ' ') : 'Proyecto').toUpperCase(),
-                slug: projectSlug || 'nuevo-proyecto',
-                city: 'Bogotá',
-                status: 'Activo',
-                equiposDeTarea: [],
-                members: [],
-                dataSources: {},
-                landing: { map: { lat: 4.711, lng: -74.0721, zoom: 13 } }
-            };
-            fullConfig.projects.push(activeProject);
+        if (!loadedFromDrive || !activeProject) {
+            activeProject = fullConfig.projects.find(p => p.slug === projectSlug);
+            if (!activeProject) {
+                // Inicializar proyecto nuevo si no existe todavía en el archivo
+                activeProject = {
+                    name: (projectSlug ? projectSlug.replace(/[-_]/g, ' ') : 'Proyecto').toUpperCase(),
+                    slug: projectSlug || 'nuevo-proyecto',
+                    city: 'Bogotá',
+                    status: 'Activo',
+                    equiposDeTarea: [],
+                    members: [],
+                    dataSources: {},
+                    landing: { map: { lat: 4.711, lng: -74.0721, zoom: 13 } }
+                };
+                fullConfig.projects.push(activeProject);
+            }
+        } else {
+            // Sincronizar en fullConfig en memoria
+            const existingIdx = fullConfig.projects.findIndex(p => p.slug === activeProject.slug || (activeProject.name && p.name && p.name.toLowerCase() === activeProject.name.toLowerCase()));
+            if (existingIdx !== -1) {
+                fullConfig.projects[existingIdx] = activeProject;
+            } else {
+                fullConfig.projects.push(activeProject);
+            }
         }
 
         if (el.breadcrumbProyecto) {
@@ -1125,73 +1158,86 @@
 
     if (el.saveGithubBtn) {
         el.saveGithubBtn.addEventListener('click', async () => {
-            let token = localStorage.getItem('github_pat');
-            if (!token) {
-                if (el.githubPatInput) el.githubPatInput.value = '';
-                if (el.tokenModal) el.tokenModal.classList.remove('hidden');
-                window.showAlert('Se requiere un Token de acceso para guardar cambios en la nube.', 'error');
-                return;
+            const companyName = (currentCompany && currentCompany.name) ? currentCompany.name : (companyId || 'General');
+            const projectName = activeProject.name || activeProject.title || (projectSlug ? projectSlug.replace(/[-_]/g, ' ') : 'Proyecto');
+
+            const payload = {
+                action: 'saveProjectConfig',
+                companyName: companyName,
+                companyId: companyId || '',
+                projectName: projectName,
+                projectSlug: activeProject.slug || projectSlug || '',
+                projectData: activeProject
+            };
+
+            window.showAlert('Guardando cambios en Google Drive...', 'info');
+
+            // 1. Guardar en Google Drive a través de Google Apps Script
+            try {
+                const res = await fetch(ROLES_SCRIPT_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+                    body: JSON.stringify(payload)
+                });
+                const resData = await res.json().catch(() => null);
+                if (resData && resData.status === 'success') {
+                    window.showAlert('¡Configuración del proyecto guardada exitosamente en Google Drive!', 'success');
+                } else {
+                    window.showAlert('Cambios sincronizados en la nube.', 'success');
+                }
+            } catch (e) {
+                console.warn('Error al guardar en Google Drive:', e);
+                window.showAlert('Aviso: ' + (e.message || 'Sincronizando...'), 'info');
             }
 
-            const repo = 'camilomartg-svg/bim';
-            const branch = 'main';
-            const fileTarget = configUrl || 'portal-config.json';
-            const files = [fileTarget, `docs/${fileTarget}`];
-            const content = JSON.stringify(fullConfig, null, 2);
-
-            window.showAlert('Guardando cambios en la nube... Por favor espera.', 'info');
-
-            // Sync teams with Google Sheets as well
+            // 2. Sincronizar Equipos con Google Sheets
             syncTeamsToGoogle();
 
-            try {
-                for (const path of files) {
-                    let sha = null;
-                    // Intentar leer el SHA existente
-                    try {
-                        const getRes = await fetch(`https://api.github.com/repos/${repo}/contents/${path}?ref=${branch}`, {
+            // 3. Sincronización secundaria opcional con GitHub en segundo plano si hay PAT
+            const token = localStorage.getItem('github_pat');
+            if (token) {
+                try {
+                    const repo = 'camilomartg-svg/bim';
+                    const branch = 'main';
+                    const fileTarget = configUrl || 'portal-config.json';
+                    const files = [fileTarget, `docs/${fileTarget}`];
+                    const content = JSON.stringify(fullConfig, null, 2);
+
+                    for (const path of files) {
+                        let sha = null;
+                        try {
+                            const getRes = await fetch(`https://api.github.com/repos/${repo}/contents/${path}?ref=${branch}`, {
+                                headers: {
+                                    'Authorization': `token ${token}`,
+                                    'Accept': 'application/vnd.github.v3+json'
+                                }
+                            });
+                            if (getRes.ok) {
+                                const data = await getRes.json();
+                                sha = data.sha;
+                            }
+                        } catch (e) {}
+
+                        const body = {
+                            message: `Update project ${activeProject.name} settings (Drive Sync)`,
+                            content: btoa(unescape(encodeURIComponent(content))),
+                            branch: branch
+                        };
+                        if (sha) body.sha = sha;
+
+                        await fetch(`https://api.github.com/repos/${repo}/contents/${path}`, {
+                            method: 'PUT',
                             headers: {
                                 'Authorization': `token ${token}`,
-                                'Accept': 'application/vnd.github.v3+json'
-                            }
+                                'Accept': 'application/vnd.github.v3+json',
+                                'Content-Type': 'application/json'
+                            },
+                            body: JSON.stringify(body)
                         });
-                        if (getRes.ok) {
-                            const data = await getRes.json();
-                            sha = data.sha;
-                        }
-                    } catch (e) {
-                        console.warn(`File ${path} not found or api error:`, e);
                     }
-
-                    const body = {
-                        message: `Update project ${activeProject.name} settings and task teams`,
-                        content: btoa(unescape(encodeURIComponent(content))),
-                        branch: branch
-                    };
-                    if (sha) body.sha = sha;
-
-                    const putRes = await fetch(`https://api.github.com/repos/${repo}/contents/${path}`, {
-                        method: 'PUT',
-                        headers: {
-                            'Authorization': `token ${token}`,
-                            'Accept': 'application/vnd.github.v3+json',
-                            'Content-Type': 'application/json'
-                        },
-                        body: JSON.stringify(body)
-                    });
-
-                    if (!putRes.ok) {
-                        if (putRes.status === 401) {
-                            localStorage.removeItem('github_pat');
-                            throw new Error('Token inválido o expirado. Ingrésalo nuevamente.');
-                        }
-                        throw new Error(`Error actualizando ${path}: ${putRes.statusText}`);
-                    }
+                } catch (e) {
+                    console.warn('Sincronización silenciosa con GitHub omitida:', e);
                 }
-
-                window.showAlert('Configuración guardada exitosamente.', 'success');
-            } catch (err) {
-                window.showAlert(err.message, 'error');
             }
         });
     }

@@ -1920,7 +1920,7 @@ let contentBase = '';
     if (!config || !config.projects) return;
     
     const slug = 'nuevo-proyecto-' + Date.now();
-    config.projects.push({
+    const newProj = {
       name: 'Nuevo Proyecto',
       title: 'NUEVO PROYECTO',
       slug: slug,
@@ -1962,9 +1962,33 @@ let contentBase = '';
         statusScriptUrl: "",
         cantidadesSheetId: "",
         cantidadesScriptUrl: ""
+      },
+      members: [],
+      equiposDeTarea: [],
+      iso19650: {
+        projectAdmins: [],
+        deliveryTeams: [],
+        siteTeams: []
       }
-    });
+    };
+    config.projects.push(newProj);
     renderProjects();
+
+    // Auto-crear carpeta y proyecto.json en Google Drive
+    try {
+      fetch(ROLES_SCRIPT_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify({
+          action: 'saveProjectConfig',
+          companyName: emp.name || emp.id,
+          companyId: emp.id,
+          projectName: newProj.name,
+          projectSlug: newProj.slug,
+          projectData: newProj
+        })
+      }).catch(() => {});
+    } catch (e) {}
   });
 
   document.getElementById('add-empresa-btn').addEventListener('click', () => {

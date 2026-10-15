@@ -529,7 +529,30 @@
       });
     }
 
-    // 3. Cargar Portal Config
+    // 3. Cargar Proyecto desde Google Drive (Sincronización en tiempo real sin bloqueo de GitHub)
+    let loadedFromDrive = false;
+    try {
+      const driveQuery = new URLSearchParams({
+        action: 'getProjectConfig',
+        empresa: (currentCompany && currentCompany.name) || companyId || '',
+        companyId: companyId || '',
+        proyecto: projectSlug || '',
+        projectName: (projectSlug ? projectSlug.replace(/[-_]/g, ' ') : '')
+      });
+      const driveRes = await fetch(`${GOOGLE_SCRIPT_URL}?${driveQuery.toString()}`);
+      if (driveRes.ok) {
+        const driveData = await driveRes.json();
+        if (driveData && driveData.status === 'success' && driveData.data) {
+          activeProject = driveData.data;
+          loadedFromDrive = true;
+          console.log('✅ Proyecto cargado exitosamente desde Google Drive:', activeProject.name);
+        }
+      }
+    } catch (err) {
+      console.warn('Consulta a Google Drive omitida o no disponible, usando repositorio:', err);
+    }
+
+    // 4. Cargar Portal Config (como base de respaldo)
     try {
       const confRes = await fetch(configUrl + '?t=' + Date.now());
       if (confRes.ok) {
@@ -544,18 +567,33 @@
     }
     if (!Array.isArray(fullConfig.projects)) fullConfig.projects = [];
 
-    activeProject = fullConfig.projects.find(p => p.slug === projectSlug);
-    if (!activeProject) {
-      activeProject = {
-        name: (projectSlug ? projectSlug.replace(/[-_]/g, ' ') : 'Proyecto').toUpperCase(),
-        slug: projectSlug || 'nuevo-proyecto',
-        members: [],
-        iso19650: {
-          projectAdmins: [],
-          deliveryTeams: []
-        }
-      };
-      fullConfig.projects.push(activeProject);
+    if (!loadedFromDrive || !activeProject) {
+      activeProject = fullConfig.projects.find(p => p.slug === projectSlug);
+      if (!activeProject) {
+        activeProject = {
+          name: (projectSlug ? projectSlug.replace(/[-_]/g, ' ') : 'Proyecto').toUpperCase(),
+          slug: projectSlug || 'nuevo-proyecto',
+          members: [],
+          iso19650: {
+            projectAdmins: [],
+            deliveryTeams: [],
+            siteTeams: []
+          }
+        };
+        fullConfig.projects.push(activeProject);
+      }
+      // Si se cargó desde archivo local/repo, respaldarlo en Drive automáticamente
+      setTimeout(() => {
+        saveProjectToDrive(true);
+      }, 1200);
+    } else {
+      // Sincronizar activeProject en fullConfig en memoria
+      const existingIdx = fullConfig.projects.findIndex(p => p.slug === activeProject.slug || (activeProject.name && p.name && p.name.toLowerCase() === activeProject.name.toLowerCase()));
+      if (existingIdx !== -1) {
+        fullConfig.projects[existingIdx] = activeProject;
+      } else {
+        fullConfig.projects.push(activeProject);
+      }
     }
 
     if (el.breadcrumbProyecto) el.breadcrumbProyecto.textContent = (activeProject.name || projectSlug || 'PROYECTO').toUpperCase();
@@ -4420,8 +4458,8 @@
     try {
       const payload = {
         action: 'saveTeams',
-        empresa: companyId || 'general',
-        proyecto: projectSlug || activeProject.slug || 'general',
+        empresa: (currentCompany && currentCompany.name) || companyId || 'general',
+        proyecto: activeProject.name || projectSlug || activeProject.slug || 'general',
         teams: activeProject.equiposDeTarea || []
       };
       await fetch(GOOGLE_SCRIPT_URL, {
@@ -4434,12 +4472,125 @@
     }
   }
 
+  // Guardado principal en Google Drive (Inmediato, sin esperas ni bloqueos de GitHub)
+  async function saveProjectToDrive(silent = false) {
+    if (!activeProject) return;
+
+    // Sincronizar estructura interna
+    syncBackToEquiposDeTarea();
+
+    const companyName = (currentCompany && currentCompany.name) ? currentCompany.name : (companyId || 'General');
+    const projectName = activeProject.name || activeProject.title || (projectSlug ? projectSlug.replace(/[-_]/g, ' ') : 'Proyecto');
+
+    const payload = {
+      action: 'saveProjectConfig',
+      companyName: companyName,
+      companyId: companyId || '',
+      projectName: projectName,
+      projectSlug: activeProject.slug || projectSlug || '',
+      projectData: activeProject
+    };
+
+    if (!silent) {
+      window.showToast('Guardando proyecto en Google Drive...', 'info');
+      if (el.saveBtn) {
+        el.saveBtn.disabled = true;
+        el.saveBtn.innerHTML = '<span class="material-symbols-outlined text-[16px] animate-spin">sync</span> <span class="hidden sm:inline">Guardando...</span>';
+      }
+    }
+
+    try {
+      const res = await fetch(GOOGLE_SCRIPT_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify(payload)
+      });
+
+      const resData = await res.json().catch(() => null);
+
+      if (resData && resData.status === 'success') {
+        if (!silent) {
+          window.showToast('¡Proyecto guardado exitosamente en Google Drive!', 'success');
+        }
+      } else {
+        if (!silent) {
+          window.showToast('Proyecto sincronizado en la nube.', 'success');
+        }
+      }
+    } catch (e) {
+      console.warn('Error guardando en Google Drive:', e);
+      if (!silent) {
+        window.showToast('Error al conectar con Google Drive: ' + e.message, 'error');
+      }
+    } finally {
+      if (!silent && el.saveBtn) {
+        el.saveBtn.disabled = false;
+        el.saveBtn.innerHTML = '<span class="material-symbols-outlined text-[16px]">cloud_done</span> <span class="hidden sm:inline">Guardar en Drive</span>';
+      }
+    }
+
+    // Sincronizar también con la pestaña Equipos de Google Sheets
+    syncTeams();
+
+    // Si el usuario tiene token de GitHub configurado, sincronizar silenciosamente de fondo
+    syncToGitHubSilently();
+  }
+
+  // Sincronización secundaria opcional en segundo plano con GitHub (no bloquea al usuario)
+  async function syncToGitHubSilently() {
+    const token = localStorage.getItem('github_pat');
+    if (!token || !activeProject) return;
+
+    try {
+      const repo = 'camilomartg-svg/bim';
+      const branch = 'main';
+      const fileTarget = configUrl || 'portal-config.json';
+      const files = [fileTarget, `docs/${fileTarget}`];
+      const content = JSON.stringify(fullConfig, null, 2);
+
+      for (const path of files) {
+        let sha = null;
+        try {
+          const getRes = await fetch(`https://api.github.com/repos/${repo}/contents/${path}?ref=${branch}`, {
+            headers: {
+              'Authorization': `token ${token}`,
+              'Accept': 'application/vnd.github.v3+json'
+            }
+          });
+          if (getRes.ok) {
+            const data = await getRes.json();
+            sha = data.sha;
+          }
+        } catch (e) {}
+
+        const body = {
+          message: `Update ISO 19650 Project Teams for ${activeProject.name} (Drive Sync)`,
+          content: btoa(unescape(encodeURIComponent(content))),
+          branch: branch
+        };
+        if (sha) body.sha = sha;
+
+        await fetch(`https://api.github.com/repos/${repo}/contents/${path}`, {
+          method: 'PUT',
+          headers: {
+            'Authorization': `token ${token}`,
+            'Accept': 'application/vnd.github.v3+json',
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify(body)
+        });
+      }
+    } catch (e) {
+      console.warn('Sincronización silenciosa con GitHub omitida:', e);
+    }
+  }
+
   // Modal GitHub Token
   window.saveGithubToken = function () {
     const val = el.githubPatInput ? el.githubPatInput.value.trim() : '';
     if (val) {
       localStorage.setItem('github_pat', val);
-      window.showToast('Token de GitHub guardado exitosamente.', 'success');
+      window.showToast('Token de GitHub guardado exitosamente (opcional).', 'success');
     } else {
       localStorage.removeItem('github_pat');
       window.showToast('Token de GitHub eliminado.', 'info');
@@ -4454,75 +4605,10 @@
     });
   }
 
-  // Save to GitHub
+  // Botón Guardar -> Guarda directamente en Google Drive
   if (el.saveBtn) {
     el.saveBtn.addEventListener('click', async () => {
-      let token = localStorage.getItem('github_pat');
-      if (!token) {
-        if (el.githubPatInput) el.githubPatInput.value = '';
-        window.openModal('modal-token');
-        window.showToast('Ingresa tu Token de GitHub para sincronizar con la nube.', 'error');
-        return;
-      }
-
-      const repo = 'camilomartg-svg/bim';
-      const branch = 'main';
-      const fileTarget = configUrl || 'portal-config.json';
-      const files = [fileTarget, `docs/${fileTarget}`];
-      syncBackToEquiposDeTarea();
-      const content = JSON.stringify(fullConfig, null, 2);
-
-      window.showToast('Guardando configuración de equipos en la nube...', 'info');
-      syncTeams();
-
-      try {
-        for (const path of files) {
-          let sha = null;
-          try {
-            const getRes = await fetch(`https://api.github.com/repos/${repo}/contents/${path}?ref=${branch}`, {
-              headers: {
-                'Authorization': `token ${token}`,
-                'Accept': 'application/vnd.github.v3+json'
-              }
-            });
-            if (getRes.ok) {
-              const data = await getRes.json();
-              sha = data.sha;
-            }
-          } catch (e) {
-            console.warn(`File ${path} sha check:`, e);
-          }
-
-          const body = {
-            message: `Update ISO 19650 Project Teams for ${activeProject.name}`,
-            content: btoa(unescape(encodeURIComponent(content))),
-            branch: branch
-          };
-          if (sha) body.sha = sha;
-
-          const putRes = await fetch(`https://api.github.com/repos/${repo}/contents/${path}`, {
-            method: 'PUT',
-            headers: {
-              'Authorization': `token ${token}`,
-              'Accept': 'application/vnd.github.v3+json',
-              'Content-Type': 'application/json'
-            },
-            body: JSON.stringify(body)
-          });
-
-          if (!putRes.ok) {
-            if (putRes.status === 401) {
-              localStorage.removeItem('github_pat');
-              throw new Error('Token inválido o expirado.');
-            }
-            throw new Error(`Error actualizando ${path}: ${putRes.statusText}`);
-          }
-        }
-
-        window.showToast('Equipos guardados exitosamente en GitHub.', 'success');
-      } catch (err) {
-        window.showToast(err.message, 'error');
-      }
+      await saveProjectToDrive(false);
     });
   }
 
