@@ -386,7 +386,9 @@
             "name": "INTERVENTORÍA",
             "leadEmail": "",
             "description": "Equipo de entrega asignado a la producción de información.",
-            "members": [],
+            "members": [
+              "dataguardar@gmail.com"
+            ],
             "taskTeams": []
           }
         ],
