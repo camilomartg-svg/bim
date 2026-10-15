@@ -398,6 +398,23 @@
           }
         ],
         "directorDeObra": ""
+      },
+      "fileVisibilityConfig": {
+        "task:ARQUITECTURA": {
+          "canViewProgreso": true,
+          "canViewCompartido": true,
+          "canViewPublicado": true
+        },
+        "task:BIM OBRA": {
+          "canViewProgreso": false,
+          "canViewCompartido": false,
+          "canViewPublicado": true
+        },
+        "task:INTERVENTORIA": {
+          "canViewProgreso": false,
+          "canViewCompartido": false,
+          "canViewPublicado": true
+        }
       }
     },
     {
