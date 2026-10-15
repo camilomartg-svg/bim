@@ -467,52 +467,15 @@
     });
   }
 
-  // Mantener equiposDeTarea y deliveryTeams sincronizados bidireccionalmente
+  // Mantener equiposDeTarea como reflejo estricto de deliveryTeams
   function syncBackToEquiposDeTarea() {
     if (!activeProject) return;
-    if (!Array.isArray(activeProject.equiposDeTarea)) {
-      activeProject.equiposDeTarea = [];
-    }
+    if (!activeProject.iso19650 || !Array.isArray(activeProject.iso19650.deliveryTeams)) return;
 
-    const normalizeName = str => (str || '').normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase().trim();
-
-    // Sincronizar hacia deliveryTeams los equiposDeTarea
-    if (activeProject.iso19650 && Array.isArray(activeProject.iso19650.deliveryTeams)) {
-      activeProject.equiposDeTarea.forEach((eq, idx) => {
-        if (!eq.name) return;
-        const norm = normalizeName(eq.name);
-        let dt = activeProject.iso19650.deliveryTeams.find(d => normalizeName(d.name) === norm);
-        if (!dt) {
-          dt = {
-            id: 'deliv-' + idx + '-' + Date.now(),
-            name: eq.name.trim(),
-            leadEmail: (eq.members && eq.members[0]) || '',
-            description: 'Equipo de tarea asignado a la producción de información.',
-            members: Array.isArray(eq.members) ? [...eq.members] : [],
-            taskTeams: []
-          };
-          activeProject.iso19650.deliveryTeams.push(dt);
-        } else {
-          dt.members = Array.isArray(eq.members) ? [...eq.members] : [];
-          if (!dt.leadEmail && dt.members.length > 0) {
-            dt.leadEmail = dt.members[0];
-          }
-        }
-      });
-
-      // Asegurar que cualquier deliveryTeam también esté en equiposDeTarea
-      activeProject.iso19650.deliveryTeams.forEach(dt => {
-        if (!dt.name) return;
-        const norm = normalizeName(dt.name);
-        let eq = activeProject.equiposDeTarea.find(e => normalizeName(e.name) === norm);
-        if (!eq) {
-          activeProject.equiposDeTarea.push({
-            name: dt.name.trim(),
-            members: Array.isArray(dt.members) ? [...dt.members] : []
-          });
-        }
-      });
-    }
+    activeProject.equiposDeTarea = activeProject.iso19650.deliveryTeams.map(dt => ({
+      name: (dt.name || '').trim(),
+      members: Array.isArray(dt.members) ? [...dt.members] : []
+    }));
   }
 
   // --- CARGA DE DATOS ---
@@ -642,7 +605,6 @@
 
   // --- RENDERIZADO GENERAL ---
   function renderAllViews() {
-    normalizeProjectIsoStructure();
     updateMetrics();
     renderDiagramStage();
     renderAuthorizedMembersTab();
@@ -769,7 +731,11 @@
 
     function getShortName(fullName) {
       if (!fullName) return '';
-      const parts = fullName.trim().split(/\s+/);
+      const clean = fullName.trim();
+      if (clean.toLowerCase().startsWith('sin ')) {
+        return 'Sin Asignar';
+      }
+      const parts = clean.split(/\s+/);
       if (parts.length === 1) return parts[0];
       return `${parts[0]} ${parts[parts.length - 1].charAt(0)}.`;
     }
@@ -885,25 +851,33 @@
     outerCircleLabel2.innerHTML = '1. Equipos Receptores';
     el.isoDiagramNodes.appendChild(outerCircleLabel2);
 
-    // Primary coordinating line between Adjudicador (A) and Director de Obra (D)
+    // Top-Center Hub: Administrador de Proyecto (Rol A)
+    const centerX_Admin = (centerX1 + centerX2) / 2;
+    const centerY_Admin = Math.max(90, centerY - Math.max(R_outer_delivery, R_outer_receiver) + 20);
+
+    // Connecting lines from Administrador de Proyecto (A) to Líder de Entrega (B) and Líder de Obra (D)
+    drawOffsetLine(centerX_Admin, centerY_Admin, centerX1, centerY, 32, 30, '#0284c7', false);
+    drawOffsetLine(centerX_Admin, centerY_Admin, centerX2, centerY, 32, 30, '#0284c7', false);
+
+    // Primary coordinating line between Líder de Entrega (B) and Líder de Obra (D)
     drawOffsetLine(centerX1, centerY, centerX2, centerY, 28, 28, '#475569', true);
 
-    // 2. Draw Left Center Hub: A. Adjudicador (Administrador)
+    // Draw Node A: Administrador del Proyecto (A)
     const nodeA = document.createElement('div');
     const isASelected = selectedNode.type === 'A';
     const aClasses = isASelected 
       ? 'ring-4 ring-indigo-500 scale-105 border-indigo-500 z-40' 
       : 'border-white dark:border-slate-800 z-30';
-    nodeA.className = `absolute rounded-full bg-sky-600 hover:bg-sky-700 dark:bg-sky-500 dark:hover:bg-sky-600 text-white font-black flex items-center justify-center cursor-pointer shadow-lg shadow-sky-500/20 hover:scale-110 transition-transform border-4 ${aClasses} select-none`;
-    nodeA.style.left = `${centerX1 - 28}px`;
-    nodeA.style.top = `${centerY - 28}px`;
+    nodeA.className = `absolute rounded-full bg-sky-600 hover:bg-sky-700 dark:bg-sky-500 dark:hover:bg-sky-600 text-white font-black flex items-center justify-center cursor-pointer shadow-lg shadow-sky-500/25 hover:scale-110 transition-transform border-4 ${aClasses} select-none`;
+    nodeA.style.left = `${centerX_Admin - 28}px`;
+    nodeA.style.top = `${centerY_Admin - 28}px`;
     nodeA.style.width = '56px';
     nodeA.style.height = '56px';
-    nodeA.innerHTML = '<span class="text-base">A</span>';
+    nodeA.innerHTML = '<span class="text-base font-black">A</span>';
 
     setupTooltip(nodeA, () => {
-      const names = projectAdmins.map(email => getUserMetadata(email).name).join(', ') || 'Sin Administrador';
-      return `<div class="p-2 text-xs space-y-1"><strong>Adjudicador:</strong><br>${names}</div>`;
+      const names = projectAdmins.map(email => getUserMetadata(email).name).join(', ') || 'Sin Administrador Asignado';
+      return `<div class="p-2 text-xs space-y-1"><strong>Administrador del Proyecto:</strong><br>${names}</div>`;
     });
 
     nodeA.addEventListener('click', (e) => {
@@ -914,18 +888,59 @@
     el.isoDiagramNodes.appendChild(nodeA);
 
     // Label for Node A
-    const adminName = projectAdmins.length > 0 ? getUserMetadata(projectAdmins[0]).name : 'Sin Administrador';
+    const adminName = projectAdmins.length > 0 ? getUserMetadata(projectAdmins[0]).name : 'Sin Asignar';
     const labelA = document.createElement('div');
     labelA.className = 'absolute text-center pointer-events-none select-none z-30';
-    labelA.style.left = `${centerX1}px`;
-    labelA.style.top = `${centerY + 32}px`;
+    labelA.style.left = `${centerX_Admin}px`;
+    labelA.style.top = `${centerY_Admin + 32}px`;
     labelA.style.transform = 'translateX(-50%)';
-    labelA.style.width = '120px';
+    labelA.style.width = '140px';
     labelA.innerHTML = `
       <div class="bg-white/95 dark:bg-slate-900/95 border border-slate-200 dark:border-slate-800 rounded px-1.5 py-0.5 shadow-sm text-slate-800 dark:text-slate-200 text-[10px] font-extrabold truncate">${escapeHtml(getShortName(adminName))}</div>
-      <div class="text-[8px] text-slate-400 dark:text-slate-500 font-bold uppercase tracking-wider mt-0.5">Adjudicador</div>
+      <div class="text-[8px] text-sky-600 dark:text-sky-400 font-bold uppercase tracking-wider mt-0.5">Admin. Proyecto (A)</div>
     `;
     el.isoDiagramNodes.appendChild(labelA);
+
+    // 2. Draw Left Center Hub: Líder de Entrega
+    const deliveryLeaderEmail = (activeProject.iso19650?.liderEquipoEntrega || '').toLowerCase().trim();
+    const effectiveDeliveryLeaderEmail = deliveryLeaderEmail || (deliveryTeams.length > 0 && deliveryTeams[0].leadEmail ? deliveryTeams[0].leadEmail : '');
+    const deliveryLeaderName = effectiveDeliveryLeaderEmail ? getUserMetadata(effectiveDeliveryLeaderEmail).name : 'Sin Asignar';
+
+    const nodeBLeader = document.createElement('div');
+    const isBLeaderSelected = selectedNode.type === 'B_LEADER';
+    const bClasses = isBLeaderSelected 
+      ? 'ring-4 ring-indigo-500 scale-105 border-indigo-500 z-40' 
+      : 'border-white dark:border-slate-800 z-30';
+    nodeBLeader.className = `absolute rounded-full bg-blue-600 hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-600 text-white font-black flex items-center justify-center cursor-pointer shadow-lg shadow-blue-500/20 hover:scale-110 transition-transform border-4 ${bClasses} select-none`;
+    nodeBLeader.style.left = `${centerX1 - 28}px`;
+    nodeBLeader.style.top = `${centerY - 28}px`;
+    nodeBLeader.style.width = '56px';
+    nodeBLeader.style.height = '56px';
+    nodeBLeader.innerHTML = '<span class="text-base font-black">B</span>';
+
+    setupTooltip(nodeBLeader, () => {
+      return `<div class="p-2 text-xs space-y-1"><strong>Líder de Entrega:</strong><br>${deliveryLeaderName}</div>`;
+    });
+
+    nodeBLeader.addEventListener('click', (e) => {
+      e.stopPropagation();
+      selectedNode = { type: 'B_LEADER', id: null };
+      renderAllViews();
+    });
+    el.isoDiagramNodes.appendChild(nodeBLeader);
+
+    // Label for Left Hub (Líder de Entrega)
+    const labelBLeaderHub = document.createElement('div');
+    labelBLeaderHub.className = 'absolute text-center pointer-events-none select-none z-30';
+    labelBLeaderHub.style.left = `${centerX1}px`;
+    labelBLeaderHub.style.top = `${centerY + 32}px`;
+    labelBLeaderHub.style.transform = 'translateX(-50%)';
+    labelBLeaderHub.style.width = '130px';
+    labelBLeaderHub.innerHTML = `
+      <div class="bg-white/95 dark:bg-slate-900/95 border border-slate-200 dark:border-slate-800 rounded px-1.5 py-0.5 shadow-sm text-slate-800 dark:text-slate-200 text-[10px] font-extrabold truncate">${escapeHtml(getShortName(deliveryLeaderName))}</div>
+      <div class="text-[8px] text-blue-600 dark:text-blue-400 font-bold uppercase tracking-wider mt-0.5">Líder de Entrega</div>
+    `;
+    el.isoDiagramNodes.appendChild(labelBLeaderHub);
 
     // Draw Delivery Teams (Left Side)
     if (deliveryTeams.length === 0) {
@@ -1094,7 +1109,7 @@
       });
     }
 
-    // 3. Draw Right Center Hub: D. Director de Obra
+    // 3. Draw Right Center Hub: D. Líder de Obra
     const nodeD = document.createElement('div');
     const isDSelected = selectedNode.type === 'D';
     const dClasses = isDSelected 
@@ -1105,11 +1120,11 @@
     nodeD.style.top = `${centerY - 28}px`;
     nodeD.style.width = '56px';
     nodeD.style.height = '56px';
-    nodeD.innerHTML = '<span class="text-base">D</span>';
+    nodeD.innerHTML = '<span class="text-base font-black">D</span>';
 
     setupTooltip(nodeD, () => {
-      const name = directorEmail ? getUserMetadata(directorEmail).name : 'Sin Director';
-      return `<div class="p-2 text-xs space-y-1"><strong>Director de Obra:</strong><br>${name}</div>`;
+      const name = directorEmail ? getUserMetadata(directorEmail).name : 'Sin Líder de Obra';
+      return `<div class="p-2 text-xs space-y-1"><strong>Líder de Obra:</strong><br>${name}</div>`;
     });
 
     nodeD.addEventListener('click', (e) => {
@@ -1120,16 +1135,16 @@
     el.isoDiagramNodes.appendChild(nodeD);
 
     // Label for Node D
-    const directorName = directorEmail ? getUserMetadata(directorEmail).name : 'Sin Director Asignado';
+    const directorName = directorEmail ? getUserMetadata(directorEmail).name : 'Sin Asignar';
     const labelD = document.createElement('div');
     labelD.className = 'absolute text-center pointer-events-none select-none z-30';
     labelD.style.left = `${centerX2}px`;
     labelD.style.top = `${centerY + 32}px`;
     labelD.style.transform = 'translateX(-50%)';
-    labelD.style.width = '120px';
+    labelD.style.width = '130px';
     labelD.innerHTML = `
       <div class="bg-white/95 dark:bg-slate-900/95 border border-slate-200 dark:border-slate-800 rounded px-1.5 py-0.5 shadow-sm text-slate-800 dark:text-slate-200 text-[10px] font-extrabold truncate">${escapeHtml(getShortName(directorName))}</div>
-      <div class="text-[8px] text-slate-400 dark:text-slate-500 font-bold uppercase tracking-wider mt-0.5">Director Obra</div>
+      <div class="text-[8px] text-amber-600 dark:text-amber-400 font-bold uppercase tracking-wider mt-0.5">Líder de Obra</div>
     `;
     el.isoDiagramNodes.appendChild(labelD);
 
@@ -1289,14 +1304,22 @@
   }
 
   function renderCardViewStage() {
-    if (!el.diagramDeliveryClusters || !activeProject) return;
+    if (!el.isoDiagramCardView || !activeProject) return;
 
     const deliveryTeams = activeProject.iso19650?.deliveryTeams || [];
     const receiverTeams = activeProject.iso19650?.receiverTeams || [];
 
-    const adminNames = (activeProject.iso19650?.projectAdmins || [])
+    const projectAdmins = activeProject.iso19650?.projectAdmins || [];
+    const adminNames = projectAdmins
       .map(email => getUserRegisteredName(email))
-      .join(', ') || 'Sin administrador asignado';
+      .join(', ') || 'Sin Administrador Asignado';
+
+    const deliveryLeaderEmail = (activeProject.iso19650?.liderEquipoEntrega || '').toLowerCase().trim();
+    const effectiveDeliveryLeaderEmail = deliveryLeaderEmail || (deliveryTeams.length > 0 && deliveryTeams[0].leadEmail ? deliveryTeams[0].leadEmail : '');
+    const deliveryLeaderName = effectiveDeliveryLeaderEmail ? getUserMetadata(effectiveDeliveryLeaderEmail).name : 'Sin Asignar';
+
+    const directorEmail = (activeProject.iso19650?.directorDeObra || '').toLowerCase().trim();
+    const directorName = directorEmail ? getUserMetadata(directorEmail).name : 'Sin Asignar';
 
     const deliveryMatrixRows = deliveryTeams.map(dt => {
       const leadMeta = getUserMetadata(dt.leadEmail);
@@ -1307,19 +1330,29 @@
       }).join('') || '<div class="text-[10px] text-slate-400 italic py-1">Sin otros miembros asignados</div>';
       const tasksHtml = (dt.taskTeams || []).map(tt => `<span class="inline-flex items-center gap-1 py-1 px-2 rounded-md bg-emerald-50 dark:bg-emerald-950/40 text-emerald-800 dark:text-emerald-300 text-[10px] font-medium border border-emerald-100 dark:border-emerald-900/40"><span class="material-symbols-outlined text-[12px]">task_alt</span>${escapeHtml(tt.name)}</span>`).join('');
       return `
-        <div class="project-matrix-team-row rounded-xl border border-slate-200 dark:border-slate-800 bg-white/80 dark:bg-slate-900/70 p-3 shadow-sm">
-          <div class="project-matrix-branch" aria-hidden="true">→</div>
-          <section class="rounded-xl border border-blue-100 dark:border-blue-900/50 bg-blue-50/60 dark:bg-blue-950/25 p-4">
-            <div class="flex items-center gap-2 text-blue-700 dark:text-blue-300 font-black text-[10px] uppercase tracking-wider"><span class="h-7 w-7 rounded-lg bg-blue-600 text-white flex items-center justify-center">B</span>${escapeHtml(dt.name)}</div>
-            <div class="mt-3 font-bold text-xs text-slate-800 dark:text-slate-100">${escapeHtml(leadMeta.name || 'Sin líder asignado')}</div>
-            <div class="mt-1 text-[10px] text-slate-500 dark:text-slate-400 break-all">${escapeHtml(leadMeta.email || '')}</div>
-          </section>
-          <div class="delivery-matrix-arrow" aria-hidden="true">→</div>
-          <section class="rounded-xl border border-purple-100 dark:border-purple-900/50 bg-purple-50/40 dark:bg-purple-950/20 p-4">
-            <div class="text-purple-700 dark:text-purple-300 font-black text-[10px] uppercase tracking-wider">Miembros del equipo (C)</div>
-            <div class="mt-3 grid grid-cols-1 gap-1.5">${membersHtml}</div>
-            ${tasksHtml ? `<div class="mt-4 border-t border-purple-100 dark:border-purple-900/50 pt-3"><div class="mb-2 text-emerald-700 dark:text-emerald-300 font-black text-[10px] uppercase tracking-wider">Equipos de tarea</div><div class="flex flex-wrap gap-1.5">${tasksHtml}</div></div>` : ''}
-          </section>
+        <div class="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white/90 dark:bg-slate-900/80 p-4 shadow-sm space-y-3">
+          <div class="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-2.5">
+            <div class="flex items-center gap-2">
+              <span class="h-6 w-6 rounded-lg bg-blue-600 text-white flex items-center justify-center font-black text-xs">B</span>
+              <span class="font-black text-xs text-slate-900 dark:text-white uppercase tracking-wider">${escapeHtml(dt.name)}</span>
+            </div>
+            <span class="text-[10px] px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-500 font-mono font-bold">${(dt.members || []).length} miembros</span>
+          </div>
+          <div class="rounded-xl bg-blue-50/60 dark:bg-blue-950/30 p-2.5 border border-blue-100 dark:border-blue-900/40 text-xs">
+            <div class="text-[9px] font-black uppercase tracking-wider text-blue-600 dark:text-blue-400">Líder del Equipo</div>
+            <div class="font-bold text-slate-800 dark:text-slate-200 mt-0.5">${escapeHtml(leadMeta.name || 'Sin líder')}</div>
+            <div class="text-[9px] text-slate-400 font-mono truncate">${escapeHtml(leadMeta.email || '')}</div>
+          </div>
+          <div>
+            <div class="text-[9px] font-black uppercase tracking-wider text-purple-600 dark:text-purple-400 mb-1.5">Miembros (C)</div>
+            <div class="space-y-1 max-h-[140px] overflow-y-auto pr-1">${membersHtml}</div>
+          </div>
+          ${tasksHtml ? `
+            <div class="border-t border-slate-100 dark:border-slate-800/60 pt-2.5">
+              <div class="text-[9px] font-black uppercase tracking-wider text-emerald-600 dark:text-emerald-400 mb-1.5">Equipos de Tarea (3)</div>
+              <div class="flex flex-wrap gap-1.5">${tasksHtml}</div>
+            </div>
+          ` : ''}
         </div>`;
     }).join('');
 
@@ -1330,51 +1363,94 @@
         const meta = getUserMetadata(email);
         return `<div class="flex items-center gap-2 py-1.5 px-2.5 rounded-lg bg-white/70 dark:bg-slate-800 text-[11px]"><span class="h-5 w-5 rounded-md bg-amber-100 dark:bg-amber-950 text-amber-700 dark:text-amber-300 flex items-center justify-center font-bold text-[9px] shrink-0">O</span><div class="min-w-0"><div class="font-bold text-slate-800 dark:text-slate-200 truncate">${escapeHtml(meta.name || email)}</div><div class="text-slate-400 font-mono text-[9px] truncate">${escapeHtml(email)}</div></div></div>`;
       }).join('') || '<div class="text-[10px] text-slate-400 italic py-1">Sin otros miembros asignados</div>';
+      const tasksHtml = (rt.taskTeams || []).map(tt => `<span class="inline-flex items-center gap-1 py-1 px-2 rounded-md bg-amber-50 dark:bg-amber-950/40 text-amber-800 dark:text-amber-300 text-[10px] font-medium border border-amber-100 dark:border-amber-900/40"><span class="material-symbols-outlined text-[12px]">construction</span>${escapeHtml(tt.name)}</span>`).join('');
       return `
-        <div class="project-matrix-team-row rounded-xl border border-slate-200 dark:border-slate-800 bg-white/80 dark:bg-slate-900/70 p-3 shadow-sm">
-          <div class="project-matrix-branch" aria-hidden="true">→</div>
-          <section class="rounded-xl border border-amber-100 dark:border-amber-900/50 bg-amber-50/60 dark:bg-amber-950/25 p-4">
-            <div class="flex items-center gap-2 text-amber-700 dark:text-amber-300 font-black text-[10px] uppercase tracking-wider"><span class="h-7 w-7 rounded-lg bg-amber-600 text-white flex items-center justify-center">O</span>${escapeHtml(rt.name)}</div>
-            <div class="mt-3 font-bold text-xs text-slate-800 dark:text-slate-100">${escapeHtml(leadMeta.name || 'Sin líder asignado')}</div>
-            <div class="mt-1 text-[10px] text-slate-500 dark:text-slate-400 break-all">${escapeHtml(leadMeta.email || '')}</div>
-          </section>
-          <div class="delivery-matrix-arrow" aria-hidden="true">→</div>
-          <section class="rounded-xl border border-amber-100 dark:border-amber-900/50 bg-amber-50/40 dark:bg-amber-950/20 p-4">
-            <div class="text-amber-700 dark:text-amber-300 font-black text-[10px] uppercase tracking-wider">Miembros del equipo receptor</div>
-            <div class="mt-3 grid grid-cols-1 gap-1.5">${membersHtml}</div>
-          </section>
+        <div class="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white/90 dark:bg-slate-900/80 p-4 shadow-sm space-y-3">
+          <div class="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-2.5">
+            <div class="flex items-center gap-2">
+              <span class="h-6 w-6 rounded-lg bg-amber-600 text-white flex items-center justify-center font-black text-xs">O</span>
+              <span class="font-black text-xs text-slate-900 dark:text-white uppercase tracking-wider">${escapeHtml(rt.name)}</span>
+            </div>
+            <span class="text-[10px] px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-500 font-mono font-bold">${(rt.members || []).length} miembros</span>
+          </div>
+          <div class="rounded-xl bg-amber-50/60 dark:bg-amber-950/30 p-2.5 border border-amber-100 dark:border-amber-900/40 text-xs">
+            <div class="text-[9px] font-black uppercase tracking-wider text-amber-600 dark:text-amber-400">Líder del Equipo de Obra</div>
+            <div class="font-bold text-slate-800 dark:text-slate-200 mt-0.5">${escapeHtml(leadMeta.name || 'Sin líder')}</div>
+            <div class="text-[9px] text-slate-400 font-mono truncate">${escapeHtml(leadMeta.email || '')}</div>
+          </div>
+          <div>
+            <div class="text-[9px] font-black uppercase tracking-wider text-amber-700 dark:text-amber-300 mb-1.5">Miembros de Obra</div>
+            <div class="space-y-1 max-h-[140px] overflow-y-auto pr-1">${membersHtml}</div>
+          </div>
+          ${tasksHtml ? `
+            <div class="border-t border-slate-100 dark:border-slate-800/60 pt-2.5">
+              <div class="text-[9px] font-black uppercase tracking-wider text-amber-600 dark:text-amber-400 mb-1.5">Tareas de Obra</div>
+              <div class="flex flex-wrap gap-1.5">${tasksHtml}</div>
+            </div>
+          ` : ''}
         </div>`;
     }).join('');
 
-    const receiverPanel = receiverTeams.length > 0 ? `
-      <div class="space-y-3">
-        <div class="rounded-2xl border-2 border-dashed border-amber-200 dark:border-amber-800 bg-amber-50/60 dark:bg-amber-950/25 p-5 flex flex-col justify-center self-stretch">
-          <div class="flex items-center gap-2 text-amber-700 dark:text-amber-300 font-black text-[10px] uppercase tracking-wider"><span class="h-8 w-8 rounded-xl bg-amber-600 text-white flex items-center justify-center">R</span>Equipo receptor / obra</div>
-          <div class="mt-4 text-sm text-slate-800 dark:text-slate-100 font-bold">${receiverTeams.map(rt => escapeHtml(rt.name)).join(', ') || 'Sin equipos receptor'}</div>
+    el.isoDiagramCardView.innerHTML = `
+      <div class="max-w-6xl mx-auto space-y-6">
+        <!-- Root Card: Administrador del Proyecto (A) -->
+        <div class="flex flex-col items-center">
+          <div class="rounded-2xl border-2 border-dashed border-sky-400 dark:border-sky-600 bg-sky-50/80 dark:bg-sky-950/30 p-5 w-full max-w-lg text-center shadow-md">
+            <div class="flex items-center justify-center gap-2 mb-2">
+              <span class="h-8 w-8 rounded-xl bg-sky-600 text-white flex items-center justify-center font-black text-sm shadow-sm">A</span>
+              <span class="text-xs font-black uppercase tracking-wider text-sky-800 dark:text-sky-300">Administrador del Proyecto</span>
+            </div>
+            <div class="font-extrabold text-base text-slate-900 dark:text-white">${escapeHtml(adminNames)}</div>
+            <div class="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5 font-medium">Designación Principal • Gobernanza ISO 19650</div>
+          </div>
+
+          <!-- Tree connector line splitting down to two branches -->
+          <div class="w-0.5 h-6 bg-slate-300 dark:bg-slate-700"></div>
+          <div class="w-2/3 border-t-2 border-slate-300 dark:border-slate-700 h-4"></div>
         </div>
-        <div class="space-y-3">${receiverMatrixRows}</div>
-      </div>
-    ` : `
-      <div class="rounded-2xl border border-dashed border-amber-200 dark:border-amber-800 bg-amber-50/40 dark:bg-amber-950/20 p-5 text-center text-xs text-slate-400 italic">
-        No hay equipos receptor configurados.
+
+        <!-- Two Main Branches: Entrega (Left) & Obra (Right) -->
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+          <!-- Left Branch: Líder de Entrega (B) and Delivery Teams -->
+          <div class="space-y-4">
+            <div class="rounded-2xl border-2 border-blue-300 dark:border-blue-800 bg-blue-50/70 dark:bg-blue-950/30 p-4 shadow-sm">
+              <div class="flex items-center justify-between">
+                <div class="flex items-center gap-2.5">
+                  <span class="h-8 w-8 rounded-xl bg-blue-600 text-white flex items-center justify-center font-black text-sm shadow-sm">B</span>
+                  <div>
+                    <div class="text-[10px] font-black uppercase tracking-wider text-blue-700 dark:text-blue-300">Líder de Entrega</div>
+                    <div class="text-xs font-extrabold text-slate-800 dark:text-slate-100">${escapeHtml(deliveryLeaderName)}</div>
+                  </div>
+                </div>
+                <span class="text-[10px] px-2.5 py-1 rounded-full bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200 font-bold font-mono">1. Equipos de Entrega</span>
+              </div>
+            </div>
+            <div class="space-y-4">
+              ${deliveryMatrixRows || '<div class="p-8 rounded-2xl border border-dashed border-slate-200 dark:border-slate-800 text-center text-xs text-slate-400 italic">No hay equipos de entrega configurados</div>'}
+            </div>
+          </div>
+
+          <!-- Right Branch: Líder de Obra (D) and Receiver Teams -->
+          <div class="space-y-4">
+            <div class="rounded-2xl border-2 border-amber-300 dark:border-amber-800 bg-amber-50/70 dark:bg-amber-950/30 p-4 shadow-sm">
+              <div class="flex items-center justify-between">
+                <div class="flex items-center gap-2.5">
+                  <span class="h-8 w-8 rounded-xl bg-amber-600 text-white flex items-center justify-center font-black text-sm shadow-sm">D</span>
+                  <div>
+                    <div class="text-[10px] font-black uppercase tracking-wider text-amber-700 dark:text-amber-300">Líder de Obra</div>
+                    <div class="text-xs font-extrabold text-slate-800 dark:text-slate-100">${escapeHtml(directorName)}</div>
+                  </div>
+                </div>
+                <span class="text-[10px] px-2.5 py-1 rounded-full bg-amber-100 dark:bg-amber-900 text-amber-800 dark:text-amber-200 font-bold font-mono">1. Equipos de Obra</span>
+              </div>
+            </div>
+            <div class="space-y-4">
+              ${receiverMatrixRows || '<div class="p-8 rounded-2xl border border-dashed border-slate-200 dark:border-slate-800 text-center text-xs text-slate-400 italic">No hay equipos de obra configurados</div>'}
+            </div>
+          </div>
+        </div>
       </div>
     `;
-
-    el.diagramDeliveryClusters.innerHTML = `
-      <div class="project-team-matrix">
-        <section class="rounded-2xl border-2 border-dashed border-sky-200 dark:border-sky-900 bg-sky-50/60 dark:bg-sky-950/25 p-5 flex flex-col justify-center self-stretch">
-          <div class="flex items-center gap-2 text-sky-700 dark:text-sky-300 font-black text-[10px] uppercase tracking-wider"><span class="h-8 w-8 rounded-xl bg-sky-600 text-white flex items-center justify-center">A</span>Administrador del proyecto</div>
-          <div class="mt-4 font-bold text-sm text-slate-800 dark:text-slate-100">${escapeHtml(adminNames)}</div>
-        </section>
-        <div class="project-matrix-bus" aria-hidden="true"></div>
-        <div class="space-y-3">${deliveryMatrixRows || '<div class="text-[10px] text-slate-400 italic py-1">Sin equipos de entrega</div>'}</div>
-      </div>
-    `;
-
-    const receiverPanelEl = document.getElementById('receiver-diagram-panel');
-    if (receiverPanelEl) {
-      receiverPanelEl.innerHTML = receiverPanel;
-    }
   }
 
   function renderTreeView() {
@@ -1629,7 +1705,7 @@
             <div class="border-b border-slate-100 dark:border-slate-800/60 pb-3 flex items-start justify-between">
               <div>
                 <span class="px-2 py-0.5 rounded bg-sky-100 dark:bg-sky-950 text-sky-700 dark:text-sky-300 text-[9px] font-black uppercase tracking-wider">Rol A</span>
-                <h3 class="text-base font-black text-slate-900 dark:text-white mt-1">Adjudicador</h3>
+                <h3 class="text-base font-black text-slate-900 dark:text-white mt-1">Administrador de Proyecto</h3>
               </div>
               <button onclick="clearInspectorSelection(event)" class="text-slate-400 hover:text-slate-600 dark:hover:text-white" title="Limpiar selección">
                 <span class="material-symbols-outlined text-[18px]">close</span>
@@ -1637,7 +1713,7 @@
             </div>
 
             <p class="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
-              Es el cliente, promotor o representante principal del proyecto que designa a los administradores para liderar la gobernanza de información.
+              Designado por el Administrador de Empresa para gobernar y liderar la estructura general del proyecto y sus equipos según ISO 19650.
             </p>
 
             <div class="space-y-2 mt-2">
@@ -1652,6 +1728,51 @@
             <button onclick="window.switchTab('admins')" class="w-full inline-flex items-center justify-center gap-2 py-2 px-4 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold uppercase tracking-wider transition-all shadow-sm">
               <span class="material-symbols-outlined text-[16px]">shield_person</span>
               <span>Gestionar Administradores</span>
+            </button>
+          </div>
+        </div>
+      `;
+      return;
+    }
+
+    // B_LEADER: Líder de Entrega (Nodo central izquierdo)
+    if (selectedNode.type === 'B_LEADER') {
+      const deliveryLeaderEmail = (activeProject.iso19650?.liderEquipoEntrega || '').toLowerCase().trim();
+      const meta = deliveryLeaderEmail ? getUserMetadata(deliveryLeaderEmail) : null;
+      el.diagramInspectorPanel.innerHTML = `
+        <div class="flex flex-col h-full justify-between">
+          <div class="space-y-4">
+            <div class="border-b border-slate-100 dark:border-slate-800/60 pb-3 flex items-start justify-between">
+              <div>
+                <span class="px-2 py-0.5 rounded bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-300 text-[9px] font-black uppercase tracking-wider">Rol B</span>
+                <h3 class="text-base font-black text-slate-900 dark:text-white mt-1">Líder de Entrega</h3>
+              </div>
+              <button onclick="clearInspectorSelection(event)" class="text-slate-400 hover:text-slate-600 dark:hover:text-white" title="Limpiar selección">
+                <span class="material-symbols-outlined text-[18px]">close</span>
+              </button>
+            </div>
+
+            <p class="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
+              Adjudicatario principal y coordinador general de la producción y entrega de información del proyecto según ISO 19650.
+            </p>
+
+            ${meta ? `
+              <div class="p-3.5 rounded-2xl bg-blue-50/60 dark:bg-blue-950/20 border border-blue-100/50 dark:border-blue-900/30 space-y-1.5">
+                <div class="font-black text-xs text-slate-800 dark:text-slate-200">${escapeHtml(meta.name)}</div>
+                <div class="text-[9px] text-slate-400 font-mono truncate">${escapeHtml(meta.email)}</div>
+                <div class="text-[10px] text-slate-500 mt-0.5">${escapeHtml(meta.company)} • ${escapeHtml(meta.cargo)}</div>
+              </div>
+            ` : `
+              <div class="p-4 rounded-xl border border-dashed border-slate-200 dark:border-slate-800 text-center text-xs text-slate-400 italic">
+                Sin Líder de Entrega asignado.
+              </div>
+            `}
+          </div>
+
+          <div class="pt-4 border-t border-slate-100 dark:border-slate-800/60 mt-4 flex flex-col gap-2">
+            <button onclick="window.switchTab('delivery')" class="w-full inline-flex items-center justify-center gap-2 py-2 px-4 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold uppercase tracking-wider transition-all shadow-sm">
+              <span class="material-symbols-outlined text-[16px]">hub</span>
+              <span>Gestionar Equipos de Entrega</span>
             </button>
           </div>
         </div>
@@ -1801,14 +1922,14 @@
       return;
     }
 
-    // D: Director de Obra
+    // D: Líder de Obra
     if (selectedNode.type === 'D') {
       const directorEmail = activeProject.iso19650?.directorDeObra || '';
       const meta = getUserMetadata(directorEmail);
       const contentHtml = directorEmail ? `
         <div class="p-3.5 rounded-2xl bg-amber-50/60 dark:bg-amber-950/20 border border-amber-100/50 dark:border-amber-900/30 space-y-1.5">
           <div class="text-[9px] font-black uppercase tracking-wider text-amber-600 dark:text-amber-400 flex items-center gap-1">
-            <span class="material-symbols-outlined text-[12px]">stars</span> Director de Obra
+            <span class="material-symbols-outlined text-[12px]">stars</span> Líder de Obra
           </div>
           <div>
             <div class="font-black text-xs text-slate-800 dark:text-slate-200">${escapeHtml(meta.name)}</div>
@@ -1818,7 +1939,7 @@
         </div>
       ` : `
         <div class="p-4 rounded-xl border border-dashed border-slate-200 dark:border-slate-800 text-center text-xs text-slate-400 italic">
-          No hay Director de Obra designado en este proyecto.
+          No hay Líder de Obra designado en este proyecto.
         </div>
       `;
 
@@ -1828,7 +1949,7 @@
             <div class="border-b border-slate-100 dark:border-slate-800/60 pb-3 flex items-start justify-between">
               <div>
                 <span class="px-2 py-0.5 rounded bg-amber-100 dark:bg-amber-950 text-amber-700 dark:text-amber-300 text-[9px] font-black uppercase tracking-wider">Rol D</span>
-                <h3 class="text-base font-black text-slate-900 dark:text-white mt-1">Director de Obra</h3>
+                <h3 class="text-base font-black text-slate-900 dark:text-white mt-1">Líder de Obra</h3>
               </div>
               <button onclick="clearInspectorSelection(event)" class="text-slate-400 hover:text-slate-600 dark:hover:text-white" title="Limpiar selección">
                 <span class="material-symbols-outlined text-[18px]">close</span>
@@ -1836,7 +1957,7 @@
             </div>
 
             <p class="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
-              Es la máxima autoridad técnica del receptor del proyecto, encargada de validar la conformidad de la información entregada.
+              Es la máxima autoridad técnica del receptor del proyecto y supervisión de obra, encargada de validar la conformidad de la información entregada.
             </p>
 
             <div class="space-y-2 mt-2">
@@ -1845,9 +1966,9 @@
           </div>
 
           <div class="pt-4 border-t border-slate-100 dark:border-slate-800/60 mt-4 flex flex-col gap-2">
-            <button onclick="window.switchTab('settings')" class="w-full inline-flex items-center justify-center gap-2 py-2 px-4 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold uppercase tracking-wider transition-all shadow-sm">
-              <span class="material-symbols-outlined text-[16px]">settings</span>
-              <span>Configuración del Proyecto</span>
+            <button onclick="window.switchTab('receiver')" class="w-full inline-flex items-center justify-center gap-2 py-2 px-4 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold uppercase tracking-wider transition-all shadow-sm">
+              <span class="material-symbols-outlined text-[16px]">construction</span>
+              <span>Gestionar Equipos de Obra</span>
             </button>
           </div>
         </div>
@@ -2602,6 +2723,31 @@
     `;
   }
 
+  // Helper: Usuarios autorizados para liderazgo del proyecto (miembros asignados al proyecto + administradores de empresa)
+  function getEligibleProjectLeadershipUsers() {
+    const seen = new Set();
+    const result = [];
+
+    const add = (em) => {
+      if (!em || typeof em !== 'string') return;
+      const clean = em.toLowerCase().trim();
+      if (!clean || seen.has(clean)) return;
+      seen.add(clean);
+      result.push(clean);
+    };
+
+    // 1. Miembros asignados a este proyecto
+    (activeProject?.members || []).forEach(add);
+
+    // 2. Administradores de la empresa actual
+    (currentCompany?.admins || []).forEach(add);
+
+    // 3. Administradores de proyecto existentes
+    (activeProject?.iso19650?.projectAdmins || []).forEach(add);
+
+    return result;
+  }
+
   // --- DESIGNACIÓN DE ADMINISTRADOR DE PROYECTO (ROL A) ---
   window.openAddProjectAdminModal = function () {
     if (!canManageProjectAdmins) {
@@ -2612,36 +2758,16 @@
     const select = document.getElementById('select-project-admin-user');
     if (!select) return;
 
-    // Available users from Company (strict isolation)
-    const companyMembers = Array.isArray(currentCompany?.members) ? currentCompany.members : [];
-    const companyAdmins = Array.isArray(currentCompany?.admins) ? currentCompany.admins : [];
     const existingAdmins = (activeProject.iso19650?.projectAdmins || []).map(a => a.toLowerCase().trim());
+    const eligible = getEligibleProjectLeadershipUsers().filter(em => !existingAdmins.includes(em));
 
-    const seen = new Set();
-    const options = [];
-
-    companyMembers.forEach(m => {
-      if (!m.email) return;
-      const em = m.email.toLowerCase().trim();
-      if (seen.has(em) || existingAdmins.includes(em)) return;
-      seen.add(em);
-      const name = getUserRegisteredName(em);
-      options.push(`<option value="${escapeHtml(em)}">${escapeHtml(name)} (${escapeHtml(em)})</option>`);
-    });
-
-    companyAdmins.forEach(adm => {
-      if (!adm) return;
-      const em = adm.toLowerCase().trim();
-      if (seen.has(em) || existingAdmins.includes(em)) return;
-      seen.add(em);
-      const name = getUserRegisteredName(em);
-      options.push(`<option value="${escapeHtml(em)}">${escapeHtml(name)} (${escapeHtml(em)})</option>`);
-    });
-
-    if (options.length === 0) {
-      select.innerHTML = '<option value="">No hay usuarios disponibles en la empresa</option>';
+    if (eligible.length === 0) {
+      select.innerHTML = '<option value="">No hay usuarios disponibles en el proyecto</option>';
     } else {
-      select.innerHTML = options.join('');
+      select.innerHTML = eligible.map(em => {
+        const name = getUserRegisteredName(em);
+        return `<option value="${escapeHtml(em)}">${escapeHtml(name)} (${escapeHtml(em)})</option>`;
+      }).join('');
     }
 
     window.openModal('modal-project-admin');
@@ -2677,7 +2803,7 @@
     evaluatePermissions();
     renderAllViews();
     syncTeams();
-    window.showToast('Administrador de Proyecto (Adjudicador) designado con éxito.', 'success');
+    window.showToast('Administrador de Proyecto designado con éxito.', 'success');
   };
 
   window.removeProjectAdmin = function (email) {
@@ -2708,34 +2834,19 @@
     const select = document.getElementById('select-delivery-leader-user');
     if (!select) return;
 
-    const companyMembers = Array.isArray(currentCompany?.members) ? currentCompany.members : [];
-    const companyAdmins = Array.isArray(currentCompany?.admins) ? currentCompany.admins : [];
     const currentLeader = (activeProject?.iso19650?.liderEquipoEntrega || '').toLowerCase().trim();
+    const eligible = getEligibleProjectLeadershipUsers();
 
-    const seen = new Set();
-    const options = [];
+    if (eligible.length === 0) {
+      select.innerHTML = '<option value="">No hay usuarios disponibles en el proyecto</option>';
+    } else {
+      select.innerHTML = eligible.map(em => {
+        const name = getUserRegisteredName(em);
+        const isSel = em === currentLeader ? 'selected' : '';
+        return `<option value="${escapeHtml(em)}" ${isSel}>${escapeHtml(name)} (${escapeHtml(em)})</option>`;
+      }).join('');
+    }
 
-    companyMembers.forEach(m => {
-      if (!m.email) return;
-      const em = m.email.toLowerCase().trim();
-      if (seen.has(em)) return;
-      seen.add(em);
-      const name = getUserRegisteredName(em);
-      const isSel = em === currentLeader ? 'selected' : '';
-      options.push(`<option value="${escapeHtml(em)}" ${isSel}>${escapeHtml(name)} (${escapeHtml(em)})</option>`);
-    });
-
-    companyAdmins.forEach(adm => {
-      if (!adm) return;
-      const em = adm.toLowerCase().trim();
-      if (seen.has(em)) return;
-      seen.add(em);
-      const name = getUserRegisteredName(em);
-      const isSel = em === currentLeader ? 'selected' : '';
-      options.push(`<option value="${escapeHtml(em)}" ${isSel}>${escapeHtml(name)} (${escapeHtml(em)})</option>`);
-    });
-
-    select.innerHTML = options.length ? options.join('') : '<option value="">No hay usuarios disponibles en la empresa</option>';
     window.openModal('modal-delivery-leader');
   };
 
@@ -2795,34 +2906,19 @@
     const select = document.getElementById('select-director-obra-user');
     if (!select) return;
 
-    const companyMembers = Array.isArray(currentCompany?.members) ? currentCompany.members : [];
-    const companyAdmins = Array.isArray(currentCompany?.admins) ? currentCompany.admins : [];
     const existing = (activeProject.iso19650?.directorDeObra || '').toLowerCase().trim();
+    const eligible = getEligibleProjectLeadershipUsers();
 
-    const seen = new Set();
-    const options = [];
+    if (eligible.length === 0) {
+      select.innerHTML = '<option value="">No hay usuarios disponibles en el proyecto</option>';
+    } else {
+      select.innerHTML = eligible.map(em => {
+        const name = getUserRegisteredName(em);
+        const isSel = em === existing ? 'selected' : '';
+        return `<option value="${escapeHtml(em)}" ${isSel}>${escapeHtml(name)} (${escapeHtml(em)})</option>`;
+      }).join('');
+    }
 
-    companyMembers.forEach(m => {
-      if (!m.email) return;
-      const em = m.email.toLowerCase().trim();
-      if (seen.has(em)) return;
-      seen.add(em);
-      const name = getUserRegisteredName(em);
-      const isSel = em === existing ? 'selected' : '';
-      options.push(`<option value="${escapeHtml(em)}" ${isSel}>${escapeHtml(name)} (${escapeHtml(em)})</option>`);
-    });
-
-    companyAdmins.forEach(adm => {
-      if (!adm) return;
-      const em = adm.toLowerCase().trim();
-      if (seen.has(em)) return;
-      seen.add(em);
-      const name = getUserRegisteredName(em);
-      const isSel = em === existing ? 'selected' : '';
-      options.push(`<option value="${escapeHtml(em)}" ${isSel}>${escapeHtml(name)} (${escapeHtml(em)})</option>`);
-    });
-
-    select.innerHTML = options.length ? options.join('') : '<option value="">No hay usuarios disponibles en la empresa</option>';
     window.openModal('modal-director-obra');
   };
 
@@ -3025,7 +3121,7 @@
 
     const leadSelect = document.getElementById('receiver-team-lead-select');
     if (!leadSelect) return;
-    const memberOptions = (activeProject.members || []).map(m => {
+    const memberOptions = getEligibleProjectLeadershipUsers().map(m => {
       const name = getUserRegisteredName(m);
       return `<option value="${escapeHtml(m)}">${escapeHtml(name)} (${escapeHtml(m)})</option>`;
     });
@@ -3053,7 +3149,7 @@
 
     const leadSelect = document.getElementById('receiver-team-lead-select');
     if (!leadSelect) return;
-    const memberOptions = (activeProject.members || []).map(m => {
+    const memberOptions = getEligibleProjectLeadershipUsers().map(m => {
       const name = getUserRegisteredName(m);
       const isSel = (m.toLowerCase().trim() === (rt.leadEmail || '').toLowerCase().trim()) ? 'selected' : '';
       return `<option value="${escapeHtml(m)}" ${isSel}>${escapeHtml(name)} (${escapeHtml(m)})</option>`;
@@ -3409,7 +3505,7 @@
     document.getElementById('delivery-team-desc').value = '';
 
     const leadSelect = document.getElementById('delivery-team-lead-select');
-    const memberOptions = (activeProject.members || []).map(m => {
+    const memberOptions = getEligibleProjectLeadershipUsers().map(m => {
       const name = getUserRegisteredName(m);
       return `<option value="${escapeHtml(m)}">${escapeHtml(name)} (${escapeHtml(m)})</option>`;
     });
@@ -3436,7 +3532,7 @@
     document.getElementById('delivery-team-desc').value = dt.description || '';
 
     const leadSelect = document.getElementById('delivery-team-lead-select');
-    const memberOptions = (activeProject.members || []).map(m => {
+    const memberOptions = getEligibleProjectLeadershipUsers().map(m => {
       const name = getUserRegisteredName(m);
       const isSel = (m.toLowerCase().trim() === (dt.leadEmail || '').toLowerCase().trim()) ? 'selected' : '';
       return `<option value="${escapeHtml(m)}" ${isSel}>${escapeHtml(name)} (${escapeHtml(m)})</option>`;
@@ -3516,9 +3612,18 @@
     if (!confirm('¿Estás seguro de eliminar este Equipo de Entrega y sus configuraciones?')) return;
 
     if (activeProject?.iso19650?.deliveryTeams) {
+      const dt = activeProject.iso19650.deliveryTeams.find(d => d.id === deliveryId);
+      const dtName = dt ? (dt.name || '').trim() : '';
       activeProject.iso19650.deliveryTeams = activeProject.iso19650.deliveryTeams.filter(d => d.id !== deliveryId);
+
+      if (dtName && Array.isArray(activeProject.equiposDeTarea)) {
+        const normalizeName = str => (str || '').normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase().trim();
+        const norm = normalizeName(dtName);
+        activeProject.equiposDeTarea = activeProject.equiposDeTarea.filter(e => normalizeName(e.name) !== norm);
+      }
     }
 
+    syncBackToEquiposDeTarea();
     renderAllViews();
     syncTeams();
     window.showToast('Equipo de Entrega eliminado.', 'info');
@@ -3767,19 +3872,18 @@
     if (!team) return;
     if (!confirm(`¿Estás seguro de que deseas eliminar el equipo de tarea "${team.name}"?`)) return;
 
-    const teamNameNorm = (team.name || '').toUpperCase().trim();
+    const normalizeName = str => (str || '').normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase().trim();
+    const teamNameNorm = normalizeName(team.name);
     activeProject.equiposDeTarea.splice(index, 1);
 
     if (activeProject.iso19650 && Array.isArray(activeProject.iso19650.deliveryTeams)) {
-      const dtIdx = activeProject.iso19650.deliveryTeams.findIndex(d => (d.name || '').toUpperCase().trim() === teamNameNorm);
-      if (dtIdx !== -1) {
-        activeProject.iso19650.deliveryTeams.splice(dtIdx, 1);
-      }
+      activeProject.iso19650.deliveryTeams = activeProject.iso19650.deliveryTeams.filter(d => normalizeName(d.name) !== teamNameNorm);
     }
 
+    syncBackToEquiposDeTarea();
     renderAllViews();
     syncTeams();
-    window.showToast('Equipo de Tarea eliminado.', 'info');
+    window.showToast(`Equipo de Tarea "${team.name}" eliminado.`, 'info');
   };
 
   window.changeUserTeam = function (email, teamName) {
