@@ -24,9 +24,14 @@
             if (curCompMember.empresaUsuario && curCompMember.empresaUsuario.trim() !== '') {
                 return curCompMember.empresaUsuario.trim();
             }
-            if (curCompMember.role === 'ADMINISTRADOR_EMPRESA') {
+            if (curCompMember.role === 'ADMINISTRADOR_EMPRESA' || curCompMember.role === 'MIEMBRO' || curCompMember.role === 'ADMINISTRADOR') {
                 return currentCompany?.name || 'Empresa';
             }
+        }
+
+        // Si es administrador configurado de la empresa actual
+        if (Array.isArray(currentCompany?.admins) && currentCompany.admins.some(a => a.toLowerCase().trim() === cleanEmail)) {
+            return currentCompany?.name || 'Empresa';
         }
 
         // 2. Prioridad: Buscar en todas las empresas de Super Admin (empresas.json)
@@ -55,6 +60,11 @@
                     }
                 }
             }
+        }
+
+        // Fallback para miembros de la empresa actual sin empresaUsuario asignada
+        if (curCompMember) {
+            return currentCompany?.name || 'Empresa';
         }
 
         // 3. Fallback: Sin empresa asignada
@@ -508,6 +518,10 @@
         } catch (e) {
             console.warn('No se pudo cargar el directorio de usuarios de Nora.', e);
         }
+        // Refresh members list AFTER directory and companies are loaded so any
+        // newly added company member appears immediately in "Personal Autorizado".
+        renderMembersTab();
+        renderTeamsTab();
 
         // 4. Cargar Equipos de Tarea desde Google Sheets automáticamente
         try {
@@ -532,6 +546,15 @@
         } catch (err) {
             console.warn('No se pudieron obtener equipos desde Google Sheets:', err);
         }
+
+        // Configurar enlaces hacia la gobernanza de equipos en equipo.html
+        const equipoUrl = `equipo.html?empresa=${encodeURIComponent(companyId)}&project=${encodeURIComponent(projectSlug)}`;
+        const linkEquipo = document.getElementById('link-project-equipo');
+        if (linkEquipo) linkEquipo.href = equipoUrl;
+        const btnMembersEquipo = document.getElementById('btn-goto-members-equipo');
+        if (btnMembersEquipo) btnMembersEquipo.href = equipoUrl;
+        const btnTeamsEquipo = document.getElementById('btn-goto-teams-equipo');
+        if (btnTeamsEquipo) btnTeamsEquipo.href = equipoUrl;
 
         renderMembersTab();
         renderTeamsTab();
@@ -666,65 +689,101 @@
         if (!el.projectMembersCount || !el.directoryTableBody) return;
         el.projectMembersCount.textContent = `${(activeProject.members || []).length} Miembros Asignados`;
         const query = (el.directorySearch ? el.directorySearch.value : '').toLowerCase().trim();
-        
-        // Build list of users strictly belonging to this company from currentCompany.members
-        const companyMembers = Array.isArray(currentCompany?.members) ? currentCompany.members : [];
+
+        // Construir la lista de usuarios elegibles para este proyecto:
+        // Únicamente miembros y administradores previamente agregados a la empresa actual (currentCompany),
+        // más cualquier usuario que ya esté asignado al proyecto.
         const userMap = new Map();
 
-        // 1. Add all members configured in the company
+        const upsertUser = (entry) => {
+            if (!entry || !entry.email) return;
+            const email = String(entry.email).toLowerCase().trim();
+            if (!email) return;
+            if (userMap.has(email)) {
+                // Merge only if new fields are provided
+                const existing = userMap.get(email);
+                userMap.set(email, {
+                    ...existing,
+                    ...entry,
+                    email,
+                    nombre:       entry.nombre       || existing.nombre,
+                    empresa:      entry.empresa      || existing.empresa,
+                    rol:          entry.rol          || existing.rol,
+                    especialidad: entry.especialidad || existing.especialidad,
+                    cargo:        entry.cargo        || existing.cargo
+                });
+                return;
+            }
+            userMap.set(email, { ...entry, email });
+        };
+
+        // ---------------------------------------------------------------
+        // 1) Miembros explícitos de la empresa actual
+        // ---------------------------------------------------------------
+        const companyMembers = Array.isArray(currentCompany?.members) ? currentCompany.members : [];
         companyMembers.forEach(m => {
             if (!m.email) return;
-            const email = m.email.toLowerCase().trim();
-            userMap.set(email, {
-                nombre: getUserRegisteredName(email),
-                email: email,
-                empresa: getUserRegisteredCompany(email),
-                rol: m.role || 'INVITADO',
-                especialidad: m.especialidad || '',
-                cargo: m.cargo || ''
+            const email = String(m.email).toLowerCase().trim();
+            upsertUser({
+                email,
+                nombre:       getUserRegisteredName(email),
+                empresa:      getUserRegisteredCompany(email),
+                rol:          m.role           || 'INVITADO',
+                especialidad: m.especialidad   || '',
+                cargo:        m.cargo          || ''
             });
         });
 
-        // 2. Enrich with allDirectoryUsers metadata if available, OR if activeProject.members has an already assigned user
+        // ---------------------------------------------------------------
+        // 2) Administradores de la empresa actual (en caso de no figurar en members)
+        // ---------------------------------------------------------------
+        const companyAdmins = Array.isArray(currentCompany?.admins) ? currentCompany.admins : [];
+        companyAdmins.forEach(adminEmail => {
+            if (!adminEmail) return;
+            const email = String(adminEmail).toLowerCase().trim();
+            upsertUser({
+                email,
+                nombre:       getUserRegisteredName(email),
+                empresa:      currentCompany?.name || 'Empresa',
+                rol:          'ADMINISTRADOR_EMPRESA',
+                especialidad: '',
+                cargo:        'Administrador de Empresa'
+            });
+        });
+
+        // ---------------------------------------------------------------
+        // 3) Enriquecer datos con el Directorio Global (Google Sheets) SOLO para usuarios ya incluidos
+        // ---------------------------------------------------------------
         if (Array.isArray(allDirectoryUsers)) {
             allDirectoryUsers.forEach(du => {
                 if (!du.email) return;
-                const email = du.email.toLowerCase().trim();
+                const email = String(du.email).toLowerCase().trim();
                 if (userMap.has(email)) {
                     const existing = userMap.get(email);
                     userMap.set(email, {
                         ...existing,
-                        nombre: getUserRegisteredName(email),
-                        empresa: getUserRegisteredCompany(email),
-                        rol: du.rol || existing.rol,
-                        especialidad: du.especialidad || existing.especialidad,
-                        cargo: du.cargo || existing.cargo
-                    });
-                } else if ((activeProject.members || []).some(pm => pm.toLowerCase().trim() === email)) {
-                    // Only include if already explicitly assigned to this project
-                    userMap.set(email, {
-                        nombre: getUserRegisteredName(email),
-                        email: email,
-                        empresa: getUserRegisteredCompany(email),
-                        rol: du.rol || 'INVITADO',
-                        especialidad: du.especialidad || '',
-                        cargo: du.cargo || ''
+                        nombre:       (existing.nombre && existing.nombre !== email.split('@')[0]) ? existing.nombre : (du.nombre || existing.nombre),
+                        especialidad: existing.especialidad || du.especialidad || '',
+                        cargo:        existing.cargo || du.cargo || '',
+                        rol:          existing.rol && existing.rol !== 'INVITADO' ? existing.rol : (du.rol || existing.rol)
                     });
                 }
             });
         }
 
-        // 3. Ensure any member in activeProject.members has an entry even if not in directory
+        // ---------------------------------------------------------------
+        // 4) Asegurar que miembros ya asignados al proyecto permanezcan visibles (para poder desasignarlos)
+        // ---------------------------------------------------------------
         (activeProject.members || []).forEach(pm => {
-            const email = pm.toLowerCase().trim();
+            const email = String(pm).toLowerCase().trim();
             if (!userMap.has(email)) {
-                userMap.set(email, {
-                    nombre: getUserRegisteredName(email),
-                    email: email,
-                    empresa: getUserRegisteredCompany(email),
-                    rol: 'Colaborador',
+                upsertUser({
+                    email,
+                    nombre:       getUserRegisteredName(email),
+                    empresa:      getUserRegisteredCompany(email),
+                    rol:          'Colaborador',
                     especialidad: '',
-                    cargo: ''
+                    cargo:        ''
                 });
             }
         });
@@ -751,8 +810,8 @@
         }
 
         el.directoryTableBody.innerHTML = filtered.map(u => {
-            const email = u.email.toLowerCase().trim();
-            const isAssigned = (activeProject.members || []).some(m => m.toLowerCase().trim() === email);
+            const email = String(u.email).toLowerCase().trim();
+            const isAssigned = (activeProject.members || []).some(m => String(m).toLowerCase().trim() === email);
 
             return `
                 <tr class="hover:bg-gray-50 dark:hover:bg-slate-800/40 transition-colors">

@@ -301,6 +301,9 @@
           </div>
         </div>
 
+        <!-- Simulation Active Indicator (shown above tabs when simulating a team) -->
+        <div id="simulation-active-badge" class="hidden mb-4 p-3 rounded-xl bg-amber-50/90 dark:bg-amber-950/60 border border-amber-300 dark:border-amber-800 text-xs text-amber-900 dark:text-amber-200 flex flex-col sm:flex-row sm:items-center justify-between gap-2 shadow-sm"></div>
+
         <!-- Main State Tabs (En Progreso, Compartido, Publicado) -->
         <div class="border-b border-slate-200 dark:border-slate-800 mb-5 flex gap-0 text-sm font-semibold overflow-x-auto">
           <button id="stab-progreso" class="border-b-2 border-amber-500 px-4 py-3 text-amber-600 dark:text-amber-400 transition-all focus:outline-none whitespace-nowrap flex items-center gap-2">
@@ -825,6 +828,7 @@
       let activeProject = null;
       let currentStatusTab = 'EN_PROGRESO'; // 'EN_PROGRESO', 'COMPARTIDO', 'PUBLICADO'
       let currentStatusSubTab = 'models';   // 'models', 'pdfs', 'dwgs'
+      let rawProjectFilesCache = [];        // Master unfiltered Drive files
       let allProjectFiles = [];             // Combined & resolved list of all files with status and version
       const collapsedModelGroups = new Set();
       const collapsedSpecialtyGroups = new Set();
@@ -1088,6 +1092,7 @@
                 driveScriptUrl: configProject.dataSources?.driveScriptUrl || DEFAULT_DRIVE_SCRIPT_URL
               }
             };
+            _visibilityPreviewTeam = null;
             updateProjectUI();
             await hydrateProjectTeams();
             try {
@@ -1392,6 +1397,34 @@
             }
           }
 
+          // 3. Fallback: check filename against task teams & common acronyms (e.g. ARQ, EST, MEP)
+          if (teams.size === 0 && file.name) {
+            const fileNameUpper = String(file.name).toUpperCase();
+            const { taskTeams } = getAllProjectTeams();
+            taskTeams.forEach(tt => {
+              const teamUpper = String(tt.name || '').toUpperCase().trim();
+              if (!teamUpper) return;
+              if (fileNameUpper.includes(teamUpper)) {
+                teams.add(teamUpper);
+                return;
+              }
+              const acronyms = {
+                'ARQUITECTURA': ['ARQ'],
+                'ESTRUCTURA': ['EST', 'STR'],
+                'INSTALACIONES': ['MEP', 'INST', 'SAN', 'HID', 'ELEC'],
+                'INTERVENTORÍA': ['INT', 'INTERVENTORIA'],
+                'BIM OBRA': ['OBRA']
+              };
+              for (const [key, list] of Object.entries(acronyms)) {
+                if (teamUpper.includes(key)) {
+                  if (list.some(acr => fileNameUpper.includes(`-${acr}-`) || fileNameUpper.includes(`_${acr}_`) || fileNameUpper.includes(`-${acr}.`) || fileNameUpper.includes(`_${acr}.`))) {
+                    teams.add(teamUpper);
+                  }
+                }
+              }
+            });
+          }
+
           return uniqueTeamNames(Array.from(teams));
         }
 
@@ -1672,8 +1705,7 @@
                   const isChecked = e.target.checked;
 
                   setTeamVisibilityRule(type, name, { [perm]: isChecked });
-                  updateTabCounts();
-                  renderDriveFilesTable();
+                  refreshAuthorizedProjectFiles();
                 });
               });
             }
@@ -1702,10 +1734,15 @@
                 const [type, ...rest] = val.split(':');
                 const name = rest.join(':');
                 _visibilityPreviewTeam = { type, name };
-                showVisibilityAlert(`Simulando vista como: <b>${escapeHtml(name)}</b> (${type === 'task' ? 'Equipo de Tarea' : 'Equipo Receptor'}). El explorador de abajo refleja sus permisos configurados.`, 'warning');
+                const rule = getTeamVisibilityRule(type, name);
+                const activeStates = [];
+                if (rule.canViewProgreso) activeStates.push('En Progreso');
+                if (rule.canViewCompartido) activeStates.push('Compartido');
+                if (rule.canViewPublicado) activeStates.push('Publicado');
+                const statesStr = activeStates.length ? activeStates.join(', ') : 'Ninguno';
+                showVisibilityAlert(`Simulando vista como: <b>${escapeHtml(name)}</b> (${type === 'task' ? 'Equipo de Tarea' : 'Equipo Receptor'}). Estados con acceso: <b>${statesStr}</b>. El explorador de abajo refleja sus permisos configurados.`, 'warning');
               }
-              updateTabCounts();
-              renderDriveFilesTable();
+              refreshAuthorizedProjectFiles();
             };
           }
 
@@ -1728,8 +1765,7 @@
                 localStorage.setItem(getTeamVisibilityStorageKey(), JSON.stringify(newConfig));
               } catch (e) {}
               renderFileVisibilityConfigPanel();
-              updateTabCounts();
-              renderDriveFilesTable();
+              refreshAuthorizedProjectFiles();
               showVisibilityAlert('Reglas de visualización restablecidas a los valores por defecto ISO 19650.', 'info');
             });
           }
@@ -1790,8 +1826,7 @@
                 }
 
                 showVisibilityAlert('Configuración de visualización guardada y aplicada exitosamente.', 'success');
-                updateTabCounts();
-                renderDriveFilesTable();
+                refreshAuthorizedProjectFiles();
               } catch (err) {
                 console.error(err);
                 showVisibilityAlert('Error al guardar la configuración: ' + (err.message || err), 'warning');
@@ -1809,15 +1844,30 @@
           const email = (currentUser.username || currentUser.email || currentUser.userAccount || '').toLowerCase().trim();
 
           const privileges = getUserRolePrivileges();
+          const previewTeam = (privileges.canConfigureVisibility && _visibilityPreviewTeam) ? _visibilityPreviewTeam : null;
 
           // 1. MANAGE ACTION (PROMOTE, DELETE, NEW VERSION)
           if (action === 'manage') {
-            if (privileges.isSuperAdmin || privileges.isCompanyAdmin || privileges.isProjectAdmin) return true;
-            const fileUploader = (file.changedByEmail || '').toLowerCase().trim();
-            if (fileUploader && fileUploader === email) return true;
+            // Full admin rights ONLY when NOT simulating
+            if (!previewTeam && (privileges.isSuperAdmin || privileges.isCompanyAdmin || privileges.isProjectAdmin)) {
+              return true;
+            }
+
+            // In simulation, only task teams can manage their own files; receiver teams cannot manage
+            let userTeams = [];
+            if (previewTeam) {
+              if (previewTeam.type === 'task') {
+                userTeams = [previewTeam.name];
+              } else {
+                return false;
+              }
+            } else {
+              const fileUploader = (file.changedByEmail || '').toLowerCase().trim();
+              if (fileUploader && fileUploader === email) return true;
+              userTeams = getUserDeliveryTeams(email);
+            }
 
             const fileTeams = getFileDeliveryTeams(file);
-            const userTeams = getUserDeliveryTeams(email);
             const normalizeName = str => String(str || '').normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase().trim();
             const normFileTeams = fileTeams.map(normalizeName);
             const normUserTeams = userTeams.map(normalizeName);
@@ -1826,15 +1876,12 @@
           }
 
           // 2. VIEW ACTION
-          // Check preview simulation mode (used by administrators to test configured team view)
-          const previewTeam = (privileges.canConfigureVisibility && _visibilityPreviewTeam) ? _visibilityPreviewTeam : null;
-
-          // Administrators have full visibility across all states, unless currently simulating a specific team
+          // Administrators have full visibility across all states ONLY when not simulating
           if (privileges.canConfigureVisibility && !previewTeam) {
             return true;
           }
 
-          // The original uploader can always view their file (unless previewing as another team)
+          // The original uploader can view their file (unless previewing as another team)
           if (!previewTeam) {
             const fileUploader = (file.changedByEmail || '').toLowerCase().trim();
             if (fileUploader && fileUploader === email) return true;
@@ -1859,20 +1906,22 @@
 
           // Check A: EN_PROGRESO (WIP)
           if (status === 'EN_PROGRESO') {
-            // Task Teams: Can view WIP of their assigned delivery specialty if canViewProgreso is enabled
             const fileTeams = getFileDeliveryTeams(file);
             const normalizeName = str => String(str || '').normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase().trim();
             const normFileTeams = fileTeams.map(normalizeName);
             const normUserTeams = userTaskTeams.map(normalizeName);
 
-            const hasMatchingTaskTeam = normUserTeams.some(t => {
-              if (normFileTeams.includes(t)) {
+            if (normUserTeams.length > 0) {
+              const hasMatchingTaskTeam = normUserTeams.some(t => {
                 const rule = getTeamVisibilityRule('task', t);
-                return rule.canViewProgreso !== false;
-              }
-              return false;
-            });
-            if (hasMatchingTaskTeam) return true;
+                if (rule.canViewProgreso === false) return false;
+                if (normFileTeams.length > 0) {
+                  return normFileTeams.includes(t);
+                }
+                return rule.canViewProgreso === true;
+              });
+              if (hasMatchingTaskTeam) return true;
+            }
 
             // Receiver Teams: If configured by admin to view En Progreso
             for (const rt of userReceiverTeams) {
@@ -1897,8 +1946,8 @@
               if (rule.canViewCompartido === true) return true;
             }
 
-            // Unassigned project members fallback
-            if (userTaskTeams.length === 0 && userReceiverTeams.length === 0) {
+            // Unassigned project members fallback (only when not simulating)
+            if (!previewTeam && userTaskTeams.length === 0 && userReceiverTeams.length === 0) {
               const isMember = (activeProject?.members || []).map(m => m.toLowerCase().trim()).includes(email);
               if (isMember) return true;
             }
@@ -1920,8 +1969,8 @@
               if (rule.canViewPublicado !== false) return true;
             }
 
-            // Unassigned project members fallback
-            if (userTaskTeams.length === 0 && userReceiverTeams.length === 0) {
+            // Unassigned project members fallback (only when not simulating)
+            if (!previewTeam && userTaskTeams.length === 0 && userReceiverTeams.length === 0) {
               const isMember = (activeProject?.members || []).map(m => m.toLowerCase().trim()).includes(email);
               if (isMember) return true;
             }
@@ -1930,6 +1979,168 @@
           }
 
           return false;
+        }
+
+        // Compute effective visibility permissions for tabs and files
+        function getCurrentEffectivePermissions() {
+          const privileges = getUserRolePrivileges();
+          const previewTeam = (privileges.canConfigureVisibility && _visibilityPreviewTeam) ? _visibilityPreviewTeam : null;
+
+          if (privileges.canConfigureVisibility && !previewTeam) {
+            return {
+              canViewProgreso: true,
+              canViewCompartido: true,
+              canViewPublicado: true,
+              isSimulation: false,
+              teamLabel: 'Administrador (Acceso Completo)'
+            };
+          }
+
+          if (previewTeam) {
+            const rule = getTeamVisibilityRule(previewTeam.type, previewTeam.name);
+            return {
+              canViewProgreso: rule.canViewProgreso === true,
+              canViewCompartido: rule.canViewCompartido === true,
+              canViewPublicado: rule.canViewPublicado !== false,
+              isSimulation: true,
+              team: previewTeam,
+              teamLabel: `${previewTeam.name} (${previewTeam.type === 'task' ? 'Equipo de Tarea' : 'Equipo Receptor'})`
+            };
+          }
+
+          const currentUser = JSON.parse(sessionStorage.getItem('userAccount') || localStorage.getItem('userAccount') || 'null');
+          const email = (currentUser?.username || currentUser?.email || currentUser?.userAccount || '').toLowerCase().trim();
+          const userTaskTeams = getUserDeliveryTeams(email);
+          const userReceiverTeams = getUserReceiverTeams(email);
+
+          if (userTaskTeams.length === 0 && userReceiverTeams.length === 0) {
+            return {
+              canViewProgreso: false,
+              canViewCompartido: true,
+              canViewPublicado: true,
+              isSimulation: false,
+              teamLabel: 'Miembro General'
+            };
+          }
+
+          const canProg = userTaskTeams.some(t => getTeamVisibilityRule('task', t).canViewProgreso === true) ||
+                          userReceiverTeams.some(r => getTeamVisibilityRule('receiver', r.name).canViewProgreso === true);
+          const canComp = userTaskTeams.some(t => getTeamVisibilityRule('task', t).canViewCompartido !== false) ||
+                          userReceiverTeams.some(r => getTeamVisibilityRule('receiver', r.name).canViewCompartido === true);
+          const canPub = userTaskTeams.some(t => getTeamVisibilityRule('task', t).canViewPublicado !== false) ||
+                         userReceiverTeams.some(r => getTeamVisibilityRule('receiver', r.name).canViewPublicado !== false);
+
+          return {
+            canViewProgreso: canProg,
+            canViewCompartido: canComp,
+            canViewPublicado: canPub,
+            isSimulation: false,
+            teamLabel: [...userTaskTeams, ...userReceiverTeams.map(r => r.name)].join(', ')
+          };
+        }
+
+        // Update tab styling based on currentStatusTab
+        function updateTabStyles() {
+          const btnMap = {
+            'EN_PROGRESO': stabProgreso,
+            'COMPARTIDO': stabCompartido,
+            'PUBLICADO': stabPublicado
+          };
+          const activeBtn = btnMap[currentStatusTab] || stabProgreso;
+          [stabProgreso, stabCompartido, stabPublicado].forEach(b => {
+            if (!b) return;
+            b.classList.remove('border-amber-500','text-amber-600','dark:text-amber-400','border-blue-500','text-blue-600','dark:text-blue-400','border-green-500','text-green-600','dark:text-green-400');
+            b.classList.add('border-transparent','text-slate-500','dark:text-slate-400');
+          });
+          if (activeBtn) {
+            if (currentStatusTab === 'EN_PROGRESO') activeBtn.classList.add('border-amber-500','text-amber-600','dark:text-amber-400');
+            else if (currentStatusTab === 'COMPARTIDO') activeBtn.classList.add('border-blue-500','text-blue-600','dark:text-blue-400');
+            else if (currentStatusTab === 'PUBLICADO') activeBtn.classList.add('border-green-500','text-green-600','dark:text-green-400');
+            activeBtn.classList.remove('border-transparent','text-slate-500','dark:text-slate-400');
+          }
+        }
+
+        // Dynamically recalculate authorized files, tabs and active view
+        function refreshAuthorizedProjectFiles() {
+          allProjectFiles = (rawProjectFilesCache || []).filter(f => isUserAuthorizedForFile(f, 'view') && !f._derivedFromIfc);
+
+          const effective = getCurrentEffectivePermissions();
+
+          if (stabProgreso) {
+            stabProgreso.style.display = effective.canViewProgreso ? '' : 'none';
+          }
+          if (stabCompartido) {
+            stabCompartido.style.display = effective.canViewCompartido ? '' : 'none';
+          }
+          if (stabPublicado) {
+            stabPublicado.style.display = effective.canViewPublicado ? '' : 'none';
+          }
+
+          const simBadge = document.getElementById('simulation-active-badge');
+          if (simBadge) {
+            if (effective.isSimulation) {
+              const states = [];
+              if (effective.canViewProgreso) states.push('En Progreso');
+              if (effective.canViewCompartido) states.push('Compartido');
+              if (effective.canViewPublicado) states.push('Publicado');
+              simBadge.innerHTML = `
+                <div class="flex items-center gap-2">
+                  <span class="material-symbols-outlined text-[16px] text-amber-600 dark:text-amber-400">visibility</span>
+                  <span>Simulando vista como: <strong>${escapeHtml(effective.teamLabel)}</strong>. Pestañas visibles: <strong>${states.length ? states.join(', ') : 'Ninguna'}</strong>.</span>
+                </div>
+                <button id="btn-exit-simulation" class="text-[11px] underline font-bold hover:text-amber-900 dark:hover:text-amber-100 transition-colors cursor-pointer whitespace-nowrap">
+                  Salir de simulación
+                </button>
+              `;
+              simBadge.classList.remove('hidden');
+              const btnExit = document.getElementById('btn-exit-simulation');
+              if (btnExit) {
+                btnExit.onclick = () => {
+                  const previewSelect = document.getElementById('visibility-preview-as');
+                  if (previewSelect) previewSelect.value = '';
+                  _visibilityPreviewTeam = null;
+                  showVisibilityAlert('Vista restaurada a Administrador con acceso completo a todos los archivos.', 'info');
+                  refreshAuthorizedProjectFiles();
+                };
+              }
+            } else {
+              simBadge.classList.add('hidden');
+            }
+          }
+
+          const tabAllowedMap = {
+            'EN_PROGRESO': effective.canViewProgreso,
+            'COMPARTIDO': effective.canViewCompartido,
+            'PUBLICADO': effective.canViewPublicado
+          };
+
+          if (!tabAllowedMap[currentStatusTab]) {
+            if (effective.canViewPublicado) {
+              currentStatusTab = 'PUBLICADO';
+            } else if (effective.canViewCompartido) {
+              currentStatusTab = 'COMPARTIDO';
+            } else if (effective.canViewProgreso) {
+              currentStatusTab = 'EN_PROGRESO';
+            }
+          } else {
+            const filesInCurrent = allProjectFiles.filter(f => f.status === currentStatusTab && isVisibleInProjectFilesView(f));
+            if (filesInCurrent.length === 0) {
+              const candidateOrder = ['PUBLICADO', 'COMPARTIDO', 'EN_PROGRESO'];
+              for (const cand of candidateOrder) {
+                if (cand !== currentStatusTab && tabAllowedMap[cand]) {
+                  const count = allProjectFiles.filter(f => f.status === cand && isVisibleInProjectFilesView(f)).length;
+                  if (count > 0) {
+                    currentStatusTab = cand;
+                    break;
+                  }
+                }
+              }
+            }
+          }
+
+          updateTabStyles();
+          updateTabCounts();
+          renderDriveFilesTable();
         }
 
         if (projects.length > 1) {
@@ -2774,25 +2985,9 @@
             }
           });
 
-          // Excluir FRAG derivados de IFC y archivos no autorizados
-          allProjectFiles = rawProjectFiles.filter(f => isUserAuthorizedForFile(f, 'view') && !f._derivedFromIfc);
-
-          // Si el usuario actual no tiene archivos/permiso en la pestaña inicial (EN_PROGRESO), pero sí en PUBLICADO o COMPARTIDO, cambiar a la disponible
-          const filesInCurrent = allProjectFiles.filter(f => f.status === currentStatusTab && isVisibleInProjectFilesView(f));
-          if (filesInCurrent.length === 0 && currentStatusTab === 'EN_PROGRESO') {
-            if (allProjectFiles.some(f => f.status === 'PUBLICADO' && isVisibleInProjectFilesView(f))) {
-              if (typeof stabPublicado !== 'undefined' && stabPublicado && typeof switchStatusTab === 'function') {
-                switchStatusTab('PUBLICADO', stabPublicado);
-              }
-            } else if (allProjectFiles.some(f => f.status === 'COMPARTIDO' && isVisibleInProjectFilesView(f))) {
-              if (typeof stabCompartido !== 'undefined' && stabCompartido && typeof switchStatusTab === 'function') {
-                switchStatusTab('COMPARTIDO', stabCompartido);
-              }
-            }
-          }
-
-          updateTabCounts();
-          renderDriveFilesTable();
+          // Guardar copia maestra de archivos del Drive y aplicar filtros de permisos/simulación
+          rawProjectFilesCache = rawProjectFiles;
+          refreshAuthorizedProjectFiles();
         } catch (err) {
           console.error(err);
           addLog('Error cargando archivos del proyecto: ' + err.message);
@@ -3605,14 +3800,7 @@
       // State tabs switcher
       function switchStatusTab(tab, activeBtn) {
         currentStatusTab = tab;
-        [stabProgreso, stabCompartido, stabPublicado].forEach(b => {
-          b.classList.remove('border-amber-500','text-amber-600','dark:text-amber-400','border-blue-500','text-blue-600','dark:text-blue-400','border-green-500','text-green-600','dark:text-green-400');
-          b.classList.add('border-transparent','text-slate-500','dark:text-slate-400');
-        });
-        if (tab === 'EN_PROGRESO') activeBtn.classList.add('border-amber-500','text-amber-600','dark:text-amber-400');
-        else if (tab === 'COMPARTIDO') activeBtn.classList.add('border-blue-500','text-blue-600','dark:text-blue-400');
-        else activeBtn.classList.add('border-green-500','text-green-600','dark:text-green-400');
-        activeBtn.classList.remove('border-transparent','text-slate-500','dark:text-slate-400');
+        updateTabStyles();
         renderDriveFilesTable();
       }
 

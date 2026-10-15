@@ -80,6 +80,10 @@
         </div>
 
         <div class="flex items-center gap-4">
+          <a href="/CONVERTIR_FRAG/index.html" target="_blank" rel="noopener noreferrer" aria-label="Abrir Convertidor FRAG" class="hidden sm:inline-flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-widest text-amber-600 dark:text-amber-400 hover:text-amber-700 dark:hover:text-amber-300 transition-colors px-2 py-1 rounded-lg border border-amber-200/60 dark:border-amber-800/30 bg-amber-50/50 dark:bg-amber-950/20" title="Convertidor IFC a FRAG">
+            <span class="material-symbols-outlined text-[16px]">change_circle</span>
+            <span class="hidden lg:inline">FRAG</span>
+          </a>
           <button id="theme-toggle" aria-label="Cambiar tema" class="text-[#111827] dark:text-white hover:text-slate-600 transition-colors">
             <span class="material-symbols-outlined text-[16px]">dark_mode</span>
           </button>
@@ -163,10 +167,116 @@
         </div>
       </div>
 
-      <!-- IFC Converter background engine (Clean offscreen execution) -->
-      <div id="ifc-converter-section" class="fixed -left-[9999px] -top-[9999px] w-[800px] h-[600px] opacity-0 pointer-events-none z-[-9999]">
-        <iframe id="integrated-conv-iframe" src="/CONVERTIR_FRAG/index.html" class="w-full h-full border-0"></iframe>
+      <!-- Convertidor IFC a FRAG (Oculto del flujo visual, motor en segundo plano) -->
+      <div id="frag-converter-panel" class="hidden" style="display:none !important;"></div>
+      <div id="frag-converter-body" class="hidden" style="display:none !important;"></div>
+      <iframe id="integrated-conv-iframe" src="/CONVERTIR_FRAG/index.html" class="hidden" style="display:none !important; width:0; height:0; border:0;" title="IFC Converter Engine"></iframe>
+
+      <!-- ============================================================ -->
+      <!-- PANEL DE CONFIGURACIÓN DE VISUALIZACIÓN DE ARCHIVOS          -->
+      <!-- Exclusivo para: Superadministrador, Admin Empresa, Admin Proy -->
+      <!-- ============================================================ -->
+      <div id="file-visibility-config-panel" class="hidden w-full glass rounded-2xl shadow-xl border border-indigo-200/50 dark:border-indigo-900/40 bg-gradient-to-br from-white/95 via-indigo-50/20 to-white/90 dark:from-slate-900/95 dark:via-indigo-950/20 dark:to-slate-900/90 backdrop-blur-md p-6 sm:p-7 mb-8 transition-all duration-300">
+        
+        <!-- Persistent Header -->
+        <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-5 border-b border-slate-200/70 dark:border-slate-800">
+          <div class="flex items-start sm:items-center gap-3.5">
+            <div class="flex-shrink-0 w-12 h-12 rounded-2xl bg-indigo-600/10 dark:bg-indigo-500/20 text-indigo-600 dark:text-indigo-400 flex items-center justify-center border border-indigo-200 dark:border-indigo-800 shadow-sm">
+              <span class="material-symbols-outlined text-2xl">admin_panel_settings</span>
+            </div>
+            <div>
+              <div class="flex flex-wrap items-center gap-2">
+                <h3 class="text-base font-extrabold text-slate-900 dark:text-white tracking-tight">
+                  Configuración de Visualización de Archivos
+                </h3>
+                <span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-indigo-100 dark:bg-indigo-950/80 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800">
+                  <span class="material-symbols-outlined text-[13px]">lock</span> Solo Administradores
+                </span>
+                <span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-extrabold uppercase tracking-wider bg-emerald-100 dark:bg-emerald-950/80 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
+                  ISO 19650
+                </span>
+              </div>
+              <p class="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                Define qué estados del ciclo de vida (<b>En Progreso</b>, <b>Compartido</b> y <b>Publicado</b>) puede visualizar cada <b>Equipo de Tarea</b> y <b>Equipo Receptor</b>.
+              </p>
+            </div>
+          </div>
+
+          <!-- Actions toolbar -->
+          <div class="flex flex-wrap items-center gap-2">
+            <!-- Link to manage teams in equipo.html -->
+            <a id="btn-manage-teams-link" href="#" class="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 font-bold text-xs transition-all shadow-xs" title="Ir a la gestión integral de equipos ISO 19650">
+              <span class="material-symbols-outlined text-[16px]">groups</span>
+              <span>Gestionar Equipos</span>
+            </a>
+
+            <!-- Reset to Defaults Button -->
+            <button id="btn-reset-visibility-defaults" class="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/60 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-400 font-bold text-xs transition-all" title="Restablecer reglas por defecto ISO 19650">
+              <span class="material-symbols-outlined text-[16px]">restart_alt</span>
+              <span>Restablecer</span>
+            </button>
+
+            <!-- Save Button -->
+            <button id="btn-save-file-visibility" class="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 dark:bg-indigo-500 dark:hover:bg-indigo-600 text-white font-bold text-xs uppercase tracking-wider transition-all shadow-md active:scale-95 cursor-pointer">
+              <span class="material-symbols-outlined text-[16px]">save</span>
+              <span>Guardar Cambios</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- In-panel feedback alert -->
+        <div id="visibility-feedback-alert" class="hidden mt-3 p-3 rounded-xl text-xs font-semibold flex items-center justify-between transition-all"></div>
+
+        <!-- Table / Matrix -->
+        <div class="mt-5 overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-800 shadow-xs">
+          <table class="w-full text-left border-collapse">
+            <thead>
+              <tr class="text-[11px] font-extrabold uppercase tracking-wider text-slate-600 dark:text-slate-300 bg-slate-100/80 dark:bg-slate-800/80 border-b border-slate-200 dark:border-slate-800">
+                <th class="py-3 px-4">Equipo</th>
+                <th class="py-3 px-3">Tipo ISO</th>
+                <th class="py-3 px-4 text-center">
+                  <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-amber-100 dark:bg-amber-950/70 text-amber-900 dark:text-amber-200 font-bold text-[11px] border border-amber-200 dark:border-amber-900/60">
+                    <span class="w-2 h-2 rounded-full bg-amber-500"></span> En Progreso (WIP)
+                  </span>
+                </th>
+                <th class="py-3 px-4 text-center">
+                  <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-blue-100 dark:bg-blue-950/70 text-blue-900 dark:text-blue-200 font-bold text-[11px] border border-blue-200 dark:border-blue-900/60">
+                    <span class="w-2 h-2 rounded-full bg-blue-500"></span> Compartido (SHARED)
+                  </span>
+                </th>
+                <th class="py-3 px-4 text-center">
+                  <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-100 dark:bg-emerald-950/70 text-emerald-900 dark:text-emerald-200 font-bold text-[11px] border border-emerald-200 dark:border-emerald-900/60">
+                    <span class="w-2 h-2 rounded-full bg-emerald-500"></span> Publicado (PUBLISHED)
+                  </span>
+                </th>
+              </tr>
+            </thead>
+            <tbody id="file-visibility-teams-tbody" class="divide-y divide-slate-100 dark:divide-slate-800/60 bg-white/60 dark:bg-slate-900/60 text-xs">
+              <!-- Dynamically populated rows -->
+            </tbody>
+          </table>
+        </div>
+
+        <!-- Simulation and Footer Notes -->
+        <div class="mt-4 pt-3 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-[11px] text-slate-500 dark:text-slate-400">
+          <div class="flex items-center gap-2">
+            <span class="material-symbols-outlined text-[16px] text-indigo-500">verified_user</span>
+            <span>Los cambios determinan la visualización en las pestañas y el explorador de archivos para los miembros de cada equipo.</span>
+          </div>
+
+          <!-- Preview as team selector -->
+          <div class="flex items-center gap-2 self-stretch sm:self-auto justify-end">
+            <label for="visibility-preview-as" class="font-bold text-slate-700 dark:text-slate-300 whitespace-nowrap flex items-center gap-1">
+              <span class="material-symbols-outlined text-[15px] text-slate-400">visibility</span> Simular vista como:
+            </label>
+            <select id="visibility-preview-as" class="text-xs py-1.5 px-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-200 font-medium focus:ring-2 focus:ring-indigo-500 transition-all cursor-pointer">
+              <option value="">Vista Administrador (Acceso Completo)</option>
+            </select>
+          </div>
+        </div>
+
       </div>
+      <!-- Fin de Panel de Configuración de Visualización -->
 
       <!-- ============================================================ -->
       <!-- UNIFIED PROJECT FILES & WORKFLOW CARD                        -->
@@ -190,6 +300,9 @@
             </button>
           </div>
         </div>
+
+        <!-- Simulation Active Indicator (shown above tabs when simulating a team) -->
+        <div id="simulation-active-badge" class="hidden mb-4 p-3 rounded-xl bg-amber-50/90 dark:bg-amber-950/60 border border-amber-300 dark:border-amber-800 text-xs text-amber-900 dark:text-amber-200 flex flex-col sm:flex-row sm:items-center justify-between gap-2 shadow-sm"></div>
 
         <!-- Main State Tabs (En Progreso, Compartido, Publicado) -->
         <div class="border-b border-slate-200 dark:border-slate-800 mb-5 flex gap-0 text-sm font-semibold overflow-x-auto">
@@ -392,11 +505,123 @@
       const _convFrame = document.getElementById('integrated-conv-iframe');
 
       let _convReady = false;
+
+      async function blobFromBase64(b64, mimeType = 'application/octet-stream') {
+        const bin = atob(b64);
+        const u8 = new Uint8Array(bin.length);
+        for (let i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i);
+        return new Blob([u8], { type: mimeType });
+      }
+
+      function findIfcFileObjByBaseName(baseName, strictFilename) {
+        const norm = v => String(v || '').replace(/\.ifc$/i, '').toLowerCase();
+        const need = norm(baseName);
+        return (selectedFiles || []).find(f => {
+          if (strictFilename && f.file && norm(f.file.name) === need) return true;
+          return f.file && norm(f.file.name) === need;
+        }) || (selectedFiles || []).find(f => {
+          const other = norm(f._uiBaseName);
+          return other === need;
+        }) || null;
+      }
+
+      function syncIfcUiFileObj(fileObj) {
+        if (!fileObj) return;
+        if (!fileObj.converted && fileObj.isConverting) {
+          fileObj.status = fileObj.status || 'Convirtiendo desde panel incrustado...';
+        } else if (fileObj.loadedInUi && !fileObj.converted && !fileObj.isConverting) {
+          fileObj.status = 'Configurar en el panel inferior → Listo para convertir';
+          if (fileObj.progress < 10) fileObj.progress = 10;
+        }
+        if (typeof renderFilesList === 'function') renderFilesList();
+      }
+
       window.addEventListener('message', function(e) {
-        if (e.data && e.data.type === 'CONVERTER_READY') { _convReady = true; }
+        if (!e || !e.data || !e.data.type) return;
+        if (e.data.type === 'CONVERTER_READY') { _convReady = true; }
+
+        if (e.data.type === 'LOAD_IFC_OK') {
+          const fileObj = findIfcFileObjByBaseName(e.data.baseName, e.data.filename);
+          if (fileObj) {
+            fileObj.loadedInUi = true;
+            fileObj._uiBaseName = e.data.baseName;
+            fileObj.isConverting = false;
+            syncIfcUiFileObj(fileObj);
+          }
+          return;
+        }
+
+        if (e.data.type === 'LOAD_IFC_ERROR') {
+          const fileObj = findIfcFileObjByBaseName(null, e.data.filename);
+          if (fileObj && !fileObj.converted) {
+            fileObj.loadedInUi = false;
+            fileObj.isConverting = false;
+            fileObj.status = 'Error al cargar en el convertidor: ' + String(e.data.error || 'desconocido');
+            if (typeof renderFilesList === 'function') renderFilesList();
+          }
+          return;
+        }
+
+        if (e.data.type === 'CONVERT_RESULT_USER') {
+          const fileObj = findIfcFileObjByBaseName(e.data.baseName, e.data.filename);
+          if (!fileObj) return;
+          // Re-use the existing helper to attach frag + json to the queue item
+          convResultToFileObj({
+            fragBase64: e.data.fragBase64,
+            jsonBase64: e.data.jsonBase64,
+            baseName: e.data.baseName
+          }, fileObj);
+          fileObj.isConverting = false;
+          fileObj.converted = true;
+          fileObj.progress = 100;
+          fileObj.status = 'Completado en panel incrustado ✓';
+          if (typeof addLog === 'function') addLog(`[${fileObj.file.name}] Conversión completada desde el panel incrustado.`);
+          if (typeof renderFilesList === 'function') renderFilesList();
+          return;
+        }
+
+        if (e.data.type === 'CONVERT_ERROR_USER') {
+          const fileObj = findIfcFileObjByBaseName(e.data.baseName);
+          if (!fileObj || fileObj.converted) return;
+          fileObj.isConverting = false;
+          fileObj.status = 'Error en conversión: ' + String(e.data.error || 'desconocido');
+          if (typeof addLog === 'function') addLog(`[${fileObj.file.name}] Error en conversión del panel: ${e.data.error || 'desconocido'}`);
+          if (typeof renderFilesList === 'function') renderFilesList();
+        }
       });
+
       if (_convFrame) {
         _convFrame.addEventListener('load', function() { _convReady = true; });
+      }
+
+      async function loadIfcInConverterUi(fileObj) {
+        if (!_convFrame) return false;
+        if (!fileObj || !fileObj.file) return false;
+        if (fileObj.loadedInUi || fileObj.converted) return true;
+        // Guard against double-sends
+        if (fileObj._loadingInUi) return false;
+        fileObj._loadingInUi = true;
+
+        try {
+          let attempts = 0;
+          while (!_convReady && attempts < 150) {
+            await new Promise(r => setTimeout(r, 200));
+            attempts++;
+          }
+          const arrayBuffer = await fileObj.file.arrayBuffer();
+          _convFrame.contentWindow.postMessage(
+            { type: 'LOAD_IFC_FILE', bytes: arrayBuffer, filename: fileObj.file.name },
+            '*'
+          );
+          fileObj.status = 'Cargando en convertidor incrustado...';
+          fileObj.progress = 5;
+          if (typeof renderFilesList === 'function') renderFilesList();
+          return true;
+        } catch (err) {
+          fileObj._loadingInUi = false;
+          if (typeof addLog === 'function') addLog(`[${fileObj.file.name}] Error al enviar al convertidor UI: ${err?.message || err}`);
+          return false;
+        }
       }
 
       async function convertIfcInBrowser(fileObj) {
@@ -437,6 +662,64 @@
             '*'
           );
         });
+      }
+      // =====================================================================
+      // FRAG Converter — Embedded Panel Controller (Collapsible / Auto-expand)
+      // =====================================================================
+      let _fragPanelOpen = false;
+      const fragPanelBody = document.getElementById('frag-converter-body');
+      const fragToggleLabel = document.getElementById('frag-toggle-label');
+      const fragToggleIcon = document.getElementById('frag-toggle-icon');
+      const fragConverterBadge = document.getElementById('frag-converter-badge');
+
+      window.toggleFragConverterPanel = function(forceState) {
+        const willOpen = typeof forceState === 'boolean'
+          ? forceState
+          : !_fragPanelOpen;
+        _fragPanelOpen = willOpen;
+        if (fragPanelBody) {
+          if (willOpen) fragPanelBody.classList.remove('hidden');
+          else fragPanelBody.classList.add('hidden');
+        }
+        if (fragToggleLabel) {
+          fragToggleLabel.textContent = willOpen ? 'Ocultar Panel' : 'Mostrar Panel';
+        }
+        if (fragToggleIcon) {
+          fragToggleIcon.textContent = willOpen ? 'visibility_off' : 'visibility';
+        }
+      };
+
+      function syncFragConverterPanelState() {
+        const ifcItems = (selectedFiles || []).filter(
+          f => getFileExtension(f.file?.name || '') === 'ifc'
+        );
+        const ifcCount = ifcItems.length;
+        const converting = ifcItems.some(f => f.isConverting);
+        const converted = ifcItems.filter(f => f.converted).length;
+
+        if (fragConverterBadge) {
+          if (ifcCount === 0) {
+            fragConverterBadge.textContent = 'Esperando IFC';
+            fragConverterBadge.className = 'inline-flex items-center px-2 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider bg-slate-200/70 dark:bg-slate-700/60 text-slate-600 dark:text-slate-300';
+          } else if (converting) {
+            fragConverterBadge.textContent = `Convirtiendo (${ifcCount})`;
+            fragConverterBadge.className = 'inline-flex items-center px-2 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider bg-amber-100 dark:bg-amber-900/60 text-amber-800 dark:text-amber-300 animate-pulse';
+          } else if (converted === ifcCount && ifcCount > 0) {
+            fragConverterBadge.textContent = `${converted}/${ifcCount} Listo`;
+            fragConverterBadge.className = 'inline-flex items-center px-2 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider bg-emerald-100 dark:bg-emerald-900/60 text-emerald-700 dark:text-emerald-300';
+          } else {
+            const pending = ifcCount - converted;
+            fragConverterBadge.textContent = `${pending} IFC${pending > 1 ? 's' : ''} pendiente${pending > 1 ? 's' : ''}`;
+            fragConverterBadge.className = 'inline-flex items-center px-2 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider bg-indigo-100 dark:bg-indigo-900/60 text-indigo-700 dark:text-indigo-300';
+          }
+        }
+
+        // Auto-expand when there is at least one IFC in the queue
+        if (ifcCount > 0 && !_fragPanelOpen) {
+          window.toggleFragConverterPanel(true);
+        }
+        // Auto-collapse only if user hasn't explicitly toggled and queue is empty
+        // (We keep it open so the user can still interact if they want)
       }
       // =====================================================================
       const DEFAULT_PORTAL_CONFIG = {
@@ -545,6 +828,7 @@
       let activeProject = null;
       let currentStatusTab = 'EN_PROGRESO'; // 'EN_PROGRESO', 'COMPARTIDO', 'PUBLICADO'
       let currentStatusSubTab = 'models';   // 'models', 'pdfs', 'dwgs'
+      let rawProjectFilesCache = [];        // Master unfiltered Drive files
       let allProjectFiles = [];             // Combined & resolved list of all files with status and version
       const collapsedModelGroups = new Set();
       const collapsedSpecialtyGroups = new Set();
@@ -808,13 +1092,29 @@
                 driveScriptUrl: configProject.dataSources?.driveScriptUrl || DEFAULT_DRIVE_SCRIPT_URL
               }
             };
+            _visibilityPreviewTeam = null;
             updateProjectUI();
             await hydrateProjectTeams();
+            try {
+              renderFileVisibilityConfigPanel();
+            } catch (errPanel) {
+              console.error('Error al renderizar panel de visibilidad:', errPanel);
+            }
             loadProjectFiles();
           }
         });
 
         // Helper functions for ISO 19650 Team Silos & Permissions
+        function escapeHtml(text) {
+          if (text === null || text === undefined) return '';
+          return String(text)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#039;');
+        }
+
         function normalizeTeamName(name) {
           return String(name || '')
             .normalize('NFD')
@@ -854,12 +1154,51 @@
           }, []);
         }
 
+        // =====================================================================
+        // ISO 19650 ROLES, PERMISSIONS & VISIBILITY GOVERNANCE
+        // =====================================================================
+        function getUserRolePrivileges() {
+          const currentUser = JSON.parse(sessionStorage.getItem('userAccount') || localStorage.getItem('userAccount') || 'null');
+          if (!currentUser) {
+            return { isSuperAdmin: false, isCompanyAdmin: false, isProjectAdmin: false, canConfigureVisibility: false, email: '', currentUser: null };
+          }
+          const email = (currentUser.username || currentUser.email || currentUser.userAccount || '').toLowerCase().trim();
+
+          const superAdmins = ['imagina3ddesign@gmail.com', 'mcmartinezg@unal.edu.co'];
+          const isSuperAdmin = superAdmins.includes(email) || currentUser.role === 'SUPER_ADMIN' || currentUser.role === 'SUPER_ADMINISTRADOR';
+
+          const companyAdmins = Array.isArray(currentCompany?.admins) ? currentCompany.admins.map(a => a.toLowerCase().trim()) : [];
+          const memberMatch = Array.isArray(currentCompany?.members) ? currentCompany.members.find(m => m.email && m.email.toLowerCase().trim() === email) : null;
+          const isMemberAdmin = memberMatch && (memberMatch.role === 'ADMINISTRADOR_EMPRESA' || memberMatch.role === 'ADMINISTRADOR');
+
+          const isCompanyAdmin = isSuperAdmin || companyAdmins.includes(email) || isMemberAdmin ||
+            (currentUser.adminEmpresaId && currentUser.adminEmpresaId === companyId &&
+             (currentUser.role === 'ADMINISTRADOR_EMPRESA' || currentUser.role === 'SUPER_ADMINISTRADOR' || currentUser.role === 'SUPER_ADMIN'));
+
+          const projectAdmins = Array.isArray(activeProject?.iso19650?.projectAdmins)
+            ? activeProject.iso19650.projectAdmins.map(a => a.toLowerCase().trim())
+            : [];
+          const isProjectAdmin = isCompanyAdmin || projectAdmins.includes(email);
+
+          // Only Superadministradores, Administradores de Empresa and Administradores del Proyecto
+          const canConfigureVisibility = isSuperAdmin || isCompanyAdmin || isProjectAdmin;
+
+          return { isSuperAdmin, isCompanyAdmin, isProjectAdmin, canConfigureVisibility, email, currentUser };
+        }
+
         function ensureProjectTeamStructure(project) {
           if (!project) return;
           if (!Array.isArray(project.members)) project.members = [];
-          if (!project.iso19650) project.iso19650 = {};
+          if (!project.iso19650 || typeof project.iso19650 !== 'object') {
+            project.iso19650 = { projectAdmins: [], deliveryTeams: [], receiverTeams: [], directorDeObra: '' };
+          }
+          if (!Array.isArray(project.iso19650.projectAdmins)) project.iso19650.projectAdmins = [];
           if (!Array.isArray(project.iso19650.deliveryTeams)) project.iso19650.deliveryTeams = [];
+          if (!Array.isArray(project.iso19650.receiverTeams)) project.iso19650.receiverTeams = [];
           if (!Array.isArray(project.equiposDeTarea)) project.equiposDeTarea = [];
+          if (!project.fileVisibilityConfig || typeof project.fileVisibilityConfig !== 'object') {
+            project.fileVisibilityConfig = {};
+          }
         }
 
         async function hydrateProjectTeams() {
@@ -870,50 +1209,89 @@
           const scriptUrl = ds.driveScriptUrl || DEFAULT_DRIVE_SCRIPT_URL;
           const projectSlug = activeProject.slug || slugify(activeProject.name);
 
+          // 1. Sync from activeProject.equiposDeTarea into deliveryTeams if deliveryTeams is empty or missing entries
+          if (Array.isArray(activeProject.equiposDeTarea)) {
+            activeProject.equiposDeTarea.forEach((t, idx) => {
+              if (!t.name) return;
+              const norm = normalizeTeamName(t.name);
+              let dt = activeProject.iso19650.deliveryTeams.find(d => normalizeTeamName(d.name) === norm);
+              if (!dt) {
+                dt = {
+                  id: `deliv-${idx}-${Date.now()}`,
+                  name: t.name.trim(),
+                  leadEmail: (t.members && t.members[0]) || '',
+                  members: Array.isArray(t.members) ? [...t.members] : [],
+                  taskTeams: []
+                };
+                activeProject.iso19650.deliveryTeams.push(dt);
+              } else if (Array.isArray(t.members)) {
+                t.members.forEach(m => {
+                  if (!dt.members.map(x => x.toLowerCase().trim()).includes(m.toLowerCase().trim())) {
+                    dt.members.push(m);
+                  }
+                });
+              }
+            });
+          }
+
+          // 2. Fetch remote teams from Google Apps Script if available
           try {
             const teamsRes = await fetch(`${scriptUrl}?action=getTeams&empresa=${encodeURIComponent(companyId || '')}&proyecto=${encodeURIComponent(projectSlug)}&t=${Date.now()}`);
-            if (!teamsRes.ok) return;
+            if (teamsRes.ok) {
+              const remoteTeams = await teamsRes.json();
+              if (Array.isArray(remoteTeams) && remoteTeams.length > 0) {
+                remoteTeams.forEach(rt => {
+                  const teamName = String(rt.name || '').trim();
+                  if (!teamName) return;
 
-            const remoteTeams = await teamsRes.json();
-            if (!Array.isArray(remoteTeams)) return;
+                  const remoteMembers = Array.isArray(rt.members)
+                    ? rt.members.map(m => String(m || '').toLowerCase().trim()).filter(Boolean)
+                    : [];
+                  const normalized = normalizeTeamName(teamName);
 
-            remoteTeams.forEach(rt => {
-              const teamName = String(rt.name || '').trim();
-              if (!teamName) return;
+                  let deliveryTeam = activeProject.iso19650.deliveryTeams.find(dt => normalizeTeamName(dt.name) === normalized);
+                  if (!deliveryTeam) {
+                    deliveryTeam = {
+                      id: `dt-${projectSlug}-${normalized.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`,
+                      name: teamName,
+                      members: []
+                    };
+                    activeProject.iso19650.deliveryTeams.push(deliveryTeam);
+                  }
 
-              const remoteMembers = Array.isArray(rt.members)
-                ? rt.members.map(member => String(member || '').toLowerCase().trim()).filter(Boolean)
-                : [];
-              const normalized = normalizeTeamName(teamName);
-
-              let deliveryTeam = activeProject.iso19650.deliveryTeams.find(dt => normalizeTeamName(dt.name) === normalized);
-              if (!deliveryTeam) {
-                deliveryTeam = {
-                  id: `dt-${projectSlug}-${normalized.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`,
-                  name: teamName,
-                  members: []
-                };
-                activeProject.iso19650.deliveryTeams.push(deliveryTeam);
+                  const mergedMembers = new Set(
+                    (Array.isArray(deliveryTeam.members) ? deliveryTeam.members : [])
+                      .map(m => String(m || '').toLowerCase().trim())
+                      .filter(Boolean)
+                  );
+                  remoteMembers.forEach(m => {
+                    mergedMembers.add(m);
+                    if (!activeProject.members.includes(m)) activeProject.members.push(m);
+                  });
+                  deliveryTeam.members = Array.from(mergedMembers);
+                });
               }
-
-              const mergedMembers = new Set(
-                (Array.isArray(deliveryTeam.members) ? deliveryTeam.members : [])
-                  .map(member => String(member || '').toLowerCase().trim())
-                  .filter(Boolean)
-              );
-              remoteMembers.forEach(member => {
-                mergedMembers.add(member);
-                if (!activeProject.members.includes(member)) activeProject.members.push(member);
-              });
-              deliveryTeam.members = Array.from(mergedMembers);
-            });
-
-            activeProject.equiposDeTarea = (activeProject.iso19650.deliveryTeams || []).map(dt => ({
-              name: dt.name,
-              members: [...(dt.members || [])]
-            }));
+            }
           } catch (err) {
-            console.warn('No se pudieron hidratar los equipos del proyecto:', err);
+            console.warn('No se pudieron hidratar equipos remotos:', err);
+          }
+
+          // 3. Keep equiposDeTarea aligned
+          activeProject.equiposDeTarea = (activeProject.iso19650.deliveryTeams || []).map(dt => ({
+            name: dt.name,
+            members: [...(dt.members || [])]
+          }));
+
+          // 4. Ensure default receiver team if none exists
+          if (!activeProject.iso19650.receiverTeams || activeProject.iso19650.receiverTeams.length === 0) {
+            activeProject.iso19650.receiverTeams = [
+              {
+                id: `recv-${projectSlug || 'default'}`,
+                name: 'EQUIPO RECEPTOR / OBRA',
+                leadEmail: activeProject.iso19650.directorDeObra || '',
+                members: activeProject.iso19650.directorDeObra ? [activeProject.iso19650.directorDeObra] : []
+              }
+            ];
           }
         }
 
@@ -923,7 +1301,6 @@
           ensureProjectTeamStructure(activeProject);
           const teams = [];
 
-          // Check deliveryTeams
           const deliveryTeams = activeProject.iso19650?.deliveryTeams || [];
           deliveryTeams.forEach(dt => {
             const isMember = Array.isArray(dt.members) && dt.members.map(m => m.toLowerCase().trim()).includes(cleanEmail);
@@ -933,7 +1310,6 @@
             }
           });
 
-          // Check equiposDeTarea
           const equipos = activeProject.equiposDeTarea || [];
           equipos.forEach(eq => {
             const isMember = Array.isArray(eq.members) && eq.members.map(m => m.toLowerCase().trim()).includes(cleanEmail);
@@ -943,6 +1319,18 @@
           });
 
           return uniqueTeamNames(teams);
+        }
+
+        function getUserReceiverTeams(email) {
+          if (!email || !activeProject) return [];
+          const cleanEmail = email.toLowerCase().trim();
+          ensureProjectTeamStructure(activeProject);
+          const receiverTeams = activeProject.iso19650?.receiverTeams || [];
+          return receiverTeams.filter(rt => {
+            const isMember = Array.isArray(rt.members) && rt.members.map(m => m.toLowerCase().trim()).includes(cleanEmail);
+            const isLead = rt.leadEmail && rt.leadEmail.toLowerCase().trim() === cleanEmail;
+            return isMember || isLead;
+          });
         }
 
         function resolveCurrentUserDeliveryTeams() {
@@ -1009,92 +1397,750 @@
             }
           }
 
+          // 3. Fallback: check filename against task teams & common acronyms (e.g. ARQ, EST, MEP)
+          if (teams.size === 0 && file.name) {
+            const fileNameUpper = String(file.name).toUpperCase();
+            const { taskTeams } = getAllProjectTeams();
+            taskTeams.forEach(tt => {
+              const teamUpper = String(tt.name || '').toUpperCase().trim();
+              if (!teamUpper) return;
+              if (fileNameUpper.includes(teamUpper)) {
+                teams.add(teamUpper);
+                return;
+              }
+              const acronyms = {
+                'ARQUITECTURA': ['ARQ'],
+                'ESTRUCTURA': ['EST', 'STR'],
+                'INSTALACIONES': ['MEP', 'INST', 'SAN', 'HID', 'ELEC'],
+                'INTERVENTORÍA': ['INT', 'INTERVENTORIA'],
+                'BIM OBRA': ['OBRA']
+              };
+              for (const [key, list] of Object.entries(acronyms)) {
+                if (teamUpper.includes(key)) {
+                  if (list.some(acr => fileNameUpper.includes(`-${acr}-`) || fileNameUpper.includes(`_${acr}_`) || fileNameUpper.includes(`-${acr}.`) || fileNameUpper.includes(`_${acr}.`))) {
+                    teams.add(teamUpper);
+                  }
+                }
+              }
+            });
+          }
+
           return uniqueTeamNames(Array.from(teams));
         }
 
+        // =====================================================================
+        // FILE VISIBILITY CONFIGURATION (EQUIPOS DE TAREA & EQUIPOS RECEPTORES)
+        // =====================================================================
+        let _visibilityPreviewTeam = null; // null: full admin view | { type: 'task'|'receiver', name: string }
+
+        function getTeamVisibilityStorageKey() {
+          const pSlug = activeProject?.slug || (activeProject?.name ? slugify(activeProject.name) : 'general');
+          return `nora_file_visibility_${companyId || 'default'}_${pSlug}`;
+        }
+
+        function getAllProjectTeams() {
+          if (!activeProject) return { taskTeams: [], receiverTeams: [] };
+          ensureProjectTeamStructure(activeProject);
+
+          const taskMap = new Map();
+
+          (activeProject.iso19650.deliveryTeams || []).forEach(dt => {
+            if (!dt.name) return;
+            const norm = normalizeTeamName(dt.name);
+            if (!taskMap.has(norm)) {
+              taskMap.set(norm, {
+                id: dt.id || `dt-${norm.toLowerCase()}`,
+                name: dt.name.trim(),
+                leadEmail: dt.leadEmail || '',
+                members: Array.isArray(dt.members) ? [...dt.members] : [],
+                type: 'task'
+              });
+            }
+          });
+
+          (activeProject.equiposDeTarea || []).forEach(et => {
+            if (!et.name) return;
+            const norm = normalizeTeamName(et.name);
+            if (!taskMap.has(norm)) {
+              taskMap.set(norm, {
+                id: `et-${norm.toLowerCase()}`,
+                name: et.name.trim(),
+                leadEmail: (et.members && et.members[0]) || '',
+                members: Array.isArray(et.members) ? [...et.members] : [],
+                type: 'task'
+              });
+            } else {
+              const existing = taskMap.get(norm);
+              (et.members || []).forEach(m => {
+                if (!existing.members.includes(m)) existing.members.push(m);
+              });
+            }
+          });
+
+          const receiverMap = new Map();
+          (activeProject.iso19650.receiverTeams || []).forEach(rt => {
+            if (!rt.name) return;
+            const norm = normalizeTeamName(rt.name);
+            if (!receiverMap.has(norm)) {
+              receiverMap.set(norm, {
+                id: rt.id || `recv-${norm.toLowerCase()}`,
+                name: rt.name.trim(),
+                leadEmail: rt.leadEmail || '',
+                members: Array.isArray(rt.members) ? [...rt.members] : [],
+                type: 'receiver'
+              });
+            }
+          });
+
+          if (receiverMap.size === 0) {
+            receiverMap.set('EQUIPO RECEPTOR / OBRA', {
+              id: 'recv-default',
+              name: 'EQUIPO RECEPTOR / OBRA',
+              leadEmail: activeProject.iso19650.directorDeObra || '',
+              members: [],
+              type: 'receiver'
+            });
+          }
+
+          return {
+            taskTeams: Array.from(taskMap.values()),
+            receiverTeams: Array.from(receiverMap.values())
+          };
+        }
+
+        function loadVisibilityConfig() {
+          ensureProjectTeamStructure(activeProject);
+          let config = { ...(activeProject.fileVisibilityConfig || {}) };
+
+          try {
+            const raw = localStorage.getItem(getTeamVisibilityStorageKey());
+            if (raw) {
+              const parsed = JSON.parse(raw);
+              if (parsed && typeof parsed === 'object') {
+                config = { ...config, ...parsed };
+              }
+            }
+          } catch (e) {
+            console.warn('Error al cargar configuración de visibilidad:', e);
+          }
+
+          activeProject.fileVisibilityConfig = config;
+          return config;
+        }
+
+        function getTeamVisibilityRule(type, teamName) {
+          const norm = normalizeTeamName(teamName);
+          const key = `${type}:${norm}`;
+          const cfg = activeProject?.fileVisibilityConfig?.[key] ||
+                      activeProject?.fileVisibilityConfig?.[norm] ||
+                      activeProject?.fileVisibilityConfig?.[teamName];
+
+          if (cfg && typeof cfg === 'object') {
+            return {
+              canViewProgreso: typeof cfg.canViewProgreso === 'boolean' ? cfg.canViewProgreso : (type === 'task'),
+              canViewCompartido: typeof cfg.canViewCompartido === 'boolean' ? cfg.canViewCompartido : (type === 'task'),
+              canViewPublicado: typeof cfg.canViewPublicado === 'boolean' ? cfg.canViewPublicado : true
+            };
+          }
+
+          // Defaults ISO 19650
+          if (type === 'task') {
+            return { canViewProgreso: true, canViewCompartido: true, canViewPublicado: true };
+          } else {
+            return { canViewProgreso: false, canViewCompartido: false, canViewPublicado: true };
+          }
+        }
+
+        function setTeamVisibilityRule(type, teamName, partialRule) {
+          ensureProjectTeamStructure(activeProject);
+          const norm = normalizeTeamName(teamName);
+          const key = `${type}:${norm}`;
+
+          const current = getTeamVisibilityRule(type, teamName);
+          const updated = { ...current, ...partialRule };
+
+          if (!activeProject.fileVisibilityConfig) activeProject.fileVisibilityConfig = {};
+          activeProject.fileVisibilityConfig[key] = updated;
+
+          try {
+            localStorage.setItem(getTeamVisibilityStorageKey(), JSON.stringify(activeProject.fileVisibilityConfig));
+          } catch (e) {
+            console.warn('Error al guardar localmente la configuración de visibilidad:', e);
+          }
+
+          return updated;
+        }
+
+        function showVisibilityAlert(msg, type = 'success') {
+          const alertEl = document.getElementById('visibility-feedback-alert');
+          if (!alertEl) return;
+          alertEl.innerHTML = `
+            <div class="flex items-center gap-2">
+              <span class="material-symbols-outlined text-[18px]">${type === 'success' ? 'check_circle' : type === 'warning' ? 'visibility' : 'info'}</span>
+              <span>${msg}</span>
+            </div>
+            <button onclick="document.getElementById('visibility-feedback-alert').classList.add('hidden')" class="p-1 hover:opacity-70 transition-opacity">
+              <span class="material-symbols-outlined text-[14px]">close</span>
+            </button>
+          `;
+          alertEl.className = `mt-3 p-3 rounded-xl text-xs font-semibold flex items-center justify-between transition-all ${
+            type === 'success' ? 'bg-emerald-50 text-emerald-800 dark:bg-emerald-950/70 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800' :
+            type === 'warning' ? 'bg-amber-50 text-amber-800 dark:bg-amber-950/70 dark:text-amber-300 border border-amber-200 dark:border-amber-800' :
+            'bg-indigo-50 text-indigo-800 dark:bg-indigo-950/70 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800'
+          }`;
+          alertEl.classList.remove('hidden');
+        }
+
+        function renderFileVisibilityConfigPanel() {
+          const panel = document.getElementById('file-visibility-config-panel');
+          if (!panel || !activeProject) return;
+
+          const privileges = getUserRolePrivileges();
+
+          // Restringido estrictamente a: Superadministradores, Administradores de Empresa y Administradores de Proyecto
+          if (!privileges.canConfigureVisibility) {
+            panel.classList.add('hidden');
+            return;
+          }
+
+          panel.classList.remove('hidden');
+
+          // Configurar enlace a la gestión integral de equipos
+          const manageLink = document.getElementById('btn-manage-teams-link');
+          if (manageLink) {
+            const params = [];
+            if (companyId) params.push(`empresa=${encodeURIComponent(companyId)}`);
+            if (activeProject.slug) params.push(`project=${encodeURIComponent(activeProject.slug)}`);
+            const ds = activeProject.dataSources || {};
+            if (ds.driveFolderName) params.push(`driveFolderName=${encodeURIComponent(ds.driveFolderName)}`);
+            manageLink.href = 'equipo.html' + (params.length ? '?' + params.join('&') : '');
+          }
+
+          loadVisibilityConfig();
+          const { taskTeams, receiverTeams } = getAllProjectTeams();
+          const allTeams = [...taskTeams, ...receiverTeams];
+
+          const tbody = document.getElementById('file-visibility-teams-tbody');
+          if (tbody) {
+            if (allTeams.length === 0) {
+              tbody.innerHTML = `
+                <tr>
+                  <td colspan="5" class="py-6 text-center text-slate-400 italic">
+                    No hay equipos de tarea o receptores configurados para este proyecto.
+                  </td>
+                </tr>
+              `;
+            } else {
+              tbody.innerHTML = allTeams.map((team, idx) => {
+                const isTask = team.type === 'task';
+                const rule = getTeamVisibilityRule(team.type, team.name);
+
+                const typeBadge = isTask
+                  ? `<span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-lg text-[10px] font-black uppercase tracking-wider bg-purple-100 text-purple-700 dark:bg-purple-950/80 dark:text-purple-300 border border-purple-200 dark:border-purple-800">
+                       <span class="material-symbols-outlined text-[12px]">work</span> Equipo de Tarea
+                     </span>`
+                  : `<span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-lg text-[10px] font-black uppercase tracking-wider bg-amber-100 text-amber-800 dark:bg-amber-950/80 dark:text-amber-300 border border-amber-200 dark:border-amber-800">
+                       <span class="material-symbols-outlined text-[12px]">foundation</span> Equipo Receptor
+                     </span>`;
+
+                const membersCount = Array.isArray(team.members) ? team.members.length : 0;
+                const leaderInfo = team.leadEmail ? `<span class="text-slate-400 font-normal"> • Líder: <span class="font-mono text-[10px]">${team.leadEmail}</span></span>` : '';
+
+                return `
+                  <tr class="hover:bg-slate-50/80 dark:hover:bg-slate-800/40 transition-colors">
+                    <!-- Team Info -->
+                    <td class="py-3 px-4 font-bold text-slate-900 dark:text-white">
+                      <div class="flex items-center gap-2.5">
+                        <span class="h-6 w-6 rounded-lg ${isTask ? 'bg-purple-100 text-purple-700 dark:bg-purple-950' : 'bg-amber-100 text-amber-700 dark:bg-amber-950'} flex items-center justify-center font-bold text-[11px]">
+                          ${isTask ? 'T' : 'R'}
+                        </span>
+                        <div>
+                          <div class="text-xs font-bold text-slate-900 dark:text-white">${escapeHtml(team.name)}</div>
+                          <div class="text-[10px] text-slate-400 font-normal">${membersCount} participante${membersCount === 1 ? '' : 's'}${leaderInfo}</div>
+                        </div>
+                      </div>
+                    </td>
+
+                    <!-- Type -->
+                    <td class="py-3 px-3 whitespace-nowrap">
+                      ${typeBadge}
+                    </td>
+
+                    <!-- En Progreso -->
+                    <td class="py-3 px-4 text-center">
+                      <label class="inline-flex items-center justify-center cursor-pointer select-none">
+                        <input type="checkbox" data-team-type="${team.type}" data-team-name="${escapeHtml(team.name)}" data-perm="canViewProgreso"
+                               class="w-4 h-4 rounded text-amber-600 focus:ring-amber-500 border-slate-300 dark:border-slate-700 dark:bg-slate-800 cursor-pointer transition-all"
+                               ${rule.canViewProgreso ? 'checked' : ''} />
+                      </label>
+                    </td>
+
+                    <!-- Compartido -->
+                    <td class="py-3 px-4 text-center">
+                      <label class="inline-flex items-center justify-center cursor-pointer select-none">
+                        <input type="checkbox" data-team-type="${team.type}" data-team-name="${escapeHtml(team.name)}" data-perm="canViewCompartido"
+                               class="w-4 h-4 rounded text-blue-600 focus:ring-blue-500 border-slate-300 dark:border-slate-700 dark:bg-slate-800 cursor-pointer transition-all"
+                               ${rule.canViewCompartido ? 'checked' : ''} />
+                      </label>
+                    </td>
+
+                    <!-- Publicado -->
+                    <td class="py-3 px-4 text-center">
+                      <label class="inline-flex items-center justify-center cursor-pointer select-none">
+                        <input type="checkbox" data-team-type="${team.type}" data-team-name="${escapeHtml(team.name)}" data-perm="canViewPublicado"
+                               class="w-4 h-4 rounded text-emerald-600 focus:ring-emerald-500 border-slate-300 dark:border-slate-700 dark:bg-slate-800 cursor-pointer transition-all"
+                               ${rule.canViewPublicado ? 'checked' : ''} />
+                      </label>
+                    </td>
+                  </tr>
+                `;
+              }).join('');
+
+              // Listen to checkbox changes
+              tbody.querySelectorAll('input[type="checkbox"]').forEach(input => {
+                input.addEventListener('change', (e) => {
+                  const type = e.target.getAttribute('data-team-type');
+                  const name = e.target.getAttribute('data-team-name');
+                  const perm = e.target.getAttribute('data-perm');
+                  const isChecked = e.target.checked;
+
+                  setTeamVisibilityRule(type, name, { [perm]: isChecked });
+                  refreshAuthorizedProjectFiles();
+                });
+              });
+            }
+          }
+
+          // Populate Preview Selector
+          const previewSelect = document.getElementById('visibility-preview-as');
+          if (previewSelect) {
+            const currentVal = _visibilityPreviewTeam ? `${_visibilityPreviewTeam.type}:${_visibilityPreviewTeam.name}` : '';
+            previewSelect.innerHTML = `
+              <option value="">Vista Administrador (Acceso Completo)</option>
+              <optgroup label="Equipos de Tarea">
+                ${taskTeams.map(t => `<option value="task:${escapeHtml(t.name)}" ${currentVal === `task:${t.name}` ? 'selected' : ''}>${escapeHtml(t.name)}</option>`).join('')}
+              </optgroup>
+              <optgroup label="Equipos Receptores">
+                ${receiverTeams.map(r => `<option value="receiver:${escapeHtml(r.name)}" ${currentVal === `receiver:${r.name}` ? 'selected' : ''}>${escapeHtml(r.name)}</option>`).join('')}
+              </optgroup>
+            `;
+
+            previewSelect.onchange = (e) => {
+              const val = e.target.value;
+              if (!val) {
+                _visibilityPreviewTeam = null;
+                showVisibilityAlert('Vista restaurada a Administrador con acceso completo a todos los archivos.', 'info');
+              } else {
+                const [type, ...rest] = val.split(':');
+                const name = rest.join(':');
+                _visibilityPreviewTeam = { type, name };
+                const rule = getTeamVisibilityRule(type, name);
+                const activeStates = [];
+                if (rule.canViewProgreso) activeStates.push('En Progreso');
+                if (rule.canViewCompartido) activeStates.push('Compartido');
+                if (rule.canViewPublicado) activeStates.push('Publicado');
+                const statesStr = activeStates.length ? activeStates.join(', ') : 'Ninguno';
+                showVisibilityAlert(`Simulando vista como: <b>${escapeHtml(name)}</b> (${type === 'task' ? 'Equipo de Tarea' : 'Equipo Receptor'}). Estados con acceso: <b>${statesStr}</b>. El explorador de abajo refleja sus permisos configurados.`, 'warning');
+              }
+              refreshAuthorizedProjectFiles();
+            };
+          }
+
+          // Reset button
+          const btnReset = document.getElementById('btn-reset-visibility-defaults');
+          if (btnReset && !btnReset._hasVisibilityListener) {
+            btnReset._hasVisibilityListener = true;
+            btnReset.addEventListener('click', () => {
+              if (!confirm('¿Restablecer las reglas de visualización a los valores por defecto ISO 19650?')) return;
+              const { taskTeams, receiverTeams } = getAllProjectTeams();
+              const newConfig = {};
+              taskTeams.forEach(t => {
+                newConfig[`task:${normalizeTeamName(t.name)}`] = { canViewProgreso: true, canViewCompartido: true, canViewPublicado: true };
+              });
+              receiverTeams.forEach(r => {
+                newConfig[`receiver:${normalizeTeamName(r.name)}`] = { canViewProgreso: false, canViewCompartido: false, canViewPublicado: true };
+              });
+              activeProject.fileVisibilityConfig = newConfig;
+              try {
+                localStorage.setItem(getTeamVisibilityStorageKey(), JSON.stringify(newConfig));
+              } catch (e) {}
+              renderFileVisibilityConfigPanel();
+              refreshAuthorizedProjectFiles();
+              showVisibilityAlert('Reglas de visualización restablecidas a los valores por defecto ISO 19650.', 'info');
+            });
+          }
+
+          // Save button
+          const btnSave = document.getElementById('btn-save-file-visibility');
+          if (btnSave && !btnSave._hasVisibilityListener) {
+            btnSave._hasVisibilityListener = true;
+            btnSave.addEventListener('click', async () => {
+              try {
+                localStorage.setItem(getTeamVisibilityStorageKey(), JSON.stringify(activeProject.fileVisibilityConfig));
+
+                // Sync with GitHub repository if token exists
+                const token = localStorage.getItem('github_pat');
+                if (token && currentCompany && currentCompany.configUrl) {
+                  try {
+                    const repo = 'camilomartg-svg/bim';
+                    const branch = 'main';
+                    const fileTarget = currentCompany.configUrl || 'portal-config.json';
+                    const files = [fileTarget, `docs/${fileTarget}`];
+
+                    if (config && Array.isArray(config.projects)) {
+                      const projIdx = config.projects.findIndex(p => p.slug === activeProject.slug || slugify(p.name) === activeProject.slug);
+                      if (projIdx !== -1) {
+                        config.projects[projIdx].fileVisibilityConfig = activeProject.fileVisibilityConfig;
+                      }
+                    }
+
+                    const content = JSON.stringify(config, null, 2);
+                    for (const path of files) {
+                      let sha = null;
+                      try {
+                        const getRes = await fetch(`https://api.github.com/repos/${repo}/contents/${path}?ref=${branch}`, {
+                          headers: { 'Authorization': `token ${token}`, 'Accept': 'application/vnd.github.v3+json' }
+                        });
+                        if (getRes.ok) {
+                          const data = await getRes.json();
+                          sha = data.sha;
+                        }
+                      } catch (e) {}
+
+                      const body = {
+                        message: `Update file visibility rules for ${activeProject.name}`,
+                        content: btoa(unescape(encodeURIComponent(content))),
+                        branch: branch
+                      };
+                      if (sha) body.sha = sha;
+
+                      await fetch(`https://api.github.com/repos/${repo}/contents/${path}`, {
+                        method: 'PUT',
+                        headers: { 'Authorization': `token ${token}`, 'Content-Type': 'application/json' },
+                        body: JSON.stringify(body)
+                      });
+                    }
+                  } catch (ghErr) {
+                    console.warn('GitHub sync warning:', ghErr);
+                  }
+                }
+
+                showVisibilityAlert('Configuración de visualización guardada y aplicada exitosamente.', 'success');
+                refreshAuthorizedProjectFiles();
+              } catch (err) {
+                console.error(err);
+                showVisibilityAlert('Error al guardar la configuración: ' + (err.message || err), 'warning');
+              }
+            });
+          }
+        }
+
+        // =====================================================================
+        // FILE ACCESS AUTHORIZATION CONTROLLER
+        // =====================================================================
         function isUserAuthorizedForFile(file, action = 'view') {
-          // 1. Get current user's email
           const currentUser = JSON.parse(sessionStorage.getItem('userAccount') || localStorage.getItem('userAccount') || 'null');
           if (!currentUser) return false;
           const email = (currentUser.username || currentUser.email || currentUser.userAccount || '').toLowerCase().trim();
 
-          // Rule: If user is in a receiver team, they can ONLY access files with status === 'PUBLICADO'
-          const receiverTeams = activeProject?.iso19650?.receiverTeams || [];
-          const isInReceiverTeam = receiverTeams.some(rt => {
-            const isMember = Array.isArray(rt.members) && rt.members.map(m => m.toLowerCase().trim()).includes(email);
-            const isLead = rt.leadEmail && rt.leadEmail.toLowerCase().trim() === email;
-            return isMember || isLead;
-          });
+          const privileges = getUserRolePrivileges();
+          const previewTeam = (privileges.canConfigureVisibility && _visibilityPreviewTeam) ? _visibilityPreviewTeam : null;
 
-          if (isInReceiverTeam && file.status !== 'PUBLICADO') {
-            return false;
-          }
+          // 1. MANAGE ACTION (PROMOTE, DELETE, NEW VERSION)
+          if (action === 'manage') {
+            // Full admin rights ONLY when NOT simulating
+            if (!previewTeam && (privileges.isSuperAdmin || privileges.isCompanyAdmin || privileges.isProjectAdmin)) {
+              return true;
+            }
 
-          // 2. Superadmins are always authorized
-          const superAdmins = ['imagina3ddesign@gmail.com', 'mcmartinezg@unal.edu.co'];
-          const isSuperAdmin = superAdmins.includes(email) || currentUser.role === 'SUPER_ADMIN' || currentUser.role === 'SUPER_ADMINISTRADOR';
-
-          if (isSuperAdmin) return true;
-
-          // Restrict WIP (EN_PROGRESO) files strictly to specialty team members and the uploader
-          if (file.status === 'EN_PROGRESO') {
-            // El uploader siempre puede ver/gestionar su propio archivo en progreso
-            const fileUploader = (file.changedByEmail || '').toLowerCase().trim();
-            if (fileUploader && fileUploader === email) return true;
+            // In simulation, only task teams can manage their own files; receiver teams cannot manage
+            let userTeams = [];
+            if (previewTeam) {
+              if (previewTeam.type === 'task') {
+                userTeams = [previewTeam.name];
+              } else {
+                return false;
+              }
+            } else {
+              const fileUploader = (file.changedByEmail || '').toLowerCase().trim();
+              if (fileUploader && fileUploader === email) return true;
+              userTeams = getUserDeliveryTeams(email);
+            }
 
             const fileTeams = getFileDeliveryTeams(file);
-            const userTeams = getUserDeliveryTeams(email);
-
             const normalizeName = str => String(str || '').normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase().trim();
             const normFileTeams = fileTeams.map(normalizeName);
             const normUserTeams = userTeams.map(normalizeName);
-
             if (normFileTeams.length === 0) return false;
-
             return normFileTeams.some(team => normUserTeams.includes(team));
           }
 
-          // For shared/published files, check company and project admin permissions
-          const companyAdmins = Array.isArray(currentCompany?.admins) ? currentCompany.admins.map(a => a.toLowerCase().trim()) : [];
-          const memberMatch = Array.isArray(currentCompany?.members) ? currentCompany.members.find(m => m.email && m.email.toLowerCase().trim() === email) : null;
-          const isMemberAdmin = memberMatch && (memberMatch.role === 'ADMINISTRADOR_EMPRESA' || memberMatch.role === 'ADMINISTRADOR');
-
-          const isCompanyAdmin = isSuperAdmin || companyAdmins.includes(email) || isMemberAdmin || (currentUser.adminEmpresaId && currentUser.adminEmpresaId === companyId && (currentUser.role === 'ADMINISTRADOR_EMPRESA' || currentUser.role === 'SUPER_ADMINISTRADOR' || currentUser.role === 'SUPER_ADMIN'));
-
-          const projectAdmins = Array.isArray(activeProject?.iso19650?.projectAdmins)
-            ? activeProject.iso19650.projectAdmins.map(a => a.toLowerCase().trim())
-            : [];
-          const isProjectAdmin = isCompanyAdmin || projectAdmins.includes(email);
-
-          if (isProjectAdmin) return true;
-
-          // El uploader siempre puede ver/gestionar su propio archivo
-          const fileUploader = (file.changedByEmail || '').toLowerCase().trim();
-          if (fileUploader && fileUploader === email) return true;
-
-          // For view action of shared/published files, any project member is authorized
-          if (action === 'view') {
-            const isMember = (activeProject?.members || []).map(m => m.toLowerCase().trim()).includes(email);
-            if (isMember) return true;
-            
-            // Fallback: check if the user is in any delivery team
-            const userTeams = getUserDeliveryTeams(email);
-            if (userTeams.length > 0) return true;
-
-            if (isInReceiverTeam) return true;
+          // 2. VIEW ACTION
+          // Administrators have full visibility across all states ONLY when not simulating
+          if (privileges.canConfigureVisibility && !previewTeam) {
+            return true;
           }
 
-          // For edit/manage action of shared/published files, check delivery team ownership
-          const fileTeams = getFileDeliveryTeams(file);
-          const userTeams = getUserDeliveryTeams(email);
+          // The original uploader can view their file (unless previewing as another team)
+          if (!previewTeam) {
+            const fileUploader = (file.changedByEmail || '').toLowerCase().trim();
+            if (fileUploader && fileUploader === email) return true;
+          }
 
-          const normalizeName = str => String(str || '').normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase().trim();
-          const normFileTeams = fileTeams.map(normalizeName);
-          const normUserTeams = userTeams.map(normalizeName);
+          // Resolve effective user teams (real or simulated)
+          let userTaskTeams = [];
+          let userReceiverTeams = [];
 
-          if (normFileTeams.length === 0) return false;
+          if (previewTeam) {
+            if (previewTeam.type === 'task') {
+              userTaskTeams = [previewTeam.name];
+            } else if (previewTeam.type === 'receiver') {
+              userReceiverTeams = [{ name: previewTeam.name }];
+            }
+          } else {
+            userTaskTeams = getUserDeliveryTeams(email);
+            userReceiverTeams = getUserReceiverTeams(email);
+          }
 
-          return normFileTeams.some(team => normUserTeams.includes(team));
+          const status = file.status; // 'EN_PROGRESO' | 'COMPARTIDO' | 'PUBLICADO'
+
+          // Check A: EN_PROGRESO (WIP)
+          if (status === 'EN_PROGRESO') {
+            const fileTeams = getFileDeliveryTeams(file);
+            const normalizeName = str => String(str || '').normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase().trim();
+            const normFileTeams = fileTeams.map(normalizeName);
+            const normUserTeams = userTaskTeams.map(normalizeName);
+
+            if (normUserTeams.length > 0) {
+              const hasMatchingTaskTeam = normUserTeams.some(t => {
+                const rule = getTeamVisibilityRule('task', t);
+                if (rule.canViewProgreso === false) return false;
+                if (normFileTeams.length > 0) {
+                  return normFileTeams.includes(t);
+                }
+                return rule.canViewProgreso === true;
+              });
+              if (hasMatchingTaskTeam) return true;
+            }
+
+            // Receiver Teams: If configured by admin to view En Progreso
+            for (const rt of userReceiverTeams) {
+              const rule = getTeamVisibilityRule('receiver', rt.name);
+              if (rule.canViewProgreso === true) return true;
+            }
+
+            return false;
+          }
+
+          // Check B: COMPARTIDO (SHARED)
+          if (status === 'COMPARTIDO') {
+            // Task Teams
+            for (const tt of userTaskTeams) {
+              const rule = getTeamVisibilityRule('task', tt);
+              if (rule.canViewCompartido !== false) return true;
+            }
+
+            // Receiver Teams
+            for (const rt of userReceiverTeams) {
+              const rule = getTeamVisibilityRule('receiver', rt.name);
+              if (rule.canViewCompartido === true) return true;
+            }
+
+            // Unassigned project members fallback (only when not simulating)
+            if (!previewTeam && userTaskTeams.length === 0 && userReceiverTeams.length === 0) {
+              const isMember = (activeProject?.members || []).map(m => m.toLowerCase().trim()).includes(email);
+              if (isMember) return true;
+            }
+
+            return false;
+          }
+
+          // Check C: PUBLICADO (PUBLISHED)
+          if (status === 'PUBLICADO') {
+            // Task Teams
+            for (const tt of userTaskTeams) {
+              const rule = getTeamVisibilityRule('task', tt);
+              if (rule.canViewPublicado !== false) return true;
+            }
+
+            // Receiver Teams (default ISO 19650 is true)
+            for (const rt of userReceiverTeams) {
+              const rule = getTeamVisibilityRule('receiver', rt.name);
+              if (rule.canViewPublicado !== false) return true;
+            }
+
+            // Unassigned project members fallback (only when not simulating)
+            if (!previewTeam && userTaskTeams.length === 0 && userReceiverTeams.length === 0) {
+              const isMember = (activeProject?.members || []).map(m => m.toLowerCase().trim()).includes(email);
+              if (isMember) return true;
+            }
+
+            return false;
+          }
+
+          return false;
+        }
+
+        // Compute effective visibility permissions for tabs and files
+        function getCurrentEffectivePermissions() {
+          const privileges = getUserRolePrivileges();
+          const previewTeam = (privileges.canConfigureVisibility && _visibilityPreviewTeam) ? _visibilityPreviewTeam : null;
+
+          if (privileges.canConfigureVisibility && !previewTeam) {
+            return {
+              canViewProgreso: true,
+              canViewCompartido: true,
+              canViewPublicado: true,
+              isSimulation: false,
+              teamLabel: 'Administrador (Acceso Completo)'
+            };
+          }
+
+          if (previewTeam) {
+            const rule = getTeamVisibilityRule(previewTeam.type, previewTeam.name);
+            return {
+              canViewProgreso: rule.canViewProgreso === true,
+              canViewCompartido: rule.canViewCompartido === true,
+              canViewPublicado: rule.canViewPublicado !== false,
+              isSimulation: true,
+              team: previewTeam,
+              teamLabel: `${previewTeam.name} (${previewTeam.type === 'task' ? 'Equipo de Tarea' : 'Equipo Receptor'})`
+            };
+          }
+
+          const currentUser = JSON.parse(sessionStorage.getItem('userAccount') || localStorage.getItem('userAccount') || 'null');
+          const email = (currentUser?.username || currentUser?.email || currentUser?.userAccount || '').toLowerCase().trim();
+          const userTaskTeams = getUserDeliveryTeams(email);
+          const userReceiverTeams = getUserReceiverTeams(email);
+
+          if (userTaskTeams.length === 0 && userReceiverTeams.length === 0) {
+            return {
+              canViewProgreso: false,
+              canViewCompartido: true,
+              canViewPublicado: true,
+              isSimulation: false,
+              teamLabel: 'Miembro General'
+            };
+          }
+
+          const canProg = userTaskTeams.some(t => getTeamVisibilityRule('task', t).canViewProgreso === true) ||
+                          userReceiverTeams.some(r => getTeamVisibilityRule('receiver', r.name).canViewProgreso === true);
+          const canComp = userTaskTeams.some(t => getTeamVisibilityRule('task', t).canViewCompartido !== false) ||
+                          userReceiverTeams.some(r => getTeamVisibilityRule('receiver', r.name).canViewCompartido === true);
+          const canPub = userTaskTeams.some(t => getTeamVisibilityRule('task', t).canViewPublicado !== false) ||
+                         userReceiverTeams.some(r => getTeamVisibilityRule('receiver', r.name).canViewPublicado !== false);
+
+          return {
+            canViewProgreso: canProg,
+            canViewCompartido: canComp,
+            canViewPublicado: canPub,
+            isSimulation: false,
+            teamLabel: [...userTaskTeams, ...userReceiverTeams.map(r => r.name)].join(', ')
+          };
+        }
+
+        // Update tab styling based on currentStatusTab
+        function updateTabStyles() {
+          const btnMap = {
+            'EN_PROGRESO': stabProgreso,
+            'COMPARTIDO': stabCompartido,
+            'PUBLICADO': stabPublicado
+          };
+          const activeBtn = btnMap[currentStatusTab] || stabProgreso;
+          [stabProgreso, stabCompartido, stabPublicado].forEach(b => {
+            if (!b) return;
+            b.classList.remove('border-amber-500','text-amber-600','dark:text-amber-400','border-blue-500','text-blue-600','dark:text-blue-400','border-green-500','text-green-600','dark:text-green-400');
+            b.classList.add('border-transparent','text-slate-500','dark:text-slate-400');
+          });
+          if (activeBtn) {
+            if (currentStatusTab === 'EN_PROGRESO') activeBtn.classList.add('border-amber-500','text-amber-600','dark:text-amber-400');
+            else if (currentStatusTab === 'COMPARTIDO') activeBtn.classList.add('border-blue-500','text-blue-600','dark:text-blue-400');
+            else if (currentStatusTab === 'PUBLICADO') activeBtn.classList.add('border-green-500','text-green-600','dark:text-green-400');
+            activeBtn.classList.remove('border-transparent','text-slate-500','dark:text-slate-400');
+          }
+        }
+
+        // Dynamically recalculate authorized files, tabs and active view
+        function refreshAuthorizedProjectFiles() {
+          allProjectFiles = (rawProjectFilesCache || []).filter(f => isUserAuthorizedForFile(f, 'view') && !f._derivedFromIfc);
+
+          const effective = getCurrentEffectivePermissions();
+
+          if (stabProgreso) {
+            stabProgreso.style.display = effective.canViewProgreso ? '' : 'none';
+          }
+          if (stabCompartido) {
+            stabCompartido.style.display = effective.canViewCompartido ? '' : 'none';
+          }
+          if (stabPublicado) {
+            stabPublicado.style.display = effective.canViewPublicado ? '' : 'none';
+          }
+
+          const simBadge = document.getElementById('simulation-active-badge');
+          if (simBadge) {
+            if (effective.isSimulation) {
+              const states = [];
+              if (effective.canViewProgreso) states.push('En Progreso');
+              if (effective.canViewCompartido) states.push('Compartido');
+              if (effective.canViewPublicado) states.push('Publicado');
+              simBadge.innerHTML = `
+                <div class="flex items-center gap-2">
+                  <span class="material-symbols-outlined text-[16px] text-amber-600 dark:text-amber-400">visibility</span>
+                  <span>Simulando vista como: <strong>${escapeHtml(effective.teamLabel)}</strong>. Pestañas visibles: <strong>${states.length ? states.join(', ') : 'Ninguna'}</strong>.</span>
+                </div>
+                <button id="btn-exit-simulation" class="text-[11px] underline font-bold hover:text-amber-900 dark:hover:text-amber-100 transition-colors cursor-pointer whitespace-nowrap">
+                  Salir de simulación
+                </button>
+              `;
+              simBadge.classList.remove('hidden');
+              const btnExit = document.getElementById('btn-exit-simulation');
+              if (btnExit) {
+                btnExit.onclick = () => {
+                  const previewSelect = document.getElementById('visibility-preview-as');
+                  if (previewSelect) previewSelect.value = '';
+                  _visibilityPreviewTeam = null;
+                  showVisibilityAlert('Vista restaurada a Administrador con acceso completo a todos los archivos.', 'info');
+                  refreshAuthorizedProjectFiles();
+                };
+              }
+            } else {
+              simBadge.classList.add('hidden');
+            }
+          }
+
+          const tabAllowedMap = {
+            'EN_PROGRESO': effective.canViewProgreso,
+            'COMPARTIDO': effective.canViewCompartido,
+            'PUBLICADO': effective.canViewPublicado
+          };
+
+          if (!tabAllowedMap[currentStatusTab]) {
+            if (effective.canViewPublicado) {
+              currentStatusTab = 'PUBLICADO';
+            } else if (effective.canViewCompartido) {
+              currentStatusTab = 'COMPARTIDO';
+            } else if (effective.canViewProgreso) {
+              currentStatusTab = 'EN_PROGRESO';
+            }
+          } else {
+            const filesInCurrent = allProjectFiles.filter(f => f.status === currentStatusTab && isVisibleInProjectFilesView(f));
+            if (filesInCurrent.length === 0) {
+              const candidateOrder = ['PUBLICADO', 'COMPARTIDO', 'EN_PROGRESO'];
+              for (const cand of candidateOrder) {
+                if (cand !== currentStatusTab && tabAllowedMap[cand]) {
+                  const count = allProjectFiles.filter(f => f.status === cand && isVisibleInProjectFilesView(f)).length;
+                  if (count > 0) {
+                    currentStatusTab = cand;
+                    break;
+                  }
+                }
+              }
+            }
+          }
+
+          updateTabStyles();
+          updateTabCounts();
+          renderDriveFilesTable();
         }
 
         if (projects.length > 1) {
@@ -1103,6 +2149,11 @@
 
         updateProjectUI();
         await hydrateProjectTeams();
+        try {
+          renderFileVisibilityConfigPanel();
+        } catch (errPanel) {
+          console.error('Error al renderizar panel de visibilidad:', errPanel);
+        }
         loadProjectFiles();
 
       } catch (err) {
@@ -1197,6 +2248,8 @@
 
       function renderFilesList() {
 
+        // Sync the embedded converter panel with the current queue state
+        if (typeof syncFragConverterPanelState === 'function') syncFragConverterPanelState();
 
         if (selectedFiles.length === 0) {
           filesListContainer.classList.add('hidden');
@@ -1212,12 +2265,26 @@
           uploadBtn.disabled = false;
         }
 
-        // Auto-trigger conversion for loaded IFC files
+        // Auto-load IFCs in the embedded converter UI (user configures then converts)
         selectedFiles.forEach(fileObj => {
-          if (getFileExtension(fileObj.file.name) === 'ifc' && !fileObj.converted && !fileObj.isConverting) {
-            setTimeout(() => {
-              window.manualConvertIfc(fileObj.id);
-            }, 300);
+          if (getFileExtension(fileObj.file?.name || '') === 'ifc' && !fileObj.converted && !fileObj.isConverting) {
+            if (!fileObj.loadedInUi && !fileObj._loadingInUi) {
+              setTimeout(() => {
+                if (typeof loadIfcInConverterUi === 'function') {
+                  loadIfcInConverterUi(fileObj);
+                }
+                // Auto-scroll & open the converter panel for visibility
+                if (typeof window.toggleFragConverterPanel === 'function') {
+                  window.toggleFragConverterPanel(true);
+                  setTimeout(() => {
+                    const panel = document.getElementById('frag-converter-panel');
+                    if (panel && typeof panel.scrollIntoView === 'function') {
+                      panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                    }
+                  }, 200);
+                }
+              }, 400);
+            }
           }
         });
 
@@ -1285,11 +2352,16 @@
                       <span class="material-symbols-outlined text-sm animate-spin">sync</span>
                       Convirtiendo... ${fileObj.progress || 10}%
                     </span>
-                  ` : `
-                    <button onclick="window.manualConvertIfc(${fileObj.id})" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white font-bold text-[11px] shadow-sm transition-all cursor-pointer">
-                      <span class="material-symbols-outlined text-sm">play_arrow</span>
-                      CONVERTIR MODELO
+                  ` : fileObj.loadedInUi ? `
+                    <button onclick="(function(){ if (window.toggleFragConverterPanel) { window.toggleFragConverterPanel(true); setTimeout(()=>{ var p = document.getElementById('frag-converter-panel'); if (p && p.scrollIntoView) p.scrollIntoView({behavior:'smooth',block:'start'}); }, 150); } })()" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-indigo-300 dark:border-indigo-800 bg-white dark:bg-indigo-950/40 hover:bg-indigo-100 dark:hover:bg-indigo-900/60 text-indigo-700 dark:text-indigo-300 font-bold text-[11px] shadow-sm transition-all cursor-pointer">
+                      <span class="material-symbols-outlined text-sm">tune</span>
+                      CONFIGURAR Y CONVERTIR ↓
                     </button>
+                  ` : `
+                    <span class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-indigo-100 dark:bg-indigo-900/80 text-indigo-700 dark:text-indigo-300 font-bold text-[11px] shadow-sm">
+                      <span class="material-symbols-outlined text-sm">progress_activity</span>
+                      CARGANDO EN PANEL...
+                    </span>
                   `}
                 </div>
               ` : ''}
@@ -1312,6 +2384,11 @@
       window.manualConvertIfc = async (id) => {
         const fileObj = selectedFiles.find(f => f.id === id);
         if (!fileObj || fileObj.isConverting || fileObj.converted) return;
+
+        // Ensure the embedded converter panel is visible so the user can watch the process
+        if (typeof window.toggleFragConverterPanel === 'function') {
+          window.toggleFragConverterPanel(true);
+        }
 
         fileObj.isConverting = true;
         fileObj.status = 'Convirtiendo a FRAG...';
@@ -1908,10 +2985,9 @@
             }
           });
 
-          // Excluir FRAG derivados de IFC y archivos no autorizados
-          allProjectFiles = rawProjectFiles.filter(f => isUserAuthorizedForFile(f, 'view') && !f._derivedFromIfc);
-          updateTabCounts();
-          renderDriveFilesTable();
+          // Guardar copia maestra de archivos del Drive y aplicar filtros de permisos/simulación
+          rawProjectFilesCache = rawProjectFiles;
+          refreshAuthorizedProjectFiles();
         } catch (err) {
           console.error(err);
           addLog('Error cargando archivos del proyecto: ' + err.message);
@@ -2724,14 +3800,7 @@
       // State tabs switcher
       function switchStatusTab(tab, activeBtn) {
         currentStatusTab = tab;
-        [stabProgreso, stabCompartido, stabPublicado].forEach(b => {
-          b.classList.remove('border-amber-500','text-amber-600','dark:text-amber-400','border-blue-500','text-blue-600','dark:text-blue-400','border-green-500','text-green-600','dark:text-green-400');
-          b.classList.add('border-transparent','text-slate-500','dark:text-slate-400');
-        });
-        if (tab === 'EN_PROGRESO') activeBtn.classList.add('border-amber-500','text-amber-600','dark:text-amber-400');
-        else if (tab === 'COMPARTIDO') activeBtn.classList.add('border-blue-500','text-blue-600','dark:text-blue-400');
-        else activeBtn.classList.add('border-green-500','text-green-600','dark:text-green-400');
-        activeBtn.classList.remove('border-transparent','text-slate-500','dark:text-slate-400');
+        updateTabStyles();
         renderDriveFilesTable();
       }
 

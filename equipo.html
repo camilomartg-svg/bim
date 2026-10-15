@@ -287,7 +287,7 @@
         <span>2. Equipos de Entrega (B & C)</span>
       </button>
 
-      <button data-tab="tasks" class="tab-btn hidden inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold uppercase tracking-wider transition-all text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 whitespace-nowrap">
+      <button data-tab="tasks" class="tab-btn inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold uppercase tracking-wider transition-all text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 whitespace-nowrap">
         <span class="material-symbols-outlined text-[16px]">task_alt</span>
         <span>3. Equipos de Tarea</span>
       </button>
@@ -500,7 +500,88 @@
 
     </div>
 
+    <!-- TAB PANEL 3: EQUIPOS DE TAREA (ISO 19650) -->
+    <div id="tab-content-tasks" class="tab-panel hidden space-y-6">
+      <!-- Notice Banner -->
+      <div class="bg-indigo-50 dark:bg-slate-800/40 border border-indigo-100 dark:border-slate-800 p-6 rounded-3xl flex items-start gap-4 shadow-sm">
+        <span class="material-symbols-outlined text-indigo-500 mt-0.5">info</span>
+        <div>
+          <h4 class="text-xs font-bold text-indigo-900 dark:text-indigo-200 uppercase tracking-wider mb-1">Configuración de Equipos de Tarea (ISO 19650)</h4>
+          <p class="text-[11px] text-indigo-700 dark:text-gray-300 leading-relaxed font-medium">
+            Los miembros del equipo y sus correspondientes Equipos de Tarea (bajo el estándar ISO 19650) se configuran para cada proyecto y se guardan de forma centralizada.
+          </p>
+        </div>
+      </div>
 
+      <!-- Teams List Management -->
+      <div class="glass-card rounded-3xl border border-slate-200/80 dark:border-slate-800 p-6 shadow-sm space-y-6">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-100 dark:border-slate-800 pb-4">
+          <div class="flex items-center gap-3">
+            <span class="material-symbols-outlined text-emerald-600 dark:text-emerald-400">groups</span>
+            <h3 class="text-xs font-black uppercase tracking-[0.2em] text-slate-900 dark:text-white">Equipos de Tarea del Proyecto</h3>
+          </div>
+          <div class="flex items-center gap-2">
+            <input id="new-team-name" type="text" placeholder="Ej: BIM, ESTRUCTURA" class="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-1.5 text-xs font-semibold w-48 text-slate-900 dark:text-white focus:ring-2 focus:ring-emerald-500" />
+            <button id="add-team-btn" onclick="addTeam()" class="flex items-center gap-1 bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-wider transition-colors shadow-sm cursor-pointer">
+              <span class="material-symbols-outlined text-[16px]">add</span>
+              <span>Crear</span>
+            </button>
+          </div>
+        </div>
+        <div id="teams-list-container" class="flex flex-wrap gap-3">
+          <!-- Pills created dynamically -->
+        </div>
+      </div>
+
+      <!-- Project Members Team Assignment Table -->
+      <div class="glass-card rounded-3xl border border-slate-200/80 dark:border-slate-800 p-6 shadow-sm space-y-6">
+        <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-100 dark:border-slate-800 pb-4">
+          <div class="flex items-center gap-3">
+            <span class="material-symbols-outlined text-emerald-600 dark:text-emerald-400">person</span>
+            <div>
+              <h3 class="text-xs font-black uppercase tracking-[0.2em] text-slate-900 dark:text-white">Personal del Proyecto</h3>
+              <p class="text-[11px] text-slate-400">Asigna a cada integrante a su correspondiente Equipo de Tarea.</p>
+            </div>
+          </div>
+          
+          <!-- Search & Group Controls -->
+          <div class="flex flex-wrap items-center gap-3">
+            <!-- Search Input -->
+            <div class="relative min-w-[220px]">
+              <span class="material-symbols-outlined absolute left-3 top-2 text-slate-400 text-[16px]">search</span>
+              <input id="teams-members-search" type="text" placeholder="Buscar personal..." class="w-full pl-8 pr-3 py-1.5 text-xs rounded-xl border border-slate-200 dark:border-slate-700 dark:bg-slate-800 bg-slate-50 focus:bg-white text-slate-900 dark:text-white transition-all shadow-sm" />
+            </div>
+            
+            <!-- Grouping options -->
+            <div class="flex items-center bg-slate-100 dark:bg-slate-800 p-1 rounded-xl text-[11px] font-semibold">
+              <span class="text-slate-400 px-2 uppercase text-[9px] tracking-wider hidden sm:inline">Organizar:</span>
+              <button type="button" id="btn-tgroup-none" onclick="setTeamsGroupBy('none')" class="px-2.5 py-1 rounded-lg bg-white dark:bg-slate-700 shadow-sm text-slate-900 dark:text-white transition-all font-bold">Todos</button>
+              <button type="button" id="btn-tgroup-team" onclick="setTeamsGroupBy('team')" class="px-2.5 py-1 rounded-lg text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white transition-all">Equipo</button>
+              <button type="button" id="btn-tgroup-role" onclick="setTeamsGroupBy('role')" class="px-2.5 py-1 rounded-lg text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white transition-all">Cargo / Rol</button>
+              <button type="button" id="btn-tgroup-company" onclick="setTeamsGroupBy('company')" class="px-2.5 py-1 rounded-lg text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white transition-all">Empresa</button>
+            </div>
+          </div>
+        </div>
+        <div class="overflow-hidden rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm">
+          <div class="overflow-x-auto">
+            <table class="w-full text-left border-collapse text-sm">
+              <thead class="bg-slate-50 dark:bg-slate-800/50 text-slate-400 uppercase text-[10px] tracking-wider font-bold border-b border-slate-200 dark:border-slate-800">
+                <tr>
+                  <th class="py-3 px-4">Cargo / Rol</th>
+                  <th class="py-3 px-4">Empresa</th>
+                  <th class="py-3 px-4">Nombre</th>
+                  <th class="py-3 px-4">Email de Usuario</th>
+                  <th class="py-3 px-4 w-52">Equipo de Tarea</th>
+                </tr>
+              </thead>
+              <tbody id="teams-members-table-body" class="divide-y divide-slate-100 dark:divide-slate-800/60 bg-white dark:bg-slate-900">
+                <!-- Injected dynamically -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
 
     <!-- TAB PANEL 4: EQUIPO RECEPTOR -->
     <div id="tab-content-receiver" class="tab-panel hidden space-y-6">
