@@ -547,17 +547,6 @@
             console.warn('No se pudieron obtener equipos desde Google Sheets:', err);
         }
 
-        // Configurar enlaces hacia la gobernanza de equipos en equipo.html
-        const equipoUrl = `equipo.html?empresa=${encodeURIComponent(companyId)}&project=${encodeURIComponent(projectSlug)}`;
-        const linkEquipo = document.getElementById('link-project-equipo');
-        if (linkEquipo) linkEquipo.href = equipoUrl;
-        const btnMembersEquipo = document.getElementById('btn-goto-members-equipo');
-        if (btnMembersEquipo) btnMembersEquipo.href = equipoUrl;
-        const btnTeamsEquipo = document.getElementById('btn-goto-teams-equipo');
-        if (btnTeamsEquipo) btnTeamsEquipo.href = equipoUrl;
-
-        renderMembersTab();
-        renderTeamsTab();
     }
 
     // --- LLENAR INPUTS ---

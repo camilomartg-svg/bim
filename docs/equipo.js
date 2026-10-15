@@ -605,6 +605,7 @@
     normalizeProjectIsoStructure();
     updateMetrics();
     renderDiagramStage();
+    renderAuthorizedMembersTab();
     renderProjectAdminsTab();
     renderDeliveryTeamsTab();
     renderTeamsTab();
@@ -2177,6 +2178,199 @@
       }
     }
   });
+
+  // --- PESTAÑA: PERSONAL PROYECTO (PERSONAL AUTORIZADO) ---
+  function renderAuthorizedMembersTab() {
+    const countEl = document.getElementById('project-members-count');
+    const tbody = document.getElementById('authorized-directory-table-body');
+    if (!tbody || !activeProject) return;
+
+    const assignedMembers = Array.isArray(activeProject.members) ? activeProject.members : [];
+    if (countEl) {
+      countEl.textContent = `${assignedMembers.length} ${assignedMembers.length === 1 ? 'Miembro Asignado' : 'Miembros Asignados'}`;
+    }
+
+    const searchInput = document.getElementById('authorized-directory-search');
+    const query = (searchInput ? searchInput.value : '').toLowerCase().trim();
+
+    const userMap = new Map();
+
+    const upsertUser = (entry) => {
+      if (!entry || !entry.email) return;
+      const email = String(entry.email).toLowerCase().trim();
+      if (!email) return;
+      if (userMap.has(email)) {
+        const existing = userMap.get(email);
+        userMap.set(email, {
+          ...existing,
+          ...entry,
+          email,
+          nombre: (entry.nombre && entry.nombre !== email.split('@')[0]) ? entry.nombre : (existing.nombre || entry.nombre),
+          empresa: entry.empresa || existing.empresa,
+          rol: entry.rol || existing.rol,
+          especialidad: entry.especialidad || existing.especialidad,
+          cargo: entry.cargo || existing.cargo
+        });
+        return;
+      }
+      userMap.set(email, { ...entry, email });
+    };
+
+    // 1) Miembros de la empresa actual
+    const companyMembers = Array.isArray(currentCompany?.members) ? currentCompany.members : [];
+    companyMembers.forEach(m => {
+      if (!m.email) return;
+      const email = String(m.email).toLowerCase().trim();
+      upsertUser({
+        email,
+        nombre: getUserRegisteredName(email),
+        empresa: getUserRegisteredCompany(email),
+        rol: m.role || 'INVITADO',
+        especialidad: m.especialidad || '',
+        cargo: m.cargo || ''
+      });
+    });
+
+    // 2) Administradores de la empresa actual
+    const companyAdmins = Array.isArray(currentCompany?.admins) ? currentCompany.admins : [];
+    companyAdmins.forEach(adminEmail => {
+      if (!adminEmail) return;
+      const email = String(adminEmail).toLowerCase().trim();
+      upsertUser({
+        email,
+        nombre: getUserRegisteredName(email),
+        empresa: currentCompany?.name || 'Empresa',
+        rol: 'ADMINISTRADOR_EMPRESA',
+        especialidad: '',
+        cargo: 'Administrador de Empresa'
+      });
+    });
+
+    // 3) Enriquecer o agregar con Directorio Global de Nora (Google Sheets)
+    if (Array.isArray(allDirectoryUsers)) {
+      allDirectoryUsers.forEach(du => {
+        if (!du.email) return;
+        const email = String(du.email).toLowerCase().trim();
+        upsertUser({
+          email,
+          nombre: du.nombre || getUserRegisteredName(email),
+          empresa: du.empresa || getUserRegisteredCompany(email),
+          rol: du.rol || 'COLABORADOR',
+          especialidad: du.especialidad || '',
+          cargo: du.cargo || du.especialidad || ''
+        });
+      });
+    }
+
+    // 4) Miembros ya en activeProject.members
+    assignedMembers.forEach(pm => {
+      const email = String(pm).toLowerCase().trim();
+      if (!userMap.has(email)) {
+        upsertUser({
+          email,
+          nombre: getUserRegisteredName(email),
+          empresa: getUserRegisteredCompany(email),
+          rol: 'COLABORADOR',
+          especialidad: '',
+          cargo: ''
+        });
+      }
+    });
+
+    const availableUsers = Array.from(userMap.values());
+
+    // Filtrar por búsqueda
+    const filtered = availableUsers.filter(u => {
+      const matchName = (u.nombre || '').toLowerCase().includes(query);
+      const matchEmail = (u.email || '').toLowerCase().includes(query);
+      const matchEmpresa = (u.empresa || '').toLowerCase().includes(query);
+      const matchCargo = (u.cargo || '').toLowerCase().includes(query);
+      const matchEspecialidad = (u.especialidad || '').toLowerCase().includes(query);
+      return matchName || matchEmail || matchEmpresa || matchCargo || matchEspecialidad;
+    });
+
+    if (filtered.length === 0) {
+      tbody.innerHTML = `
+        <tr>
+          <td colspan="4" class="py-8 px-4 text-center text-xs text-slate-400 italic">
+            No se encontraron usuarios que coincidan con la búsqueda.
+          </td>
+        </tr>
+      `;
+      return;
+    }
+
+    tbody.innerHTML = filtered.map(u => {
+      const email = String(u.email).toLowerCase().trim();
+      const isAssigned = assignedMembers.some(m => String(m).toLowerCase().trim() === email);
+
+      return `
+        <tr class="hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors">
+          <td class="py-3 px-4">
+            <div class="font-bold text-slate-900 dark:text-white">${escapeHtml(u.nombre || 'Sin Nombre')}</div>
+            <div class="text-xs text-slate-500">${escapeHtml(u.empresa || currentCompany?.name || 'Empresa')}</div>
+          </td>
+          <td class="py-3 px-4 text-xs font-mono">
+            <div class="text-slate-700 dark:text-slate-300">${escapeHtml(email)}</div>
+            <span class="inline-block mt-1 px-2 py-0.5 rounded-lg bg-slate-100 dark:bg-slate-800 font-sans font-semibold text-slate-600 dark:text-slate-300 text-[10px] uppercase tracking-wider">${escapeHtml(u.cargo || u.especialidad || 'Sin Cargo')}</span>
+          </td>
+          <td class="py-3 px-4 text-xs text-slate-500 font-semibold uppercase tracking-wider">${escapeHtml(u.rol || 'Colaborador')}</td>
+          <td class="py-3 px-4 text-center">
+            ${isAssigned 
+              ? `<button onclick="toggleAuthorizedMember('${email}', false)" ${canManageProjectStructure ? '' : 'disabled'} class="inline-flex items-center gap-1 bg-rose-50 dark:bg-rose-950 hover:bg-rose-100 dark:hover:bg-rose-900 border border-rose-200 dark:border-rose-800 text-rose-700 dark:text-rose-200 px-3 py-1.5 rounded-xl text-xs font-bold uppercase tracking-wider transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed">
+                  <span class="material-symbols-outlined text-[16px]">person_remove</span>
+                  <span>Remover</span>
+                 </button>`
+              : `<button onclick="toggleAuthorizedMember('${email}', true)" ${canManageProjectStructure ? '' : 'disabled'} class="inline-flex items-center gap-1 bg-emerald-50 dark:bg-emerald-950 hover:bg-emerald-100 dark:hover:bg-emerald-900 border border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-200 px-3 py-1.5 rounded-xl text-xs font-bold uppercase tracking-wider transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed">
+                  <span class="material-symbols-outlined text-[16px]">person_add</span>
+                  <span>Asignar</span>
+                 </button>`
+            }
+          </td>
+        </tr>
+      `;
+    }).join('');
+  }
+
+  window.toggleAuthorizedMember = function (email, assign) {
+    if (!activeProject) return;
+    const cleanEmail = email.toLowerCase().trim();
+    if (!Array.isArray(activeProject.members)) activeProject.members = [];
+
+    if (assign) {
+      if (!activeProject.members.some(m => m.toLowerCase().trim() === cleanEmail)) {
+        activeProject.members.push(cleanEmail);
+      }
+    } else {
+      activeProject.members = activeProject.members.filter(m => m.toLowerCase().trim() !== cleanEmail);
+
+      // Si removemos del proyecto, también removemos de todos los equipos de tarea y entrega
+      if (Array.isArray(activeProject.equiposDeTarea)) {
+        activeProject.equiposDeTarea.forEach(team => {
+          if (Array.isArray(team.members)) {
+            team.members = team.members.filter(m => m.toLowerCase().trim() !== cleanEmail);
+          }
+        });
+      }
+      if (activeProject.iso19650 && Array.isArray(activeProject.iso19650.deliveryTeams)) {
+        activeProject.iso19650.deliveryTeams.forEach(dt => {
+          if (Array.isArray(dt.members)) {
+            dt.members = dt.members.filter(m => m.toLowerCase().trim() !== cleanEmail);
+          }
+        });
+      }
+    }
+
+    syncBackToEquiposDeTarea();
+    renderAllViews();
+    syncTeams();
+    window.showToast(assign ? 'Miembro asignado al proyecto con éxito.' : 'Miembro removido del proyecto.', assign ? 'success' : 'info');
+  };
+
+  const authSearchInput = document.getElementById('authorized-directory-search');
+  if (authSearchInput) {
+    authSearchInput.addEventListener('input', renderAuthorizedMembersTab);
+  }
 
   // --- 3. PESTAÑA: 1. ADMINISTRADORES DE PROYECTO (ADJUDICADORES) ---
   function renderProjectAdminsTab() {
