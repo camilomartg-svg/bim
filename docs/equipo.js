@@ -2246,19 +2246,21 @@
       });
     });
 
-    // 3) Enriquecer o agregar con Directorio Global de Nora (Google Sheets)
+    // 3) Enriquecer datos con Directorio Global de Nora (Google Sheets) SOLO para usuarios ya pertenecientes a esta empresa
     if (Array.isArray(allDirectoryUsers)) {
       allDirectoryUsers.forEach(du => {
         if (!du.email) return;
         const email = String(du.email).toLowerCase().trim();
-        upsertUser({
-          email,
-          nombre: du.nombre || getUserRegisteredName(email),
-          empresa: du.empresa || getUserRegisteredCompany(email),
-          rol: du.rol || 'COLABORADOR',
-          especialidad: du.especialidad || '',
-          cargo: du.cargo || du.especialidad || ''
-        });
+        if (userMap.has(email)) {
+          const existing = userMap.get(email);
+          userMap.set(email, {
+            ...existing,
+            nombre: (existing.nombre && existing.nombre !== email.split('@')[0]) ? existing.nombre : (du.nombre || existing.nombre),
+            especialidad: existing.especialidad || du.especialidad || '',
+            cargo: existing.cargo || du.cargo || '',
+            rol: existing.rol && existing.rol !== 'INVITADO' ? existing.rol : (du.rol || existing.rol)
+          });
+        }
       });
     }
 
