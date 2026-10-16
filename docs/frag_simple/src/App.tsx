@@ -60,7 +60,8 @@ export default function App() {
     const loader = components.get(OBC.IfcLoader);
     loaderRef.current = loader;
 
-    // Set up WASM path
+    // Prevent autoSetWasm from overwriting wasm path with incompatible unpkg semver (>=0.0.74 -> 0.0.78)
+    loader.settings.autoSetWasm = false;
     loader.settings.wasm = {
       path: "https://unpkg.com/web-ifc@0.0.77/",
       absolute: true
@@ -110,16 +111,32 @@ export default function App() {
             fragments.init(getWorkerUrl());
           }
 
-          // Ensure wasm is set before loading
-          await loader.setup({
-            wasm: {
-              path: "https://unpkg.com/web-ifc@0.0.77/",
-              absolute: true
+          // Determine wasm path (prefer local wasm, fallback to unpkg 0.0.77)
+          loader.settings.autoSetWasm = false;
+          let wasmPath = "https://unpkg.com/web-ifc@0.0.77/";
+          try {
+            const localBase = new URL('./', window.location.href).href;
+            const testRes = await fetch(new URL('web-ifc.wasm', localBase).href, { method: 'HEAD' });
+            if (testRes.ok) {
+              wasmPath = localBase;
             }
-          });
+          } catch {}
+
+          loader.settings.wasm = {
+            path: wasmPath,
+            absolute: true
+          };
+
+          // Initialize webIfc with forceSingleThread=true to prevent crossOriginIsolated MT worker crashes
+          try {
+            loader.webIfc.SetWasmPath(loader.settings.wasm.path, loader.settings.wasm.absolute);
+            await loader.webIfc.Init(undefined, true);
+          } catch (initErr) {
+            console.warn("Manual webIfc init warning:", initErr);
+          }
 
           // 1. Load IFC and convert to fragments
-          const model = await loader.load(new Uint8Array(buffer));
+          const model = await loader.load(new Uint8Array(buffer), true, file.name);
           
           // 2. Export Fragments to .frag
           let fragBuffer: ArrayBuffer | Uint8Array;
