@@ -2212,6 +2212,66 @@
         addLog('Cola de carga limpia.');
       });
 
+      // Helper: auto calculate next version
+      function calculateNextVersion(verStr) {
+        if (!verStr) return 'v1.1';
+        const match = String(verStr).trim().match(/^v?(\d+)\.(\d+)$/i);
+        if (match) {
+          const major = parseInt(match[1], 10);
+          const minor = parseInt(match[2], 10);
+          return `v${major}.${minor + 1}`;
+        }
+        return 'v1.1';
+      }
+
+      // Helper: find existing project file in rawProjectFilesCache matching uploaded filename
+      function findExistingProjectFile(fileName) {
+        if (!fileName || !rawProjectFilesCache || rawProjectFilesCache.length === 0) return null;
+        const cleanName = String(fileName).trim().toLowerCase();
+        const ext = getFileExtension(cleanName);
+        const baseName = cleanName.replace(/\.[^/.]+$/, '');
+
+        let candidates = rawProjectFilesCache.filter(f => {
+          const fn = String(f.name || f.filename || '').trim().toLowerCase();
+          if (!fn) return false;
+          if (fn === cleanName) return true;
+          if (ext === 'ifc' && (fn === `${baseName}.frag` || fn === `${baseName}.ifc`)) return true;
+          if (ext === 'frag' && (fn === `${baseName}.frag` || fn === `${baseName}.ifc`)) return true;
+          return false;
+        });
+
+        if (candidates.length === 0) return null;
+
+        candidates.sort((a, b) => {
+          const fnA = String(a.name || a.filename || '').trim().toLowerCase();
+          const fnB = String(b.name || b.filename || '').trim().toLowerCase();
+          const exactA = fnA === cleanName ? 1 : 0;
+          const exactB = fnB === cleanName ? 1 : 0;
+          if (exactA !== exactB) return exactB - exactA;
+
+          const tabA = a.status === currentStatusTab ? 1 : 0;
+          const tabB = b.status === currentStatusTab ? 1 : 0;
+          if (tabA !== tabB) return tabB - tabA;
+
+          const progA = a.status === 'EN_PROGRESO' ? 1 : 0;
+          const progB = b.status === 'EN_PROGRESO' ? 1 : 0;
+          return progB - progA;
+        });
+
+        return candidates[0];
+      }
+
+      function recheckSelectedFilesReplacements() {
+        if (!selectedFiles || selectedFiles.length === 0) return;
+        selectedFiles.forEach(fileObj => {
+          const match = findExistingProjectFile(fileObj.file.name);
+          fileObj.isReplacement = !!match;
+          fileObj.existingFile = match;
+          fileObj.targetVersion = match ? calculateNextVersion(match.version || 'v1.0') : 'v1.0';
+        });
+        renderFilesList();
+      }
+
       function handleFilesSelection(filesList) {
         if (isUploading) return;
         
@@ -2230,12 +2290,20 @@
           const exists = selectedFiles.some(f => f.file.name === file.name && f.file.size === file.size);
           if (exists) continue;
 
+          const existingMatch = findExistingProjectFile(file.name);
+          const isReplacement = !!existingMatch;
+          const currentVersion = existingMatch ? (existingMatch.version || 'v1.0') : 'v1.0';
+          const targetVersion = isReplacement ? calculateNextVersion(currentVersion) : 'v1.0';
+
           selectedFiles.push({
             id: fileIdCounter++,
             file: file,
             status: 'Listo',
             progress: 0,
-            errorMsg: ''
+            errorMsg: '',
+            isReplacement: isReplacement,
+            existingFile: existingMatch,
+            targetVersion: targetVersion
           });
           addedCount++;
         }
@@ -2335,6 +2403,21 @@
                   <span class="material-symbols-outlined text-lg">close</span>
                 </button>
               </div>
+
+              ${fileObj.isReplacement ? `
+                <div class="mb-2.5 flex items-center justify-between gap-2 bg-indigo-50/80 dark:bg-indigo-950/50 p-2 rounded-lg border border-indigo-200 dark:border-indigo-900/60">
+                  <div class="flex items-center gap-1.5 text-xs text-indigo-900 dark:text-indigo-200">
+                    <span class="material-symbols-outlined text-indigo-600 dark:text-indigo-400 text-sm">history_edu</span>
+                    <span class="font-bold">Reemplazo:</span>
+                    <span class="text-slate-600 dark:text-slate-300">Creará versión</span>
+                    <span class="font-mono font-extrabold px-1.5 py-0.5 rounded bg-indigo-200/80 dark:bg-indigo-900/80 text-indigo-950 dark:text-indigo-100">${fileObj.targetVersion || 'v1.1'}</span>
+                    <span class="text-[11px] text-slate-400">(actual: ${fileObj.existingFile?.version || 'v1.0'})</span>
+                  </div>
+                  <span class="text-[10px] font-semibold text-indigo-600 dark:text-indigo-400 bg-white dark:bg-slate-900 px-2 py-0.5 rounded shadow-2xs border border-indigo-100 dark:border-indigo-900/40">
+                    Versión automática
+                  </span>
+                </div>
+              ` : ''}
 
               ${isIfcFile ? `
                 <div class="mb-2.5 flex items-center justify-between gap-2 bg-indigo-50/80 dark:bg-indigo-950/50 p-2 rounded-lg border border-indigo-100 dark:border-indigo-900/60">
@@ -2528,7 +2611,11 @@
             changedByEmail: userAccount ? (userAccount.email || userAccount.username || '') : '',
             deliveryTeams: resolveCurrentUserDeliveryTeams(),
             folderId: ds.driveFolderId || '',
-            driveFolderName: driveFolderName
+            driveFolderName: driveFolderName,
+            skipStatusRegister: (fileObj && fileObj.isReplacement) ? true : false,
+            isVersionUpload: (fileObj && fileObj.isReplacement) ? true : false,
+            targetVersion: (fileObj && fileObj.targetVersion) || '',
+            originalFileId: (fileObj && fileObj.existingFile && (fileObj.existingFile.originalFileId || fileObj.existingFile.fileId)) || ''
           };
 
           const chunkRes = await fetch(scriptUrl, {
@@ -2634,6 +2721,46 @@
         }
       }
 
+      // Helper to create a version via Apps Script
+      async function createProjectFileVersion(params) {
+        if (!activeProject) return null;
+        const ds = activeProject.dataSources || {};
+        const scriptUrl = ds.driveScriptUrl || DEFAULT_DRIVE_SCRIPT_URL;
+
+        const payload = {
+          action: 'createVersion',
+          fileId: params.fileId,
+          jsonId: params.jsonId || '',
+          filename: params.filename,
+          project: activeProject.slug || slugify(activeProject.name),
+          status: params.status || 'EN_PROGRESO',
+          version: params.version || 'v1.1',
+          comments: params.comments || `Actualización automática: reemplazo de archivo (${params.version || 'v1.1'})`,
+          changedBy: userAccount ? (userAccount.name || '') : '',
+          changedByEmail: userAccount ? (userAccount.email || userAccount.username || '') : '',
+          deliveryTeams: params.deliveryTeams || resolveCurrentUserDeliveryTeams(),
+          originalFileId: params.originalFileId || params.fileId,
+          type: params.type || '',
+          folderId: ds.driveFolderId || '',
+          driveFolderName: ds.driveFolderName || activeProject.name,
+          uploadedFileId: params.uploadedFileId || '',
+          content: '',
+          contentType: ''
+        };
+
+        const res = await fetch(scriptUrl, {
+          method: 'POST',
+          mode: 'cors',
+          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+          body: JSON.stringify(payload)
+        });
+
+        if (!res.ok) throw new Error(`Error en el servidor: ${res.statusText}`);
+        const data = await res.json();
+        if (data.status === 'error') throw new Error(data.message || 'Error al guardar la versión');
+        return data;
+      }
+
       uploadBtn.addEventListener('click', async () => {
         if (selectedFiles.length === 0 || !activeProject || isUploading) return;
 
@@ -2650,7 +2777,7 @@
 
         for (let i = 0; i < totalFiles; i++) {
           const fileObj = selectedFiles[i];
-          if (fileObj.status === 'Completado') continue;
+          if (fileObj.status === 'Completado' || fileObj.status.startsWith('✓')) continue;
 
           const globalProgressStart = Math.round((i / totalFiles) * 100);
           globalStatusText.textContent = `Procesando archivo ${i + 1} de ${totalFiles}: ${fileObj.file.name}`;
@@ -2679,25 +2806,85 @@
               const fragUploadResult = await uploadToDriveResumable(fragBlob, `${baseName}.frag`, 'application/octet-stream', fileObj, (pct) => {
                 updateFileUI(fileObj, Math.round(35 + (pct * 0.2)), 'Subiendo fragmento...');
               });
-              const fragFileId = fragUploadResult.fileId;
+              const fragFileId = fragUploadResult ? fragUploadResult.fileId : '';
 
               updateFileUI(fileObj, 55, 'Subiendo propiedades...');
               addLog(`[${fileObj.file.name}] Subiendo propiedades (.json)...`);
               const jsonBlob = base64ToBlob(jsonBase64, 'application/json');
-              await uploadToDriveResumable(jsonBlob, `${baseName}.json`, 'application/json', fileObj, (pct) => {
+              const jsonUploadResult = await uploadToDriveResumable(jsonBlob, `${baseName}.json`, 'application/json', fileObj, (pct) => {
                 updateFileUI(fileObj, Math.round(55 + (pct * 0.2)), 'Subiendo propiedades...');
               });
+              const jsonFileId = jsonUploadResult ? jsonUploadResult.fileId : '';
 
               updateFileUI(fileObj, 75, 'Subiendo IFC original...');
               addLog(`[${fileObj.file.name}] Subiendo IFC original para el registro...`);
               fileObj._ifcConvertedFragId = fragFileId;
               fileObj._ifcConvertedFragName = `${baseName}.frag`;
-              await uploadToDriveResumable(fileObj.file, fileObj.file.name, 'application/octet-stream', fileObj, (pct) => {
+              const ifcUploadResult = await uploadToDriveResumable(fileObj.file, fileObj.file.name, 'application/octet-stream', fileObj, (pct) => {
                 updateFileUI(fileObj, Math.round(75 + (pct * 0.2)), 'Subiendo IFC...');
               });
+              const ifcFileId = ifcUploadResult ? ifcUploadResult.fileId : '';
 
-              updateFileUI(fileObj, 100, 'Completado');
-              addLog(`[${fileObj.file.name}] ¡IFC convertido y subido con éxito! (.frag + .json + .ifc)`);
+              // Si reemplaza un modelo existente, registrar automáticamente la nueva versión
+              const existingFrag = fileObj.existingFile || findMatchingProjectFile(`${baseName}.frag`);
+              const existingIfc = findMatchingProjectFile(fileObj.file.name);
+
+              if (existingFrag || existingIfc) {
+                const targetFrag = existingFrag || existingIfc;
+                const currentVer = targetFrag.version || 'v1.0';
+                const nextVer = fileObj.targetVersion || calculateNextVersion(currentVer);
+                updateFileUI(fileObj, 95, `Creando versión ${nextVer}...`);
+                addLog(`[${fileObj.file.name}] Archivo existente detectado (${currentVer}). Registrando automáticamente versión ${nextVer}...`);
+
+                // 1. Versionar el modelo FRAG derivado
+                if (existingFrag && fragFileId) {
+                  try {
+                    await createProjectFileVersion({
+                      fileId: existingFrag.fileId || existingFrag.originalFileId,
+                      jsonId: jsonFileId || existingFrag.jsonId || '',
+                      filename: existingFrag.name || `${baseName}.frag`,
+                      status: existingFrag.status || 'EN_PROGRESO',
+                      version: nextVer,
+                      comments: `Actualización automática: reemplazo de modelo IFC/FRAG (${nextVer})`,
+                      deliveryTeams: existingFrag.deliveryTeams || resolveCurrentUserDeliveryTeams(),
+                      originalFileId: existingFrag.originalFileId || existingFrag.fileId,
+                      type: 'model',
+                      uploadedFileId: fragFileId
+                    });
+                    addLog(`[VERSIÓN] ¡Modelo FRAG ${existingFrag.name} actualizado a versión ${nextVer}!`);
+                  } catch (vErr) {
+                    console.warn('Error al versionar FRAG:', vErr);
+                    addLog(`[VERSIÓN] Advertencia al versionar FRAG: ${vErr.message}`);
+                  }
+                }
+
+                // 2. Versionar el IFC original si ya existía en el proyecto
+                if (existingIfc && ifcFileId) {
+                  try {
+                    await createProjectFileVersion({
+                      fileId: existingIfc.fileId || existingIfc.originalFileId,
+                      jsonId: '',
+                      filename: existingIfc.name || fileObj.file.name,
+                      status: existingIfc.status || 'EN_PROGRESO',
+                      version: nextVer,
+                      comments: `Actualización automática: reemplazo de archivo IFC (${nextVer})`,
+                      deliveryTeams: existingIfc.deliveryTeams || resolveCurrentUserDeliveryTeams(),
+                      originalFileId: existingIfc.originalFileId || existingIfc.fileId,
+                      type: 'model',
+                      uploadedFileId: ifcFileId
+                    });
+                    addLog(`[VERSIÓN] ¡Archivo IFC ${existingIfc.name} actualizado a versión ${nextVer}!`);
+                  } catch (vErr) {
+                    console.warn('Error al versionar IFC:', vErr);
+                  }
+                }
+
+                updateFileUI(fileObj, 100, `✓ Completado (${nextVer})`);
+                addLog(`[${fileObj.file.name}] ¡IFC convertido y subido con éxito! Nueva versión ${nextVer} generada automáticamente.`);
+              } else {
+                updateFileUI(fileObj, 100, 'Completado');
+                addLog(`[${fileObj.file.name}] ¡IFC convertido y subido con éxito! (.frag + .json + .ifc)`);
+              }
             } else {
               updateFileUI(fileObj, 25, 'Iniciando subida...');
               addLog(`[${fileObj.file.name}] Subiendo archivo directo...`);
@@ -2708,12 +2895,41 @@
               else if (ext === 'json') mimeType = 'application/json';
               else if (ext === 'frag') mimeType = 'application/octet-stream';
 
-              await uploadToDriveResumable(fileObj.file, fileObj.file.name, mimeType, fileObj, (pct) => {
-                updateFileUI(fileObj, Math.round(25 + (pct * 0.7)), 'Subiendo...');
+              const uploadResult = await uploadToDriveResumable(fileObj.file, fileObj.file.name, mimeType, fileObj, (pct) => {
+                updateFileUI(fileObj, Math.round(25 + (pct * 0.65)), 'Subiendo...');
               });
               
-              updateFileUI(fileObj, 100, 'Completado');
-              addLog(`[${fileObj.file.name}] ¡Subido con éxito!`);
+              const existingFile = fileObj.existingFile || findMatchingProjectFile(fileObj.file.name);
+              if (existingFile && uploadResult && uploadResult.fileId) {
+                const currentVer = existingFile.version || 'v1.0';
+                const nextVer = fileObj.targetVersion || calculateNextVersion(currentVer);
+                updateFileUI(fileObj, 92, `Creando versión ${nextVer}...`);
+                addLog(`[${fileObj.file.name}] Archivo existente detectado (${currentVer}). Registrando automáticamente versión ${nextVer}...`);
+
+                try {
+                  await createProjectFileVersion({
+                    fileId: existingFile.fileId || existingFile.originalFileId,
+                    jsonId: existingFile.jsonId || '',
+                    filename: existingFile.name,
+                    status: existingFile.status || 'EN_PROGRESO',
+                    version: nextVer,
+                    comments: `Actualización automática: archivo reemplazado (${nextVer})`,
+                    deliveryTeams: existingFile.deliveryTeams || resolveCurrentUserDeliveryTeams(),
+                    originalFileId: existingFile.originalFileId || existingFile.fileId,
+                    type: existingFile.type || resolveUploadFileType(ext),
+                    uploadedFileId: uploadResult.fileId
+                  });
+                  updateFileUI(fileObj, 100, `✓ Completado (${nextVer})`);
+                  addLog(`[VERSIÓN] ¡${fileObj.file.name} reemplazado y actualizado exitosamente a la versión ${nextVer}!`);
+                } catch (vErr) {
+                  console.error('Error al versionar archivo:', vErr);
+                  updateFileUI(fileObj, 100, 'Completado');
+                  addLog(`[VERSIÓN] Advertencia al registrar versión automática: ${vErr.message}`);
+                }
+              } else {
+                updateFileUI(fileObj, 100, 'Completado');
+                addLog(`[${fileObj.file.name}] ¡Subido con éxito!`);
+              }
             }
           } catch (err) {
             console.error(err);
@@ -2731,7 +2947,7 @@
         uploadBtn.textContent = 'Completado';
         clearQueueBtn.classList.remove('hidden');
         
-        loadProjectFiles();
+        await loadProjectFiles();
       });
 
       // Helper: clean specialty folder string
@@ -2761,17 +2977,7 @@
         return cleanSpecialty(f.folder);
       }
 
-      // Helper: auto calculate next version
-      const calculateNextVersion = (verStr) => {
-        if (!verStr) return 'v1.1';
-        const match = verStr.match(/^v?(\d+)\.(\d+)$/i);
-        if (match) {
-          const major = parseInt(match[1], 10);
-          const minor = parseInt(match[2], 10);
-          return `v${major}.${minor + 1}`;
-        }
-        return 'v1.1';
-      };
+      // Helper: clean specialty folder string
 
       // Load Drive Project Files List with Workflow Status and Version Resolution
       async function loadProjectFiles() {
@@ -2988,6 +3194,9 @@
           // Guardar copia maestra de archivos del Drive y aplicar filtros de permisos/simulación
           rawProjectFilesCache = rawProjectFiles;
           refreshAuthorizedProjectFiles();
+          if (typeof recheckSelectedFilesReplacements === 'function') {
+            recheckSelectedFilesReplacements();
+          }
         } catch (err) {
           console.error(err);
           addLog('Error cargando archivos del proyecto: ' + err.message);
@@ -3442,37 +3651,18 @@
             uploadedFileId = uploadResult.fileId;
           }
 
-          const payload = {
-            action: 'createVersion',
+          await createProjectFileVersion({
             fileId: targetVersionFile.fileId || targetVersionFile.originalFileId,
             jsonId: targetVersionFile.jsonId || '',
             filename: targetVersionFile.name,
-            project: activeProject.slug || slugify(activeProject.name),
             status: targetVersionFile.status || 'EN_PROGRESO',
             version: versionTag,
             comments: comments,
-            changedBy: userAccount ? (userAccount.name || '') : '',
-            changedByEmail: userAccount ? (userAccount.email || userAccount.username || '') : '',
             deliveryTeams: targetVersionFile.deliveryTeams || resolveCurrentUserDeliveryTeams(),
             originalFileId: targetVersionFile.originalFileId || targetVersionFile.fileId,
             type: targetVersionFile.type || '',
-            folderId: ds.driveFolderId || '',
-            driveFolderName: ds.driveFolderName || activeProject.name,
-            uploadedFileId: uploadedFileId,
-            content: '',
-            contentType: ''
-          };
-
-          const res = await fetch(scriptUrl, {
-            method: 'POST',
-            mode: 'cors',
-            headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-            body: JSON.stringify(payload)
+            uploadedFileId: uploadedFileId
           });
-
-          if (!res.ok) throw new Error(`Error en el servidor: ${res.statusText}`);
-          const data = await res.json();
-          if (data.status === 'error') throw new Error(data.message || 'Error al guardar la versión');
 
           addLog(`[VERSIÓN] ${targetVersionFile.name} actualizada a ${versionTag} con respaldo en .versiones/`);
           closeNewVersionModal();
@@ -3561,7 +3751,8 @@
               deliveryTeams: f.deliveryTeams || []
             }));
 
-            const downloadUrl = `https://drive.google.com/uc?export=download&id=${ver.backupFileId || ver.fileId}`;
+            const targetDownloadId = isLatest ? (ver.fileId || ver.backupFileId) : (ver.backupFileId || ver.fileId);
+            const downloadUrl = `https://drive.google.com/uc?export=download&id=${targetDownloadId}`;
 
             return `
               <div class="p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-white/60 dark:bg-slate-900/60 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-3">

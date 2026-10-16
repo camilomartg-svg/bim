@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import * as THREE from 'three';
 import * as OBC from '@thatopen/components';
 import * as FRAGS from '@thatopen/fragments';
+import workerUrl from '@thatopen/fragments/worker?url';
 import { 
   FileUp, 
   Download, 
@@ -24,6 +25,14 @@ interface ConversionState {
   fileName?: string;
 }
 
+const getWorkerUrl = () => {
+  try {
+    return new URL(workerUrl, window.location.href).href;
+  } catch {
+    return workerUrl || "https://unpkg.com/@thatopen/fragments@3.3.6/dist/Worker/worker.mjs";
+  }
+};
+
 export default function App() {
   const [state, setState] = useState<ConversionState>({
     status: 'idle',
@@ -42,6 +51,12 @@ export default function App() {
     const fragments = components.get(OBC.FragmentsManager);
     fragmentsRef.current = fragments;
 
+    try {
+      fragments.init(getWorkerUrl());
+    } catch (e) {
+      console.warn("Error initializing fragments worker:", e);
+    }
+
     const loader = components.get(OBC.IfcLoader);
     loaderRef.current = loader;
 
@@ -53,7 +68,9 @@ export default function App() {
 
     // Clean up
     return () => {
-      components.dispose();
+      try {
+        components.dispose();
+      } catch {}
     };
   }, []);
 
@@ -88,6 +105,11 @@ export default function App() {
           const fragments = fragmentsRef.current!;
           const loader = loaderRef.current!;
 
+          // Ensure fragments manager is initialized
+          if (!fragments.initialized) {
+            fragments.init(getWorkerUrl());
+          }
+
           // Ensure wasm is set before loading
           await loader.setup({
             wasm: {
@@ -100,13 +122,28 @@ export default function App() {
           const model = await loader.load(new Uint8Array(buffer));
           
           // 2. Export Fragments to .frag
-          const fragData = fragments.export(model);
-          const fragBlob = new Blob([fragData], { type: 'application/octet-stream' });
+          let fragBuffer: ArrayBuffer | Uint8Array;
+          if (typeof (model as any).getBuffer === 'function') {
+            fragBuffer = await (model as any).getBuffer();
+          } else if (typeof (fragments as any).export === 'function') {
+            fragBuffer = (fragments as any).export(model);
+          } else {
+            throw new Error("No fragment export method found on model or manager.");
+          }
+          const fragBlob = new Blob([fragBuffer], { type: 'application/octet-stream' });
 
           // 3. Extract Properties to JSON
           setState(prev => ({ ...prev, message: 'Extracting properties...' }));
           
           let properties: any = (model as any).properties;
+          if (!properties && typeof (model as any).getLocalIds === 'function' && typeof (model as any).getItemsData === 'function') {
+            try {
+              const localIds = await (model as any).getLocalIds();
+              properties = await (model as any).getItemsData(localIds);
+            } catch (err) {
+              console.warn("Could not retrieve items data:", err);
+            }
+          }
           if (!properties && typeof (model as any).getAllProperties === 'function') {
             try { properties = await (model as any).getAllProperties(); } catch {}
           } else if (!properties && typeof (model as any).getLocalProperties === 'function') {
@@ -128,8 +165,14 @@ export default function App() {
 
           // Clean up the model from memory to avoid leaks
           try {
-            fragments.disposeGroup(model);
-          } catch {}
+            if (typeof (model as any).dispose === 'function') {
+              await (model as any).dispose();
+            } else if (typeof (fragments as any).disposeGroup === 'function') {
+              (fragments as any).disposeGroup(model);
+            }
+          } catch (cleanupErr) {
+            console.warn("Cleanup warning:", cleanupErr);
+          }
         } catch (error) {
           console.error("Conversion error:", error);
           setState({

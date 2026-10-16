@@ -1618,7 +1618,9 @@ function uploadResumableChunk_(e, body) {
           // non-fatal
         }
         try {
-          registerFileStatus_(fileId, String(body.jsonId || ''), String(body.filename || ''), String(body.project || ''), 'EN_PROGRESO', String(body.changedBy || ''), String(body.changedByEmail || ''), fileId, String(body.fileType || ''), '', '', body.deliveryTeams);
+          if (!body.skipStatusRegister) {
+            registerFileStatus_(fileId, String(body.jsonId || ''), String(body.filename || ''), String(body.project || ''), 'EN_PROGRESO', String(body.changedBy || ''), String(body.changedByEmail || ''), String(body.originalFileId || fileId), String(body.fileType || ''), String(body.version || ''), String(body.comments || ''), body.deliveryTeams);
+          }
         } catch (statusErr) {
           // Trash the completed file to avoid orphaning it in Drive
           try {
@@ -1946,15 +1948,32 @@ function createVersion_(e, body) {
     }
 
     // 2. If an already uploaded file ID is provided, use it, otherwise check content
+    var destFolder = root;
+    if (status === 'COMPARTIDO' || status === 'PUBLICADO') {
+      var ef = root.getFoldersByName('.estados');
+      var estadosFolder = ef.hasNext() ? ef.next() : root.createFolder('.estados');
+      var sf = estadosFolder.getFoldersByName(status.toLowerCase());
+      destFolder = sf.hasNext() ? sf.next() : estadosFolder.createFolder(status.toLowerCase());
+    }
+
+    // Fallback: if backupFileId could not be obtained by fileId, search existing file in destFolder
+    if (!backupFileId) {
+      try {
+        var existingForBackup = destFolder.getFilesByName(filename);
+        while (existingForBackup.hasNext()) {
+          var cand = existingForBackup.next();
+          if (cand.getId() !== uploadedFileId) {
+            var backupName = version + '_' + filename;
+            var backupFile = cand.makeCopy(backupName, fileVersFolder);
+            backupFileId = backupFile.getId();
+            break;
+          }
+        }
+      } catch (beFallback) {}
+    }
+
     if (uploadedFileId) {
       activeFileId = uploadedFileId;
-      var destFolder = root;
-      if (status === 'COMPARTIDO' || status === 'PUBLICADO') {
-        var ef = root.getFoldersByName('.estados');
-        var estadosFolder = ef.hasNext() ? ef.next() : root.createFolder('.estados');
-        var sf = estadosFolder.getFoldersByName(status.toLowerCase());
-        destFolder = sf.hasNext() ? sf.next() : estadosFolder.createFolder(status.toLowerCase());
-      }
 
       // Ensure the file is in the destFolder
       try {
@@ -1973,6 +1992,7 @@ function createVersion_(e, body) {
             root.removeFile(fileToMove);
           } catch (e) {}
         }
+        try { fileToMove.setName(filename); } catch (eName) {}
       } catch (moveErr) {}
 
       // Trash older copies in destFolder
@@ -1984,14 +2004,6 @@ function createVersion_(e, body) {
         }
       }
     } else if (content) {
-      var destFolder = root;
-      if (status === 'COMPARTIDO' || status === 'PUBLICADO') {
-        var ef = root.getFoldersByName('.estados');
-        var estadosFolder = ef.hasNext() ? ef.next() : root.createFolder('.estados');
-        var sf = estadosFolder.getFoldersByName(status.toLowerCase());
-        destFolder = sf.hasNext() ? sf.next() : estadosFolder.createFolder(status.toLowerCase());
-      }
-
       var existing = destFolder.getFilesByName(filename);
       while (existing.hasNext()) {
         var oldF = existing.next();
@@ -2012,6 +2024,49 @@ function createVersion_(e, body) {
     let vSheet = doc.getSheetByName('VersionesArchivos');
     if (!vSheet) vSheet = doc.insertSheet('VersionesArchivos');
     ensureHeaders(vSheet, FILE_VERSION_HEADERS);
+
+    // Check if any version already existed for this file in VersionesArchivos
+    var hasPriorVersions = false;
+    if (vSheet.getLastRow() > 1) {
+      var existingData = vSheet.getRange(2, 1, vSheet.getLastRow() - 1, vSheet.getLastColumn()).getValues();
+      var fIdx = FILE_VERSION_HEADERS.indexOf('filename');
+      var pIdx = FILE_VERSION_HEADERS.indexOf('project');
+      var oIdx = FILE_VERSION_HEADERS.indexOf('originalFileId');
+      for (var k = 0; k < existingData.length; k++) {
+        var rF = String(existingData[k][fIdx] || '').trim().toLowerCase();
+        var rP = String(existingData[k][pIdx] || '').trim().toLowerCase();
+        var rO = String(existingData[k][oIdx] || '').trim();
+        if ((!project || rP === project.toLowerCase()) && (rF === filename.toLowerCase() || (originalFileId && rO === originalFileId))) {
+          hasPriorVersions = true;
+          break;
+        }
+      }
+    }
+
+    // If this is the first replacement (e.g. moving from v1.0 to v1.1),
+    // record the base v1.0 version as an initial history entry
+    if (!hasPriorVersions && (backupFileId || fileId)) {
+      var baseVersionId = 'ver-' + (Date.now() - 2000) + '-' + Math.floor(Math.random() * 9999);
+      var baseRow = FILE_VERSION_HEADERS.map(function(h) {
+        if (h === 'versionId') return baseVersionId;
+        if (h === 'fecha') return new Date(Date.now() - 2000).toISOString();
+        if (h === 'fileId') return fileId || backupFileId;
+        if (h === 'jsonId') return jsonId || '';
+        if (h === 'filename') return filename || '';
+        if (h === 'project') return project || '';
+        if (h === 'status') return status || 'EN_PROGRESO';
+        if (h === 'version') return 'v1.0';
+        if (h === 'comments') return 'Versión inicial';
+        if (h === 'createdBy') return createdBy || 'CDE NORA';
+        if (h === 'createdByEmail') return createdByEmail || '';
+        if (h === 'originalFileId') return originalFileId || fileId || '';
+        if (h === 'type') return type || '';
+        if (h === 'isCurrent') return 'false';
+        if (h === 'backupFileId') return backupFileId || fileId || '';
+        return '';
+      });
+      vSheet.appendRow(baseRow);
+    }
 
     markPreviousVersionsNotCurrent_(vSheet, project, filename, originalFileId);
 
