@@ -78,40 +78,65 @@ export default function App() {
     try {
       const reader = new FileReader();
       reader.onload = async (e) => {
-        const buffer = e.target?.result as ArrayBuffer;
-        if (!buffer) return;
+        try {
+          const buffer = e.target?.result as ArrayBuffer;
+          if (!buffer) return;
 
-        setState(prev => ({ ...prev, status: 'converting', message: 'Converting IFC to Fragments...' }));
+          setState(prev => ({ ...prev, status: 'converting', message: 'Converting IFC to Fragments...' }));
 
-        const components = componentsRef.current!;
-        const fragments = fragmentsRef.current!;
-        const loader = loaderRef.current!;
+          const components = componentsRef.current!;
+          const fragments = fragmentsRef.current!;
+          const loader = loaderRef.current!;
 
-        // 1. Load IFC and convert to fragments
-        const model = await loader.load(new Uint8Array(buffer));
-        
-        // 2. Export Fragments to .frag
-        const fragData = fragments.export(model);
-        const fragBlob = new Blob([fragData], { type: 'application/octet-stream' });
+          // Ensure wasm is set before loading
+          await loader.setup({
+            wasm: {
+              path: "https://unpkg.com/web-ifc@0.0.77/",
+              absolute: true
+            }
+          });
 
-        // 3. Extract Properties to JSON
-        setState(prev => ({ ...prev, message: 'Extracting properties...' }));
-        
-        // In @thatopen/components, properties are stored in model.properties
-        // We need to ensure they are loaded or accessible
-        const properties = model.properties;
-        const jsonBlob = new Blob([JSON.stringify(properties, null, 2)], { type: 'application/json' });
+          // 1. Load IFC and convert to fragments
+          const model = await loader.load(new Uint8Array(buffer));
+          
+          // 2. Export Fragments to .frag
+          const fragData = fragments.export(model);
+          const fragBlob = new Blob([fragData], { type: 'application/octet-stream' });
 
-        setState(prev => ({
-          ...prev,
-          status: 'success',
-          message: 'Conversion complete!',
-          fragBlob,
-          jsonBlob
-        }));
+          // 3. Extract Properties to JSON
+          setState(prev => ({ ...prev, message: 'Extracting properties...' }));
+          
+          let properties: any = (model as any).properties;
+          if (!properties && typeof (model as any).getAllProperties === 'function') {
+            try { properties = await (model as any).getAllProperties(); } catch {}
+          } else if (!properties && typeof (model as any).getLocalProperties === 'function') {
+            try { properties = await (model as any).getLocalProperties(); } catch {}
+          }
+          if (!properties) {
+            properties = {};
+          }
 
-        // Clean up the model from memory to avoid leaks
-        fragments.disposeGroup(model);
+          const jsonBlob = new Blob([JSON.stringify(properties, null, 2)], { type: 'application/json' });
+
+          setState(prev => ({
+            ...prev,
+            status: 'success',
+            message: 'Conversion complete!',
+            fragBlob,
+            jsonBlob
+          }));
+
+          // Clean up the model from memory to avoid leaks
+          try {
+            fragments.disposeGroup(model);
+          } catch {}
+        } catch (error) {
+          console.error("Conversion error:", error);
+          setState({
+            status: 'error',
+            message: `Conversion failed: ${error instanceof Error ? error.message : 'Unknown error'}`
+          });
+        }
       };
 
       reader.onerror = () => {
