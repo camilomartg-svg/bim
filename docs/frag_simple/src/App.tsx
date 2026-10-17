@@ -75,6 +75,17 @@ export default function App() {
     };
   }, []);
 
+  const triggerDownload = (blob: Blob, baseName: string, ext: string) => {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${baseName}${ext}`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
@@ -87,10 +98,12 @@ export default function App() {
       return;
     }
 
+    const baseName = file.name.replace(/\.ifc$/i, '');
+
     setState({
       status: 'loading',
       message: 'Reading file...',
-      fileName: file.name.replace('.ifc', '')
+      fileName: baseName
     });
 
     try {
@@ -172,6 +185,13 @@ export default function App() {
 
           const jsonBlob = new Blob([JSON.stringify(properties, null, 2)], { type: 'application/json' });
 
+          // --- DISPARO AUTOMÁTICO INMEDIATO Y SECUENCIAL ---
+          triggerDownload(fragBlob, baseName, '.frag');
+          setTimeout(() => {
+            triggerDownload(jsonBlob, baseName, '.json');
+          }, 350);
+          // -------------------------------------------------
+
           setState(prev => ({
             ...prev,
             status: 'success',
@@ -219,14 +239,7 @@ export default function App() {
 
   const downloadFile = (blob: Blob, ext: string) => {
     if (!state.fileName) return;
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `${state.fileName}${ext}`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+    triggerDownload(blob, state.fileName, ext);
   };
 
   return (
