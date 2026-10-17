@@ -75,17 +75,6 @@ export default function App() {
     };
   }, []);
 
-  const triggerDownload = (blob: Blob, baseName: string, ext: string) => {
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `${baseName}${ext}`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-  };
-
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
@@ -185,12 +174,25 @@ export default function App() {
 
           const jsonBlob = new Blob([JSON.stringify(properties, null, 2)], { type: 'application/json' });
 
-          // --- DISPARO AUTOMÁTICO INMEDIATO Y SECUENCIAL ---
-          triggerDownload(fragBlob, baseName, '.frag');
-          setTimeout(() => {
-            triggerDownload(jsonBlob, baseName, '.json');
-          }, 350);
-          // -------------------------------------------------
+          // 4. Conversión binaria de alta velocidad para transmisión nativa a C#
+          const fragBytes = new Uint8Array(fragBuffer);
+          let binaryStr = '';
+          const chunkSize = 8192;
+          for (let i = 0; i < fragBytes.length; i += chunkSize) {
+            binaryStr += String.fromCharCode.apply(null, Array.from(fragBytes.subarray(i, i + chunkSize)));
+          }
+          const fragBase64 = btoa(binaryStr);
+          const jsonBase64 = btoa(unescape(encodeURIComponent(JSON.stringify(properties, null, 2))));
+
+          // 5. Enviar directamente a C# por el canal nativo de WebView2
+          if ((window as any).chrome && (window as any).chrome.webview) {
+            (window as any).chrome.webview.postMessage({
+              tipo: "CONVERSION_COMPLETA",
+              nombreBase: baseName,
+              fragBase64: fragBase64,
+              jsonBase64: jsonBase64
+            });
+          }
 
           setState(prev => ({
             ...prev,
@@ -239,7 +241,14 @@ export default function App() {
 
   const downloadFile = (blob: Blob, ext: string) => {
     if (!state.fileName) return;
-    triggerDownload(blob, state.fileName, ext);
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${state.fileName}${ext}`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
   };
 
   return (
@@ -330,7 +339,7 @@ export default function App() {
                     animate={{ opacity: 1, y: 0 }}
                     className="space-y-4 flex-grow"
                   >
-                    {/* Frag Download */}
+                    {/* Frag Download Manual de Respaldo */}
                     <button 
                       onClick={() => downloadFile(state.fragBlob!, '.frag')}
                       className="w-full border border-[#E4E3E0] p-4 flex items-center justify-between hover:bg-[#E4E3E0] hover:text-[#141414] transition-all group"
@@ -345,7 +354,7 @@ export default function App() {
                       <Download className="w-5 h-5 group-hover:translate-y-0.5 transition-transform" />
                     </button>
 
-                    {/* JSON Download */}
+                    {/* JSON Download Manual de Respaldo */}
                     <button 
                       onClick={() => downloadFile(state.jsonBlob!, '.json')}
                       className="w-full border border-[#E4E3E0] p-4 flex items-center justify-between hover:bg-[#E4E3E0] hover:text-[#141414] transition-all group"
