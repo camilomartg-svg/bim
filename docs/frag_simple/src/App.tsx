@@ -7,8 +7,7 @@ import {
   FileUp, 
   Download, 
   AlertCircle, 
-  Loader2, 
-  Database
+  Loader2
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -255,115 +254,86 @@ export default function App() {
   };
 
   return (
-    <div className="min-h-screen bg-white text-[#141414] font-sans p-4 md:p-8 flex flex-col justify-center">
-      <div className="max-w-4xl mx-auto w-full">
-        {/* Header con Logo de Nora BIM centrado */}
-        <header className="mb-8 md:mb-10 flex justify-center items-center">
+    <div className="min-h-screen bg-white text-[#141414] font-sans p-4 md:p-8 flex flex-col justify-center items-center">
+      <div className="w-full max-w-2xl flex flex-col items-center">
+        {/* Header con Logo de Nora BIM centrado y grande */}
+        <header className="mb-8 md:mb-12 flex justify-center items-center">
           <img 
             src="https://i.postimg.cc/SsS0K3Yn/LOGO-NORA-NEGRO.png" 
             alt="Nora BIM" 
-            className="h-10 md:h-12 w-auto object-contain"
+            className="h-20 sm:h-24 md:h-28 w-auto object-contain"
           />
         </header>
 
-        {/* Main Interface */}
-        <main className="grid grid-cols-1 md:grid-cols-2 gap-8 items-stretch">
-          {/* Upload Section */}
-          <section className="h-full">
-            <div className="border border-[#141414] bg-white relative overflow-hidden group min-h-[300px] md:min-h-[360px] h-full flex flex-col justify-end items-center pb-3">
-              {/* Decorative grid lines */}
-              <div className="absolute inset-0 pointer-events-none opacity-5">
-                <div className="w-full h-full grid grid-cols-4 grid-rows-4">
-                  {[...Array(16)].map((_, i) => (
-                    <div key={i} className="border border-[#141414]" />
-                  ))}
-                </div>
-              </div>
-
-              {/* Sheet with arrow icon at the bottom center - tiny and discrete */}
-              <div className="relative z-10 flex flex-col items-center justify-center pointer-events-none">
-                <FileUp className="w-3.5 h-3.5 opacity-20 text-[#141414] transition-opacity duration-300 group-hover:opacity-40" />
-              </div>
-
-              {/* Invisible file input covering the entire box */}
-              <input 
-                type="file" 
-                accept=".ifc" 
-                onChange={handleFileUpload}
-                className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-20"
-                disabled={state.status === 'loading' || state.status === 'converting'}
-                title="Seleccionar archivo IFC"
-              />
-            </div>
-          </section>
-
-          {/* Output Section */}
-          <section className="h-full">
-            <div className="border border-[#141414] p-6 bg-[#141414] text-[#E4E3E0] min-h-[300px] md:min-h-[360px] h-full flex flex-col justify-between">
-              <div className="flex items-center justify-between mb-4">
-                <span className="text-[10px] font-mono uppercase tracking-widest opacity-60">Output Assets</span>
-                <Database className="w-4 h-4 opacity-60" />
-              </div>
-
-              <div className="flex-grow flex flex-col items-center justify-center w-full">
-                <AnimatePresence mode="wait">
-                  {state.status === 'success' ? (
-                    <motion.div 
-                      key="success"
-                      initial={{ opacity: 0, scale: 0.95 }}
-                      animate={{ opacity: 1, scale: 1 }}
-                      exit={{ opacity: 0 }}
-                      className="w-full flex flex-col items-center justify-center"
-                    >
-                      <button 
-                        onClick={handleIniciarDescarga}
-                        className="w-full max-w-xs border-2 border-[#E4E3E0] bg-transparent hover:bg-[#E4E3E0] hover:text-[#141414] text-[#E4E3E0] py-4 px-6 flex items-center justify-center gap-2 font-bold tracking-widest text-sm uppercase transition-all duration-300 shadow-md group cursor-pointer"
-                      >
-                        <span>INICIAR</span>
-                        <Download className="w-4 h-4 group-hover:translate-y-0.5 transition-transform" />
-                      </button>
-                    </motion.div>
-                  ) : state.status === 'loading' || state.status === 'converting' ? (
-                    <motion.div
-                      key="loading"
-                      initial={{ opacity: 0 }}
-                      animate={{ opacity: 1 }}
-                      exit={{ opacity: 0 }}
-                      className="flex flex-col items-center justify-center text-center py-8"
-                    >
-                      <Loader2 className="w-8 h-8 animate-spin mb-3 text-[#E4E3E0]" />
-                      <p className="text-xs font-mono uppercase tracking-wider text-[#E4E3E0]/80">{state.message}</p>
-                    </motion.div>
-                  ) : state.status === 'error' ? (
-                    <motion.div
-                      key="error"
-                      initial={{ opacity: 0 }}
-                      animate={{ opacity: 1 }}
-                      exit={{ opacity: 0 }}
-                      className="flex flex-col items-center justify-center text-center py-8 text-rose-400"
-                    >
-                      <AlertCircle className="w-8 h-8 mb-3" />
-                      <p className="text-xs font-mono max-w-xs">{state.message}</p>
-                    </motion.div>
-                  ) : (
-                    <motion.div
-                      key="idle"
-                      initial={{ opacity: 0 }}
-                      animate={{ opacity: 1 }}
-                      exit={{ opacity: 0 }}
-                      className="flex flex-col items-center justify-center text-center opacity-20 py-8"
-                    >
-                      <Database className="w-12 h-12 mb-4" />
-                      <p className="text-xs font-mono uppercase">Waiting for input...</p>
-                    </motion.div>
-                  )}
-                </AnimatePresence>
-              </div>
-
-              {/* Bottom spacer to balance layout */}
-              <div className="h-4" />
-            </div>
-          </section>
+        {/* Main Interface: Un solo cuadro grande en la mitad */}
+        <main className="w-full">
+          <div className="w-full min-h-[360px] md:min-h-[400px] bg-[#141414] text-[#E4E3E0] border border-[#141414] p-8 flex flex-col items-center justify-center relative shadow-2xl">
+            <AnimatePresence mode="wait">
+              {state.status === 'success' ? (
+                <motion.div 
+                  key="success"
+                  initial={{ opacity: 0, scale: 0.95 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  exit={{ opacity: 0 }}
+                  className="w-full flex flex-col items-center justify-center"
+                >
+                  <button 
+                    onClick={handleIniciarDescarga}
+                    className="w-full max-w-xs border-2 border-white bg-transparent hover:bg-white hover:text-[#141414] text-white py-4 px-8 flex items-center justify-center gap-3 font-bold tracking-widest text-base uppercase transition-all duration-300 shadow-xl group cursor-pointer"
+                  >
+                    <span>INICIAR</span>
+                    <Download className="w-5 h-5 group-hover:translate-y-0.5 transition-transform" />
+                  </button>
+                </motion.div>
+              ) : state.status === 'loading' || state.status === 'converting' ? (
+                <motion.div
+                  key="loading"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  className="flex flex-col items-center justify-center text-center py-8"
+                >
+                  <Loader2 className="w-10 h-10 animate-spin mb-4 text-white" />
+                  <p className="text-sm font-mono uppercase tracking-wider text-white/80">{state.message}</p>
+                </motion.div>
+              ) : state.status === 'error' ? (
+                <motion.div
+                  key="error"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  className="flex flex-col items-center justify-center text-center py-8 text-rose-400"
+                >
+                  <AlertCircle className="w-10 h-10 mb-4" />
+                  <p className="text-sm font-mono max-w-md mb-6">{state.message}</p>
+                  <button 
+                    onClick={() => setState({ status: 'idle', message: 'Ready to convert your IFC file.' })}
+                    className="border border-rose-400/60 hover:bg-rose-400 hover:text-[#141414] text-rose-400 px-6 py-2 text-xs font-mono uppercase transition-colors cursor-pointer"
+                  >
+                    Intentar de nuevo
+                  </button>
+                </motion.div>
+              ) : (
+                /* Estado idle: La hojita sola y en el centro */
+                <motion.div
+                  key="idle"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  className="w-full h-full min-h-[300px] flex items-center justify-center cursor-pointer group relative"
+                >
+                  <input 
+                    type="file" 
+                    accept=".ifc" 
+                    onChange={handleFileUpload}
+                    className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-20"
+                    title="Seleccionar archivo IFC"
+                  />
+                  <FileUp className="w-10 h-10 text-white/40 group-hover:text-white group-hover:scale-110 transition-all duration-300 pointer-events-none" />
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
         </main>
       </div>
     </div>
