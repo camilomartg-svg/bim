@@ -277,14 +277,6 @@
               <div id="global-progress-bar" class="bg-blue-600 h-full w-0 transition-all duration-300"></div>
             </div>
           </div>
-
-          <!-- Upload Action Button -->
-          <div class="pt-2 flex justify-end">
-            <button id="btn-start-upload" type="button" class="px-6 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs shadow-md hover:shadow-lg transition-all flex items-center gap-2 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed">
-              <span class="material-symbols-outlined text-base">cloud_upload</span>
-              <span>INICIAR SUBIDAS</span>
-            </button>
-          </div>
         </div>
       </div>
 
@@ -888,6 +880,8 @@
         });
 
         renderUploadQueue();
+        // Iniciar la subida de inmediato automáticamente (sin segundo clic)
+        processUploadQueue();
       }
 
       function findMatchingFile(filename) {
@@ -908,6 +902,14 @@
 
         queueList.innerHTML = selectedUploadQueue.map(item => {
           const { icon, color } = getFileIcon(item.name);
+          const statusHtml = item.status === 'Completado'
+            ? `<span class="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/60 px-2 py-0.5 rounded-full border border-emerald-200 dark:border-emerald-800"><span class="material-symbols-outlined text-[12px]">check_circle</span> Completado</span>`
+            : item.status.startsWith('Error')
+            ? `<span class="inline-flex items-center gap-1 text-[10px] font-bold text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-950/60 px-2 py-0.5 rounded-full border border-red-200 dark:border-red-800"><span class="material-symbols-outlined text-[12px]">error</span> ${escapeHtml(item.status)}</span>`
+            : (item.status === 'Subiendo...' || item.status === 'Registrando versión...')
+            ? `<span class="inline-flex items-center gap-1.5 text-[10px] font-bold text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/60 px-2 py-0.5 rounded-full border border-blue-200 dark:border-blue-800"><span class="inline-block w-2.5 h-2.5 border-2 border-current border-t-transparent rounded-full animate-spin"></span> ${escapeHtml(item.status)}</span>`
+            : `<span class="text-[10px] font-semibold text-slate-500 dark:text-slate-400">${escapeHtml(item.status)}</span>`;
+
           return `
             <div class="p-3 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 flex flex-col gap-2">
               <div class="flex items-center justify-between gap-3">
@@ -922,8 +924,8 @@
                 </div>
 
                 <div class="flex items-center gap-2">
-                  <span class="text-[10px] font-semibold text-slate-500 dark:text-slate-400">${item.status}</span>
-                  ${!isUploading ? `
+                  ${statusHtml}
+                  ${!isUploading && item.status !== 'Completado' ? `
                     <button type="button" onclick="window.removeFromQueue(${item.id})" class="text-slate-400 hover:text-red-500 p-1">
                       <span class="material-symbols-outlined text-base">close</span>
                     </button>
@@ -961,28 +963,28 @@
         renderUploadQueue();
       });
 
-      // --- Drive Upload Execution ---
-      btnStartUpload.addEventListener('click', async () => {
+      // --- Drive Upload Execution (Automático) ---
+      async function processUploadQueue() {
         if (!selectedUploadQueue.length || !currentProject || isUploading) return;
 
         isUploading = true;
-        btnStartUpload.disabled = true;
-        btnClearQueue.classList.add('hidden');
+        if (btnClearQueue) btnClearQueue.classList.add('hidden');
         globalProgressBox.classList.remove('hidden');
 
-        const total = selectedUploadQueue.length;
         const ds = currentProject.dataSources || {};
         const scriptUrl = ds.driveScriptUrl || DEFAULT_API_URL;
         const projectSlug = currentProject.slug || slugify(currentProject.name);
 
-        for (let i = 0; i < total; i++) {
-          const item = selectedUploadQueue[i];
-          if (item.status === 'Completado') continue;
+        while (true) {
+          const item = selectedUploadQueue.find(i => i.status === 'Listo para subir');
+          if (!item) break;
 
-          const overallPct = Math.round((i / total) * 100);
+          const total = selectedUploadQueue.length;
+          const completedCount = selectedUploadQueue.filter(i => i.status === 'Completado').length;
+          const overallPct = Math.round((completedCount / total) * 100);
           globalProgressBar.style.width = `${overallPct}%`;
           globalProgressPct.textContent = `${overallPct}%`;
-          globalProgressStatus.textContent = `Subiendo archivo ${i + 1} de ${total}: ${item.name}`;
+          globalProgressStatus.textContent = `Subiendo archivo ${completedCount + 1} de ${total}: ${item.name}`;
 
           try {
             item.status = 'Subiendo...';
@@ -1020,17 +1022,18 @@
           }
         }
 
+        const totalFinal = selectedUploadQueue.length;
+        const completedFinal = selectedUploadQueue.filter(i => i.status === 'Completado').length;
         globalProgressBar.style.width = '100%';
         globalProgressPct.textContent = '100%';
-        globalProgressStatus.textContent = '¡Todos los archivos fueron procesados!';
+        globalProgressStatus.textContent = `¡Subida finalizada! (${completedFinal} de ${totalFinal} archivos procesados)`;
 
         isUploading = false;
-        btnStartUpload.disabled = false;
-        btnClearQueue.classList.remove('hidden');
+        if (btnClearQueue) btnClearQueue.classList.remove('hidden');
 
         // Reload project files to show new files in the table
         await loadProjectFiles();
-      });
+      }
 
       // Resumable upload chunker
       async function uploadResumableToDrive(fileOrBlob, filename, item, scriptUrl, ds, progressCb) {
