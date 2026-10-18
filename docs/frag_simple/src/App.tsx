@@ -5,7 +5,6 @@ import * as FRAGS from '@thatopen/fragments';
 import workerUrl from '@thatopen/fragments/worker?url';
 import { 
   FileUp, 
-  Download, 
   AlertCircle, 
   Loader2
 } from 'lucide-react';
@@ -279,10 +278,9 @@ export default function App() {
                 >
                   <button 
                     onClick={handleIniciarDescarga}
-                    className="w-full max-w-xs border-2 border-white bg-transparent hover:bg-white hover:text-[#141414] text-white py-4 px-8 flex items-center justify-center gap-3 font-bold tracking-widest text-base uppercase transition-all duration-300 shadow-xl group cursor-pointer"
+                    className="w-full max-w-sm border-2 border-white bg-transparent hover:bg-white hover:text-[#141414] text-white py-4 px-8 flex items-center justify-center font-bold tracking-widest text-base uppercase transition-all duration-300 shadow-xl cursor-pointer"
                   >
-                    <span>INICIAR</span>
-                    <Download className="w-5 h-5 group-hover:translate-y-0.5 transition-transform" />
+                    <span>INICIAR CARGA</span>
                   </button>
                 </motion.div>
               ) : state.status === 'loading' || state.status === 'converting' ? (
