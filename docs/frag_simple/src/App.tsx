@@ -6,13 +6,9 @@ import workerUrl from '@thatopen/fragments/worker?url';
 import { 
   FileUp, 
   Download, 
-  CheckCircle2, 
   AlertCircle, 
   Loader2, 
-  Box, 
-  Database,
-  FileJson,
-  Terminal
+  Database
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -251,156 +247,124 @@ export default function App() {
     URL.revokeObjectURL(url);
   };
 
+  const handleIniciarDescarga = () => {
+    if (state.fragBlob) downloadFile(state.fragBlob, '.frag');
+    setTimeout(() => {
+      if (state.jsonBlob) downloadFile(state.jsonBlob, '.json');
+    }, 250);
+  };
+
   return (
-    <div className="min-h-screen bg-[#E4E3E0] text-[#141414] font-sans p-4 md:p-8">
-      <div className="max-w-4xl mx-auto">
-        {/* Header */}
-        <header className="mb-12 border-b border-[#141414] pb-6">
-          <div className="flex items-center gap-3 mb-2">
-            <Box className="w-8 h-8" />
-            <h1 className="text-3xl font-bold tracking-tight uppercase">IFC to FRAG</h1>
-          </div>
-          <p className="font-serif italic text-sm opacity-60">
-            High-performance BIM conversion utility for web visualization.
-          </p>
+    <div className="min-h-screen bg-white text-[#141414] font-sans p-4 md:p-8 flex flex-col justify-center">
+      <div className="max-w-4xl mx-auto w-full">
+        {/* Header con Logo de Nora BIM centrado */}
+        <header className="mb-8 md:mb-10 flex justify-center items-center">
+          <img 
+            src="https://i.postimg.cc/SsS0K3Yn/LOGO-NORA-NEGRO.png" 
+            alt="Nora BIM" 
+            className="h-10 md:h-12 w-auto object-contain"
+          />
         </header>
 
         {/* Main Interface */}
-        <main className="grid grid-cols-1 md:grid-cols-2 gap-8">
+        <main className="grid grid-cols-1 md:grid-cols-2 gap-8 items-stretch">
           {/* Upload Section */}
-          <section className="space-y-6">
-            <div className="border border-[#141414] p-8 bg-white/50 relative overflow-hidden group">
-              <div className="relative z-10 flex flex-col items-center justify-center text-center space-y-4">
-                <div className="w-16 h-16 border border-dashed border-[#141414] flex items-center justify-center group-hover:bg-[#141414] group-hover:text-[#E4E3E0] transition-colors duration-300">
-                  <FileUp className="w-8 h-8" />
-                </div>
-                <div>
-                  <h2 className="text-lg font-bold uppercase">Upload IFC</h2>
-                  <p className="text-xs opacity-50 font-mono">Drag & drop or click to select</p>
-                </div>
-                <input 
-                  type="file" 
-                  accept=".ifc" 
-                  onChange={handleFileUpload}
-                  className="absolute inset-0 opacity-0 cursor-pointer"
-                  disabled={state.status === 'loading' || state.status === 'converting'}
-                />
-              </div>
+          <section className="h-full">
+            <div className="border border-[#141414] bg-white relative overflow-hidden group min-h-[300px] md:min-h-[360px] h-full flex flex-col justify-end items-center pb-3">
               {/* Decorative grid lines */}
-              <div className="absolute top-0 left-0 w-full h-full pointer-events-none opacity-5">
+              <div className="absolute inset-0 pointer-events-none opacity-5">
                 <div className="w-full h-full grid grid-cols-4 grid-rows-4">
                   {[...Array(16)].map((_, i) => (
                     <div key={i} className="border border-[#141414]" />
                   ))}
                 </div>
               </div>
-            </div>
 
-            {/* Status Panel */}
-            <div className="border border-[#141414] p-6 bg-white">
-              <div className="flex items-center justify-between mb-4">
-                <span className="text-[10px] font-mono uppercase opacity-50 tracking-widest">System Status</span>
-                <Terminal className="w-3 h-3 opacity-30" />
+              {/* Sheet with arrow icon at the bottom center - tiny and discrete */}
+              <div className="relative z-10 flex flex-col items-center justify-center pointer-events-none">
+                <FileUp className="w-3.5 h-3.5 opacity-20 text-[#141414] transition-opacity duration-300 group-hover:opacity-40" />
               </div>
-              
-              <div className="flex items-start gap-3">
-                {state.status === 'loading' || state.status === 'converting' ? (
-                  <Loader2 className="w-5 h-5 animate-spin mt-0.5" />
-                ) : state.status === 'success' ? (
-                  <CheckCircle2 className="w-5 h-5 text-emerald-600 mt-0.5" />
-                ) : state.status === 'error' ? (
-                  <AlertCircle className="w-5 h-5 text-rose-600 mt-0.5" />
-                ) : (
-                  <div className="w-5 h-5 border border-[#141414] mt-0.5" />
-                )}
-                
-                <div className="space-y-1">
-                  <p className="text-sm font-medium">{state.message}</p>
-                  {state.fileName && (
-                    <p className="text-[10px] font-mono opacity-50">FILE: {state.fileName}.ifc</p>
-                  )}
-                </div>
-              </div>
+
+              {/* Invisible file input covering the entire box */}
+              <input 
+                type="file" 
+                accept=".ifc" 
+                onChange={handleFileUpload}
+                className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-20"
+                disabled={state.status === 'loading' || state.status === 'converting'}
+                title="Seleccionar archivo IFC"
+              />
             </div>
           </section>
 
           {/* Output Section */}
-          <section className="space-y-6">
-            <div className="border border-[#141414] p-6 bg-[#141414] text-[#E4E3E0] h-full flex flex-col">
-              <div className="flex items-center justify-between mb-8">
-                <span className="text-[10px] font-mono uppercase tracking-widest">Output Assets</span>
-                <Database className="w-4 h-4" />
+          <section className="h-full">
+            <div className="border border-[#141414] p-6 bg-[#141414] text-[#E4E3E0] min-h-[300px] md:min-h-[360px] h-full flex flex-col justify-between">
+              <div className="flex items-center justify-between mb-4">
+                <span className="text-[10px] font-mono uppercase tracking-widest opacity-60">Output Assets</span>
+                <Database className="w-4 h-4 opacity-60" />
               </div>
 
-              <AnimatePresence mode="wait">
-                {state.status === 'success' ? (
-                  <motion.div 
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    className="space-y-4 flex-grow"
-                  >
-                    {/* Frag Download Manual de Respaldo */}
-                    <button 
-                      onClick={() => downloadFile(state.fragBlob!, '.frag')}
-                      className="w-full border border-[#E4E3E0] p-4 flex items-center justify-between hover:bg-[#E4E3E0] hover:text-[#141414] transition-all group"
+              <div className="flex-grow flex flex-col items-center justify-center w-full">
+                <AnimatePresence mode="wait">
+                  {state.status === 'success' ? (
+                    <motion.div 
+                      key="success"
+                      initial={{ opacity: 0, scale: 0.95 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      exit={{ opacity: 0 }}
+                      className="w-full flex flex-col items-center justify-center"
                     >
-                      <div className="flex items-center gap-3">
-                        <Box className="w-5 h-5" />
-                        <div className="text-left">
-                          <p className="text-xs font-bold uppercase">Geometry Data</p>
-                          <p className="text-[10px] opacity-60 font-mono">.FRAG (Optimized Mesh)</p>
-                        </div>
-                      </div>
-                      <Download className="w-5 h-5 group-hover:translate-y-0.5 transition-transform" />
-                    </button>
-
-                    {/* JSON Download Manual de Respaldo */}
-                    <button 
-                      onClick={() => downloadFile(state.jsonBlob!, '.json')}
-                      className="w-full border border-[#E4E3E0] p-4 flex items-center justify-between hover:bg-[#E4E3E0] hover:text-[#141414] transition-all group"
+                      <button 
+                        onClick={handleIniciarDescarga}
+                        className="w-full max-w-xs border-2 border-[#E4E3E0] bg-transparent hover:bg-[#E4E3E0] hover:text-[#141414] text-[#E4E3E0] py-4 px-6 flex items-center justify-center gap-2 font-bold tracking-widest text-sm uppercase transition-all duration-300 shadow-md group cursor-pointer"
+                      >
+                        <span>INICIAR</span>
+                        <Download className="w-4 h-4 group-hover:translate-y-0.5 transition-transform" />
+                      </button>
+                    </motion.div>
+                  ) : state.status === 'loading' || state.status === 'converting' ? (
+                    <motion.div
+                      key="loading"
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      exit={{ opacity: 0 }}
+                      className="flex flex-col items-center justify-center text-center py-8"
                     >
-                      <div className="flex items-center gap-3">
-                        <FileJson className="w-5 h-5" />
-                        <div className="text-left">
-                          <p className="text-xs font-bold uppercase">Properties Data</p>
-                          <p className="text-[10px] opacity-60 font-mono">.JSON (BIM Metadata)</p>
-                        </div>
-                      </div>
-                      <Download className="w-5 h-5 group-hover:translate-y-0.5 transition-transform" />
-                    </button>
+                      <Loader2 className="w-8 h-8 animate-spin mb-3 text-[#E4E3E0]" />
+                      <p className="text-xs font-mono uppercase tracking-wider text-[#E4E3E0]/80">{state.message}</p>
+                    </motion.div>
+                  ) : state.status === 'error' ? (
+                    <motion.div
+                      key="error"
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      exit={{ opacity: 0 }}
+                      className="flex flex-col items-center justify-center text-center py-8 text-rose-400"
+                    >
+                      <AlertCircle className="w-8 h-8 mb-3" />
+                      <p className="text-xs font-mono max-w-xs">{state.message}</p>
+                    </motion.div>
+                  ) : (
+                    <motion.div
+                      key="idle"
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      exit={{ opacity: 0 }}
+                      className="flex flex-col items-center justify-center text-center opacity-20 py-8"
+                    >
+                      <Database className="w-12 h-12 mb-4" />
+                      <p className="text-xs font-mono uppercase">Waiting for input...</p>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </div>
 
-                    <div className="mt-8 pt-6 border-t border-[#E4E3E0]/20">
-                      <p className="text-[10px] font-mono opacity-40 leading-relaxed">
-                        Assets are ready for integration. Use the .frag file for 3D rendering and the .json file for property management in your BIM viewer.
-                      </p>
-                    </div>
-                  </motion.div>
-                ) : (
-                  <div className="flex-grow flex flex-col items-center justify-center text-center opacity-20 py-12">
-                    <Database className="w-12 h-12 mb-4" />
-                    <p className="text-xs font-mono uppercase">Waiting for input...</p>
-                  </div>
-                )}
-              </AnimatePresence>
+              {/* Bottom spacer to balance layout */}
+              <div className="h-4" />
             </div>
           </section>
         </main>
-
-        {/* Footer Info */}
-        <footer className="mt-16 grid grid-cols-1 md:grid-cols-3 gap-8 text-[10px] font-mono opacity-40 border-t border-[#141414] pt-8">
-          <div>
-            <p className="font-bold uppercase mb-2">Technology</p>
-            <p>Powered by That Open Engine & Web-IFC. Optimized for high-performance web-based BIM visualization.</p>
-          </div>
-          <div>
-            <p className="font-bold uppercase mb-2">Format Details</p>
-            <p>.FRAG is a binary format that stores geometry as fragments, allowing for massive model loading with minimal memory footprint.</p>
-          </div>
-          <div>
-            <p className="font-bold uppercase mb-2">Data Extraction</p>
-            <p>Properties are extracted directly from the IFC schema and mapped to a JSON structure compatible with standard BIM viewers.</p>
-          </div>
-        </footer>
       </div>
     </div>
   );
