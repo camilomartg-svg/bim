@@ -67,8 +67,8 @@
 </head>
 
 <body class="bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-100 min-h-screen flex flex-col transition-colors duration-300">
-  <!-- Top Navigation Header -->
-  <header class="w-full sticky top-0 z-30 px-4 sm:px-6 lg:px-8 py-3.5 bg-white/90 dark:bg-slate-900/90 border-b border-slate-200 dark:border-slate-800 backdrop-blur-md">
+  <!-- Top Navigation Header (Oculto según solicitud) -->
+  <header class="hidden">
     <div class="max-w-7xl mx-auto flex items-center justify-between">
       <div class="flex items-center gap-3 sm:gap-5">
         <a href="empresas.html" id="btn-header-back" class="p-1.5 rounded-lg border border-slate-200 bg-white/80 hover:bg-slate-100 transition-colors dark:bg-slate-800 dark:border-slate-700 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300" title="Volver al portal">
@@ -212,133 +212,29 @@
           </div>
         </div>
 
-        <div class="flex items-center gap-2 shrink-0">
-          <button type="button" onclick="window.navToProyectos()" class="px-3.5 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-xs font-semibold text-slate-700 dark:text-slate-200 transition-colors flex items-center gap-1.5 shadow-2xs">
-            <span class="material-symbols-outlined text-sm">swap_horiz</span> Cambiar Proyecto
-          </button>
-          <button type="button" onclick="window.loadProjectFiles()" class="p-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 transition-colors" title="Actualizar archivos">
-            <span id="refresh-icon" class="material-symbols-outlined text-base">refresh</span>
-          </button>
+        <div class="flex items-center shrink-0">
+          <img class="h-10 sm:h-12 w-auto object-contain dark:hidden" src="https://i.postimg.cc/tR3YSryT/LOGO-NORA-NEGRO.png" alt="Nora BIM" />
+          <img class="h-10 sm:h-12 w-auto object-contain hidden dark:block" src="https://i.postimg.cc/SQ6JTZqj/LOGO-NORA-BLANCO.png" alt="Nora BIM" />
         </div>
       </div>
 
       <!-- Upload Zone Card -->
       <div class="glass-card rounded-2xl p-6 sm:p-8 shadow-md">
-        <div class="mb-5">
-          <h3 class="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
-            <span class="material-symbols-outlined text-blue-600 text-lg">cloud_upload</span>
-            Subir Archivos a la Carpeta
-          </h3>
-          <p class="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Sube tus archivos IFC, FRAG, JSON, PDF, DWG, DXF o RVT. Si el archivo ya existe, se creará automáticamente una nueva versión.</p>
-        </div>
-
-        <!-- Dropzone -->
-        <div id="drop-zone" class="border-2 border-dashed border-slate-300 dark:border-slate-700 rounded-2xl p-8 sm:p-10 text-center cursor-pointer transition-all hover:border-blue-500 hover:bg-blue-50/20 dark:hover:bg-blue-950/10 group">
+        <!-- Dropzone con únicamente el ícono pequeño de la hoja -->
+        <div id="drop-zone" class="border-2 border-dashed border-slate-300 dark:border-slate-700 rounded-2xl py-14 px-6 text-center cursor-pointer transition-all hover:border-blue-500 hover:bg-blue-50/20 dark:hover:bg-blue-950/10 flex items-center justify-center group relative">
           <input type="file" id="file-input" class="hidden" multiple accept=".ifc,.frag,.json,.pdf,.dwg,.dxf,.rvt,.rfa,.nwc,.nwd,.pln,.xlsx,.bcf" />
-          <div class="flex flex-col items-center justify-center space-y-3">
-            <div class="w-14 h-14 rounded-2xl bg-blue-50 dark:bg-slate-800 border border-blue-100 dark:border-slate-700 flex items-center justify-center text-blue-600 dark:text-blue-400 group-hover:scale-110 transition-transform">
-              <span class="material-symbols-outlined text-3xl">upload_file</span>
-            </div>
-            <div>
-              <p class="text-sm font-bold text-slate-800 dark:text-slate-200">
-                Arrastra tus archivos aquí o <span class="text-blue-600 dark:text-blue-400 underline decoration-2">haz clic para buscarlos</span>
-              </p>
-              <p class="text-[11px] text-slate-400 dark:text-slate-500 mt-1">
-                Formatos compatibles: IFC, FRAG, JSON, PDF, DWG, DXF, RVT, NWD, XLSX
-              </p>
-            </div>
-          </div>
+          <span class="material-symbols-outlined text-3xl text-blue-600 dark:text-blue-400 group-hover:scale-110 transition-transform pointer-events-none">upload_file</span>
         </div>
 
-        <!-- Upload Queue Section -->
-        <div id="queue-container" class="mt-6 space-y-4 hidden">
-          <div class="flex items-center justify-between pb-2 border-b border-slate-200 dark:border-slate-800">
-            <div class="flex items-center gap-2">
-              <span class="text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">Archivos en cola</span>
-              <span id="queue-count" class="px-2 py-0.5 text-[10px] font-black rounded-full bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-200">0</span>
-            </div>
-            <button id="btn-clear-queue" type="button" class="text-[11px] font-semibold text-slate-400 hover:text-red-500 transition-colors">
-              Limpiar cola
-            </button>
+        <!-- Global Upload Progress (Una sola barra de avance) -->
+        <div id="global-progress-box" class="space-y-2 pt-6 hidden">
+          <div class="flex justify-between items-center text-xs">
+            <span id="global-progress-status" class="font-semibold text-blue-600 dark:text-blue-400">Subiendo archivos...</span>
+            <span id="global-progress-pct" class="font-bold text-slate-700 dark:text-slate-300">0%</span>
           </div>
-
-          <!-- Queue List -->
-          <div id="queue-list" class="space-y-2.5 max-h-72 overflow-y-auto pr-1">
-            <!-- Injected by JS -->
+          <div class="w-full bg-slate-200 dark:bg-slate-700 h-2.5 rounded-full overflow-hidden">
+            <div id="global-progress-bar" class="bg-blue-600 h-full w-0 transition-all duration-300"></div>
           </div>
-
-          <!-- Global Upload Progress -->
-          <div id="global-progress-box" class="space-y-1.5 pt-2 hidden">
-            <div class="flex justify-between items-center text-xs">
-              <span id="global-progress-status" class="font-semibold text-blue-600 dark:text-blue-400">Subiendo archivos...</span>
-              <span id="global-progress-pct" class="font-bold text-slate-700 dark:text-slate-300">0%</span>
-            </div>
-            <div class="w-full bg-slate-200 dark:bg-slate-700 h-2 rounded-full overflow-hidden">
-              <div id="global-progress-bar" class="bg-blue-600 h-full w-0 transition-all duration-300"></div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- ======================================================== -->
-      <!-- SECTION: LISTADO DE ARCHIVOS YA CARGADOS (Abajo)         -->
-      <!-- ======================================================== -->
-      <div class="glass-card rounded-2xl p-6 sm:p-8 shadow-md space-y-6">
-        <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-slate-200 dark:border-slate-800 pb-4">
-          <div>
-            <h3 class="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
-              <span class="material-symbols-outlined text-slate-700 dark:text-slate-300 text-xl">inventory_2</span>
-              <span>Archivos Cargados en el Proyecto</span>
-              <span id="files-badge-count" class="px-2.5 py-0.5 rounded-full text-xs font-extrabold bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300">0</span>
-            </h3>
-            <p class="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Explora, visualiza o descarga los documentos y modelos registrados en este proyecto.</p>
-          </div>
-
-          <!-- Type filter tabs -->
-          <div class="flex items-center gap-1.5 p-1 rounded-xl bg-slate-100 dark:bg-slate-800/80 self-start sm:self-auto text-xs font-semibold">
-            <button type="button" onclick="window.setFilterType('all')" class="type-filter-btn px-3 py-1.5 rounded-lg transition-all bg-white dark:bg-slate-900 shadow-2xs text-blue-600 dark:text-blue-400" data-filter="all">Todos</button>
-            <button type="button" onclick="window.setFilterType('model')" class="type-filter-btn px-3 py-1.5 rounded-lg transition-all text-slate-500 hover:text-slate-800 dark:hover:text-slate-200" data-filter="model">Modelos (.frag/.ifc)</button>
-            <button type="button" onclick="window.setFilterType('pdf')" class="type-filter-btn px-3 py-1.5 rounded-lg transition-all text-slate-500 hover:text-slate-800 dark:hover:text-slate-200" data-filter="pdf">Planos (.pdf)</button>
-            <button type="button" onclick="window.setFilterType('dwg')" class="type-filter-btn px-3 py-1.5 rounded-lg transition-all text-slate-500 hover:text-slate-800 dark:hover:text-slate-200" data-filter="dwg">CAD (.dwg/.dxf)</button>
-          </div>
-        </div>
-
-        <!-- Search Bar for Files -->
-        <div class="relative w-full">
-          <span class="material-symbols-outlined absolute left-3 top-2.5 text-slate-400 text-sm">search</span>
-          <input type="text" id="filter-files-search" placeholder="Buscar por nombre de archivo..." class="w-full pl-9 pr-3 py-2 rounded-xl text-xs border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500" />
-        </div>
-
-        <!-- Files Loading State -->
-        <div id="files-loading" class="flex flex-col items-center justify-center py-12">
-          <div class="w-8 h-8 border-3 border-slate-200 dark:border-slate-700 border-t-blue-600 rounded-full animate-spin"></div>
-          <p class="text-xs text-slate-500 dark:text-slate-400 mt-2.5">Obteniendo archivos del proyecto desde Drive y Sheets...</p>
-        </div>
-
-        <!-- Files Empty State -->
-        <div id="files-empty" class="hidden flex-col items-center justify-center py-12 text-center">
-          <span class="material-symbols-outlined text-4xl text-slate-300 dark:text-slate-600 mb-2">folder_open</span>
-          <p class="text-xs font-semibold text-slate-600 dark:text-slate-300">No se encontraron archivos cargados</p>
-          <p class="text-[11px] text-slate-400 mt-1 max-w-sm">Utiliza la zona de carga superior para añadir los primeros modelos o planos al proyecto.</p>
-        </div>
-
-        <!-- Files Table -->
-        <div id="files-table-wrapper" class="overflow-x-auto rounded-xl border border-slate-200/80 dark:border-slate-800 hidden">
-          <table class="w-full text-left border-collapse text-xs">
-            <thead>
-              <tr class="border-b border-slate-200 dark:border-slate-800 bg-slate-50/80 dark:bg-slate-800/50 text-slate-500 dark:text-slate-400 font-bold uppercase text-[10px] tracking-wider">
-                <th class="py-3 px-4 min-w-[220px]">Archivo</th>
-                <th class="py-3 px-3 text-center whitespace-nowrap">Versión</th>
-                <th class="py-3 px-3 whitespace-nowrap">Especialidad</th>
-                <th class="py-3 px-3 whitespace-nowrap">Estado</th>
-                <th class="py-3 px-3 whitespace-nowrap">Fecha</th>
-                <th class="py-3 px-4 text-right whitespace-nowrap">Acciones</th>
-              </tr>
-            </thead>
-            <tbody id="files-tbody" class="divide-y divide-slate-100 dark:divide-slate-800/60">
-              <!-- Rendered by JS -->
-            </tbody>
-          </table>
         </div>
       </div>
     </section>
@@ -496,33 +392,44 @@
       const applyTheme = (theme) => {
         if (theme === 'dark') {
           htmlEl.classList.add('dark');
-          themeToggle.querySelector('.material-symbols-outlined').textContent = 'light_mode';
+          if (themeToggle) {
+            const icon = themeToggle.querySelector('.material-symbols-outlined');
+            if (icon) icon.textContent = 'light_mode';
+          }
         } else {
           htmlEl.classList.remove('dark');
-          themeToggle.querySelector('.material-symbols-outlined').textContent = 'dark_mode';
+          if (themeToggle) {
+            const icon = themeToggle.querySelector('.material-symbols-outlined');
+            if (icon) icon.textContent = 'dark_mode';
+          }
         }
       };
       const savedTheme = localStorage.getItem('theme') || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
       applyTheme(savedTheme);
-      themeToggle.addEventListener('click', () => {
-        const newTheme = htmlEl.classList.contains('dark') ? 'light' : 'dark';
-        localStorage.setItem('theme', newTheme);
-        applyTheme(newTheme);
-      });
+      if (themeToggle) {
+        themeToggle.addEventListener('click', () => {
+          const newTheme = htmlEl.classList.contains('dark') ? 'light' : 'dark';
+          localStorage.setItem('theme', newTheme);
+          applyTheme(newTheme);
+        });
+      }
 
       // --- Auth Info ---
-      if (userAccount) {
+      if (userAccount && authContainer) {
         authContainer.innerHTML = `
           <div class="flex items-center gap-3">
             <span class="hidden sm:inline">Hola, <strong class="font-bold">${escapeHtml(userAccount.name.split(' ')[0])}</strong></span>
             <button id="btn-logout" type="button" class="text-[11px] font-bold text-red-600 dark:text-red-400 hover:underline uppercase">Cerrar Sesión</button>
           </div>
         `;
-        document.getElementById('btn-logout').addEventListener('click', () => {
-          sessionStorage.removeItem('userAccount');
-          localStorage.removeItem('userAccount');
-          window.location.replace('https://norabim.com/inse.html');
-        });
+        const btnLogout = document.getElementById('btn-logout');
+        if (btnLogout) {
+          btnLogout.addEventListener('click', () => {
+            sessionStorage.removeItem('userAccount');
+            localStorage.removeItem('userAccount');
+            window.location.replace('https://norabim.com/inse.html');
+          });
+        }
       }
 
       // ========================================================
@@ -879,8 +786,7 @@
           });
         });
 
-        renderUploadQueue();
-        // Iniciar la subida de inmediato automáticamente (sin segundo clic)
+        if (globalProgressBox) globalProgressBox.classList.remove('hidden');
         processUploadQueue();
       }
 
@@ -891,85 +797,12 @@
         return projectFiles.find(f => norm(f.name) === target) || null;
       }
 
-      function renderUploadQueue() {
-        if (!selectedUploadQueue.length) {
-          queueContainer.classList.add('hidden');
-          return;
-        }
-
-        queueContainer.classList.remove('hidden');
-        queueCount.textContent = selectedUploadQueue.length;
-
-        queueList.innerHTML = selectedUploadQueue.map(item => {
-          const { icon, color } = getFileIcon(item.name);
-          const statusHtml = item.status === 'Completado'
-            ? `<span class="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/60 px-2 py-0.5 rounded-full border border-emerald-200 dark:border-emerald-800"><span class="material-symbols-outlined text-[12px]">check_circle</span> Completado</span>`
-            : item.status.startsWith('Error')
-            ? `<span class="inline-flex items-center gap-1 text-[10px] font-bold text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-950/60 px-2 py-0.5 rounded-full border border-red-200 dark:border-red-800"><span class="material-symbols-outlined text-[12px]">error</span> ${escapeHtml(item.status)}</span>`
-            : (item.status === 'Subiendo...' || item.status === 'Registrando versión...')
-            ? `<span class="inline-flex items-center gap-1.5 text-[10px] font-bold text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/60 px-2 py-0.5 rounded-full border border-blue-200 dark:border-blue-800"><span class="inline-block w-2.5 h-2.5 border-2 border-current border-t-transparent rounded-full animate-spin"></span> ${escapeHtml(item.status)}</span>`
-            : `<span class="text-[10px] font-semibold text-slate-500 dark:text-slate-400">${escapeHtml(item.status)}</span>`;
-
-          return `
-            <div class="p-3 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 flex flex-col gap-2">
-              <div class="flex items-center justify-between gap-3">
-                <div class="flex items-center gap-2.5 truncate max-w-[70%]">
-                  <div class="w-8 h-8 rounded-lg ${color} flex items-center justify-center shrink-0">
-                    <span class="material-symbols-outlined text-lg">${icon}</span>
-                  </div>
-                  <div class="truncate">
-                    <p class="text-xs font-bold text-slate-800 dark:text-slate-200 truncate">${escapeHtml(item.name)}</p>
-                    <p class="text-[10px] text-slate-400">${formatBytes(item.size)}</p>
-                  </div>
-                </div>
-
-                <div class="flex items-center gap-2">
-                  ${statusHtml}
-                  ${!isUploading && item.status !== 'Completado' ? `
-                    <button type="button" onclick="window.removeFromQueue(${item.id})" class="text-slate-400 hover:text-red-500 p-1">
-                      <span class="material-symbols-outlined text-base">close</span>
-                    </button>
-                  ` : ''}
-                </div>
-              </div>
-
-              ${item.isReplacement ? `
-                <div class="flex items-center justify-between text-[11px] p-2 rounded-lg bg-indigo-50 dark:bg-indigo-950/60 border border-indigo-200/60 dark:border-indigo-800/60 text-indigo-900 dark:text-indigo-200">
-                  <span class="flex items-center gap-1.5 font-semibold">
-                    <span class="material-symbols-outlined text-sm text-indigo-600">history_edu</span>
-                    Reemplazo detectado: se creará versión <strong class="font-mono">${item.targetVersion}</strong>
-                  </span>
-                  <span class="text-[10px] text-slate-400">(Actual: ${item.existingFile.version || 'v1.0'})</span>
-                </div>
-              ` : ''}
-
-              <!-- Progress bar -->
-              <div class="w-full bg-slate-100 dark:bg-slate-800 h-1.5 rounded-full overflow-hidden">
-                <div class="bg-blue-600 h-full transition-all duration-200" style="width: ${item.progress}%"></div>
-              </div>
-            </div>
-          `;
-        }).join('');
-      }
-
-      window.removeFromQueue = (id) => {
-        selectedUploadQueue = selectedUploadQueue.filter(item => item.id !== id);
-        renderUploadQueue();
-      };
-
-      btnClearQueue.addEventListener('click', () => {
-        if (isUploading) return;
-        selectedUploadQueue = [];
-        renderUploadQueue();
-      });
-
-      // --- Drive Upload Execution (Automático) ---
+      // --- Drive Upload Execution (Automático con una sola barra de avance) ---
       async function processUploadQueue() {
         if (!selectedUploadQueue.length || !currentProject || isUploading) return;
 
         isUploading = true;
-        if (btnClearQueue) btnClearQueue.classList.add('hidden');
-        globalProgressBox.classList.remove('hidden');
+        if (globalProgressBox) globalProgressBox.classList.remove('hidden');
 
         const ds = currentProject.dataSources || {};
         const scriptUrl = ds.driveScriptUrl || DEFAULT_API_URL;
@@ -982,23 +815,24 @@
           const total = selectedUploadQueue.length;
           const completedCount = selectedUploadQueue.filter(i => i.status === 'Completado').length;
           const overallPct = Math.round((completedCount / total) * 100);
-          globalProgressBar.style.width = `${overallPct}%`;
-          globalProgressPct.textContent = `${overallPct}%`;
-          globalProgressStatus.textContent = `Subiendo archivo ${completedCount + 1} de ${total}: ${item.name}`;
+          if (globalProgressBar) globalProgressBar.style.width = `${overallPct}%`;
+          if (globalProgressPct) globalProgressPct.textContent = `${overallPct}%`;
+          if (globalProgressStatus) globalProgressStatus.textContent = `Subiendo (${completedCount + 1}/${total}): ${item.name}`;
 
           try {
             item.status = 'Subiendo...';
-            renderUploadQueue();
 
             const uploadResult = await uploadResumableToDrive(item.file, item.name, item, scriptUrl, ds, (pct) => {
               item.progress = pct;
-              renderUploadQueue();
+              const currentOverall = Math.round(((completedCount + (pct / 100)) / total) * 100);
+              if (globalProgressBar) globalProgressBar.style.width = `${currentOverall}%`;
+              if (globalProgressPct) globalProgressPct.textContent = `${currentOverall}%`;
             });
 
             // If replacement, create version record
             if (item.isReplacement && item.existingFile) {
               item.status = 'Registrando versión...';
-              renderUploadQueue();
+              if (globalProgressStatus) globalProgressStatus.textContent = `Registrando versión (${item.targetVersion}): ${item.name}`;
               await createVersionRecord({
                 scriptUrl: scriptUrl,
                 projectSlug: projectSlug,
@@ -1014,24 +848,22 @@
 
             item.progress = 100;
             item.status = 'Completado';
-            renderUploadQueue();
           } catch (err) {
             console.error('Error subiendo archivo:', err);
             item.status = 'Error: ' + err.message;
-            renderUploadQueue();
+            if (globalProgressStatus) globalProgressStatus.textContent = `Error en ${item.name}: ${err.message}`;
           }
         }
 
         const totalFinal = selectedUploadQueue.length;
         const completedFinal = selectedUploadQueue.filter(i => i.status === 'Completado').length;
-        globalProgressBar.style.width = '100%';
-        globalProgressPct.textContent = '100%';
-        globalProgressStatus.textContent = `¡Subida finalizada! (${completedFinal} de ${totalFinal} archivos procesados)`;
+        if (globalProgressBar) globalProgressBar.style.width = '100%';
+        if (globalProgressPct) globalProgressPct.textContent = '100%';
+        if (globalProgressStatus) globalProgressStatus.textContent = `¡Subida finalizada! (${completedFinal} de ${totalFinal} archivos procesados)`;
 
         isUploading = false;
-        if (btnClearQueue) btnClearQueue.classList.remove('hidden');
 
-        // Reload project files to show new files in the table
+        // Reload project files in background for auto-versioning
         await loadProjectFiles();
       }
 
@@ -1165,10 +997,10 @@
       window.loadProjectFiles = async () => {
         if (!currentProject) return;
 
-        filesLoading.classList.remove('hidden');
-        filesEmpty.classList.add('hidden');
-        filesTableWrapper.classList.add('hidden');
-        refreshIcon.classList.add('animate-spin');
+        if (filesLoading) filesLoading.classList.remove('hidden');
+        if (filesEmpty) filesEmpty.classList.add('hidden');
+        if (filesTableWrapper) filesTableWrapper.classList.add('hidden');
+        if (refreshIcon) refreshIcon.classList.add('animate-spin');
 
         const ds = currentProject.dataSources || {};
         const scriptUrl = ds.driveScriptUrl || DEFAULT_API_URL;
@@ -1235,19 +1067,20 @@
           (listData.pdfs || []).forEach(p => pushItem(p, 'pdf'));
 
           projectFiles = combined;
-          filesBadgeCount.textContent = projectFiles.length;
-          filesLoading.classList.add('hidden');
-          refreshIcon.classList.remove('animate-spin');
+          if (filesBadgeCount) filesBadgeCount.textContent = projectFiles.length;
+          if (filesLoading) filesLoading.classList.add('hidden');
+          if (refreshIcon) refreshIcon.classList.remove('animate-spin');
 
           renderProjectFilesTable();
         } catch (err) {
           console.error('Error cargando archivos del proyecto:', err);
-          filesLoading.innerHTML = `<p class="text-xs text-red-500">Error al cargar archivos: ${err.message}</p>`;
-          refreshIcon.classList.remove('animate-spin');
+          if (filesLoading) filesLoading.innerHTML = `<p class="text-xs text-red-500">Error al cargar archivos: ${err.message}</p>`;
+          if (refreshIcon) refreshIcon.classList.remove('animate-spin');
         }
       };
 
       function renderProjectFilesTable() {
+        if (!filterFilesSearch || !filesTableWrapper || !filesTbody) return;
         const query = (filterFilesSearch.value || '').toLowerCase().trim();
 
         let filtered = projectFiles.filter(f => {
