@@ -440,17 +440,23 @@
         const empresasGrid = document.getElementById('empresas-grid');
 
         try {
-          const [compRes, staticEmpRes] = await Promise.all([
-            fetch(DEFAULT_API_URL + '?action=getCompanies&t=' + Date.now()).catch(() => null),
-            fetch('empresas.json?t=' + Date.now()).catch(() => null)
-          ]);
-
-          let remoteCompanies = compRes && compRes.ok ? await compRes.json() : [];
-          let staticEmpresas = staticEmpRes && staticEmpRes.ok ? await staticEmpRes.json() : [];
+          // 1. Fetch static empresas first (instant and reliable)
+          let staticEmpresas = [];
+          try {
+            let sRes = await fetch('empresas.json?t=' + Date.now()).catch(() => null);
+            if (!sRes || !sRes.ok) {
+              sRes = await fetch('https://raw.githubusercontent.com/camilomartg-svg/bim/main/empresas.json?t=' + Date.now()).catch(() => null);
+            }
+            if (sRes && sRes.ok) {
+              staticEmpresas = await sRes.json();
+            }
+          } catch (e) {
+            console.warn('Error fetching static empresas:', e);
+          }
 
           const map = new Map();
 
-          // Merge static
+          // Merge static empresas
           if (Array.isArray(staticEmpresas)) {
             staticEmpresas.forEach(se => {
               if (se.deleted) return;
@@ -465,28 +471,56 @@
             });
           }
 
-          // Merge remote
-          if (Array.isArray(remoteCompanies)) {
-            remoteCompanies.forEach(rc => {
-              if (!rc.name) return;
-              const id = rc.id || 'empresa-' + slugify(rc.name);
-              if (!map.has(id)) {
-                map.set(id, {
-                  id: id,
-                  name: rc.name,
-                  code: rc.code || rc.name.substring(0, 3).toUpperCase(),
-                  location: rc.ciudad || rc.location || 'Sede Principal',
-                  configUrl: rc.configUrl || `config-${id}.json`,
-                  image: rc.image || 'https://i.postimg.cc/02mTnnQv/21bd5ee9d2351270615280386caad1f3.jpg'
-                });
-              }
-            });
+          allCompanies = Array.from(map.values());
+
+          // Render static companies immediately so the page is instantly responsive
+          if (allCompanies.length > 0) {
+            if (empresasLoading) empresasLoading.classList.add('hidden');
+            if (empresasGrid) empresasGrid.classList.remove('hidden');
+            renderEmpresasGrid(allCompanies);
           }
 
-          allCompanies = Array.from(map.values());
-          empresasLoading.classList.add('hidden');
-          empresasGrid.classList.remove('hidden');
+          // 2. Fetch remote companies with timeout so it never hangs
+          try {
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 3500);
+            const compRes = await fetch(DEFAULT_API_URL + '?action=getCompanies&t=' + Date.now(), {
+              signal: controller.signal
+            }).catch(() => null);
+            clearTimeout(timeoutId);
 
+            if (compRes && compRes.ok) {
+              const remoteCompanies = await compRes.json();
+              if (Array.isArray(remoteCompanies)) {
+                let updated = false;
+                remoteCompanies.forEach(rc => {
+                  if (!rc.name) return;
+                  const id = rc.id || 'empresa-' + slugify(rc.name);
+                  if (!map.has(id)) {
+                    map.set(id, {
+                      id: id,
+                      name: rc.name,
+                      code: rc.code || rc.name.substring(0, 3).toUpperCase(),
+                      location: rc.ciudad || rc.location || 'Sede Principal',
+                      configUrl: rc.configUrl || `config-${id}.json`,
+                      image: rc.image || 'https://i.postimg.cc/02mTnnQv/21bd5ee9d2351270615280386caad1f3.jpg'
+                    });
+                    updated = true;
+                  }
+                });
+                if (updated) {
+                  allCompanies = Array.from(map.values());
+                  renderEmpresasGrid(allCompanies);
+                }
+              }
+            }
+          } catch (remErr) {
+            console.warn('Could not load remote companies:', remErr);
+          }
+
+          // Final ensure grid is visible
+          if (empresasLoading) empresasLoading.classList.add('hidden');
+          if (empresasGrid) empresasGrid.classList.remove('hidden');
           renderEmpresasGrid(allCompanies);
 
           // Check if URL parameters request a specific empresa/project
@@ -502,7 +536,9 @@
           }
         } catch (err) {
           console.error('Error al inicializar empresas:', err);
-          empresasLoading.innerHTML = `<p class="text-xs text-red-500">Error al cargar empresas: ${err.message}</p>`;
+          if (empresasLoading) {
+            empresasLoading.innerHTML = `<p class="text-xs text-red-500">Error al cargar empresas: ${err.message}</p>`;
+          }
         }
       }
 
@@ -542,11 +578,14 @@
         `).join('');
       }
 
-      document.getElementById('filter-empresas').addEventListener('input', (e) => {
-        const query = e.target.value.toLowerCase().trim();
-        const filtered = allCompanies.filter(c => c.name.toLowerCase().includes(query) || (c.code && c.code.toLowerCase().includes(query)));
-        renderEmpresasGrid(filtered);
-      });
+      const filterEmpresasInput = document.getElementById('filter-empresas');
+      if (filterEmpresasInput) {
+        filterEmpresasInput.addEventListener('input', (e) => {
+          const query = e.target.value.toLowerCase().trim();
+          const filtered = allCompanies.filter(c => c.name.toLowerCase().includes(query) || (c.code && c.code.toLowerCase().includes(query)));
+          renderEmpresasGrid(filtered);
+        });
+      }
 
       window.selectEmpresaById = (empresaId) => {
         const company = allCompanies.find(c => c.id === empresaId);
@@ -589,8 +628,11 @@
 
         try {
           const configUrl = company.configUrl || `config-${company.id}.json`;
-          const res = await fetch(`${configUrl}?t=${Date.now()}`);
-          if (!res.ok) throw new Error('No se pudo leer la configuración de proyectos');
+          let res = await fetch(`${configUrl}?t=${Date.now()}`).catch(() => null);
+          if (!res || !res.ok) {
+            res = await fetch(`https://raw.githubusercontent.com/camilomartg-svg/bim/main/${configUrl}?t=${Date.now()}`).catch(() => null);
+          }
+          if (!res || !res.ok) throw new Error('No se pudo leer la configuración de proyectos');
           const data = await res.json();
           const projects = Array.isArray(data.projects) ? data.projects.filter(p => p && p.enabled !== false) : [];
 
@@ -652,12 +694,15 @@
         }).join('');
       }
 
-      document.getElementById('filter-proyectos').addEventListener('input', (e) => {
-        const query = e.target.value.toLowerCase().trim();
-        const list = window._currentEmpresaProjects || [];
-        const filtered = list.filter(p => p.name.toLowerCase().includes(query) || (p.description && p.description.toLowerCase().includes(query)));
-        renderProyectosGrid(filtered);
-      });
+      const filterProyectosInput = document.getElementById('filter-proyectos');
+      if (filterProyectosInput) {
+        filterProyectosInput.addEventListener('input', (e) => {
+          const query = e.target.value.toLowerCase().trim();
+          const list = window._currentEmpresaProjects || [];
+          const filtered = list.filter(p => p.name.toLowerCase().includes(query) || (p.description && p.description.toLowerCase().includes(query)));
+          renderProyectosGrid(filtered);
+        });
+      }
 
       window.selectProyectoBySlug = (slug) => {
         const list = window._currentEmpresaProjects || [];
@@ -730,39 +775,41 @@
         crumbAdmin.classList.remove('flex');
       };
 
-      crumbRoot.addEventListener('click', window.navToEmpresas);
-      crumbEmpresa.addEventListener('click', window.navToProyectos);
+      if (crumbRoot) crumbRoot.addEventListener('click', window.navToEmpresas);
+      if (crumbEmpresa) crumbEmpresa.addEventListener('click', window.navToProyectos);
 
       // ========================================================
       // 4. FILE UPLOAD LOGIC & QUEUE MANAGEMENT
       // ========================================================
-      dropZone.addEventListener('click', () => fileInput.click());
+      if (dropZone && fileInput) {
+        dropZone.addEventListener('click', () => fileInput.click());
 
-      ['dragenter', 'dragover'].forEach(eventName => {
-        dropZone.addEventListener(eventName, (e) => {
-          e.preventDefault();
-          e.stopPropagation();
-          dropZone.classList.add('drag-over');
+        ['dragenter', 'dragover'].forEach(eventName => {
+          dropZone.addEventListener(eventName, (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            dropZone.classList.add('drag-over');
+          });
         });
-      });
 
-      ['dragleave', 'drop'].forEach(eventName => {
-        dropZone.addEventListener(eventName, (e) => {
-          e.preventDefault();
-          e.stopPropagation();
-          dropZone.classList.remove('drag-over');
+        ['dragleave', 'drop'].forEach(eventName => {
+          dropZone.addEventListener(eventName, (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            dropZone.classList.remove('drag-over');
+          });
         });
-      });
 
-      dropZone.addEventListener('drop', (e) => {
-        const files = e.dataTransfer.files;
-        handleFilesSelected(files);
-      });
+        dropZone.addEventListener('drop', (e) => {
+          const files = e.dataTransfer.files;
+          handleFilesSelected(files);
+        });
 
-      fileInput.addEventListener('change', (e) => {
-        handleFilesSelected(e.target.files);
-        fileInput.value = '';
-      });
+        fileInput.addEventListener('change', (e) => {
+          handleFilesSelected(e.target.files);
+          fileInput.value = '';
+        });
+      }
 
       function handleFilesSelected(files) {
         if (!files || !files.length || !currentProject) return;
@@ -1090,15 +1137,16 @@
         });
 
         if (!filtered.length) {
-          filesTableWrapper.classList.add('hidden');
-          filesEmpty.classList.remove('hidden');
+          if (filesTableWrapper) filesTableWrapper.classList.add('hidden');
+          if (filesEmpty) filesEmpty.classList.remove('hidden');
           return;
         }
 
-        filesEmpty.classList.add('hidden');
-        filesTableWrapper.classList.remove('hidden');
+        if (filesEmpty) filesEmpty.classList.add('hidden');
+        if (filesTableWrapper) filesTableWrapper.classList.remove('hidden');
 
-        filesTbody.innerHTML = filtered.map(f => {
+        if (filesTbody) {
+          filesTbody.innerHTML = filtered.map(f => {
           const { icon, color } = getFileIcon(f.name);
           const ext = f.name.split('.').pop().toLowerCase();
 
@@ -1205,7 +1253,9 @@
         renderProjectFilesTable();
       };
 
-      filterFilesSearch.addEventListener('input', renderProjectFilesTable);
+      if (filterFilesSearch) {
+        filterFilesSearch.addEventListener('input', renderProjectFilesTable);
+      }
 
       // ========================================================
       // 6. VERSION HISTORY MODAL
