@@ -218,16 +218,16 @@
         </div>
       </div>
 
-      <!-- Upload Zone Card -->
-      <div class="glass-card rounded-2xl p-6 sm:p-8 shadow-md">
-        <!-- Dropzone con únicamente el ícono pequeño de la hoja -->
-        <div id="drop-zone" class="border-2 border-dashed border-slate-300 dark:border-slate-700 rounded-2xl py-14 px-6 text-center cursor-pointer transition-all hover:border-blue-500 hover:bg-blue-50/20 dark:hover:bg-blue-950/10 flex items-center justify-center group relative">
+      <!-- Zona de Carga: Únicamente la hoja, sin tarjeta ni línea punteada -->
+      <div class="w-full flex flex-col items-center justify-center py-12">
+        <!-- Ícono solitario de la hoja -->
+        <div id="drop-zone" class="cursor-pointer transition-all duration-200 hover:scale-125 flex items-center justify-center p-4 rounded-full select-none" title="Haz clic o arrastra un archivo aquí">
           <input type="file" id="file-input" class="hidden" multiple accept=".ifc,.frag,.json,.pdf,.dwg,.dxf,.rvt,.rfa,.nwc,.nwd,.pln,.xlsx,.bcf" />
-          <span class="material-symbols-outlined text-3xl text-blue-600 dark:text-blue-400 group-hover:scale-110 transition-transform pointer-events-none">upload_file</span>
+          <span class="material-symbols-outlined text-4xl sm:text-5xl text-blue-600 dark:text-blue-400 pointer-events-none">upload_file</span>
         </div>
 
-        <!-- Global Upload Progress (Una sola barra de avance) -->
-        <div id="global-progress-box" class="space-y-2 pt-6 hidden">
+        <!-- Global Upload Progress (Aparece cuando el proyecto se esté cargando y la hoja desaparece) -->
+        <div id="global-progress-box" class="w-full max-w-xl space-y-2 hidden px-4">
           <div class="flex justify-between items-center text-xs">
             <span id="global-progress-status" class="font-semibold text-blue-600 dark:text-blue-400">Subiendo archivos...</span>
             <span id="global-progress-pct" class="font-bold text-slate-700 dark:text-slate-300">0%</span>
@@ -738,9 +738,12 @@
         document.getElementById('active-project-name').textContent = project.name;
         document.getElementById('active-project-desc').textContent = project.description || `Carpeta de gestión y repositorio central del proyecto ${project.name}.`;
 
-        // Reset Queue & Load project files
+        // Reset Queue & ensure leaf icon is visible and progress bar is hidden
         selectedUploadQueue = [];
-        renderUploadQueue();
+        if (dropZone) dropZone.classList.remove('hidden');
+        if (globalProgressBox) globalProgressBox.classList.add('hidden');
+        if (globalProgressBar) globalProgressBar.style.width = '0%';
+        if (globalProgressPct) globalProgressPct.textContent = '0%';
         loadProjectFiles();
       }
 
@@ -788,7 +791,7 @@
           dropZone.addEventListener(eventName, (e) => {
             e.preventDefault();
             e.stopPropagation();
-            dropZone.classList.add('drag-over');
+            dropZone.classList.add('scale-125');
           });
         });
 
@@ -796,7 +799,7 @@
           dropZone.addEventListener(eventName, (e) => {
             e.preventDefault();
             e.stopPropagation();
-            dropZone.classList.remove('drag-over');
+            dropZone.classList.remove('scale-125');
           });
         });
 
@@ -833,6 +836,8 @@
           });
         });
 
+        // Ocultar ícono de la hoja y mostrar barra de avance mientras se carga
+        if (dropZone) dropZone.classList.add('hidden');
         if (globalProgressBox) globalProgressBox.classList.remove('hidden');
         processUploadQueue();
       }
@@ -912,6 +917,16 @@
 
         // Reload project files in background for auto-versioning
         await loadProjectFiles();
+
+        // Ocultar barra de progreso y volver a mostrar la hoja tras unos segundos
+        setTimeout(() => {
+          if (!isUploading) {
+            if (globalProgressBox) globalProgressBox.classList.add('hidden');
+            if (dropZone) dropZone.classList.remove('hidden');
+            if (globalProgressBar) globalProgressBar.style.width = '0%';
+            if (globalProgressPct) globalProgressPct.textContent = '0%';
+          }
+        }, 3500);
       }
 
       // Resumable upload chunker
