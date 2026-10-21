@@ -57,7 +57,7 @@
       border: 1px solid rgba(51, 65, 85, 0.6);
     }
     .drag-over {
-      border-color: #3b82f6 !important;
+
       background-color: rgba(59, 130, 246, 0.05) !important;
     }
     .dark .drag-over {
@@ -224,7 +224,7 @@
 
       <!-- Upload Zone Card -->
       <div class="glass-card rounded-2xl p-6 sm:p-8 shadow-md">
-        <div class="mb-5">
+        <div class="mb-5 hidden">
           <h3 class="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
             <span class="material-symbols-outlined text-blue-600 text-lg">cloud_upload</span>
             Subir Archivos a la Carpeta
@@ -233,13 +233,13 @@
         </div>
 
         <!-- Dropzone -->
-        <div id="drop-zone" class="border-2 border-dashed border-slate-300 dark:border-slate-700 rounded-2xl p-8 sm:p-10 text-center cursor-pointer transition-all hover:border-blue-500 hover:bg-blue-50/20 dark:hover:bg-blue-950/10 group">
+        <div id="drop-zone" class="py-6 flex items-center justify-center cursor-pointer transition-transform group" title="Haz clic o arrastra un archivo aquí">
           <input type="file" id="file-input" class="hidden" multiple accept=".ifc,.frag,.json,.pdf,.dwg,.dxf,.rvt,.rfa,.nwc,.nwd,.pln,.xlsx,.bcf" />
-          <div class="flex flex-col items-center justify-center space-y-3">
+          <div class="flex flex-col items-center justify-center">
             <div class="w-14 h-14 rounded-2xl bg-blue-50 dark:bg-slate-800 border border-blue-100 dark:border-slate-700 flex items-center justify-center text-blue-600 dark:text-blue-400 group-hover:scale-110 transition-transform">
               <span class="material-symbols-outlined text-3xl">upload_file</span>
             </div>
-            <div>
+            <div class="hidden">
               <p class="text-sm font-bold text-slate-800 dark:text-slate-200">
                 Arrastra tus archivos aquí o <span class="text-blue-600 dark:text-blue-400 underline decoration-2">haz clic para buscarlos</span>
               </p>
