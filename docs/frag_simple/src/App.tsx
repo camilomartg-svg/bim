@@ -253,87 +253,83 @@ export default function App() {
   };
 
   return (
-    <div className="min-h-screen bg-white text-[#141414] font-sans p-4 md:p-8 flex flex-col justify-center items-center">
-      <div className="w-full max-w-2xl flex flex-col items-center">
-        {/* Header con Logo de Nora BIM centrado y grande */}
-        <header className="mb-8 md:mb-12 flex justify-center items-center">
-          <img 
-            src="https://i.postimg.cc/SsS0K3Yn/LOGO-NORA-NEGRO.png" 
-            alt="Nora BIM" 
-            className="h-20 sm:h-24 md:h-28 w-auto object-contain"
-          />
-        </header>
+    <div className="min-h-screen w-full bg-white text-[#141414] font-sans flex flex-col m-0 p-0">
+      {/* Header con Logo de Nora BIM centrado */}
+      <header className="w-full py-8 md:py-12 flex justify-center items-center bg-white shrink-0">
+        <img 
+          src="https://i.postimg.cc/SsS0K3Yn/LOGO-NORA-NEGRO.png" 
+          alt="Nora BIM" 
+          className="h-20 sm:h-24 md:h-28 w-auto object-contain"
+        />
+      </header>
 
-        {/* Main Interface: Un solo cuadro grande en la mitad */}
-        <main className="w-full">
-          <div className="w-full min-h-[360px] md:min-h-[400px] bg-[#141414] text-[#E4E3E0] border border-[#141414] p-8 flex flex-col items-center justify-center relative shadow-2xl">
-            <AnimatePresence mode="wait">
-              {state.status === 'success' ? (
-                <motion.div 
-                  key="success"
-                  initial={{ opacity: 0, scale: 0.95 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  exit={{ opacity: 0 }}
-                  className="w-full flex flex-col items-center justify-center"
-                >
-                  <button 
-                    onClick={handleIniciarDescarga}
-                    className="w-full max-w-sm border-2 border-white bg-transparent hover:bg-white hover:text-[#141414] text-white py-4 px-8 flex items-center justify-center font-bold tracking-widest text-base uppercase transition-all duration-300 shadow-xl cursor-pointer"
-                  >
-                    <span>INICIAR CARGA</span>
-                  </button>
-                </motion.div>
-              ) : state.status === 'loading' || state.status === 'converting' ? (
-                <motion.div
-                  key="loading"
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  exit={{ opacity: 0 }}
-                  className="flex flex-col items-center justify-center text-center py-8"
-                >
-                  <Loader2 className="w-10 h-10 animate-spin mb-4 text-white" />
-                  <p className="text-sm font-mono uppercase tracking-wider text-white/80">{state.message}</p>
-                </motion.div>
-              ) : state.status === 'error' ? (
-                <motion.div
-                  key="error"
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  exit={{ opacity: 0 }}
-                  className="flex flex-col items-center justify-center text-center py-8 text-rose-400"
-                >
-                  <AlertCircle className="w-10 h-10 mb-4" />
-                  <p className="text-sm font-mono max-w-md mb-6">{state.message}</p>
-                  <button 
-                    onClick={() => setState({ status: 'idle', message: 'Ready to convert your IFC file.' })}
-                    className="border border-rose-400/60 hover:bg-rose-400 hover:text-[#141414] text-rose-400 px-6 py-2 text-xs font-mono uppercase transition-colors cursor-pointer"
-                  >
-                    Intentar de nuevo
-                  </button>
-                </motion.div>
-              ) : (
-                /* Estado idle: La hojita sola y en el centro */
-                <motion.div
-                  key="idle"
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  exit={{ opacity: 0 }}
-                  className="w-full h-full min-h-[300px] flex items-center justify-center cursor-pointer group relative"
-                >
-                  <input 
-                    type="file" 
-                    accept=".ifc" 
-                    onChange={handleFileUpload}
-                    className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-20"
-                    title="Seleccionar archivo IFC"
-                  />
-                  <FileUp className="w-10 h-10 text-white/40 group-hover:text-white group-hover:scale-110 transition-all duration-300 pointer-events-none" />
-                </motion.div>
-              )}
-            </AnimatePresence>
-          </div>
-        </main>
-      </div>
+      {/* Main Interface: La parte negra ocupa todo el espacio disponible de esa línea para abajo */}
+      <main className="w-full flex-1 flex flex-col items-center justify-center bg-[#141414] text-[#E4E3E0] p-6 relative">
+        <AnimatePresence mode="wait">
+          {state.status === 'success' ? (
+            <motion.div 
+              key="success"
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0 }}
+              className="w-full flex flex-col items-center justify-center"
+            >
+              <button 
+                onClick={handleIniciarDescarga}
+                className="w-full max-w-sm border border-[#2a2a2a] bg-[#1a1a1a] hover:bg-[#222222] hover:border-[#383838] text-white py-4 px-8 flex items-center justify-center font-bold tracking-widest text-base uppercase transition-all duration-300 shadow-xl cursor-pointer"
+              >
+                <span>INICIAR CARGA</span>
+              </button>
+            </motion.div>
+          ) : state.status === 'loading' || state.status === 'converting' ? (
+            <motion.div
+              key="loading"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="flex flex-col items-center justify-center text-center py-8"
+            >
+              <Loader2 className="w-10 h-10 animate-spin mb-4 text-white" />
+              <p className="text-sm font-mono uppercase tracking-wider text-white/80">{state.message}</p>
+            </motion.div>
+          ) : state.status === 'error' ? (
+            <motion.div
+              key="error"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="flex flex-col items-center justify-center text-center py-8 text-rose-400"
+            >
+              <AlertCircle className="w-10 h-10 mb-4" />
+              <p className="text-sm font-mono max-w-md mb-6">{state.message}</p>
+              <button 
+                onClick={() => setState({ status: 'idle', message: 'Ready to convert your IFC file.' })}
+                className="border border-rose-400/60 hover:bg-rose-400 hover:text-[#141414] text-rose-400 px-6 py-2 text-xs font-mono uppercase transition-colors cursor-pointer"
+              >
+                Intentar de nuevo
+              </button>
+            </motion.div>
+          ) : (
+            /* Estado idle: La hojita sola y en el centro */
+            <motion.div
+              key="idle"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="w-full h-full flex-1 flex items-center justify-center cursor-pointer group relative min-h-[300px]"
+            >
+              <input 
+                type="file" 
+                accept=".ifc" 
+                onChange={handleFileUpload}
+                className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-20"
+                title="Seleccionar archivo IFC"
+              />
+              <FileUp className="w-10 h-10 text-white/40 group-hover:text-white group-hover:scale-110 transition-all duration-300 pointer-events-none" />
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </main>
     </div>
   );
 }
