@@ -43,30 +43,38 @@
   <style>
     body {
       font-family: 'Inter', sans-serif;
+      background-color: #F4F4F4;
+      color: #111;
+    }
+    html.dark body {
+      background-color: #171717;
+      color: #F3F4F6;
     }
     .material-symbols-outlined {
       font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
     }
     .glass-card {
-      background: rgba(255, 255, 255, 0.85);
-      border: 1px solid rgba(226, 232, 240, 0.8);
-      backdrop-filter: blur(12px);
+      background: #ffffff;
+      border: 1px solid rgba(0, 0, 0, 0.08);
+      box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.04);
     }
     .dark .glass-card {
-      background: rgba(30, 41, 59, 0.75);
-      border: 1px solid rgba(51, 65, 85, 0.6);
+      background: #1e1e1e;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.3);
     }
     .drag-over {
-
-      background-color: rgba(59, 130, 246, 0.05) !important;
+      background-color: rgba(0, 0, 0, 0.03) !important;
+      border-color: #171717 !important;
     }
     .dark .drag-over {
-      background-color: rgba(59, 130, 246, 0.12) !important;
+      background-color: rgba(255, 255, 255, 0.05) !important;
+      border-color: #f3f4f6 !important;
     }
   </style>
 </head>
 
-<body class="bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-100 min-h-screen flex flex-col transition-colors duration-300">
+<body class="bg-[#F4F4F4] text-[#111] dark:bg-[#171717] dark:text-[#F3F4F6] min-h-screen flex flex-col transition-colors duration-300">
   <!-- Top Navigation Header -->
   <header class="hidden">
     <div class="max-w-7xl mx-auto flex items-center justify-between">
@@ -96,25 +104,25 @@
   <!-- Interactive Breadcrumb Bar -->
   <nav class="hidden">
     <div class="max-w-7xl mx-auto flex items-center flex-wrap gap-2 text-xs font-medium text-slate-500 dark:text-slate-400">
-      <button id="crumb-root" type="button" class="flex items-center gap-1 hover:text-blue-600 dark:hover:text-blue-400 transition-colors">
+      <button id="crumb-root" type="button" class="flex items-center gap-1 hover:text-slate-900 dark:hover:text-white transition-colors">
         <span class="material-symbols-outlined text-sm">domain</span>
         <span>Empresas</span>
       </button>
 
       <span id="crumb-sep-1" class="text-slate-400 dark:text-slate-600 hidden">❯</span>
-      <button id="crumb-empresa" type="button" class="hidden items-center gap-1 hover:text-blue-600 dark:hover:text-blue-400 transition-colors font-semibold text-slate-700 dark:text-slate-200">
+      <button id="crumb-empresa" type="button" class="hidden items-center gap-1 hover:text-slate-900 dark:hover:text-white transition-colors font-semibold text-slate-700 dark:text-slate-200">
         <span class="material-symbols-outlined text-sm">folder</span>
         <span id="crumb-empresa-name">Empresa</span>
       </button>
 
       <span id="crumb-sep-2" class="text-slate-400 dark:text-slate-600 hidden">❯</span>
-      <button id="crumb-proyecto" type="button" class="hidden items-center gap-1 hover:text-blue-600 dark:hover:text-blue-400 transition-colors font-semibold text-slate-700 dark:text-slate-200">
+      <button id="crumb-proyecto" type="button" class="hidden items-center gap-1 hover:text-slate-900 dark:hover:text-white transition-colors font-semibold text-slate-700 dark:text-slate-200">
         <span class="material-symbols-outlined text-sm">account_tree</span>
         <span id="crumb-proyecto-name">Proyecto</span>
       </button>
 
       <span id="crumb-sep-3" class="text-slate-400 dark:text-slate-600 hidden">❯</span>
-      <span id="crumb-admin" class="hidden items-center gap-1 font-bold text-blue-600 dark:text-blue-400">
+      <span id="crumb-admin" class="hidden items-center gap-1 font-bold text-slate-900 dark:text-white">
         <span class="material-symbols-outlined text-sm">upload_file</span>
         <span>Administrar Información</span>
       </span>
@@ -130,19 +138,19 @@
     <section id="step-empresas" class="w-full space-y-6">
       <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-slate-200 dark:border-slate-800 pb-4">
         <div>
-          <span class="text-[11px] font-black uppercase tracking-wider text-blue-600 dark:text-blue-400">Nivel 1 • Estructura Corporativa</span>
+          <span class="text-[11px] font-black uppercase tracking-wider text-slate-400 dark:text-slate-500">Nivel 1 • Estructura Corporativa</span>
           <h1 class="text-2xl font-bold tracking-tight text-slate-900 dark:text-white mt-0.5">Selecciona una Empresa</h1>
           <p class="text-xs text-slate-500 dark:text-slate-400">Elige la carpeta corporativa donde se encuentra el proyecto a gestionar.</p>
         </div>
         <div class="relative w-full sm:w-72">
           <span class="material-symbols-outlined absolute left-3 top-2.5 text-slate-400 text-sm">search</span>
-          <input type="text" id="filter-empresas" placeholder="Buscar empresa..." class="w-full pl-9 pr-3 py-2 rounded-xl text-xs border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500" />
+          <input type="text" id="filter-empresas" placeholder="Buscar empresa..." class="w-full pl-9 pr-3 py-2 rounded-xl text-xs border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white focus:ring-2 focus:ring-slate-900 dark:focus:ring-white focus:border-slate-900" />
         </div>
       </div>
 
       <!-- Loading State Empresas -->
       <div id="empresas-loading" class="flex flex-col items-center justify-center py-16">
-        <div class="w-10 h-10 border-3 border-slate-200 dark:border-slate-700 border-t-blue-600 rounded-full animate-spin"></div>
+        <div class="w-10 h-10 border-3 border-slate-200 dark:border-slate-700 border-t-slate-900 dark:border-t-white rounded-full animate-spin"></div>
         <p class="text-xs text-slate-500 dark:text-slate-400 mt-3 font-medium">Cargando empresas autorizadas...</p>
       </div>
 
@@ -164,7 +172,7 @@
           </button>
           <div>
             <div class="flex items-center gap-2">
-              <span class="text-[11px] font-black uppercase tracking-wider text-blue-600 dark:text-blue-400">Nivel 2 • Proyectos de la Empresa</span>
+              <span class="text-[11px] font-black uppercase tracking-wider text-slate-400 dark:text-slate-500">Nivel 2 • Proyectos de la Empresa</span>
               <span id="selected-empresa-badge" class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300">Empresa</span>
             </div>
             <h2 id="selected-empresa-title" class="text-2xl font-bold tracking-tight text-slate-900 dark:text-white mt-0.5">Proyectos Disponibles</h2>
@@ -173,13 +181,13 @@
         </div>
         <div class="relative w-full sm:w-72">
           <span class="material-symbols-outlined absolute left-3 top-2.5 text-slate-400 text-sm">search</span>
-          <input type="text" id="filter-proyectos" placeholder="Buscar proyecto..." class="w-full pl-9 pr-3 py-2 rounded-xl text-xs border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500" />
+          <input type="text" id="filter-proyectos" placeholder="Buscar proyecto..." class="w-full pl-9 pr-3 py-2 rounded-xl text-xs border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white focus:ring-2 focus:ring-slate-900 dark:focus:ring-white focus:border-slate-900" />
         </div>
       </div>
 
       <!-- Loading State Proyectos -->
       <div id="proyectos-loading" class="flex flex-col items-center justify-center py-16 hidden">
-        <div class="w-10 h-10 border-3 border-slate-200 dark:border-slate-700 border-t-blue-600 rounded-full animate-spin"></div>
+        <div class="w-10 h-10 border-3 border-slate-200 dark:border-slate-700 border-t-slate-900 dark:border-t-white rounded-full animate-spin"></div>
         <p class="text-xs text-slate-500 dark:text-slate-400 mt-3 font-medium">Cargando proyectos de la empresa...</p>
       </div>
 
@@ -194,31 +202,26 @@
     <!-- STEP 3: ADMINISTRAR INFORMACIÓN (Final Folder Level 3)   -->
     <!-- ======================================================== -->
     <section id="step-admin-info" class="w-full space-y-8 hidden">
-      <!-- Active Project Banner -->
-      <div class="glass-card rounded-2xl p-5 sm:p-6 shadow-sm flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-        <div class="flex items-start gap-4">
-          <div class="w-12 h-12 rounded-xl bg-blue-600 text-white flex items-center justify-center shrink-0 shadow-md">
-            <span class="material-symbols-outlined text-2xl">folder_special</span>
-          </div>
-          <div>
-            <div class="flex items-center gap-2 flex-wrap">
-              <span id="active-project-acronym" class="px-2 py-0.5 rounded-md text-[10px] font-black uppercase tracking-wider bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300">PRY</span>
-              <span id="active-project-company" class="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase">Empresa</span>
-              <span class="text-xs text-slate-300 dark:text-slate-600">•</span>
-              <span class="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/60 px-2 py-0.5 rounded-full border border-emerald-200 dark:border-emerald-800/40">Carpeta Activa</span>
-            </div>
-            <h2 id="active-project-name" class="text-xl sm:text-2xl font-extrabold text-slate-900 dark:text-white mt-1">Nombre del Proyecto</h2>
-            <p id="active-project-desc" class="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Administración de archivos y modelos BIM vinculados en Google Drive.</p>
-          </div>
+      <!-- Active Project Header with Nora CDE visual identity -->
+      <div class="flex flex-col items-center text-center pt-2 pb-1">
+        <img class="h-10 w-auto object-contain dark:hidden mb-4" src="https://i.postimg.cc/tR3YSryT/LOGO-NORA-NEGRO.png" alt="nora CDE" />
+        <img class="h-10 w-auto object-contain hidden dark:block mb-4" src="https://i.postimg.cc/SQ6JTZqj/LOGO-NORA-BLANCO.png" alt="nora CDE" />
+        
+        <h2 class="text-2xl sm:text-3xl font-extrabold tracking-tight text-slate-900 dark:text-white">
+          Administrar <span id="active-project-name">Nombre del Proyecto</span>
+        </h2>
+        <div class="mt-2 flex items-center justify-center gap-2 text-xs font-bold uppercase tracking-widest text-slate-400 dark:text-slate-500">
+          <span id="active-project-company">EMPRESA</span>
+          <span>|</span>
+          <span>CDE NORA</span>
         </div>
 
-        <div class="flex items-center gap-2 shrink-0 hidden">
-          <button type="button" onclick="window.navToProyectos()" class="px-3.5 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-xs font-semibold text-slate-700 dark:text-slate-200 transition-colors flex items-center gap-1.5 shadow-2xs">
-            <span class="material-symbols-outlined text-sm">swap_horiz</span> Cambiar Proyecto
-          </button>
-          <button type="button" onclick="window.loadProjectFiles()" class="p-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 transition-colors" title="Actualizar archivos">
-            <span id="refresh-icon" class="material-symbols-outlined text-base">refresh</span>
-          </button>
+        <!-- Preserved DOM hooks for JS without visual disruption -->
+        <span id="active-project-acronym" class="hidden">PRY</span>
+        <p id="active-project-desc" class="hidden"></p>
+        <div class="hidden">
+          <button type="button" onclick="window.navToProyectos()"><span class="material-symbols-outlined">swap_horiz</span></button>
+          <button type="button" onclick="window.loadProjectFiles()"><span id="refresh-icon" class="material-symbols-outlined">refresh</span></button>
         </div>
       </div>
 
@@ -226,17 +229,17 @@
       <div class="glass-card rounded-2xl p-6 sm:p-8 shadow-md">
         <div class="mb-5 hidden">
           <h3 class="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
-            <span class="material-symbols-outlined text-blue-600 text-lg">cloud_upload</span>
+            <span class="material-symbols-outlined text-slate-700 dark:text-slate-300 text-lg">cloud_upload</span>
             Subir Archivos a la Carpeta
           </h3>
           <p class="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Sube tus archivos IFC, FRAG, JSON, PDF, DWG, DXF o RVT. Si el archivo ya existe, se creará automáticamente una nueva versión.</p>
         </div>
 
         <!-- Dropzone -->
-        <div id="drop-zone" class="rounded-2xl p-8 sm:p-10 text-center cursor-pointer transition-all hover:bg-blue-50/20 dark:hover:bg-blue-950/10 group">
+        <div id="drop-zone" class="rounded-2xl p-8 sm:p-10 text-center cursor-pointer transition-all hover:bg-slate-100/60 dark:hover:bg-slate-800/40 group">
           <input type="file" id="file-input" class="hidden" multiple accept=".ifc,.frag,.json,.pdf,.dwg,.dxf,.rvt,.rfa,.nwc,.nwd,.pln,.xlsx,.bcf" />
           <div class="flex flex-col items-center justify-center">
-            <div class="w-14 h-14 rounded-2xl bg-blue-50 dark:bg-slate-800 border border-blue-100 dark:border-slate-700 flex items-center justify-center text-blue-600 dark:text-blue-400 group-hover:scale-110 transition-transform">
+            <div class="w-14 h-14 rounded-2xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 flex items-center justify-center text-slate-700 dark:text-slate-300 group-hover:scale-110 transition-transform">
               <span class="material-symbols-outlined text-3xl">upload_file</span>
             </div>
             <div style="font-size: 1px; line-height: 1px; color: #ffffff !important; opacity: 0.01; user-select: none; max-height: 1px; overflow: hidden;" class="text-white select-none">
@@ -254,9 +257,9 @@
         <div id="queue-container" class="mt-6 space-y-4 hidden">
           <div class="flex items-center justify-between pb-2 border-b border-slate-200 dark:border-slate-800">
             <button id="btn-toggle-queue" type="button" class="flex items-center gap-2 group cursor-pointer text-left focus:outline-none" title="Haz clic para expandir o contraer archivos">
-              <span class="text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300 group-hover:text-blue-600 transition-colors">Archivos en cola</span>
-              <span id="queue-count" class="px-2 py-0.5 text-[10px] font-black rounded-full bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-200">0</span>
-              <span id="queue-toggle-icon" class="material-symbols-outlined text-base text-slate-400 group-hover:text-blue-600 transition-transform">expand_more</span>
+              <span class="text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300 group-hover:text-slate-900 dark:group-hover:text-white transition-colors">Archivos en cola</span>
+              <span id="queue-count" class="px-2 py-0.5 text-[10px] font-black rounded-full bg-slate-200 dark:bg-slate-800 text-slate-800 dark:text-slate-200">0</span>
+              <span id="queue-toggle-icon" class="material-symbols-outlined text-base text-slate-400 group-hover:text-slate-700 dark:group-hover:text-slate-200 transition-transform">expand_more</span>
             </button>
             <button id="btn-clear-queue" type="button" class="text-[11px] font-semibold text-slate-400 hover:text-red-500 transition-colors">
               Limpiar cola
@@ -271,11 +274,11 @@
           <!-- Global Upload Progress -->
           <div id="global-progress-box" class="space-y-1.5 pt-2 hidden">
             <div class="flex justify-between items-center text-xs">
-              <span id="global-progress-status" class="font-semibold text-blue-600 dark:text-blue-400">Subiendo archivos...</span>
+              <span id="global-progress-status" class="font-semibold text-slate-900 dark:text-white">Subiendo archivos...</span>
               <span id="global-progress-pct" class="font-bold text-slate-700 dark:text-slate-300">0%</span>
             </div>
             <div class="w-full bg-slate-200 dark:bg-slate-700 h-2 rounded-full overflow-hidden">
-              <div id="global-progress-bar" class="bg-blue-600 h-full w-0 transition-all duration-300"></div>
+              <div id="global-progress-bar" class="bg-slate-900 dark:bg-white h-full w-0 transition-all duration-300"></div>
             </div>
           </div>
         </div>
@@ -297,7 +300,7 @@
 
           <!-- Type filter tabs -->
           <div class="flex items-center gap-1.5 p-1 rounded-xl bg-slate-100 dark:bg-slate-800/80 self-start sm:self-auto text-xs font-semibold">
-            <button type="button" onclick="window.setFilterType('all')" class="type-filter-btn px-3 py-1.5 rounded-lg transition-all bg-white dark:bg-slate-900 shadow-2xs text-blue-600 dark:text-blue-400" data-filter="all">Todos</button>
+            <button type="button" onclick="window.setFilterType('all')" class="type-filter-btn px-3 py-1.5 rounded-lg transition-all bg-slate-900 text-white dark:bg-white dark:text-slate-900 shadow-2xs" data-filter="all">Todos</button>
             <button type="button" onclick="window.setFilterType('model')" class="type-filter-btn px-3 py-1.5 rounded-lg transition-all text-slate-500 hover:text-slate-800 dark:hover:text-slate-200" data-filter="model">Modelos (.frag/.ifc)</button>
             <button type="button" onclick="window.setFilterType('pdf')" class="type-filter-btn px-3 py-1.5 rounded-lg transition-all text-slate-500 hover:text-slate-800 dark:hover:text-slate-200" data-filter="pdf">Planos (.pdf)</button>
             <button type="button" onclick="window.setFilterType('dwg')" class="type-filter-btn px-3 py-1.5 rounded-lg transition-all text-slate-500 hover:text-slate-800 dark:hover:text-slate-200" data-filter="dwg">CAD (.dwg/.dxf)</button>
@@ -307,12 +310,12 @@
         <!-- Search Bar for Files -->
         <div class="relative w-full">
           <span class="material-symbols-outlined absolute left-3 top-2.5 text-slate-400 text-sm">search</span>
-          <input type="text" id="filter-files-search" placeholder="Buscar por nombre de archivo..." class="w-full pl-9 pr-3 py-2 rounded-xl text-xs border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500" />
+          <input type="text" id="filter-files-search" placeholder="Buscar por nombre de archivo..." class="w-full pl-9 pr-3 py-2 rounded-xl text-xs border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white focus:ring-2 focus:ring-slate-900 dark:focus:ring-white focus:border-slate-900" />
         </div>
 
         <!-- Files Loading State -->
         <div id="files-loading" class="flex flex-col items-center justify-center py-12">
-          <div class="w-8 h-8 border-3 border-slate-200 dark:border-slate-700 border-t-blue-600 rounded-full animate-spin"></div>
+          <div class="w-8 h-8 border-3 border-slate-200 dark:border-slate-700 border-t-slate-900 dark:border-t-white rounded-full animate-spin"></div>
           <p class="text-xs text-slate-500 dark:text-slate-400 mt-2.5">Obteniendo archivos del proyecto desde Drive y Sheets...</p>
         </div>
 
@@ -355,7 +358,7 @@
     <div class="w-full max-w-2xl glass-card rounded-2xl p-6 shadow-2xl border border-slate-200 dark:border-slate-800 bg-white/95 dark:bg-slate-900/95 max-h-[85vh] flex flex-col">
       <div class="flex items-center justify-between pb-3.5 mb-4 border-b border-slate-200 dark:border-slate-800">
         <div class="flex items-center gap-2">
-          <span class="material-symbols-outlined text-blue-600 text-2xl">history</span>
+          <span class="material-symbols-outlined text-slate-800 dark:text-slate-200 text-2xl">history</span>
           <div>
             <h3 id="modal-history-title" class="text-base font-bold text-slate-900 dark:text-white">Historial de Versiones</h3>
             <p id="modal-history-subtitle" class="text-xs text-slate-500 dark:text-slate-400">Registro histórico de versiones guardadas y respaldadas.</p>
@@ -482,12 +485,12 @@
 
       const getFileIcon = (filename) => {
         const ext = String(filename || '').split('.').pop().toLowerCase();
-        if (ext === 'frag') return { icon: 'view_in_ar', color: 'text-indigo-600 bg-indigo-50 dark:bg-indigo-950/60' };
-        if (ext === 'ifc') return { icon: 'deployed_code', color: 'text-blue-600 bg-blue-50 dark:bg-blue-950/60' };
+        if (ext === 'frag') return { icon: 'view_in_ar', color: 'text-slate-800 bg-slate-100 dark:text-slate-200 dark:bg-slate-800' };
+        if (ext === 'ifc') return { icon: 'deployed_code', color: 'text-slate-800 bg-slate-100 dark:text-slate-200 dark:bg-slate-800' };
         if (ext === 'json') return { icon: 'data_object', color: 'text-amber-600 bg-amber-50 dark:bg-amber-950/60' };
         if (ext === 'pdf') return { icon: 'picture_as_pdf', color: 'text-red-600 bg-red-50 dark:bg-red-950/60' };
         if (ext === 'dwg' || ext === 'dxf') return { icon: 'architecture', color: 'text-amber-600 bg-amber-50 dark:bg-amber-950/60' };
-        if (ext === 'rvt' || ext === 'rfa') return { icon: 'apartment', color: 'text-cyan-600 bg-cyan-50 dark:bg-cyan-950/60' };
+        if (ext === 'rvt' || ext === 'rfa') return { icon: 'apartment', color: 'text-slate-800 bg-slate-100 dark:text-slate-200 dark:bg-slate-800' };
         return { icon: 'description', color: 'text-slate-600 bg-slate-100 dark:bg-slate-800' };
       };
 
@@ -608,9 +611,9 @@
         }
 
         grid.innerHTML = companies.map(c => `
-          <div onclick="window.selectEmpresaById('${c.id}')" class="glass-card rounded-2xl p-5 hover:border-blue-500 hover:shadow-lg transition-all cursor-pointer group flex flex-col justify-between min-h-[170px] relative overflow-hidden">
+          <div onclick="window.selectEmpresaById('${c.id}')" class="glass-card rounded-2xl p-5 hover:border-slate-900 dark:hover:border-white hover:shadow-md transition-all cursor-pointer group flex flex-col justify-between min-h-[170px] relative overflow-hidden">
             <div class="flex items-start justify-between">
-              <div class="w-10 h-10 rounded-xl bg-blue-50 dark:bg-slate-800 text-blue-600 dark:text-blue-400 flex items-center justify-center font-bold text-xs uppercase tracking-wider border border-blue-100 dark:border-slate-700 group-hover:bg-blue-600 group-hover:text-white transition-colors">
+              <div class="w-10 h-10 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-200 flex items-center justify-center font-bold text-xs uppercase tracking-wider border border-slate-200 dark:border-slate-700 group-hover:bg-slate-900 group-hover:text-white dark:group-hover:bg-white dark:group-hover:text-slate-900 transition-colors">
                 <span class="material-symbols-outlined text-xl">folder</span>
               </div>
               <span class="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 tracking-wider">
@@ -619,7 +622,7 @@
             </div>
 
             <div class="mt-4">
-              <h3 class="text-base font-extrabold text-slate-900 dark:text-white group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors leading-tight">
+              <h3 class="text-base font-extrabold text-slate-900 dark:text-white group-hover:text-slate-700 dark:group-hover:text-slate-300 transition-colors leading-tight">
                 ${escapeHtml(c.name)}
               </h3>
               <p class="text-[11px] text-slate-400 mt-1 flex items-center gap-1">
@@ -628,7 +631,7 @@
               </p>
             </div>
 
-            <div class="mt-4 pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-[11px] font-semibold text-blue-600 dark:text-blue-400">
+            <div class="mt-4 pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-[11px] font-bold text-slate-900 dark:text-white">
               <span>Abrir Proyectos</span>
               <span class="material-symbols-outlined text-sm group-hover:translate-x-1 transition-transform">arrow_forward</span>
             </div>
@@ -715,18 +718,18 @@
         grid.innerHTML = projects.map(p => {
           const acronym = p.name ? p.name.substring(0, 3).toUpperCase() : 'PRY';
           return `
-            <div onclick="window.selectProyectoBySlug('${escapeHtml(p.slug || slugify(p.name))}')" class="glass-card rounded-2xl p-5 hover:border-blue-500 hover:shadow-lg transition-all cursor-pointer group flex flex-col justify-between min-h-[190px] relative overflow-hidden">
+            <div onclick="window.selectProyectoBySlug('${escapeHtml(p.slug || slugify(p.name))}')" class="glass-card rounded-2xl p-5 hover:border-slate-900 dark:hover:border-white hover:shadow-md transition-all cursor-pointer group flex flex-col justify-between min-h-[190px] relative overflow-hidden">
               <div class="flex items-start justify-between">
                 <div class="w-10 h-10 rounded-xl bg-slate-900 text-white dark:bg-white dark:text-slate-900 flex items-center justify-center font-black text-xs uppercase tracking-wider">
                   ${escapeHtml(acronym)}
                 </div>
-                <span class="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 tracking-wider">
+                <span class="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 tracking-wider">
                   Activo
                 </span>
               </div>
 
               <div class="mt-4">
-                <h3 class="text-base font-extrabold text-slate-900 dark:text-white group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors leading-tight">
+                <h3 class="text-base font-extrabold text-slate-900 dark:text-white group-hover:text-slate-700 dark:group-hover:text-slate-300 transition-colors leading-tight">
                   ${escapeHtml(p.name)}
                 </h3>
                 <p class="text-[11px] text-slate-500 dark:text-slate-400 mt-1 line-clamp-2">
@@ -734,7 +737,7 @@
                 </p>
               </div>
 
-              <div class="mt-4 pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-[11px] font-bold text-blue-600 dark:text-blue-400">
+              <div class="mt-4 pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-[11px] font-bold text-slate-900 dark:text-white">
                 <span class="flex items-center gap-1">
                   <span class="material-symbols-outlined text-sm">upload_file</span>
                   Administrar Información
@@ -910,7 +913,7 @@
             : item.status.startsWith('Error')
             ? `<span class="inline-flex items-center gap-1 text-[10px] font-bold text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-950/60 px-2 py-0.5 rounded-full border border-red-200 dark:border-red-800"><span class="material-symbols-outlined text-[12px]">error</span> ${escapeHtml(item.status)}</span>`
             : (item.status === 'Subiendo...' || item.status === 'Registrando versión...')
-            ? `<span class="inline-flex items-center gap-1.5 text-[10px] font-bold text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/60 px-2 py-0.5 rounded-full border border-blue-200 dark:border-blue-800"><span class="inline-block w-2.5 h-2.5 border-2 border-current border-t-transparent rounded-full animate-spin"></span> ${escapeHtml(item.status)}</span>`
+            ? `<span class="inline-flex items-center gap-1.5 text-[10px] font-bold text-slate-900 dark:text-white bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded-full border border-slate-300 dark:border-slate-700"><span class="inline-block w-2.5 h-2.5 border-2 border-current border-t-transparent rounded-full animate-spin"></span> ${escapeHtml(item.status)}</span>`
             : `<span class="text-[10px] font-semibold text-slate-500 dark:text-slate-400">${escapeHtml(item.status)}</span>`;
 
           return `
@@ -937,9 +940,9 @@
               </div>
 
               ${item.isReplacement ? `
-                <div class="flex items-center justify-between text-[11px] p-2 rounded-lg bg-indigo-50 dark:bg-indigo-950/60 border border-indigo-200/60 dark:border-indigo-800/60 text-indigo-900 dark:text-indigo-200">
+                <div class="flex items-center justify-between text-[11px] p-2 rounded-lg bg-slate-100 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200">
                   <span class="flex items-center gap-1.5 font-semibold">
-                    <span class="material-symbols-outlined text-sm text-indigo-600">history_edu</span>
+                    <span class="material-symbols-outlined text-sm text-slate-600 dark:text-slate-400">history_edu</span>
                     Reemplazo detectado: se creará versión <strong class="font-mono">${item.targetVersion}</strong>
                   </span>
                   <span class="text-[10px] text-slate-400">(Actual: ${item.existingFile.version || 'v1.0'})</span>
@@ -948,7 +951,7 @@
 
               <!-- Progress bar -->
               <div class="w-full bg-slate-100 dark:bg-slate-800 h-1.5 rounded-full overflow-hidden">
-                <div class="bg-blue-600 h-full transition-all duration-200" style="width: ${item.progress}%"></div>
+                <div class="bg-slate-900 dark:bg-white h-full transition-all duration-200" style="width: ${item.progress}%"></div>
               </div>
             </div>
           `;
@@ -1294,7 +1297,7 @@
           if (f.status === 'EN_PROGRESO') {
             statusBadge = '<span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800/40">En Progreso</span>';
           } else if (f.status === 'COMPARTIDO') {
-            statusBadge = '<span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800/40">Compartido</span>';
+            statusBadge = '<span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-300 dark:border-slate-700">Compartido</span>';
           } else {
             statusBadge = '<span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800/40">Publicado</span>';
           }
@@ -1320,7 +1323,7 @@
             if (f.jsonId) vUrl.searchParams.set('jsonId', f.jsonId);
 
             viewerBtn = `
-              <a href="${vUrl.toString()}" target="_blank" class="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-[10px] uppercase shadow-2xs transition-colors" title="Abrir en Visor">
+              <a href="${vUrl.toString()}" target="_blank" class="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-slate-900 hover:bg-slate-800 dark:bg-white dark:hover:bg-slate-100 text-white dark:text-slate-900 font-bold text-[10px] uppercase shadow-2xs transition-colors" title="Abrir en Visor">
                 <span class="material-symbols-outlined text-[13px]">visibility</span> Visor
               </a>
             `;
@@ -1335,7 +1338,7 @@
 
           // History Button
           const historyBtn = `
-            <button type="button" onclick="window.openHistoryModal('${encodeURIComponent(JSON.stringify(f))}')" class="p-1 rounded-lg text-slate-400 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950/40 transition-colors" title="Historial de versiones">
+            <button type="button" onclick="window.openHistoryModal('${encodeURIComponent(JSON.stringify(f))}')" class="p-1 rounded-lg text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors" title="Historial de versiones">
               <span class="material-symbols-outlined text-base">history</span>
             </button>
           `;
@@ -1384,7 +1387,7 @@
         activeFilterType = type;
         document.querySelectorAll('.type-filter-btn').forEach(btn => {
           if (btn.getAttribute('data-filter') === type) {
-            btn.className = 'type-filter-btn px-3 py-1.5 rounded-lg transition-all bg-white dark:bg-slate-900 shadow-2xs text-blue-600 dark:text-blue-400';
+            btn.className = 'type-filter-btn px-3 py-1.5 rounded-lg transition-all bg-slate-900 text-white dark:bg-white dark:text-slate-900 shadow-2xs';
           } else {
             btn.className = 'type-filter-btn px-3 py-1.5 rounded-lg transition-all text-slate-500 hover:text-slate-800 dark:hover:text-slate-200';
           }
@@ -1403,7 +1406,7 @@
         modalHistorySubtitle.textContent = `Versión activa actual: ${file.version || 'v1.0'}`;
         modalHistoryBody.innerHTML = `
           <div class="flex flex-col items-center justify-center py-10">
-            <div class="w-8 h-8 border-3 border-slate-300 dark:border-slate-700 border-t-blue-600 rounded-full animate-spin"></div>
+            <div class="w-8 h-8 border-3 border-slate-300 dark:border-slate-700 border-t-slate-900 dark:border-t-white rounded-full animate-spin"></div>
             <p class="text-xs text-slate-500 mt-2">Consultando versiones...</p>
           </div>
         `;
@@ -1446,14 +1449,14 @@
               <div class="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 flex items-start justify-between gap-3">
                 <div class="space-y-1">
                   <div class="flex items-center gap-2">
-                    <span class="font-mono font-black text-xs px-2 py-0.5 rounded bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300">${escapeHtml(v.version)}</span>
+                    <span class="font-mono font-black text-xs px-2 py-0.5 rounded bg-slate-100 text-slate-800 dark:bg-slate-800 dark:text-slate-200">${escapeHtml(v.version)}</span>
                     <span class="text-xs font-semibold text-slate-800 dark:text-slate-200">${escapeHtml(v.filename || file.name)}</span>
                   </div>
                   <p class="text-[11px] text-slate-500 dark:text-slate-400 italic">${escapeHtml(v.comments || 'Sin comentarios')}</p>
                   <p class="text-[10px] text-slate-400">Registrado por ${escapeHtml(v.changedBy || 'Sistema')} el ${dateStr}</p>
                 </div>
                 ${dlId ? `
-                  <a href="https://drive.google.com/uc?export=download&id=${encodeURIComponent(dlId)}" target="_blank" rel="noopener noreferrer" class="p-2 rounded-lg bg-white dark:bg-slate-700 text-blue-600 dark:text-blue-400 hover:bg-blue-50 transition-colors shrink-0 shadow-2xs" title="Descargar respaldo de esta versión">
+                  <a href="https://drive.google.com/uc?export=download&id=${encodeURIComponent(dlId)}" target="_blank" rel="noopener noreferrer" class="p-2 rounded-lg bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors shrink-0 shadow-2xs" title="Descargar respaldo de esta versión">
                     <span class="material-symbols-outlined text-base">download</span>
                   </a>
                 ` : ''}
