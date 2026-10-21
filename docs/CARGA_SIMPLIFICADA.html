@@ -894,9 +894,11 @@
       function renderUploadQueue() {
         if (!selectedUploadQueue.length) {
           queueContainer.classList.add('hidden');
+          if (dropZone) dropZone.classList.remove('hidden');
           return;
         }
 
+        if (dropZone) dropZone.classList.add('hidden');
         queueContainer.classList.remove('hidden');
         queueCount.textContent = selectedUploadQueue.length;
 
@@ -968,6 +970,7 @@
         if (!selectedUploadQueue.length || !currentProject || isUploading) return;
 
         isUploading = true;
+        if (dropZone) dropZone.classList.add('hidden');
         if (btnClearQueue) btnClearQueue.classList.add('hidden');
         globalProgressBox.classList.remove('hidden');
 
