@@ -253,17 +253,18 @@
         <!-- Upload Queue Section -->
         <div id="queue-container" class="mt-6 space-y-4 hidden">
           <div class="flex items-center justify-between pb-2 border-b border-slate-200 dark:border-slate-800">
-            <div class="flex items-center gap-2">
-              <span class="text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">Archivos en cola</span>
+            <button id="btn-toggle-queue" type="button" class="flex items-center gap-2 group cursor-pointer text-left focus:outline-none" title="Haz clic para expandir o contraer archivos">
+              <span class="text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300 group-hover:text-blue-600 transition-colors">Archivos en cola</span>
               <span id="queue-count" class="px-2 py-0.5 text-[10px] font-black rounded-full bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-200">0</span>
-            </div>
+              <span id="queue-toggle-icon" class="material-symbols-outlined text-base text-slate-400 group-hover:text-blue-600 transition-transform">expand_more</span>
+            </button>
             <button id="btn-clear-queue" type="button" class="text-[11px] font-semibold text-slate-400 hover:text-red-500 transition-colors">
               Limpiar cola
             </button>
           </div>
 
           <!-- Queue List -->
-          <div id="queue-list" class="space-y-2.5 max-h-72 overflow-y-auto pr-1">
+          <div id="queue-list" class="space-y-2.5 max-h-72 overflow-y-auto pr-1 hidden">
             <!-- Injected by JS -->
           </div>
 
@@ -959,7 +960,23 @@
         renderUploadQueue();
       };
 
-      btnClearQueue.addEventListener('click', () => {
+      const btnToggleQueue = document.getElementById('btn-toggle-queue');
+            const queueToggleIcon = document.getElementById('queue-toggle-icon');
+      
+            if (btnToggleQueue && queueList) {
+              btnToggleQueue.addEventListener('click', () => {
+                const isCollapsed = queueList.classList.contains('hidden');
+                if (isCollapsed) {
+                  queueList.classList.remove('hidden');
+                  if (queueToggleIcon) queueToggleIcon.textContent = 'expand_less';
+                } else {
+                  queueList.classList.add('hidden');
+                  if (queueToggleIcon) queueToggleIcon.textContent = 'expand_more';
+                }
+              });
+            }
+      
+            btnClearQueue.addEventListener('click', () => {
         if (isUploading) return;
         selectedUploadQueue = [];
         renderUploadQueue();
