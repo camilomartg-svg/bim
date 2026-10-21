@@ -861,10 +861,38 @@
         fileInput.value = '';
       });
 
+      function hasRvtAssociated(baseName, currentFiles) {
+        const norm = s => String(s || '').trim().toLowerCase();
+        const target = norm(baseName);
+        const inBatch = Array.from(currentFiles || []).some(f => {
+          const ext = String(f.name || '').split('.').pop().toLowerCase();
+          return ext === 'rvt' && norm(f.name.replace(/\.[^/.]+$/, '')) === target;
+        });
+        if (inBatch) return true;
+        const inQueue = (selectedUploadQueue || []).some(f => {
+          const ext = String(f.name || '').split('.').pop().toLowerCase();
+          return ext === 'rvt' && norm(f.name.replace(/\.[^/.]+$/, '')) === target;
+        });
+        if (inQueue) return true;
+        const inProject = (projectFiles || []).some(f => {
+          const ext = String(f.name || '').split('.').pop().toLowerCase();
+          return ext === 'rvt' && norm(f.name.replace(/\.[^/.]+$/, '')) === target;
+        });
+        return inProject;
+      }
+
       function handleFilesSelected(files) {
         if (!files || !files.length || !currentProject) return;
 
         Array.from(files).forEach(file => {
+          const ext = String(file.name || '').split('.').pop().toLowerCase();
+          if (ext === 'frag' || ext === 'json') {
+            const baseName = file.name.replace(/\.[^/.]+$/, '');
+            if (!hasRvtAssociated(baseName, files)) {
+              alert(`No se permite subir "${file.name}" sin su archivo Revit (.rvt) correspondiente.\n\nTodo archivo FRAG o JSON debe estar anclado a un archivo .rvt con el mismo nombre (ej: "${baseName}.rvt").`);
+              return;
+            }
+          }
           const matchingExisting = findMatchingFile(file.name);
           const isReplacement = !!matchingExisting;
           const currentVer = matchingExisting ? (matchingExisting.version || 'v1.0') : 'v1.0';
@@ -1257,7 +1285,31 @@
           (listData.dwgs || []).forEach(d => pushItem(d, 'dwg'));
           (listData.pdfs || []).forEach(p => pushItem(p, 'pdf'));
 
-          projectFiles = combined;
+          // Emparejar RVT con su FRAG + JSON asociado por mismo nombre
+          const fragsMap = new Map();
+          combined.forEach(f => {
+            const ext = String(f.name || '').split('.').pop().toLowerCase();
+            if (ext === 'frag') {
+              const base = f.name.replace(/\.frag$/i, '').trim().toLowerCase();
+              fragsMap.set(base, f);
+            }
+          });
+
+          combined.forEach(f => {
+            const ext = String(f.name || '').split('.').pop().toLowerCase();
+            if (ext === 'rvt') {
+              const base = f.name.replace(/\.rvt$/i, '').trim().toLowerCase();
+              const paired = fragsMap.get(base);
+              if (paired) {
+                f.pairedFragId = paired.fileId;
+                f.pairedFragName = paired.name;
+                f.pairedFragJsonId = paired.jsonId || '';
+                paired._derivedFromRvt = true;
+              }
+            }
+          });
+
+          projectFiles = combined.filter(f => !f._derivedFromRvt);
           filesBadgeCount.textContent = projectFiles.length;
           filesLoading.classList.add('hidden');
           refreshIcon.classList.remove('animate-spin');
@@ -1305,9 +1357,25 @@
           // Viewer Link
           let viewerBtn = '';
           let viewerPath = '';
-          if (ext === 'frag' || ext === 'ifc') viewerPath = 'VSR_IFCA/';
-          else if (ext === 'pdf') viewerPath = 'VSR_PDFA/';
-          else if (ext === 'dwg' || ext === 'dxf') viewerPath = 'VSR_DWGA/';
+          let targetFileId = f.fileId;
+          let targetFileName = f.name;
+          let targetJsonId = f.jsonId;
+
+          if (ext === 'frag' || ext === 'ifc') {
+            viewerPath = 'VSR_IFCA/';
+          } else if (ext === 'rvt') {
+            // RVT se visualiza mediante su FRAG emparejado si existe
+            if (f.pairedFragId) {
+              viewerPath = 'VSR_IFCA/';
+              targetFileId = f.pairedFragId;
+              targetFileName = f.pairedFragName || f.name.replace(/\.rvt$/i, '.frag');
+              targetJsonId = f.pairedFragJsonId || '';
+            }
+          } else if (ext === 'pdf') {
+            viewerPath = 'VSR_PDFA/';
+          } else if (ext === 'dwg' || ext === 'dxf') {
+            viewerPath = 'VSR_DWGA/';
+          }
 
           if (viewerPath) {
             const vUrl = new URL(viewerPath, window.location.href);
@@ -1318,9 +1386,9 @@
               if (ds.driveFolderName) vUrl.searchParams.set('driveFolderName', ds.driveFolderName);
               if (ds.driveFolderId) vUrl.searchParams.set('driveFolderId', ds.driveFolderId);
             }
-            if (f.fileId) vUrl.searchParams.set('fileId', f.fileId);
-            if (f.name) vUrl.searchParams.set('file', f.name);
-            if (f.jsonId) vUrl.searchParams.set('jsonId', f.jsonId);
+            if (targetFileId) vUrl.searchParams.set('fileId', targetFileId);
+            if (targetFileName) vUrl.searchParams.set('file', targetFileName);
+            if (targetJsonId) vUrl.searchParams.set('jsonId', targetJsonId);
 
             viewerBtn = `
               <a href="${vUrl.toString()}" target="_blank" class="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-slate-900 hover:bg-slate-800 dark:bg-white dark:hover:bg-slate-100 text-white dark:text-slate-900 font-bold text-[10px] uppercase shadow-2xs transition-colors" title="Abrir en Visor">

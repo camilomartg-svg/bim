@@ -2066,7 +2066,7 @@
 
         // Dynamically recalculate authorized files, tabs and active view
         function refreshAuthorizedProjectFiles() {
-          allProjectFiles = (rawProjectFilesCache || []).filter(f => isUserAuthorizedForFile(f, 'view') && !f._derivedFromIfc);
+          allProjectFiles = (rawProjectFilesCache || []).filter(f => isUserAuthorizedForFile(f, 'view') && !f._derivedFromIfc && !f._derivedFromRvt);
 
           const effective = getCurrentEffectivePermissions();
 
@@ -2284,6 +2284,46 @@
         renderFilesList();
       }
 
+      function hasRvtAssociated(baseName, currentBatch) {
+        const norm = s => String(s || '').trim().toLowerCase();
+        const target = norm(baseName);
+
+        // 1. ¿Está el .rvt en el lote actual que se intenta agregar?
+        const inBatch = Array.from(currentBatch || []).some(f => {
+          const ext = getFileExtension(f.name);
+          if (ext === 'rvt') {
+            const b = f.name.replace(/\.[^/.]+$/, '');
+            return norm(b) === target;
+          }
+          return false;
+        });
+        if (inBatch) return true;
+
+        // 2. ¿Está el .rvt ya en la cola de subida (selectedFiles)?
+        const inQueue = (selectedFiles || []).some(f => {
+          const ext = getFileExtension(f.file?.name);
+          if (ext === 'rvt') {
+            const b = f.file.name.replace(/\.[^/.]+$/, '');
+            return norm(b) === target;
+          }
+          return false;
+        });
+        if (inQueue) return true;
+
+        // 3. ¿Existe ya un .rvt con ese nombre en el proyecto (Google Drive)?
+        const inProject = (rawProjectFilesCache || []).some(f => {
+          const ext = getFileExtension(f.name);
+          if (ext === 'rvt') {
+            const b = f.name.replace(/\.[^/.]+$/, '');
+            return norm(b) === target;
+          }
+          return false;
+        });
+        if (inProject) return true;
+
+        return false;
+      }
+
       function handleFilesSelection(filesList) {
         if (isUploading) return;
         
@@ -2297,6 +2337,16 @@
           if (!allowed.includes(ext)) {
             alert(`El archivo "${file.name}" no tiene un formato válido. Formatos admitidos: IFC, BCF, RVT, RFA, NWC, NWD, DWG, DXF, PDF, PLN, DGN, XLSX, E57, LAS y más.`);
             continue;
+          }
+
+          // Validación obligatoria: NO permitir subir .frag ni .json sin su archivo .rvt asociado
+          if (ext === 'frag' || ext === 'json') {
+            const baseName = file.name.replace(/\.[^/.]+$/, '');
+            if (!hasRvtAssociated(baseName, filesList)) {
+              alert(`No se permite subir "${file.name}" sin su archivo Revit (.rvt) correspondiente.\n\nTodo archivo FRAG o JSON debe estar anclado a un archivo .rvt con el mismo nombre (ej: "${baseName}.rvt").`);
+              addLog(`[RECHAZADO] ${file.name} bloqueado: requiere un archivo .rvt con el mismo nombre.`);
+              continue;
+            }
           }
 
           const exists = selectedFiles.some(f => f.file.name === file.name && f.file.size === file.size);
@@ -2776,6 +2826,20 @@
       uploadBtn.addEventListener('click', async () => {
         if (selectedFiles.length === 0 || !activeProject || isUploading) return;
 
+        // Doble validación: verificar que no haya archivos .frag o .json huérfanos sin su .rvt
+        const orphaned = selectedFiles.find(f => {
+          const ext = getFileExtension(f.file.name);
+          if (ext === 'frag' || ext === 'json') {
+            const base = f.file.name.replace(/\.[^/.]+$/, '');
+            return !hasRvtAssociated(base, []);
+          }
+          return false;
+        });
+        if (orphaned) {
+          alert(`No se puede iniciar la subida:\nEl archivo "${orphaned.file.name}" no cuenta con su archivo .rvt correspondiente en la cola ni en el proyecto.`);
+          return;
+        }
+
         isUploading = true;
         uploadBtn.disabled = true;
         clearQueueBtn.classList.add('hidden');
@@ -3176,29 +3240,60 @@
 
           const rawProjectFiles = Array.from(filesByPath.values());
 
-          // Emparejar IFC con FRAG por nombre base + estado, y ocultar el FRAG derivado
-          // Construir mapa de frags indexado por (baseName|status)
+          // Construir mapa de JSONs indexado por baseName para vincular metadatos
+          const jsonsByBase = new Map();
+          rawProjectFiles.forEach(f => {
+            if (getFileExtension(f.name) === 'json') {
+              const base = f.name.replace(/\.json$/i, '').trim().toLowerCase();
+              jsonsByBase.set(base, f);
+            }
+          });
+
+          // Emparejar IFC y RVT con FRAG por nombre base + estado, y ocultar el FRAG derivado
           const fragsByKey = new Map();
           rawProjectFiles.forEach(f => {
             if (getFileExtension(f.name) === 'frag') {
-              const base = f.name.replace(/\.frag$/i, '').toLowerCase();
+              const base = f.name.replace(/\.frag$/i, '').trim().toLowerCase();
               const key = `${base}|${f.status}`;
               fragsByKey.set(key, f);
             }
           });
-          // Para cada IFC, buscar un FRAG del mismo nombre base y mismo estado
+
+          // Para cada IFC, buscar un FRAG del mismo nombre base
           rawProjectFiles.forEach(f => {
             if (getFileExtension(f.name) === 'ifc') {
-              const base = f.name.replace(/\.ifc$/i, '').toLowerCase();
-              // Primero: mismo estado. Luego: cualquier estado como fallback
+              const base = f.name.replace(/\.ifc$/i, '').trim().toLowerCase();
               const pairedFrag = fragsByKey.get(`${base}|${f.status}`)
-                || fragsByKey.get(`${base}|EN_PROGRESO`);
+                || fragsByKey.get(`${base}|EN_PROGRESO`)
+                || fragsByKey.get(`${base}|COMPARTIDO`)
+                || fragsByKey.get(`${base}|PUBLICADO`);
               if (pairedFrag) {
                 f.pairedFragId = pairedFrag.fileId;
                 f.pairedFragName = pairedFrag.name;
-                f.pairedFragJsonId = pairedFrag.jsonId || '';
-                // Marcar el FRAG como derivado: no se mostrará en el listado
+                f.pairedFragJsonId = pairedFrag.jsonId || (jsonsByBase.get(base)?.fileId) || '';
                 pairedFrag._derivedFromIfc = true;
+              }
+            }
+          });
+
+          // Para cada RVT, buscar su FRAG + JSON asociado por mismo nombre
+          rawProjectFiles.forEach(f => {
+            if (getFileExtension(f.name) === 'rvt') {
+              const base = f.name.replace(/\.rvt$/i, '').trim().toLowerCase();
+              const pairedFrag = fragsByKey.get(`${base}|${f.status}`)
+                || fragsByKey.get(`${base}|EN_PROGRESO`)
+                || fragsByKey.get(`${base}|COMPARTIDO`)
+                || fragsByKey.get(`${base}|PUBLICADO`);
+              if (pairedFrag) {
+                f.pairedFragId = pairedFrag.fileId;
+                f.pairedFragName = pairedFrag.name;
+                const matchedJson = jsonsByBase.get(base);
+                f.pairedFragJsonId = pairedFrag.jsonId || (matchedJson ? matchedJson.fileId : '');
+                // Anclar el FRAG y JSON al RVT para que se gestionen a través del RVT
+                pairedFrag._derivedFromRvt = true;
+                if (matchedJson) {
+                  matchedJson._derivedFromRvt = true;
+                }
               }
             }
           });
@@ -3300,6 +3395,14 @@
             viewerFileId = f.pairedFragId;
             viewerFileName = f.pairedFragName || f.name.replace(/\.ifc$/i, '.frag');
             viewerJsonId = f.pairedFragJsonId || f.jsonId || '';
+          } else if (ext === 'rvt') {
+            // Para RVT: usar el .frag emparejado si existe; si se subió sin FRAG+JSON, no se mostrará visor
+            if (!f.pairedFragId) return '';
+            viewerPath = 'VSR_IFCA/index.html';
+            viewerIcon = 'view_in_ar';
+            viewerFileId = f.pairedFragId;
+            viewerFileName = f.pairedFragName || f.name.replace(/\.rvt$/i, '.frag');
+            viewerJsonId = f.pairedFragJsonId || f.jsonId || '';
           } else {
             return ''; // Not compatible
           }
@@ -3322,7 +3425,7 @@
           if (viewerJsonId) url.searchParams.set('jsonId', viewerJsonId);
 
           // Tooltip diferente para IFC que apunta a su FRAG
-          const tooltip = ext === 'ifc' ? 'Abrir en Visor (via .frag convertido)' : 'Abrir en Visor';
+          const tooltip = (ext === 'ifc' || ext === 'rvt') ? 'Abrir en Visor (modelo 3D FRAG vinculado)' : 'Abrir en Visor';
 
           return `
             <a href="${url.toString()}" target="_blank" class="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-[10px] uppercase tracking-wider shadow-sm transition-all whitespace-nowrap" title="${tooltip}">
@@ -3919,6 +4022,35 @@
           const data = await res.json();
           if (data.status === 'error') throw new Error(data.message || 'Error al cambiar estado');
 
+          // Si tiene un .frag emparejado, promoverlo también para mantener la sincronía del modelo 3D
+          if (f.pairedFragId && f.pairedFragName) {
+            try {
+              await fetch(scriptUrl, {
+                method: 'POST', mode: 'cors',
+                headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+                body: JSON.stringify({
+                  action: 'changeFileStatus',
+                  fileId: f.pairedFragId,
+                  jsonId: f.pairedFragJsonId || '',
+                  filename: f.pairedFragName,
+                  newStatus: newStatus,
+                  project: activeProject.slug || slugify(activeProject.name),
+                  folderId: ds.driveFolderId || '',
+                  driveFolderName: ds.driveFolderName || activeProject.name,
+                  originalFileId: f.pairedFragId,
+                  type: 'model',
+                  version: f.version || 'v1.0',
+                  comments: `Promovido junto a su RVT principal a ${labels[newStatus]}`,
+                  changedBy: userAccount ? (userAccount.name || '') : '',
+                  changedByEmail: userAccount ? (userAccount.email || userAccount.username || '') : '',
+                  deliveryTeams: f.deliveryTeams || resolveCurrentUserDeliveryTeams()
+                })
+              });
+            } catch (errFragPromote) {
+              console.warn('Advertencia promoviendo .frag asociado:', errFragPromote);
+            }
+          }
+
           addLog(`[${f.name}] → ${labels[newStatus]} por ${data.changedBy || (userAccount ? userAccount.name : 'usuario')}.`);
           await loadProjectFiles();
         } catch(err) {
@@ -3945,10 +4077,18 @@
           return;
         }
 
+        const ext = getFileExtension(f.name);
+        const isRvt = ext === 'rvt';
         const isModel = f.type === 'model';
-        const fileDesc = isModel && f.jsonId ? `"${f.name}" y sus datos asociados (.json)` : `"${f.name}"`;
+        
+        let fileDesc = `"${f.name}"`;
+        if (isRvt && f.pairedFragId) {
+          fileDesc = `"${f.name}" y sus archivos asociados (.frag + .json)`;
+        } else if (isModel && f.jsonId) {
+          fileDesc = `"${f.name}" y sus datos asociados (.json)`;
+        }
 
-        if (!confirm(`¿Estás seguro de que deseas eliminar ${fileDesc} de Google Drive?`)) {
+        if (!confirm(`¿Estás seguro de que deseas eliminar ${fileDesc} de Google Drive?\nEsta acción eliminará tanto el archivo .rvt como su modelo 3D (.frag + .json) vinculado.`)) {
           return;
         }
 
@@ -3960,9 +4100,26 @@
           const ds = activeProject.dataSources || {};
           const scriptUrl = ds.driveScriptUrl || DEFAULT_DRIVE_SCRIPT_URL;
 
-          const fileIds = [f.fileId, f.originalFileId, f.jsonId].filter(Boolean);
-          const uniqueFileIds = [...new Set(fileIds)];
+          const baseName = f.name.replace(/\.[^/.]+$/, '').trim().toLowerCase();
+          
+          // Recopilar todos los IDs asociados: RVT, FRAG, JSON y versiones
+          const fileIds = [f.fileId, f.originalFileId, f.jsonId, f.pairedFragId, f.pairedFragJsonId];
+          
+          // Si es RVT, buscar cualquier archivo en el proyecto con el mismo nombre base (.frag, .json)
+          const associatedFiles = isRvt ? (rawProjectFilesCache || []).filter(item => {
+            const itemBase = String(item.name || '').replace(/\.[^/.]+$/, '').trim().toLowerCase();
+            return itemBase === baseName;
+          }) : [];
 
+          associatedFiles.forEach(item => {
+            if (item.fileId) fileIds.push(item.fileId);
+            if (item.originalFileId) fileIds.push(item.originalFileId);
+            if (item.jsonId) fileIds.push(item.jsonId);
+          });
+
+          const uniqueFileIds = [...new Set(fileIds.filter(Boolean))];
+
+          // 1. Eliminar archivos principales en Google Drive
           const payload = {
             action: 'deleteFiles',
             fileIds: uniqueFileIds,
@@ -3988,6 +4145,28 @@
           const data = await res.json();
           if (data.status === 'error') {
             throw new Error(data.message || 'Error al eliminar');
+          }
+
+          // 2. Si era RVT y tenía .frag asociado, limpiar también registro de estado para el .frag
+          const fragName = f.pairedFragName || `${f.name.replace(/\.rvt$/i, '')}.frag`;
+          if (isRvt && f.pairedFragId) {
+            try {
+              await fetch(scriptUrl, {
+                method: 'POST',
+                mode: 'cors',
+                headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+                body: JSON.stringify({
+                  action: 'deleteFiles',
+                  fileIds: [f.pairedFragId, f.pairedFragJsonId].filter(Boolean),
+                  folderId: ds.driveFolderId || '',
+                  driveFolderName: ds.driveFolderName || activeProject.name,
+                  project: activeProject.slug || slugify(activeProject.name),
+                  filename: fragName
+                })
+              });
+            } catch (errFrag) {
+              console.warn('Limpieza de estado del FRAG asociado:', errFrag);
+            }
           }
 
           addLog(`[ELIMINADO] ${fileDesc} eliminado correctamente.`);
