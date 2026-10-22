@@ -239,8 +239,65 @@ function generateViewpointsIndex() {
   }
 }
 
+
+// Plugin to auto-sync build output to VSR_IFCB
+const syncIfcbPlugin = () => {
+  return {
+    name: 'sync-ifcb-plugin',
+    closeBundle() {
+      try {
+        const ifcaHtmlPath = path.resolve(__dirname, '../docs/VSR_IFCA/index.html');
+        if (!fs.existsSync(ifcaHtmlPath)) return;
+        const ifcaHtml = fs.readFileSync(ifcaHtmlPath, 'utf8');
+
+        const jsMatch = ifcaHtml.match(/src="(\.\/assets\/main-[^"]+\.js(?:\?[^"]*)?)"/);
+        const cssMatch = ifcaHtml.match(/href="(\.\/assets\/main-[^"]+\.css)"/);
+        const vpMatch = ifcaHtml.match(/href="(\.\/assets\/viewpoints-manager-[^"]+\.js)"/);
+
+        if (!jsMatch) return;
+        const jsSrc = jsMatch[1];
+        const cssHref = cssMatch ? cssMatch[1] : null;
+        const vpHref = vpMatch ? vpMatch[1] : null;
+
+        const ifcaAssetsDir = path.resolve(__dirname, '../docs/VSR_IFCA/assets');
+        const targetDirs = [
+          path.resolve(__dirname, '../docs/VSR_IFCB/assets'),
+          path.resolve(__dirname, '../VSR_IFCB/assets')
+        ];
+
+        targetDirs.forEach(td => {
+          if (!fs.existsSync(td)) fs.mkdirSync(td, { recursive: true });
+          if (fs.existsSync(ifcaAssetsDir)) {
+            const files = fs.readdirSync(ifcaAssetsDir);
+            for (const file of files) {
+              fs.copyFileSync(path.join(ifcaAssetsDir, file), path.join(td, file));
+            }
+          }
+        });
+
+        const targetHtmls = [
+          path.resolve(__dirname, '../docs/VSR_IFCB/index.html'),
+          path.resolve(__dirname, '../VSR_IFCB/index.html')
+        ];
+
+        targetHtmls.forEach(th => {
+          if (!fs.existsSync(th)) return;
+          let html = fs.readFileSync(th, 'utf8');
+          html = html.replace(/src="\.\/assets\/main-[^"]+\.js(?:\?[^"]*)?"/, `src="${jsSrc}"`);
+          if (cssHref) html = html.replace(/href="\.\/assets\/main-[^"]+\.css"/, `href="${cssHref}"`);
+          if (vpHref) html = html.replace(/href="\.\/assets\/viewpoints-manager-[^"]+\.js"/, `href="${vpHref}"`);
+          fs.writeFileSync(th, html, 'utf8');
+        });
+        console.log('[Sync] Successfully synchronized build to VSR_IFCB.');
+      } catch (e) {
+        console.error('[Sync] Error syncing to VSR_IFCB:', e);
+      }
+    }
+  };
+};
+
 export default defineConfig({
-  plugins: [modelsGenerator(), viewpointsGenerator()],
+  plugins: [modelsGenerator(), viewpointsGenerator(), syncIfcbPlugin()],
   base: './', // Ensures relative paths for GitHub Pages
   build: {
     target: 'esnext', // Enable top-level await
@@ -248,7 +305,7 @@ export default defineConfig({
     emptyOutDir: false,
     rollupOptions: {
       input: {
-        main: './index.html'
+        main: path.resolve(__dirname, 'index.html')
       }
     }
   },

@@ -320,13 +320,6 @@ async function extractCompleteIfcProperties(
       { type: WEBIFC.IFCBUILDING, inherited: true },
       { type: WEBIFC.IFCBUILDINGSTOREY, inherited: true },
       { type: WEBIFC.IFCSPACE, inherited: true },
-      { type: WEBIFC.IFCPROPERTYSET, inherited: false },
-      { type: WEBIFC.IFCELEMENTQUANTITY, inherited: false },
-      { type: WEBIFC.IFCRELDEFINESBYPROPERTIES, inherited: false },
-      { type: WEBIFC.IFCRELDEFINESBYTYPE, inherited: false },
-      { type: WEBIFC.IFCRELCONTAINEDINSPATIALSTRUCTURE, inherited: false },
-      { type: WEBIFC.IFCRELASSOCIATESMATERIAL, inherited: false },
-      { type: WEBIFC.IFCRELAGGREGATES, inherited: false },
       { type: WEBIFC.IFCMATERIAL, inherited: true }
     ];
 
@@ -341,10 +334,7 @@ async function extractCompleteIfcProperties(
       } catch {}
     }
 
-    // Include referenced relationships, types, psets, materials and storeys
-    for (const pList of elementToPsetIds.values()) {
-      for (const p of pList) entityIdsToProcess.add(p);
-    }
+    // Include referenced types, materials and storeys directly so their semantic metadata is preserved
     for (const t of elementToTypeId.values()) entityIdsToProcess.add(t);
     for (const s of elementToSpatialId.values()) entityIdsToProcess.add(s);
     for (const m of elementToMaterialId.values()) entityIdsToProcess.add(m);
@@ -404,6 +394,17 @@ async function extractCompleteIfcProperties(
         // Attach resolved psets if any exist
         if (Object.keys(psetsMap).length > 0) {
           entityData.psets = psetsMap;
+
+          // Flatten all pset properties directly onto entityData for immediate top-level access
+          for (const psetProps of Object.values(psetsMap)) {
+            if (psetProps && typeof psetProps === 'object') {
+              for (const [propKey, propVal] of Object.entries(psetProps as Record<string, any>)) {
+                if (entityData[propKey] === undefined && propVal !== undefined && propVal !== null) {
+                  entityData[propKey] = propVal;
+                }
+              }
+            }
+          }
         }
 
         // C. Spatial Structure (Storey / Level)
@@ -414,6 +415,9 @@ async function extractCompleteIfcProperties(
           if (spatialName) {
             entityData.level = spatialName;
             entityData.storey = spatialName;
+            if (entityData['NIVEL INTEGRADO'] === undefined) {
+              entityData['NIVEL INTEGRADO'] = spatialName;
+            }
           }
         }
 
@@ -424,6 +428,9 @@ async function extractCompleteIfcProperties(
           const matName = resolveMaterialName(materialId);
           if (matName) {
             entityData.material = matName;
+            if (entityData['MATERIAL INTEGRADO'] === undefined) {
+              entityData['MATERIAL INTEGRADO'] = matName;
+            }
           }
         }
 
@@ -603,6 +610,64 @@ export default function App() {
 
           if (!properties) {
             properties = {};
+          }
+
+          // 3b. Map ThatOpen fragment localIds directly to IFC entities so the JSON is indexed by BOTH localId and expressID!
+          try {
+            if (typeof (model as any).getLocalIds === 'function') {
+              setState(prev => ({ ...prev, message: 'Vinculando elementos 3D con parámetros...' }));
+              const localIds: number[] = await (model as any).getLocalIds();
+              
+              // Build lookups from IFC properties
+              const byGuid = new Map<string, any>();
+              const byTag = new Map<string, any>();
+              const byName = new Map<string, any>();
+
+              for (const [idStr, entity] of Object.entries(properties)) {
+                if (!entity || typeof entity !== 'object') continue;
+                if (entity.GlobalId) byGuid.set(String(entity.GlobalId).trim(), entity);
+                if (entity.Tag) byTag.set(String(entity.Tag).trim(), entity);
+                if (entity.Name) byName.set(String(entity.Name).trim(), entity);
+              }
+
+              // Get fragment items data or guids
+              let fragmentItems: any[] = [];
+              if (typeof (model as any).getItemsData === 'function') {
+                try {
+                  fragmentItems = await (model as any).getItemsData(localIds, { attributesDefault: true });
+                } catch {}
+              }
+
+              let fragmentGuids: any[] = [];
+              if (typeof (model as any).getGuidsByLocalIds === 'function') {
+                try {
+                  fragmentGuids = await (model as any).getGuidsByLocalIds(localIds);
+                } catch {}
+              }
+
+              let matchedCount = 0;
+              for (let i = 0; i < localIds.length; i++) {
+                const localId = localIds[i];
+                const item = fragmentItems[i] || {};
+                const guid = String(fragmentGuids[i] || item._guid?.value || item.GlobalId?.value || item.GlobalId || '').trim();
+                const tag = String(item.Tag?.value || item.Tag || '').trim();
+                const name = String(item.Name?.value || item.Name || '').trim();
+
+                const matchedEntity = (guid && byGuid.get(guid)) || 
+                                     (tag && byTag.get(tag)) || 
+                                     properties[String(localId)] || 
+                                     (name && byName.get(name));
+
+                if (matchedEntity) {
+                  matchedEntity.localId = localId;
+                  properties[String(localId)] = matchedEntity;
+                  matchedCount++;
+                }
+              }
+              console.log(`[FRAG_SIMPLE] Mapped ${matchedCount} / ${localIds.length} localIds directly to IFC entities.`);
+            }
+          } catch (mapErr) {
+            console.warn('[FRAG_SIMPLE] Error mapping localIds to IFC properties:', mapErr);
           }
 
           const jsonBlob = new Blob([JSON.stringify(properties, null, 2)], { type: 'application/json' });

@@ -344,7 +344,16 @@ export const snapConfig = {
 
 let updateSnappingModes = () => {};
 
+// --- Measurement State (Hoisted to top for 0ms snap bypass when not measuring) ---
+let measurementMode: 'length' | 'point' | 'area' | 'angle' | 'slope' | 'volume' | null = null;
+
 const applyGlobalSnap = (intersects: THREE.Intersection[], mousePixelPos?: { x: number; y: number }) => {
+    // HIGH-PERFORMANCE: If no measurement tool is active, return immediately
+    if (!measurementMode) {
+        updateSnapIndicator(null);
+        return intersects;
+    }
+
     if (!intersects || intersects.length === 0) {
         updateSnapIndicator(null);
         return intersects;
@@ -566,7 +575,7 @@ const setupDebugSphere = (scene: THREE.Scene) => {
 
 
 // --- Measurement State (Hoisted to top to avoid ReferenceError) ---
-let measurementMode: 'length' | 'point' | 'area' | 'angle' | 'slope' | 'volume' | null = null;
+// (measurementMode moved to top)
 let areaTool: any = null; // Area Measurement Tool
 let volumeTool: any = null; // Volume Measurement Tool
 let measurementPoints: THREE.Vector3[] = [];
@@ -1212,10 +1221,6 @@ highlighter.setup({
     select: {
         name: 'select',
         material: new THREE.MeshBasicMaterial({ color: 0xff0000, depthTest: false, opacity: 0.8, transparent: true })
-    },
-    hover: {
-        name: 'hover',
-        material: new THREE.MeshBasicMaterial({ color: 0xe0e0e0, depthTest: false, opacity: 0.4, transparent: true })
     }
 });
 highlighter.enabled = true; // Ensure it's enabled explicitly
@@ -1835,25 +1840,77 @@ const attachExternalPropertiesToLocalIds = async (model: any, externalProperties
         const value = unwrapValue(raw);
         return value === undefined || value === null || String(value).trim() === '' ? null : String(value).trim();
     };
+    const getTag = (entity: any): string | null => {
+        if (!entity || typeof entity !== 'object') return null;
+        const raw = entity.Tag ?? entity.tag ?? entity.TAG;
+        const value = unwrapValue(raw);
+        return value === undefined || value === null || String(value).trim() === '' ? null : String(value).trim();
+    };
+    const getName = (entity: any): string | null => {
+        if (!entity || typeof entity !== 'object') return null;
+        const raw = entity.Name ?? entity.name;
+        const value = unwrapValue(raw);
+        return value === undefined || value === null || String(value).trim() === '' ? null : String(value).trim();
+    };
 
     const properties = { ...externalProperties };
     const propertiesByGuid = new Map<string, any>();
+    const propertiesByTag = new Map<string, any>();
+    const propertiesByName = new Map<string, any>();
+
     for (const entity of Object.values(externalProperties)) {
+        if (!entity || typeof entity !== 'object') continue;
         const guid = getGuid(entity);
         if (guid && !propertiesByGuid.has(guid)) propertiesByGuid.set(guid, entity);
+        const tag = getTag(entity);
+        if (tag && !propertiesByTag.has(tag)) propertiesByTag.set(tag, entity);
+        const name = getName(entity);
+        if (name && !propertiesByName.has(name)) propertiesByName.set(name, entity);
     }
-    if (propertiesByGuid.size === 0) return { properties, matched: 0, localIds: 0 };
 
     try {
-        const localIds: number[] = await model.getLocalIds();
-        const fragmentGuids: unknown = await model.getGuidsByLocalIds(localIds);
-        const guidList = Array.isArray(fragmentGuids) ? fragmentGuids : [];
-        let matched = 0;
+        let localIds: number[] = [];
+        if (typeof model.getLocalIds === 'function') {
+            try { localIds = await model.getLocalIds(); } catch {}
+        }
+        if ((!localIds || localIds.length === 0) && typeof model.getItemsIdsWithGeometry === 'function') {
+            try { localIds = await model.getItemsIdsWithGeometry(); } catch {}
+        }
 
+        if (!localIds || localIds.length === 0) {
+            return { properties, matched: 0, localIds: 0 };
+        }
+
+        let guidList: unknown[] = [];
+        if (typeof model.getGuidsByLocalIds === 'function') {
+            try {
+                const fragmentGuids = await model.getGuidsByLocalIds(localIds);
+                if (Array.isArray(fragmentGuids)) guidList = fragmentGuids;
+            } catch {}
+        }
+
+        let fragmentItems: any[] = [];
+        if (typeof model.getItemsData === 'function') {
+            try {
+                fragmentItems = await model.getItemsData(localIds, { attributesDefault: true });
+            } catch {}
+        }
+
+        let matched = 0;
         localIds.forEach((localId, index) => {
-            const guid = guidList[index] === undefined || guidList[index] === null ? '' : String(guidList[index]).trim();
-            const entity = propertiesByGuid.get(guid);
-            if (entity && properties[String(localId)] !== entity) {
+            const item = fragmentItems[index] || {};
+            const itemGuid = guidList[index] ?? item._guid?.value ?? item.GlobalId?.value ?? item.GlobalId ?? '';
+            const guid = itemGuid === undefined || itemGuid === null ? '' : String(itemGuid).trim();
+            const tag = String(item.Tag?.value ?? item.Tag ?? '').trim();
+            const name = String(item.Name?.value ?? item.Name ?? '').trim();
+
+            const entity = (guid && propertiesByGuid.get(guid)) ||
+                           (tag && propertiesByTag.get(tag)) ||
+                           properties[String(localId)] ||
+                           (name && propertiesByName.get(name));
+
+            if (entity) {
+                entity.localId = localId;
                 properties[String(localId)] = entity;
                 matched++;
             }
@@ -4034,7 +4091,22 @@ function initSidebar() {
                     if (progressDiv) progressDiv.textContent = 'Procesando archivo...';
                 }
 
-                const file = target.files[0];
+                const fileList = Array.from(target.files || []) as File[];
+                const fragFile = fileList.find(f => f.name.toLowerCase().endsWith('.frag')) || fileList[0];
+                const jsonFile = fileList.find(f => f.name.toLowerCase().endsWith('.json'));
+
+                let localPropsJson: any = null;
+                if (jsonFile) {
+                    try {
+                        const jsonText = await jsonFile.text();
+                        localPropsJson = JSON.parse(jsonText);
+                        logToScreen(`Local JSON detected: ${jsonFile.name} (${Object.keys(localPropsJson).length} items)`);
+                    } catch (jErr) {
+                        console.warn('Error reading local JSON file:', jErr);
+                    }
+                }
+
+                const file = fragFile;
 
                 try {
                     if (file.name.toLowerCase().endsWith('.frag')) {
@@ -4054,9 +4126,8 @@ function initSidebar() {
                             console.warn('Failed to save to IDB:', dbErr);
                         }
 
-                        // Use the centralized loadModel function to ensure registration and userData setup
-                        // This handles fetch, decompression, and basic registration
-                        await loadModel(blobUrl, file.name);
+                        // Use the centralized loadModel function with external properties
+                        await loadModel(blobUrl, file.name, { propertiesJson: localPropsJson });
 
                         // Retrieve the model to perform post-load operations (dummy props, zoom)
                         const model = fragments.groups.get(file.name) ||
@@ -9291,14 +9362,16 @@ async function classifyModel(model: any) {
         const validGeomSet = new Set<number>(idsWithGeometry);
 
         for (const keyStr of jsonKeys) {
-            const expressID = parseInt(keyStr, 10);
-            if (isNaN(expressID)) continue;
-            // Only process expressIDs that are valid geometry elements if geometry IDs are known
-            if (validGeomSet.size > 0 && !validGeomSet.has(expressID)) continue;
+            const numericId = parseInt(keyStr, 10);
+            if (isNaN(numericId)) continue;
 
             const entity: any = model.properties[keyStr];
             if (!entity || typeof entity !== 'object') continue;
-            if (readFields(entity, expressID)) jsonHits++;
+
+            const targetId = entity.localId !== undefined ? Number(entity.localId) : numericId;
+            if (validGeomSet.size > 0 && !validGeomSet.has(targetId) && !validGeomSet.has(numericId)) continue;
+
+            if (readFields(entity, targetId)) jsonHits++;
         }
         logToScreen(`[Classify] JSON hits: ${jsonHits}`);
     }
@@ -9315,7 +9388,10 @@ async function classifyModel(model: any) {
     ]);
 
     if (validGeomSet.size > 0) {
-        allIds = new Set<number>(Array.from(allIds).filter(id => validGeomSet.has(id)));
+        const filtered = Array.from(allIds).filter(id => validGeomSet.has(id));
+        if (filtered.length > 0) {
+            allIds = new Set<number>(filtered);
+        }
     } else if (allIds.size === 0 && idsWithGeometry.length > 0) {
         idsWithGeometry.forEach(id => allIds.add(id));
     }

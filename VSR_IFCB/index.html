@@ -34,16 +34,17 @@
       #update-banner button{cursor:pointer;border:0;border-radius:8px;background:#fff;color:#111827;font-weight:900;letter-spacing:.12em;text-transform:uppercase;font-size:11px;padding:10px 12px}
       
       /* Ocultar toda la interfaz (CDE) para dejar solo el visor 3D en el banner público */
-      #sidebar, 
-      #properties-panel, 
-      .top-bar, 
-      .console-toggle-container, 
-      #project-links-bar, 
-      #quantities-panel, 
-      #status-panel {
+      /* Modo banner: Ocultar interfaz para banner público solo si se especifica ?banner=true */
+      body.banner-mode #sidebar, 
+      body.banner-mode #properties-panel, 
+      body.banner-mode .top-bar, 
+      body.banner-mode .console-toggle-container, 
+      body.banner-mode #project-links-bar, 
+      body.banner-mode #quantities-panel, 
+      body.banner-mode #status-panel {
           display: none !important;
       }
-      #viewer-container {
+      body.banner-mode #viewer-container {
           position: fixed !important;
           top: 0 !important;
           left: 0 !important;
@@ -53,9 +54,9 @@
       }
     </style>
 
-    <script type="module" crossorigin src="./assets/main-DD_jpksl.js"></script>
-    <link rel="modulepreload" crossorigin href="./assets/viewpoints-manager-Y0PzoOtk.js">
-    <link rel="stylesheet" crossorigin href="./assets/main-VWbOnd-X.css">
+    <script type="module" crossorigin src="./assets/main-3XBkwdpq.js"></script>
+    <link rel="modulepreload" crossorigin href="./assets/viewpoints-manager-DcOIyzzy.js">
+    <link rel="stylesheet" crossorigin href="./assets/main-wYIDCi_d.css">
   </head>
   <body>
     <div id="update-banner"><div class="inner"><div>Hay una nueva versión disponible.</div><button id="update-reload" type="button">Actualizar</button></div></div>
