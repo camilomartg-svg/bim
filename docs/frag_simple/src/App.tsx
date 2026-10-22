@@ -306,14 +306,54 @@ async function extractCompleteIfcProperties(
       } catch {}
     }
 
-    // 5. Iterate ALL lines in the IFC model and build the property dictionary
-    onProgress?.(88, 'Extrayendo todos los parámetros y propiedades IFC...');
-    const allLinesVector = webIfc.GetAllLines(modelID);
-    const totalLines = allLinesVector.size();
+    // 5. Query semantic entities directly without loading millions of geometric coordinate lines
+    onProgress?.(88, 'Extrayendo parámetros y propiedades de los elementos IFC...');
     const result: Record<string, any> = {};
+    const entityIdsToProcess = new Set<number>();
 
-    for (let i = 0; i < totalLines; i++) {
-      const expressID = allLinesVector.get(i);
+    // Target semantic entity categories
+    const targetCategories = [
+      { type: WEBIFC.IFCPRODUCT, inherited: true },
+      { type: WEBIFC.IFCTYPEPRODUCT, inherited: true },
+      { type: WEBIFC.IFCPROJECT, inherited: true },
+      { type: WEBIFC.IFCSITE, inherited: true },
+      { type: WEBIFC.IFCBUILDING, inherited: true },
+      { type: WEBIFC.IFCBUILDINGSTOREY, inherited: true },
+      { type: WEBIFC.IFCSPACE, inherited: true },
+      { type: WEBIFC.IFCPROPERTYSET, inherited: false },
+      { type: WEBIFC.IFCELEMENTQUANTITY, inherited: false },
+      { type: WEBIFC.IFCRELDEFINESBYPROPERTIES, inherited: false },
+      { type: WEBIFC.IFCRELDEFINESBYTYPE, inherited: false },
+      { type: WEBIFC.IFCRELCONTAINEDINSPATIALSTRUCTURE, inherited: false },
+      { type: WEBIFC.IFCRELASSOCIATESMATERIAL, inherited: false },
+      { type: WEBIFC.IFCRELAGGREGATES, inherited: false },
+      { type: WEBIFC.IFCMATERIAL, inherited: true }
+    ];
+
+    for (const cat of targetCategories) {
+      try {
+        const vec = webIfc.GetLineIDsWithType(modelID, cat.type, cat.inherited);
+        const sz = vec.size();
+        for (let i = 0; i < sz; i++) {
+          entityIdsToProcess.add(vec.get(i));
+        }
+        vec.delete?.();
+      } catch {}
+    }
+
+    // Include referenced relationships, types, psets, materials and storeys
+    for (const pList of elementToPsetIds.values()) {
+      for (const p of pList) entityIdsToProcess.add(p);
+    }
+    for (const t of elementToTypeId.values()) entityIdsToProcess.add(t);
+    for (const s of elementToSpatialId.values()) entityIdsToProcess.add(s);
+    for (const m of elementToMaterialId.values()) entityIdsToProcess.add(m);
+
+    const idsArray = Array.from(entityIdsToProcess);
+    const totalEntities = idsArray.length;
+
+    for (let i = 0; i < totalEntities; i++) {
+      const expressID = idsArray[i];
       try {
         const line = webIfc.GetLine(modelID, expressID, false);
         if (!line) continue;
@@ -390,12 +430,11 @@ async function extractCompleteIfcProperties(
         result[String(expressID)] = entityData;
       } catch {}
 
-      if (i % 300 === 0 && onProgress) {
-        const pct = 88 + Math.floor((i / Math.max(1, totalLines)) * 10);
-        onProgress(pct, `Extrayendo parámetros (${i}/${totalLines})...`);
+      if (i % 150 === 0 && onProgress) {
+        const pct = 88 + Math.floor((i / Math.max(1, totalEntities)) * 10);
+        onProgress(pct, `Extrayendo parámetros (${i}/${totalEntities})...`);
       }
     }
-    allLinesVector.delete?.();
 
     return result;
   } finally {
@@ -507,12 +546,11 @@ export default function App() {
             console.warn("Manual webIfc init warning:", initErr);
           }
 
-          // 1. Load IFC and convert to fragments (importing all attributes and relations)
+          // 1. Load IFC and convert to fragments (importing attributes)
           setState(prev => ({ ...prev, message: 'Convirtiendo geometría IFC a Fragments...' }));
           const model = await loader.load(new Uint8Array(buffer), true, file.name, {
             instanceCallback: (importer: any) => {
               if (typeof importer.addAllAttributes === 'function') importer.addAllAttributes();
-              if (typeof importer.addAllRelations === 'function') importer.addAllRelations();
             }
           });
           
@@ -569,24 +607,51 @@ export default function App() {
 
           const jsonBlob = new Blob([JSON.stringify(properties, null, 2)], { type: 'application/json' });
 
-          // 4. Conversión binaria de alta velocidad para transmisión nativa a C#
-          const fragBytes = new Uint8Array(fragBuffer);
-          let binaryStr = '';
-          const chunkSize = 8192;
-          for (let i = 0; i < fragBytes.length; i += chunkSize) {
-            binaryStr += String.fromCharCode.apply(null, Array.from(fragBytes.subarray(i, i + chunkSize)));
+          // 4. Descarga automática por navegador (interceptada nativamente por WebView2 sin límites de memoria)
+          try {
+            const aFrag = document.createElement('a');
+            aFrag.href = URL.createObjectURL(fragBlob);
+            aFrag.download = `${baseName}.frag`;
+            document.body.appendChild(aFrag);
+            aFrag.click();
+            aFrag.remove();
+
+            setTimeout(() => {
+              const aJson = document.createElement('a');
+              aJson.href = URL.createObjectURL(jsonBlob);
+              aJson.download = `${baseName}.json`;
+              document.body.appendChild(aJson);
+              aJson.click();
+              aJson.remove();
+            }, 300);
+          } catch (dlErr) {
+            console.warn("Auto-download warning:", dlErr);
           }
-          const fragBase64 = btoa(binaryStr);
+
+          // 5. Enviar señal de conversión a C# (con Base64 ligero si es pequeño)
+          const fragBytes = new Uint8Array(fragBuffer);
+          let fragBase64 = '';
+          if (fragBytes.length < 5 * 1024 * 1024) {
+            let binaryStr = '';
+            const chunkSize = 8192;
+            for (let i = 0; i < fragBytes.length; i += chunkSize) {
+              binaryStr += String.fromCharCode.apply(null, Array.from(fragBytes.subarray(i, i + chunkSize)));
+            }
+            fragBase64 = btoa(binaryStr);
+          }
 
           const jsonStr = JSON.stringify(properties, null, 2);
-          const jsonUtf8Bytes = new TextEncoder().encode(jsonStr);
-          let jsonBinaryStr = '';
-          for (let i = 0; i < jsonUtf8Bytes.length; i += chunkSize) {
-            jsonBinaryStr += String.fromCharCode.apply(null, Array.from(jsonUtf8Bytes.subarray(i, i + chunkSize)));
+          let jsonBase64 = '';
+          if (jsonStr.length < 5 * 1024 * 1024) {
+            const jsonUtf8Bytes = new TextEncoder().encode(jsonStr);
+            let jsonBinaryStr = '';
+            const chunkSize = 8192;
+            for (let i = 0; i < jsonUtf8Bytes.length; i += chunkSize) {
+              jsonBinaryStr += String.fromCharCode.apply(null, Array.from(jsonUtf8Bytes.subarray(i, i + chunkSize)));
+            }
+            jsonBase64 = btoa(jsonBinaryStr);
           }
-          const jsonBase64 = btoa(jsonBinaryStr);
 
-          // 5. Enviar directamente a C# por el canal nativo de WebView2
           if ((window as any).chrome && (window as any).chrome.webview) {
             (window as any).chrome.webview.postMessage({
               tipo: "CONVERSION_COMPLETA",
