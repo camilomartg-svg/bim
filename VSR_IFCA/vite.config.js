@@ -270,7 +270,9 @@ const syncIfcbPlugin = () => {
           if (fs.existsSync(ifcaAssetsDir)) {
             const files = fs.readdirSync(ifcaAssetsDir);
             for (const file of files) {
-              fs.copyFileSync(path.join(ifcaAssetsDir, file), path.join(td, file));
+              try {
+                fs.copyFileSync(path.join(ifcaAssetsDir, file), path.join(td, file));
+              } catch (copyErr) {}
             }
           }
         });

@@ -807,6 +807,11 @@ world.scene.three.background = new THREE.Color(0x202020); // Dark gray
 
 const container = document.getElementById('viewer-container') as HTMLElement;
 world.renderer = new OBF.PostproductionRenderer(components, container);
+if (world.renderer && (world.renderer as any).three) {
+    const threeRenderer = (world.renderer as any).three;
+    threeRenderer.powerPreference = 'high-performance';
+    threeRenderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.5));
+}
 world.camera = new OBC.OrthoPerspectiveCamera(components);
 world.camera.threePersp.near = 0.05;
 world.camera.threePersp.updateProjectionMatrix();
@@ -1587,7 +1592,7 @@ async function loadFromIndexedDB(key: string): Promise<ArrayBuffer | undefined> 
                 } else if (res && typeof res === 'object' && res.data instanceof ArrayBuffer) {
                     // New timestamped entry
                     const isDriveKey = key.startsWith('drive:');
-                    const cacheLimit = 10 * 60 * 1000; // 10 minutes cache
+                    const cacheLimit = 7 * 24 * 60 * 60 * 1000; // 7 days persistent device buffer for PWA performance
                     const params = new URLSearchParams(window.location.search);
                     const forceNoCache = params.get('nocache') === 'true' || params.get('cache') === 'false';
                     if (isDriveKey && navigator.onLine && (forceNoCache || (Date.now() - (res.ts || 0) > cacheLimit))) {
@@ -1606,6 +1611,31 @@ async function loadFromIndexedDB(key: string): Promise<ArrayBuffer | undefined> 
         console.warn('IndexedDB load failed:', e);
         return undefined;
     }
+}
+
+async function clearModelCache() {
+    try {
+        const db = await getDB();
+        const tx = db.transaction(STORE_NAME, 'readwrite');
+        tx.objectStore(STORE_NAME).clear();
+        logToScreen('Búfer y caché local de modelos vaciada correctamente.');
+        setTimeout(() => {
+            window.location.reload();
+        }, 250);
+    } catch (e) {
+        console.warn('Error clearing cache:', e);
+        window.location.reload();
+    }
+}
+(window as any).clearModelCache = clearModelCache;
+
+const cacheClearBtn = document.getElementById('cache-clear-btn');
+if (cacheClearBtn) {
+    cacheClearBtn.addEventListener('click', () => {
+        if (confirm('¿Deseas vaciar el búfer local y recargar el modelo desde el origen?')) {
+            clearModelCache();
+        }
+    });
 }
 
 
@@ -1858,7 +1888,7 @@ const attachExternalPropertiesToLocalIds = async (model: any, externalProperties
     const propertiesByTag = new Map<string, any>();
     const propertiesByName = new Map<string, any>();
 
-    for (const entity of Object.values(externalProperties)) {
+    for (const [key, entity] of Object.entries(externalProperties)) {
         if (!entity || typeof entity !== 'object') continue;
         const guid = getGuid(entity);
         if (guid && !propertiesByGuid.has(guid)) propertiesByGuid.set(guid, entity);
@@ -1866,55 +1896,62 @@ const attachExternalPropertiesToLocalIds = async (model: any, externalProperties
         if (tag && !propertiesByTag.has(tag)) propertiesByTag.set(tag, entity);
         const name = getName(entity);
         if (name && !propertiesByName.has(name)) propertiesByName.set(name, entity);
+        if (tag && !properties[tag]) properties[tag] = entity;
+        if (guid && !properties[guid]) properties[guid] = entity;
     }
+
+    model._propertiesByGuid = propertiesByGuid;
+    model._propertiesByTag = propertiesByTag;
+    model._propertiesByName = propertiesByName;
 
     try {
         let localIds: number[] = [];
-        if (typeof model.getLocalIds === 'function') {
-            try { localIds = await model.getLocalIds(); } catch {}
-        }
-        if ((!localIds || localIds.length === 0) && typeof model.getItemsIdsWithGeometry === 'function') {
+        if (typeof model.getItemsIdsWithGeometry === 'function') {
             try { localIds = await model.getItemsIdsWithGeometry(); } catch {}
+        }
+        if ((!localIds || localIds.length === 0) && typeof model.getLocalIds === 'function') {
+            try { localIds = await model.getLocalIds(); } catch {}
         }
 
         if (!localIds || localIds.length === 0) {
             return { properties, matched: 0, localIds: 0 };
         }
 
-        let guidList: unknown[] = [];
-        if (typeof model.getGuidsByLocalIds === 'function') {
-            try {
-                const fragmentGuids = await model.getGuidsByLocalIds(localIds);
-                if (Array.isArray(fragmentGuids)) guidList = fragmentGuids;
-            } catch {}
-        }
-
-        let fragmentItems: any[] = [];
-        if (typeof model.getItemsData === 'function') {
-            try {
-                fragmentItems = await model.getItemsData(localIds, { attributesDefault: true });
-            } catch {}
-        }
-
+        const modelUUID = model.uuid || '';
         let matched = 0;
-        localIds.forEach((localId, index) => {
-            const item = fragmentItems[index] || {};
-            const itemGuid = guidList[index] ?? item._guid?.value ?? item.GlobalId?.value ?? item.GlobalId ?? '';
-            const guid = itemGuid === undefined || itemGuid === null ? '' : String(itemGuid).trim();
-            const tag = String(item.Tag?.value ?? item.Tag ?? '').trim();
-            const name = String(item.Name?.value ?? item.Name ?? '').trim();
+        const CHUNK = 1000;
+        for (let i = 0; i < localIds.length; i += CHUNK) {
+            const chunk = localIds.slice(i, i + CHUNK);
+            try {
+                const res = await fragments.getData(
+                    { [modelUUID]: chunk } as any,
+                    { attributesDefault: true } as any
+                );
+                const items: any[] = (res as any)[modelUUID] || [];
+                items.forEach((raw: any, idx: number) => {
+                    const localId = chunk[idx];
+                    if (localId === undefined) return;
+                    const attrs = raw?.data || raw?.attributes || raw || {};
+                    const tag = String(attrs.Tag?.value ?? attrs.Tag ?? '').trim();
+                    const guid = String(attrs.GlobalId?.value ?? attrs.GlobalId ?? attrs._guid?.value ?? attrs._guid ?? raw.guid ?? '').trim();
+                    const name = String(attrs.Name?.value ?? attrs.Name ?? '').trim();
 
-            const entity = (guid && propertiesByGuid.get(guid)) ||
-                           (tag && propertiesByTag.get(tag)) ||
-                           properties[String(localId)] ||
-                           (name && propertiesByName.get(name));
+                    const entity = (tag && propertiesByTag.get(tag)) ||
+                                   (guid && propertiesByGuid.get(guid)) ||
+                                   properties[String(localId)] ||
+                                   (name && propertiesByName.get(name));
 
-            if (entity) {
-                entity.localId = localId;
-                properties[String(localId)] = entity;
-                matched++;
+                    if (entity) {
+                        entity.localId = localId;
+                        properties[String(localId)] = entity;
+                        properties[localId] = entity;
+                        matched++;
+                    }
+                });
+            } catch (chunkErr) {
+                console.warn('[JSON bridge] chunk error:', chunkErr);
             }
-        });
+        }
 
         return { properties, matched, localIds: localIds.length };
     } catch (error) {
@@ -1985,11 +2022,27 @@ async function loadModel(url: string, path: string, options?: { propertiesUrl?: 
     }
 
     try {
-        logToScreen(`Fetching Fragment: ${url}`);
-        const file = await fetch(url);
-        if (!file.ok) throw new Error(`Failed to fetch ${url}`);
+        let buffer: ArrayBuffer | undefined;
+        const cacheKey = `url:frag:${path}`;
+        const params = new URLSearchParams(window.location.search);
+        const forceNoCache = params.get('nocache') === 'true' || params.get('cache') === 'false';
+        if (!forceNoCache && !url.startsWith('blob:')) {
+            buffer = await loadFromIndexedDB(cacheKey);
+        }
 
-        let buffer = await file.arrayBuffer();
+        if (buffer && buffer.byteLength > 0) {
+            logToScreen(`Fragment cargado desde búfer local (${(buffer.byteLength / 1024 / 1024).toFixed(2)} MB)`);
+        } else {
+            logToScreen(`Fetching Fragment: ${url}`);
+            const file = await fetch(url);
+            if (!file.ok) throw new Error(`Failed to fetch ${url}`);
+            buffer = await file.arrayBuffer();
+            logToScreen(`Fetched ${(buffer.byteLength / 1024 / 1024).toFixed(2)} MB`);
+            if (!url.startsWith('blob:')) {
+                saveToIndexedDB(cacheKey, buffer).catch(() => {});
+            }
+        }
+
         let data = new Uint8Array(buffer);
 
         logToScreen(`Fetched ${(buffer.byteLength / 1024 / 1024).toFixed(2)} MB`);
@@ -2112,6 +2165,9 @@ async function loadModel(url: string, path: string, options?: { propertiesUrl?: 
         */
 
         loadedModels.set(path, model);
+        if (model.uuid) loadedModels.set(model.uuid, model);
+        if (model.id) loadedModels.set(model.id, model);
+        if (model.modelId) loadedModels.set(model.modelId, model);
         updateProjectLinksBarVisibility();
 
         // Generar bordes para snapping
@@ -5101,7 +5157,7 @@ async function centerCameraOnSelection(modelIdMap: any) {
 
             const model = (fragments.groups instanceof Map)
                 ? fragments.groups.get(modelId)
-                : (fragments.groups as any)?.[modelId] || Array.from(loadedModels.values()).find((m: any) => m.uuid === modelId || m.name === modelId);
+                : (fragments.groups as any)?.[modelId] || Array.from(loadedModels.values()).find((m: any) => m.uuid === modelId || m.name === modelId || m.modelId === modelId);
 
             if (!model) continue;
 
@@ -5113,12 +5169,13 @@ async function centerCameraOnSelection(modelIdMap: any) {
                         if (fragment && fragment.mesh) {
                             const mesh = fragment.mesh as THREE.InstancedMesh;
                             const geom = mesh.geometry;
-                            if (!geom || !geom.attributes || !geom.attributes.position) continue;
+                            if (!geom) continue;
 
                             mesh.updateMatrixWorld();
-                            const pos = geom.attributes.position;
-                            const itemIdsSet = itemIds as Set<number>;
+                            if (!geom.boundingBox) geom.computeBoundingBox();
+                            if (!geom.boundingBox) continue;
 
+                            const itemIdsSet = itemIds as Set<number>;
                             for (const itemId of itemIdsSet) {
                                 let instIndex = -1;
                                 if (typeof fragment.getItemInstance === 'function') {
@@ -5129,12 +5186,9 @@ async function centerCameraOnSelection(modelIdMap: any) {
                                     mesh.getMatrixAt(instIndex, matrix);
                                     matrix.premultiply(mesh.matrixWorld);
 
-                                    const step = Math.max(1, Math.floor(pos.count / 10));
-                                    for (let i = 0; i < pos.count; i += step) {
-                                        const v = new THREE.Vector3().fromBufferAttribute(pos, i).applyMatrix4(matrix);
-                                        box.expandByPoint(v);
-                                        hasPoint = true;
-                                    }
+                                    const itemBox = geom.boundingBox.clone().applyMatrix4(matrix);
+                                    box.union(itemBox);
+                                    hasPoint = true;
                                 }
                             }
                         }
@@ -5147,8 +5201,8 @@ async function centerCameraOnSelection(modelIdMap: any) {
             const sphere = new THREE.Sphere();
             box.getBoundingSphere(sphere);
             if (sphere.radius > 0.01) {
-                // Set camera orbit target directly to the center of the selected element
-                await world.camera.controls.setTarget(sphere.center.x, sphere.center.y, sphere.center.z, true);
+                // Instantly update orbit target without blocking or animations
+                world.camera.controls.setTarget(sphere.center.x, sphere.center.y, sphere.center.z, false);
             }
         }
     } catch (e) {
@@ -5156,11 +5210,17 @@ async function centerCameraOnSelection(modelIdMap: any) {
     }
 }
 
-if (container) {
-    container.addEventListener('click', () => {
-        const selection = (highlighter as any).selection?.select as Record<string, Set<number>> | undefined;
-        renderPropertiesTable(selection || ({} as any));
-    });
+// Model lookup helper ensuring properties are found across all registry keys
+function findModel(id: string): any {
+    if (!id) return Array.from(loadedModels.values())[0] || null;
+    if (loadedModels.has(id)) return loadedModels.get(id);
+    if ((fragments as any).list?.has?.(id)) return (fragments as any).list.get(id);
+    if (fragments.groups instanceof Map && fragments.groups.has(id)) return fragments.groups.get(id);
+    if ((fragments.groups as any)?.[id]) return (fragments.groups as any)[id];
+    for (const m of loadedModels.values()) {
+        if (m.uuid === id || m.id === id || m.modelId === id || m.name === id) return m;
+    }
+    return Array.from(loadedModels.values())[0] || null;
 }
 
 // Helper for deep property resolution
@@ -5172,7 +5232,6 @@ function resolveRemote(ref: any, model: any) {
 }
 
 async function renderPropertiesTable(modelIdMap: Record<string, Set<number>>) {
-    console.log('[DEBUG] renderPropertiesTable called with:', modelIdMap);
     const content = document.getElementById('properties-content');
     const panel = document.getElementById('properties-panel');
     const tabProp = document.getElementById('right-tab-properties');
@@ -5216,128 +5275,53 @@ async function renderPropertiesTable(modelIdMap: Record<string, Set<number>>) {
         return;
     }
 
+    // Fast 0ms query: only request default attributes from worker (NO slow recursive relation graph)
     const dataByModel = await fragments.getData(normalized as any, {
-        attributesDefault: true,
-        relations: {
-            ContainedInStructure: { attributes: true, relations: true },
-            IsDefinedBy: { attributes: true, relations: true }
-        }
+        attributesDefault: true
     } as any);
-
-    // --- SECOND PASS: Fetch Relations Entities (specifically IfcRelContainedInSpatialStructure) ---
-    // Identify which relation IDs we need to fetch
-    const relationsToFetch: Record<string, number[]> = {};
-
-    for (const modelID of modelIds) {
-        const items = (dataByModel as any)[modelID] || [];
-        const modelRelations = new Set<number>();
-
-        items.forEach((item: any) => {
-            const raw = item as any;
-            const attrs = raw.data || raw.attributes || raw;
-            const relations = raw.relations || raw.Relations || attrs.relations || attrs.Relations || {};
-            const spatial = relations.ContainedInStructure || relations.containedInStructure || relations.containedInSpatialStructure || relations.ContainedInSpatialStructure;
-            if (Array.isArray(spatial)) {
-                spatial.forEach((id: number) => modelRelations.add(id));
-            }
-        });
-
-        if (modelRelations.size > 0) {
-            relationsToFetch[modelID] = Array.from(modelRelations);
-        }
-    }
-
-    let relationsData: any = {};
-    if (Object.keys(relationsToFetch).length > 0) {
-        try {
-            relationsData = await fragments.getData(relationsToFetch as any, {
-                attributesDefault: true,
-                relationsDefault: { attributes: true } // We just need the RelatingStructure ID
-            } as any);
-        } catch (e) {
-            console.error('Failed to fetch relations data:', e);
-        }
-    }
-
-    // --- THIRD PASS: Fetch Structure Entities (The Levels themselves) ---
-    const structuresToFetch: Record<string, number[]> = {};
-    const relIdToStructureId: Record<string, number> = {}; // Key: "modelID-relID" -> structureID
-
-    for (const modelID of Object.keys(relationsData)) {
-        const rels = relationsData[modelID];
-        const modelStructures = new Set<number>();
-
-        rels.forEach((rel: any) => {
-            const raw = rel as any;
-            const attrs = raw.data || raw.attributes || raw;
-            // IfcRelContainedInSpatialStructure has RelatingStructure
-            const structRef = attrs.RelatingStructure || attrs.relatingStructure;
-            const structID = (structRef && typeof structRef === 'object' && 'value' in structRef) ? structRef.value : structRef;
-
-            if (typeof structID === 'number') {
-                modelStructures.add(structID);
-                // Map relation to structure for lookup later
-                // Note: relationsData returns array of objects, we need to match by Express ID if possible
-                // But fragments.getData returns objects which usually contain expressID. 
-                // If not, we rely on the order or check if expressID is in attrs.
-                const expressID = raw.expressID || attrs.expressID;
-                if (expressID) {
-                    relIdToStructureId[`${modelID}-${expressID}`] = structID;
-                }
-            }
-        });
-
-        if (modelStructures.size > 0) {
-            structuresToFetch[modelID] = Array.from(modelStructures);
-        }
-    }
-
-    let structuresData: any = {};
-    if (Object.keys(structuresToFetch).length > 0) {
-        try {
-            structuresData = await fragments.getData(structuresToFetch as any, {
-                attributesDefault: true
-            } as any);
-        } catch (e) {
-            console.error('Failed to fetch structure data:', e);
-        }
-    }
-
-    // Helper to find structure name
-    const getStructureName = (modelID: string, structureID: number) => {
-        const structs = structuresData[modelID];
-        if (!structs) return null;
-        const s = structs.find((x: any) => (x.expressID || x.attributes?.expressID || x.data?.expressID) === structureID);
-        if (!s) return null;
-        const attrs = s.data || s.attributes || s;
-        const n = attrs.Name || attrs.name;
-        return (n?.value ?? n);
-    };
 
     for (const modelID of modelIds) {
         const localIds = normalized[modelID] || [];
         const items = (dataByModel as any)[modelID] || [];
-
-        // Try to get the full model to access raw properties
-        const model = loadedModels.get(modelID) || fragments.list.get(modelID);
+        const model = findModel(modelID);
 
         items.forEach((item: any, index: number) => {
             const localId = localIds[index];
             const raw = item as any;
-            const attrs = raw.data || raw.attributes || raw;
+            const attrs = raw?.data || raw?.attributes || raw || {};
             let levelName: string | null = null;
+            let materialName: string | null = null;
 
-            // --- Base Info (Name, ID, Category, GUID) ---
+            const tag = String(attrs.Tag?.value ?? attrs.Tag ?? '').trim();
+            const guid = String(attrs.GlobalId?.value ?? attrs.GlobalId ?? attrs._guid?.value ?? attrs._guid ?? raw.guid ?? '').trim();
             const nameAttr = attrs.Name || attrs.name || attrs.IFCNAME || attrs.IfcName;
             const nameValue = typeof nameAttr === 'object' && nameAttr !== null && 'value' in nameAttr
                 ? (nameAttr as any).value
                 : nameAttr || `Elemento ${localId ?? ''}`;
 
-            const category = raw.category || attrs.Category || attrs.category;
-            const guidAttr = raw.guid || attrs.GlobalId || attrs.globalId || attrs.GUID || attrs.guid;
-            const guidValue = typeof guidAttr === 'object' && guidAttr !== null && 'value' in guidAttr
-                ? (guidAttr as any).value
-                : guidAttr || '';
+            const category = raw.category || attrs.Category || attrs.category || attrs.type || attrs.ifcType;
+
+            // Direct 0ms entity resolution across localId, Tag, GlobalId and Name
+            let entity = model?.properties ? (
+                model.properties[localId] ||
+                model.properties[String(localId)] ||
+                (tag && (model.properties[tag] || model._propertiesByTag?.get(tag))) ||
+                (guid && (model.properties[guid] || model._propertiesByGuid?.get(guid))) ||
+                (nameValue && model._propertiesByName?.get(String(nameValue).trim()))
+            ) : null;
+
+            if (entity && model?.properties) {
+                model.properties[localId] = entity;
+                model.properties[String(localId)] = entity;
+            }
+
+            if (entity) {
+                const lvl = entity.level || entity.storey || entity['NIVEL INTEGRADO'] || entity['Nivel Integrado'];
+                if (lvl) levelName = String(lvl);
+
+                const mat = entity.material || entity['MATERIAL INTEGRADO'] || entity['Material Integrado'];
+                if (mat) materialName = String(mat);
+            }
 
             const container = document.createElement('div');
             container.className = 'prop-item';
@@ -5348,7 +5332,7 @@ async function renderPropertiesTable(modelIdMap: Record<string, Set<number>>) {
                     <div style="font-size: 11px; color: #666;">
                         ID: ${localId ?? '-'} <span style="margin: 0 5px;">|</span> Modelo: ${modelID}
                         ${category ? `<span style="margin: 0 5px;">|</span> Tipo: ${category}</span>` : ''}
-                        ${guidValue ? `<br/>GUID: ${guidValue}` : ''}
+                        ${guid ? `<br/>GUID: ${guid}` : ''}
                     </div>
                 </div>
             `;
@@ -5356,99 +5340,49 @@ async function renderPropertiesTable(modelIdMap: Record<string, Set<number>>) {
             html += `<div class="prop-set-title">Atributos Base</div>`;
             html += `<table class="prop-table"><tbody>`;
 
-            // Filter out internal/relation keys from base attributes
-            const ignoredKeys = new Set(['localId', 'category', 'guid', 'IsDefinedBy', 'isDefinedBy', 'relations', 'Relations', 'expressID', 'type']);
+            const ignoredKeys = new Set(['localId', 'category', 'guid', 'IsDefinedBy', 'isDefinedBy', 'relations', 'Relations', 'expressID', 'type', 'psets', 'typeCode', 'typeId', 'spatialStructureId', 'materialId']);
 
             for (const [key, attr] of Object.entries(attrs)) {
                 if (!key || ignoredKeys.has(key)) continue;
-
                 const val = (attr as any)?.value ?? attr;
                 if (val === null || val === undefined) continue;
-                if (Array.isArray(val)) continue;
-                if (typeof val === 'object') continue;
-
+                if (Array.isArray(val) || typeof val === 'object') continue;
                 html += `<tr><th>${key}</th><td>${val}</td></tr>`;
             }
 
             if (levelName) {
                 html += `<tr><th>Nivel</th><td>${levelName}</td></tr>`;
             }
+            if (materialName) {
+                html += `<tr><th>Material</th><td>${materialName}</td></tr>`;
+            }
 
             html += `</tbody></table>`;
 
-            // --- Relations (Property Sets & Cantidades) ---
-
-            let foundDeepProps = false;
-
-            // GENERIC DUMP of all other properties
-            // This ensures we show everything in the JSON even if it's not a standard Pset
-            const standardKeys = new Set([
-                'expressID', 'type', 'GlobalId', 'Name', 'Description', 'Tag', 'ObjectType',
-                'ContainedInStructure', 'containedInStructure',
-                'IsDefinedBy', 'isDefinedBy',
-                'relations', 'Relations',
-                'localId', 'category', 'guid'
-            ]);
-
-            // First, check standard relations (Psets)
-            if (model && model.properties && model.properties[localId]) {
-                const entity = model.properties[localId];
-
-                // Show any top-level properties that aren't standard keys
-                let hasCustomTopLevel = false;
-                let customTopLevelHtml = `<div class="prop-set-title">Propiedades del Elemento (Completo)</div><table class="prop-table"><tbody>`;
-
-                // Helper to format values recursively
+            // --- Full Entity Properties & Psets from JSON ---
+            if (entity) {
                 const formatValue = (v: any, depth: number): string => {
-                    if (depth > 2) return '...'; // Avoid infinite recursion
+                    if (depth > 2) return '...';
                     if (v === null || v === undefined) return '';
-
-                    let valueToProcess = v;
-
-                    // Handle Value Wrapper { type: 1, value: "foo" }
+                    let val = v;
                     if (typeof v === 'object' && v !== null && v.value !== undefined) {
-                        valueToProcess = v.value;
+                        val = v.value;
                     }
-
-                    // Handle Array
-                    if (Array.isArray(valueToProcess)) {
-                        if (valueToProcess.length === 0) return '[]';
-                        return `[${valueToProcess.map((item: any) => formatValue(item, depth + 1)).join(', ')}]`;
+                    if (Array.isArray(val)) {
+                        if (val.length === 0) return '[]';
+                        return `[${val.map((item: any) => formatValue(item, depth + 1)).join(', ')}]`;
                     }
-
-                    // Handle Reference (Number) - Try to resolve it
-                    if (typeof valueToProcess === 'number' && Number.isInteger(valueToProcess)) {
-                        // Check if it's a reference to another entity in the model
-                        if (model.properties[valueToProcess]) {
-                            const ref = model.properties[valueToProcess];
-
-                            // Try to get a meaningful name
-                            const name = (ref.Name && (ref.Name.value || ref.Name)) ||
-                                (ref.NominalValue && (ref.NominalValue.value || ref.NominalValue)) ||
-                                (ref.Description && (ref.Description.value || ref.Description));
-
-                            // If we are at depth 0 or 1, maybe show some details of the referenced object
-                            let details = '';
-                            if (depth < 1) {
-                                const subProps = [];
-                                for (const [sk, sv] of Object.entries(ref)) {
-                                    if (['expressID', 'type', 'GlobalId', 'OwnerHistory', 'Owner'].includes(sk)) continue;
-                                    if (typeof sv === 'object' || Array.isArray(sv)) continue; // Only simple values in summary
-                                    subProps.push(`${sk}: ${sv}`);
-                                }
-                                if (subProps.length > 0) details = ` <span style="color:#666; font-size:0.85em;">{${subProps.join(', ')}}</span>`;
-                            }
-
-                            return `<span title="ExpressID: ${valueToProcess}" style="color: #0056b3; cursor: help;">${name ? name : ref.type || 'Entity'} <i>#${valueToProcess}</i>${details}</span>`;
-                        }
-                        return String(valueToProcess);
+                    if (typeof val === 'number' && Number.isInteger(val) && model?.properties?.[val]) {
+                        const ref = model.properties[val];
+                        const refName = (ref.Name && (ref.Name.value || ref.Name)) ||
+                            (ref.NominalValue && (ref.NominalValue.value || ref.NominalValue)) ||
+                            (ref.Description && (ref.Description.value || ref.Description));
+                        return `<span title="ID: ${val}" style="color: #0056b3;">${refName ? refName : ref.type || 'Entity'} #${val}</span>`;
                     }
-
-                    if (typeof valueToProcess === 'object') {
-                        try { return JSON.stringify(valueToProcess); } catch { return '[Object]'; }
+                    if (typeof val === 'object') {
+                        try { return JSON.stringify(val); } catch { return '[Object]'; }
                     }
-
-                    return String(valueToProcess);
+                    return String(val);
                 };
 
                 const renderSection = (sectionName: string, obj: any, depth: number = 0): string => {
@@ -5468,8 +5402,7 @@ async function renderPropertiesTable(modelIdMap: Record<string, Set<number>>) {
                                     idx++;
                                 }
                             } else {
-                                const displayVal = formatValue(sv, depth);
-                                out += `<tr><th>${sk}</th><td>${displayVal}</td></tr>`;
+                                out += `<tr><th>${sk}</th><td>${formatValue(sv, depth)}</td></tr>`;
                             }
                             continue;
                         }
@@ -5477,334 +5410,44 @@ async function renderPropertiesTable(modelIdMap: Record<string, Set<number>>) {
                             out += renderSection(sk, sv, depth + 1);
                             continue;
                         }
-                        const displayVal = formatValue(sv, depth);
-                        out += `<tr><th>${sk}</th><td>${displayVal}</td></tr>`;
+                        out += `<tr><th>${sk}</th><td>${formatValue(sv, depth)}</td></tr>`;
                     }
                     out += `</tbody></table>`;
                     return out;
                 };
 
-                // --- Robust recursive rendering for ANY object/JSON structure ---
-                // This replaces the specific 'psets' check to handle 'pstes', 'properties', 'data', etc.
-
-                let sectionsHtml = '';
-
-                for (const [key, val] of Object.entries(entity)) {
-                    if (standardKeys.has(key)) continue;
-
-                    // Skip nulls
-                    if (val === null || val === undefined) continue;
-
-                    let processedObject: any = null;
-                    let isComplex = false;
-
-                    // 1. Try to parse if it's a string
-                    if (typeof val === 'string') {
-                        const cleaned = val.trim();
-                        // Heuristic: starts with { or [ looks like JSON
-                        if (cleaned.startsWith('{') || cleaned.startsWith('[')) {
-                            console.log(`[DEBUG] Attempting to parse complex string for key '${key}'`, cleaned.substring(0, 50) + '...');
-                            try {
-                                processedObject = JSON.parse(cleaned);
-                                isComplex = (typeof processedObject === 'object' && processedObject !== null);
-                                console.log(`[DEBUG] Parsing success for '${key}'`, isComplex);
-                            } catch (e) {
-                                console.warn(`[DEBUG] JSON.parse failed for '${key}':`, e);
-                                // Fallback: relaxed parsing
-                                try {
-                                    if (cleaned.startsWith('{')) {
-                                        processedObject = new Function("return " + cleaned)();
-                                        isComplex = (typeof processedObject === 'object' && processedObject !== null);
-                                    }
-                                } catch (e2) { }
-                            }
-                        }
-                    }
-                    // 2. Already an object
-                    else if (typeof val === 'object') {
-                        // Exclude simple value wrappers { type: 1, value: "foo" } unless they contain nested objects
-                        const isWrapper = (val as any).value !== undefined && Object.keys(val).length <= 2;
-
-                        if (!isWrapper && !Array.isArray(val)) {
-                            processedObject = val;
-                            isComplex = true;
-                        } else if (Array.isArray(val)) {
-                            // Check if array contains objects
-                            if (val.length > 0 && typeof val[0] === 'object') {
-                                processedObject = val;
-                                isComplex = true;
-                            }
-                        }
-                    }
-
-                    if (isComplex && processedObject) {
-                        // Render as a separate section
-                        // If it's the 'psets' (or typo 'pstes') style object, keys are Pset names
-                        if (!Array.isArray(processedObject)) {
-                            // Check if the values are themselves objects (Pset style)
-                            // e.g. { "Pset_WallCommon": { "LoadBearing": true }, "Pset_X": ... }
-                            let isPsetCollection = true;
-                            for (const subVal of Object.values(processedObject)) {
-                                if (typeof subVal !== 'object' || subVal === null) {
-                                    isPsetCollection = false;
-                                    break;
-                                }
-                            }
-
-                            if (isPsetCollection) {
-                                // Render each key as a separate table
-                                for (const [psetName, psetProps] of Object.entries(processedObject)) {
-                                    sectionsHtml += renderSection(psetName, psetProps, 0);
-                                }
-                            } else {
-                                // Just a single complex object
-                                sectionsHtml += renderSection(key, processedObject, 0);
-                            }
-                        } else {
-                            // Array of objects
-                            sectionsHtml += renderSection(key, processedObject, 0);
-                        }
-                        continue;
-                    }
-
-                    // Standard Value Rendering
-                    const displayVal = formatValue(val, 0);
-                    customTopLevelHtml += `<tr><th>${key}</th><td>${displayVal}</td></tr>`;
-                    hasCustomTopLevel = true;
-                }
-                customTopLevelHtml += `</tbody></table>`;
-
-                if (hasCustomTopLevel) {
-                    html += customTopLevelHtml;
-                }
-                html += sectionsHtml;
-
-                // --- INVERSE ATTRIBUTE RECONSTRUCTION (Lazy Build) ---
-                if (!model._inverseMap) {
-                    console.log('Building inverse attribute map for property discovery...');
-                    model._inverseMap = new Map();
-                    const psetMap = model._inverseMap;
-
-                    for (const id in model.properties) {
-                        const prop = model.properties[id];
-                        if (!prop) continue;
-
-                        // Check for IfcRelDefinesByProperties
-                        // Note: Type can be numeric or string depending on parser
-                        const type = String(prop.type || '').toUpperCase();
-
-                        if (type === 'IFCRELDEFINESBYPROPERTIES') {
-                            const related = prop.RelatedObjects || prop.relatedObjects;
-                            const relating = prop.RelatingPropertyDefinition || prop.relatingPropertyDefinition;
-
-                            if (related && relating) {
-                                const relatedIds = Array.isArray(related) ? related : [related];
-                                const psetId = (relating.value || relating); // Handle wrapper
-
-                                for (const relId of relatedIds) {
-                                    const rId = (relId.value || relId);
-                                    if (!psetMap.has(rId)) psetMap.set(rId, []);
-                                    psetMap.get(rId).push(psetId);
-                                }
-                            }
-                        }
-                    }
-                    console.log(`Inverse map built. Found relations for ${psetMap.size} items.`);
-                }
-
-                // Inject detected Psets into IsDefinedBy if missing
-                let isDefinedBy = entity.IsDefinedBy || entity.isDefinedBy || [];
-                if (!Array.isArray(isDefinedBy)) isDefinedBy = [isDefinedBy];
-
-                // Add inverse relations
-                if (model._inverseMap && model._inverseMap.has(Number(localId))) {
-                    const extraPsets = model._inverseMap.get(Number(localId));
-                    // Construct synthetic objects to mimic direct reference
-                    // We only have the Pset ID, but that's what resolveRemote needs
-                    extraPsets.forEach((pid: any) => {
-                        // We create a fake "Rel" that points to the Pset
-                        // Because the loop below expects a Rel, then gets RelatingPropertyDefinition
-                        // But wait, the loop below iterates 'isDefinedBy' which are RELATIONS (IfcRelDefinesByProperties)
-                        // NOT Psets directly.
-                        // So we need to find the REL ID that connects them? 
-                        // No, we can just treat the Pset as if it was directly linked if we adjust the loop.
-                        // BUT, to avoid breaking existing logic, let's look at the loop.
-
-                        // The loop expects: rel -> RelatingPropertyDefinition -> Pset
-                        // If we just add the Pset ID to a separate list, we can process it.
-                    });
-                }
-
-                // Better approach: Separate loop for Inverse Psets
-                const inversePsets = model._inverseMap ? (model._inverseMap.get(Number(localId)) || []) : [];
-
-                // --- Level / Spatial Structure ---
-                const containedIn = entity.ContainedInStructure || entity.containedInStructure;
-                if (containedIn && Array.isArray(containedIn)) {
-                    for (const relRef of containedIn) {
-                        const rel = resolveRemote(relRef, model);
-                        if (!rel) continue;
-
-                        const structureRef = rel.RelatingStructure || rel.relatingStructure;
-                        if (!structureRef) continue;
-
-                        const structure = resolveRemote(structureRef, model);
-                        if (!structure) continue;
-
-                        const levelNameObj = structure.Name || structure.name;
-                        const candidate = (levelNameObj?.value ?? levelNameObj) || 'Sin Nombre';
-                        if (candidate) {
-                            levelName = String(candidate);
-                            break;
-                        }
+                // A. Render Psets if present
+                if (entity.psets && typeof entity.psets === 'object') {
+                    for (const [psetName, psetProps] of Object.entries(entity.psets)) {
+                        html += renderSection(psetName, psetProps, 0);
                     }
                 }
 
-                const directIsDefinedBy = entity.IsDefinedBy || entity.isDefinedBy;
+                // B. Render top-level custom properties (excluding internal / already rendered keys)
+                const renderedTopKeys = new Set([
+                    'expressID', 'type', 'GlobalId', 'Name', 'Description', 'Tag', 'ObjectType',
+                    'ContainedInStructure', 'containedInStructure',
+                    'IsDefinedBy', 'isDefinedBy',
+                    'relations', 'Relations', 'localId', 'category', 'guid',
+                    'spatialStructureId', 'materialId', 'typeId', 'typeCode', 'ifcType', 'typeName',
+                    'psets', 'level', 'storey', 'material'
+                ]);
 
-                if (directIsDefinedBy && Array.isArray(directIsDefinedBy)) {
-                    for (const relRef of directIsDefinedBy) {
-                        const rel = resolveRemote(relRef, model);
-                        if (!rel) continue;
-
-                        // Check if it is IfcRelDefinesByProperties
-                        const psetRef = rel.RelatingPropertyDefinition || rel.relatingPropertyDefinition;
-                        if (!psetRef) continue;
-
-                        const pset = resolveRemote(psetRef, model);
-                        if (!pset) continue;
-
-                        renderPset(pset);
+                let customTopHtml = '';
+                for (const [k, v] of Object.entries(entity)) {
+                    if (renderedTopKeys.has(k)) continue;
+                    if (v === null || v === undefined) continue;
+                    if (typeof v === 'object' && !Array.isArray(v)) {
+                        html += renderSection(k, v, 0);
+                    } else {
+                        customTopHtml += `<tr><th>${k}</th><td>${formatValue(v, 0)}</td></tr>`;
                     }
                 }
 
-                // Render Inverse Psets
-                if (inversePsets.length > 0) {
-                    for (const psetId of inversePsets) {
-                        const pset = resolveRemote(psetId, model);
-                        if (pset) renderPset(pset);
-                    }
-                }
-
-                function renderPset(pset: any) {
-                    const psetNameObj = pset.Name || pset.name;
-                    const psetName = (psetNameObj?.value ?? psetNameObj) || 'Sin Nombre';
-
-                    // Case 1: IfcPropertySet -> HasProperties
-                    const props = pset.HasProperties || pset.hasProperties;
-                    if (props && Array.isArray(props)) {
-                        foundDeepProps = true;
-                        html += `<div class="prop-set-title">${psetName}</div><table class="prop-table"><tbody>`;
-                        for (const propRef of props) {
-                            const prop = resolveRemote(propRef, model);
-                            if (!prop) continue;
-
-                            const propNameObj = prop.Name || prop.name;
-                            const propName = propNameObj?.value ?? propNameObj;
-
-                            const propValObj = prop.NominalValue || prop.nominalValue;
-                            const propVal = propValObj?.value ?? propValObj;
-
-                            if (propName && propVal !== undefined) {
-                                const displayVal = formatValue(propVal, 0);
-                                html += `<tr><th>${propName}</th><td>${displayVal}</td></tr>`;
-                            }
-                        }
-                        html += `</tbody></table>`;
-                    }
-
-                    // Case 2: IfcElementQuantity -> Quantities
-                    const quantities = pset.Quantities || pset.quantities;
-                    if (quantities && Array.isArray(quantities)) {
-                        foundDeepProps = true;
-                        html += `<div class="prop-set-title">${psetName} (Cantidades)</div><table class="prop-table"><tbody>`;
-                        for (const qRef of quantities) {
-                            const q = resolveRemote(qRef, model);
-                            if (!q) continue;
-
-                            const qNameObj = q.Name || q.name;
-                            const qName = qNameObj?.value ?? qNameObj;
-
-                            const qVal = (q.LengthValue?.value ?? q.LengthValue) ??
-                                (q.AreaValue?.value ?? q.AreaValue) ??
-                                (q.VolumeValue?.value ?? q.VolumeValue) ??
-                                (q.CountValue?.value ?? q.CountValue) ??
-                                (q.WeightValue?.value ?? q.WeightValue) ??
-                                (q.TimeValue?.value ?? q.TimeValue) ??
-                                (q.nominalValue?.value ?? q.nominalValue);
-
-                            if (qName && qVal !== undefined) {
-                                const displayVal = formatValue(qVal, 0);
-                                html += `<tr><th>${qName}</th><td>${displayVal}</td></tr>`;
-                            }
-                        }
-                        html += `</tbody></table>`;
-                    }
+                if (customTopHtml) {
+                    html += `<div class="prop-set-title">Propiedades del Elemento</div><table class="prop-table"><tbody>${customTopHtml}</tbody></table>`;
                 }
             }
-
-            // --- Robust Level Lookup (Independent of Deep Props) ---
-            if (!levelName) {
-                const relations = raw.relations || raw.Relations || attrs.relations || attrs.Relations || {};
-                const spatial = relations.ContainedInStructure || relations.containedInStructure || relations.containedInSpatialStructure || relations.ContainedInSpatialStructure;
-
-                if (Array.isArray(spatial) && spatial.length > 0) {
-                    // spatial contains IDs of IFCRELCONTAINEDINSPATIALSTRUCTURE
-                    for (const relID of spatial) {
-                        // New Lookup Logic using pre-fetched data
-                        const structID = relIdToStructureId[`${modelID}-${relID}`];
-                        if (structID) {
-                            const name = getStructureName(modelID, structID);
-                            if (name) {
-                                levelName = String(name);
-                                break;
-                            }
-                        }
-
-                        // Fallback to old logic (only works if model.properties is loaded)
-                        if (!levelName) {
-                            const rel = resolveRemote(relID, model);
-                            if (rel && typeof rel === 'object') {
-                                const structureRef = rel.RelatingStructure || rel.relatingStructure;
-                                const structure = resolveRemote(structureRef, model);
-                                if (structure && typeof structure === 'object') {
-                                    const levelNameObj = structure.Name || structure.name;
-                                    const candidate = (levelNameObj?.value ?? levelNameObj);
-                                    if (candidate) {
-                                        levelName = String(candidate);
-                                        break; // Found it
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-
-            if (levelName && !html.includes("<th>Nivel</th>")) {
-                html = html.replace(
-                    "</tbody></table>",
-                    `<tr><th>Nivel</th><td>${levelName}</td></tr></tbody></table>`
-                );
-            }
-
-            const rels = raw.relations || raw.Relations || attrs.relations || attrs.Relations || {};
-            const relKeys = Object.keys(rels);
-            const spatial = rels.ContainedInStructure || rels.containedInStructure || rels.containedInSpatialStructure || rels.ContainedInSpatialStructure;
-
-            html += `
-                <details style="margin-top: 15px; border-top: 1px solid #ddd; padding-top: 10px;">
-                    <summary style="font-size: 11px; color: #999; cursor: pointer; user-select: none;">
-                        🛠 Diagnóstico de Datos
-                    </summary>
-                    <div style="font-size: 10px; color: #444; background: #f5f5f5; padding: 10px; margin-top: 5px; border-radius: 4px; overflow-x: auto;">
-                        <strong>ID Elemento:</strong> ${localId} (ExpressID)<br/>
-                        <strong>Relaciones Disponibles:</strong> ${relKeys.length > 0 ? relKeys.join(', ') : 'NINGUNA'}<br/>
-                        <strong>Relación Espacial (Nivel):</strong> ${spatial ? '✅ EXISTE' : '❌ FALTA'}<br/>
-                        ${spatial ? `Valores: ${JSON.stringify(spatial)}` : ''}
-                    </div>
-                </details>
-            `;
 
             container.innerHTML = html;
             content.appendChild(container);
@@ -9338,11 +8981,31 @@ async function classifyModel(model: any) {
                     );
                     const items: any[] = (result as any)[modelUUID] || [];
                     items.forEach((raw: any, idx: number) => {
-                        const expressID: number = chunk[idx];
-                        if (expressID === undefined) return;
-                        // EXACTLY like the properties panel:
+                        const localId: number = chunk[idx];
+                        if (localId === undefined) return;
                         const attrs = raw?.data || raw?.attributes || raw || {};
-                        if (readFields(attrs, expressID)) gdataHits++;
+                        const tag = String(attrs.Tag?.value ?? attrs.Tag ?? '').trim();
+                        const guid = String(attrs.GlobalId?.value ?? attrs.GlobalId ?? attrs._guid?.value ?? attrs._guid ?? raw.guid ?? '').trim();
+                        const name = String(attrs.Name?.value ?? attrs.Name ?? attrs.IFCNAME ?? attrs.IfcName ?? '').trim();
+
+                        const entity = model.properties ? (
+                            model.properties[localId] ||
+                            model.properties[String(localId)] ||
+                            (tag && (model.properties[tag] || model._propertiesByTag?.get(tag))) ||
+                            (guid && (model.properties[guid] || model._propertiesByGuid?.get(guid))) ||
+                            (name && model._propertiesByName?.get(name))
+                        ) : null;
+
+                        if (entity) {
+                            entity.localId = localId;
+                            if (model.properties) {
+                                model.properties[localId] = entity;
+                                model.properties[String(localId)] = entity;
+                            }
+                            if (readFields({ ...attrs, ...entity }, localId)) gdataHits++;
+                        } else {
+                            if (readFields(attrs, localId)) gdataHits++;
+                        }
                     });
                 } catch (e) {
                     console.warn('[Classify] getData chunk error:', e);
