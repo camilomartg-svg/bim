@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import * as THREE from 'three';
 import * as OBC from '@thatopen/components';
 import * as FRAGS from '@thatopen/fragments';
+import * as WEBIFC from 'web-ifc';
 import workerUrl from '@thatopen/fragments/worker?url';
 import { 
   FileUp, 
@@ -26,6 +27,381 @@ const getWorkerUrl = () => {
     return workerUrl || "https://unpkg.com/@thatopen/fragments@3.3.6/dist/Worker/worker.mjs";
   }
 };
+
+function unwrapIfcValue(val: any): any {
+  if (val == null) return null;
+  if (typeof val === 'object') {
+    if ('value' in val) return unwrapIfcValue(val.value);
+    if (Array.isArray(val)) return val.map(unwrapIfcValue);
+  }
+  return val;
+}
+
+function shouldIncludeEntityType(typeName: string): boolean {
+  if (!typeName) return false;
+  const upper = typeName.toUpperCase();
+  // Filter out pure internal geometric point/curve math to avoid massive JSON bloat without loss of properties
+  const pureGeometry = /^(IFC)?(CARTESIANPOINT|DIRECTION|AXIS2PLACEMENT|AXIS1PLACEMENT|POLYLOOP|POLYLINE|INDEXEDPOLYCURVE|FACETEDBREP|FACE|EDGE|VERTEX|SURFACE|VECTOR|PLANE|BOUNDINGBOX|SHAPEREPRESENTATION|PRODUCTDEFINITIONSHAPE|GEOMETRICREPRESENTATION)/i;
+  const semantic = /(PROPERTY|REL|QUANTITY|MATERIAL|TYPE|STYLE|PRESENTATION|CLASSIFICATION|PRODUCT|PROJECT|SITE|BUILDING|STOREY|ELEMENT|SYSTEM|GROUP|ZONE|SPATIAL|PORT|ACTUATOR|VALVE|PIPE|DUCT|BEAM|COLUMN|WALL|SLAB|DOOR|WINDOW|ROOF|STAIR|RAILING|COVERING|FOOTING|PLATE|MEMBER)/i;
+  
+  if (semantic.test(upper)) return true;
+  if (pureGeometry.test(upper)) return false;
+  return true;
+}
+
+async function extractCompleteIfcProperties(
+  webIfc: WEBIFC.IfcAPI, 
+  buffer: Uint8Array,
+  onProgress?: (progress: number, msg: string) => void
+): Promise<Record<string, any>> {
+  const modelID = webIfc.OpenModel(buffer);
+  try {
+    onProgress?.(80, 'Indexando relaciones y parámetros IFC...');
+    
+    // 1. IFCRELDEFINESBYPROPERTIES: elements -> psets/qsets
+    const elementToPsetIds = new Map<number, number[]>();
+    try {
+      const relDefinesIds = webIfc.GetLineIDsWithType(modelID, WEBIFC.IFCRELDEFINESBYPROPERTIES);
+      const totalRels = relDefinesIds.size();
+      for (let i = 0; i < totalRels; i++) {
+        const relId = relDefinesIds.get(i);
+        const rel = webIfc.GetLine(modelID, relId, false);
+        if (rel && rel.RelatedObjects && rel.RelatingPropertyDefinition) {
+          const psetId = unwrapIfcValue(rel.RelatingPropertyDefinition);
+          if (typeof psetId === 'number') {
+            const relObjects = Array.isArray(rel.RelatedObjects) ? rel.RelatedObjects : [rel.RelatedObjects];
+            for (const obj of relObjects) {
+              const elId = unwrapIfcValue(obj);
+              if (typeof elId === 'number') {
+                const list = elementToPsetIds.get(elId);
+                if (list) list.push(psetId);
+                else elementToPsetIds.set(elId, [psetId]);
+              }
+            }
+          }
+        }
+      }
+      relDefinesIds.delete?.();
+    } catch (e) {
+      console.warn('Warning indexing IFCRELDEFINESBYPROPERTIES:', e);
+    }
+
+    // 2. IFCRELDEFINESBYTYPE: element -> type
+    const elementToTypeId = new Map<number, number>();
+    try {
+      const relTypesIds = webIfc.GetLineIDsWithType(modelID, WEBIFC.IFCRELDEFINESBYTYPE);
+      const totalRelTypes = relTypesIds.size();
+      for (let i = 0; i < totalRelTypes; i++) {
+        const relId = relTypesIds.get(i);
+        const rel = webIfc.GetLine(modelID, relId, false);
+        if (rel && rel.RelatedObjects && rel.RelatingType) {
+          const typeId = unwrapIfcValue(rel.RelatingType);
+          if (typeof typeId === 'number') {
+            const relObjects = Array.isArray(rel.RelatedObjects) ? rel.RelatedObjects : [rel.RelatedObjects];
+            for (const obj of relObjects) {
+              const elId = unwrapIfcValue(obj);
+              if (typeof elId === 'number') {
+                elementToTypeId.set(elId, typeId);
+              }
+            }
+          }
+        }
+      }
+      relTypesIds.delete?.();
+    } catch (e) {
+      console.warn('Warning indexing IFCRELDEFINESBYTYPE:', e);
+    }
+
+    // 3. IFCRELCONTAINEDINSPATIALSTRUCTURE: element -> spatial structure (Level / Storey)
+    const elementToSpatialId = new Map<number, number>();
+    try {
+      const relSpatialIds = webIfc.GetLineIDsWithType(modelID, WEBIFC.IFCRELCONTAINEDINSPATIALSTRUCTURE);
+      const totalRelSpatial = relSpatialIds.size();
+      for (let i = 0; i < totalRelSpatial; i++) {
+        const relId = relSpatialIds.get(i);
+        const rel = webIfc.GetLine(modelID, relId, false);
+        if (rel && rel.RelatedElements && rel.RelatingStructure) {
+          const structId = unwrapIfcValue(rel.RelatingStructure);
+          if (typeof structId === 'number') {
+            const relElements = Array.isArray(rel.RelatedElements) ? rel.RelatedElements : [rel.RelatedElements];
+            for (const obj of relElements) {
+              const elId = unwrapIfcValue(obj);
+              if (typeof elId === 'number') {
+                elementToSpatialId.set(elId, structId);
+              }
+            }
+          }
+        }
+      }
+      relSpatialIds.delete?.();
+    } catch (e) {
+      console.warn('Warning indexing IFCRELCONTAINEDINSPATIALSTRUCTURE:', e);
+    }
+
+    // 4. IFCRELASSOCIATESMATERIAL: element -> material
+    const elementToMaterialId = new Map<number, number>();
+    try {
+      const relMaterialIds = webIfc.GetLineIDsWithType(modelID, WEBIFC.IFCRELASSOCIATESMATERIAL);
+      const totalRelMat = relMaterialIds.size();
+      for (let i = 0; i < totalRelMat; i++) {
+        const relId = relMaterialIds.get(i);
+        const rel = webIfc.GetLine(modelID, relId, false);
+        if (rel && rel.RelatedObjects && rel.RelatingMaterial) {
+          const matId = unwrapIfcValue(rel.RelatingMaterial);
+          if (typeof matId === 'number') {
+            const relObjects = Array.isArray(rel.RelatedObjects) ? rel.RelatedObjects : [rel.RelatedObjects];
+            for (const obj of relObjects) {
+              const elId = unwrapIfcValue(obj);
+              if (typeof elId === 'number') {
+                elementToMaterialId.set(elId, matId);
+              }
+            }
+          }
+        }
+      }
+      relMaterialIds.delete?.();
+    } catch (e) {
+      console.warn('Warning indexing IFCRELASSOCIATESMATERIAL:', e);
+    }
+
+    // Helper: Parse a Property Set or Element Quantity by expressID
+    const resolvePset = (psetId: number): { psetName: string; props: Record<string, any> } | null => {
+      try {
+        const psetEntity = webIfc.GetLine(modelID, psetId, false);
+        if (!psetEntity) return null;
+        const psetName = unwrapIfcValue(psetEntity.Name) || `Pset_${psetId}`;
+        const props: Record<string, any> = {};
+
+        // HasProperties (IfcPropertySet)
+        if (psetEntity.HasProperties && Array.isArray(psetEntity.HasProperties)) {
+          for (const propRef of psetEntity.HasProperties) {
+            const propId = unwrapIfcValue(propRef);
+            if (typeof propId !== 'number') continue;
+            const propLine = webIfc.GetLine(modelID, propId, false);
+            if (!propLine) continue;
+            const propName = unwrapIfcValue(propLine.Name);
+            if (!propName) continue;
+
+            if (propLine.NominalValue !== undefined) {
+              props[propName] = unwrapIfcValue(propLine.NominalValue);
+            } else if (propLine.EnumerationValues && Array.isArray(propLine.EnumerationValues)) {
+              props[propName] = propLine.EnumerationValues.map(unwrapIfcValue);
+            } else if (propLine.HasProperties && Array.isArray(propLine.HasProperties)) {
+              const subProps: Record<string, any> = {};
+              for (const subRef of propLine.HasProperties) {
+                const subId = unwrapIfcValue(subRef);
+                if (typeof subId === 'number') {
+                  const subLine = webIfc.GetLine(modelID, subId, false);
+                  if (subLine && subLine.Name) {
+                    const subName = unwrapIfcValue(subLine.Name);
+                    subProps[subName] = unwrapIfcValue(subLine.NominalValue ?? subLine.Description);
+                  }
+                }
+              }
+              props[propName] = subProps;
+            } else {
+              props[propName] = unwrapIfcValue(propLine.Description ?? true);
+            }
+          }
+        }
+
+        // Quantities (IfcElementQuantity)
+        if (psetEntity.Quantities && Array.isArray(psetEntity.Quantities)) {
+          for (const qRef of psetEntity.Quantities) {
+            const qId = unwrapIfcValue(qRef);
+            if (typeof qId !== 'number') continue;
+            const qLine = webIfc.GetLine(modelID, qId, false);
+            if (!qLine) continue;
+            const qName = unwrapIfcValue(qLine.Name);
+            if (!qName) continue;
+            const val = unwrapIfcValue(
+              qLine.LengthValue ?? 
+              qLine.AreaValue ?? 
+              qLine.VolumeValue ?? 
+              qLine.CountValue ?? 
+              qLine.WeightValue ?? 
+              qLine.TimeValue ?? 
+              qLine.NominalValue
+            );
+            if (val !== undefined) {
+              props[qName] = val;
+            }
+          }
+        }
+
+        return { psetName: String(psetName), props };
+      } catch {
+        return null;
+      }
+    };
+
+    // Helper: Material name resolver
+    const resolveMaterialName = (matId: number): string | null => {
+      try {
+        const mat = webIfc.GetLine(modelID, matId, false);
+        if (!mat) return null;
+        if (mat.Name) return String(unwrapIfcValue(mat.Name));
+        if (mat.ForLayerSet) {
+          const layerSet = webIfc.GetLine(modelID, unwrapIfcValue(mat.ForLayerSet), false);
+          if (layerSet && layerSet.LayerSetName) return String(unwrapIfcValue(layerSet.LayerSetName));
+        }
+        if (mat.MaterialLayers && Array.isArray(mat.MaterialLayers)) {
+          const names: string[] = [];
+          for (const lRef of mat.MaterialLayers) {
+            const layer = webIfc.GetLine(modelID, unwrapIfcValue(lRef), false);
+            if (layer && layer.Material) {
+              const subMat = webIfc.GetLine(modelID, unwrapIfcValue(layer.Material), false);
+              if (subMat && subMat.Name) names.push(String(unwrapIfcValue(subMat.Name)));
+            }
+          }
+          if (names.length > 0) return names.join(' / ');
+        }
+        return null;
+      } catch {
+        return null;
+      }
+    };
+
+    // Helper: Spatial structure name resolver (Storey / Level)
+    const resolveSpatialName = (structId: number): string | null => {
+      try {
+        const struct = webIfc.GetLine(modelID, structId, false);
+        if (!struct) return null;
+        return unwrapIfcValue(struct.Name ?? struct.LongName) || null;
+      } catch {
+        return null;
+      }
+    };
+
+    // Pre-cache Type property sets so elements get their type parameters attached
+    const typePsetsCache = new Map<number, { typeName: string; psets: Record<string, any> }>();
+    for (const typeId of new Set(elementToTypeId.values())) {
+      try {
+        const typeEntity = webIfc.GetLine(modelID, typeId, false);
+        if (!typeEntity) continue;
+        const typeName = unwrapIfcValue(typeEntity.Name) || '';
+        const typePsets: Record<string, any> = {};
+
+        // Property sets directly on the type (HasPropertySets)
+        if (typeEntity.HasPropertySets && Array.isArray(typeEntity.HasPropertySets)) {
+          for (const psetRef of typeEntity.HasPropertySets) {
+            const pId = unwrapIfcValue(psetRef);
+            if (typeof pId === 'number') {
+              const parsed = resolvePset(pId);
+              if (parsed) typePsets[parsed.psetName] = parsed.props;
+            }
+          }
+        }
+
+        // Property sets associated via IFCRELDEFINESBYPROPERTIES on the type
+        const associatedPsets = elementToPsetIds.get(typeId);
+        if (associatedPsets) {
+          for (const pId of associatedPsets) {
+            const parsed = resolvePset(pId);
+            if (parsed) typePsets[parsed.psetName] = parsed.props;
+          }
+        }
+
+        typePsetsCache.set(typeId, { typeName, psets: typePsets });
+      } catch {}
+    }
+
+    // 5. Iterate ALL lines in the IFC model and build the property dictionary
+    onProgress?.(88, 'Extrayendo todos los parámetros y propiedades IFC...');
+    const allLinesVector = webIfc.GetAllLines(modelID);
+    const totalLines = allLinesVector.size();
+    const result: Record<string, any> = {};
+
+    for (let i = 0; i < totalLines; i++) {
+      const expressID = allLinesVector.get(i);
+      try {
+        const line = webIfc.GetLine(modelID, expressID, false);
+        if (!line) continue;
+
+        const typeCode = line.type;
+        if (typeof typeCode !== 'number') continue;
+
+        const typeName = webIfc.GetNameFromTypeCode(typeCode);
+        if (!typeName || !shouldIncludeEntityType(typeName)) continue;
+
+        const entityData: any = { ...line };
+        entityData.typeCode = typeCode;
+        entityData.type = typeName;
+        entityData.ifcType = typeName;
+
+        // Normalize common attributes
+        if (line.Name !== undefined) entityData.Name = unwrapIfcValue(line.Name);
+        if (line.GlobalId !== undefined) entityData.GlobalId = unwrapIfcValue(line.GlobalId);
+        if (line.Description !== undefined) entityData.Description = unwrapIfcValue(line.Description);
+        if (line.ObjectType !== undefined) entityData.ObjectType = unwrapIfcValue(line.ObjectType);
+        if (line.Tag !== undefined) entityData.Tag = unwrapIfcValue(line.Tag);
+
+        // A. Resolve Instance Property Sets & Quantities
+        const psetIds = elementToPsetIds.get(expressID);
+        const psetsMap: Record<string, any> = {};
+        if (psetIds) {
+          for (const pId of psetIds) {
+            const parsed = resolvePset(pId);
+            if (parsed) {
+              psetsMap[parsed.psetName] = { ...(psetsMap[parsed.psetName] || {}), ...parsed.props };
+            }
+          }
+        }
+
+        // B. Resolve Type Parameters (via IFCRELDEFINESBYTYPE)
+        const typeId = elementToTypeId.get(expressID);
+        if (typeId) {
+          entityData.typeId = typeId;
+          const cachedType = typePsetsCache.get(typeId);
+          if (cachedType) {
+            if (cachedType.typeName) entityData.typeName = cachedType.typeName;
+            for (const [psetName, props] of Object.entries(cachedType.psets)) {
+              psetsMap[psetName] = { ...(psetsMap[psetName] || {}), ...props };
+            }
+          }
+        }
+
+        // Attach resolved psets if any exist
+        if (Object.keys(psetsMap).length > 0) {
+          entityData.psets = psetsMap;
+        }
+
+        // C. Spatial Structure (Storey / Level)
+        const spatialId = elementToSpatialId.get(expressID);
+        if (spatialId) {
+          entityData.spatialStructureId = spatialId;
+          const spatialName = resolveSpatialName(spatialId);
+          if (spatialName) {
+            entityData.level = spatialName;
+            entityData.storey = spatialName;
+          }
+        }
+
+        // D. Material
+        const materialId = elementToMaterialId.get(expressID);
+        if (materialId) {
+          entityData.materialId = materialId;
+          const matName = resolveMaterialName(materialId);
+          if (matName) {
+            entityData.material = matName;
+          }
+        }
+
+        result[String(expressID)] = entityData;
+      } catch {}
+
+      if (i % 300 === 0 && onProgress) {
+        const pct = 88 + Math.floor((i / Math.max(1, totalLines)) * 10);
+        onProgress(pct, `Extrayendo parámetros (${i}/${totalLines})...`);
+      }
+    }
+    allLinesVector.delete?.();
+
+    return result;
+  } finally {
+    webIfc.CloseModel(modelID);
+  }
+}
 
 export default function App() {
   const [state, setState] = useState<ConversionState>({
@@ -131,10 +507,17 @@ export default function App() {
             console.warn("Manual webIfc init warning:", initErr);
           }
 
-          // 1. Load IFC and convert to fragments
-          const model = await loader.load(new Uint8Array(buffer), true, file.name);
+          // 1. Load IFC and convert to fragments (importing all attributes and relations)
+          setState(prev => ({ ...prev, message: 'Convirtiendo geometría IFC a Fragments...' }));
+          const model = await loader.load(new Uint8Array(buffer), true, file.name, {
+            instanceCallback: (importer: any) => {
+              if (typeof importer.addAllAttributes === 'function') importer.addAllAttributes();
+              if (typeof importer.addAllRelations === 'function') importer.addAllRelations();
+            }
+          });
           
           // 2. Export Fragments to .frag
+          setState(prev => ({ ...prev, message: 'Exportando geometría a .frag...' }));
           let fragBuffer: ArrayBuffer | Uint8Array;
           if (typeof (model as any).getBuffer === 'function') {
             fragBuffer = await (model as any).getBuffer();
@@ -145,23 +528,41 @@ export default function App() {
           }
           const fragBlob = new Blob([fragBuffer], { type: 'application/octet-stream' });
 
-          // 3. Extract Properties to JSON
-          setState(prev => ({ ...prev, message: 'Extracting properties...' }));
+          // 3. Extract complete properties, parameters, Psets, Qsets, and relations to JSON
+          setState(prev => ({ ...prev, message: 'Extrayendo todos los datos y parámetros IFC a JSON...' }));
           
-          let properties: any = (model as any).properties;
-          if (!properties && typeof (model as any).getLocalIds === 'function' && typeof (model as any).getItemsData === 'function') {
+          let properties: any = null;
+          try {
+            properties = await extractCompleteIfcProperties(
+              loader.webIfc,
+              new Uint8Array(buffer),
+              (_pct, msg) => {
+                setState(prev => ({ ...prev, message: msg }));
+              }
+            );
+          } catch (extractErr) {
+            console.warn("Complete extraction warning, attempting fallback:", extractErr);
+          }
+
+          if (!properties || Object.keys(properties).length === 0) {
             try {
-              const localIds = await (model as any).getLocalIds();
-              properties = await (model as any).getItemsData(localIds);
-            } catch (err) {
-              console.warn("Could not retrieve items data:", err);
+              if (typeof (model as any).getLocalIds === 'function' && typeof (model as any).getItemsData === 'function') {
+                const localIds = await (model as any).getLocalIds();
+                const itemsData = await (model as any).getItemsData(localIds, {
+                  attributesDefault: true,
+                  relationsDefault: { attributes: true, relations: true }
+                });
+                properties = {};
+                for (let i = 0; i < localIds.length; i++) {
+                  const id = localIds[i];
+                  properties[id] = itemsData[i] || { expressID: id };
+                }
+              }
+            } catch (fallbackErr) {
+              console.warn("Fallback getItemsData failed:", fallbackErr);
             }
           }
-          if (!properties && typeof (model as any).getAllProperties === 'function') {
-            try { properties = await (model as any).getAllProperties(); } catch {}
-          } else if (!properties && typeof (model as any).getLocalProperties === 'function') {
-            try { properties = await (model as any).getLocalProperties(); } catch {}
-          }
+
           if (!properties) {
             properties = {};
           }
@@ -176,7 +577,14 @@ export default function App() {
             binaryStr += String.fromCharCode.apply(null, Array.from(fragBytes.subarray(i, i + chunkSize)));
           }
           const fragBase64 = btoa(binaryStr);
-          const jsonBase64 = btoa(unescape(encodeURIComponent(JSON.stringify(properties, null, 2))));
+
+          const jsonStr = JSON.stringify(properties, null, 2);
+          const jsonUtf8Bytes = new TextEncoder().encode(jsonStr);
+          let jsonBinaryStr = '';
+          for (let i = 0; i < jsonUtf8Bytes.length; i += chunkSize) {
+            jsonBinaryStr += String.fromCharCode.apply(null, Array.from(jsonUtf8Bytes.subarray(i, i + chunkSize)));
+          }
+          const jsonBase64 = btoa(jsonBinaryStr);
 
           // 5. Enviar directamente a C# por el canal nativo de WebView2
           if ((window as any).chrome && (window as any).chrome.webview) {
