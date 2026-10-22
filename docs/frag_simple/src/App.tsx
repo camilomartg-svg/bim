@@ -28,6 +28,31 @@ const getWorkerUrl = () => {
   }
 };
 
+function getBaseWasmPath(): string {
+  try {
+    let href = window.location.href.split('?')[0].split('#')[0];
+    if (href.endsWith('.html')) {
+      href = href.substring(0, href.lastIndexOf('/') + 1);
+    } else if (!href.endsWith('/')) {
+      href = href + '/';
+    }
+    return href;
+  } catch {
+    return "https://unpkg.com/web-ifc@0.0.77/";
+  }
+}
+
+async function resolveWasmPath(): Promise<string> {
+  const localBase = getBaseWasmPath();
+  try {
+    const res = await fetch(new URL('web-ifc.wasm', localBase).href, { method: 'HEAD' });
+    if (res.ok) {
+      return localBase;
+    }
+  } catch {}
+  return "https://unpkg.com/web-ifc@0.0.77/";
+}
+
 function unwrapIfcValue(val: any): any {
   if (val == null) return null;
   if (typeof val === 'object') {
@@ -42,7 +67,7 @@ function shouldIncludeEntityType(typeName: string): boolean {
   const upper = typeName.toUpperCase();
   // Filter out pure internal geometric point/curve math to avoid massive JSON bloat without loss of properties
   const pureGeometry = /^(IFC)?(CARTESIANPOINT|DIRECTION|AXIS2PLACEMENT|AXIS1PLACEMENT|POLYLOOP|POLYLINE|INDEXEDPOLYCURVE|FACETEDBREP|FACE|EDGE|VERTEX|SURFACE|VECTOR|PLANE|BOUNDINGBOX|SHAPEREPRESENTATION|PRODUCTDEFINITIONSHAPE|GEOMETRICREPRESENTATION)/i;
-  const semantic = /(PROPERTY|REL|QUANTITY|MATERIAL|TYPE|STYLE|PRESENTATION|CLASSIFICATION|PRODUCT|PROJECT|SITE|BUILDING|STOREY|ELEMENT|SYSTEM|GROUP|ZONE|SPATIAL|PORT|ACTUATOR|VALVE|PIPE|DUCT|BEAM|COLUMN|WALL|SLAB|DOOR|WINDOW|ROOF|STAIR|RAILING|COVERING|FOOTING|PLATE|MEMBER)/i;
+  const semantic = /(PROPERTY|REL|QUANTITY|MATERIAL|TYPE|STYLE|PRESENTATION|CLASSIFICATION|PRODUCT|PROJECT|SITE|BUILDING|STOREY|ELEMENT|SYSTEM|GROUP|ZONE|SPATIAL|PORT|ACTUATOR|VALVE|PIPE|DUCT|BEAM|COLUMN|WALL|SLAB|DOOR|WINDOW|ROOF|STAIR|RAILING|COVERING|FOOTING|PLATE|MEMBER|FIXTURE|FURNISHING)/i;
   
   if (semantic.test(upper)) return true;
   if (pureGeometry.test(upper)) return false;
@@ -54,9 +79,18 @@ async function extractCompleteIfcProperties(
   buffer: Uint8Array,
   onProgress?: (progress: number, msg: string) => void
 ): Promise<Record<string, any>> {
-  const modelID = webIfc.OpenModel(buffer);
+  // Use 1GB WASM memory limit to guarantee heavy models never run out of memory
+  const modelID = webIfc.OpenModel(buffer, {
+    COORDINATE_TO_ORIGIN: false,
+    MEMORY_LIMIT: 1073741824
+  });
+
+  if (modelID < 0) {
+    throw new Error(`No se pudo abrir el modelo IFC en web-ifc (código: ${modelID})`);
+  }
+
   try {
-    onProgress?.(80, 'Indexando relaciones y parámetros IFC...');
+    onProgress?.(10, 'Indexando relaciones y parámetros IFC...');
     
     // 1. IFCRELDEFINESBYPROPERTIES: elements -> psets/qsets
     const elementToPsetIds = new Map<number, number[]>();
@@ -164,6 +198,58 @@ async function extractCompleteIfcProperties(
       console.warn('Warning indexing IFCRELASSOCIATESMATERIAL:', e);
     }
 
+    // 5. IFCRELASSOCIATESCLASSIFICATION: element -> classification
+    const elementToClassificationId = new Map<number, number>();
+    try {
+      const relClassIds = webIfc.GetLineIDsWithType(modelID, WEBIFC.IFCRELASSOCIATESCLASSIFICATION);
+      const totalRelClass = relClassIds.size();
+      for (let i = 0; i < totalRelClass; i++) {
+        const relId = relClassIds.get(i);
+        const rel = webIfc.GetLine(modelID, relId, false);
+        if (rel && rel.RelatedObjects && rel.RelatingClassification) {
+          const classId = unwrapIfcValue(rel.RelatingClassification);
+          if (typeof classId === 'number') {
+            const relObjects = Array.isArray(rel.RelatedObjects) ? rel.RelatedObjects : [rel.RelatedObjects];
+            for (const obj of relObjects) {
+              const elId = unwrapIfcValue(obj);
+              if (typeof elId === 'number') {
+                elementToClassificationId.set(elId, classId);
+              }
+            }
+          }
+        }
+      }
+      relClassIds.delete?.();
+    } catch (e) {
+      console.warn('Warning indexing IFCRELASSOCIATESCLASSIFICATION:', e);
+    }
+
+    // 6. IFCRELASSIGNSTOGROUP: element -> system / group
+    const elementToGroupId = new Map<number, number>();
+    try {
+      const relGroupIds = webIfc.GetLineIDsWithType(modelID, WEBIFC.IFCRELASSIGNSTOGROUP);
+      const totalRelGrp = relGroupIds.size();
+      for (let i = 0; i < totalRelGrp; i++) {
+        const relId = relGroupIds.get(i);
+        const rel = webIfc.GetLine(modelID, relId, false);
+        if (rel && rel.RelatedObjects && rel.RelatingGroup) {
+          const grpId = unwrapIfcValue(rel.RelatingGroup);
+          if (typeof grpId === 'number') {
+            const relObjects = Array.isArray(rel.RelatedObjects) ? rel.RelatedObjects : [rel.RelatedObjects];
+            for (const obj of relObjects) {
+              const elId = unwrapIfcValue(obj);
+              if (typeof elId === 'number') {
+                elementToGroupId.set(elId, grpId);
+              }
+            }
+          }
+        }
+      }
+      relGroupIds.delete?.();
+    } catch (e) {
+      console.warn('Warning indexing IFCRELASSIGNSTOGROUP:', e);
+    }
+
     // Helper: Parse a Property Set or Element Quantity by expressID
     const resolvePset = (psetId: number): { psetName: string; props: Record<string, any> } | null => {
       try {
@@ -199,6 +285,8 @@ async function extractCompleteIfcProperties(
                 }
               }
               props[propName] = subProps;
+            } else if (propLine.ListValues && Array.isArray(propLine.ListValues)) {
+              props[propName] = propLine.ListValues.map(unwrapIfcValue);
             } else {
               props[propName] = unwrapIfcValue(propLine.Description ?? true);
             }
@@ -256,6 +344,14 @@ async function extractCompleteIfcProperties(
           }
           if (names.length > 0) return names.join(' / ');
         }
+        if (mat.Materials && Array.isArray(mat.Materials)) {
+          const names: string[] = [];
+          for (const mRef of mat.Materials) {
+            const subMat = webIfc.GetLine(modelID, unwrapIfcValue(mRef), false);
+            if (subMat && subMat.Name) names.push(String(unwrapIfcValue(subMat.Name)));
+          }
+          if (names.length > 0) return names.join(' / ');
+        }
         return null;
       } catch {
         return null;
@@ -268,6 +364,36 @@ async function extractCompleteIfcProperties(
         const struct = webIfc.GetLine(modelID, structId, false);
         if (!struct) return null;
         return unwrapIfcValue(struct.Name ?? struct.LongName) || null;
+      } catch {
+        return null;
+      }
+    };
+
+    // Helper: Classification resolver
+    const resolveClassification = (classId: number): { name: string; code?: string } | null => {
+      try {
+        const c = webIfc.GetLine(modelID, classId, false);
+        if (!c) return null;
+        const name = unwrapIfcValue(c.Name);
+        const code = unwrapIfcValue(c.Identification ?? c.ItemReference);
+        let srcName = '';
+        if (c.ReferencedSource) {
+          const src = webIfc.GetLine(modelID, unwrapIfcValue(c.ReferencedSource), false);
+          if (src && src.Name) srcName = unwrapIfcValue(src.Name);
+        }
+        const full = [srcName, code, name].filter(Boolean).join(' - ') || name || code || null;
+        return full ? { name: full, code: code || '' } : null;
+      } catch {
+        return null;
+      }
+    };
+
+    // Helper: Group / System name resolver
+    const resolveGroupName = (grpId: number): string | null => {
+      try {
+        const g = webIfc.GetLine(modelID, grpId, false);
+        if (!g) return null;
+        return unwrapIfcValue(g.Name ?? g.Description) || null;
       } catch {
         return null;
       }
@@ -306,8 +432,8 @@ async function extractCompleteIfcProperties(
       } catch {}
     }
 
-    // 5. Query semantic entities directly without loading millions of geometric coordinate lines
-    onProgress?.(88, 'Extrayendo parámetros y propiedades de los elementos IFC...');
+    // 7. Query semantic entities directly without loading millions of geometric coordinate lines
+    onProgress?.(30, 'Extrayendo parámetros y propiedades de los elementos IFC...');
     const result: Record<string, any> = {};
     const entityIdsToProcess = new Set<number>();
 
@@ -320,7 +446,8 @@ async function extractCompleteIfcProperties(
       { type: WEBIFC.IFCBUILDING, inherited: true },
       { type: WEBIFC.IFCBUILDINGSTOREY, inherited: true },
       { type: WEBIFC.IFCSPACE, inherited: true },
-      { type: WEBIFC.IFCMATERIAL, inherited: true }
+      { type: WEBIFC.IFCMATERIAL, inherited: true },
+      { type: WEBIFC.IFCGROUP, inherited: true }
     ];
 
     for (const cat of targetCategories) {
@@ -334,10 +461,15 @@ async function extractCompleteIfcProperties(
       } catch {}
     }
 
-    // Include referenced types, materials and storeys directly so their semantic metadata is preserved
+    // Include referenced types, materials, storeys, classifications and groups directly
     for (const t of elementToTypeId.values()) entityIdsToProcess.add(t);
     for (const s of elementToSpatialId.values()) entityIdsToProcess.add(s);
     for (const m of elementToMaterialId.values()) entityIdsToProcess.add(m);
+    for (const c of elementToClassificationId.values()) entityIdsToProcess.add(c);
+    for (const g of elementToGroupId.values()) entityIdsToProcess.add(g);
+
+    // Also include any entity that has property sets defined
+    for (const elId of elementToPsetIds.keys()) entityIdsToProcess.add(elId);
 
     const idsArray = Array.from(entityIdsToProcess);
     const totalEntities = idsArray.length;
@@ -355,6 +487,7 @@ async function extractCompleteIfcProperties(
         if (!typeName || !shouldIncludeEntityType(typeName)) continue;
 
         const entityData: any = { ...line };
+        entityData.expressID = expressID;
         entityData.typeCode = typeCode;
         entityData.type = typeName;
         entityData.ifcType = typeName;
@@ -434,18 +567,54 @@ async function extractCompleteIfcProperties(
           }
         }
 
+        // E. Classification
+        const classifId = elementToClassificationId.get(expressID);
+        if (classifId) {
+          entityData.classificationId = classifId;
+          const classif = resolveClassification(classifId);
+          if (classif && classif.name) {
+            entityData.classification = classif.name;
+            if (classif.code) entityData.classificationCode = classif.code;
+            if (entityData['CLASIFICACIÓN'] === undefined) {
+              entityData['CLASIFICACIÓN'] = classif.name;
+            }
+          }
+        }
+
+        // F. System / Group
+        const grpId = elementToGroupId.get(expressID);
+        if (grpId) {
+          entityData.systemId = grpId;
+          const grpName = resolveGroupName(grpId);
+          if (grpName) {
+            entityData.system = grpName;
+            if (entityData['SISTEMA'] === undefined) {
+              entityData['SISTEMA'] = grpName;
+            }
+          }
+        }
+
+        // Index in root dictionary by ExpressID, Tag (Revit ID), and GlobalId (GUID)
         result[String(expressID)] = entityData;
+        if (entityData.Tag) {
+          result[String(entityData.Tag)] = entityData;
+        }
+        if (entityData.GlobalId) {
+          result[String(entityData.GlobalId)] = entityData;
+        }
       } catch {}
 
       if (i % 150 === 0 && onProgress) {
-        const pct = 88 + Math.floor((i / Math.max(1, totalEntities)) * 10);
+        const pct = 30 + Math.floor((i / Math.max(1, totalEntities)) * 25);
         onProgress(pct, `Extrayendo parámetros (${i}/${totalEntities})...`);
       }
     }
 
     return result;
   } finally {
-    webIfc.CloseModel(modelID);
+    try {
+      webIfc.CloseModel(modelID);
+    } catch {}
   }
 }
 
@@ -518,7 +687,7 @@ export default function App() {
           const buffer = e.target?.result as ArrayBuffer;
           if (!buffer) return;
 
-          setState(prev => ({ ...prev, status: 'converting', message: 'Converting IFC to Fragments...' }));
+          setState(prev => ({ ...prev, status: 'converting', message: 'Resolviendo motor WebAssembly...' }));
 
           const components = componentsRef.current!;
           const fragments = fragmentsRef.current!;
@@ -529,40 +698,56 @@ export default function App() {
             fragments.init(getWorkerUrl());
           }
 
-          // Determine wasm path (prefer local wasm, fallback to unpkg 0.0.77)
+          // Determine wasm path (local wasm or unpkg 0.0.77)
+          const wasmPath = await resolveWasmPath();
           loader.settings.autoSetWasm = false;
-          let wasmPath = "https://unpkg.com/web-ifc@0.0.77/";
-          try {
-            const localBase = new URL('./', window.location.href).href;
-            const testRes = await fetch(new URL('web-ifc.wasm', localBase).href, { method: 'HEAD' });
-            if (testRes.ok) {
-              wasmPath = localBase;
-            }
-          } catch {}
-
           loader.settings.wasm = {
             path: wasmPath,
             absolute: true
           };
 
-          // Initialize webIfc with forceSingleThread=true to prevent crossOriginIsolated MT worker crashes
+          // =========================================================================
+          // PASO 1: EXTRACCIÓN COMPLETA DE PARÁMETROS Y PROPIEDADES IFC A JSON
+          // Ejecutamos esto primero para asegurar que web-ifc tenga memoria disponible
+          // y no se vea afectado por buffers de malla de Three.js
+          // =========================================================================
+          setState(prev => ({ ...prev, message: 'Extrayendo parámetros y propiedades del IFC...' }));
+          let properties: Record<string, any> = {};
+
           try {
-            loader.webIfc.SetWasmPath(loader.settings.wasm.path, loader.settings.wasm.absolute);
-            await loader.webIfc.Init(undefined, true);
-          } catch (initErr) {
-            console.warn("Manual webIfc init warning:", initErr);
+            const ifcApi = new WEBIFC.IfcAPI();
+            ifcApi.SetWasmPath(wasmPath, true);
+            await ifcApi.Init(undefined, true); // forceSingleThread = true para evitar bloqueos MT
+
+            properties = await extractCompleteIfcProperties(
+              ifcApi,
+              new Uint8Array(buffer),
+              (pct, msg) => {
+                setState(prev => ({ ...prev, message: `${msg} (${pct}%)` }));
+              }
+            );
+
+            try {
+              ifcApi.Dispose();
+            } catch {}
+          } catch (extractErr) {
+            console.error("[FRAG_SIMPLE] Error during complete IFC extraction:", extractErr);
           }
 
-          // 1. Load IFC and convert to fragments (importing attributes)
-          setState(prev => ({ ...prev, message: 'Convirtiendo geometría IFC a Fragments...' }));
+          // =========================================================================
+          // PASO 2: CONVERTIR GEOMETRÍA IFC A FRAGMENTS (3D)
+          // =========================================================================
+          setState(prev => ({ ...prev, message: 'Convirtiendo geometría IFC a Fragments 3D (60%)...' }));
           const model = await loader.load(new Uint8Array(buffer), true, file.name, {
             instanceCallback: (importer: any) => {
               if (typeof importer.addAllAttributes === 'function') importer.addAllAttributes();
             }
           });
           
-          // 2. Export Fragments to .frag
-          setState(prev => ({ ...prev, message: 'Exportando geometría a .frag...' }));
+          // =========================================================================
+          // PASO 3: EXPORTAR FRAGMENTS A .FRAG
+          // =========================================================================
+          setState(prev => ({ ...prev, message: 'Exportando geometría a archivo .frag (80%)...' }));
           let fragBuffer: ArrayBuffer | Uint8Array;
           if (typeof (model as any).getBuffer === 'function') {
             fragBuffer = await (model as any).getBuffer();
@@ -573,23 +758,9 @@ export default function App() {
           }
           const fragBlob = new Blob([fragBuffer], { type: 'application/octet-stream' });
 
-          // 3. Extract complete properties, parameters, Psets, Qsets, and relations to JSON
-          setState(prev => ({ ...prev, message: 'Extrayendo todos los datos y parámetros IFC a JSON...' }));
-          
-          let properties: any = null;
-          try {
-            properties = await extractCompleteIfcProperties(
-              loader.webIfc,
-              new Uint8Array(buffer),
-              (_pct, msg) => {
-                setState(prev => ({ ...prev, message: msg }));
-              }
-            );
-          } catch (extractErr) {
-            console.warn("Complete extraction warning, attempting fallback:", extractErr);
-          }
-
+          // Fallback de emergencia solo si la extracción completa no obtuvo nada
           if (!properties || Object.keys(properties).length === 0) {
+            console.warn("[FRAG_SIMPLE] Using emergency fallback for properties...");
             try {
               if (typeof (model as any).getLocalIds === 'function' && typeof (model as any).getItemsData === 'function') {
                 const localIds = await (model as any).getLocalIds();
@@ -604,7 +775,7 @@ export default function App() {
                 }
               }
             } catch (fallbackErr) {
-              console.warn("Fallback getItemsData failed:", fallbackErr);
+              console.warn("[FRAG_SIMPLE] Fallback getItemsData failed:", fallbackErr);
             }
           }
 
@@ -612,13 +783,16 @@ export default function App() {
             properties = {};
           }
 
-          // 3b. Map ThatOpen fragment localIds directly to IFC entities so the JSON is indexed by BOTH localId and expressID!
+          // =========================================================================
+          // PASO 4: VINCULAR LOCALIDS DE THATOPEN DIRECTAMENTE AL DICCIONARIO
+          // Así el JSON responde inmediatamente a localId, expressID, Tag y GlobalId
+          // =========================================================================
           try {
             if (typeof (model as any).getLocalIds === 'function') {
-              setState(prev => ({ ...prev, message: 'Vinculando elementos 3D con parámetros...' }));
+              setState(prev => ({ ...prev, message: 'Vinculando elementos 3D con parámetros (95%)...' }));
               const localIds: number[] = await (model as any).getLocalIds();
               
-              // Build lookups from IFC properties
+              // Mapas rápidos de búsqueda
               const byGuid = new Map<string, any>();
               const byTag = new Map<string, any>();
               const byName = new Map<string, any>();
@@ -630,18 +804,17 @@ export default function App() {
                 if (entity.Name) byName.set(String(entity.Name).trim(), entity);
               }
 
-              // Get fragment items data or guids
-              let fragmentItems: any[] = [];
-              if (typeof (model as any).getItemsData === 'function') {
-                try {
-                  fragmentItems = await (model as any).getItemsData(localIds, { attributesDefault: true });
-                } catch {}
-              }
-
               let fragmentGuids: any[] = [];
               if (typeof (model as any).getGuidsByLocalIds === 'function') {
                 try {
                   fragmentGuids = await (model as any).getGuidsByLocalIds(localIds);
+                } catch {}
+              }
+
+              let fragmentItems: any[] = [];
+              if (typeof (model as any).getItemsData === 'function') {
+                try {
+                  fragmentItems = await (model as any).getItemsData(localIds, { attributesDefault: true });
                 } catch {}
               }
 
@@ -670,9 +843,11 @@ export default function App() {
             console.warn('[FRAG_SIMPLE] Error mapping localIds to IFC properties:', mapErr);
           }
 
-          const jsonBlob = new Blob([JSON.stringify(properties, null, 2)], { type: 'application/json' });
+          const jsonBlob = new Blob([JSON.stringify(properties)], { type: 'application/json' });
 
-          // 4. Descarga automática por navegador (interceptada nativamente por WebView2 sin límites de memoria)
+          // =========================================================================
+          // PASO 5: DESCARGA AUTOMÁTICA NATIVA (INTERCEPTADA POR WEBVIEW2 / REVIT)
+          // =========================================================================
           try {
             const aFrag = document.createElement('a');
             aFrag.href = URL.createObjectURL(fragBlob);
@@ -693,7 +868,9 @@ export default function App() {
             console.warn("Auto-download warning:", dlErr);
           }
 
-          // 5. Enviar señal de conversión a C# (con Base64 ligero si es pequeño)
+          // =========================================================================
+          // PASO 6: NOTIFICAR A C# WEBVIEW2
+          // =========================================================================
           const fragBytes = new Uint8Array(fragBuffer);
           let fragBase64 = '';
           if (fragBytes.length < 5 * 1024 * 1024) {
@@ -705,7 +882,7 @@ export default function App() {
             fragBase64 = btoa(binaryStr);
           }
 
-          const jsonStr = JSON.stringify(properties, null, 2);
+          const jsonStr = JSON.stringify(properties);
           let jsonBase64 = '';
           if (jsonStr.length < 5 * 1024 * 1024) {
             const jsonUtf8Bytes = new TextEncoder().encode(jsonStr);
