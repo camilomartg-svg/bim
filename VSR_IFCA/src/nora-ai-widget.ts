@@ -19,6 +19,7 @@ export interface NoraAIAction {
     levels?: string[];
     materials?: string[];
     pilotes?: string[];
+    semanticTarget?: 'facade' | 'interior' | 'doors_windows' | 'alfajias' | 'balconies' | 'windows' | 'curtain_walls' | 'facade_walls';
     numericFilter?: {
         property: 'height' | 'length' | 'volume' | 'area' | 'slope' | 'diameter';
         operator: '>' | '<' | '>=' | '<=' | '==' | 'between';
@@ -113,6 +114,12 @@ export class NoraAIWidget {
                     <button class="nora-ai-prompt-pill" data-prompt="Aísla los elementos que hacen parte de la fachada">
                         <i class="fa-solid fa-building"></i> Aislar Fachada
                     </button>
+                    <button class="nora-ai-prompt-pill" data-prompt="Aísla las puertas ventanas">
+                        <i class="fa-solid fa-door-open"></i> Puertas Ventanas
+                    </button>
+                    <button class="nora-ai-prompt-pill" data-prompt="Aísla las alfajías">
+                        <i class="fa-solid fa-ruler-horizontal"></i> Alfajías
+                    </button>
                     <button class="nora-ai-prompt-pill" data-prompt="Oculta la fachada para ver el interior">
                         <i class="fa-solid fa-eye-slash"></i> Ver Interior
                     </button>
@@ -172,6 +179,7 @@ export class NoraAIWidget {
         this.drawerEl.querySelector('#nora-ai-close')?.addEventListener('click', () => this.close());
         this.drawerEl.querySelector('#nora-ai-clear')?.addEventListener('click', () => this.clearChat());
         this.drawerEl.querySelector('#nora-ai-key')?.addEventListener('click', () => this.configureApiKey());
+        this.drawerEl.querySelector('#nora-ai-status-text')?.addEventListener('click', () => this.configureApiKey());
 
         this.sendBtnEl.addEventListener('click', () => this.handleSend());
         this.inputEl.addEventListener('keydown', (e) => {
@@ -506,6 +514,15 @@ TOTAL ELEMENTOS EN EL MODELO: ${bimContext.totalElements || 0}
 ELEMENTO SELECCIONADO O DE REFERENCIA:
 ${JSON.stringify(this.lastInspectedElement || bimContext.selectedElements?.[0] || null, null, 2)}
 
+TIPOS Y NOMBRES DE PUERTAS EN EL MODELO:
+${JSON.stringify(bimContext.sampleDoorTypes || [], null, 2)}
+
+TIPOS Y NOMBRES DE MUROS EN EL MODELO:
+${JSON.stringify(bimContext.sampleWallTypes || [], null, 2)}
+
+OTROS ELEMENTOS DEL PROYECTO:
+${JSON.stringify(bimContext.sampleOtherTypes || [], null, 2)}
+
 ESTADO DE FILTROS Y CONTEXTO ACTIVO:
 ${JSON.stringify(this.activeContext, null, 2)}
 
@@ -513,8 +530,13 @@ REGLAS CRÍTICAS DE RESPUESTA:
 1. SENCILLEZ Y CONCISIÓN TOTAL: Tu respuesta en el campo "answer" debe ser MUY BREVE, DIRECTA Y NATURAL (máximo 1 o 2 oraciones, sin texto de relleno).
 2. PROHIBIDO DAR RESPUESTAS GENÉRICAS o soltar menús de ayuda largos a menos que el usuario diga explícitamente "ayuda".
 3. Si el usuario pide aislar o cuantificar (ej: "aisla los muros"), di directamente lo que hiciste y el dato esencial (ej: "🧱 He aislado **3,908 muros** (Vol: 1,809.5 m³ | Área: 13,583 m²).").
-4. FACHADA Y ENVOLVENTE: Si el usuario pide aislar o consultar la fachada ("aisla la fachada", "elementos de la fachada", "que hacen parte de la fachada", "envolvente exterior"), aísla en classifications los Muros Cortina, Montantes de Muro Cortina y Barandillas (ej: ["MUROS CORTINA", "MONTANTES DE MURO CORTINA", "BARANDILLAS"]). Si pide ver el interior u ocultar la fachada, usa action.type = "hide" con esas clasificaciones.
-5. Si el usuario pide algo que no existe en el modelo (por ejemplo "ventanas"), pero el modelo tiene un equivalente obvio (como "Muros Cortina" / fachada vidriada), aíslalos y acláralo en una sola oración: "Este proyecto no tiene ventanas convencionales; he aislado los **Muros Cortina** de la fachada (X uds)."
+4. RECONOCIMIENTO INTELIGENTE DE FACHADA Y ELEMENTOS EXTERIORES:
+   - "FACHADA COMPLETA / ENVOLVENTE": Si el usuario pide aislar la fachada ("aisla la fachada", "elementos de la fachada", "que hacen parte de la fachada", "envolvente exterior"), usa action.type = "isolate" con action.semanticTarget = "facade". Esto aísla inteligentemente muros cortina, montantes, barandas, puertas ventanas y alfajías.
+   - "PUERTAS VENTANAS / BALCONES": Si el usuario pide "puertas ventanas" o "puertas de la fachada" o "puertas corredizas", usa action.type = "isolate" con action.semanticTarget = "doors_windows".
+   - "ALFAJÍAS": Si pide "alfajías" o "vierteaguas", usa action.type = "isolate" con action.semanticTarget = "alfajias".
+   - "VENTANAS": Si pide "ventanas", usa action.type = "isolate" con action.semanticTarget = "windows".
+   - "VER EL INTERIOR": Si pide ver el interior u ocultar la fachada, usa action.type = "hide" con action.semanticTarget = "facade".
+5. Si el usuario pide algo que no existe en el modelo (por ejemplo "ventanas"), pero el modelo tiene un equivalente obvio (como "Muros Cortina" / fachada vidriada), aíslalos y acláralo en una sola oración.
 6. REFERENCIAS CONTEXTUALES: Si el usuario dice "aisla los de ese mismo tipo", "del mismo tipo", "iguales a este", etc., toma el nombre/tipo (name) del ELEMENTO SELECCIONADO y aísla con action.elementTypes: [name].
 7. NO incluyas advertencias de auditoría a menos que el usuario pregunte específicamente por anomalías o auditoría.
 8. NO agregues tips o consejos no solicitados.
@@ -540,6 +562,7 @@ SIEMPRE responde ÚNICAMENTE en formato JSON:
   "answer": "Respuesta muy concisa y directa de 1-2 oraciones...",
   "action": {
     "type": "isolate" | "hide" | "show_all" | "filter" | "color" | "camera" | "section" | "none",
+    "semanticTarget": "facade" | "interior" | "doors_windows" | "alfajias" | "balconies" | "windows" | "facade_walls",
     "classifications": ["NOMBRE_EXACTO_DEL_CONTEXTO"],
     "categories": [],
     "levels": [],
@@ -988,65 +1011,73 @@ SIEMPRE responde ÚNICAMENTE en formato JSON:
         const matchedClassifications: string[] = [];
 
         // =========================================================================
-        // 8.0 RECONOCIMIENTO INTELIGENTE DE FACHADA Y ENVOLVENTE EXTERIOR
+        // 8.0 RECONOCIMIENTO INTELIGENTE DE ELEMENTOS DE FACHADA, PUERTAS VENTANAS Y ALFAJÍAS
         // =========================================================================
+        const isPuertaVentanaQuery = /(?:puerta[s]?\s*ventana[s]?|puertaventana[s]?|puerta[s]?\s*de\s*(?:la\s*)?fachada|puerta[s]?\s*balc[oó]n|puerta[s]?\s*vidriera[s]?|puerta[s]?\s*corrediza[s]?|puerta[s]?\s*exterior(?:es)?)/i.test(qNorm);
+        if (isPuertaVentanaQuery) {
+            return {
+                answer: `🚪 He reconocido y aislado las **Puertas Ventanas** de la fachada en el modelo 3D (diferenciándolas de las puertas interiores).`,
+                action: {
+                    type: 'isolate',
+                    semanticTarget: 'doors_windows',
+                    cameraView: 'focus',
+                    message: 'Puertas Ventanas aisladas'
+                }
+            };
+        }
+
+        const isAlfajiaQuery = /(?:alfaj[ií]a[s]?|vierteagua[s]?|lagrimero[s]?)/i.test(qNorm);
+        if (isAlfajiaQuery) {
+            return {
+                answer: `📐 He reconocido y aislado las **Alfajías** (remates y vierteaguas de ventana y fachada) en el visor 3D.`,
+                action: {
+                    type: 'isolate',
+                    semanticTarget: 'alfajias',
+                    cameraView: 'focus',
+                    message: 'Alfajías aisladas'
+                }
+            };
+        }
+
+        const isMuroFachadaQuery = /(?:muros?\s+de\s+fachada|muros?\s+exteriores?|muros?\s+envolventes?)/i.test(qNorm);
+        if (isMuroFachadaQuery) {
+            return {
+                answer: `🧱 He aislado los **Muros de Fachada / Exteriores**, distinguiéndolos de las divisiones interiores.`,
+                action: {
+                    type: 'isolate',
+                    semanticTarget: 'facade_walls',
+                    cameraView: 'focus',
+                    message: 'Muros de fachada aislados'
+                }
+            };
+        }
+
         const isFacadeQuery = /(?:fachada|fachadas|envolvente|envolventes|exterior(?:es)?)\b/i.test(qNorm);
         const isInteriorQuery = /(?:interior(?:es)?|distribuci[oó]n\s+interior|tabiquer[ií]a\s+interior)\b/i.test(qNorm) && !qNorm.includes('exterior');
 
         if (isFacadeQuery || isInteriorQuery) {
-            const facadeMatches = availableClassifs.filter(c => {
-                const nc = c.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
-                return nc.includes('cortina') || 
-                       nc.includes('montante') || 
-                       nc.includes('barandilla') || 
-                       nc.includes('fachada') || 
-                       nc.includes('envolvente') ||
-                       nc.includes('vidrio') ||
-                       nc.includes('acristalamiento');
-            });
+            const wantsToHide = isHide || isNegationQuery || isInteriorQuery || /(?:oculta|ocultar|esconde|esconder|quitar|adentro|ver\s+el\s+interior)/i.test(qNorm);
 
-            if (facadeMatches.length > 0) {
-                let facadeCount = 0;
-                let facadeArea = 0;
-                let facadeVol = 0;
-                for (const fm of facadeMatches) {
-                    const stats = classifDict[fm] || {};
-                    facadeCount += stats.count || 0;
-                    facadeArea += stats.area || 0;
-                    facadeVol += stats.volume || 0;
-                }
-
-                const wantsToHide = isHide || isNegationQuery || isInteriorQuery || /(?:oculta|ocultar|esconde|esconder|quitar|adentro|ver\s+el\s+interior)/i.test(qNorm);
-
-                if (wantsToHide) {
-                    return {
-                        answer: `🏢 He ocultado los elementos de la **Fachada y Envolvente** (${facadeMatches.join(', ')}: ${facadeCount} uds) para visualizar la distribución interior.`,
-                        action: {
-                            type: 'hide',
-                            classifications: facadeMatches,
-                            message: `Fachada y Envolvente ocultada (${facadeCount} uds)`
-                        }
-                    };
-                }
-
-                if (isExplicitQuantity && !isExplicitIsolate) {
-                    return {
-                        answer: `📊 La **Fachada y Envolvente Exterior** está compuesta por **${facadeCount} elementos** (${facadeMatches.join(', ')})${facadeArea > 0 ? ' con un área total de **' + Math.round(facadeArea).toLocaleString() + ' m²**' : ''}.`,
-                        action: { type: 'none' }
-                    };
-                }
-
-                const areaStr = facadeArea > 0 ? ` | Área: **${Math.round(facadeArea).toLocaleString()} m²**` : '';
+            if (wantsToHide) {
                 return {
-                    answer: `🏢 He aislado los elementos de la **Fachada y Envolvente Exterior** (${facadeMatches.join(', ')}: **${facadeCount} uds**${areaStr}).`,
+                    answer: `🏢 He ocultado toda la **Fachada y Envolvente** (muros cortina, montantes, barandas, puertas ventanas y alfajías) para que visualices la distribución interior.`,
                     action: {
-                        type: 'isolate',
-                        classifications: facadeMatches,
-                        cameraView: 'focus',
-                        message: `Aislada Fachada y Envolvente (${facadeCount} uds)`
+                        type: 'hide',
+                        semanticTarget: 'facade',
+                        message: 'Fachada y Envolvente ocultada'
                     }
                 };
             }
+
+            return {
+                answer: `🏢 He reconocido y aislado la **Fachada y Envolvente Completa**: Muros Cortina, Montantes, Barandas, Puertas Ventanas y Alfajías.`,
+                action: {
+                    type: 'isolate',
+                    semanticTarget: 'facade',
+                    cameraView: 'focus',
+                    message: 'Fachada y Envolvente completa aislada'
+                }
+            };
         }
 
         const classificationAliases: Record<string, string[]> = {
@@ -1060,6 +1091,7 @@ SIEMPRE responde ÚNICAMENTE en formato JSON:
             "PILOTES": ["pilote", "pilotes", "pile", "piles"],
             "PUERTAS": ["puerta", "puertas", "door", "doors", "porton", "portones"],
             "VENTANAS": ["ventana", "ventanas", "window", "windows", "ventaneria", "ventanerias", "vidriera", "vidrieras"],
+            "BARANDAS": ["barandilla", "barandillas", "baranda", "barandas", "railing", "railings", "pasamanos"],
             "BARANDILLAS": ["barandilla", "barandillas", "baranda", "barandas", "railing", "railings", "pasamanos"],
             "ESCALERAS": ["escalera", "escaleras", "stair", "stairs", "grada", "gradas", "peldano", "peldanos"],
             "TUBERÍAS": ["tuberia", "tuberias", "tubo", "tubos", "pipe", "pipes", "conduit", "red sanitaria", "red hidraulica", "desague", "agua potable", "tubo sanitario"],

@@ -9465,6 +9465,24 @@ function buildBIMContextForAI() {
     roundStats(matrixByLevelAndMaterial);
     roundStats(matrixByLevelAndCategory);
 
+    const sampleDoorTypes: string[] = [];
+    const sampleWallTypes: string[] = [];
+    const sampleOtherTypes: string[] = [];
+
+    for (const el of elements) {
+        const name = (el.name || '').trim();
+        const cls = (el.classification || '').toLowerCase();
+        if (name) {
+            if (cls.includes('puerta') && !sampleDoorTypes.includes(name) && sampleDoorTypes.length < 25) {
+                sampleDoorTypes.push(name);
+            } else if (cls.includes('muro') && !cls.includes('cortina') && !sampleWallTypes.includes(name) && sampleWallTypes.length < 25) {
+                sampleWallTypes.push(name);
+            } else if (!sampleOtherTypes.includes(name) && sampleOtherTypes.length < 35) {
+                sampleOtherTypes.push(name);
+            }
+        }
+    }
+
     return {
         totalElements: elements.length,
         selectedElements,
@@ -9475,6 +9493,9 @@ function buildBIMContextForAI() {
         materials,
         materialsList: Object.keys(materials),
         pilotes,
+        sampleDoorTypes,
+        sampleWallTypes,
+        sampleOtherTypes,
         anomalies: {
             zeroVolumeCount,
             missingLevelCount,
@@ -9579,6 +9600,64 @@ const checkNumericCondition = (el: any, filter: NonNullable<NoraAIAction['numeri
     if (filter.operator === '==') return Math.abs(val - filter.value) < 0.05;
     if (filter.operator === 'between' && filter.value2 !== undefined) return val >= filter.value && val <= filter.value2;
     return true;
+};
+
+const isPuertaVentanaElement = (el: any): boolean => {
+    const name = ((el.name || '') + ' ' + (el.detail || '')).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+    const cls = (el.classification || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+    const cat = (el.category || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+    const isDoor = cls.includes('puerta') || cat.includes('door') || cat.includes('puerta') || name.includes('puerta') || name.includes('door');
+    
+    if (name.includes('puerta ventana') || name.includes('puertaventana') || name.includes('puerta-ventana') || name.includes('p-v') || name.includes('pv ') || name.includes('pv-') || name.includes('p.v')) {
+        return true;
+    }
+    if (isDoor && (name.includes('balcon') || name.includes('corrediza') || name.includes('vidrio') || name.includes('vidriera') || name.includes('terraza') || name.includes('exterior') || name.includes('aluminio') || name.includes('fachada'))) {
+        return true;
+    }
+    return false;
+};
+
+const isAlfajiaElement = (el: any): boolean => {
+    const name = ((el.name || '') + ' ' + (el.detail || '') + ' ' + (el.category || '')).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+    return name.includes('alfajia') || name.includes('vierteagua') || name.includes('lagrimero') || name.includes('antepecho') || name.includes('remate fachada');
+};
+
+const isVentanaElement = (el: any): boolean => {
+    const name = ((el.name || '') + ' ' + (el.detail || '')).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+    const cls = (el.classification || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+    return cls.includes('ventana') || cls.includes('cortina') || name.includes('ventana') || name.includes('window') || name.includes('muro cortina') || name.includes('curtain');
+};
+
+const isBarandaElement = (el: any): boolean => {
+    const name = ((el.name || '') + ' ' + (el.detail || '')).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+    const cls = (el.classification || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+    return cls.includes('baranda') || name.includes('baranda') || name.includes('railing') || name.includes('pasamanos') || name.includes('balcon');
+};
+
+const isMuroFachadaElement = (el: any): boolean => {
+    const name = ((el.name || '') + ' ' + (el.detail || '')).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+    const cls = (el.classification || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+    const isWall = cls.includes('muro') || (el.category || '').toLowerCase().includes('wall');
+    if (!isWall) return false;
+    return name.includes('fachada') || name.includes('exterior') || name.includes('envolvente') || name.includes('cortina') || name.includes('antepecho') || name.includes('ladrillo a la vista') || name.includes('panel exterior');
+};
+
+const isFacadeElement = (el: any): boolean => {
+    const cls = (el.classification || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+    // 1. Muros cortina y montantes
+    if (cls.includes('cortina') || cls.includes('montante')) return true;
+    // 2. Barandas y balcones
+    if (isBarandaElement(el)) return true;
+    // 3. Puertas ventanas
+    if (isPuertaVentanaElement(el)) return true;
+    // 4. Alfajías y remates
+    if (isAlfajiaElement(el)) return true;
+    // 5. Ventanas
+    if (isVentanaElement(el)) return true;
+    // 6. Muros exteriores o de fachada
+    if (isMuroFachadaElement(el)) return true;
+
+    return false;
 };
 
 async function executeNoraAI3DAction(action: NoraAIAction): Promise<string> {
@@ -9779,6 +9858,17 @@ async function executeNoraAI3DAction(action: NoraAIAction): Promise<string> {
         let hideCount = 0;
 
         for (const el of allElements) {
+            let matchesSemantic = false;
+            if (action.semanticTarget) {
+                if (action.semanticTarget === 'facade') matchesSemantic = isFacadeElement(el);
+                else if (action.semanticTarget === 'doors_windows') matchesSemantic = isPuertaVentanaElement(el);
+                else if (action.semanticTarget === 'alfajias') matchesSemantic = isAlfajiaElement(el);
+                else if (action.semanticTarget === 'windows') matchesSemantic = isVentanaElement(el);
+                else if (action.semanticTarget === 'balconies') matchesSemantic = isBarandaElement(el);
+                else if (action.semanticTarget === 'facade_walls') matchesSemantic = isMuroFachadaElement(el);
+                else if (action.semanticTarget === 'interior') matchesSemantic = !isFacadeElement(el);
+            }
+
             const matchesClassif = classifs.length > 0 && classifs.some(cl => el.classification && el.classification.toLowerCase().includes(cl.toLowerCase()));
             const matchesCat = cats.length > 0 && cats.some(c => (el.category && el.category.toLowerCase().includes(c.toLowerCase())) || (el.name && el.name.toLowerCase().includes(c.toLowerCase())));
             const matchesType = types.length > 0 && types.some(t => (el.name && el.name.toLowerCase().includes(t.toLowerCase())) || (el.detail && el.detail.toLowerCase().includes(t.toLowerCase())));
@@ -9791,7 +9881,7 @@ async function executeNoraAI3DAction(action: NoraAIAction): Promise<string> {
                 matchesNumeric = checkNumericCondition(el, action.numericFilter);
             }
 
-            let shouldHide = (matchesClassif || matchesCat || matchesType || matchesLvl || matchesMat || matchesPil) && matchesNumeric;
+            let shouldHide = (matchesSemantic || matchesClassif || matchesCat || matchesType || matchesLvl || matchesMat || matchesPil) && matchesNumeric;
             if (action.invertMatch) shouldHide = !shouldHide;
 
             if (shouldHide) {
@@ -9827,6 +9917,17 @@ async function executeNoraAI3DAction(action: NoraAIAction): Promise<string> {
         let matchCount = 0;
 
         for (const el of allElements) {
+            let matchesSemantic = true;
+            if (action.semanticTarget) {
+                if (action.semanticTarget === 'facade') matchesSemantic = isFacadeElement(el);
+                else if (action.semanticTarget === 'doors_windows') matchesSemantic = isPuertaVentanaElement(el);
+                else if (action.semanticTarget === 'alfajias') matchesSemantic = isAlfajiaElement(el);
+                else if (action.semanticTarget === 'windows') matchesSemantic = isVentanaElement(el);
+                else if (action.semanticTarget === 'balconies') matchesSemantic = isBarandaElement(el);
+                else if (action.semanticTarget === 'facade_walls') matchesSemantic = isMuroFachadaElement(el);
+                else if (action.semanticTarget === 'interior') matchesSemantic = !isFacadeElement(el);
+            }
+
             const matchesClassif = classifs.length === 0 || classifs.some(cl => {
                 const lowerCl = cl.toLowerCase().trim();
                 return el.classification && (el.classification.toLowerCase().trim() === lowerCl || el.classification.toLowerCase().includes(lowerCl));
@@ -9864,7 +9965,7 @@ async function executeNoraAI3DAction(action: NoraAIAction): Promise<string> {
                 matchesNumeric = checkNumericCondition(el, action.numericFilter);
             }
 
-            let isMatch = matchesClassif && matchesCat && matchesType && matchesLvl && matchesMat && matchesPil && matchesNumeric;
+            let isMatch = matchesSemantic && matchesClassif && matchesCat && matchesType && matchesLvl && matchesMat && matchesPil && matchesNumeric;
             if (action.invertMatch) isMatch = !isMatch;
 
             if (isMatch) {
@@ -9874,15 +9975,10 @@ async function executeNoraAI3DAction(action: NoraAIAction): Promise<string> {
                 matchingExpressIdsByModel[el.modelUUID].push(el.expressID);
                 matchCount++;
 
-                if (classifs.length > 0 && el.classification) {
+                if (el.name) selectedCategories.add(el.name);
+                if (el.category) selectedCategories.add(el.category);
+                if (!action.semanticTarget && classifs.length > 0 && el.classification) {
                     selectedClassifications.add(el.classification);
-                }
-                if (cats.length > 0) {
-                    if (el.category) selectedCategories.add(el.category);
-                    if (el.name) selectedCategories.add(el.name);
-                }
-                if (types.length > 0) {
-                    if (el.name) selectedCategories.add(el.name);
                 }
             }
         }
@@ -9896,9 +9992,11 @@ async function executeNoraAI3DAction(action: NoraAIAction): Promise<string> {
             }
         }
 
-        for (const cl of classifs) selectedClassifications.add(cl);
-        for (const cat of cats) selectedCategories.add(cat);
-        for (const t of types) selectedCategories.add(t);
+        if (!action.semanticTarget) {
+            for (const cl of classifs) selectedClassifications.add(cl);
+            for (const cat of cats) selectedCategories.add(cat);
+            for (const t of types) selectedCategories.add(t);
+        }
         for (const lvl of lvls) selectedLevels.add(lvl);
         for (const mat of mats) selectedMaterials.add(mat);
         for (const p of pils) selectedPilotes.add(p);
