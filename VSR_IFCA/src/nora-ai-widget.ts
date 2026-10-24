@@ -72,8 +72,13 @@ export class NoraAIWidget {
         this.fabEl.innerHTML = '<i class="fa-solid fa-wand-magic-sparkles"></i> <span>nora AI</span>';
         this.fabEl.addEventListener('click', () => this.toggle());
 
-        const isApiKeyActive = !!(this.options.apiKey || this.userApiKey || (window as any).NORA_GEMINI_API_KEY);
-        const subTitleText = isApiKeyActive ? 'Gemini Copilot (Online)' : 'BIM AI Engine (Local)';
+        const activeKey = this.options.apiKey || this.userApiKey || (window as any).NORA_GEMINI_API_KEY || '';
+        const isValidKey = activeKey.startsWith('AIza');
+        const isBadKey = !!activeKey && !isValidKey;
+        const subTitleText = isValidKey 
+            ? 'Gemini Copilot (Online)' 
+            : (isBadKey ? 'Key Inválida (Motor Local)' : 'BIM AI Engine (Local)');
+        const statusColor = isValidKey ? '#34d399' : (isBadKey ? '#ef4444' : '#f59e0b');
 
         this.drawerEl = document.createElement('div');
         this.drawerEl.className = 'nora-ai-drawer';
@@ -86,7 +91,7 @@ export class NoraAIWidget {
                     <div>
                         <div class="nora-ai-title">nora AI Copilot</div>
                         <div class="nora-ai-subtitle" id="nora-ai-status-text">
-                            <i class="fa-solid fa-circle" style="color: ${isApiKeyActive ? '#34d399' : '#f59e0b'}; font-size: 8px;"></i> ${subTitleText}
+                            <i class="fa-solid fa-circle" style="color: ${statusColor}; font-size: 8px;"></i> ${subTitleText}
                         </div>
                     </div>
                 </div>
@@ -105,6 +110,12 @@ export class NoraAIWidget {
 
             <div class="nora-ai-body" id="nora-ai-messages">
                 <div class="nora-ai-prompts">
+                    <button class="nora-ai-prompt-pill" data-prompt="Aísla los elementos que hacen parte de la fachada">
+                        <i class="fa-solid fa-building"></i> Aislar Fachada
+                    </button>
+                    <button class="nora-ai-prompt-pill" data-prompt="Oculta la fachada para ver el interior">
+                        <i class="fa-solid fa-eye-slash"></i> Ver Interior
+                    </button>
                     <button class="nora-ai-prompt-pill" data-prompt="Aísla los muros de más de 2.50 metros de altura en el Piso 3">
                         <i class="fa-solid fa-ruler-vertical"></i> Muros > 2.5m Piso 3
                     </button>
@@ -116,9 +127,6 @@ export class NoraAIWidget {
                     </button>
                     <button class="nora-ai-prompt-pill" data-prompt="Mapa de calor por volumen de elementos">
                         <i class="fa-solid fa-fire-flame-curved"></i> Mapa de Calor
-                    </button>
-                    <button class="nora-ai-prompt-pill" data-prompt="Aísla la estructura de concreto y drywall">
-                        <i class="fa-solid fa-cubes"></i> Concreto y Drywall
                     </button>
                     <button class="nora-ai-prompt-pill" data-prompt="Muéstrame todo el modelo y limpia los filtros">
                         <i class="fa-solid fa-rotate-left"></i> Restablecer 3D
@@ -184,25 +192,50 @@ export class NoraAIWidget {
 
     private configureApiKey() {
         const currentKey = this.userApiKey || this.options.apiKey || '';
-        const inputKey = prompt('Configurar Google Gemini API Key (deja en blanco para usar el motor local BIM):', currentKey);
+        const inputKey = prompt(
+            'Configurar Google Gemini API Key:\n\n' +
+            '• Clave oficial gratuita en: https://aistudio.google.com/app/apikey\n' +
+            '• Formato requerido: Comienza siempre por "AIzaSy..."\n' +
+            '(Nota: Tokens tipo Google Cloud como "AQ..." o "ya29..." no son válidos).\n\n' +
+            'Pega tu API Key de Gemini (o deja vacío para usar motor local):',
+            currentKey
+        );
         if (inputKey !== null) {
-            this.userApiKey = inputKey.trim();
-            if (this.userApiKey) {
+            const trimmed = inputKey.trim();
+            if (trimmed) {
+                if (!trimmed.startsWith('AIza')) {
+                    alert(
+                        '⚠️ Atención: La clave ingresada no parece una API Key de Gemini (suelen iniciar por "AIzaSy...").\n\n' +
+                        'Has ingresado un token tipo Google Cloud (' + trimmed.substring(0, 8) + '...) que la API rechazará con error 400.\n\n' +
+                        'Puedes generar tu API Key gratuita en https://aistudio.google.com/app/apikey'
+                    );
+                }
+                this.userApiKey = trimmed;
                 localStorage.setItem('NORA_GEMINI_KEY', this.userApiKey);
             } else {
+                this.userApiKey = '';
                 localStorage.removeItem('NORA_GEMINI_KEY');
             }
             this.updateStatusText();
         }
     }
 
-    private updateStatusText() {
+    private updateStatusText(overrideStatus?: { text: string; color: string }) {
         const statusEl = this.drawerEl.querySelector('#nora-ai-status-text');
-        const activeKey = this.userApiKey || this.options.apiKey || (window as any).NORA_GEMINI_API_KEY;
-        if (statusEl) {
-            statusEl.innerHTML = activeKey
-                ? `<i class="fa-solid fa-circle" style="color: #34d399; font-size: 8px;"></i> Gemini Copilot (Online)`
-                : `<i class="fa-solid fa-circle" style="color: #f59e0b; font-size: 8px;"></i> BIM AI Engine (Local)`;
+        if (!statusEl) return;
+        if (overrideStatus) {
+            statusEl.innerHTML = `<i class="fa-solid fa-circle" style="color: ${overrideStatus.color}; font-size: 8px;"></i> ${overrideStatus.text}`;
+            return;
+        }
+        const activeKey = this.userApiKey || this.options.apiKey || (window as any).NORA_GEMINI_API_KEY || '';
+        if (activeKey) {
+            if (activeKey.startsWith('AIza')) {
+                statusEl.innerHTML = `<i class="fa-solid fa-circle" style="color: #34d399; font-size: 8px;"></i> Gemini Copilot (Online)`;
+            } else {
+                statusEl.innerHTML = `<i class="fa-solid fa-triangle-exclamation" style="color: #ef4444; font-size: 8px;" title="Clave no válida. Debe comenzar por AIzaSy"></i> Key Inválida (Motor Local)`;
+            }
+        } else {
+            statusEl.innerHTML = `<i class="fa-solid fa-circle" style="color: #f59e0b; font-size: 8px;"></i> BIM AI Engine (Local)`;
         }
     }
 
@@ -480,10 +513,11 @@ REGLAS CRÍTICAS DE RESPUESTA:
 1. SENCILLEZ Y CONCISIÓN TOTAL: Tu respuesta en el campo "answer" debe ser MUY BREVE, DIRECTA Y NATURAL (máximo 1 o 2 oraciones, sin texto de relleno).
 2. PROHIBIDO DAR RESPUESTAS GENÉRICAS o soltar menús de ayuda largos a menos que el usuario diga explícitamente "ayuda".
 3. Si el usuario pide aislar o cuantificar (ej: "aisla los muros"), di directamente lo que hiciste y el dato esencial (ej: "🧱 He aislado **3,908 muros** (Vol: 1,809.5 m³ | Área: 13,583 m²).").
-4. Si el usuario pide algo que no existe en el modelo (por ejemplo "ventanas"), pero el modelo tiene un equivalente obvio (como "Muros Cortina" / fachada vidriada), aíslalos y acláralo en una sola oración: "Este proyecto no tiene ventanas convencionales; he aislado los **Muros Cortina** de la fachada (X uds)."
-5. REFERENCIAS CONTEXTUALES: Si el usuario dice "aisla los de ese mismo tipo", "del mismo tipo", "iguales a este", etc., toma el nombre/tipo (name) del ELEMENTO SELECCIONADO y aísla con action.elementTypes: [name].
-6. NO incluyas advertencias de auditoría a menos que el usuario pregunte específicamente por anomalías o auditoría.
-7. NO agregues tips o consejos no solicitados.
+4. FACHADA Y ENVOLVENTE: Si el usuario pide aislar o consultar la fachada ("aisla la fachada", "elementos de la fachada", "que hacen parte de la fachada", "envolvente exterior"), aísla en classifications los Muros Cortina, Montantes de Muro Cortina y Barandillas (ej: ["MUROS CORTINA", "MONTANTES DE MURO CORTINA", "BARANDILLAS"]). Si pide ver el interior u ocultar la fachada, usa action.type = "hide" con esas clasificaciones.
+5. Si el usuario pide algo que no existe en el modelo (por ejemplo "ventanas"), pero el modelo tiene un equivalente obvio (como "Muros Cortina" / fachada vidriada), aíslalos y acláralo en una sola oración: "Este proyecto no tiene ventanas convencionales; he aislado los **Muros Cortina** de la fachada (X uds)."
+6. REFERENCIAS CONTEXTUALES: Si el usuario dice "aisla los de ese mismo tipo", "del mismo tipo", "iguales a este", etc., toma el nombre/tipo (name) del ELEMENTO SELECCIONADO y aísla con action.elementTypes: [name].
+7. NO incluyas advertencias de auditoría a menos que el usuario pregunte específicamente por anomalías o auditoría.
+8. NO agregues tips o consejos no solicitados.
 
 CAPACIDADES Y ACCIONES:
 1. CONTROL DE VISIBILIDAD Y FILTRADO MULTICRITERIO:
@@ -538,39 +572,48 @@ SIEMPRE responde ÚNICAMENTE en formato JSON:
                 ...this.chatHistory
             ];
 
-            for (const modelName of ['gemini-2.0-flash', 'gemini-1.5-flash', 'gemini-1.5-pro']) {
-                const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`;
-                const payload = {
-                    contents,
-                    generationConfig: {
-                        temperature: 0.1,
-                        responseMimeType: "application/json"
-                    }
-                };
+            if (!apiKey.startsWith('AIza')) {
+                console.warn('[nora AI] Gemini API key does not start with AIza, falling back to local engine');
+                this.updateStatusText({ text: 'Key Inválida (Motor Local)', color: '#ef4444' });
+            } else {
+                for (const modelName of ['gemini-2.0-flash', 'gemini-1.5-flash', 'gemini-1.5-pro']) {
+                    const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`;
+                    const payload = {
+                        contents,
+                        generationConfig: {
+                            temperature: 0.1,
+                            responseMimeType: "application/json"
+                        }
+                    };
 
-                try {
-                    const res = await fetch(url, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify(payload)
-                    });
+                    try {
+                        const res = await fetch(url, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify(payload)
+                        });
 
-                    if (res.ok) {
-                        const data = await res.json();
-                        const rawText = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
-                        if (rawText) {
-                            this.chatHistory.push({ role: 'model', parts: [{ text: rawText }] });
-                            try {
-                                return JSON.parse(rawText);
-                            } catch (e) {
-                                return { answer: rawText, action: { type: 'none' } };
+                        if (res.ok) {
+                            this.updateStatusText({ text: 'Gemini Copilot (Online)', color: '#34d399' });
+                            const data = await res.json();
+                            const rawText = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+                            if (rawText) {
+                                this.chatHistory.push({ role: 'model', parts: [{ text: rawText }] });
+                                try {
+                                    return JSON.parse(rawText);
+                                } catch (e) {
+                                    return { answer: rawText, action: { type: 'none' } };
+                                }
+                            }
+                        } else {
+                            console.warn(`[nora AI] Model ${modelName} returned status ${res.status}`);
+                            if (res.status === 400 || res.status === 403) {
+                                this.updateStatusText({ text: `Key Rechazada por Google (${res.status})`, color: '#ef4444' });
                             }
                         }
-                    } else {
-                        console.warn(`[nora AI] Model ${modelName} returned status ${res.status}`);
+                    } catch (err) {
+                        console.warn(`[nora AI] Model ${modelName} fetch error:`, err);
                     }
-                } catch (err) {
-                    console.warn(`[nora AI] Model ${modelName} fetch error:`, err);
                 }
             }
         }
@@ -943,6 +986,68 @@ SIEMPRE responde ÚNICAMENTE en formato JSON:
         const classifDict = bimContext?.classifications || bimContext?.categories || {};
         const availableClassifs = Object.keys(classifDict);
         const matchedClassifications: string[] = [];
+
+        // =========================================================================
+        // 8.0 RECONOCIMIENTO INTELIGENTE DE FACHADA Y ENVOLVENTE EXTERIOR
+        // =========================================================================
+        const isFacadeQuery = /(?:fachada|fachadas|envolvente|envolventes|exterior(?:es)?)\b/i.test(qNorm);
+        const isInteriorQuery = /(?:interior(?:es)?|distribuci[oó]n\s+interior|tabiquer[ií]a\s+interior)\b/i.test(qNorm) && !qNorm.includes('exterior');
+
+        if (isFacadeQuery || isInteriorQuery) {
+            const facadeMatches = availableClassifs.filter(c => {
+                const nc = c.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+                return nc.includes('cortina') || 
+                       nc.includes('montante') || 
+                       nc.includes('barandilla') || 
+                       nc.includes('fachada') || 
+                       nc.includes('envolvente') ||
+                       nc.includes('vidrio') ||
+                       nc.includes('acristalamiento');
+            });
+
+            if (facadeMatches.length > 0) {
+                let facadeCount = 0;
+                let facadeArea = 0;
+                let facadeVol = 0;
+                for (const fm of facadeMatches) {
+                    const stats = classifDict[fm] || {};
+                    facadeCount += stats.count || 0;
+                    facadeArea += stats.area || 0;
+                    facadeVol += stats.volume || 0;
+                }
+
+                const wantsToHide = isHide || isNegationQuery || isInteriorQuery || /(?:oculta|ocultar|esconde|esconder|quitar|adentro|ver\s+el\s+interior)/i.test(qNorm);
+
+                if (wantsToHide) {
+                    return {
+                        answer: `🏢 He ocultado los elementos de la **Fachada y Envolvente** (${facadeMatches.join(', ')}: ${facadeCount} uds) para visualizar la distribución interior.`,
+                        action: {
+                            type: 'hide',
+                            classifications: facadeMatches,
+                            message: `Fachada y Envolvente ocultada (${facadeCount} uds)`
+                        }
+                    };
+                }
+
+                if (isExplicitQuantity && !isExplicitIsolate) {
+                    return {
+                        answer: `📊 La **Fachada y Envolvente Exterior** está compuesta por **${facadeCount} elementos** (${facadeMatches.join(', ')})${facadeArea > 0 ? ' con un área total de **' + Math.round(facadeArea).toLocaleString() + ' m²**' : ''}.`,
+                        action: { type: 'none' }
+                    };
+                }
+
+                const areaStr = facadeArea > 0 ? ` | Área: **${Math.round(facadeArea).toLocaleString()} m²**` : '';
+                return {
+                    answer: `🏢 He aislado los elementos de la **Fachada y Envolvente Exterior** (${facadeMatches.join(', ')}: **${facadeCount} uds**${areaStr}).`,
+                    action: {
+                        type: 'isolate',
+                        classifications: facadeMatches,
+                        cameraView: 'focus',
+                        message: `Aislada Fachada y Envolvente (${facadeCount} uds)`
+                    }
+                };
+            }
+        }
 
         const classificationAliases: Record<string, string[]> = {
             "MUROS": ["muro", "muros", "pared", "paredes", "wall", "walls", "tabique", "tabiques", "mamposteria"],
