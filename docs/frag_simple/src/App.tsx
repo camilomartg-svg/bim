@@ -53,6 +53,25 @@ async function resolveWasmPath(): Promise<string> {
   return "https://unpkg.com/web-ifc@0.0.77/";
 }
 
+function cleanMojibake(str: string): string {
+  if (!str || typeof str !== 'string') return str;
+  return str
+    .replace(/CLASIFICACI[ÃÓAÁ][“"”\u0093]?N/gi, 'CLASIFICACIÓN')
+    .replace(/Ã[\u0093\u201c\u201d"]/g, 'Ó')
+    .replace(/Ã³/g, 'ó')
+    .replace(/Ã\u0093/g, 'Ó')
+    .replace(/Ã[\u0081]/g, 'Á')
+    .replace(/Ã¡/g, 'á')
+    .replace(/Ã[\u0089]/g, 'É')
+    .replace(/Ã©/g, 'é')
+    .replace(/Ã[\u008d]/g, 'Í')
+    .replace(/Ã­/g, 'í')
+    .replace(/Ã[\u009a]/g, 'Ú')
+    .replace(/Ãº/g, 'ú')
+    .replace(/Ã[\u0091]/g, 'Ñ')
+    .replace(/Ã±/g, 'ñ');
+}
+
 function unwrapIfcValue(val: any): any {
   if (val == null) return null;
   if (typeof val === 'object') {
@@ -255,7 +274,7 @@ async function extractCompleteIfcProperties(
       try {
         const psetEntity = webIfc.GetLine(modelID, psetId, false);
         if (!psetEntity) return null;
-        const psetName = unwrapIfcValue(psetEntity.Name) || `Pset_${psetId}`;
+        const psetName = cleanMojibake(unwrapIfcValue(psetEntity.Name)) || `Pset_${psetId}`;
         const props: Record<string, any> = {};
 
         // HasProperties (IfcPropertySet)
@@ -265,7 +284,7 @@ async function extractCompleteIfcProperties(
             if (typeof propId !== 'number') continue;
             const propLine = webIfc.GetLine(modelID, propId, false);
             if (!propLine) continue;
-            const propName = unwrapIfcValue(propLine.Name);
+            const propName = cleanMojibake(unwrapIfcValue(propLine.Name));
             if (!propName) continue;
 
             if (propLine.NominalValue !== undefined) {
@@ -279,7 +298,7 @@ async function extractCompleteIfcProperties(
                 if (typeof subId === 'number') {
                   const subLine = webIfc.GetLine(modelID, subId, false);
                   if (subLine && subLine.Name) {
-                    const subName = unwrapIfcValue(subLine.Name);
+                    const subName = cleanMojibake(unwrapIfcValue(subLine.Name));
                     subProps[subName] = unwrapIfcValue(subLine.NominalValue ?? subLine.Description);
                   }
                 }
@@ -300,7 +319,7 @@ async function extractCompleteIfcProperties(
             if (typeof qId !== 'number') continue;
             const qLine = webIfc.GetLine(modelID, qId, false);
             if (!qLine) continue;
-            const qName = unwrapIfcValue(qLine.Name);
+            const qName = cleanMojibake(unwrapIfcValue(qLine.Name));
             if (!qName) continue;
             const val = unwrapIfcValue(
               qLine.LengthValue ?? 
@@ -374,12 +393,12 @@ async function extractCompleteIfcProperties(
       try {
         const c = webIfc.GetLine(modelID, classId, false);
         if (!c) return null;
-        const name = unwrapIfcValue(c.Name);
-        const code = unwrapIfcValue(c.Identification ?? c.ItemReference);
+        const name = cleanMojibake(unwrapIfcValue(c.Name));
+        const code = cleanMojibake(unwrapIfcValue(c.Identification ?? c.ItemReference));
         let srcName = '';
         if (c.ReferencedSource) {
           const src = webIfc.GetLine(modelID, unwrapIfcValue(c.ReferencedSource), false);
-          if (src && src.Name) srcName = unwrapIfcValue(src.Name);
+          if (src && src.Name) srcName = cleanMojibake(unwrapIfcValue(src.Name));
         }
         const full = [srcName, code, name].filter(Boolean).join(' - ') || name || code || null;
         return full ? { name: full, code: code || '' } : null;
@@ -532,8 +551,20 @@ async function extractCompleteIfcProperties(
           for (const psetProps of Object.values(psetsMap)) {
             if (psetProps && typeof psetProps === 'object') {
               for (const [propKey, propVal] of Object.entries(psetProps as Record<string, any>)) {
-                if (entityData[propKey] === undefined && propVal !== undefined && propVal !== null) {
-                  entityData[propKey] = propVal;
+                if (propVal !== undefined && propVal !== null) {
+                  const cleanedK = cleanMojibake(propKey);
+                  if (entityData[propKey] === undefined) entityData[propKey] = propVal;
+                  if (cleanedK !== propKey && entityData[cleanedK] === undefined) entityData[cleanedK] = propVal;
+
+                  // Detect and bridge any variant of CLASIFICACION (with/without tildes, mojibake, etc.)
+                  const normK = cleanedK.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '');
+                  if (normK === 'clasificacion') {
+                    entityData['CLASIFICACIÓN'] = propVal;
+                    entityData['CLASIFICACION'] = propVal;
+                    entityData['CLASIFICACIÃ"N'] = propVal;
+                    entityData['CLASIFICACIÃ“N'] = propVal;
+                    entityData['classification'] = propVal;
+                  }
                 }
               }
             }
@@ -575,9 +606,10 @@ async function extractCompleteIfcProperties(
           if (classif && classif.name) {
             entityData.classification = classif.name;
             if (classif.code) entityData.classificationCode = classif.code;
-            if (entityData['CLASIFICACIÓN'] === undefined) {
-              entityData['CLASIFICACIÓN'] = classif.name;
-            }
+            entityData['CLASIFICACIÓN'] = classif.name;
+            entityData['CLASIFICACION'] = classif.name;
+            entityData['CLASIFICACIÃ"N'] = classif.name;
+            entityData['CLASIFICACIÃ“N'] = classif.name;
           }
         }
 

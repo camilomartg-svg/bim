@@ -1890,6 +1890,16 @@ const attachExternalPropertiesToLocalIds = async (model: any, externalProperties
 
     for (const [key, entity] of Object.entries(externalProperties)) {
         if (!entity || typeof entity !== 'object') continue;
+
+        // Bridge classification aliases so entity['CLASIFICACIÓN'] and entity['CLASIFICACION'] are always available
+        const clasifVal = getValGlobal(entity, 'CLASIFICACIÓN', 'CLASIFICACION', 'CLASIFICACIÃ"N', 'CLASIFICACIÃ“N', 'Clasificación', 'Clasificacion', 'classification');
+        if (clasifVal) {
+            entity['CLASIFICACIÓN'] = clasifVal;
+            entity['CLASIFICACION'] = clasifVal;
+            entity['CLASIFICACIÃ"N'] = clasifVal;
+            entity['CLASIFICACIÃ“N'] = clasifVal;
+            entity['classification'] = clasifVal;
+        }
         const guid = getGuid(entity);
         if (guid && !propertiesByGuid.has(guid)) propertiesByGuid.set(guid, entity);
         const tag = getTag(entity);
@@ -2609,8 +2619,27 @@ const normalizeValue = (v: unknown) => {
     const s = String(v ?? '').trim();
     return s ? s : '(En blanco)';
 };
+function cleanMojibake(str: string): string {
+    if (!str || typeof str !== 'string') return str;
+    return str
+        .replace(/CLASIFICACI[ÃÓAÁ][“"”\u0093]?N/gi, 'CLASIFICACIÓN')
+        .replace(/Ã[\u0093\u201c\u201d"]/g, 'Ó')
+        .replace(/Ã³/g, 'ó')
+        .replace(/Ã\u0093/g, 'Ó')
+        .replace(/Ã[\u0081]/g, 'Á')
+        .replace(/Ã¡/g, 'á')
+        .replace(/Ã[\u0089]/g, 'É')
+        .replace(/Ã©/g, 'é')
+        .replace(/Ã[\u008d]/g, 'Í')
+        .replace(/Ã­/g, 'í')
+        .replace(/Ã[\u009a]/g, 'Ú')
+        .replace(/Ãº/g, 'ú')
+        .replace(/Ã[\u0091]/g, 'Ñ')
+        .replace(/Ã±/g, 'ñ');
+}
+
 const normalizePropKey = (v: unknown) => {
-    const s = String(v ?? '');
+    const s = cleanMojibake(String(v ?? ''));
     return s
         .normalize('NFD')
         .replace(/[\u0300-\u036f]/g, '')
@@ -2802,6 +2831,8 @@ function resetFilters() {
 
 const getValGlobal = (obj: any, ...keys: string[]): string | null => {
     if (!obj || typeof obj !== 'object') return null;
+
+    // 1. Direct top-level key search
     for (const k of keys) {
         const raw = obj[k];
         if (raw !== undefined && raw !== null) {
@@ -2809,6 +2840,20 @@ const getValGlobal = (obj: any, ...keys: string[]): string | null => {
             if (v !== null && v !== undefined && String(v).trim() !== '') return String(v).trim();
         }
     }
+
+    // 1b. Normalized top-level search (matches CLASIFICACIÓN, CLASIFICACION, CLASIFICACIÃ"N, etc.)
+    const normalizedTargets = new Set(keys.map(k => normalizePropKey(k)).filter(Boolean));
+    for (const actualKey of Object.keys(obj)) {
+        if (normalizedTargets.has(normalizePropKey(actualKey))) {
+            const raw = obj[actualKey];
+            if (raw !== undefined && raw !== null) {
+                const v = (raw && typeof raw === 'object' && 'value' in raw) ? raw.value : raw;
+                if (v !== null && v !== undefined && String(v).trim() !== '') return String(v).trim();
+            }
+        }
+    }
+
+    // 2. Recursive deep search (BFS)
     const queue = [obj];
     const seen = new Set<any>();
     let steps = 0;
@@ -2819,6 +2864,7 @@ const getValGlobal = (obj: any, ...keys: string[]): string | null => {
         if (seen.has(current)) continue;
         seen.add(current);
         steps++;
+
         for (const k of keys) {
             const raw = current[k];
             if (raw !== undefined && raw !== null) {
@@ -2826,6 +2872,17 @@ const getValGlobal = (obj: any, ...keys: string[]): string | null => {
                 if (v !== null && v !== undefined && String(v).trim() !== '') return String(v).trim();
             }
         }
+
+        for (const actualKey of Object.keys(current)) {
+            if (normalizedTargets.has(normalizePropKey(actualKey))) {
+                const raw = current[actualKey];
+                if (raw !== undefined && raw !== null) {
+                    const v = (raw && typeof raw === 'object' && 'value' in raw) ? raw.value : raw;
+                    if (v !== null && v !== undefined && String(v).trim() !== '') return String(v).trim();
+                }
+            }
+        }
+
         for (const key in current) {
             if (key === 'ObjectPlacement' || key === 'Representation' || key === 'OwnerHistory') continue;
             const val = current[key];
@@ -2899,9 +2956,9 @@ function extractAllElementsGlobal() {
             } else if (modelAny.properties) {
                 const attrs = modelAny.properties[String(expressID)];
                 if (!attrs || typeof attrs !== 'object') continue;
-                category = getValGlobal(attrs, 'type', 'ifcType', 'Category', 'ObjectType', 'CLASIFICACIóN', 'Clasificación', 'CLASIFICACION', 'clasificacion', 'CATEGORÍA', 'CATEGORIA', 'Categoría', 'categoria', 'TIPO', 'Tipo', 'tipo', 'DETALLE', 'Detalle', 'detalle') || 'Elemento';
+                category = getValGlobal(attrs, 'type', 'ifcType', 'Category', 'ObjectType', 'CLASIFICACIÓN', 'CLASIFICACION', 'CLASIFICACIÃ"N', 'CLASIFICACIÃ“N', 'Clasificación', 'Clasificacion', 'clasificación', 'clasificacion', 'CATEGORÍA', 'CATEGORIA', 'Categoría', 'categoria', 'TIPO', 'Tipo', 'tipo', 'DETALLE', 'Detalle', 'detalle') || 'Elemento';
                 name = getValGlobal(attrs, 'NOMBRE INTEGRADO', 'Nombre Integrado', 'nombre integrado', 'Name', 'name') || `${category} - ${expressID}`;
-                classification = getValGlobal(attrs, 'CLASIFICACIóN', 'Clasificación', 'CLASIFICACION', 'clasificacion') || 'SIN CLASIFICAR';
+                classification = getValGlobal(attrs, 'CLASIFICACIÓN', 'CLASIFICACION', 'CLASIFICACIÃ"N', 'CLASIFICACIÃ“N', 'CLASIFICACI\u00c3\u0093N', 'Clasificación', 'Clasificacion', 'clasificación', 'clasificacion', 'classification', 'Classification') || 'SIN CLASIFICAR';
                 level = getValGlobal(attrs, 'NIVEL INTEGRADO', 'Nivel Integrado', 'nivel integrado', 'Nivel', 'nivel') || 'SIN NIVEL';
                 material = getValGlobal(attrs, 'MATERIAL INTEGRADO', 'Material Integrado', 'material integrado') || 'SIN MATERIAL';
                 volume = parseNumGlobal(getValGlobal(attrs, 'VOLUMEN INTEGRADO', 'Volumen', 'Volume', 'Volume integrado', 'Volumen integrado'));
@@ -5402,7 +5459,7 @@ async function renderPropertiesTable(modelIdMap: Record<string, Set<number>>) {
                                     idx++;
                                 }
                             } else {
-                                out += `<tr><th>${sk}</th><td>${formatValue(sv, depth)}</td></tr>`;
+                                out += `<tr><th>${cleanMojibake(sk)}</th><td>${formatValue(sv, depth)}</td></tr>`;
                             }
                             continue;
                         }
@@ -5410,7 +5467,7 @@ async function renderPropertiesTable(modelIdMap: Record<string, Set<number>>) {
                             out += renderSection(sk, sv, depth + 1);
                             continue;
                         }
-                        out += `<tr><th>${sk}</th><td>${formatValue(sv, depth)}</td></tr>`;
+                        out += `<tr><th>${cleanMojibake(sk)}</th><td>${formatValue(sv, depth)}</td></tr>`;
                     }
                     out += `</tbody></table>`;
                     return out;
@@ -5440,7 +5497,7 @@ async function renderPropertiesTable(modelIdMap: Record<string, Set<number>>) {
                     if (typeof v === 'object' && !Array.isArray(v)) {
                         html += renderSection(k, v, 0);
                     } else {
-                        customTopHtml += `<tr><th>${k}</th><td>${formatValue(v, 0)}</td></tr>`;
+                        customTopHtml += `<tr><th>${cleanMojibake(k)}</th><td>${formatValue(v, 0)}</td></tr>`;
                     }
                 }
 
@@ -5600,12 +5657,24 @@ function initQuantitiesPanel() {
     const getVal = (obj: any, ...keys: string[]): string | null => {
         if (!obj || typeof obj !== 'object') return null;
 
-        // 1. Try top-level keys first
+        // 1. Direct top-level match
         for (const k of keys) {
             const raw = obj[k];
             if (raw !== undefined && raw !== null) {
                 const v = (raw && typeof raw === 'object' && 'value' in raw) ? raw.value : raw;
                 if (v !== null && v !== undefined && String(v).trim() !== '') return String(v).trim();
+            }
+        }
+
+        // 1b. Normalized top-level search (matches CLASIFICACIÓN, CLASIFICACION, CLASIFICACIÃ"N, etc.)
+        const normalizedTargets = new Set(keys.map(k => normalizePropKey(k)).filter(Boolean));
+        for (const actualKey of Object.keys(obj)) {
+            if (normalizedTargets.has(normalizePropKey(actualKey))) {
+                const raw = obj[actualKey];
+                if (raw !== undefined && raw !== null) {
+                    const v = (raw && typeof raw === 'object' && 'value' in raw) ? raw.value : raw;
+                    if (v !== null && v !== undefined && String(v).trim() !== '') return String(v).trim();
+                }
             }
         }
 
@@ -5627,6 +5696,16 @@ function initQuantitiesPanel() {
                 if (raw !== undefined && raw !== null) {
                     const v = (raw && typeof raw === 'object' && 'value' in raw) ? raw.value : raw;
                     if (v !== null && v !== undefined && String(v).trim() !== '') return String(v).trim();
+                }
+            }
+
+            for (const actualKey of Object.keys(current)) {
+                if (normalizedTargets.has(normalizePropKey(actualKey))) {
+                    const raw = current[actualKey];
+                    if (raw !== undefined && raw !== null) {
+                        const v = (raw && typeof raw === 'object' && 'value' in raw) ? raw.value : raw;
+                        if (v !== null && v !== undefined && String(v).trim() !== '') return String(v).trim();
+                    }
                 }
             }
 
@@ -7580,6 +7659,7 @@ function initStatusPanel() {
     const getVal = (obj: any, ...keys: string[]): string | null => {
         if (!obj || typeof obj !== 'object') return null;
 
+        // 1. Direct top-level match
         for (const k of keys) {
             const raw = obj[k];
             if (raw !== undefined && raw !== null) {
@@ -7588,6 +7668,19 @@ function initStatusPanel() {
             }
         }
 
+        // 1b. Normalized top-level search (matches CLASIFICACIÓN, CLASIFICACION, CLASIFICACIÃ"N, etc.)
+        const normalizedTargets = new Set(keys.map(k => normalizePropKey(k)).filter(Boolean));
+        for (const actualKey of Object.keys(obj)) {
+            if (normalizedTargets.has(normalizePropKey(actualKey))) {
+                const raw = obj[actualKey];
+                if (raw !== undefined && raw !== null) {
+                    const v = (raw && typeof raw === 'object' && 'value' in raw) ? raw.value : raw;
+                    if (v !== null && v !== undefined && String(v).trim() !== '') return String(v).trim();
+                }
+            }
+        }
+
+        // 2. Recursive deep search (BFS)
         const queue = [obj];
         const seen = new Set<any>();
         let steps = 0;
@@ -7605,6 +7698,16 @@ function initStatusPanel() {
                 if (raw !== undefined && raw !== null) {
                     const v = (raw && typeof raw === 'object' && 'value' in raw) ? raw.value : raw;
                     if (v !== null && v !== undefined && String(v).trim() !== '') return String(v).trim();
+                }
+            }
+
+            for (const actualKey of Object.keys(current)) {
+                if (normalizedTargets.has(normalizePropKey(actualKey))) {
+                    const raw = current[actualKey];
+                    if (raw !== undefined && raw !== null) {
+                        const v = (raw && typeof raw === 'object' && 'value' in raw) ? raw.value : raw;
+                        if (v !== null && v !== undefined && String(v).trim() !== '') return String(v).trim();
+                    }
                 }
             }
 
@@ -8875,12 +8978,24 @@ async function classifyModel(model: any) {
     const getVal = (obj: any, ...keys: string[]): string | null => {
         if (!obj || typeof obj !== 'object') return null;
 
-        // 1. Try top-level keys first
+        // 1. Direct top-level match
         for (const k of keys) {
             const raw = obj[k];
             if (raw !== undefined && raw !== null) {
                 const v = (raw && typeof raw === 'object' && 'value' in raw) ? raw.value : raw;
                 if (v !== null && v !== undefined && String(v).trim() !== '') return String(v).trim();
+            }
+        }
+
+        // 1b. Normalized top-level search (matches CLASIFICACIÓN, CLASIFICACION, CLASIFICACIÃ"N, etc.)
+        const normalizedTargets = new Set(keys.map(k => normalizePropKey(k)).filter(Boolean));
+        for (const actualKey of Object.keys(obj)) {
+            if (normalizedTargets.has(normalizePropKey(actualKey))) {
+                const raw = obj[actualKey];
+                if (raw !== undefined && raw !== null) {
+                    const v = (raw && typeof raw === 'object' && 'value' in raw) ? raw.value : raw;
+                    if (v !== null && v !== undefined && String(v).trim() !== '') return String(v).trim();
+                }
             }
         }
 
@@ -8905,6 +9020,16 @@ async function classifyModel(model: any) {
                 }
             }
 
+            for (const actualKey of Object.keys(current)) {
+                if (normalizedTargets.has(normalizePropKey(actualKey))) {
+                    const raw = current[actualKey];
+                    if (raw !== undefined && raw !== null) {
+                        const v = (raw && typeof raw === 'object' && 'value' in raw) ? raw.value : raw;
+                        if (v !== null && v !== undefined && String(v).trim() !== '') return String(v).trim();
+                    }
+                }
+            }
+
             for (const key in current) {
                 if (key === 'ObjectPlacement' || key === 'Representation' || key === 'OwnerHistory') continue;
                 const val = current[key];
@@ -8919,8 +9044,7 @@ async function classifyModel(model: any) {
 
     // Helper: read integrated fields from an attribute object
     const readFields = (attrs: any, expressID: number) => {
-        const clasif = getVal(attrs,
-            'CLASIFICACIÓN', 'Clasificaci\u00f3n', 'CLASIFICACION', 'clasificacion');
+        const clasif = getVal(attrs, 'CLASIFICACIÓN', 'CLASIFICACION', 'CLASIFICACIÃ"N', 'CLASIFICACIÃ“N', 'CLASIFICACI\u00c3\u0093N', 'Clasificación', 'Clasificacion', 'clasificación', 'clasificacion', 'classification', 'Classification');
         if (clasif) integratedClassById.set(expressID, clasif);
 
         const nivel = getVal(attrs,
