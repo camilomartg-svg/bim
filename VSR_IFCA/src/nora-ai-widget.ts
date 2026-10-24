@@ -15,6 +15,7 @@ export interface NoraAIAction {
     type: 'isolate' | 'hide' | 'show_all' | 'filter' | 'color' | 'camera' | 'section' | 'none';
     classifications?: string[];
     categories?: string[];
+    elementTypes?: string[];
     levels?: string[];
     materials?: string[];
     pilotes?: string[];
@@ -48,6 +49,7 @@ export class NoraAIWidget {
     private recognition: any = null;
     private userApiKey: string = localStorage.getItem('NORA_GEMINI_KEY') || '';
     private chatHistory: Array<{ role: 'user' | 'model'; parts: Array<{ text: string }> }> = [];
+    private lastInspectedElement: any = null;
 
     private drawerEl!: HTMLElement;
     private fabEl!: HTMLElement;
@@ -410,6 +412,42 @@ export class NoraAIWidget {
     private async queryLLM(userQuery: string, bimContext: any): Promise<{ answer: string; action: NoraAIAction }> {
         const apiKey = this.userApiKey || this.options.apiKey || (window as any).NORA_GEMINI_API_KEY || '';
 
+        // Actualizar referencia al elemento seleccionado si existe
+        if (bimContext?.selectedElements && bimContext.selectedElements.length > 0) {
+            this.lastInspectedElement = bimContext.selectedElements[0];
+        }
+
+        const qClean = userQuery.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
+        let qNorm = qClean
+            .replace(/\btpda[s]?\b/g, 'todas')
+            .replace(/\btpd[os]\b/g, 'todos')
+            .replace(/\btodso\b/g, 'todos')
+            .replace(/\btodsa\b/g, 'todas')
+            .replace(/\btodo[s]?\s+el\s+modelo\b/g, 'todo')
+            .replace(/\bre+st[aá]blec[ea]?\b/g, 'restablecer')
+            .replace(/\bre+st[aá]bl[ea]c?e?r?\b/g, 'restablecer')
+            .replace(/\bresteblece\b/g, 'restablecer')
+            .replace(/\breinici[ae]r?\b/g, 'restablecer')
+            .replace(/\baisl[ae]m[eo]\b/g, 'aislar')
+            .replace(/\basil[ae]r?\b/g, 'aislar')
+            .replace(/\baislam\b/g, 'aislar')
+            .replace(/\bventans\b/g, 'ventanas')
+            .replace(/\bventna[s]?\b/g, 'ventanas')
+            .replace(/\bmuros?\s+cotina\b/g, 'muros cortina');
+
+        const isReset = /(?:re*st[aá]blec|reset|limpi|mostra?r?\s*todo|ver\s*todo|todo\s*el\s*modelo|despejar|mostrar\s*modelo|quitar\s*filtros|restaurar|todo\s*visible|ver\s*todos?|^todos?$|^todo$)/i.test(qNorm);
+        const isSameType = /(?:mismo\s+tipo|mismo\s+nombre|misma\s+categor[ií]a|iguales|similares|de\s+(?:este|ese|aquel)\s*tipo|del\s+mismo|de\s+esa\s+categor[ií]a|de\s+esta\s+categor[ií]a|como\s+(?:este|ese))/i.test(qNorm);
+        const isSelectionInfo = ['seleccionad', 'este', 'esta', 'tocado', 'marcado', 'que toque', 'actual', 'que seleccione', 'que elemento es', 'cual es este', 'que es esto'].some(k => qNorm.includes(k)) && !qNorm.includes('aisla');
+        const isOnlyThisSelected = /(?:aisla\s*(?:solo|solamente)?\s*(?:este|el\s*seleccionado|esta\s*pieza)|ver\s*solo\s*este)/i.test(qNorm) && !isSameType;
+
+        // Comandos contextuales directos se resuelven en 0ms localmente sin riesgo de timeout o alucinación de red
+        if (isReset || isSameType || isSelectionInfo || isOnlyThisSelected) {
+            const directResult = this.localHeuristicFallback(userQuery, bimContext);
+            this.chatHistory.push({ role: 'user', parts: [{ text: userQuery }] });
+            this.chatHistory.push({ role: 'model', parts: [{ text: directResult.answer }] });
+            return directResult;
+        }
+
         this.chatHistory.push({ role: 'user', parts: [{ text: userQuery }] });
         if (this.chatHistory.length > 20) this.chatHistory = this.chatHistory.slice(-20);
 
@@ -432,6 +470,9 @@ ${JSON.stringify(bimContext.anomalies || {}, null, 2)}
 
 TOTAL ELEMENTOS EN EL MODELO: ${bimContext.totalElements || 0}
 
+ELEMENTO SELECCIONADO O DE REFERENCIA:
+${JSON.stringify(this.lastInspectedElement || bimContext.selectedElements?.[0] || null, null, 2)}
+
 ESTADO DE FILTROS Y CONTEXTO ACTIVO:
 ${JSON.stringify(this.activeContext, null, 2)}
 
@@ -440,8 +481,9 @@ REGLAS CRÍTICAS DE RESPUESTA:
 2. PROHIBIDO DAR RESPUESTAS GENÉRICAS o soltar menús de ayuda largos a menos que el usuario diga explícitamente "ayuda".
 3. Si el usuario pide aislar o cuantificar (ej: "aisla los muros"), di directamente lo que hiciste y el dato esencial (ej: "🧱 He aislado **3,908 muros** (Vol: 1,809.5 m³ | Área: 13,583 m²).").
 4. Si el usuario pide algo que no existe en el modelo (por ejemplo "ventanas"), pero el modelo tiene un equivalente obvio (como "Muros Cortina" / fachada vidriada), aíslalos y acláralo en una sola oración: "Este proyecto no tiene ventanas convencionales; he aislado los **Muros Cortina** de la fachada (X uds)."
-5. NO incluyas advertencias de auditoría a menos que el usuario pregunte específicamente por anomalías o auditoría.
-6. NO agregues tips o consejos no solicitados.
+5. REFERENCIAS CONTEXTUALES: Si el usuario dice "aisla los de ese mismo tipo", "del mismo tipo", "iguales a este", etc., toma el nombre/tipo (name) del ELEMENTO SELECCIONADO y aísla con action.elementTypes: [name].
+6. NO incluyas advertencias de auditoría a menos que el usuario pregunte específicamente por anomalías o auditoría.
+7. NO agregues tips o consejos no solicitados.
 
 CAPACIDADES Y ACCIONES:
 1. CONTROL DE VISIBILIDAD Y FILTRADO MULTICRITERIO:
@@ -558,6 +600,8 @@ SIEMPRE responde ÚNICAMENTE en formato JSON:
         let qNorm = qClean
             .replace(/\btpda[s]?\b/g, 'todas')
             .replace(/\btpd[os]\b/g, 'todos')
+            .replace(/\btodso\b/g, 'todos')
+            .replace(/\btodsa\b/g, 'todas')
             .replace(/\btodo[s]?\s+el\s+modelo\b/g, 'todo')
             .replace(/\bre+st[aá]blec[ea]?\b/g, 'restablecer')
             .replace(/\bre+st[aá]bl[ea]c?e?r?\b/g, 'restablecer')
@@ -565,6 +609,7 @@ SIEMPRE responde ÚNICAMENTE en formato JSON:
             .replace(/\breinici[ae]r?\b/g, 'restablecer')
             .replace(/\baisl[ae]m[eo]\b/g, 'aislar')
             .replace(/\basil[ae]r?\b/g, 'aislar')
+            .replace(/\baislam\b/g, 'aislar')
             .replace(/\bventans\b/g, 'ventanas')
             .replace(/\bventna[s]?\b/g, 'ventanas')
             .replace(/\bmuros?\s+cotina\b/g, 'muros cortina');
@@ -597,10 +642,58 @@ SIEMPRE responde ÚNICAMENTE en formato JSON:
             }
         }
 
-        const isSelectionQuery = ['seleccionad', 'este', 'esta', 'tocado', 'marcado', 'que toque', 'actual', 'que seleccione'].some(k => qNorm.includes(k));
+        // Si hay un elemento seleccionado actualmente, se recuerda en memoria contextual
+        if (selectedEls.length > 0) {
+            this.lastInspectedElement = selectedEls[0];
+        }
+        const activeRefEl = selectedEls.length > 0 ? selectedEls[0] : this.lastInspectedElement;
 
-        if (selectedEls.length > 0 && isSelectionQuery) {
-            const el = selectedEls[0];
+        // =========================================================================
+        // 0.1 AISLAMIENTO O FILTRADO DE ELEMENTOS DEL MISMO TIPO / SELECCIONADO
+        // =========================================================================
+        const isSameTypeQuery = /(?:mismo\s+tipo|mismo\s+nombre|misma\s+categor[ií]a|iguales|similares|de\s+(?:este|ese|aquel)\s*tipo|del\s+mismo|de\s+esa\s+categor[ií]a|de\s+esta\s+categor[ií]a|como\s+(?:este|ese))/i.test(qNorm);
+
+        if (isSameTypeQuery) {
+            if (!activeRefEl) {
+                return {
+                    answer: '⚠️ No tengo ningún elemento de referencia. Haz clic en un elemento del modelo 3D primero.',
+                    action: { type: 'none' }
+                };
+            }
+
+            const targetName = activeRefEl.name || activeRefEl.category || activeRefEl.classification;
+            const targetClassif = activeRefEl.classification;
+            const isHide = /(?:oculta|ocultar|esconde|esconder|quita|quitar|remover)/i.test(qNorm);
+
+            if (isHide) {
+                return {
+                    answer: `👁️ He ocultado todos los elementos del tipo **${targetName}**${targetClassif ? ' (' + targetClassif + ')' : ''}.`,
+                    action: {
+                        type: 'hide',
+                        elementTypes: [targetName],
+                        categories: [targetName],
+                        message: `Ocultados elementos tipo ${targetName}`
+                    }
+                };
+            }
+
+            return {
+                answer: `🎯 He aislado todos los elementos del tipo **${targetName}**${targetClassif ? ' (' + targetClassif + ')' : ''} en el modelo 3D.`,
+                action: {
+                    type: 'isolate',
+                    elementTypes: [targetName],
+                    categories: [targetName],
+                    cameraView: 'focus',
+                    message: `Aislados elementos tipo ${targetName}`
+                }
+            };
+        }
+
+        // Consultar qué elemento es el seleccionado actualmente
+        const isSelectionInfoQuery = ['seleccionad', 'este', 'esta', 'tocado', 'marcado', 'que toque', 'actual', 'que seleccione', 'que elemento es', 'cual es este', 'que es esto'].some(k => qNorm.includes(k)) && !qNorm.includes('aisla');
+
+        if (activeRefEl && isSelectionInfoQuery) {
+            const el = activeRefEl;
             const detailLines: string[] = [];
             if (el.name) detailLines.push(`• <b>Nombre / Tipo:</b> ${el.name}`);
             if (el.category) detailLines.push(`• <b>Categoría:</b> ${el.category}${el.classification ? ' (' + el.classification + ')' : ''}`);
@@ -613,6 +706,21 @@ SIEMPRE responde ÚNICAMENTE en formato JSON:
             return {
                 answer: `📌 <b>Elemento seleccionado:</b><br>${detailLines.join('<br>')}`,
                 action: { type: 'none' }
+            };
+        }
+
+        // Aislar exclusivamente el elemento seleccionado
+        const isIsolateOnlySelection = /(?:aisla\s*(?:solo|solamente)?\s*(?:este|el\s*seleccionado|esta\s*pieza)|ver\s*solo\s*este)/i.test(qNorm) && !isSameTypeQuery;
+        if (isIsolateOnlySelection && activeRefEl) {
+            const targetName = activeRefEl.name || 'Elemento seleccionado';
+            return {
+                answer: `🎯 He enfocado y aislado el elemento **${targetName}** en el visor 3D.`,
+                action: {
+                    type: 'isolate',
+                    elementTypes: activeRefEl.name ? [activeRefEl.name] : undefined,
+                    cameraView: 'focus',
+                    message: `Aislado elemento ${targetName}`
+                }
             };
         }
 

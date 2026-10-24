@@ -3122,7 +3122,11 @@ async function applyFiltersToViewerGlobal() {
     const isTreeFilterActive = selectedClassifications.size > 0 || selectedCategories.size > 0;
 
     const visibleElements = allElements.filter(el => {
-        const treeMatch = !isTreeFilterActive || selectedCategories.has(el.category) || selectedCategories.has(el.name) || selectedClassifications.has(el.classification);
+        const treeMatch = !isTreeFilterActive || 
+            selectedCategories.has(el.category) || 
+            selectedCategories.has(el.name) || 
+            selectedClassifications.has(el.classification) ||
+            Array.from(selectedCategories).some(c => (el.name && el.name.toLowerCase().includes(c.toLowerCase())) || (el.detail && el.detail.toLowerCase().includes(c.toLowerCase())));
         const levelMatch = selectedLevels.size === 0 || selectedLevels.has(el.level);
         const materialMatch = selectedMaterials.size === 0 || selectedMaterials.has(el.material);
         const piloteMatch = selectedPilotes.size === 0 || selectedPilotes.has(el.pilote);
@@ -9766,6 +9770,7 @@ async function executeNoraAI3DAction(action: NoraAIAction): Promise<string> {
         const allElements = extractAllElementsGlobal();
         const classifs = action.classifications || [];
         const cats = action.categories || [];
+        const types = action.elementTypes || [];
         const lvls = action.levels || [];
         const mats = action.materials || [];
         const pils = action.pilotes || [];
@@ -9776,6 +9781,7 @@ async function executeNoraAI3DAction(action: NoraAIAction): Promise<string> {
         for (const el of allElements) {
             const matchesClassif = classifs.length > 0 && classifs.some(cl => el.classification && el.classification.toLowerCase().includes(cl.toLowerCase()));
             const matchesCat = cats.length > 0 && cats.some(c => (el.category && el.category.toLowerCase().includes(c.toLowerCase())) || (el.name && el.name.toLowerCase().includes(c.toLowerCase())));
+            const matchesType = types.length > 0 && types.some(t => (el.name && el.name.toLowerCase().includes(t.toLowerCase())) || (el.detail && el.detail.toLowerCase().includes(t.toLowerCase())));
             const matchesLvl = lvls.length > 0 && lvls.some(l => el.level && el.level.toLowerCase().includes(l.toLowerCase()));
             const matchesMat = mats.length > 0 && mats.some(m => fuzzyMaterialMatch(el.material, m));
             const matchesPil = pils.length > 0 && pils.some(p => el.pilote && el.pilote.toLowerCase().includes(p.toLowerCase()));
@@ -9785,7 +9791,7 @@ async function executeNoraAI3DAction(action: NoraAIAction): Promise<string> {
                 matchesNumeric = checkNumericCondition(el, action.numericFilter);
             }
 
-            let shouldHide = (matchesClassif || matchesCat || matchesLvl || matchesMat || matchesPil) && matchesNumeric;
+            let shouldHide = (matchesClassif || matchesCat || matchesType || matchesLvl || matchesMat || matchesPil) && matchesNumeric;
             if (action.invertMatch) shouldHide = !shouldHide;
 
             if (shouldHide) {
@@ -9812,6 +9818,7 @@ async function executeNoraAI3DAction(action: NoraAIAction): Promise<string> {
         const allElements = extractAllElementsGlobal();
         const classifs = action.classifications || [];
         const cats = action.categories || [];
+        const types = action.elementTypes || [];
         const lvls = action.levels || [];
         const mats = action.materials || [];
         const pils = action.pilotes || [];
@@ -9829,7 +9836,15 @@ async function executeNoraAI3DAction(action: NoraAIAction): Promise<string> {
                 const lowerC = c.toLowerCase().trim();
                 return (el.category && el.category.toLowerCase().includes(lowerC)) ||
                        (el.classification && el.classification.toLowerCase().includes(lowerC)) ||
-                       (el.name && el.name.toLowerCase().includes(lowerC));
+                       (el.name && el.name.toLowerCase().includes(lowerC)) ||
+                       (el.detail && el.detail.toLowerCase().includes(lowerC));
+            });
+
+            const matchesType = types.length === 0 || types.some(t => {
+                const lowerT = t.toLowerCase().trim();
+                return (el.name && el.name.toLowerCase().includes(lowerT)) ||
+                       (el.detail && el.detail.toLowerCase().includes(lowerT)) ||
+                       (el.category && el.category.toLowerCase().includes(lowerT));
             });
 
             const matchesLvl = lvls.length === 0 || lvls.some(l => {
@@ -9849,7 +9864,7 @@ async function executeNoraAI3DAction(action: NoraAIAction): Promise<string> {
                 matchesNumeric = checkNumericCondition(el, action.numericFilter);
             }
 
-            let isMatch = matchesClassif && matchesCat && matchesLvl && matchesMat && matchesPil && matchesNumeric;
+            let isMatch = matchesClassif && matchesCat && matchesType && matchesLvl && matchesMat && matchesPil && matchesNumeric;
             if (action.invertMatch) isMatch = !isMatch;
 
             if (isMatch) {
@@ -9864,14 +9879,26 @@ async function executeNoraAI3DAction(action: NoraAIAction): Promise<string> {
                 }
                 if (cats.length > 0) {
                     if (el.category) selectedCategories.add(el.category);
-                    if (el.classification) selectedClassifications.add(el.classification);
+                    if (el.name) selectedCategories.add(el.name);
+                }
+                if (types.length > 0) {
                     if (el.name) selectedCategories.add(el.name);
                 }
             }
         }
 
+        // Aislamiento directo en Three.js / ThatOpen hider
+        if (hider && matchCount > 0) {
+            try {
+                await hider.isolate(matchingExpressIdsByModel);
+            } catch (e) {
+                console.warn('Error in hider.isolate:', e);
+            }
+        }
+
         for (const cl of classifs) selectedClassifications.add(cl);
         for (const cat of cats) selectedCategories.add(cat);
+        for (const t of types) selectedCategories.add(t);
         for (const lvl of lvls) selectedLevels.add(lvl);
         for (const mat of mats) selectedMaterials.add(mat);
         for (const p of pils) selectedPilotes.add(p);
