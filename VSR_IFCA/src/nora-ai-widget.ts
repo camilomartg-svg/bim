@@ -13,6 +13,7 @@ export interface NoraAIOptions {
 
 export interface NoraAIAction {
     type: 'isolate' | 'hide' | 'show_all' | 'filter' | 'color' | 'camera' | 'none';
+    classifications?: string[];
     categories?: string[];
     levels?: string[];
     materials?: string[];
@@ -84,11 +85,14 @@ export class NoraAIWidget {
 
             <div class="nora-ai-body" id="nora-ai-messages">
                 <div class="nora-ai-prompts">
-                    <button class="nora-ai-prompt-pill" data-prompt="Aísla la tubería sanitaria">
-                        <i class="fa-solid fa-faucet-drip"></i> Tubería Sanitaria
+                    <button class="nora-ai-prompt-pill" data-prompt="Aísla todos los muros del proyecto">
+                        <i class="fa-solid fa-border-all"></i> Aislar Muros
                     </button>
                     <button class="nora-ai-prompt-pill" data-prompt="Quiero ver solo las columnas">
                         <i class="fa-solid fa-eye"></i> Aislar Columnas
+                    </button>
+                    <button class="nora-ai-prompt-pill" data-prompt="Aísla la tubería sanitaria">
+                        <i class="fa-solid fa-faucet-drip"></i> Tubería Sanitaria
                     </button>
                     <button class="nora-ai-prompt-pill" data-prompt="¿Volumen de concreto en piso 2?">
                         <i class="fa-solid fa-cube"></i> Concreto Piso 2
@@ -254,12 +258,14 @@ export class NoraAIWidget {
     }
 
     private activeContext: {
+        activeClassifications: string[];
         activeLevels: string[];
         activeCategories: string[];
         activeMaterials: string[];
         activePilotes: string[];
         lastActionType: string;
     } = {
+        activeClassifications: [],
         activeLevels: [],
         activeCategories: [],
         activeMaterials: [],
@@ -269,7 +275,7 @@ export class NoraAIWidget {
 
     public clearChat() {
         this.chatHistory = [];
-        this.activeContext = { activeLevels: [], activeCategories: [], activeMaterials: [], activePilotes: [], lastActionType: 'none' };
+        this.activeContext = { activeClassifications: [], activeLevels: [], activeCategories: [], activeMaterials: [], activePilotes: [], lastActionType: 'none' };
         this.bodyEl.innerHTML = `
             <div class="nora-ai-msg bot">
                 <div class="nora-ai-bubble">
@@ -348,8 +354,11 @@ export class NoraAIWidget {
             let actionBadge: string | undefined;
             if (response.action && response.action.type !== 'none') {
                 if (response.action.type === 'show_all') {
-                    this.activeContext = { activeLevels: [], activeCategories: [], activeMaterials: [], activePilotes: [], lastActionType: 'show_all' };
+                    this.activeContext = { activeClassifications: [], activeLevels: [], activeCategories: [], activeMaterials: [], activePilotes: [], lastActionType: 'show_all' };
                 } else {
+                    if (response.action.classifications && response.action.classifications.length > 0) {
+                        this.activeContext.activeClassifications = response.action.classifications;
+                    }
                     if (response.action.levels && response.action.levels.length > 0) {
                         this.activeContext.activeLevels = response.action.levels;
                     }
@@ -383,31 +392,53 @@ export class NoraAIWidget {
         this.chatHistory.push({ role: 'user', parts: [{ text: userQuery }] });
         if (this.chatHistory.length > 20) this.chatHistory = this.chatHistory.slice(-20);
 
-        // Si hay API key, intentamos consultar Gemini en la nube
+        // Si hay API key, consultamos Gemini en la nube
         if (apiKey) {
             const systemPrompt = `
-Eres "nora AI", la asistente experta de IA para la plataforma nora BIM CDE.
+Eres "nora AI Copilot", la asistente experta de Inteligencia Artificial para el visor BIM y CDE de Nora.
 
-CONTEXTO DEL MODELO IFC CARGADO EN PANTALLA:
-${JSON.stringify(bimContext, null, 2)}
+ESTRUCTURA DE CLASIFICACIÓN DEL PROYECTO (Árbol principal del visor):
+${JSON.stringify(bimContext.classifications || bimContext.categories || {}, null, 2)}
 
-ESTADO DE FILTROS Y CONTEXTO ACTIVO EN LA CONVERSACIÓN ACTUAL:
+NIVELES DISPONIBLES:
+${JSON.stringify(Object.keys(bimContext.levels || {}), null, 2)}
+
+MATERIALES PRESENTES EN EL MODELO:
+${JSON.stringify(Object.keys(bimContext.materials || {}).slice(0, 40), null, 2)}
+
+TOTAL ELEMENTOS EN EL MODELO: ${bimContext.totalElements || 0}
+
+ESTADO DE FILTROS Y CONTEXTO ACTIVO EN LA CONVERSACIÓN:
 ${JSON.stringify(this.activeContext, null, 2)}
 
-REGLAS CRÍTICAS:
-1. OBJETO SELECCIONADO: Si el usuario pregunta por un elemento seleccionado o activo, responde ÚNICAMENTE con sus datos individuales (área, volumen, longitud, nivel). NO sumes toda la categoría.
-2. CONTINUIDAD: Combina filtros de niveles y categorías si la conversación es secuencial.
-3. MAPEO MEP / HIDROSANITARIO: Reconoce TUBERÍAS (IfcPipeSegment), UNIONES (IfcPipeFitting) y APARATOS SANITARIOS (IfcSanitaryTerminal).
+REGLAS CRÍTICAS DE INTERPRETACIÓN BIM:
+1. CLASIFICACIÓN VS MATERIAL:
+   - "muro", "muros", "paredes" SIEMPRE corresponde a la clasificación "MUROS" (o "MUROS CORTINA"). NUNCA lo interpretes como un material específico salvo que el usuario pida explícitamente "material muro básico...".
+   - "columna", "columnas", "pilares" corresponde a la clasificación "COLUMNAS".
+   - "viga", "vigas" corresponde a la clasificación "VIGAS".
+   - "piso", "pisos", "placa", "placas", "losa", "losas" corresponde a "PISOS / PLACAS".
+   - "puerta", "puertas" corresponde a "PUERTAS".
+   - "ventana", "ventanas" corresponde a "VENTANAS".
+   - "tubería", "tuberías", "tubo" corresponde a "TUBERÍAS".
+   - "accesorios", "uniones", "codos" corresponde a "ACCESORIOS DE TUBERÍA".
+   - "sanitarios", "aparatos sanitarios" corresponde a "APARATOS SANITARIOS".
+2. ACCIONES EN EL VISOR 3D:
+   - Si el usuario dice "aisla...", "ver solo...", "todos los muros", "deja solo...", usa action.type = "isolate" y coloca los nombres exactos en "classifications".
+   - Si pide ocultar: action.type = "hide".
+   - Si pide mostrar todo o limpiar filtros: action.type = "show_all".
+   - Si solo pregunta por cantidades sin pedir aislar: action.type = "none".
+3. ELEMENTO SELECCIONADO: Si el usuario pregunta por un elemento seleccionado o activo, responde con sus propiedades individuales.
 
 SIEMPRE responde ÚNICAMENTE en formato JSON:
 {
-  "answer": "Respuesta clara al usuario...",
+  "answer": "Respuesta clara y profesional en markdown...",
   "action": {
-    "type": "isolate" | "hide" | "show_all" | "filter" | "color" | "none",
-    "categories": ["NOMBRE_CATEGORIA_EXACTA_DEL_CONTEXTO"],
-    "levels": ["NOMBRE_NIVEL_EXACTO_DEL_CONTEXTO"],
-    "materials": ["NOMBRE_MATERIAL_EXACTO_DEL_CONTEXTO"],
-    "message": "Mensaje descriptivo de la acción ejecutada"
+    "type": "isolate" | "hide" | "show_all" | "filter" | "none",
+    "classifications": ["NOMBRE_EXACTO_DEL_CONTEXTO"],
+    "categories": [],
+    "levels": [],
+    "materials": [],
+    "message": "Mensaje descriptivo de la acción"
   }
 }
             `;
@@ -418,8 +449,7 @@ SIEMPRE responde ÚNICAMENTE en formato JSON:
                 ...this.chatHistory
             ];
 
-            // Intentar modelos compatibles vigentes
-            for (const modelName of ['gemini-2.5-flash', 'gemini-2.5-pro']) {
+            for (const modelName of ['gemini-2.0-flash', 'gemini-1.5-flash', 'gemini-1.5-pro']) {
                 const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`;
                 const payload = {
                     contents,
@@ -456,7 +486,7 @@ SIEMPRE responde ÚNICAMENTE en formato JSON:
             }
         }
 
-        // Fallback robusto local garantizado
+        // Motor BIM Heurístico Local Robusto
         const fallbackResult = this.localHeuristicFallback(userQuery, bimContext);
         this.chatHistory.push({ role: 'model', parts: [{ text: JSON.stringify(fallbackResult) }] });
         return fallbackResult;
@@ -475,7 +505,7 @@ SIEMPRE responde ÚNICAMENTE en formato JSON:
     }
 
     private localHeuristicFallback(query: string, bimContext: any): { answer: string; action: NoraAIAction } {
-        const qClean = query.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+        const qClean = query.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
 
         // =========================================================================
         // 0. Inspección de Selección Activa (DOM o Memoria)
@@ -506,7 +536,7 @@ SIEMPRE responde ÚNICAMENTE en formato JSON:
             }
         }
 
-        const isSelectionQuery = ['seleccionad', 'este', 'esta', 'tocado', 'marcado', 'que toque', 'actual'].some(k => qClean.includes(k));
+        const isSelectionQuery = ['seleccionad', 'este', 'esta', 'tocado', 'marcado', 'que toque', 'actual', 'que seleccione'].some(k => qClean.includes(k));
 
         if (selectedEls.length > 0 && isSelectionQuery) {
             const el = selectedEls[0];
@@ -549,6 +579,7 @@ SIEMPRE responde ÚNICAMENTE en formato JSON:
                         answer: msg,
                         action: {
                             type: tsResult.action || tsResult.parsedJSON?.action || 'none',
+                            classifications: tsResult.classificationsMatched || tsResult.parsedJSON?.classifications,
                             categories: tsResult.categoriesMatched || tsResult.parsedJSON?.categories,
                             levels: tsResult.levelMatched || tsResult.parsedJSON?.levelMatched,
                             message: msg
@@ -563,60 +594,94 @@ SIEMPRE responde ÚNICAMENTE en formato JSON:
         // =========================================================================
         // 2. Restablecer / Mostrar todo
         // =========================================================================
-        if (qClean.includes('mostrar todo') || qClean.includes('limpiar') || qClean.includes('restablecer') || qClean.includes('reset')) {
-            this.activeContext = { activeLevels: [], activeCategories: [], activeMaterials: [], activePilotes: [], lastActionType: 'show_all' };
+        const isReset = /(mostrar todo|muestra todo|restablecer|limpiar|reset|ver todo|todo el modelo|despejar|mostrar modelo|quitar filtros|restaurar|todo visible)/i.test(qClean);
+        if (isReset) {
+            this.activeContext = { activeClassifications: [], activeLevels: [], activeCategories: [], activeMaterials: [], activePilotes: [], lastActionType: 'show_all' };
+            const total = bimContext?.totalElements || 0;
             return {
-                answer: 'Se han restablecido todos los filtros y la visibilidad completa del modelo 3D.',
+                answer: `🔄 <b>Modelo Restablecido:</b> Se han eliminado los aislamientos y filtros. Los <b>${total}</b> elementos del modelo están visibles en el visor 3D.`,
                 action: { type: 'show_all', message: 'Modelo restablecido' }
             };
         }
 
         // =========================================================================
-        // 3. Extracción de Categorías (Match Directo con bimContext.categories)
+        // 3. Detección de Intención (Ocultar, Aislar, Cantidades)
         // =========================================================================
-        const matchedCategories: string[] = [];
-        if (bimContext && bimContext.categories) {
-            const catKeys = Object.keys(bimContext.categories);
+        const isHide = /(oculta|ocultar|esconde|esconder|apaga|apagar|quitar|quita|remover|desactiva)/i.test(qClean);
+        const isExplicitQuantity = /(cu[aá]nto|cu[aá]ntos|cu[aá]nta|cu[aá]ntas|qu[eé] cantidad|dame el metrado|metrado|resumen de cantidades|cu[aá]l es el volumen|cu[aá]l es el [aá]rea|cu[aá]ntos metros)/i.test(qClean);
+        const isExplicitIsolate = /(aisla|aislar|a[ií]sla|ver solo|muestra solo|mostrar solo|deja solo|dejame ver|quiero ver|necesito ver|necesito que aisles|solamente|unicamente|todos los|todas las|todo el|toda la|filtra|filtrar)/i.test(qClean);
 
-            // Mapeo de términos coloquiales a nombres reales del árbol
-            const synonymsMap: Record<string, string[]> = {
-                "tuberi": ["tuberia", "tuberias", "tubo", "tubos", "pipe"],
-                "union": ["union", "uniones", "accesorio", "accesorios", "codo", "codos", "tee", "fitting"],
-                "sanitari": ["sanitario", "sanitarios", "aparato", "aparatos", "inodoro", "inodoros", "lavamanos"],
-                "colum": ["columna", "columnas", "colum", "pilar", "pilares"],
-                "viga": ["viga", "vigas", "dintel", "beam"],
-                "muro": ["muro", "muros", "pared", "paredes", "wall"],
-                "slab": ["losa", "losas", "placa", "placas", "forjado"]
-            };
+        // =========================================================================
+        // 4. Mapeo y Detección de Clasificaciones
+        // =========================================================================
+        const classifDict = bimContext?.classifications || bimContext?.categories || {};
+        const availableClassifs = Object.keys(classifDict);
+        const matchedClassifications: string[] = [];
 
-            for (const catKey of catKeys) {
-                const normCat = catKey.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+        const classificationAliases: Record<string, string[]> = {
+            "MUROS": ["muro", "muros", "pared", "paredes", "wall", "walls", "tabique", "tabiques", "mamposteria"],
+            "MUROS CORTINA": ["muro cortina", "muros cortina", "curtain wall", "fachada flotante", "muro vidriado"],
+            "COLUMNAS": ["columna", "columnas", "pilar", "pilares", "column", "columns"],
+            "VIGAS": ["viga", "vigas", "beam", "beams", "dintel", "dinteles", "vigueta", "viguetas"],
+            "PISOS / PLACAS": ["piso", "pisos", "placa", "placas", "losa", "losas", "slab", "slabs", "floor", "floors", "forjado", "forjados", "entrepiso", "suelo", "suelos"],
+            "CUBIERTAS": ["cubierta", "cubiertas", "techo", "techos", "roof", "roofs", "tejado", "tejados", "cielo raso"],
+            "CIMENTACIONES": ["cimentacion", "cimentaciones", "zapata", "zapatas", "foundation", "foundations", "fundacion", "fundaciones", "pedestal", "pedestales", "viga de amarre", "vigas de amarre"],
+            "PILOTES": ["pilote", "pilotes", "pile", "piles"],
+            "PUERTAS": ["puerta", "puertas", "door", "doors", "porton", "portones"],
+            "VENTANAS": ["ventana", "ventanas", "window", "windows", "ventaneria", "ventanerias", "vidriera", "vidrieras"],
+            "BARANDILLAS": ["barandilla", "barandillas", "baranda", "barandas", "railing", "railings", "pasamanos"],
+            "ESCALERAS": ["escalera", "escaleras", "stair", "stairs", "grada", "gradas", "peldano", "peldanos"],
+            "TUBERÍAS": ["tuberia", "tuberias", "tubo", "tubos", "pipe", "pipes", "conduit", "red sanitaria", "red hidraulica", "desague", "agua potable", "tubo sanitario"],
+            "ACCESORIOS DE TUBERÍA": ["accesorio", "accesorios", "union", "uniones", "codo", "codos", "tee", "fitting", "fittings", "reduccion", "reducciones", "acople"],
+            "APARATOS SANITARIOS": ["aparato sanitario", "aparatos sanitarios", "sanitario", "sanitarios", "inodoro", "inodoros", "lavamanos", "ducha", "duchas", "grifo", "griferia", "sanitary"],
+            "EQUIPOS MECÁNICOS": ["equipo mecanico", "equipos mecanicos", "bomba", "bombas", "caldera", "calderas", "chiller", "tanque", "tanques"],
+            "CONDUCTOS": ["conducto", "conductos", "ducto", "ductos", "rejilla", "rejillas", "difusor", "difusores", "hvac"],
+            "LUMINARIAS": ["luminaria", "luminarias", "lampara", "lamparas", "iluminacion", "light", "foco", "focos"],
+            "DISPOSITIVOS ELÉCTRICOS": ["electrico", "electrica", "electricos", "electricas", "tablero", "tableros", "toma", "tomas", "tomacorriente", "interruptor"]
+        };
 
-                // 1. Coincidencia directa con el nombre en el árbol (ej. "tuberias", "muros")
-                if (qClean.includes(normCat)) {
-                    if (!matchedCategories.includes(catKey)) matchedCategories.push(catKey);
-                    continue;
+        const isCortinaMentioned = qClean.includes('cortina') || qClean.includes('curtain') || qClean.includes('fachada flotante');
+        const isAllWalls = /(todos los muros|todos muros|aisla los muros|aisla muros|aislar los muros|todos los muros del proyecto|necesito que aisles todos los muros)/i.test(qClean);
+
+        for (const realClassif of availableClassifs) {
+            const normReal = realClassif.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
+
+            // Si es MUROS CORTINA vs MUROS
+            if (normReal.includes('muros cortina') || normReal.includes('muro cortina')) {
+                if (isCortinaMentioned || isAllWalls) {
+                    if (!matchedClassifications.includes(realClassif)) matchedClassifications.push(realClassif);
                 }
+                continue;
+            }
 
-                // 2. Coincidencia por sinónimos
-                for (const rootKey of Object.keys(synonymsMap)) {
-                    if (normCat.includes(rootKey)) {
-                        const words = synonymsMap[rootKey];
-                        if (words.some(w => qClean.includes(w))) {
-                            if (!matchedCategories.includes(catKey)) matchedCategories.push(catKey);
-                        }
+            // Si coincide directamente con el nombre en el árbol
+            if (qClean.includes(normReal)) {
+                if (!matchedClassifications.includes(realClassif)) matchedClassifications.push(realClassif);
+                continue;
+            }
+
+            // Buscar por alias
+            for (const [keyGroup, aliasList] of Object.entries(classificationAliases)) {
+                const normGroup = keyGroup.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+                if (normReal === normGroup || normReal.includes(normGroup) || normGroup.includes(normReal)) {
+                    const matchFound = aliasList.some(alias => {
+                        const regex = new RegExp(`\\b${alias}\\b`, 'i');
+                        return regex.test(qClean);
+                    });
+                    if (matchFound) {
+                        if (!matchedClassifications.includes(realClassif)) matchedClassifications.push(realClassif);
                     }
                 }
             }
         }
 
         // =========================================================================
-        // 4. Extracción de Niveles (Match Directo con bimContext.levels)
+        // 5. Extracción de Niveles
         // =========================================================================
         let targetLevelKey: string | null = null;
         if (bimContext && bimContext.levels) {
             const levelKeys = Object.keys(bimContext.levels);
-            const numMatch = qClean.match(/(?:piso|nivel|level|planta|p|n)\s*([0-9]+)/) || qClean.match(/\b([0-9]+)\b/);
+            const numMatch = qClean.match(/(?:piso|nivel|level|planta|sotano|p|n)\s*([0-9]+)/i) || qClean.match(/\b([0-9]+)\b/);
             const queryLevelNumber = numMatch ? numMatch[1] : null;
 
             for (const lKey of levelKeys) {
@@ -626,7 +691,7 @@ SIEMPRE responde ÚNICAMENTE en formato JSON:
                     break;
                 }
                 if (queryLevelNumber) {
-                    const lNumMatch = normLvl.match(/(?:piso|nivel|level|p|n)\s*([0-9]+)/) || normLvl.match(/\b([0-9]+)\b/);
+                    const lNumMatch = normLvl.match(/(?:piso|nivel|level|planta|p|n)\s*([0-9]+)/i) || normLvl.match(/\b([0-9]+)\b/);
                     if (lNumMatch && lNumMatch[1] === queryLevelNumber) {
                         targetLevelKey = lKey;
                         break;
@@ -636,17 +701,33 @@ SIEMPRE responde ÚNICAMENTE en formato JSON:
         }
 
         // =========================================================================
-        // 5. Extracción de Materiales (Match Directo con bimContext.materials)
+        // 6. Extracción de Materiales (ESTRICTO - Sin falsos positivos)
         // =========================================================================
         let targetMaterialKey: string | null = null;
-        if (bimContext && bimContext.materials) {
+        const materialStopWords = new Set([
+            'muro', 'muros', 'pared', 'paredes', 'columna', 'columnas', 'viga', 'vigas',
+            'piso', 'pisos', 'placa', 'placas', 'losa', 'losas', 'puerta', 'puertas',
+            'ventana', 'ventanas', 'tubo', 'tubos', 'tuberia', 'tuberias', 'aisla', 'aislar',
+            'todos', 'todas', 'todo', 'toda', 'proyecto', 'modelo', 'nivel', 'niveles',
+            'ver', 'solo', 'solamente', 'quitar', 'ocultar', 'mostrar', 'sin', 'con', 'del',
+            'los', 'las', 'un', 'una', 'para', 'por', 'que', 'en'
+        ]);
+
+        const explicitMaterialKeywords = [
+            'concreto', 'hormigon', 'ladrillo', 'pvc', 'vidrio', 'glass', 'acero',
+            'madera', 'yeso', 'drywall', 'aluminio', 'hierro', 'pavco', 'cemento',
+            'mortero', 'cobre', 'polietileno', 'asfalto', 'ceramica', 'gres', 'pintura'
+        ];
+
+        const hasMaterialIntent = qClean.includes('material') || explicitMaterialKeywords.some(mk => qClean.includes(mk));
+
+        if (hasMaterialIntent && bimContext && bimContext.materials) {
             const matKeys = Object.keys(bimContext.materials);
             for (const mKey of matKeys) {
                 const normMat = mKey.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
-                const tokens = normMat.split(/[\s\-_/]+/);
+                const tokens = normMat.split(/[\s\-_/:]+/).filter(t => t.length > 2 && !materialStopWords.has(t));
                 
-                // Si el usuario dijo "sanitaria", "ventilacion", "pvc", "pavco"
-                if (tokens.some(t => t.length > 2 && qClean.includes(t)) || qClean.includes(normMat)) {
+                if (tokens.some(t => qClean.includes(t)) || (normMat.length > 3 && qClean.includes(normMat))) {
                     targetMaterialKey = mKey;
                     break;
                 }
@@ -654,18 +735,43 @@ SIEMPRE responde ÚNICAMENTE en formato JSON:
         }
 
         // =========================================================================
-        // 6. Ejecución y Generación de Respuesta
+        // 7. Contexto Efectivo y Continuidad Secuencial
         // =========================================================================
-        const effectiveLevels: string[] = targetLevelKey ? [targetLevelKey] : [...this.activeContext.activeLevels];
-        const effectiveCategories: string[] = matchedCategories.length > 0 ? matchedCategories : (targetLevelKey && this.activeContext.activeCategories.length > 0 ? [...this.activeContext.activeCategories] : []);
-        const effectiveMaterials: string[] = targetMaterialKey ? [targetMaterialKey] : [...this.activeContext.activeMaterials];
+        const effectiveClassifications = matchedClassifications.length > 0
+            ? matchedClassifications
+            : (targetLevelKey && this.activeContext.activeClassifications.length > 0 ? [...this.activeContext.activeClassifications] : []);
 
-        if (effectiveCategories.length > 0 || effectiveLevels.length > 0 || effectiveMaterials.length > 0) {
+        const effectiveLevels = targetLevelKey
+            ? [targetLevelKey]
+            : (matchedClassifications.length > 0 && !qClean.includes('todo el proyecto') && !qClean.includes('todos los') ? [...this.activeContext.activeLevels] : []);
+
+        const effectiveMaterials = targetMaterialKey
+            ? [targetMaterialKey]
+            : (matchedClassifications.length > 0 ? [] : [...this.activeContext.activeMaterials]);
+
+        // =========================================================================
+        // 8. Cálculo de Métricas y Generación de Respuesta
+        // =========================================================================
+        if (effectiveClassifications.length > 0 || effectiveLevels.length > 0 || effectiveMaterials.length > 0) {
             let totalCount = 0, totalVol = 0, totalArea = 0, totalLen = 0;
 
-            for (const cat of (effectiveCategories.length > 0 ? effectiveCategories : Object.keys(bimContext?.categories || {}))) {
-                const stats = bimContext?.categories?.[cat];
-                if (stats) {
+            const targetLvl = effectiveLevels.length > 0 ? effectiveLevels[0] : null;
+
+            for (const cl of (effectiveClassifications.length > 0 ? effectiveClassifications : Object.keys(classifDict))) {
+                if (targetLvl && bimContext?.matrixByLevelAndClassification?.[targetLvl]?.[cl]) {
+                    const stats = bimContext.matrixByLevelAndClassification[targetLvl][cl];
+                    totalCount += stats.count || 0;
+                    totalVol += stats.volume || 0;
+                    totalArea += stats.area || 0;
+                    totalLen += stats.length || 0;
+                } else if (bimContext?.classifications?.[cl]) {
+                    const stats = bimContext.classifications[cl];
+                    totalCount += stats.count || 0;
+                    totalVol += stats.volume || 0;
+                    totalArea += stats.area || 0;
+                    totalLen += stats.length || 0;
+                } else if (bimContext?.categories?.[cl]) {
+                    const stats = bimContext.categories[cl];
                     totalCount += stats.count || 0;
                     totalVol += stats.volume || 0;
                     totalArea += stats.area || 0;
@@ -673,32 +779,84 @@ SIEMPRE responde ÚNICAMENTE en formato JSON:
                 }
             }
 
-            const catListStr = effectiveCategories.join(', ');
-            const lvlListStr = effectiveLevels.join(', ');
-            const matListStr = effectiveMaterials.join(', ');
-
-            let answerStr = `Aislando ${catListStr ? 'categoría(s) <b>' + catListStr + '</b>' : ''}${lvlListStr ? (catListStr ? ' en ' : '') + 'nivel <b>' + lvlListStr + '</b>' : ''}${matListStr ? ' (Material: <b>' + matListStr + '</b>)' : ''}:<br>• <b>Total elementos:</b> ${totalCount}<br>• <b>Volumen acumulado:</b> ${Math.round(totalVol * 100) / 100} m³<br>• <b>Área acumulada:</b> ${Math.round(totalArea * 100) / 100} m²`;
-
-            if (totalLen > 0) {
-                answerStr += `<br>• <b>Longitud acumulada:</b> ${Math.round(totalLen * 100) / 100} m`;
+            // Si se especificó solo nivel sin clasificación
+            if (effectiveClassifications.length === 0 && targetLvl && bimContext?.levels?.[targetLvl]) {
+                const lvlStats = bimContext.levels[targetLvl];
+                totalCount = lvlStats.count || 0;
+                totalVol = lvlStats.volume || 0;
+                totalArea = lvlStats.area || 0;
             }
+
+            const classifStr = effectiveClassifications.join(', ');
+            const lvlStr = effectiveLevels.join(', ');
+            const matStr = effectiveMaterials.join(', ');
+
+            const roundedVol = Math.round(totalVol * 100) / 100;
+            const roundedArea = Math.round(totalArea * 100) / 100;
+            const roundedLen = Math.round(totalLen * 100) / 100;
+
+            // CASO A: OCULTAR
+            if (isHide) {
+                return {
+                    answer: `👁️ <b>Ocultando en visor 3D:</b><br>He ocultado <b>${classifStr || 'elementos'}</b>${lvlStr ? ' en nivel <b>' + lvlStr + '</b>' : ''} (${totalCount} elementos).<br><br>💡 <i>Tip: Di "mostrar todo" para restaurar la visibilidad completa.</i>`,
+                    action: {
+                        type: 'hide',
+                        classifications: effectiveClassifications.length > 0 ? effectiveClassifications : undefined,
+                        levels: effectiveLevels.length > 0 ? effectiveLevels : undefined,
+                        materials: effectiveMaterials.length > 0 ? effectiveMaterials : undefined,
+                        message: `Ocultado: ${classifStr || ''} ${lvlStr || ''}`.trim()
+                    }
+                };
+            }
+
+            // CASO B: CONSULTA DE CANTIDADES SIN PEDIR AISLAMIENTO
+            if (isExplicitQuantity && !isExplicitIsolate) {
+                let qtyAnswer = `📊 <b>Cantidades de ${classifStr || 'elementos'}</b>${lvlStr ? ' en nivel <b>' + lvlStr + '</b>' : ''}${matStr ? ' (Material: ' + matStr + ')' : ''}:<br>• <b>Total elementos:</b> ${totalCount}<br>• <b>Volumen total:</b> ${roundedVol} m³<br>• <b>Área total:</b> ${roundedArea} m²`;
+                if (roundedLen > 0) qtyAnswer += `<br>• <b>Longitud total:</b> ${roundedLen} m`;
+                qtyAnswer += `<br><br>¿Deseas que los aísle en el visor 3D? Solo dime: <i>"Aísla ${classifStr || 'estos elementos'}"</i>.`;
+
+                return {
+                    answer: qtyAnswer,
+                    action: { type: 'none' }
+                };
+            }
+
+            // CASO C: AISLAR (DEFAULT PARA COMANDOS DE SELECCIÓN Y FILTRO)
+            let answerStr = '';
+            if (isAllWalls || qClean.includes('todos los muros')) {
+                answerStr = `🧱 <b>Mostrando todos los muros del proyecto:</b><br>He aislado <b>${totalCount} muros</b> en la totalidad del modelo 3D.`;
+            } else {
+                answerStr = `🧱 <b>Aislamiento aplicado:</b><br>Visualizando ${classifStr ? 'clasificación <b>' + classifStr + '</b>' : ''}${lvlStr ? (classifStr ? ' en nivel <b>' : 'nivel <b>') + lvlStr + '</b>' : ''}${matStr ? ' (Material: <b>' + matStr + '</b>)' : ''}:`;
+            }
+
+            answerStr += `<br>• <b>Total elementos:</b> ${totalCount}<br>• <b>Volumen acumulado:</b> ${roundedVol} m³<br>• <b>Área acumulada:</b> ${roundedArea} m²`;
+            if (roundedLen > 0) {
+                answerStr += `<br>• <b>Longitud acumulada:</b> ${roundedLen} m`;
+            }
+
+            answerStr += `<br><br>💡 <i>Tip: Puedes decir "mostrar todo" para restablecer el modelo completo.</i>`;
 
             return {
                 answer: answerStr,
                 action: {
                     type: 'isolate',
-                    categories: effectiveCategories.length > 0 ? effectiveCategories : undefined,
+                    classifications: effectiveClassifications.length > 0 ? effectiveClassifications : undefined,
                     levels: effectiveLevels.length > 0 ? effectiveLevels : undefined,
                     materials: effectiveMaterials.length > 0 ? effectiveMaterials : undefined,
-                    message: `Aislado: ${catListStr} ${lvlListStr} ${matListStr}`.trim()
+                    message: `Aislado: ${classifStr || ''} ${lvlStr || ''} ${matStr || ''}`.trim()
                 }
             };
         }
 
-        // Si realmente nada coincidió
+        // =========================================================================
+        // 9. Si no coincidió ningún filtro específico
+        // =========================================================================
         const total = bimContext?.totalElements || 0;
+        const availableClassList = availableClassifs.slice(0, 7).join('</b>, <b>');
+        const availableLvlList = Object.keys(bimContext?.levels || {}).slice(0, 5).join('</b>, <b>');
+
         return {
-            answer: `El modelo cargado cuenta con <b>${total} elementos</b>.<br><br>Puedes pedirme:<br>• <i>"Aísla la tubería sanitaria"</i><br>• <i>"Quiero ver solo aparatos sanitarios"</i><br>• <i>"Aísla Level 4"</i>`,
+            answer: `El modelo cargado cuenta con <b>${total} elementos</b>.<br><br>Puedes pedirme comandos directos como:<br>• <i>"Aísla todos los muros del proyecto"</i><br>• <i>"Quiero ver solo las columnas"</i><br>• <i>"Aísla la tubería sanitaria"</i><br>• <i>"¿Volumen de concreto en piso 2?"</i><br>• <i>"Mostrar todo"</i><br><br><b>Clasificaciones disponibles:</b> <b>${availableClassList}</b>...<br><b>Niveles:</b> <b>${availableLvlList}</b>...`,
             action: { type: 'none' }
         };
     }

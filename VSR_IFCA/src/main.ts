@@ -9316,19 +9316,29 @@ function setupVisibilityToolbar() {
 
 function buildBIMContextForAI() {
     const elements = extractAllElementsGlobal();
+    const classifications: Record<string, { count: number; area: number; volume: number; length: number }> = {};
     const categories: Record<string, { count: number; area: number; volume: number }> = {};
     const levels: Record<string, { count: number; area: number; volume: number }> = {};
     const materials: Record<string, { count: number; area: number; volume: number }> = {};
     const pilotes: Record<string, { count: number; area: number; volume: number }> = {};
+    const matrixByLevelAndClassification: Record<string, Record<string, { count: number; area: number; volume: number; length: number }>> = {};
     const matrixByLevelAndMaterial: Record<string, Record<string, { count: number; area: number; volume: number }>> = {};
     const matrixByLevelAndCategory: Record<string, Record<string, { count: number; area: number; volume: number }>> = {};
 
     for (const el of elements) {
+        const classifKey = el.classification || 'SIN CLASIFICAR';
         const catKey = el.category || el.name || 'Sin Categoría';
         const lvlKey = el.level || 'SIN NIVEL';
         const matKey = el.material || 'SIN MATERIAL';
         const vol = el.volume || 0;
         const area = el.area || 0;
+        const len = el.length || 0;
+
+        if (!classifications[classifKey]) classifications[classifKey] = { count: 0, area: 0, volume: 0, length: 0 };
+        classifications[classifKey].count++;
+        classifications[classifKey].area += area;
+        classifications[classifKey].volume += vol;
+        classifications[classifKey].length += len;
 
         if (!categories[catKey]) categories[catKey] = { count: 0, area: 0, volume: 0 };
         categories[catKey].count++;
@@ -9356,6 +9366,16 @@ function buildBIMContextForAI() {
             pilotes[el.pilote].volume += vol;
         }
 
+        // Matrix level x classification
+        if (lvlKey !== 'SIN NIVEL') {
+            if (!matrixByLevelAndClassification[lvlKey]) matrixByLevelAndClassification[lvlKey] = {};
+            if (!matrixByLevelAndClassification[lvlKey][classifKey]) matrixByLevelAndClassification[lvlKey][classifKey] = { count: 0, area: 0, volume: 0, length: 0 };
+            matrixByLevelAndClassification[lvlKey][classifKey].count++;
+            matrixByLevelAndClassification[lvlKey][classifKey].area += area;
+            matrixByLevelAndClassification[lvlKey][classifKey].volume += vol;
+            matrixByLevelAndClassification[lvlKey][classifKey].length += len;
+        }
+
         // Matrix level x material
         if (lvlKey !== 'SIN NIVEL' && matKey !== 'SIN MATERIAL') {
             if (!matrixByLevelAndMaterial[lvlKey]) matrixByLevelAndMaterial[lvlKey] = {};
@@ -9381,6 +9401,7 @@ function buildBIMContextForAI() {
                 if ('area' in obj[k]) {
                     obj[k].area = Math.round(obj[k].area * 100) / 100;
                     obj[k].volume = Math.round(obj[k].volume * 100) / 100;
+                    if ('length' in obj[k]) obj[k].length = Math.round(obj[k].length * 100) / 100;
                 } else {
                     roundStats(obj[k]);
                 }
@@ -9423,9 +9444,11 @@ function buildBIMContextForAI() {
         console.warn('Error reading selected elements for AI context:', e);
     }
 
+    roundStats(classifications);
     roundStats(categories);
     roundStats(levels);
     roundStats(materials);
+    roundStats(matrixByLevelAndClassification);
     roundStats(matrixByLevelAndMaterial);
     roundStats(matrixByLevelAndCategory);
 
@@ -9433,10 +9456,12 @@ function buildBIMContextForAI() {
         totalElements: elements.length,
         selectedElements,
         hasSelection: selectedElements.length > 0,
+        classifications,
         categories,
         levels,
         materials,
         pilotes,
+        matrixByLevelAndClassification,
         matrixByLevelAndMaterial,
         matrixByLevelAndCategory
     };
@@ -9456,10 +9481,44 @@ async function executeNoraAI3DAction(action: NoraAIAction): Promise<string> {
         return 'Modelo 3D y filtros restablecidos a la vista completa';
     }
 
+    if (action.type === 'hide') {
+        const allElements = extractAllElementsGlobal();
+        const classifs = action.classifications || [];
+        const cats = action.categories || [];
+        const lvls = action.levels || [];
+        const mats = action.materials || [];
+        const pils = action.pilotes || [];
+
+        const hideExpressIdsByModel: Record<string, Set<number>> = {};
+        let hideCount = 0;
+
+        for (const el of allElements) {
+            const matchesClassif = classifs.length > 0 && classifs.some(cl => el.classification && el.classification.toLowerCase().includes(cl.toLowerCase()));
+            const matchesCat = cats.length > 0 && cats.some(c => (el.category && el.category.toLowerCase().includes(c.toLowerCase())) || (el.name && el.name.toLowerCase().includes(c.toLowerCase())));
+            const matchesLvl = lvls.length > 0 && lvls.some(l => el.level && el.level.toLowerCase().includes(l.toLowerCase()));
+            const matchesMat = mats.length > 0 && mats.some(m => el.material && el.material.toLowerCase().includes(m.toLowerCase()));
+            const matchesPil = pils.length > 0 && pils.some(p => el.pilote && el.pilote.toLowerCase().includes(p.toLowerCase()));
+
+            if (matchesClassif || matchesCat || matchesLvl || matchesMat || matchesPil) {
+                if (!hideExpressIdsByModel[el.modelUUID]) hideExpressIdsByModel[el.modelUUID] = new Set();
+                hideExpressIdsByModel[el.modelUUID].add(el.expressID);
+                hideCount++;
+            }
+        }
+
+        if (hider && hideCount > 0) {
+            for (const modelUUID in hideExpressIdsByModel) {
+                await hider.set(false, { [modelUUID]: hideExpressIdsByModel[modelUUID] });
+            }
+        }
+        return action.message || `Ocultado(s) ${hideCount} elementos en el visor 3D`;
+    }
+
     if (action.type === 'isolate' || action.type === 'filter') {
         resetFilters();
 
         const allElements = extractAllElementsGlobal();
+        const classifs = action.classifications || [];
         const cats = action.categories || [];
         const lvls = action.levels || [];
         const mats = action.materials || [];
@@ -9469,8 +9528,13 @@ async function executeNoraAI3DAction(action: NoraAIAction): Promise<string> {
         let matchCount = 0;
 
         for (const el of allElements) {
+            const matchesClassif = classifs.length === 0 || classifs.some(cl => {
+                const lowerCl = cl.toLowerCase().trim();
+                return el.classification && (el.classification.toLowerCase().trim() === lowerCl || el.classification.toLowerCase().includes(lowerCl));
+            });
+
             const matchesCat = cats.length === 0 || cats.some(c => {
-                const lowerC = c.toLowerCase();
+                const lowerC = c.toLowerCase().trim();
                 return (el.category && el.category.toLowerCase().includes(lowerC)) ||
                        (el.classification && el.classification.toLowerCase().includes(lowerC)) ||
                        (el.name && el.name.toLowerCase().includes(lowerC));
@@ -9491,13 +9555,16 @@ async function executeNoraAI3DAction(action: NoraAIAction): Promise<string> {
                 return el.pilote && el.pilote.toLowerCase().includes(lowerP);
             });
 
-            if (matchesCat && matchesLvl && matchesMat && matchesPil) {
+            if (matchesClassif && matchesCat && matchesLvl && matchesMat && matchesPil) {
                 if (!matchingExpressIdsByModel[el.modelUUID]) {
                     matchingExpressIdsByModel[el.modelUUID] = [];
                 }
                 matchingExpressIdsByModel[el.modelUUID].push(el.expressID);
                 matchCount++;
 
+                if (classifs.length > 0 && el.classification) {
+                    selectedClassifications.add(el.classification);
+                }
                 if (cats.length > 0) {
                     if (el.category) selectedCategories.add(el.category);
                     if (el.classification) selectedClassifications.add(el.classification);
@@ -9506,6 +9573,7 @@ async function executeNoraAI3DAction(action: NoraAIAction): Promise<string> {
             }
         }
 
+        for (const cl of classifs) selectedClassifications.add(cl);
         for (const cat of cats) selectedCategories.add(cat);
         for (const lvl of lvls) selectedLevels.add(lvl);
         for (const mat of mats) selectedMaterials.add(mat);
