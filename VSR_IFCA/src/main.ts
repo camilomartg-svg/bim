@@ -9444,6 +9444,15 @@ function buildBIMContextForAI() {
         console.warn('Error reading selected elements for AI context:', e);
     }
 
+    let zeroVolumeCount = 0;
+    let missingLevelCount = 0;
+    let missingMaterialCount = 0;
+    for (const el of elements) {
+        if (!el.volume || el.volume === 0) zeroVolumeCount++;
+        if (!el.level || el.level === 'SIN NIVEL') missingLevelCount++;
+        if (!el.material || el.material === 'SIN MATERIAL') missingMaterialCount++;
+    }
+
     roundStats(classifications);
     roundStats(categories);
     roundStats(levels);
@@ -9460,27 +9469,299 @@ function buildBIMContextForAI() {
         categories,
         levels,
         materials,
+        materialsList: Object.keys(materials),
         pilotes,
+        anomalies: {
+            zeroVolumeCount,
+            missingLevelCount,
+            missingMaterialCount,
+            totalAnomalies: elements.filter(el => (!el.volume || el.volume === 0) || (!el.level || el.level === 'SIN NIVEL')).length
+        },
         matrixByLevelAndClassification,
         matrixByLevelAndMaterial,
         matrixByLevelAndCategory
     };
 }
 
+const aiColorStylesRegistered = new Set<string>();
+function ensureAIColorStyles() {
+    const palette: Record<string, number> = {
+        'ai_red': 0xef4444,
+        'ai_green': 0x10b981,
+        'ai_blue': 0x3b82f6,
+        'ai_yellow': 0xf59e0b,
+        'ai_orange': 0xf97316,
+        'ai_purple': 0x8b5cf6
+    };
+    for (const [name, hex] of Object.entries(palette)) {
+        if (!aiColorStylesRegistered.has(name)) {
+            try {
+                highlighter.styles.set(name, {
+                    color: new THREE.Color(hex),
+                    opacity: 1,
+                    transparent: false,
+                    depthTest: true,
+                    depthWrite: true,
+                    renderedFaces: FRAGS.RenderedFaces.ONE
+                });
+                aiColorStylesRegistered.add(name);
+            } catch (e) {}
+        }
+    }
+}
+
+function clearAIColorStyles() {
+    for (const name of aiColorStylesRegistered) {
+        try {
+            highlighter.clear(name);
+        } catch (e) {}
+    }
+}
+
+const fuzzyMaterialMatch = (mat: string, targetMat: string): boolean => {
+    if (!mat || !targetMat) return false;
+    const normMat = mat.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+    const normTarget = targetMat.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+    if (normMat.includes(normTarget) || normTarget.includes(normMat)) return true;
+
+    const fuzzyGroups: string[][] = [
+        ["drywall", "gypsum", "carton yeso", "durlock", "placa yeso", "yeso", "sheetrock"],
+        ["concreto", "hormigon", "concrete", "cemento", "mortero"],
+        ["vidrio", "cristal", "glass", "panel vidriado", "acristalamiento"],
+        ["acero", "steel", "metal", "hierro", "perfil metalico", "aluminio"],
+        ["pvc", "sanitario", "pavco", "polietileno", "plastico"],
+        ["ladrillo", "bloque", "mamposteria", "arcilla", "masonry"],
+        ["madera", "wood", "timber"]
+    ];
+
+    for (const group of fuzzyGroups) {
+        const matInGroup = group.some(w => normMat.includes(w));
+        const targetInGroup = group.some(w => normTarget.includes(w));
+        if (matInGroup && targetInGroup) return true;
+    }
+    return false;
+};
+
+const checkNumericCondition = (el: any, filter: NonNullable<NoraAIAction['numericFilter']>): boolean => {
+    let val = 0;
+    if (filter.property === 'height') {
+        val = el.height || el.length || 0;
+        if (val === 0) {
+            const hMatch = (el.name + ' ' + el.detail).match(/(?:h|altura|alto)\s*[=:]?\s*([0-9]+(?:[\.,][0-9]+)?)/i);
+            if (hMatch) val = parseFloat(hMatch[1].replace(',', '.'));
+        }
+    } else if (filter.property === 'slope') {
+        val = el.slope || 0;
+        const sMatch = (el.name + ' ' + el.detail).match(/(?:pendiente|pend|slope|s)\s*[=:]?\s*([0-9]+(?:[\.,][0-9]+)?)\s*%/i);
+        if (sMatch) val = parseFloat(sMatch[1].replace(',', '.'));
+    } else if (filter.property === 'volume') {
+        val = el.volume || 0;
+    } else if (filter.property === 'area') {
+        val = el.area || 0;
+    } else if (filter.property === 'length') {
+        val = el.length || 0;
+    } else if (filter.property === 'diameter') {
+        val = parseFloat(el.diameter) || 0;
+        if (val === 0) {
+            const dMatch = (el.name + ' ' + el.detail).match(/(?:[øØdD]|diam|di[aá]metro)\s*[=:]?\s*([0-9]+(?:[\.,][0-9]+)?)/i);
+            if (dMatch) val = parseFloat(dMatch[1].replace(',', '.'));
+        }
+    }
+
+    if (filter.operator === '>') return val > filter.value;
+    if (filter.operator === '>=') return val >= filter.value;
+    if (filter.operator === '<') return val < filter.value;
+    if (filter.operator === '<=') return val <= filter.value;
+    if (filter.operator === '==') return Math.abs(val - filter.value) < 0.05;
+    if (filter.operator === 'between' && filter.value2 !== undefined) return val >= filter.value && val <= filter.value2;
+    return true;
+};
+
 async function executeNoraAI3DAction(action: NoraAIAction): Promise<string> {
     if (!action || action.type === 'none') return '';
 
+    // =========================================================================
+    // 1. SHOW ALL / RESTABLECER
+    // =========================================================================
     if (action.type === 'show_all') {
         resetFilters();
         if (hider) {
             await hider.set(true);
         }
+        clipper.deleteAll();
+        clearAIColorStyles();
+        clearClassificationColorization();
         await updateClassificationUI();
         await applyFiltersToViewerGlobal();
         window.dispatchEvent(new CustomEvent('classificationFilterChanged'));
-        return 'Modelo 3D y filtros restablecidos a la vista completa';
+        return 'Modelo 3D, filtros, cortes y colores analíticos restablecidos';
     }
 
+    // =========================================================================
+    // 2. MODOS GRÁFICOS ANALÍTICOS Y MAPAS DE CALOR (COLOR OVERRIDES)
+    // =========================================================================
+    if (action.type === 'color' || action.colorOverrides) {
+        ensureAIColorStyles();
+        clearAIColorStyles();
+
+        if (action.colorOverrides?.clear) {
+            return action.message || 'Colores analíticos restablecidos a la vista normal';
+        }
+
+        const allElements = extractAllElementsGlobal();
+        const mode = action.colorOverrides?.mode || 'anomalies';
+
+        if (mode === 'anomalies') {
+            const anomalyMap: Record<string, number[]> = {};
+            const normalMap: Record<string, number[]> = {};
+            let anomCount = 0;
+            let normCount = 0;
+
+            for (const el of allElements) {
+                const isAnomalous = (!el.volume || el.volume === 0) || (!el.level || el.level === 'SIN NIVEL');
+                const targetMap = isAnomalous ? anomalyMap : normalMap;
+                if (!targetMap[el.modelUUID]) targetMap[el.modelUUID] = [];
+                targetMap[el.modelUUID].push(el.expressID);
+                if (isAnomalous) anomCount++; else normCount++;
+            }
+
+            if (anomCount > 0) highlighter.highlightByID('ai_red', anomalyMap as any, true, false);
+            if (normCount > 0) highlighter.highlightByID('ai_green', normalMap as any, false, false);
+
+            return action.message || `Auditoría visual: ${anomCount} anomalías en rojo y ${normCount} elementos conformes en verde`;
+        }
+
+        if (mode === 'heatmap') {
+            // Sort elements by volume
+            const sorted = [...allElements].filter(e => (e.volume || 0) > 0).sort((a, b) => (a.volume || 0) - (b.volume || 0));
+            if (sorted.length > 0) {
+                const q1 = Math.floor(sorted.length * 0.25);
+                const q2 = Math.floor(sorted.length * 0.50);
+                const q3 = Math.floor(sorted.length * 0.75);
+
+                const blueMap: Record<string, number[]> = {};
+                const yellowMap: Record<string, number[]> = {};
+                const orangeMap: Record<string, number[]> = {};
+                const redMap: Record<string, number[]> = {};
+
+                sorted.forEach((el, idx) => {
+                    let map = blueMap;
+                    if (idx >= q3) map = redMap;
+                    else if (idx >= q2) map = orangeMap;
+                    else if (idx >= q1) map = yellowMap;
+
+                    if (!map[el.modelUUID]) map[el.modelUUID] = [];
+                    map[el.modelUUID].push(el.expressID);
+                });
+
+                highlighter.highlightByID('ai_blue', blueMap as any, true, false);
+                highlighter.highlightByID('ai_yellow', yellowMap as any, false, false);
+                highlighter.highlightByID('ai_orange', orangeMap as any, false, false);
+                highlighter.highlightByID('ai_red', redMap as any, false, false);
+
+                return action.message || `Mapa de calor aplicado: Degradado térmico según volumen de elementos`;
+            }
+        }
+
+        if (mode === 'presence') {
+            const presentMap: Record<string, number[]> = {};
+            const absentMap: Record<string, number[]> = {};
+            for (const el of allElements) {
+                const hasData = el.material !== 'SIN MATERIAL' && el.level !== 'SIN NIVEL';
+                const map = hasData ? presentMap : absentMap;
+                if (!map[el.modelUUID]) map[el.modelUUID] = [];
+                map[el.modelUUID].push(el.expressID);
+            }
+            highlighter.highlightByID('ai_green', presentMap as any, true, false);
+            highlighter.highlightByID('ai_red', absentMap as any, false, false);
+            return action.message || 'Coloreado por metadatos presentes (verde) y ausentes (rojo)';
+        }
+
+        return action.message || 'Modo gráfico analítico aplicado';
+    }
+
+    // =========================================================================
+    // 3. CAJAS DE SECCIÓN Y CORTES DINÁMICOS
+    // =========================================================================
+    if (action.type === 'section' || action.sectionBox) {
+        clipper.deleteAll();
+
+        if (action.sectionBox?.clear) {
+            return action.message || 'Caja de sección y cortes eliminados';
+        }
+
+        const center = getModelCenter();
+        const axis = action.sectionBox?.axis || 'y';
+        const normal = new THREE.Vector3();
+
+        if (axis === 'x') normal.set(-1, 0, 0);
+        else if (axis === 'z') normal.set(0, 0, -1);
+        else normal.set(0, -1, 0); // eje Y transversal por defecto
+
+        try {
+            clipper.createFromNormalAndCoplanarPoint(world, normal, center);
+            clipper.enabled = true;
+        } catch (e) {
+            console.warn('[nora AI] Error creating section plane:', e);
+        }
+
+        if (action.cameraView) {
+            const dist = getModelRadius() * 2;
+            world.camera.controls.enabled = true;
+            if (axis === 'x') await world.camera.controls.setLookAt(center.x - dist, center.y, center.z, center.x, center.y, center.z, true);
+            else if (axis === 'z') await world.camera.controls.setLookAt(center.x, center.y, center.z + dist, center.x, center.y, center.z, true);
+            else await world.camera.controls.setLookAt(center.x, center.y + dist, center.z, center.x, center.y, center.z, true);
+        }
+
+        return action.message || `Caja de sección y corte en eje ${axis.toUpperCase()} generado`;
+    }
+
+    // =========================================================================
+    // 4. MANIPULACIÓN DE CÁMARA Y VISTAS DE INSPECCIÓN GUIADAS
+    // =========================================================================
+    if (action.type === 'camera' || (action.cameraView && action.type !== 'isolate' && action.type !== 'filter')) {
+        const center = getModelCenter();
+        const radius = getModelRadius();
+        const dist = radius * 2;
+        world.camera.controls.enabled = true;
+
+        switch (action.cameraView) {
+            case 'top':
+                await world.camera.controls.setLookAt(center.x, center.y + dist, center.z, center.x, center.y, center.z, true);
+                break;
+            case 'bottom':
+                await world.camera.controls.setLookAt(center.x, center.y - dist, center.z, center.x, center.y, center.z, true);
+                break;
+            case 'front':
+                await world.camera.controls.setLookAt(center.x, center.y, center.z + dist, center.x, center.y, center.z, true);
+                break;
+            case 'back':
+                await world.camera.controls.setLookAt(center.x, center.y, center.z - dist, center.x, center.y, center.z, true);
+                break;
+            case 'left':
+                await world.camera.controls.setLookAt(center.x - dist, center.y, center.z, center.x, center.y, center.z, true);
+                break;
+            case 'right':
+                await world.camera.controls.setLookAt(center.x + dist, center.y, center.z, center.x, center.y, center.z, true);
+                break;
+            case 'iso':
+                await world.camera.controls.setLookAt(center.x + dist, center.y + dist, center.z + dist, center.x, center.y, center.z, true);
+                break;
+            case 'focus':
+            default:
+                const box = getModelBox();
+                const sphere = new THREE.Sphere();
+                box.getBoundingSphere(sphere);
+                if (sphere.radius > 0.1) world.camera.controls.fitToSphere(sphere, true);
+                break;
+        }
+
+        return action.message || `Cámara ajustada a vista ${action.cameraView || 'enfocada'}`;
+    }
+
+    // =========================================================================
+    // 5. OCULTAR ELEMENTOS (HIDE)
+    // =========================================================================
     if (action.type === 'hide') {
         const allElements = extractAllElementsGlobal();
         const classifs = action.classifications || [];
@@ -9496,10 +9777,18 @@ async function executeNoraAI3DAction(action: NoraAIAction): Promise<string> {
             const matchesClassif = classifs.length > 0 && classifs.some(cl => el.classification && el.classification.toLowerCase().includes(cl.toLowerCase()));
             const matchesCat = cats.length > 0 && cats.some(c => (el.category && el.category.toLowerCase().includes(c.toLowerCase())) || (el.name && el.name.toLowerCase().includes(c.toLowerCase())));
             const matchesLvl = lvls.length > 0 && lvls.some(l => el.level && el.level.toLowerCase().includes(l.toLowerCase()));
-            const matchesMat = mats.length > 0 && mats.some(m => el.material && el.material.toLowerCase().includes(m.toLowerCase()));
+            const matchesMat = mats.length > 0 && mats.some(m => fuzzyMaterialMatch(el.material, m));
             const matchesPil = pils.length > 0 && pils.some(p => el.pilote && el.pilote.toLowerCase().includes(p.toLowerCase()));
 
-            if (matchesClassif || matchesCat || matchesLvl || matchesMat || matchesPil) {
+            let matchesNumeric = true;
+            if (action.numericFilter) {
+                matchesNumeric = checkNumericCondition(el, action.numericFilter);
+            }
+
+            let shouldHide = (matchesClassif || matchesCat || matchesLvl || matchesMat || matchesPil) && matchesNumeric;
+            if (action.invertMatch) shouldHide = !shouldHide;
+
+            if (shouldHide) {
                 if (!hideExpressIdsByModel[el.modelUUID]) hideExpressIdsByModel[el.modelUUID] = new Set();
                 hideExpressIdsByModel[el.modelUUID].add(el.expressID);
                 hideCount++;
@@ -9514,6 +9803,9 @@ async function executeNoraAI3DAction(action: NoraAIAction): Promise<string> {
         return action.message || `Ocultado(s) ${hideCount} elementos en el visor 3D`;
     }
 
+    // =========================================================================
+    // 6. AISLAMIENTO Y FILTRADO MULTICRITERIO (ISOLATE / FILTER)
+    // =========================================================================
     if (action.type === 'isolate' || action.type === 'filter') {
         resetFilters();
 
@@ -9545,17 +9837,22 @@ async function executeNoraAI3DAction(action: NoraAIAction): Promise<string> {
                 return el.level && el.level.toLowerCase().includes(lowerL);
             });
 
-            const matchesMat = mats.length === 0 || mats.some(m => {
-                const lowerM = m.toLowerCase();
-                return el.material && el.material.toLowerCase().includes(lowerM);
-            });
+            const matchesMat = mats.length === 0 || mats.some(m => fuzzyMaterialMatch(el.material, m));
 
             const matchesPil = pils.length === 0 || pils.some(p => {
                 const lowerP = p.toLowerCase();
                 return el.pilote && el.pilote.toLowerCase().includes(lowerP);
             });
 
-            if (matchesClassif && matchesCat && matchesLvl && matchesMat && matchesPil) {
+            let matchesNumeric = true;
+            if (action.numericFilter) {
+                matchesNumeric = checkNumericCondition(el, action.numericFilter);
+            }
+
+            let isMatch = matchesClassif && matchesCat && matchesLvl && matchesMat && matchesPil && matchesNumeric;
+            if (action.invertMatch) isMatch = !isMatch;
+
+            if (isMatch) {
                 if (!matchingExpressIdsByModel[el.modelUUID]) {
                     matchingExpressIdsByModel[el.modelUUID] = [];
                 }
@@ -9582,6 +9879,16 @@ async function executeNoraAI3DAction(action: NoraAIAction): Promise<string> {
         await updateClassificationUI();
         await applyFiltersToViewerGlobal();
         window.dispatchEvent(new CustomEvent('classificationFilterChanged'));
+
+        // Centrado de cámara si se solicitó inspección guiada
+        if (action.cameraView === 'focus' && matchCount > 0) {
+            try {
+                const box = getModelBox();
+                const sphere = new THREE.Sphere();
+                box.getBoundingSphere(sphere);
+                if (sphere.radius > 0.1) world.camera.controls.fitToSphere(sphere, true);
+            } catch (e) {}
+        }
 
         return action.message || `Aislado(s) ${matchCount} elementos en el visor 3D`;
     }
