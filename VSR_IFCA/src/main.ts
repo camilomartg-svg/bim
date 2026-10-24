@@ -5446,7 +5446,11 @@ async function renderPropertiesTable(modelIdMap: Record<string, Set<number>>) {
                     if (!obj || typeof obj !== 'object') return '';
                     if (depth > 2) return '';
                     let out = `<div class="prop-set-title">${sectionName}</div><table class="prop-table"><tbody>`;
+                    const seenInSection = new Set<string>();
                     for (const [sk, sv0] of Object.entries(obj)) {
+                        const normSK = normalizePropKey(sk);
+                        if (seenInSection.has(normSK)) continue;
+                        seenInSection.add(normSK);
                         let sv: any = (sv0 as any)?.value ?? sv0;
                         if (sv === null || sv === undefined) continue;
                         if (Array.isArray(sv)) {
@@ -5473,9 +5477,16 @@ async function renderPropertiesTable(modelIdMap: Record<string, Set<number>>) {
                     return out;
                 };
 
+                const alreadyRenderedNormalizedKeys = new Set<string>();
+
                 // A. Render Psets if present
                 if (entity.psets && typeof entity.psets === 'object') {
                     for (const [psetName, psetProps] of Object.entries(entity.psets)) {
+                        if (psetProps && typeof psetProps === 'object') {
+                            for (const pKey of Object.keys(psetProps)) {
+                                alreadyRenderedNormalizedKeys.add(normalizePropKey(pKey));
+                            }
+                        }
                         html += renderSection(psetName, psetProps, 0);
                     }
                 }
@@ -5487,15 +5498,22 @@ async function renderPropertiesTable(modelIdMap: Record<string, Set<number>>) {
                     'IsDefinedBy', 'isDefinedBy',
                     'relations', 'Relations', 'localId', 'category', 'guid',
                     'spatialStructureId', 'materialId', 'typeId', 'typeCode', 'ifcType', 'typeName',
-                    'psets', 'level', 'storey', 'material'
+                    'psets', 'level', 'storey', 'material',
+                    'classification', 'Classification', 'CLASIFICACION', 'clasificacion',
+                    'CLASIFICACIÃ"N', 'CLASIFICACIÃ“N', 'CLASIFICACI\u00c3\u0093N', 'CLASIFICACI\u00c3"N'
                 ]);
 
                 let customTopHtml = '';
                 for (const [k, v] of Object.entries(entity)) {
                     if (renderedTopKeys.has(k)) continue;
                     if (v === null || v === undefined) continue;
+
+                    const normK = normalizePropKey(k);
+                    if (alreadyRenderedNormalizedKeys.has(normK)) continue;
+                    alreadyRenderedNormalizedKeys.add(normK);
+
                     if (typeof v === 'object' && !Array.isArray(v)) {
-                        html += renderSection(k, v, 0);
+                        html += renderSection(cleanMojibake(k), v, 0);
                     } else {
                         customTopHtml += `<tr><th>${cleanMojibake(k)}</th><td>${formatValue(v, 0)}</td></tr>`;
                     }

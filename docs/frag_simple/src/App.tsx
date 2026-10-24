@@ -553,17 +553,15 @@ async function extractCompleteIfcProperties(
               for (const [propKey, propVal] of Object.entries(psetProps as Record<string, any>)) {
                 if (propVal !== undefined && propVal !== null) {
                   const cleanedK = cleanMojibake(propKey);
-                  if (entityData[propKey] === undefined) entityData[propKey] = propVal;
-                  if (cleanedK !== propKey && entityData[cleanedK] === undefined) entityData[cleanedK] = propVal;
-
-                  // Detect and bridge any variant of CLASIFICACION (with/without tildes, mojibake, etc.)
                   const normK = cleanedK.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '');
+
                   if (normK === 'clasificacion') {
                     entityData['CLASIFICACIÓN'] = propVal;
                     entityData['CLASIFICACION'] = propVal;
-                    entityData['CLASIFICACIÃ"N'] = propVal;
-                    entityData['CLASIFICACIÃ“N'] = propVal;
                     entityData['classification'] = propVal;
+                  } else {
+                    if (entityData[propKey] === undefined) entityData[propKey] = propVal;
+                    if (cleanedK !== propKey && entityData[cleanedK] === undefined) entityData[cleanedK] = propVal;
                   }
                 }
               }
@@ -608,8 +606,6 @@ async function extractCompleteIfcProperties(
             if (classif.code) entityData.classificationCode = classif.code;
             entityData['CLASIFICACIÓN'] = classif.name;
             entityData['CLASIFICACION'] = classif.name;
-            entityData['CLASIFICACIÃ"N'] = classif.name;
-            entityData['CLASIFICACIÃ“N'] = classif.name;
           }
         }
 
