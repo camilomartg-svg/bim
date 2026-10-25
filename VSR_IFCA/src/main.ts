@@ -1850,6 +1850,14 @@ const loadDriveJsonProps = async (jsonId: string): Promise<any | null> => {
     }
 };
 
+const yieldToMain = () => new Promise<void>(resolve => {
+    if (typeof requestAnimationFrame !== 'undefined') {
+        requestAnimationFrame(() => setTimeout(resolve, 0));
+    } else {
+        setTimeout(resolve, 0);
+    }
+});
+
 /**
  * JSON exports are normally indexed by IFC ExpressID, whereas Fragments v3
  * addresses picked geometry by localId.  Keep the original index (relations
@@ -1961,6 +1969,7 @@ const attachExternalPropertiesToLocalIds = async (model: any, externalProperties
             } catch (chunkErr) {
                 console.warn('[JSON bridge] chunk error:', chunkErr);
             }
+            await yieldToMain();
         }
 
         return { properties, matched, localIds: localIds.length };
@@ -8997,66 +9006,50 @@ async function classifyModel(model: any) {
     const integratedLengthById = new Map<number, number>();
 
     // Helper: unwrap {type, value} objects or return plain string
+    const extractRaw = (val: any): string | null => {
+        if (val === undefined || val === null) return null;
+        const v = (typeof val === 'object' && 'value' in val) ? val.value : val;
+        if (v !== null && v !== undefined && String(v).trim() !== '') return String(v).trim();
+        return null;
+    };
+
     const getVal = (obj: any, ...keys: string[]): string | null => {
         if (!obj || typeof obj !== 'object') return null;
 
-        // 1. Direct top-level match
+        // 1. Direct top-level match (0ms)
         for (const k of keys) {
-            const raw = obj[k];
-            if (raw !== undefined && raw !== null) {
-                const v = (raw && typeof raw === 'object' && 'value' in raw) ? raw.value : raw;
-                if (v !== null && v !== undefined && String(v).trim() !== '') return String(v).trim();
+            const res = extractRaw(obj[k]);
+            if (res !== null) return res;
+        }
+
+        // 2. Direct sub-containers (attrs.data, attrs.attributes, attrs.psets, attrs.properties)
+        const subContainers = [obj.data, obj.attributes, obj.psets, obj.properties];
+        for (const sub of subContainers) {
+            if (sub && typeof sub === 'object') {
+                for (const k of keys) {
+                    const res = extractRaw(sub[k]);
+                    if (res !== null) return res;
+                }
             }
         }
 
-        // 1b. Normalized top-level search (matches CLASIFICACIÓN, CLASIFICACION, CLASIFICACIÃ"N, etc.)
+        // 3. Normalized direct match (handles CLASIFICACIÓN / CLASIFICACIÃ"N)
         const normalizedTargets = new Set(keys.map(k => normalizePropKey(k)).filter(Boolean));
         for (const actualKey of Object.keys(obj)) {
             if (normalizedTargets.has(normalizePropKey(actualKey))) {
-                const raw = obj[actualKey];
-                if (raw !== undefined && raw !== null) {
-                    const v = (raw && typeof raw === 'object' && 'value' in raw) ? raw.value : raw;
-                    if (v !== null && v !== undefined && String(v).trim() !== '') return String(v).trim();
-                }
+                const res = extractRaw(obj[actualKey]);
+                if (res !== null) return res;
             }
         }
 
-        // 2. Recursive deep search (BFS)
-        const queue = [obj];
-        const seen = new Set<any>();
-        let steps = 0;
-        const maxSteps = 1000;
-
-        while (queue.length > 0 && steps < maxSteps) {
-            const current = queue.shift();
-            if (!current || typeof current !== 'object') continue;
-            if (seen.has(current)) continue;
-            seen.add(current);
-            steps++;
-
-            for (const k of keys) {
-                const raw = current[k];
-                if (raw !== undefined && raw !== null) {
-                    const v = (raw && typeof raw === 'object' && 'value' in raw) ? raw.value : raw;
-                    if (v !== null && v !== undefined && String(v).trim() !== '') return String(v).trim();
-                }
-            }
-
-            for (const actualKey of Object.keys(current)) {
-                if (normalizedTargets.has(normalizePropKey(actualKey))) {
-                    const raw = current[actualKey];
-                    if (raw !== undefined && raw !== null) {
-                        const v = (raw && typeof raw === 'object' && 'value' in raw) ? raw.value : raw;
-                        if (v !== null && v !== undefined && String(v).trim() !== '') return String(v).trim();
-                    }
-                }
-            }
-
-            for (const key in current) {
-                if (key === 'ObjectPlacement' || key === 'Representation' || key === 'OwnerHistory') continue;
-                const val = current[key];
-                if (val && typeof val === 'object') {
-                    queue.push(val);
+        // 4. Shallow scan of direct child objects only (depth = 1, e.g. custom Pset objects)
+        for (const key of Object.keys(obj)) {
+            if (key === 'ObjectPlacement' || key === 'Representation' || key === 'OwnerHistory' || key === 'geometry') continue;
+            const child = obj[key];
+            if (child && typeof child === 'object' && !Array.isArray(child)) {
+                for (const k of keys) {
+                    const res = extractRaw(child[k]);
+                    if (res !== null) return res;
                 }
             }
         }
@@ -9156,6 +9149,7 @@ async function classifyModel(model: any) {
                 } catch (e) {
                     console.warn('[Classify] getData chunk error:', e);
                 }
+                await yieldToMain();
             }
             logToScreen(`[Classify] getData: ${gdataHits} hits CLASIFICACIÓN de ${idsWithGeometry.length} elem`);
         }
@@ -9168,6 +9162,7 @@ async function classifyModel(model: any) {
         const jsonKeys = Object.keys(model.properties);
         logToScreen(`[Classify] Fallback JSON: ${jsonKeys.length} entradas...`);
         let jsonHits = 0;
+        let jsonProcessed = 0;
         const validGeomSet = new Set<number>(idsWithGeometry);
 
         for (const keyStr of jsonKeys) {
@@ -9181,6 +9176,7 @@ async function classifyModel(model: any) {
             if (validGeomSet.size > 0 && !validGeomSet.has(targetId) && !validGeomSet.has(numericId)) continue;
 
             if (readFields(entity, targetId)) jsonHits++;
+            if (++jsonProcessed % 2000 === 0) await yieldToMain();
         }
         logToScreen(`[Classify] JSON hits: ${jsonHits}`);
     }
@@ -9205,6 +9201,7 @@ async function classifyModel(model: any) {
         idsWithGeometry.forEach(id => allIds.add(id));
     }
 
+    let indexedCount = 0;
     for (const id of allIds) {
         const clasifVal = integratedClassById.get(id) ?? 'SIN CLASIFICAR';
         addToIndex('CLASIFICACIÓN', modelUUID, normalizeValue(clasifVal), id);
@@ -9212,6 +9209,7 @@ async function classifyModel(model: any) {
         addToIndex('MATERIAL INTEGRADO', modelUUID, normalizeValue(integratedMaterialById.get(id) ?? 'Sin Material'), id);
         addToIndex('NOMBRE INTEGRADO', modelUUID, normalizeValue(integratedNameById.get(id) ?? ''), id);
         addToIndex('SUBPROYECTOS INTEGRADO', modelUUID, normalizeValue(integratedSubById.get(id) ?? ''), id);
+        if (++indexedCount % 2000 === 0) await yieldToMain();
     }
 
     classifier.list.clear();
@@ -9223,6 +9221,7 @@ async function classifyModel(model: any) {
     // --- Populate modelElementData global cache so extractAllElementsGlobal can use it ---
     const modelCache = new Map<number, { level: string; material: string; name: string; classification: string; volume: number; area: number; length: number; detail: string; category: string; }>();
 
+    let cachedCount = 0;
     for (const id of allIds) {
         const lvl = integratedLevelById.get(id);
         const mat = integratedMaterialById.get(id);
@@ -9248,6 +9247,7 @@ async function classifyModel(model: any) {
             detail: det ?? '-',
             category: cat ?? 'Elemento'
         });
+        if (++cachedCount % 2000 === 0) await yieldToMain();
     }
     modelElementData.set(modelUUID, modelCache);
 
