@@ -2700,7 +2700,7 @@ const selectedPilotes = new Set<string>();
 let selectedDiameter = 'Todos';
 
 let activeModelFilter = 'ALL';
-let isolateActiveModel = false;
+let isolateActiveModel = true;
 
 const expandedClassifications = new Set<string>();
 const collapsedSections = new Set<string>();
@@ -2954,19 +2954,32 @@ function getUniqueLoadedModels(): { uuid: string; name: string; model: any; elem
     return list;
 }
 
-function extractAllElementsGlobal(filterModelId: string = 'ALL') {
+let cachedAllElements: any[] | null = null;
+let lastLoadedModelsHash = '';
+
+function getLoadedModelsHash(): string {
+    let hash = '';
+    for (const [k, m] of loadedModels.entries()) {
+        hash += `${k}:${m?.uuid || ''};`;
+    }
+    let dataSize = 0;
+    for (const cache of modelElementData.values()) {
+        dataSize += cache.size;
+    }
+    return `${hash}_${dataSize}`;
+}
+
+function invalidateElementsCache() {
+    cachedAllElements = null;
+}
+
+function rebuildAllElements(): any[] {
     const allElements: any[] = [];
     const models = getUniqueLoadedModels();
 
     for (const { uuid: modelUUID, name: modelName, model } of models) {
-        if (filterModelId && filterModelId !== 'ALL') {
-            if (modelUUID !== filterModelId && modelName !== filterModelId && String(model.uuid) !== filterModelId) {
-                continue;
-            }
-        }
         const modelAny = model as any;
 
-        // Collect all expressIDs: from modelElementData (primary cache populated by classifyModel)
         const idsFromCache = modelElementData.get(modelUUID) || (model.uuid ? modelElementData.get(model.uuid) : undefined);
         const allIds = new Set<number>();
 
@@ -2978,7 +2991,6 @@ function extractAllElementsGlobal(filterModelId: string = 'ALL') {
         }
 
         for (const expressID of allIds) {
-            // Try modelElementData first (populated by classifyModel from IFC data)
             const cached = idsFromCache?.get(expressID);
 
             let level: string, material: string, name: string, classification: string;
@@ -3012,7 +3024,7 @@ function extractAllElementsGlobal(filterModelId: string = 'ALL') {
                 continue;
             }
 
-            const searchStr = [classification, name, material].join(' ').toLowerCase();
+            const searchStr = (classification + ' ' + name + ' ' + material).toLowerCase();
             const diameter = '';
 
             const isUnion = searchStr.includes('fitting') || searchStr.includes('conduitfitting') || searchStr.includes('cablecarrierfitting') || searchStr.includes('union') || searchStr.includes('codo') || searchStr.includes('tee') || searchStr.includes('reducc') || searchStr.includes('caja') || searchStr.includes('accesorio') || searchStr.includes('adaptador') || searchStr.includes('copla');
@@ -3040,6 +3052,22 @@ function extractAllElementsGlobal(filterModelId: string = 'ALL') {
         }
     }
     return allElements;
+}
+
+function extractAllElementsGlobal(filterModelId: string = 'ALL') {
+    const currentHash = getLoadedModelsHash();
+    if (!cachedAllElements || lastLoadedModelsHash !== currentHash) {
+        cachedAllElements = rebuildAllElements();
+        lastLoadedModelsHash = currentHash;
+    }
+
+    if (!filterModelId || filterModelId === 'ALL') {
+        return cachedAllElements;
+    }
+
+    return cachedAllElements.filter(el => 
+        el.modelUUID === filterModelId || el.modelName === filterModelId
+    );
 }
 
 function isSanitaryModelGlobal(): boolean {
@@ -3161,6 +3189,7 @@ async function applyFiltersToViewerGlobal() {
     const allElements = extractAllElementsGlobal('ALL');
     if (allElements.length === 0) return;
 
+    const uniqueModels = getUniqueLoadedModels();
     const isSanitary = isSanitaryModelGlobal();
     const isTreeFilterActive = selectedClassifications.size > 0 || selectedCategories.size > 0;
     const isLevelFilterActive = selectedLevels.size > 0;
@@ -3170,16 +3199,32 @@ async function applyFiltersToViewerGlobal() {
 
     const hasAnyFilter = isTreeFilterActive || isLevelFilterActive || isMaterialFilterActive || isPiloteFilterActive || isDiameterFilterActive;
 
+    // 1. Control instantáneo de visibilidad a nivel de mesh Three.js (0ms)
+    // Si un modelo específico está seleccionado:
+    // Si hay un filtro activo o isolateActiveModel es true, los otros modelos se ocultan por completo en Three.js
+    const shouldHideOtherModels = activeModelFilter !== 'ALL' && (hasAnyFilter || isolateActiveModel);
+
+    for (const m of uniqueModels) {
+        const isTargetModel = (m.uuid === activeModelFilter || m.name === activeModelFilter);
+        if (m.model && m.model.object) {
+            if (activeModelFilter === 'ALL') {
+                m.model.object.visible = true;
+            } else {
+                m.model.object.visible = isTargetModel || !shouldHideOtherModels;
+            }
+        }
+    }
+
+    // 2. Filtrado de elementos
     const visibleElements = allElements.filter(el => {
         const isFromActiveModel = (activeModelFilter === 'ALL' || el.modelUUID === activeModelFilter || el.modelName === activeModelFilter);
 
-        if (activeModelFilter !== 'ALL') {
-            if (!isFromActiveModel) {
-                // If isolateActiveModel is enabled, hide other models; otherwise keep them visible
-                return !isolateActiveModel;
-            }
+        // Si se está filtrando un modelo específico, los demás modelos NUNCA deben mostrarse en el aislamiento
+        if (activeModelFilter !== 'ALL' && !isFromActiveModel) {
+            return false;
         }
 
+        // Si no hay ningún filtro de categoría/nivel/material, se muestran todos los elementos del modelo activo
         if (!hasAnyFilter) return true;
 
         const treeMatch = !isTreeFilterActive || 
@@ -3195,33 +3240,21 @@ async function applyFiltersToViewerGlobal() {
         return treeMatch && levelMatch && materialMatch && piloteMatch && diameterMatch;
     });
 
-    const visibleSet = new Set(visibleElements.map(e => `${e.modelUUID}:${e.expressID}`));
-
     const visibleMap: Record<string, Set<number>> = {};
-    const hiddenMap: Record<string, Set<number>> = {};
-    let hasVisible = false;
-    let hasHidden = false;
+    for (const el of visibleElements) {
+        if (!visibleMap[el.modelUUID]) visibleMap[el.modelUUID] = new Set();
+        visibleMap[el.modelUUID].add(el.expressID);
+    }
 
-    for (const el of allElements) {
-        const modelUUID = el.modelUUID;
-        const expressID = el.expressID;
-
-        if (visibleSet.has(`${modelUUID}:${expressID}`)) {
-            if (!visibleMap[modelUUID]) visibleMap[modelUUID] = new Set();
-            visibleMap[modelUUID].add(expressID);
-            hasVisible = true;
+    // 3. Aplicar aislamiento en el visor (1 sola llamada atómica en lugar de loops pesados)
+    if (hasAnyFilter || activeModelFilter !== 'ALL') {
+        if (visibleElements.length > 0) {
+            await hider.isolate(visibleMap);
         } else {
-            if (!hiddenMap[modelUUID]) hiddenMap[modelUUID] = new Set();
-            hiddenMap[modelUUID].add(expressID);
-            hasHidden = true;
+            await hider.set(false);
         }
-    }
-
-    if (hasVisible) {
-        await hider.set(true, visibleMap);
-    }
-    if (hasHidden) {
-        await hider.set(false, hiddenMap);
+    } else {
+        await hider.set(true);
     }
 
     if (activeColorMode !== 'none') {
@@ -4019,14 +4052,8 @@ function isElementHidden(e: any): boolean {
     const expressID = Number(e.expressID);
     if (isNaN(expressID)) return false;
 
-    if (e.modelUUID && hiddenItems[e.modelUUID]?.has(expressID)) {
-        return true;
-    }
-
-    for (const key in hiddenItems) {
-        if (hiddenItems[key]?.has(expressID)) {
-            return true;
-        }
+    if (e.modelUUID && hiddenItems[e.modelUUID]) {
+        return hiddenItems[e.modelUUID].has(expressID);
     }
 
     return false;
@@ -6087,9 +6114,13 @@ function initQuantitiesPanel() {
         });
     });
 
+    let qFilterDebounce: number | null = null;
     window.addEventListener('classificationFilterChanged', () => {
         if (qPanel && !qPanel.classList.contains('closed')) {
-            renderQuantitiesContent();
+            if (qFilterDebounce) cancelAnimationFrame(qFilterDebounce);
+            qFilterDebounce = requestAnimationFrame(() => {
+                renderQuantitiesContent();
+            });
         }
     });
 
@@ -6120,7 +6151,7 @@ function initQuantitiesPanel() {
             renderQuantitiesContent();
         } catch (err) {
             console.error("Error during remote sync:", err);
-            setSyncState('offline', 'Error de sincronización');
+            setSyncState('offline', 'Modo Local');
         } finally {
             isSyncing = false;
         }
@@ -8624,9 +8655,13 @@ function initStatusPanel() {
         });
     });
 
+    let sFilterDebounce: number | null = null;
     window.addEventListener('classificationFilterChanged', () => {
         if (sPanel && !sPanel.classList.contains('closed')) {
-            renderStatusContent();
+            if (sFilterDebounce) cancelAnimationFrame(sFilterDebounce);
+            sFilterDebounce = requestAnimationFrame(() => {
+                renderStatusContent();
+            });
         }
     });
 
@@ -9300,83 +9335,49 @@ async function classifyModel(model: any) {
         return !!clasif;
     };
 
-    // --- STRATEGY 1: fragments.getData() — same data source as the properties panel ---
-    // The panel uses: const attrs = raw.data || raw.attributes || raw
-    let gdataHits = 0;
     let idsWithGeometry: number[] = [];
     try {
         idsWithGeometry = await model.getItemsIdsWithGeometry().catch(() => []);
-        if (idsWithGeometry && idsWithGeometry.length > 0) {
-            logToScreen(`[Classify] getData para ${idsWithGeometry.length} elementos...`);
-            const CHUNK = 1000;
-            for (let i = 0; i < idsWithGeometry.length; i += CHUNK) {
-                const chunk = idsWithGeometry.slice(i, i + CHUNK);
-                try {
-                    const result = await fragments.getData(
-                        { [modelUUID]: chunk } as any,
-                        { attributesDefault: true } as any
-                    );
-                    const items: any[] = (result as any)[modelUUID] || [];
-                    items.forEach((raw: any, idx: number) => {
-                        const localId: number = chunk[idx];
-                        if (localId === undefined) return;
-                        const attrs = raw?.data || raw?.attributes || raw || {};
-                        const tag = String(attrs.Tag?.value ?? attrs.Tag ?? '').trim();
-                        const guid = String(attrs.GlobalId?.value ?? attrs.GlobalId ?? attrs._guid?.value ?? attrs._guid ?? raw.guid ?? '').trim();
-                        const name = String(attrs.Name?.value ?? attrs.Name ?? attrs.IFCNAME ?? attrs.IfcName ?? '').trim();
-
-                        const entity = model.properties ? (
-                            model.properties[localId] ||
-                            model.properties[String(localId)] ||
-                            (tag && (model.properties[tag] || model._propertiesByTag?.get(tag))) ||
-                            (guid && (model.properties[guid] || model._propertiesByGuid?.get(guid))) ||
-                            (name && model._propertiesByName?.get(name))
-                        ) : null;
-
-                        if (entity) {
-                            entity.localId = localId;
-                            if (model.properties) {
-                                model.properties[localId] = entity;
-                                model.properties[String(localId)] = entity;
-                            }
-                            if (readFields({ ...attrs, ...entity }, localId)) gdataHits++;
-                        } else {
-                            if (readFields(attrs, localId)) gdataHits++;
-                        }
-                    });
-                } catch (e) {
-                    console.warn('[Classify] getData chunk error:', e);
-                }
-                await yieldToMain();
-            }
-            logToScreen(`[Classify] getData: ${gdataHits} hits CLASIFICACIÓN de ${idsWithGeometry.length} elem`);
-        }
     } catch (e) {
         console.warn('[Classify] getItemsIdsWithGeometry error:', e);
     }
 
-    // --- STRATEGY 2: model.properties JSON (external .json file loaded from Drive or URL) ---
-    if (model.properties) {
-        const jsonKeys = Object.keys(model.properties);
-        logToScreen(`[Classify] Fallback JSON: ${jsonKeys.length} entradas...`);
-        let jsonHits = 0;
-        let jsonProcessed = 0;
-        const validGeomSet = new Set<number>(idsWithGeometry);
+    const hasExtProps = model.properties && Object.keys(model.properties).length > 0;
 
-        for (const keyStr of jsonKeys) {
+    if (!hasExtProps && idsWithGeometry && idsWithGeometry.length > 0) {
+        // Only run fragments.getData() if NO external JSON properties were provided
+        logToScreen(`[Classify] Obteniendo propiedades nativas de ${idsWithGeometry.length} elementos...`);
+        const CHUNK = 1000;
+        for (let i = 0; i < idsWithGeometry.length; i += CHUNK) {
+            const chunk = idsWithGeometry.slice(i, i + CHUNK);
+            try {
+                const result = await fragments.getData({ [modelUUID]: chunk } as any, { attributesDefault: true } as any);
+                const items: any[] = (result as any)[modelUUID] || [];
+                items.forEach((raw: any, idx: number) => {
+                    const localId: number = chunk[idx];
+                    if (localId === undefined) return;
+                    const attrs = raw?.data || raw?.attributes || raw || {};
+                    readFields(attrs, localId);
+                });
+            } catch (e) {
+                console.warn('[Classify] getData chunk error:', e);
+            }
+            await yieldToMain();
+        }
+    } else if (hasExtProps) {
+        // Fast path: Classify directly from model.properties in memory (< 50ms)
+        const validGeomSet = new Set<number>(idsWithGeometry);
+        let processed = 0;
+        for (const keyStr in model.properties) {
             const numericId = parseInt(keyStr, 10);
             if (isNaN(numericId)) continue;
-
-            const entity: any = model.properties[keyStr];
+            const entity = model.properties[keyStr];
             if (!entity || typeof entity !== 'object') continue;
-
             const targetId = entity.localId !== undefined ? Number(entity.localId) : numericId;
             if (validGeomSet.size > 0 && !validGeomSet.has(targetId) && !validGeomSet.has(numericId)) continue;
-
-            if (readFields(entity, targetId)) jsonHits++;
-            if (++jsonProcessed % 2000 === 0) await yieldToMain();
+            readFields(entity, targetId);
+            if (++processed % 3000 === 0) await yieldToMain();
         }
-        logToScreen(`[Classify] JSON hits: ${jsonHits}`);
     }
 
     // --- Build index ---
@@ -9448,6 +9449,7 @@ async function classifyModel(model: any) {
         if (++cachedCount % 2000 === 0) await yieldToMain();
     }
     modelElementData.set(modelUUID, modelCache);
+    invalidateElementsCache();
 
     logToScreen(`✓ Clasificado: ${allIds.size} elem | CLASIF:${integratedClassById.size} NIVEL:${integratedLevelById.size} MAT:${integratedMaterialById.size} NOMBRE:${integratedNameById.size} SUB:${integratedSubById.size}`);
 
@@ -10199,6 +10201,12 @@ async function executeNoraAI3DAction(action: NoraAIAction): Promise<string> {
             } catch (e) {
                 console.warn('Error in hider.isolate:', e);
             }
+        }
+
+        if (action.models && action.models.length > 0) {
+            const uniqueModels = getUniqueLoadedModels();
+            const targetM = uniqueModels.find(m => action.models?.some(name => m.name.toLowerCase().includes(name.toLowerCase())));
+            if (targetM) activeModelFilter = targetM.uuid;
         }
 
         if (!action.semanticTarget) {
