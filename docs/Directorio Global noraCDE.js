@@ -1876,13 +1876,20 @@ function markPreviousVersionsNotCurrent_(vSheet, project, filename, originalFile
   const values = range.getValues();
   let modified = false;
 
+  var cleanP1 = project ? project.toLowerCase().replace(/[^a-z0-9]/g, '') : '';
+  var f1 = filename ? filename.toLowerCase().trim() : '';
+
   for (let i = 0; i < values.length; i++) {
     const row = values[i];
     const rowProj = String(row[projectIdx] || '').trim();
-    const rowFile = String(row[filenameIdx] || '').trim();
+    const rowFile = String(row[filenameIdx] || '').trim().toLowerCase();
     const rowOrig = String(row[origIdIdx] || '').trim();
 
-    if ((!project || rowProj === project) && (rowFile === filename || (originalFileId && rowOrig === originalFileId))) {
+    var cleanP2 = rowProj.toLowerCase().replace(/[^a-z0-9]/g, '');
+    var matchProj = (!project) || (!rowProj) || (cleanP1 === cleanP2) || (rowProj.toLowerCase() === project.toLowerCase());
+    var matchFile = (f1 && rowFile === f1) || (originalFileId && rowOrig === originalFileId);
+
+    if (matchProj && matchFile) {
       if (String(row[isCurrentIdx]).trim() === 'true') {
         values[i][isCurrentIdx] = 'false';
         modified = true;
@@ -2112,6 +2119,7 @@ function createVersion_(e, body) {
 
 function listVersions_(e, body) {
   const project = String(((body && body.project) || (e && e.parameter && e.parameter.project) || '') ?? '').trim();
+  const projectName = String(((body && body.projectName) || (e && e.parameter && e.parameter.projectName) || '') ?? '').trim();
   const filename = String(((body && body.filename) || (e && e.parameter && e.parameter.filename) || '') ?? '').trim();
   const originalFileId = String(((body && body.originalFileId) || (e && e.parameter && e.parameter.originalFileId) || '') ?? '').trim();
 
@@ -2125,17 +2133,32 @@ function listVersions_(e, body) {
   const idx = {};
   FILE_VERSION_HEADERS.forEach(function(h) { idx[h] = headers.indexOf(h); });
 
+  const cleanP1 = project ? project.toLowerCase().replace(/[^a-z0-9]/g, '') : '';
+  const cleanPName = projectName ? projectName.toLowerCase().replace(/[^a-z0-9]/g, '') : '';
+  const f1 = filename ? filename.toLowerCase().trim() : '';
+
   const versions = [];
   for (var i = 0; i < rows.length; i++) {
     var row = rows[i];
     var rowProject = String(row[idx['project']] || '').trim();
-    if (project && rowProject !== project) continue;
+    if (project && rowProject) {
+      var cleanP2 = rowProject.toLowerCase().replace(/[^a-z0-9]/g, '');
+      var matchP = (!cleanP1) || (!cleanP2) || (cleanP1 === cleanP2) || (cleanPName && cleanPName === cleanP2) ||
+                   (rowProject.toLowerCase() === project.toLowerCase()) ||
+                   (projectName && rowProject.toLowerCase() === projectName.toLowerCase());
+      if (!matchP) {
+        continue;
+      }
+    }
 
     var rowFilename = String(row[idx['filename']] || '').trim();
     var rowOrigId = String(row[idx['originalFileId']] || '').trim();
     var rowFileId = String(row[idx['fileId']] || '').trim();
 
-    if (filename && rowFilename !== filename && rowOrigId !== originalFileId && rowFileId !== originalFileId) {
+    var matchFile = f1 && (rowFilename.toLowerCase().trim() === f1);
+    var matchId = originalFileId && (rowOrigId === originalFileId || rowFileId === originalFileId);
+
+    if (filename && !matchFile && !matchId) {
       continue;
     }
 

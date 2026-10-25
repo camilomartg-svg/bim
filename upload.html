@@ -2225,16 +2225,32 @@
       });
 
       // Helper: auto calculate next version
-      function calculateNextVersion(verStr) {
+      // Helper: cálculo de versión menor (reemplazos automáticos desde cualquier medio: subidas, Revit, etc.)
+      // Regla obligatoria:
+      // - Incrementa el decimal manteniendo el entero: 1.0 -> 1.1 -> 1.2 ... -> 1.9 -> 1.10 -> 1.11 ...
+      // - Si el decimal llega a .9, el siguiente NO aumenta el entero, pasa a .10 (ej: 3.9 -> 3.10)
+      function calculateNextMinorVersion(verStr) {
         if (!verStr) return 'v1.1';
-        const match = String(verStr).trim().match(/^v?(\d+)\.(\d+)$/i);
-        if (match) {
-          const major = parseInt(match[1], 10);
-          const minor = parseInt(match[2], 10);
-          return `v${major}.${minor + 1}`;
-        }
-        return 'v1.1';
+        const clean = String(verStr).trim().replace(/^v/i, '');
+        const parts = clean.split('.');
+        const major = parseInt(parts[0], 10) || 1;
+        const minor = parseInt(parts[1] !== undefined ? parts[1] : '0', 10);
+        return `v${major}.${minor + 1}`;
       }
+
+      // Helper: cálculo de versión mayor (creación manual con botón "+ VERSIÓN" en la plataforma)
+      // Regla obligatoria:
+      // - Incrementa el entero y reinicia el decimal a .0: 1.0 -> 2.0, 1.2 -> 2.0, 2.5 -> 3.0, 3.10 -> 4.0
+      function calculateNextMajorVersion(verStr) {
+        if (!verStr) return 'v2.0';
+        const clean = String(verStr).trim().replace(/^v/i, '');
+        const parts = clean.split('.');
+        const major = parseInt(parts[0], 10) || 1;
+        return `v${major + 1}.0`;
+      }
+
+      // Alias retrocompatible
+      const calculateNextVersion = calculateNextMinorVersion;
 
       // Helper: find existing project file in rawProjectFilesCache matching uploaded filename
       function findExistingProjectFile(fileName) {
@@ -2279,7 +2295,7 @@
           const match = findExistingProjectFile(fileObj.file.name);
           fileObj.isReplacement = !!match;
           fileObj.existingFile = match;
-          fileObj.targetVersion = match ? calculateNextVersion(match.version || 'v1.0') : 'v1.0';
+          fileObj.targetVersion = match ? calculateNextMinorVersion(match.version || 'v1.0') : 'v1.0';
         });
         renderFilesList();
       }
@@ -2355,7 +2371,7 @@
           const existingMatch = findExistingProjectFile(file.name);
           const isReplacement = !!existingMatch;
           const currentVersion = existingMatch ? (existingMatch.version || 'v1.0') : 'v1.0';
-          const targetVersion = isReplacement ? calculateNextVersion(currentVersion) : 'v1.0';
+          const targetVersion = isReplacement ? calculateNextMinorVersion(currentVersion) : 'v1.0';
 
           selectedFiles.push({
             id: fileIdCounter++,
@@ -2902,13 +2918,13 @@
               const ifcFileId = ifcUploadResult ? ifcUploadResult.fileId : '';
 
               // Si reemplaza un modelo existente, registrar automáticamente la nueva versión
-              const existingFrag = fileObj.existingFile || findMatchingProjectFile(`${baseName}.frag`);
-              const existingIfc = findMatchingProjectFile(fileObj.file.name);
+              const existingFrag = fileObj.existingFile || findExistingProjectFile(`${baseName}.frag`);
+              const existingIfc = findExistingProjectFile(fileObj.file.name);
 
               if (existingFrag || existingIfc) {
                 const targetFrag = existingFrag || existingIfc;
                 const currentVer = targetFrag.version || 'v1.0';
-                const nextVer = fileObj.targetVersion || calculateNextVersion(currentVer);
+                const nextVer = fileObj.targetVersion || calculateNextMinorVersion(currentVer);
                 updateFileUI(fileObj, 95, `Creando versión ${nextVer}...`);
                 addLog(`[${fileObj.file.name}] Archivo existente detectado (${currentVer}). Registrando automáticamente versión ${nextVer}...`);
 
@@ -2975,10 +2991,10 @@
                 updateFileUI(fileObj, Math.round(25 + (pct * 0.65)), 'Subiendo...');
               });
               
-              const existingFile = fileObj.existingFile || findMatchingProjectFile(fileObj.file.name);
+              const existingFile = fileObj.existingFile || findExistingProjectFile(fileObj.file.name);
               if (existingFile && uploadResult && uploadResult.fileId) {
                 const currentVer = existingFile.version || 'v1.0';
-                const nextVer = fileObj.targetVersion || calculateNextVersion(currentVer);
+                const nextVer = fileObj.targetVersion || calculateNextMinorVersion(currentVer);
                 updateFileUI(fileObj, 92, `Creando versión ${nextVer}...`);
                 addLog(`[${fileObj.file.name}] Archivo existente detectado (${currentVer}). Registrando automáticamente versión ${nextVer}...`);
 
@@ -3115,18 +3131,11 @@
             };
             
             statusEntries.forEach(entry => {
-              const hasId = entry.originalFileId || entry.fileId;
               const matchesId = (entry.originalFileId && entry.originalFileId === fid) ||
                                 (entry.fileId && entry.fileId === fid);
+              const matchesName = entry.filename && fname && entry.filename.trim().toLowerCase() === fname.trim().toLowerCase();
               
-              let isMatch = false;
-              if (hasId) {
-                isMatch = matchesId;
-              } else {
-                isMatch = entry.filename && entry.filename.toLowerCase() === fname.toLowerCase();
-              }
-              
-              if (isMatch) {
+              if (matchesId || matchesName) {
                 const status = entry.status;
                 if (status === 'EN_PROGRESO' || status === 'COMPARTIDO' || status === 'PUBLICADO') {
                   matches[status] = entry;
@@ -3153,6 +3162,45 @@
 
               // 1. Always keep the EN_PROGRESO (WIP) version of the file
               const progMatch = matches.EN_PROGRESO;
+
+              // Detección automática de subidas desde Revit o Google Drive directamente:
+              // Si el archivo en Drive tiene fecha de modificación más reciente que la del registro o cambió su fileId,
+              // generamos y respaldamos automáticamente la nueva versión decimal (ej: 1.0 -> 1.1, 1.9 -> 1.10, 3.9 -> 3.10)
+              let fileVersion = progMatch?.version || 'v1.0';
+              let fileComments = progMatch?.comments || '';
+              let fileChangedAt = progMatch?.changedAt || item.lastUpdated;
+
+              const isDriveFileNewer = progMatch && item.lastUpdated && progMatch.changedAt && 
+                (new Date(item.lastUpdated).getTime() - new Date(progMatch.changedAt).getTime() > 20000);
+              const isDriveIdChanged = progMatch && fid && (progMatch.fileId || progMatch.originalFileId) && 
+                fid !== progMatch.fileId && fid !== progMatch.originalFileId;
+
+              if (progMatch && (isDriveFileNewer || isDriveIdChanged)) {
+                const currentVer = progMatch.version || 'v1.0';
+                const nextVer = calculateNextMinorVersion(currentVer);
+                fileVersion = nextVer;
+                fileChangedAt = item.lastUpdated;
+                fileComments = `Actualización automática detectada desde Revit / Google Drive (${nextVer})`;
+                addLog(`[AUTO-VERSIÓN] Detectada actualización externa en ${fname}. Incrementando automáticamente a ${nextVer}...`);
+
+                createProjectFileVersion({
+                  fileId: fid,
+                  jsonId: type === 'model' ? (item.jsonId || progMatch.jsonId || '') : '',
+                  filename: fname,
+                  status: 'EN_PROGRESO',
+                  version: nextVer,
+                  comments: fileComments,
+                  deliveryTeams: progMatch.deliveryTeams || resolveCurrentUserDeliveryTeams(),
+                  originalFileId: progMatch.originalFileId || fid,
+                  type: type,
+                  uploadedFileId: fid
+                }).then(() => {
+                  addLog(`[AUTO-VERSIÓN] ✓ ${fname} actualizado a ${nextVer} con respaldo en .versiones/`);
+                }).catch(err => {
+                  console.warn('Auto-version error:', err);
+                });
+              }
+
               const progFileObj = {
                 fileId: fid, // Original physical file ID
                 originalFileId: fid,
@@ -3161,12 +3209,12 @@
                 filename: fname,
                 type: type,
                 folder: fld,
-                lastUpdated: progMatch?.changedAt || item.lastUpdated,
+                lastUpdated: fileChangedAt,
                 status: 'EN_PROGRESO',
-                version: progMatch?.version || 'v1.0',
-                comments: progMatch?.comments || '',
-                changedBy: (progMatch?.changedBy && progMatch.changedBy.trim()) || item.ownerName || 'UNASSIGNED',
-                changedByEmail: (progMatch?.changedByEmail && progMatch.changedByEmail.trim()) || item.ownerEmail || 'unassigned@nora.cde',
+                version: fileVersion,
+                comments: fileComments,
+                changedBy: (progMatch?.changedBy && progMatch.changedBy.trim()) || item.ownerName || 'Revit / Drive',
+                changedByEmail: (progMatch?.changedByEmail && progMatch.changedByEmail.trim()) || item.ownerEmail || 'revit@nora.cde',
                 deliveryTeams: parseStoredDeliveryTeams(progMatch?.deliveryTeams || '')
               };
 
@@ -3694,7 +3742,7 @@
 
         const specialty = getFileDisplaySpecialty(f);
         const currentVer = f.version || 'v1.0';
-        const nextVer = calculateNextVersion(currentVer);
+        const nextVer = calculateNextMajorVersion(currentVer);
 
         verModalFilename.textContent = f.name;
         verModalSpecialty.textContent = `Especialidad: ${specialty}`;
@@ -3819,6 +3867,7 @@
             body: JSON.stringify({
               action: 'listVersions',
               project: activeProject.slug || slugify(activeProject.name),
+              projectName: activeProject.name || '',
               filename: f.name,
               originalFileId: f.originalFileId || f.fileId
             })

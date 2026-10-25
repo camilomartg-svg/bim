@@ -470,18 +470,28 @@
         return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
       };
 
-      const calculateNextVersion = (currentVer) => {
+      // Helper: cálculo de versión menor (reemplazos automáticos desde cualquier medio: subidas, Revit, etc.)
+      // Regla: 1.0 -> 1.1 -> 1.2 ... -> 1.9 -> 1.10 -> 1.11 ... 3.9 -> 3.10
+      const calculateNextMinorVersion = (currentVer) => {
         if (!currentVer) return 'v1.1';
         const clean = String(currentVer).trim().replace(/^v/i, '');
         const parts = clean.split('.');
-        if (parts.length >= 2) {
-          const major = parseInt(parts[0], 10) || 1;
-          const minor = (parseInt(parts[1], 10) || 0) + 1;
-          return `v${major}.${minor}`;
-        }
-        const num = parseInt(clean, 10);
-        return isNaN(num) ? 'v1.1' : `v${num + 1}.0`;
+        const major = parseInt(parts[0], 10) || 1;
+        const minor = parseInt(parts[1] !== undefined ? parts[1] : '0', 10);
+        return `v${major}.${minor + 1}`;
       };
+
+      // Helper: cálculo de versión mayor (creación manual con botón "+ VERSIÓN")
+      // Regla: 1.0 -> 2.0, 1.2 -> 2.0, 2.5 -> 3.0, 3.10 -> 4.0
+      const calculateNextMajorVersion = (currentVer) => {
+        if (!currentVer) return 'v2.0';
+        const clean = String(currentVer).trim().replace(/^v/i, '');
+        const parts = clean.split('.');
+        const major = parseInt(parts[0], 10) || 1;
+        return `v${major + 1}.0`;
+      };
+
+      const calculateNextVersion = calculateNextMinorVersion;
 
       const getFileIcon = (filename) => {
         const ext = String(filename || '').split('.').pop().toLowerCase();
