@@ -2699,6 +2699,9 @@ const selectedMaterials = new Set<string>();
 const selectedPilotes = new Set<string>();
 let selectedDiameter = 'Todos';
 
+let activeModelFilter = 'ALL';
+let isolateActiveModel = false;
+
 const expandedClassifications = new Set<string>();
 const collapsedSections = new Set<string>();
 
@@ -2928,13 +2931,43 @@ const modelElementData = new Map<string, Map<number, {
     pilote: string;
 }>>();
 
-function extractAllElementsGlobal() {
+function getUniqueLoadedModels(): { uuid: string; name: string; model: any; elementCount: number }[] {
+    const seen = new Set<any>();
+    const list: { uuid: string; name: string; model: any; elementCount: number }[] = [];
+    for (const [key, model] of loadedModels.entries()) {
+        if (!model || seen.has(model)) continue;
+        seen.add(model);
+        const uuid = model.uuid || key;
+        const rawName = (model as any).name || (model as any).modelName || key;
+        const cleanName = rawName.split('/').pop()?.split('?')[0] || rawName;
+
+        let count = 0;
+        const cached = modelElementData.get(uuid) || (model.uuid ? modelElementData.get(model.uuid) : undefined);
+        if (cached) {
+            count = cached.size;
+        } else if (model.properties) {
+            count = Object.keys(model.properties).length;
+        }
+
+        list.push({ uuid, name: cleanName, model, elementCount: count });
+    }
+    return list;
+}
+
+function extractAllElementsGlobal(filterModelId: string = 'ALL') {
     const allElements: any[] = [];
-    for (const [modelUUID, model] of loadedModels.entries()) {
+    const models = getUniqueLoadedModels();
+
+    for (const { uuid: modelUUID, name: modelName, model } of models) {
+        if (filterModelId && filterModelId !== 'ALL') {
+            if (modelUUID !== filterModelId && modelName !== filterModelId && String(model.uuid) !== filterModelId) {
+                continue;
+            }
+        }
         const modelAny = model as any;
 
         // Collect all expressIDs: from modelElementData (primary cache populated by classifyModel)
-        const idsFromCache = modelElementData.get(modelUUID);
+        const idsFromCache = modelElementData.get(modelUUID) || (model.uuid ? modelElementData.get(model.uuid) : undefined);
         const allIds = new Set<number>();
 
         if (idsFromCache && idsFromCache.size > 0) {
@@ -2987,6 +3020,7 @@ function extractAllElementsGlobal() {
 
             allElements.push({
                 modelUUID,
+                modelName,
                 expressID,
                 id: String(expressID),
                 name,
@@ -3009,7 +3043,7 @@ function extractAllElementsGlobal() {
 }
 
 function isSanitaryModelGlobal(): boolean {
-    const allElements = extractAllElementsGlobal();
+    const allElements = extractAllElementsGlobal(activeModelFilter);
     return allElements.some(el => {
         const text = [
             el.classification,
@@ -3043,8 +3077,8 @@ function isSanitaryModelGlobal(): boolean {
     });
 }
 
-function getFilterDataGlobal() {
-    const allElements = extractAllElementsGlobal();
+function getFilterDataGlobal(modelFilter: string = 'ALL') {
+    const allElements = extractAllElementsGlobal(modelFilter);
 
     const classMap = new Map<string, Set<string>>();
     const levelsSet = new Set<string>();
@@ -3124,27 +3158,44 @@ function getFilterDataGlobal() {
 }
 
 async function applyFiltersToViewerGlobal() {
-    const allElements = extractAllElementsGlobal();
+    const allElements = extractAllElementsGlobal('ALL');
     if (allElements.length === 0) return;
 
     const isSanitary = isSanitaryModelGlobal();
     const isTreeFilterActive = selectedClassifications.size > 0 || selectedCategories.size > 0;
+    const isLevelFilterActive = selectedLevels.size > 0;
+    const isMaterialFilterActive = selectedMaterials.size > 0;
+    const isPiloteFilterActive = selectedPilotes.size > 0;
+    const isDiameterFilterActive = isSanitary && selectedDiameter !== 'Todos';
+
+    const hasAnyFilter = isTreeFilterActive || isLevelFilterActive || isMaterialFilterActive || isPiloteFilterActive || isDiameterFilterActive;
 
     const visibleElements = allElements.filter(el => {
+        const isFromActiveModel = (activeModelFilter === 'ALL' || el.modelUUID === activeModelFilter || el.modelName === activeModelFilter);
+
+        if (activeModelFilter !== 'ALL') {
+            if (!isFromActiveModel) {
+                // If isolateActiveModel is enabled, hide other models; otherwise keep them visible
+                return !isolateActiveModel;
+            }
+        }
+
+        if (!hasAnyFilter) return true;
+
         const treeMatch = !isTreeFilterActive || 
             selectedCategories.has(el.category) || 
             selectedCategories.has(el.name) || 
             selectedClassifications.has(el.classification) ||
             Array.from(selectedCategories).some(c => (el.name && el.name.toLowerCase().includes(c.toLowerCase())) || (el.detail && el.detail.toLowerCase().includes(c.toLowerCase())));
-        const levelMatch = selectedLevels.size === 0 || selectedLevels.has(el.level);
-        const materialMatch = selectedMaterials.size === 0 || selectedMaterials.has(el.material);
-        const piloteMatch = selectedPilotes.size === 0 || selectedPilotes.has(el.pilote);
-        const diameterMatch = !isSanitary || selectedDiameter === 'Todos' || el.diameter === selectedDiameter;
+        const levelMatch = !isLevelFilterActive || selectedLevels.has(el.level);
+        const materialMatch = !isMaterialFilterActive || selectedMaterials.has(el.material);
+        const piloteMatch = !isPiloteFilterActive || selectedPilotes.has(el.pilote);
+        const diameterMatch = !isDiameterFilterActive || el.diameter === selectedDiameter;
 
         return treeMatch && levelMatch && materialMatch && piloteMatch && diameterMatch;
     });
 
-    const visibleSet = new Set(visibleElements.map(e => e.id));
+    const visibleSet = new Set(visibleElements.map(e => `${e.modelUUID}:${e.expressID}`));
 
     const visibleMap: Record<string, Set<number>> = {};
     const hiddenMap: Record<string, Set<number>> = {};
@@ -3155,7 +3206,7 @@ async function applyFiltersToViewerGlobal() {
         const modelUUID = el.modelUUID;
         const expressID = el.expressID;
 
-        if (visibleSet.has(el.id)) {
+        if (visibleSet.has(`${modelUUID}:${expressID}`)) {
             if (!visibleMap[modelUUID]) visibleMap[modelUUID] = new Set();
             visibleMap[modelUUID].add(expressID);
             hasVisible = true;
@@ -3182,7 +3233,8 @@ async function applyFiltersToViewerGlobal() {
 }
 
 function renderIntegratedClassificationUI(container: HTMLElement) {
-    const { tree, levels, materials, pilotes, diameters } = getFilterDataGlobal();
+    const uniqueModels = getUniqueLoadedModels();
+    const { tree, levels, materials, pilotes, diameters } = getFilterDataGlobal(activeModelFilter);
     const isSanitary = isSanitaryModelGlobal();
 
     container.innerHTML = '';
@@ -3190,8 +3242,147 @@ function renderIntegratedClassificationUI(container: HTMLElement) {
     const wrapper = document.createElement('div');
     wrapper.style.display = 'flex';
     wrapper.style.flexDirection = 'column';
-    wrapper.style.gap = '15px';
+    wrapper.style.gap = '12px';
     wrapper.style.padding = '10px';
+
+    // --- In-place expansion helpers for 0ms, zero-DOM-rebuild interaction ---
+    const toggleCategoryExpansion = (tNode: HTMLElement, catName: string, force?: boolean) => {
+        const ch = tNode.querySelector(':scope > .filter-tree-children') as HTMLElement | null;
+        const chv = tNode.querySelector(':scope > .filter-tree-header > i.fa-solid') as HTMLElement | null;
+        if (!ch || !chv) return;
+
+        const isCurrentlyCollapsed = ch.classList.contains('collapsed');
+        const shouldExpand = (force !== undefined) ? force : isCurrentlyCollapsed;
+
+        if (shouldExpand) {
+            ch.classList.remove('collapsed');
+            chv.classList.remove('fa-chevron-right');
+            chv.classList.add('fa-chevron-down');
+            expandedClassifications.add(catName);
+        } else {
+            ch.classList.add('collapsed');
+            chv.classList.remove('fa-chevron-down');
+            chv.classList.add('fa-chevron-right');
+            expandedClassifications.delete(catName);
+        }
+    };
+
+    const toggleSectionCollapse = (sectionDiv: HTMLElement, sectionKey: string) => {
+        const sHeader = sectionDiv.querySelector(':scope > .filter-section-header') as HTMLElement | null;
+        const sContent = sectionDiv.querySelector(':scope > .filter-section-content') as HTMLElement | null;
+        const sChevron = sHeader?.querySelector('i.fa-chevron-down, i.fa-chevron-right') as HTMLElement | null;
+        if (!sContent) return;
+
+        const isCurrentlyCollapsed = sContent.classList.contains('collapsed');
+        if (isCurrentlyCollapsed) {
+            sContent.classList.remove('collapsed');
+            sHeader?.classList.remove('collapsed');
+            if (sChevron) {
+                sChevron.classList.remove('fa-chevron-right');
+                sChevron.classList.add('fa-chevron-down');
+            }
+            collapsedSections.delete(sectionKey);
+        } else {
+            sContent.classList.add('collapsed');
+            sHeader?.classList.add('collapsed');
+            if (sChevron) {
+                sChevron.classList.remove('fa-chevron-down');
+                sChevron.classList.add('fa-chevron-right');
+            }
+            collapsedSections.add(sectionKey);
+        }
+    };
+
+    // --- Selector de Modelos Federados ---
+    if (uniqueModels.length > 0) {
+        const modelSelectorBox = document.createElement('div');
+        modelSelectorBox.className = 'filter-model-selector-box';
+        modelSelectorBox.style.cssText = `
+            background: rgba(30, 41, 59, 0.7);
+            border: 1px solid rgba(59, 130, 246, 0.3);
+            border-radius: 8px;
+            padding: 8px 10px;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.15);
+        `;
+
+        const modelSelectorHeader = document.createElement('div');
+        modelSelectorHeader.style.cssText = 'display: flex; justify-content: space-between; align-items: center; font-size: 11px; font-weight: 600; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.5px;';
+        modelSelectorHeader.innerHTML = `
+            <span style="display: flex; align-items: center; gap: 6px;"><i class="fa-solid fa-layer-group" style="color: #60a5fa;"></i> Modelo en Filtros</span>
+            <span class="badge" style="background: rgba(96, 165, 250, 0.2); color: #60a5fa; padding: 2px 8px; border-radius: 12px; font-size: 10px;">${uniqueModels.length} ${uniqueModels.length === 1 ? 'modelo' : 'modelos'}</span>
+        `;
+        modelSelectorBox.appendChild(modelSelectorHeader);
+
+        const modelSelect = document.createElement('select');
+        modelSelect.className = 'filter-model-select';
+        modelSelect.style.cssText = `
+            width: 100%;
+            background: #0f172a;
+            color: #f8fafc;
+            border: 1px solid #334155;
+            border-radius: 6px;
+            padding: 6px 8px;
+            font-size: 11px;
+            cursor: pointer;
+            outline: none;
+        `;
+
+        const totalElemCount = uniqueModels.reduce((acc, m) => acc + m.elementCount, 0);
+        const allOption = document.createElement('option');
+        allOption.value = 'ALL';
+        allOption.textContent = `🌐 Todos los modelos federados (${totalElemCount.toLocaleString()} elem)`;
+        allOption.selected = (activeModelFilter === 'ALL');
+        modelSelect.appendChild(allOption);
+
+        for (const m of uniqueModels) {
+            const opt = document.createElement('option');
+            opt.value = m.uuid;
+            opt.textContent = `📦 ${m.name} (${m.elementCount.toLocaleString()} elem)`;
+            if (activeModelFilter === m.uuid || activeModelFilter === m.name) {
+                opt.selected = true;
+            }
+            modelSelect.appendChild(opt);
+        }
+
+        modelSelect.addEventListener('change', async (e) => {
+            activeModelFilter = (e.target as HTMLSelectElement).value;
+            // Clear subcategory selections on model change
+            selectedClassifications.clear();
+            selectedCategories.clear();
+            selectedLevels.clear();
+            selectedMaterials.clear();
+            selectedPilotes.clear();
+            renderIntegratedClassificationUI(container);
+            await applyFiltersToViewerGlobal();
+        });
+        modelSelectorBox.appendChild(modelSelect);
+
+        if (uniqueModels.length > 1) {
+            const isolateRow = document.createElement('label');
+            isolateRow.style.cssText = 'display: flex; align-items: center; gap: 8px; font-size: 11px; color: #cbd5e1; cursor: pointer; user-select: none; padding-top: 2px;';
+
+            const isolateCheckbox = document.createElement('input');
+            isolateCheckbox.type = 'checkbox';
+            isolateCheckbox.checked = isolateActiveModel;
+            isolateCheckbox.style.cursor = 'pointer';
+            isolateCheckbox.addEventListener('change', async (e) => {
+                isolateActiveModel = (e.target as HTMLInputElement).checked;
+                await applyFiltersToViewerGlobal();
+            });
+
+            const isolateLabel = document.createElement('span');
+            isolateLabel.innerHTML = '<i class="fa-solid fa-crosshairs" style="color: #38bdf8; margin-right: 4px;"></i> Aislar modelo activo (ocultar los demás)';
+
+            isolateRow.appendChild(isolateCheckbox);
+            isolateRow.appendChild(isolateLabel);
+            modelSelectorBox.appendChild(isolateRow);
+        }
+
+        wrapper.appendChild(modelSelectorBox);
+    }
 
     const actionToolbar = document.createElement('div');
     actionToolbar.style.display = 'flex';
@@ -3219,12 +3410,13 @@ function renderIntegratedClassificationUI(container: HTMLElement) {
     expandAllBtn.style.padding = '6px 4px';
     expandAllBtn.style.fontSize = '10px';
     expandAllBtn.innerHTML = '<i class="fa-solid fa-square-plus"></i> Expandir';
-    expandAllBtn.title = 'Expandir todas las categorías';
+    expandAllBtn.title = 'Expandir todas las categorías (Instantáneo)';
     expandAllBtn.addEventListener('click', () => {
-        for (const n of tree) {
-            expandedClassifications.add(n.name);
-        }
-        renderIntegratedClassificationUI(container);
+        const allTreeNodes = wrapper.querySelectorAll<HTMLElement>('.filter-tree-node');
+        allTreeNodes.forEach(tn => {
+            const catName = tn.dataset.classificationName;
+            if (catName) toggleCategoryExpansion(tn, catName, true);
+        });
     });
 
     const collapseAllBtn = document.createElement('button');
@@ -3233,10 +3425,14 @@ function renderIntegratedClassificationUI(container: HTMLElement) {
     collapseAllBtn.style.padding = '6px 4px';
     collapseAllBtn.style.fontSize = '10px';
     collapseAllBtn.innerHTML = '<i class="fa-solid fa-square-minus"></i> Recoger';
-    collapseAllBtn.title = 'Recoger todas las categorías';
+    collapseAllBtn.title = 'Recoger todas las categorías (Instantáneo)';
     collapseAllBtn.addEventListener('click', () => {
+        const allTreeNodes = wrapper.querySelectorAll<HTMLElement>('.filter-tree-node');
+        allTreeNodes.forEach(tn => {
+            const catName = tn.dataset.classificationName;
+            if (catName) toggleCategoryExpansion(tn, catName, false);
+        });
         expandedClassifications.clear();
-        renderIntegratedClassificationUI(container);
     });
 
     actionToolbar.appendChild(resetBtn);
@@ -3279,14 +3475,12 @@ function renderIntegratedClassificationUI(container: HTMLElement) {
     classTitleDiv.appendChild(classColorBtn);
 
     const classChevron = document.createElement('i');
-    classChevron.className = 'fa-solid fa-chevron-down';
+    classChevron.className = isClassCollapsed ? 'fa-solid fa-chevron-right' : 'fa-solid fa-chevron-down';
 
     classHeader.appendChild(classTitleDiv);
     classHeader.appendChild(classChevron);
     classHeader.addEventListener('click', () => {
-        if (isClassCollapsed) collapsedSections.delete('classification');
-        else collapsedSections.add('classification');
-        renderIntegratedClassificationUI(container);
+        toggleSectionCollapse(classSection, 'classification');
     });
     classSection.appendChild(classHeader);
 
@@ -3297,6 +3491,7 @@ function renderIntegratedClassificationUI(container: HTMLElement) {
     for (const node of tree) {
         const treeNode = document.createElement('div');
         treeNode.className = 'filter-tree-node';
+        treeNode.dataset.classificationName = node.name;
 
         const allCatsSelected = node.categories.every(cat => selectedCategories.has(cat));
         const someCatsSelected = node.categories.some(cat => selectedCategories.has(cat));
@@ -3313,9 +3508,7 @@ function renderIntegratedClassificationUI(container: HTMLElement) {
         chevron.style.cursor = 'pointer';
         chevron.addEventListener('click', (e) => {
             e.stopPropagation();
-            if (isExpanded) expandedClassifications.delete(node.name);
-            else expandedClassifications.add(node.name);
-            renderIntegratedClassificationUI(container);
+            toggleCategoryExpansion(treeNode, node.name);
         });
         nodeHeader.appendChild(chevron);
 
@@ -3327,6 +3520,7 @@ function renderIntegratedClassificationUI(container: HTMLElement) {
         checkbox.indeterminate = someCatsSelected && !allCatsSelected;
         checkbox.addEventListener('change', async (e) => {
             const checked = (e.target as HTMLInputElement).checked;
+            checkbox.indeterminate = false;
             if (checked) {
                 selectedClassifications.add(node.name);
                 for (const cat of node.categories) {
@@ -3338,7 +3532,8 @@ function renderIntegratedClassificationUI(container: HTMLElement) {
                     selectedCategories.delete(cat);
                 }
             }
-            renderIntegratedClassificationUI(container);
+            const childInputs = childrenDiv.querySelectorAll<HTMLInputElement>('input[type="checkbox"]');
+            childInputs.forEach(ci => { ci.checked = checked; });
             await applyFiltersToViewerGlobal();
         });
         nodeHeader.appendChild(checkbox);
@@ -3347,9 +3542,7 @@ function renderIntegratedClassificationUI(container: HTMLElement) {
         labelText.textContent = node.name;
         labelText.style.flex = '1';
         labelText.addEventListener('click', () => {
-            if (isExpanded) expandedClassifications.delete(node.name);
-            else expandedClassifications.add(node.name);
-            renderIntegratedClassificationUI(container);
+            toggleCategoryExpansion(treeNode, node.name);
         });
         nodeHeader.appendChild(labelText);
 
@@ -3377,14 +3570,24 @@ function renderIntegratedClassificationUI(container: HTMLElement) {
                 const checked = (e.target as HTMLInputElement).checked;
                 if (checked) {
                     selectedCategories.add(category);
-                    if (node.categories.every(cat => selectedCategories.has(cat))) {
-                        selectedClassifications.add(node.name);
-                    }
                 } else {
                     selectedCategories.delete(category);
-                    selectedClassifications.delete(node.name);
                 }
-                renderIntegratedClassificationUI(container);
+                const allNowSelected = node.categories.every(cat => selectedCategories.has(cat));
+                const someNowSelected = node.categories.some(cat => selectedCategories.has(cat));
+                if (allNowSelected) {
+                    selectedClassifications.add(node.name);
+                    checkbox.checked = true;
+                    checkbox.indeterminate = false;
+                } else if (someNowSelected) {
+                    selectedClassifications.delete(node.name);
+                    checkbox.checked = false;
+                    checkbox.indeterminate = true;
+                } else {
+                    selectedClassifications.delete(node.name);
+                    checkbox.checked = false;
+                    checkbox.indeterminate = false;
+                }
                 await applyFiltersToViewerGlobal();
             });
 
@@ -3439,14 +3642,12 @@ function renderIntegratedClassificationUI(container: HTMLElement) {
         levelsTitleDiv.appendChild(levelsColorBtn);
 
         const levelsChevron = document.createElement('i');
-        levelsChevron.className = 'fa-solid fa-chevron-down';
+        levelsChevron.className = isLevelsCollapsed ? 'fa-solid fa-chevron-right' : 'fa-solid fa-chevron-down';
 
         levelsHeader.appendChild(levelsTitleDiv);
         levelsHeader.appendChild(levelsChevron);
         levelsHeader.addEventListener('click', () => {
-            if (isLevelsCollapsed) collapsedSections.delete('levels');
-            else collapsedSections.add('levels');
-            renderIntegratedClassificationUI(container);
+            toggleSectionCollapse(levelsSection, 'levels');
         });
         levelsSection.appendChild(levelsHeader);
 
@@ -3475,10 +3676,11 @@ function renderIntegratedClassificationUI(container: HTMLElement) {
             levelBtn.addEventListener('click', async () => {
                 if (selectedLevels.has(level)) {
                     selectedLevels.delete(level);
+                    levelBtn.classList.remove('active');
                 } else {
                     selectedLevels.add(level);
+                    levelBtn.classList.add('active');
                 }
-                renderIntegratedClassificationUI(container);
                 await applyFiltersToViewerGlobal();
             });
             levelsGrid.appendChild(levelBtn);
@@ -3525,14 +3727,12 @@ function renderIntegratedClassificationUI(container: HTMLElement) {
         materialsTitleDiv.appendChild(materialsColorBtn);
 
         const materialsChevron = document.createElement('i');
-        materialsChevron.className = 'fa-solid fa-chevron-down';
+        materialsChevron.className = isMaterialsCollapsed ? 'fa-solid fa-chevron-right' : 'fa-solid fa-chevron-down';
 
         materialsHeader.appendChild(materialsTitleDiv);
         materialsHeader.appendChild(materialsChevron);
         materialsHeader.addEventListener('click', () => {
-            if (isMaterialsCollapsed) collapsedSections.delete('materials');
-            else collapsedSections.add('materials');
-            renderIntegratedClassificationUI(container);
+            toggleSectionCollapse(materialsSection, 'materials');
         });
         materialsSection.appendChild(materialsHeader);
 
@@ -3561,10 +3761,11 @@ function renderIntegratedClassificationUI(container: HTMLElement) {
             matBtn.addEventListener('click', async () => {
                 if (selectedMaterials.has(mat)) {
                     selectedMaterials.delete(mat);
+                    matBtn.classList.remove('active');
                 } else {
                     selectedMaterials.add(mat);
+                    matBtn.classList.add('active');
                 }
-                renderIntegratedClassificationUI(container);
                 await applyFiltersToViewerGlobal();
             });
             materialsGrid.appendChild(matBtn);
@@ -3611,14 +3812,12 @@ function renderIntegratedClassificationUI(container: HTMLElement) {
         pilotesTitleDiv.appendChild(pilotesColorBtn);
 
         const pilotesChevron = document.createElement('i');
-        pilotesChevron.className = 'fa-solid fa-chevron-down';
+        pilotesChevron.className = isPilotesCollapsed ? 'fa-solid fa-chevron-right' : 'fa-solid fa-chevron-down';
 
         pilotesHeader.appendChild(pilotesTitleDiv);
         pilotesHeader.appendChild(pilotesChevron);
         pilotesHeader.addEventListener('click', () => {
-            if (isPilotesCollapsed) collapsedSections.delete('pilotes');
-            else collapsedSections.add('pilotes');
-            renderIntegratedClassificationUI(container);
+            toggleSectionCollapse(pilotesSection, 'pilotes');
         });
         pilotesSection.appendChild(pilotesHeader);
 
@@ -3647,10 +3846,11 @@ function renderIntegratedClassificationUI(container: HTMLElement) {
             pilBtn.addEventListener('click', async () => {
                 if (selectedPilotes.has(pil)) {
                     selectedPilotes.delete(pil);
+                    pilBtn.classList.remove('active');
                 } else {
                     selectedPilotes.add(pil);
+                    pilBtn.classList.add('active');
                 }
-                renderIntegratedClassificationUI(container);
                 await applyFiltersToViewerGlobal();
             });
             pilotesGrid.appendChild(pilBtn);
@@ -3671,12 +3871,10 @@ function renderIntegratedClassificationUI(container: HTMLElement) {
         if (isDiameterCollapsed) diameterHeader.classList.add('collapsed');
         diameterHeader.innerHTML = `
             <span>Diámetros</span>
-            <i class="fa-solid fa-chevron-down"></i>
+            <i class="fa-solid ${isDiameterCollapsed ? 'fa-chevron-right' : 'fa-chevron-down'}"></i>
         `;
         diameterHeader.addEventListener('click', () => {
-            if (isDiameterCollapsed) collapsedSections.delete('diameter');
-            else collapsedSections.add('diameter');
-            renderIntegratedClassificationUI(container);
+            toggleSectionCollapse(diameterSection, 'diameter');
         });
         diameterSection.appendChild(diameterHeader);
 
@@ -9485,6 +9683,7 @@ function buildBIMContextForAI() {
 
     return {
         totalElements: elements.length,
+        loadedModels: getUniqueLoadedModels().map(m => ({ name: m.name, uuid: m.uuid, elements: m.elementCount })),
         selectedElements,
         hasSelection: selectedElements.length > 0,
         classifications,
@@ -9846,7 +10045,8 @@ async function executeNoraAI3DAction(action: NoraAIAction): Promise<string> {
     // 5. OCULTAR ELEMENTOS (HIDE)
     // =========================================================================
     if (action.type === 'hide') {
-        const allElements = extractAllElementsGlobal();
+        const allElements = extractAllElementsGlobal('ALL');
+        const models = (action.models || (action.modelName ? [action.modelName] : [])).map(m => m.toLowerCase());
         const classifs = action.classifications || [];
         const cats = action.categories || [];
         const types = action.elementTypes || [];
@@ -9881,7 +10081,14 @@ async function executeNoraAI3DAction(action: NoraAIAction): Promise<string> {
                 matchesNumeric = checkNumericCondition(el, action.numericFilter);
             }
 
-            let shouldHide = (matchesSemantic || matchesClassif || matchesCat || matchesType || matchesLvl || matchesMat || matchesPil) && matchesNumeric;
+            const matchesModel = models.length === 0 || models.some(m => (el.modelName && el.modelName.toLowerCase().includes(m)) || (el.modelUUID && el.modelUUID.toLowerCase().includes(m)));
+            const hasSpecificTarget = !!action.semanticTarget || classifs.length > 0 || cats.length > 0 || types.length > 0 || lvls.length > 0 || mats.length > 0 || pils.length > 0;
+            let shouldHide = false;
+            if (models.length > 0 && !hasSpecificTarget) {
+                shouldHide = matchesModel && matchesNumeric;
+            } else {
+                shouldHide = (matchesSemantic || matchesClassif || matchesCat || matchesType || matchesLvl || matchesMat || matchesPil) && matchesNumeric && matchesModel;
+            }
             if (action.invertMatch) shouldHide = !shouldHide;
 
             if (shouldHide) {
@@ -9905,7 +10112,8 @@ async function executeNoraAI3DAction(action: NoraAIAction): Promise<string> {
     if (action.type === 'isolate' || action.type === 'filter') {
         resetFilters();
 
-        const allElements = extractAllElementsGlobal();
+        const allElements = extractAllElementsGlobal('ALL');
+        const models = (action.models || (action.modelName ? [action.modelName] : [])).map(m => m.toLowerCase());
         const classifs = action.classifications || [];
         const cats = action.categories || [];
         const types = action.elementTypes || [];
@@ -9965,7 +10173,8 @@ async function executeNoraAI3DAction(action: NoraAIAction): Promise<string> {
                 matchesNumeric = checkNumericCondition(el, action.numericFilter);
             }
 
-            let isMatch = matchesSemantic && matchesClassif && matchesCat && matchesType && matchesLvl && matchesMat && matchesPil && matchesNumeric;
+            const matchesModel = models.length === 0 || models.some(m => (el.modelName && el.modelName.toLowerCase().includes(m)) || (el.modelUUID && el.modelUUID.toLowerCase().includes(m)));
+            let isMatch = matchesSemantic && matchesClassif && matchesCat && matchesType && matchesLvl && matchesMat && matchesPil && matchesNumeric && matchesModel;
             if (action.invertMatch) isMatch = !isMatch;
 
             if (isMatch) {

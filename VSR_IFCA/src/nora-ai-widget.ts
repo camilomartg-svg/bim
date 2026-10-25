@@ -13,6 +13,8 @@ export interface NoraAIOptions {
 
 export interface NoraAIAction {
     type: 'isolate' | 'hide' | 'show_all' | 'filter' | 'color' | 'camera' | 'section' | 'none';
+    models?: string[];
+    modelName?: string;
     classifications?: string[];
     categories?: string[];
     elementTypes?: string[];
@@ -497,6 +499,9 @@ export class NoraAIWidget {
             const systemPrompt = `
 Eres "nora AI Copilot", la asistente experta de Inteligencia Artificial para el visor BIM y CDE de Nora.
 
+MODELOS FEDERADOS CARGADOS EN EL VISOR:
+${JSON.stringify((bimContext.loadedModels || []).map((m: any) => ({ name: m.name, elements: m.elements })), null, 2)}
+
 ESTRUCTURA DE CLASIFICACIÓN DEL PROYECTO (Árbol principal del visor):
 ${JSON.stringify(bimContext.classifications || bimContext.categories || {}, null, 2)}
 
@@ -538,8 +543,9 @@ REGLAS CRÍTICAS DE RESPUESTA:
    - "VER EL INTERIOR": Si pide ver el interior u ocultar la fachada, usa action.type = "hide" con action.semanticTarget = "facade".
 5. Si el usuario pide algo que no existe en el modelo (por ejemplo "ventanas"), pero el modelo tiene un equivalente obvio (como "Muros Cortina" / fachada vidriada), aíslalos y acláralo en una sola oración.
 6. REFERENCIAS CONTEXTUALES: Si el usuario dice "aisla los de ese mismo tipo", "del mismo tipo", "iguales a este", etc., toma el nombre/tipo (name) del ELEMENTO SELECCIONADO y aísla con action.elementTypes: [name].
-7. NO incluyas advertencias de auditoría a menos que el usuario pregunte específicamente por anomalías o auditoría.
-8. NO agregues tips o consejos no solicitados.
+7. MODELOS FEDERADOS: Si el usuario especifica o menciona un modelo en particular (ej: "aisla arquitectura", "muestra solo estructura", "oculta arquitectura", "columnas de estructura"), incluye models: ["NOMBRE_MODELO"] en la acción (ej: ["ARQUITECTURA"] o ["ESTRUCTURA"]).
+8. NO incluyas advertencias de auditoría a menos que el usuario pregunte específicamente por anomalías o auditoría.
+9. NO agregues tips o consejos no solicitados.
 
 CAPACIDADES Y ACCIONES:
 1. CONTROL DE VISIBILIDAD Y FILTRADO MULTICRITERIO:
@@ -562,6 +568,7 @@ SIEMPRE responde ÚNICAMENTE en formato JSON:
   "answer": "Respuesta muy concisa y directa de 1-2 oraciones...",
   "action": {
     "type": "isolate" | "hide" | "show_all" | "filter" | "color" | "camera" | "section" | "none",
+    "models": ["ARQUITECTURA" | "ESTRUCTURA"],
     "semanticTarget": "facade" | "interior" | "doors_windows" | "alfajias" | "balconies" | "windows" | "facade_walls",
     "classifications": ["NOMBRE_EXACTO_DEL_CONTEXTO"],
     "categories": [],
@@ -1011,6 +1018,59 @@ SIEMPRE responde ÚNICAMENTE en formato JSON:
         const matchedClassifications: string[] = [];
 
         // =========================================================================
+        // 8.00 RECONOCIMIENTO Y SEPARACIÓN DE MODELOS FEDERADOS
+        // =========================================================================
+        const loadedModelsList: Array<{ name: string; uuid: string; elements: number }> = bimContext?.loadedModels || [];
+        let matchedModelName: string | undefined = undefined;
+
+        for (const lm of loadedModelsList) {
+            const cleanM = lm.name.toLowerCase().replace(/\.(frag|ifc)$/i, '');
+            if (qNorm.includes(cleanM)) {
+                matchedModelName = lm.name;
+                break;
+            }
+        }
+        if (!matchedModelName) {
+            if (qNorm.includes('arquitectura') || qNorm.includes('arqui')) {
+                matchedModelName = loadedModelsList.find(m => /arquitectura/i.test(m.name))?.name || 'ARQUITECTURA';
+            } else if (qNorm.includes('estructura') || qNorm.includes('estruct')) {
+                matchedModelName = loadedModelsList.find(m => /estructura/i.test(m.name))?.name || 'ESTRUCTURA';
+            } else if (qNorm.includes('hidrosanitario') || qNorm.includes('sanitario') || qNorm.includes('plomeria')) {
+                matchedModelName = loadedModelsList.find(m => /sanitari|hidro/i.test(m.name))?.name || 'HIDROSANITARIO';
+            } else if (qNorm.includes('electrico') || qNorm.includes('elect')) {
+                matchedModelName = loadedModelsList.find(m => /elect/i.test(m.name))?.name || 'ELECTRICO';
+            }
+        }
+
+        const isOnlyModelQuery = matchedModelName && (
+            /(?:aisla|aislar|muestra\s+solo|deja\s+solo|ver\s+solo|solo\s+el\s+modelo|modelo\s+de)\s*(?:el\s*modelo\s*)?(?:de\s*)?(?:arquitectura|estructura|hidrosanitario|electrico)/i.test(qNorm) ||
+            /^(?:arquitectura|estructura|solo\s+arquitectura|solo\s+estructura)$/i.test(qNorm)
+        ) && !qNorm.includes('muros') && !qNorm.includes('columnas') && !qNorm.includes('vigas') && !qNorm.includes('puertas') && !qNorm.includes('ventanas') && !qNorm.includes('pisos');
+
+        if (isOnlyModelQuery && matchedModelName) {
+            return {
+                answer: `📦 He aislado el modelo **${matchedModelName}** en el visor 3D, ocultando las demás disciplinas.`,
+                action: {
+                    type: 'isolate',
+                    models: [matchedModelName],
+                    message: `Modelo ${matchedModelName} aislado`
+                }
+            };
+        }
+
+        const isHideModelQuery = matchedModelName && /(?:oculta|ocultar|apaga|apagar|quitar|quita)\s*(?:el\s*modelo\s*)?(?:de\s*)?(?:arquitectura|estructura|hidrosanitario|electrico)/i.test(qNorm) && !qNorm.includes('muros') && !qNorm.includes('columnas') && !qNorm.includes('vigas');
+        if (isHideModelQuery && matchedModelName) {
+            return {
+                answer: `👁️ He ocultado el modelo **${matchedModelName}** del visor 3D.`,
+                action: {
+                    type: 'hide',
+                    models: [matchedModelName],
+                    message: `Modelo ${matchedModelName} ocultado`
+                }
+            };
+        }
+
+        // =========================================================================
         // 8.0 RECONOCIMIENTO INTELIGENTE DE ELEMENTOS DE FACHADA, PUERTAS VENTANAS Y ALFAJÍAS
         // =========================================================================
         const isPuertaVentanaQuery = /(?:puerta[s]?\s*ventana[s]?|puertaventana[s]?|puerta[s]?\s*de\s*(?:la\s*)?fachada|puerta[s]?\s*balc[oó]n|puerta[s]?\s*vidriera[s]?|puerta[s]?\s*corrediza[s]?|puerta[s]?\s*exterior(?:es)?)/i.test(qNorm);
@@ -1270,9 +1330,10 @@ SIEMPRE responde ÚNICAMENTE en formato JSON:
             // CASO A: OCULTAR
             if (isHide) {
                 return {
-                    answer: `👁️ He ocultado **${classifStr || 'elementos'}**${lvlStr ? ' en **' + lvlStr + '**' : ''}${numDesc}${invertDesc} (${totalCount} uds).`,
+                    answer: `👁️ He ocultado **${classifStr || 'elementos'}**${matchedModelName ? ' de **' + matchedModelName + '**' : ''}${lvlStr ? ' en **' + lvlStr + '**' : ''}${numDesc}${invertDesc} (${totalCount} uds).`,
                     action: {
                         type: 'hide',
+                        models: matchedModelName ? [matchedModelName] : undefined,
                         classifications: effectiveClassifications.length > 0 ? effectiveClassifications : undefined,
                         levels: effectiveLevels.length > 0 ? effectiveLevels : undefined,
                         materials: effectiveMaterials.length > 0 ? effectiveMaterials : undefined,
@@ -1304,10 +1365,11 @@ SIEMPRE responde ÚNICAMENTE en formato JSON:
             const metricsStr = metricsSummary.length > 0 ? ` (${metricsSummary.join(' | ')})` : '';
 
             let answerStr = '';
+            const modelPart = matchedModelName ? ` de **${matchedModelName}**` : '';
             if (isAllWalls || qNorm.includes('todos los muros')) {
-                answerStr = `🧱 He aislado **${totalCount} muros** en el modelo 3D${metricsStr}.`;
+                answerStr = `🧱 He aislado **${totalCount} muros**${modelPart} en el modelo 3D${metricsStr}.`;
             } else {
-                answerStr = `🎯 He aislado **${classifStr || 'elementos'}**${lvlStr ? ' en **' + lvlStr + '**' : ''}${matStr ? ' (' + matStr + ')' : ''}${numDesc}: **${totalCount} uds**${metricsStr}.`;
+                answerStr = `🎯 He aislado **${classifStr || 'elementos'}**${modelPart}${lvlStr ? ' en **' + lvlStr + '**' : ''}${matStr ? ' (' + matStr + ')' : ''}${numDesc}: **${totalCount} uds**${metricsStr}.`;
             }
 
             // Solo mostrar auditoría si el usuario preguntó por anomalías o inconsistencias
@@ -1323,13 +1385,14 @@ SIEMPRE responde ÚNICAMENTE en formato JSON:
                 answer: answerStr,
                 action: {
                     type: 'isolate',
+                    models: matchedModelName ? [matchedModelName] : undefined,
                     classifications: effectiveClassifications.length > 0 ? effectiveClassifications : undefined,
                     levels: effectiveLevels.length > 0 ? effectiveLevels : undefined,
                     materials: effectiveMaterials.length > 0 ? effectiveMaterials : undefined,
                     numericFilter,
                     invertMatch: isNegationQuery,
                     cameraView: 'focus',
-                    message: `Aislado: ${classifStr || ''} ${lvlStr || ''} ${matStr || ''}`.trim()
+                    message: `Aislado: ${classifStr || ''} ${matchedModelName || ''} ${lvlStr || ''} ${matStr || ''}`.trim()
                 }
             };
         }
