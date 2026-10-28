@@ -17,8 +17,8 @@ export class ModelCardSettings extends FormattingSettingsCard {
     defaultFragId = new formattingSettings.TextInput({
         name: "defaultFragId",
         displayName: "ID Archivo FRAG (Google Drive)",
-        placeholder: "Pega el ID del archivo .frag",
-        value: ""
+        placeholder: "1PG0-nKvsO0AnsddgwLSlGpJRtdCDMBdp",
+        value: "1PG0-nKvsO0AnsddgwLSlGpJRtdCDMBdp"
     });
 
     defaultJsonId = new formattingSettings.TextInput({

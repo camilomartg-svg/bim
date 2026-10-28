@@ -8,12 +8,12 @@
     {
       "displayName": "ID Modelo FRAG (Opcional)",
       "name": "fragId",
-      "kind": "Grouping"
+      "kind": "GroupingOrMeasure"
     },
     {
       "displayName": "ID Metadata JSON (Opcional)",
       "name": "jsonId",
-      "kind": "Grouping"
+      "kind": "GroupingOrMeasure"
     }
   ],
   "objects": {
@@ -60,6 +60,32 @@
   },
   "dataViewMappings": [
     {
+      "table": {
+        "rows": {
+          "select": [
+            {
+              "for": {
+                "in": "expressId"
+              }
+            },
+            {
+              "for": {
+                "in": "fragId"
+              }
+            },
+            {
+              "for": {
+                "in": "jsonId"
+              }
+            }
+          ],
+          "dataReductionAlgorithm": {
+            "window": {
+              "count": 30000
+            }
+          }
+        }
+      },
       "categorical": {
         "categories": {
           "for": {

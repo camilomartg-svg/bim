@@ -25,6 +25,8 @@ export class Visual implements IVisual {
     private pendingFilter: any = null;
     private lastSentIdsJson: string = "";
 
+    private statusBadge: HTMLDivElement;
+
     constructor(options: VisualConstructorOptions) {
         this.events = options.host.eventService;
         this.formattingSettingsService = new FormattingSettingsService();
@@ -78,8 +80,13 @@ export class Visual implements IVisual {
             <div style="font-size: 13px; color: #94a3b8;">Cargando modelo 3D...</div>
         `;
 
+        this.statusBadge = document.createElement("div");
+        this.statusBadge.style.cssText = "position:absolute; bottom:8px; left:8px; z-index:20; background:rgba(15,23,42,0.85); color:#38bdf8; font-family:Segoe UI, sans-serif; font-size:11px; padding:3px 8px; border-radius:6px; border:1px solid rgba(56,189,248,0.3); pointer-events:none; transition:opacity 0.5s ease;";
+        this.statusBadge.innerText = "NoraBIM 3D: Inicializando...";
+
         this.container.appendChild(this.iframe);
         this.container.appendChild(this.loader);
+        this.container.appendChild(this.statusBadge);
         this.target.appendChild(this.container);
 
         this.iframe.onload = () => {
@@ -229,10 +236,23 @@ export class Visual implements IVisual {
                 }
             }
 
+            // Ensure fragId has a valid fallback
+            if (!fragId) {
+                fragId = (modelSettings?.defaultFragId?.value || "").trim() || "1PG0-nKvsO0AnsddgwLSlGpJRtdCDMBdp";
+            }
+
+            if (this.statusBadge) {
+                this.statusBadge.innerText = `NoraBIM 3D: ${fragId ? 'Conectado (' + fragId.slice(0, 8) + '...)' : 'Sin ID'} | ${expressIds.length} elem`;
+                this.statusBadge.style.opacity = "1";
+                setTimeout(() => {
+                    if (this.statusBadge) this.statusBadge.style.opacity = "0.4";
+                }, 4000);
+            }
+
             // Build target URL with version tag to bypass stale WebView2 caching
             const url = new URL(viewerBaseUrl);
             url.searchParams.set("embed", "true");
-            url.searchParams.set("_v", "20261028-07");
+            url.searchParams.set("_v", "20261028-08");
             if (fragId) url.searchParams.set("fileId", fragId);
             if (jsonId) url.searchParams.set("jsonId", jsonId);
             if (forceLogin) url.searchParams.set("forceLogin", "true");

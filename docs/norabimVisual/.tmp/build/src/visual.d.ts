@@ -15,6 +15,7 @@ export declare class Visual implements IVisual {
     private iframeLoaded;
     private pendingFilter;
     private lastSentIdsJson;
+    private statusBadge;
     constructor(options: VisualConstructorOptions);
     private sendPostMessage;
     update(options: VisualUpdateOptions): void;
