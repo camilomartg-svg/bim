@@ -12892,16 +12892,56 @@ setupViewpoints();
 
 
 // --- User Authentication Setup (Reused from home.html) ---
+function renderFloatingUserBadge(userAccount: any) {
+    let badge = document.getElementById('nora-floating-auth-badge');
+    if (!badge) {
+        badge = document.createElement('div');
+        badge.id = 'nora-floating-auth-badge';
+        badge.style.cssText = 'position:fixed; top:12px; right:12px; z-index:9999; display:flex; align-items:center; gap:8px; background:rgba(15, 23, 42, 0.88); border:1px solid rgba(148, 163, 184, 0.3); border-radius:20px; padding:6px 14px; color:#f8fafc; font-family:Inter, Segoe UI, sans-serif; font-size:12px; backdrop-filter:blur(8px); box-shadow:0 4px 14px rgba(0,0,0,0.35); user-select:none;';
+        document.body.appendChild(badge);
+    }
+    if (userAccount) {
+        const name = userAccount.name || userAccount.username || 'Usuario';
+        const role = userAccount.role || 'Usuario';
+        const initial = name.charAt(0).toUpperCase();
+        badge.innerHTML = `
+            <div style="width:22px; height:22px; border-radius:50%; background:#0284c7; display:flex; align-items:center; justify-content:center; font-weight:700; font-size:11px; color:#fff;">
+                ${initial}
+            </div>
+            <span style="font-weight:600; max-width:140px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${name}</span>
+            <span style="font-size:10px; color:#38bdf8; background:rgba(56, 189, 248, 0.12); padding:2px 6px; border-radius:10px; border:1px solid rgba(56, 189, 248, 0.25);">${role}</span>
+            <button id="nora-floating-logout-btn" title="Cerrar sesión para probar otro usuario" style="background:none; border:none; color:#f87171; cursor:pointer; font-size:13px; margin-left:4px; padding:2px 4px; display:flex; align-items:center;" onmouseover="this.style.color='#ef4444'" onmouseout="this.style.color='#f87171'">
+                <i class="fa-solid fa-right-from-bracket"></i>
+            </button>
+        `;
+        document.getElementById('nora-floating-logout-btn')?.addEventListener('click', () => {
+            if (confirm('¿Cerrar sesión de nora BIM? Se solicitarán credenciales nuevamente.')) {
+                sessionStorage.removeItem('userAccount');
+                localStorage.removeItem('userAccount');
+                window.location.reload();
+            }
+        });
+    } else {
+        badge.innerHTML = `
+            <button id="nora-floating-login-btn" style="background:#0284c7; border:none; color:#fff; border-radius:12px; padding:5px 12px; font-size:12px; font-weight:600; cursor:pointer; display:flex; align-items:center; gap:6px;">
+                <i class="fa-solid fa-lock"></i> Iniciar Sesión
+            </button>
+        `;
+        document.getElementById('nora-floating-login-btn')?.addEventListener('click', () => {
+            enforceAuthenticatedAccess();
+        });
+    }
+}
+
 function setupUserAuthentication() {
     console.log('[Auth] Setting up user authentication...');
-    const userContainer = document.getElementById('user-profile-container');
+    const userAccount = getStoredUserAccount();
+    renderFloatingUserBadge(userAccount);
 
+    const userContainer = document.getElementById('user-profile-container');
     if (!userContainer) {
-        console.warn('[Auth] user-profile-container not found');
         return;
     }
-
-    const userAccount = getStoredUserAccount();
 
     if (userAccount) {
         try {
