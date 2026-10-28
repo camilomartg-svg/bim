@@ -54,7 +54,7 @@ export class Visual implements IVisual {
         this.iframe.style.border = "none";
         this.iframe.style.display = "block";
         this.iframe.setAttribute("allow", "accelerometer; autoplay; encrypted-media; gyroscope; picture-in-picture");
-        this.iframe.setAttribute("sandbox", "allow-scripts allow-same-origin allow-forms allow-popups allow-downloads");
+        // Sandbox removed for unrestricted 3D model streaming in WebView2
 
         this.loader = document.createElement("div");
         this.loader.className = "norabim-loader";
@@ -108,10 +108,20 @@ export class Visual implements IVisual {
 
         window.addEventListener("message", (event) => {
             try {
-                if (event.data && typeof event.data === "object" && event.data.type === "NORA_VIEWER_READY") {
+                if (!event.data || typeof event.data !== "object") return;
+                if (event.data.type === "NORA_VIEWER_READY") {
                     if (this.pendingFilter) {
                         this.sendPostMessage(this.pendingFilter);
                         this.pendingFilter = null;
+                    }
+                } else if (event.data.type === "NORA_VIEWER_STATUS") {
+                    if (this.statusBadge && event.data.text) {
+                        this.statusBadge.innerText = (event.data.isError ? "⚠️ " : "⚡ ") + event.data.text;
+                        this.statusBadge.style.opacity = "1";
+                        if (event.data.isError) {
+                            this.statusBadge.style.borderColor = "#ef4444";
+                            this.statusBadge.style.color = "#f87171";
+                        }
                     }
                 }
             } catch (e) {
@@ -252,7 +262,7 @@ export class Visual implements IVisual {
             // Build target URL with version tag to bypass stale WebView2 caching
             const url = new URL(viewerBaseUrl);
             url.searchParams.set("embed", "true");
-            url.searchParams.set("_v", "20261028-08");
+            url.searchParams.set("_v", "20261028-09");
             if (fragId) url.searchParams.set("fileId", fragId);
             if (jsonId) url.searchParams.set("jsonId", jsonId);
             if (forceLogin) url.searchParams.set("forceLogin", "true");

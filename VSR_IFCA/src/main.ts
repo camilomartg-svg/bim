@@ -1534,6 +1534,32 @@ let propertiesTableElement: HTMLElement | null = null;
 function logToScreen(msg: string, isError = false) {
     if (isError) console.error(msg);
     else console.log(msg);
+
+    try {
+        const isEmbed = window.location.search.includes('embed=true') || (window !== window.parent) || window.location.search.includes('fileId');
+        if (isEmbed) {
+            let hud = document.getElementById('nora-embed-hud');
+            if (!hud) {
+                hud = document.createElement('div');
+                hud.id = 'nora-embed-hud';
+                hud.style.cssText = 'position:fixed; top:8px; left:8px; z-index:999999; font-family:Segoe UI, sans-serif; font-size:11px; padding:4px 10px; border-radius:6px; pointer-events:none; transition:all 0.3s ease; box-shadow:0 4px 12px rgba(0,0,0,0.5); max-width:90vw; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;';
+                document.body.appendChild(hud);
+            }
+            hud.style.background = isError ? 'rgba(220, 38, 38, 0.92)' : 'rgba(15, 23, 42, 0.88)';
+            hud.style.color = isError ? '#ffffff' : '#38bdf8';
+            hud.style.border = isError ? '1px solid #ef4444' : '1px solid rgba(56, 189, 248, 0.4)';
+            hud.innerText = (isError ? '⚠️ ' : '⚡ ') + msg;
+            hud.style.opacity = '1';
+
+            if (!isError && (msg.includes('completado') || msg.includes('Cargado') || msg.includes('listo') || msg.includes('análisis') || msg.includes('Mallas:'))) {
+                setTimeout(() => { if (hud) hud.style.opacity = '0.35'; }, 6000);
+            }
+
+            if (window.parent && window.parent !== window) {
+                window.parent.postMessage({ type: 'NORA_VIEWER_STATUS', text: msg, isError }, '*');
+            }
+        }
+    } catch (_) {}
 }
 
 /**
@@ -1984,11 +2010,26 @@ const fetchDriveText = async (id: string): Promise<string> => {
 
 const loadDriveFragBuffer = async (fragId: string): Promise<ArrayBuffer> => {
     const dbKey = `drive:frag:${fragId}`;
-    const cached = await loadFromIndexedDB(dbKey);
-    if (cached && cached.byteLength > 0) return cached;
+    try {
+        const cached = await loadFromIndexedDB(dbKey);
+        if (cached && cached.byteLength > 100) {
+            logToScreen(`Geometría desde caché local (${(cached.byteLength / 1024 / 1024).toFixed(2)} MB)`);
+            return cached;
+        }
+    } catch (e) {
+        console.warn('[IDB] Error leyendo caché:', e);
+    }
+
+    logToScreen(`Descargando modelo 3D (${fragId})...`);
     const bytes = await fetchDriveBytes(fragId);
+    if (!bytes || bytes.byteLength === 0) {
+        throw new Error(`Descarga vacía para fragId: ${fragId}`);
+    }
+    logToScreen(`Descarga completada (${(bytes.byteLength / 1024 / 1024).toFixed(2)} MB). Procesando...`);
     const buffer = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
-    await saveToIndexedDB(dbKey, buffer);
+    try {
+        await saveToIndexedDB(dbKey, buffer);
+    } catch (_) {}
     return buffer;
 };
 
@@ -5230,6 +5271,17 @@ function renderGuestMode(container: HTMLElement) {
 function enforceAuthenticatedAccess(forcePrompt = false) {
     const app = document.getElementById('app');
     if (!app) return;
+    const urlParams = new URLSearchParams(window.location.search);
+    const isEmbedMode = urlParams.get('embed') === 'true' || window !== window.parent || !!urlParams.get('fileId');
+    if (isEmbedMode) {
+        const existingGate = document.getElementById('auth-gate-overlay');
+        existingGate?.remove();
+        app.style.pointerEvents = '';
+        app.style.userSelect = '';
+        app.style.filter = '';
+        document.body.style.overflow = '';
+        return;
+    }
     const userAccount = forcePrompt ? null : getStoredUserAccount();
     const existingGate = document.getElementById('auth-gate-overlay');
 
@@ -5429,10 +5481,38 @@ const folderStates: Record<string, boolean> = {};
 // Load models from JSON and populate sidebar
 function fitModelToScreen() {
     try {
-        const box = getModelBox();
+        if (!world || !world.camera || !world.camera.controls) return;
+        if (world.renderer) {
+            try { world.renderer.resize(); } catch (_) {}
+        }
+        try { world.camera.updateAspect(); } catch (_) {}
+
+        world.scene.three.updateMatrixWorld(true);
+
+        const box = new THREE.Box3();
+        let meshCount = 0;
+        for (const [, model] of loadedModels.entries()) {
+            if (model && model.object) {
+                model.object.updateMatrixWorld(true);
+                box.expandByObject(model.object);
+                meshCount++;
+            }
+        }
+
+        if (box.isEmpty()) {
+            const boxer = components.get(OBC.BoundingBoxer);
+            boxer.list.clear();
+            boxer.addFromModels();
+            const b = boxer.get();
+            if (!b.isEmpty()) box.copy(b);
+            boxer.list.clear();
+        }
+
         const sphere = new THREE.Sphere();
         box.getBoundingSphere(sphere);
-        if (sphere.radius > 0.1 && world && world.camera && world.camera.controls) {
+        logToScreen(`Centrado 3D: ${meshCount} mallas, r=${sphere.radius.toFixed(1)}, c=(${sphere.center.x.toFixed(0)},${sphere.center.y.toFixed(0)},${sphere.center.z.toFixed(0)})`);
+
+        if (sphere.radius > 0.05) {
             world.camera.controls.fitToSphere(sphere, true);
         }
     } catch (e) {
@@ -13135,13 +13215,14 @@ function setupPowerBIIntegration() {
     let isEmbed = false;
     try {
         const params = new URLSearchParams(window.location.search);
-        isEmbed = params.get('embed') === 'true' || (window !== window.parent);
+        isEmbed = params.get('embed') === 'true' || (window !== window.parent) || !!params.get('fileId');
     } catch (_) {
         isEmbed = true;
     }
 
     if (isEmbed) {
         document.body.classList.add('nora-embed-mode');
+        document.documentElement.classList.add('nora-embed-mode');
         const style = document.createElement('style');
         style.textContent = `
             .nora-embed-mode #nora-top-header,
@@ -13152,7 +13233,12 @@ function setupPowerBIIntegration() {
             .nora-embed-mode #sidebar-resizer,
             .nora-embed-mode .sidebar-toggle-btn,
             .nora-embed-mode #nora-floating-auth-badge,
-            .nora-embed-mode #auth-gate-overlay {
+            .nora-embed-mode #auth-gate-overlay,
+            .nora-embed-mode #properties-panel,
+            .nora-embed-mode #properties-resizer,
+            .nora-embed-mode #properties-toggle,
+            .nora-embed-mode #right-tab-nora,
+            .nora-embed-mode #update-banner {
                 display: none !important;
             }
             .nora-embed-mode #app {
@@ -13161,13 +13247,32 @@ function setupPowerBIIntegration() {
             }
             .nora-embed-mode #viewer-container {
                 left: 0 !important;
-                width: 100% !important;
+                right: 0 !important;
+                width: 100vw !important;
+                height: 100vh !important;
             }
             #global-error-box {
                 display: none !important;
             }
         `;
         document.head.appendChild(style);
+
+        // Auto resize listener for Power BI iframe resizes
+        window.addEventListener('resize', () => {
+            try {
+                if (world && world.renderer && world.camera) {
+                    world.renderer.resize();
+                    world.camera.updateAspect();
+                }
+            } catch (_) {}
+        });
+
+        window.addEventListener('error', (ev) => {
+            logToScreen('Error iframe: ' + (ev.message || ev.error), true);
+        });
+        window.addEventListener('unhandledrejection', (ev) => {
+            logToScreen('Promesa iframe: ' + (ev.reason?.message || ev.reason), true);
+        });
     }
 
     try {
@@ -13221,15 +13326,33 @@ function setupPowerBIIntegration() {
                 if (expressIds.length === 0) {
                     await hider.set(true);
                     highlighter.clear('select');
+                    logToScreen('Power BI: Todos los elementos visibles');
                     return;
                 }
 
+                // Verificar si los expressIds corresponden a geometrías 3D reales
+                let hasMatchingGeometry = false;
                 const filterMap: Record<string, number[]> = {};
                 for (const [key, model] of loadedModels.entries()) {
                     if (model && model.uuid) {
                         filterMap[model.uuid] = expressIds;
+                        if (typeof model.getFragmentMap === 'function') {
+                            try {
+                                const fMap = model.getFragmentMap(expressIds);
+                                if (fMap && Object.keys(fMap).length > 0) {
+                                    hasMatchingGeometry = true;
+                                }
+                            } catch (_) {}
+                        }
                     }
                     filterMap[key] = expressIds;
+                }
+
+                // Si los IDs no coinciden con ninguna malla (ej. son IDs de IfcMaterial o metadatos), no ocultar el modelo
+                if (!hasMatchingGeometry) {
+                    logToScreen(`Power BI: ${expressIds.length} elementos sin malla 3D directa. Modelo visible.`);
+                    await hider.set(true);
+                    return;
                 }
 
                 if (shouldIsolate) {
@@ -13246,6 +13369,7 @@ function setupPowerBIIntegration() {
                 } catch (err) {
                     console.warn('[PowerBI Integration] Highlight error:', err);
                 }
+                logToScreen(`Power BI filtro aplicado: ${expressIds.length} elementos`);
             }
         } catch (e) {
             console.error('[PowerBI Integration] Error handling message:', e);

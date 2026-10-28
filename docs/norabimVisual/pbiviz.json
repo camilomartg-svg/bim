@@ -4,7 +4,7 @@
     "displayName": "NoraBIM 3D Viewer",
     "guid": "norabimVisual2534212955184434B99FE295482A3C03",
     "visualClassName": "Visual",
-    "version": "1.0.0.7",
+    "version": "1.0.0.8",
     "description": "Visor 3D interactivo para modelos FRAG de NoraBIM conectado a Power BI",
     "supportUrl": "https://norabim.com",
     "gitHubUrl": "https://github.com/camilomartg-svg/bim"
