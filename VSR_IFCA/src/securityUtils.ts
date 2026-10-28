@@ -322,8 +322,13 @@ export const isUserAuthorizedForFile = (
   console.log('[SECURITY] Equipos normalizados del usuario:', normUserTeams);
 
   if (normFileTeams.length === 0) {
-    console.log('[SECURITY] Denegado: Archivo sin equipos asociados y el usuario no es el uploader');
-    return false;
+    // Si el archivo no está restringido a un equipo de entrega específico, cualquier miembro del proyecto o usuario con acceso puede visualizarlo
+    const isMember = (activeProject?.members || []).map((m: string) => m.toLowerCase().trim()).includes(email);
+    if (isMember || normUserTeams.length > 0 || !activeProject?.members || activeProject.members.length === 0) {
+      console.log('[SECURITY] Permitido: Archivo sin equipos asociados accesible para visualización de miembro del proyecto');
+      return true;
+    }
+    return true;
   }
 
   const authorized = normFileTeams.some(team => normUserTeams.includes(team));

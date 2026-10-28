@@ -1908,6 +1908,34 @@ const attachExternalPropertiesToLocalIds = async (model: any, externalProperties
             entity['CLASIFICACIÃ“N'] = clasifVal;
             entity['classification'] = clasifVal;
         }
+
+        // Bridge level aliases
+        const lvlVal = getValGlobal(entity, 'NIVEL INTEGRADO', 'Nivel Integrado', 'nivel integrado', 'Nivel', 'nivel', 'NIVEL', 'Level', 'level', 'LEVEL', 'Storey', 'storey', 'Piso', 'piso', 'Planta', 'planta');
+        if (lvlVal) {
+            entity['NIVEL INTEGRADO'] = lvlVal;
+            entity['Nivel Integrado'] = lvlVal;
+            entity['nivel integrado'] = lvlVal;
+            entity['level'] = lvlVal;
+        }
+
+        // Bridge material aliases
+        const matVal = getValGlobal(entity, 'MATERIAL INTEGRADO', 'Material Integrado', 'material integrado', 'MATERIAL', 'Material', 'material', 'Tipo de Material', 'tipo de material', 'Material Name', 'Structural Material');
+        if (matVal) {
+            entity['MATERIAL INTEGRADO'] = matVal;
+            entity['Material Integrado'] = matVal;
+            entity['material integrado'] = matVal;
+            entity['material'] = matVal;
+        }
+
+        // Bridge name aliases
+        const nmVal = getValGlobal(entity, 'NOMBRE INTEGRADO', 'Nombre Integrado', 'nombre integrado', 'Name', 'name');
+        if (nmVal) {
+            entity['NOMBRE INTEGRADO'] = nmVal;
+            entity['Nombre Integrado'] = nmVal;
+            entity['nombre integrado'] = nmVal;
+            entity['name'] = nmVal;
+        }
+
         const guid = getGuid(entity);
         if (guid && !propertiesByGuid.has(guid)) propertiesByGuid.set(guid, entity);
         const tag = getTag(entity);
@@ -1945,7 +1973,7 @@ const attachExternalPropertiesToLocalIds = async (model: any, externalProperties
                     { [modelUUID]: chunk } as any,
                     { attributesDefault: true } as any
                 );
-                const items: any[] = (res as any)[modelUUID] || [];
+                const items: any[] = (res as any)[modelUUID] || (res ? Object.values(res)[0] as any : []) || [];
                 items.forEach((raw: any, idx: number) => {
                     const localId = chunk[idx];
                     if (localId === undefined) return;
@@ -3008,13 +3036,13 @@ function rebuildAllElements(): any[] {
                 category = cached.category;
                 pilote = cached.pilote || '';
             } else if (modelAny.properties) {
-                const attrs = modelAny.properties[String(expressID)];
+                const attrs = modelAny.properties[String(expressID)] || modelAny.properties[expressID] || (modelAny._propertiesByTag?.get(String(expressID))) || (modelAny._propertiesByGuid?.get(String(expressID)));
                 if (!attrs || typeof attrs !== 'object') continue;
                 category = getValGlobal(attrs, 'type', 'ifcType', 'Category', 'ObjectType', 'CLASIFICACIÓN', 'CLASIFICACION', 'CLASIFICACIÃ"N', 'CLASIFICACIÃ“N', 'Clasificación', 'Clasificacion', 'clasificación', 'clasificacion', 'CATEGORÍA', 'CATEGORIA', 'Categoría', 'categoria', 'TIPO', 'Tipo', 'tipo', 'DETALLE', 'Detalle', 'detalle') || 'Elemento';
                 name = getValGlobal(attrs, 'NOMBRE INTEGRADO', 'Nombre Integrado', 'nombre integrado', 'Name', 'name') || `${category} - ${expressID}`;
                 classification = getValGlobal(attrs, 'CLASIFICACIÓN', 'CLASIFICACION', 'CLASIFICACIÃ"N', 'CLASIFICACIÃ“N', 'CLASIFICACI\u00c3\u0093N', 'Clasificación', 'Clasificacion', 'clasificación', 'clasificacion', 'classification', 'Classification') || 'SIN CLASIFICAR';
-                level = getValGlobal(attrs, 'NIVEL INTEGRADO', 'Nivel Integrado', 'nivel integrado', 'Nivel', 'nivel') || 'SIN NIVEL';
-                material = getValGlobal(attrs, 'MATERIAL INTEGRADO', 'Material Integrado', 'material integrado') || 'SIN MATERIAL';
+                level = getValGlobal(attrs, 'NIVEL INTEGRADO', 'Nivel Integrado', 'nivel integrado', 'NIVEL', 'Nivel', 'nivel', 'Level', 'level', 'LEVEL', 'Storey', 'storey', 'Piso', 'piso', 'Planta', 'planta') || 'SIN NIVEL';
+                material = getValGlobal(attrs, 'MATERIAL INTEGRADO', 'Material Integrado', 'material integrado', 'MATERIAL', 'Material', 'material', 'Tipo de Material', 'tipo de material', 'Material Name', 'Structural Material') || 'SIN MATERIAL';
                 volume = parseNumGlobal(getValGlobal(attrs, 'VOLUMEN INTEGRADO', 'Volumen', 'Volume', 'Volume integrado', 'Volumen integrado'));
                 area = parseNumGlobal(getValGlobal(attrs, 'ÁREA INTEGRADO', 'Area', 'Area integrado', 'Área', 'Área integrado', 'AREA INTEGRADO'));
                 length = parseNumGlobal(getValGlobal(attrs, 'LONGITUD INTEGRADO', 'Longitud', 'Length', 'Longitud integrado', 'Longitud integrado', 'LONGITUD', 'longitud'));
@@ -3137,6 +3165,28 @@ function getFilterDataGlobal(modelFilter: string = 'ALL') {
 
         if (el.diameter && el.diameter.trim() !== '') {
             diametersSet.add(el.diameter);
+        }
+    }
+
+    // Direct fallback from model properties if allElements had unmapped level/material values
+    if (levelsSet.size === 0 || materialsSet.size === 0) {
+        const uniqueModels = getUniqueLoadedModels();
+        for (const { model } of uniqueModels) {
+            const props = (model as any)?.properties;
+            if (props && typeof props === 'object') {
+                for (const k of Object.keys(props)) {
+                    const item = props[k];
+                    if (!item || typeof item !== 'object') continue;
+                    if (levelsSet.size === 0) {
+                        const l = getValGlobal(item, 'NIVEL INTEGRADO', 'Nivel Integrado', 'nivel integrado', 'NIVEL', 'Nivel', 'nivel', 'Level', 'level', 'LEVEL', 'Storey', 'storey', 'Piso', 'piso', 'Planta', 'planta');
+                        if (l && l !== 'SIN NIVEL') levelsSet.add(l.trim());
+                    }
+                    if (materialsSet.size === 0) {
+                        const m = getValGlobal(item, 'MATERIAL INTEGRADO', 'Material Integrado', 'material integrado', 'MATERIAL', 'Material', 'material', 'Tipo de Material', 'tipo de material', 'Material Name', 'Structural Material');
+                        if (m && m !== 'SIN MATERIAL') materialsSet.add(m.trim());
+                    }
+                }
+            }
         }
     }
 
@@ -3639,7 +3689,7 @@ function renderIntegratedClassificationUI(container: HTMLElement) {
     classSection.appendChild(classContent);
     wrapper.appendChild(classSection);
 
-    if (levels.length > 0) {
+    if (levels.length > 0 || uniqueModels.length > 0) {
         const levelsSection = document.createElement('div');
         levelsSection.className = 'filter-section';
 
@@ -3657,22 +3707,24 @@ function renderIntegratedClassificationUI(container: HTMLElement) {
         levelsSpan.textContent = 'Niveles';
         levelsTitleDiv.appendChild(levelsSpan);
 
-        const levelsColorBtn = document.createElement('button');
-        levelsColorBtn.className = `filter-color-toggle-btn ${activeColorMode === 'levels' ? 'active' : ''}`;
-        levelsColorBtn.title = 'Colorear modelo por Niveles';
-        levelsColorBtn.innerHTML = '<i class="fa-solid fa-palette"></i>';
-        levelsColorBtn.addEventListener('click', (e) => {
-            e.stopPropagation();
-            if (activeColorMode === 'levels') {
-                activeColorMode = 'none';
-                clearClassificationColorization();
-            } else {
-                activeColorMode = 'levels';
-                applyClassificationColorizationToViewer();
-            }
-            renderIntegratedClassificationUI(container);
-        });
-        levelsTitleDiv.appendChild(levelsColorBtn);
+        if (levels.length > 0) {
+            const levelsColorBtn = document.createElement('button');
+            levelsColorBtn.className = `filter-color-toggle-btn ${activeColorMode === 'levels' ? 'active' : ''}`;
+            levelsColorBtn.title = 'Colorear modelo por Niveles';
+            levelsColorBtn.innerHTML = '<i class="fa-solid fa-palette"></i>';
+            levelsColorBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                if (activeColorMode === 'levels') {
+                    activeColorMode = 'none';
+                    clearClassificationColorization();
+                } else {
+                    activeColorMode = 'levels';
+                    applyClassificationColorizationToViewer();
+                }
+                renderIntegratedClassificationUI(container);
+            });
+            levelsTitleDiv.appendChild(levelsColorBtn);
+        }
 
         const levelsChevron = document.createElement('i');
         levelsChevron.className = isLevelsCollapsed ? 'fa-solid fa-chevron-right' : 'fa-solid fa-chevron-down';
@@ -3691,32 +3743,41 @@ function renderIntegratedClassificationUI(container: HTMLElement) {
         const levelsGrid = document.createElement('div');
         levelsGrid.className = 'levels-grid';
 
-        for (const level of levels) {
-            const levelBtn = document.createElement('button');
-            levelBtn.className = 'level-filter-btn';
-            if (selectedLevels.has(level)) levelBtn.classList.add('active');
+        if (levels.length === 0) {
+            const emptyNotice = document.createElement('div');
+            emptyNotice.style.fontSize = '11px';
+            emptyNotice.style.color = '#888';
+            emptyNotice.style.padding = '4px 6px';
+            emptyNotice.textContent = 'Sin niveles detectados en el modelo';
+            levelsGrid.appendChild(emptyNotice);
+        } else {
+            for (const level of levels) {
+                const levelBtn = document.createElement('button');
+                levelBtn.className = 'level-filter-btn';
+                if (selectedLevels.has(level)) levelBtn.classList.add('active');
 
-            if (activeColorMode === 'levels' && currentClassificationColorsMap.has(level)) {
-                const dot = document.createElement('span');
-                dot.className = 'level-color-bar';
-                dot.style.backgroundColor = currentClassificationColorsMap.get(level)!;
-                levelBtn.appendChild(dot);
-            }
-
-            const levelText = document.createTextNode(level);
-            levelBtn.appendChild(levelText);
-            levelBtn.title = level;
-            levelBtn.addEventListener('click', async () => {
-                if (selectedLevels.has(level)) {
-                    selectedLevels.delete(level);
-                    levelBtn.classList.remove('active');
-                } else {
-                    selectedLevels.add(level);
-                    levelBtn.classList.add('active');
+                if (activeColorMode === 'levels' && currentClassificationColorsMap.has(level)) {
+                    const dot = document.createElement('span');
+                    dot.className = 'level-color-bar';
+                    dot.style.backgroundColor = currentClassificationColorsMap.get(level)!;
+                    levelBtn.appendChild(dot);
                 }
-                await applyFiltersToViewerGlobal();
-            });
-            levelsGrid.appendChild(levelBtn);
+
+                const levelText = document.createTextNode(level);
+                levelBtn.appendChild(levelText);
+                levelBtn.title = level;
+                levelBtn.addEventListener('click', async () => {
+                    if (selectedLevels.has(level)) {
+                        selectedLevels.delete(level);
+                        levelBtn.classList.remove('active');
+                    } else {
+                        selectedLevels.add(level);
+                        levelBtn.classList.add('active');
+                    }
+                    await applyFiltersToViewerGlobal();
+                });
+                levelsGrid.appendChild(levelBtn);
+            }
         }
 
         levelsContent.appendChild(levelsGrid);
@@ -3724,7 +3785,7 @@ function renderIntegratedClassificationUI(container: HTMLElement) {
         wrapper.appendChild(levelsSection);
     }
 
-    if (materials.length > 0) {
+    if (materials.length > 0 || uniqueModels.length > 0) {
         const materialsSection = document.createElement('div');
         materialsSection.className = 'filter-section';
 
@@ -3742,22 +3803,24 @@ function renderIntegratedClassificationUI(container: HTMLElement) {
         materialsSpan.textContent = 'Material Integrado';
         materialsTitleDiv.appendChild(materialsSpan);
 
-        const materialsColorBtn = document.createElement('button');
-        materialsColorBtn.className = `filter-color-toggle-btn ${activeColorMode === 'materials' ? 'active' : ''}`;
-        materialsColorBtn.title = 'Colorear modelo por Material Integrado';
-        materialsColorBtn.innerHTML = '<i class="fa-solid fa-palette"></i>';
-        materialsColorBtn.addEventListener('click', (e) => {
-            e.stopPropagation();
-            if (activeColorMode === 'materials') {
-                activeColorMode = 'none';
-                clearClassificationColorization();
-            } else {
-                activeColorMode = 'materials';
-                applyClassificationColorizationToViewer();
-            }
-            renderIntegratedClassificationUI(container);
-        });
-        materialsTitleDiv.appendChild(materialsColorBtn);
+        if (materials.length > 0) {
+            const materialsColorBtn = document.createElement('button');
+            materialsColorBtn.className = `filter-color-toggle-btn ${activeColorMode === 'materials' ? 'active' : ''}`;
+            materialsColorBtn.title = 'Colorear modelo por Material Integrado';
+            materialsColorBtn.innerHTML = '<i class="fa-solid fa-palette"></i>';
+            materialsColorBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                if (activeColorMode === 'materials') {
+                    activeColorMode = 'none';
+                    clearClassificationColorization();
+                } else {
+                    activeColorMode = 'materials';
+                    applyClassificationColorizationToViewer();
+                }
+                renderIntegratedClassificationUI(container);
+            });
+            materialsTitleDiv.appendChild(materialsColorBtn);
+        }
 
         const materialsChevron = document.createElement('i');
         materialsChevron.className = isMaterialsCollapsed ? 'fa-solid fa-chevron-right' : 'fa-solid fa-chevron-down';
@@ -3776,32 +3839,41 @@ function renderIntegratedClassificationUI(container: HTMLElement) {
         const materialsGrid = document.createElement('div');
         materialsGrid.className = 'levels-grid';
 
-        for (const mat of materials) {
-            const matBtn = document.createElement('button');
-            matBtn.className = 'level-filter-btn';
-            if (selectedMaterials.has(mat)) matBtn.classList.add('active');
+        if (materials.length === 0) {
+            const emptyNotice = document.createElement('div');
+            emptyNotice.style.fontSize = '11px';
+            emptyNotice.style.color = '#888';
+            emptyNotice.style.padding = '4px 6px';
+            emptyNotice.textContent = 'Sin materiales detectados en el modelo';
+            materialsGrid.appendChild(emptyNotice);
+        } else {
+            for (const mat of materials) {
+                const matBtn = document.createElement('button');
+                matBtn.className = 'level-filter-btn';
+                if (selectedMaterials.has(mat)) matBtn.classList.add('active');
 
-            if (activeColorMode === 'materials' && currentClassificationColorsMap.has(mat)) {
-                const dot = document.createElement('span');
-                dot.className = 'level-color-bar';
-                dot.style.backgroundColor = currentClassificationColorsMap.get(mat)!;
-                matBtn.appendChild(dot);
-            }
-
-            const matText = document.createTextNode(mat);
-            matBtn.appendChild(matText);
-            matBtn.title = mat;
-            matBtn.addEventListener('click', async () => {
-                if (selectedMaterials.has(mat)) {
-                    selectedMaterials.delete(mat);
-                    matBtn.classList.remove('active');
-                } else {
-                    selectedMaterials.add(mat);
-                    matBtn.classList.add('active');
+                if (activeColorMode === 'materials' && currentClassificationColorsMap.has(mat)) {
+                    const dot = document.createElement('span');
+                    dot.className = 'level-color-bar';
+                    dot.style.backgroundColor = currentClassificationColorsMap.get(mat)!;
+                    matBtn.appendChild(dot);
                 }
-                await applyFiltersToViewerGlobal();
-            });
-            materialsGrid.appendChild(matBtn);
+
+                const matText = document.createTextNode(mat);
+                matBtn.appendChild(matText);
+                matBtn.title = mat;
+                matBtn.addEventListener('click', async () => {
+                    if (selectedMaterials.has(mat)) {
+                        selectedMaterials.delete(mat);
+                        matBtn.classList.remove('active');
+                    } else {
+                        selectedMaterials.add(mat);
+                        matBtn.classList.add('active');
+                    }
+                    await applyFiltersToViewerGlobal();
+                });
+                materialsGrid.appendChild(matBtn);
+            }
         }
 
         materialsContent.appendChild(materialsGrid);
@@ -4853,18 +4925,26 @@ async function loadModelList() {
                         .map((m) => {
                             const fname = m.name || '';
                             const fid = m.fragId || '';
-                            const match = activeSecurityContext?.statusMap?.[fid] || activeSecurityContext?.statusMap?.[fname.toLowerCase()] || null;
+                            const rvtName = fname.toLowerCase().replace(/\.frag$/, '.rvt');
+                            const ifcName = fname.toLowerCase().replace(/\.frag$/, '.ifc');
+                            const match = activeSecurityContext?.statusMap?.[fid] ||
+                                          activeSecurityContext?.statusMap?.[fname.toLowerCase()] ||
+                                          activeSecurityContext?.statusMap?.[rvtName] ||
+                                          activeSecurityContext?.statusMap?.[ifcName] ||
+                                          null;
+                            const ownerEmail = (m as any).ownerEmail || '';
                             return {
                                 name: m.name,
                                 path: `models/${m.name}`,
                                 driveFragId: m.fragId,
                                 driveJsonId: m.jsonId ?? null,
                                 status: match?.status || 'EN_PROGRESO',
-                                changedBy: match?.changedBy || 'UNASSIGNED',
-                                changedByEmail: match?.changedByEmail || 'unassigned@nora.cde',
+                                changedBy: match?.changedBy || (m as any).ownerName || 'UNASSIGNED',
+                                changedByEmail: match?.changedByEmail || ownerEmail || 'unassigned@nora.cde',
                                 fileId: fid,
                                 filename: fname,
-                                folder: m.name
+                                folder: (m as any).folder || 'General',
+                                deliveryTeams: match?.deliveryTeams || []
                             };
                         });
                     models = processed.filter(f => 
@@ -4884,7 +4964,13 @@ async function loadModelList() {
                     const processedLocal = localModels.map((m) => {
                         const fname = m.name || '';
                         const fid = m.driveFragId || '';
-                        const match = activeSecurityContext?.statusMap?.[fid] || activeSecurityContext?.statusMap?.[fname.toLowerCase()] || null;
+                        const rvtName = fname.toLowerCase().replace(/\.frag$/, '.rvt');
+                        const ifcName = fname.toLowerCase().replace(/\.frag$/, '.ifc');
+                        const match = activeSecurityContext?.statusMap?.[fid] ||
+                                      activeSecurityContext?.statusMap?.[fname.toLowerCase()] ||
+                                      activeSecurityContext?.statusMap?.[rvtName] ||
+                                      activeSecurityContext?.statusMap?.[ifcName] ||
+                                      null;
                         return {
                             ...m,
                             status: match?.status || 'EN_PROGRESO',
@@ -4892,7 +4978,7 @@ async function loadModelList() {
                             changedByEmail: match?.changedByEmail || 'unassigned@nora.cde',
                             fileId: fid || undefined,
                             filename: fname,
-                            folder: m.name
+                            folder: (m as any).folder || 'General'
                         };
                     });
                     models = processedLocal.filter(f => 
@@ -4927,14 +5013,19 @@ async function loadModelList() {
                 
                 const processedGit = gitModels.map((m) => {
                     const fname = m.name || '';
-                    const match = activeSecurityContext?.statusMap?.[fname.toLowerCase()] || null;
+                    const rvtName = fname.toLowerCase().replace(/\.frag$/, '.rvt');
+                    const ifcName = fname.toLowerCase().replace(/\.frag$/, '.ifc');
+                    const match = activeSecurityContext?.statusMap?.[fname.toLowerCase()] ||
+                                  activeSecurityContext?.statusMap?.[rvtName] ||
+                                  activeSecurityContext?.statusMap?.[ifcName] ||
+                                  null;
                     return {
                         ...m,
                         status: match?.status || 'EN_PROGRESO',
                         changedBy: match?.changedBy || 'UNASSIGNED',
                         changedByEmail: match?.changedByEmail || 'unassigned@nora.cde',
                         filename: fname,
-                        folder: m.name
+                        folder: (m as any).folder || 'General'
                     };
                 });
                 
@@ -4952,10 +5043,40 @@ async function loadModelList() {
                 logToScreen(`GitHub Scan: ${models.length} authorized .frag models found`);
             }
 
+            // Ensure autoloaded model from query params is present in the list
+            const autoLoadFileId = params.get('fileId');
+            const autoLoadFilename = params.get('file');
+            const autoLoadJsonId = params.get('jsonId');
+
+            if (autoLoadFileId || autoLoadFilename) {
+                let matchingItem = models.find((m) => 
+                    (autoLoadFileId && (m.driveFragId === autoLoadFileId || m.fileId === autoLoadFileId)) ||
+                    (autoLoadFilename && (m.name === autoLoadFilename || m.filename === autoLoadFilename))
+                );
+
+                if (!matchingItem && autoLoadFileId) {
+                    const rawName = autoLoadFilename || 'Modelo.frag';
+                    const cleanName = rawName.endsWith('.frag') ? rawName : `${rawName.replace(/\.[^/.]+$/, '')}.frag`;
+                    matchingItem = {
+                        name: cleanName,
+                        path: `models/${cleanName}`,
+                        driveFragId: autoLoadFileId,
+                        driveJsonId: autoLoadJsonId ?? null,
+                        status: 'EN_PROGRESO',
+                        changedBy: 'Revit Add-in',
+                        changedByEmail: '',
+                        fileId: autoLoadFileId,
+                        filename: cleanName,
+                        folder: 'General'
+                    };
+                    models.push(matchingItem);
+                }
+            }
+
             // Group models by specialty
             const groups: Record<string, any[]> = {};
-            models.forEach((m: { name: string; path: string; url: string }) => {
-                const specialty = getSpecialtyFromIfcPath(m.path);
+            models.forEach((m: { name: string; path: string; url: string; folder?: string }) => {
+                const specialty = m.folder && m.folder !== 'General' ? cleanSpecialty(m.folder) : getSpecialtyFromIfcPath(m.path);
                 if (!groups[specialty]) groups[specialty] = [];
                 groups[specialty].push(m);
             });
@@ -5045,11 +5166,6 @@ async function loadModelList() {
                 groupDiv.appendChild(itemsList);
                 listContainer.appendChild(groupDiv);
             }
-
-            // Check for autoload parameters in URL on initial load
-            const autoLoadFileId = params.get('fileId');
-            const autoLoadFilename = params.get('file');
-            const autoLoadJsonId = params.get('jsonId');
 
             if ((autoLoadFileId || autoLoadFilename) && !(window as any)._autoLoadedModel) {
                 (window as any)._autoLoadedModel = true;
@@ -9296,15 +9412,20 @@ async function classifyModel(model: any) {
         if (clasif) integratedClassById.set(expressID, clasif);
 
         const nivel = getVal(attrs,
-            'NIVEL INTEGRADO', 'Nivel Integrado', 'nivel integrado');
+            'NIVEL INTEGRADO', 'Nivel Integrado', 'nivel integrado',
+            'NIVEL', 'Nivel', 'nivel', 'Level', 'level', 'LEVEL',
+            'Storey', 'storey', 'Piso', 'piso', 'Planta', 'planta',
+            'Building Story', 'IfcBuildingStorey');
         if (nivel) integratedLevelById.set(expressID, nivel);
 
         const material = getVal(attrs,
-            'MATERIAL INTEGRADO', 'Material Integrado', 'material integrado');
+            'MATERIAL INTEGRADO', 'Material Integrado', 'material integrado',
+            'MATERIAL', 'Material', 'material', 'Tipo de Material', 'tipo de material',
+            'Material Name', 'Structural Material', 'Material estructural');
         if (material) integratedMaterialById.set(expressID, material);
 
         const nombre = getVal(attrs,
-            'NOMBRE INTEGRADO', 'Nombre Integrado', 'nombre integrado');
+            'NOMBRE INTEGRADO', 'Nombre Integrado', 'nombre integrado', 'Name', 'name');
         if (nombre) integratedNameById.set(expressID, nombre);
 
         const sub = getVal(attrs,
@@ -9352,7 +9473,7 @@ async function classifyModel(model: any) {
             const chunk = idsWithGeometry.slice(i, i + CHUNK);
             try {
                 const result = await fragments.getData({ [modelUUID]: chunk } as any, { attributesDefault: true } as any);
-                const items: any[] = (result as any)[modelUUID] || [];
+                const items: any[] = (result as any)[modelUUID] || (result ? Object.values(result)[0] as any : []) || [];
                 items.forEach((raw: any, idx: number) => {
                     const localId: number = chunk[idx];
                     if (localId === undefined) return;
@@ -9366,7 +9487,6 @@ async function classifyModel(model: any) {
         }
     } else if (hasExtProps) {
         // Fast path: Classify directly from model.properties in memory (< 50ms)
-        const validGeomSet = new Set<number>(idsWithGeometry);
         let processed = 0;
         for (const keyStr in model.properties) {
             const numericId = parseInt(keyStr, 10);
@@ -9374,31 +9494,38 @@ async function classifyModel(model: any) {
             const entity = model.properties[keyStr];
             if (!entity || typeof entity !== 'object') continue;
             const targetId = entity.localId !== undefined ? Number(entity.localId) : numericId;
-            if (validGeomSet.size > 0 && !validGeomSet.has(targetId) && !validGeomSet.has(numericId)) continue;
             readFields(entity, targetId);
+            if (entity.localId !== undefined && targetId !== numericId) {
+                readFields(entity, numericId);
+            }
             if (++processed % 3000 === 0) await yieldToMain();
         }
     }
 
     // --- Build index ---
-    // Strict element IDs set: strictly elements with geometry or explicit integrated metadata
-    const validGeomSet = new Set<number>(idsWithGeometry);
+    // Ensure all elements with geometry are included and have metadata resolved
+    for (const geomId of idsWithGeometry) {
+        if (!integratedClassById.has(geomId) || !integratedLevelById.has(geomId) || !integratedMaterialById.has(geomId)) {
+            const ent = model.properties ? (
+                model.properties[geomId] ||
+                model.properties[String(geomId)] ||
+                (model._propertiesByTag && model._propertiesByTag.get(String(geomId))) ||
+                (model._propertiesByGuid && model._propertiesByGuid.get(String(geomId)))
+            ) : null;
+            if (ent) {
+                readFields(ent, geomId);
+            }
+        }
+    }
+
     let allIds = new Set<number>([
+        ...idsWithGeometry,
         ...integratedClassById.keys(),
         ...integratedLevelById.keys(),
         ...integratedMaterialById.keys(),
         ...integratedNameById.keys(),
         ...integratedSubById.keys(),
     ]);
-
-    if (validGeomSet.size > 0) {
-        const filtered = Array.from(allIds).filter(id => validGeomSet.has(id));
-        if (filtered.length > 0) {
-            allIds = new Set<number>(filtered);
-        }
-    } else if (allIds.size === 0 && idsWithGeometry.length > 0) {
-        idsWithGeometry.forEach(id => allIds.add(id));
-    }
 
     let indexedCount = 0;
     for (const id of allIds) {
@@ -9422,15 +9549,44 @@ async function classifyModel(model: any) {
 
     let cachedCount = 0;
     for (const id of allIds) {
-        const lvl = integratedLevelById.get(id);
-        const mat = integratedMaterialById.get(id);
-        const nm = integratedNameById.get(id);
-        const cls = integratedClassById.get(id) ?? 'SIN CLASIFICAR';
-        const cat = integratedCategoryById.get(id) ?? cls;
-        const det = integratedDetailById.get(id);
+        let lvl = integratedLevelById.get(id);
+        let mat = integratedMaterialById.get(id);
+        let nm = integratedNameById.get(id);
+        let cls = integratedClassById.get(id);
+        let cat = integratedCategoryById.get(id);
+        let det = integratedDetailById.get(id);
         
         // Try fallback to model.properties if available
-        const propEntry = model.properties ? model.properties[String(id)] : null;
+        const propEntry = model.properties ? (
+            model.properties[String(id)] ||
+            model.properties[id] ||
+            (model._propertiesByTag && model._propertiesByTag.get(String(id))) ||
+            (model._propertiesByGuid && model._propertiesByGuid.get(String(id)))
+        ) : null;
+
+        if (!lvl && propEntry) {
+            lvl = getVal(propEntry,
+                'NIVEL INTEGRADO', 'Nivel Integrado', 'nivel integrado',
+                'NIVEL', 'Nivel', 'nivel', 'Level', 'level', 'LEVEL',
+                'Storey', 'storey', 'Piso', 'piso', 'Planta', 'planta',
+                'Building Story', 'IfcBuildingStorey');
+        }
+        if (!mat && propEntry) {
+            mat = getVal(propEntry,
+                'MATERIAL INTEGRADO', 'Material Integrado', 'material integrado',
+                'MATERIAL', 'Material', 'material', 'Tipo de Material', 'tipo de material',
+                'Material Name', 'Structural Material', 'Material estructural');
+        }
+        if (!cls && propEntry) {
+            cls = getVal(propEntry, 'CLASIFICACIÓN', 'CLASIFICACION', 'CLASIFICACIÃ"N', 'CLASIFICACIÃ“N', 'Clasificación', 'Clasificacion', 'classification');
+        }
+        if (!nm && propEntry) {
+            nm = getVal(propEntry, 'NOMBRE INTEGRADO', 'Nombre Integrado', 'nombre integrado', 'Name', 'name');
+        }
+        if (!cat && propEntry) {
+            cat = getVal(propEntry, 'type', 'ifcType', 'Category', 'ObjectType', 'CLASIFICACIÓN', 'Clasificación', 'CATEGORÍA', 'Categoría', 'TIPO', 'Tipo');
+        }
+
         const vol = integratedVolumeById.get(id) ?? (propEntry ? parseNumGlobal(getValGlobal(propEntry, 'VOLUMEN INTEGRADO', 'Volumen', 'Volume')) : 0);
         const ar = integratedAreaById.get(id) ?? (propEntry ? parseNumGlobal(getValGlobal(propEntry, 'ÁREA INTEGRADO', 'Area', 'Área', 'AREA INTEGRADO')) : 0);
         const len = integratedLengthById.get(id) ?? (propEntry ? parseNumGlobal(getValGlobal(propEntry, 'LONGITUD INTEGRADO', 'Longitud', 'Length', 'LONGITUD', 'longitud')) : 0);
@@ -9438,13 +9594,13 @@ async function classifyModel(model: any) {
         modelCache.set(id, {
             level: lvl ?? 'SIN NIVEL',
             material: mat ?? 'SIN MATERIAL',
-            name: nm ?? `${cls}-${id}`,
-            classification: cls,
+            name: nm ?? `${cls || 'Elemento'}-${id}`,
+            classification: cls ?? 'SIN CLASIFICAR',
             volume: vol,
             area: ar,
             length: len,
             detail: det ?? '-',
-            category: cat ?? 'Elemento'
+            category: cat ?? (cls || 'Elemento')
         });
         if (++cachedCount % 2000 === 0) await yieldToMain();
     }
