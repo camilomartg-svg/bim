@@ -452,7 +452,7 @@
             </div>
 
             <p class="text-[10.5px] text-slate-500 dark:text-slate-400">
-              💡 <em>En Power BI Desktop:</em> Ve a <strong>Inicio > Transformar Datos > Editor Avanzado</strong>, pega este código y haz clic en <strong>Listo</strong>.
+              💡 <em>En Power BI Desktop:</em> Ve a <strong>Inicio > Transformar Datos > Editor Avanzado</strong>, pega este código y haz clic en <strong>Listo</strong>. (Si Power BI solicita credenciales web, selecciona <strong>Anónima</strong> y haz clic en <strong>Conectar</strong>).
             </p>
           </div>
 
@@ -4038,7 +4038,8 @@
             let foundIndex = 0;
             models.forEach((m, idx) => {
               const opt = document.createElement('option');
-              opt.value = m.fileId || String(idx);
+              opt.value = m.fileId || m.name || String(idx);
+              opt.dataset.modelIdx = String(idx);
               opt.textContent = m.name + ' (' + (m.status || 'EN_PROGRESO') + ')';
               if (f && (m.name === f.name || m.fileId === f.fileId)) {
                 opt.selected = true;
@@ -4061,8 +4062,9 @@
       const pbiModelSelectEl = document.getElementById('pbi-model-select');
       pbiModelSelectEl?.addEventListener('change', () => {
         const models = getAvailableModelsForPowerBi();
-        const selVal = pbiModelSelectEl.value;
-        const matched = models.find(m => m.fileId === selVal) || models[0];
+        const selOpt = pbiModelSelectEl.options[pbiModelSelectEl.selectedIndex];
+        const idx = selOpt ? Number(selOpt.dataset.modelIdx) : -1;
+        const matched = (idx >= 0 && models[idx]) ? models[idx] : (models.find(m => m.fileId === pbiModelSelectEl.value || m.name === pbiModelSelectEl.value) || models[0]);
         updatePowerBiModalDetails(matched);
       });
 
