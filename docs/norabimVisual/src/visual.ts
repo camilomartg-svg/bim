@@ -144,21 +144,36 @@ export class Visual implements IVisual {
                 viewerBaseUrl += "/";
             }
 
-            let fragId = (modelSettings?.defaultFragId?.value || "1PG0-nKvsO0AnsddgwLSlGpJRtdCDMBdp").trim();
-            let jsonId = (modelSettings?.defaultJsonId?.value || "1suvvCVLmyh5wnVRCnyIZdpBO5FlpZ-l8").trim();
+            let fragId = (modelSettings?.defaultFragId?.value || "").trim();
+            let jsonId = (modelSettings?.defaultJsonId?.value || "").trim();
             const autoIsolate = modelSettings?.autoIsolate?.value !== false;
             const forceLogin = modelSettings?.forceLogin?.value === true;
 
-            // Extract expressIDs from dataView
+            // Extract fields from dataView roles (expressId, fragId, jsonId)
             const expressIds: number[] = [];
             if (dataView?.categorical?.categories && dataView.categorical.categories.length > 0) {
-                const category = dataView.categorical.categories[0];
-                if (category && Array.isArray(category.values)) {
-                    for (const val of category.values) {
-                        if (val !== null && val !== undefined && val !== "") {
-                            const num = Number(val);
-                            if (!isNaN(num)) {
-                                expressIds.push(num);
+                for (const cat of dataView.categorical.categories) {
+                    const roles = cat.source?.roles || {};
+                    if (roles["fragId"]) {
+                        const val = cat.values?.find(v => v !== null && v !== undefined && String(v).trim() !== "");
+                        if (val && !fragId) {
+                            fragId = String(val).trim();
+                        }
+                    } else if (roles["jsonId"]) {
+                        const val = cat.values?.find(v => v !== null && v !== undefined && String(v).trim() !== "");
+                        if (val && !jsonId) {
+                            jsonId = String(val).trim();
+                        }
+                    } else {
+                        // ExpressID role or default category
+                        if (Array.isArray(cat.values)) {
+                            for (const val of cat.values) {
+                                if (val !== null && val !== undefined && val !== "") {
+                                    const num = Number(val);
+                                    if (!isNaN(num)) {
+                                        expressIds.push(num);
+                                    }
+                                }
                             }
                         }
                     }
@@ -168,7 +183,7 @@ export class Visual implements IVisual {
             // Build target URL with version tag to bypass stale WebView2 caching
             const url = new URL(viewerBaseUrl);
             url.searchParams.set("embed", "true");
-            url.searchParams.set("_v", "20261028-03");
+            url.searchParams.set("_v", "20261028-04");
             if (fragId) url.searchParams.set("fileId", fragId);
             if (jsonId) url.searchParams.set("jsonId", jsonId);
             if (forceLogin) url.searchParams.set("forceLogin", "true");

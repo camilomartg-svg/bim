@@ -17,15 +17,15 @@ export class ModelCardSettings extends FormattingSettingsCard {
     defaultFragId = new formattingSettings.TextInput({
         name: "defaultFragId",
         displayName: "ID Archivo FRAG (Google Drive)",
-        placeholder: "1PG0-nKvsO0AnsddgwLSlGpJRtdCDMBdp",
-        value: "1PG0-nKvsO0AnsddgwLSlGpJRtdCDMBdp"
+        placeholder: "Pega el ID del archivo .frag",
+        value: ""
     });
 
     defaultJsonId = new formattingSettings.TextInput({
         name: "defaultJsonId",
         displayName: "ID Archivo JSON (Google Drive)",
-        placeholder: "1suvvCVLmyh5wnVRCnyIZdpBO5FlpZ-l8",
-        value: "1suvvCVLmyh5wnVRCnyIZdpBO5FlpZ-l8"
+        placeholder: "Pega el ID del archivo .json (opcional)",
+        value: ""
     });
 
     autoIsolate = new formattingSettings.ToggleSwitch({

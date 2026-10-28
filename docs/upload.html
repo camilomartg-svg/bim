@@ -385,7 +385,7 @@
 
     
     <!-- MODAL: Conector Power BI -->
-    <div id="modal-powerbi-connector" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-md hidden transition-opacity duration-200">
+    <div id="modal-powerbi-connector" style="z-index: 999999;" class="fixed inset-0 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-md hidden transition-opacity duration-200">
       <div class="w-full max-w-3xl glass rounded-2xl p-6 sm:p-7 shadow-2xl border border-slate-200 dark:border-slate-800 bg-white/95 dark:bg-slate-900/95 max-h-[90vh] flex flex-col overflow-hidden transform transition-all">
         <!-- Header -->
         <div class="flex items-center justify-between pb-4 mb-4 border-b border-slate-200 dark:border-slate-800 shrink-0">
@@ -3880,142 +3880,216 @@
       // ==========================================
       // POWER BI CONNECTOR HUB
       // ==========================================
-      const modalPowerBi = document.getElementById('modal-powerbi-connector');
-      const pbiModelSelect = document.getElementById('pbi-model-select');
-      const pbiModelInfo = document.getElementById('pbi-model-info');
-      const pbiMCode = document.getElementById('pbi-m-code');
-      const pbiDirectUrl = document.getElementById('pbi-direct-url');
-      const pbiFragIdVal = document.getElementById('pbi-frag-id-val');
-      const pbiJsonIdVal = document.getElementById('pbi-json-id-val');
-
       function getAvailableModelsForPowerBi() {
-        if (!Array.isArray(allDriveFiles)) return [];
-        return allDriveFiles.filter(f => {
-          const name = String(f.name || '').toLowerCase();
+        const pool = (Array.isArray(allProjectFiles) && allProjectFiles.length > 0)
+          ? allProjectFiles
+          : ((typeof rawProjectFilesCache !== 'undefined' && Array.isArray(rawProjectFilesCache)) ? rawProjectFilesCache : []);
+        return pool.filter(f => {
+          if (!f || !f.name) return false;
           const ext = getFileExtension(f.name);
-          return f.type === 'model' || ext === 'frag' || ext === 'ifc' || f.fragId || f.pairedFragId || f.jsonId;
+          return f.type === 'model' || isModel3DExtension(ext) || ext === 'frag' || ext === 'ifc' || ext === 'rvt' || f.fragId || f.pairedFragId || f.jsonId;
         });
       }
 
       function updatePowerBiModalDetails(selectedFile) {
+        const pbiModelSelect = document.getElementById('pbi-model-select');
+        const pbiModelInfo = document.getElementById('pbi-model-info');
+        const pbiMCode = document.getElementById('pbi-m-code');
+        const pbiDirectUrl = document.getElementById('pbi-direct-url');
+        const pbiFragIdVal = document.getElementById('pbi-frag-id-val');
+        const pbiJsonIdVal = document.getElementById('pbi-json-id-val');
+
         if (!selectedFile) {
-          pbiMCode.textContent = '// No hay modelos disponibles con metadata JSON en este proyecto.';
-          pbiDirectUrl.value = '';
-          pbiFragIdVal.textContent = '—';
-          pbiJsonIdVal.textContent = '—';
-          pbiModelInfo.innerHTML = '<span class="text-slate-400">Sin modelo</span>';
+          if (pbiMCode) pbiMCode.textContent = '// No hay modelos 3D disponibles en este proyecto.';
+          if (pbiDirectUrl) pbiDirectUrl.value = '';
+          if (pbiFragIdVal) pbiFragIdVal.textContent = '—';
+          if (pbiJsonIdVal) pbiJsonIdVal.textContent = '—';
+          if (pbiModelInfo) pbiModelInfo.innerHTML = '<span class="text-slate-400">Sin modelo</span>';
           return;
         }
 
-        const fragId = selectedFile.pairedFragId || selectedFile.fragId || selectedFile.driveFragId || (selectedFile.name.endsWith('.frag') ? selectedFile.fileId : '') || '';
-        const jsonId = selectedFile.jsonId || selectedFile.driveJsonId || '';
-        const name = selectedFile.name || 'Modelo';
+        const pool = (Array.isArray(allProjectFiles) && allProjectFiles.length > 0)
+          ? allProjectFiles
+          : ((typeof rawProjectFilesCache !== 'undefined' && Array.isArray(rawProjectFilesCache)) ? rawProjectFilesCache : []);
+
+        const name = String(selectedFile.name || 'Modelo').trim();
+        const baseName = name.replace(/\.[^/.]+$/, '').trim().toLowerCase();
+
+        // 1. Resolver FRAG ID
+        let fragId = selectedFile.pairedFragId || selectedFile.fragId || selectedFile.driveFragId || '';
+        if (!fragId && name.toLowerCase().endsWith('.frag')) {
+          fragId = selectedFile.fileId || '';
+        }
+        if (!fragId) {
+          const matchedFrag = pool.find(x => {
+            const xBase = String(x.name || '').replace(/\.frag$/i, '').trim().toLowerCase();
+            return xBase === baseName && String(x.name || '').toLowerCase().endsWith('.frag');
+          });
+          if (matchedFrag) fragId = matchedFrag.fileId || '';
+        }
+
+        // 2. Resolver JSON ID
+        let jsonId = selectedFile.jsonId || selectedFile.pairedFragJsonId || selectedFile.driveJsonId || '';
+        if (!jsonId) {
+          const matchedJson = pool.find(x => {
+            const xBase = String(x.name || '').replace(/\.json$/i, '').trim().toLowerCase();
+            return xBase === baseName && String(x.name || '').toLowerCase().endsWith('.json');
+          });
+          if (matchedJson) jsonId = matchedJson.fileId || '';
+        }
+
         const status = selectedFile.status || 'EN_PROGRESO';
 
-        pbiFragIdVal.textContent = fragId || 'No asignado';
-        pbiJsonIdVal.textContent = jsonId || 'No asignado';
+        if (pbiFragIdVal) pbiFragIdVal.textContent = fragId || 'No asignado';
+        if (pbiJsonIdVal) pbiJsonIdVal.textContent = jsonId || 'No asignado';
 
-        pbiModelInfo.innerHTML = '<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700">' + status + '</span> ' +
-          (jsonId ? '<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800/40">JSON listo</span>' : '<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 dark:bg-amber-950/60 text-amber-600 dark:text-amber-400 border border-amber-200 dark:border-amber-800/40">Sin JSON</span>');
+        if (pbiModelInfo) {
+          pbiModelInfo.innerHTML = '<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700">' + status + '</span> ' +
+            (fragId ? '<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-800/40">FRAG 3D</span> ' : '<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-400">Sin FRAG</span> ') +
+            (jsonId ? '<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800/40">JSON listo</span>' : '<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 dark:bg-amber-950/60 text-amber-600 dark:text-amber-400 border border-amber-200 dark:border-amber-800/40">Sin JSON</span>');
+        }
 
-        const apiUrl = jsonId ? 'https://script.google.com/macros/s/AKfycbx2RAQx_8K4o22xE0Mw-ETc7K_58vIoi6-PgVi64u80inuiw144ks3cgWSdCtXqIgB02g/exec?action=text&id=' + encodeURIComponent(jsonId) : '';
-        pbiDirectUrl.value = apiUrl;
+        const scriptUrl = (activeProject?.dataSources?.driveScriptUrl || DEFAULT_DRIVE_SCRIPT_URL);
+        const apiUrl = jsonId ? `${scriptUrl}?action=text&id=${encodeURIComponent(jsonId)}` : '';
+        if (pbiDirectUrl) pbiDirectUrl.value = apiUrl;
 
-        const mQuery = 'let\n' +
-          '    // 1. Conexión directa a nora BIM Cloud - Modelo: ' + name + '\n' +
-          '    Origen = Json.Document(Web.Contents("' + (apiUrl || 'https://norabim.com/...') + '")),\n' +
-          '    TextoContenido = Origen[text],\n' +
-          '    PropiedadesJSON = Json.Document(TextoContenido),\n' +
-          '    // 2. Transformar elementos a filas y columnas relacionales\n' +
-          '    Registros = Record.ToTable(PropiedadesJSON),\n' +
-          '    NombresColumnas = Record.FieldNames(Record.FieldValues(PropiedadesJSON){0}),\n' +
-          '    TablaExpandida = Table.ExpandRecordColumn(Registros, "Value", NombresColumnas),\n' +
-          '    TablaFinal = Table.RenameColumns(TablaExpandida, {{"Name", "expressID"}})\n' +
-          'in\n' +
-          '    TablaFinal';
+        const mQuery = [
+          'let',
+          '    // 1. Conexión directa a nora BIM Cloud - Modelo: ' + name,
+          '    Origen = Json.Document(Web.Contents("' + (apiUrl || `${scriptUrl}?action=text&id=${jsonId || 'ID_DEL_JSON'}`) + '")),',
+          '    TextoContenido = Origen[text],',
+          '    PropiedadesJSON = Json.Document(TextoContenido),',
+          '    // 2. Transformar elementos a filas y columnas relacionales',
+          '    Registros = Record.ToTable(PropiedadesJSON),',
+          '    NombresColumnas = Record.FieldNames(Record.FieldValues(PropiedadesJSON){0}),',
+          '    TablaExpandida = Table.ExpandRecordColumn(Registros, "Value", NombresColumnas),',
+          '    TablaConExpressID = Table.RenameColumns(TablaExpandida, {{"Name", "expressID"}}),',
+          '    // 3. Vincular ID del modelo FRAG (3D) para el objeto visual en Power BI',
+          '    TablaFinal = Table.AddColumn(TablaConExpressID, "ID Modelo FRAG", each "' + (fragId || '') + '")',
+          'in',
+          '    TablaFinal'
+        ].join('\n');
 
-        pbiMCode.textContent = mQuery;
+        if (pbiMCode) pbiMCode.textContent = mQuery;
       }
 
-      window.openPowerBIHubModal = () => {
-        const models = getAvailableModelsForPowerBi();
-        pbiModelSelect.innerHTML = '';
-        if (models.length === 0) {
-          const opt = document.createElement('option');
-          opt.textContent = 'No hay modelos 3D en este proyecto';
-          pbiModelSelect.appendChild(opt);
-          updatePowerBiModalDetails(null);
+      function pbiCopyToClipboard(text, btnElement, successMsg = '¡Copiado!') {
+        if (!text) return;
+        const doSuccess = () => {
+          if (!btnElement) return;
+          const prev = btnElement.innerHTML;
+          btnElement.innerHTML = `<span class="material-symbols-outlined text-[14px]">check</span> ${successMsg}`;
+          btnElement.classList.add('bg-emerald-600');
+          setTimeout(() => {
+            btnElement.innerHTML = prev;
+            btnElement.classList.remove('bg-emerald-600');
+          }, 2000);
+        };
+
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(text).then(doSuccess).catch(() => pbiFallbackCopy(text, doSuccess));
         } else {
-          models.forEach((m, idx) => {
-            const opt = document.createElement('option');
-            opt.value = m.fileId || String(idx);
-            opt.textContent = m.name + ' (' + (m.status || 'EN_PROGRESO') + ')';
-            pbiModelSelect.appendChild(opt);
-          });
-          updatePowerBiModalDetails(models[0]);
+          pbiFallbackCopy(text, doSuccess);
         }
-        modalPowerBi?.classList.remove('hidden');
-      };
+      }
+
+      function pbiFallbackCopy(text, cb) {
+        const ta = document.createElement('textarea');
+        ta.value = text;
+        ta.style.position = 'fixed';
+        ta.style.opacity = '0';
+        document.body.appendChild(ta);
+        ta.select();
+        try { document.execCommand('copy'); if (cb) cb(); } catch(e){}
+        document.body.removeChild(ta);
+      }
 
       window.openPowerBIConnectorModal = (encodedData) => {
-        let f;
-        try { f = JSON.parse(decodeURIComponent(encodedData)); } catch(e) { return; }
-        if (!f) return;
+        let f = null;
+        if (encodedData) {
+          try {
+            f = typeof encodedData === 'object' ? encodedData : JSON.parse(decodeURIComponent(encodedData));
+          } catch(e) {
+            console.warn('[PowerBI Modal] Error parseando datos:', e);
+          }
+        }
+
+        const modal = document.getElementById('modal-powerbi-connector');
+        const pbiModelSelect = document.getElementById('pbi-model-select');
+        if (!modal) {
+          alert('Modal Power BI no encontrado');
+          return;
+        }
 
         const models = getAvailableModelsForPowerBi();
-        pbiModelSelect.innerHTML = '';
-        let foundIndex = 0;
-        models.forEach((m, idx) => {
-          const opt = document.createElement('option');
-          opt.value = m.fileId || String(idx);
-          opt.textContent = m.name + ' (' + (m.status || 'EN_PROGRESO') + ')';
-          if (m.name === f.name || m.fileId === f.fileId) {
-            opt.selected = true;
-            foundIndex = idx;
+        if (pbiModelSelect) {
+          pbiModelSelect.innerHTML = '';
+          if (models.length === 0) {
+            const opt = document.createElement('option');
+            opt.textContent = 'No hay modelos 3D en este proyecto';
+            pbiModelSelect.appendChild(opt);
+            updatePowerBiModalDetails(f || null);
+          } else {
+            let foundIndex = 0;
+            models.forEach((m, idx) => {
+              const opt = document.createElement('option');
+              opt.value = m.fileId || String(idx);
+              opt.textContent = m.name + ' (' + (m.status || 'EN_PROGRESO') + ')';
+              if (f && (m.name === f.name || m.fileId === f.fileId)) {
+                opt.selected = true;
+                foundIndex = idx;
+              }
+              pbiModelSelect.appendChild(opt);
+            });
+            updatePowerBiModalDetails(models[foundIndex] || f || models[0]);
           }
-          pbiModelSelect.appendChild(opt);
-        });
+        }
 
-        updatePowerBiModalDetails(models[foundIndex] || f);
-        modalPowerBi?.classList.remove('hidden');
+        modal.classList.remove('hidden');
+        modal.style.display = 'flex';
       };
 
-      pbiModelSelect?.addEventListener('change', () => {
+      window.openPowerBIHubModal = () => {
+        window.openPowerBIConnectorModal(null);
+      };
+
+      const pbiModelSelectEl = document.getElementById('pbi-model-select');
+      pbiModelSelectEl?.addEventListener('change', () => {
         const models = getAvailableModelsForPowerBi();
-        const selVal = pbiModelSelect.value;
+        const selVal = pbiModelSelectEl.value;
         const matched = models.find(m => m.fileId === selVal) || models[0];
         updatePowerBiModalDetails(matched);
       });
 
-      document.getElementById('btn-close-pbi-modal')?.addEventListener('click', () => modalPowerBi?.classList.add('hidden'));
-      document.getElementById('btn-close-pbi-modal-bottom')?.addEventListener('click', () => modalPowerBi?.classList.add('hidden'));
+      const closePowerBIModal = () => {
+        const modal = document.getElementById('modal-powerbi-connector');
+        if (modal) {
+          modal.classList.add('hidden');
+          modal.style.display = 'none';
+        }
+      };
 
-      document.getElementById('btn-copy-m-code')?.addEventListener('click', () => {
-        navigator.clipboard.writeText(pbiMCode.textContent);
-        const btn = document.getElementById('btn-copy-m-code');
-        const prev = btn.innerHTML;
-        btn.innerHTML = '<span class="material-symbols-outlined text-[14px]">check</span> ¡Copiado!';
-        btn.classList.replace('bg-blue-600', 'bg-emerald-600');
-        setTimeout(() => {
-          btn.innerHTML = prev;
-          btn.classList.replace('bg-emerald-600', 'bg-blue-600');
-        }, 2000);
+      document.getElementById('btn-close-pbi-modal')?.addEventListener('click', closePowerBIModal);
+      document.getElementById('btn-close-pbi-modal-bottom')?.addEventListener('click', closePowerBIModal);
+
+      document.getElementById('btn-copy-m-code')?.addEventListener('click', function() {
+        const pbiMCode = document.getElementById('pbi-m-code');
+        pbiCopyToClipboard(pbiMCode?.textContent || '', this, '¡Consulta Copiada!');
       });
 
-      document.getElementById('btn-copy-direct-url')?.addEventListener('click', () => {
-        navigator.clipboard.writeText(pbiDirectUrl.value);
-        const btn = document.getElementById('btn-copy-direct-url');
-        const prev = btn.textContent;
-        btn.textContent = '¡Copiado!';
-        setTimeout(() => { btn.textContent = prev; }, 2000);
+      document.getElementById('btn-copy-direct-url')?.addEventListener('click', function() {
+        const pbiDirectUrl = document.getElementById('pbi-direct-url');
+        pbiCopyToClipboard(pbiDirectUrl?.value || '', this, '¡URL Copiada!');
       });
 
-      document.getElementById('btn-copy-frag-id')?.addEventListener('click', () => {
-        navigator.clipboard.writeText(pbiFragIdVal.textContent.trim());
+      document.getElementById('btn-copy-frag-id')?.addEventListener('click', function() {
+        const pbiFragIdVal = document.getElementById('pbi-frag-id-val');
+        pbiCopyToClipboard(pbiFragIdVal?.textContent?.trim() || '', this, '¡ID Copiado!');
       });
 
-      document.getElementById('btn-copy-json-id')?.addEventListener('click', () => {
-        navigator.clipboard.writeText(pbiJsonIdVal.textContent.trim());
+      document.getElementById('btn-copy-json-id')?.addEventListener('click', function() {
+        const pbiJsonIdVal = document.getElementById('pbi-json-id-val');
+        pbiCopyToClipboard(pbiJsonIdVal?.textContent?.trim() || '', this, '¡ID Copiado!');
       });
 
       window.openNewVersionModal = (encodedData) => {
