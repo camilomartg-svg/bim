@@ -2178,12 +2178,13 @@ const attachExternalPropertiesToLocalIds = async (model: any, externalProperties
 
 async function loadModel(url: string, path: string, options?: { propertiesUrl?: string; propertiesJson?: any | null; sourceUrl?: string }) {
     resetFilters();
+    const urlParams = new URLSearchParams(window.location.search);
+    const isEmbedMode = urlParams.get('embed') === 'true' || window !== window.parent || !!urlParams.get('fileId');
     
     // Security check
-    if (!activeSecurityContext) {
-        const params = new URLSearchParams(window.location.search);
-        const project = params.get('project') || '';
-        const companyId = params.get('empresa') || '';
+    if (!activeSecurityContext && !isEmbedMode) {
+        const project = urlParams.get('project') || '';
+        const companyId = urlParams.get('empresa') || '';
         try {
             activeSecurityContext = await loadSecurityContext(project, companyId);
         } catch (se) {
@@ -2191,7 +2192,6 @@ async function loadModel(url: string, path: string, options?: { propertiesUrl?: 
         }
     }
     
-    const isEmbedMode = params.get('embed') === 'true' || window !== window.parent || !!params.get('fileId');
     if (activeSecurityContext && !isEmbedMode) {
         const fname = path.split('/').pop() || path;
         let fid = '';
@@ -13276,11 +13276,11 @@ function setupPowerBIIntegration() {
 
 if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', () => {
-        setupNoraAI();
+        try { setupNoraAI(); } catch(e) { console.warn('nora AI init error:', e); }
         setupPowerBIIntegration();
     });
 } else {
-    setupNoraAI();
+    try { setupNoraAI(); } catch(e) { console.warn('nora AI init error:', e); }
     setupPowerBIIntegration();
 }
 
