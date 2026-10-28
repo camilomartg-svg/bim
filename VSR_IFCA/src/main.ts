@@ -12795,10 +12795,102 @@ function renderGuestMode(container: HTMLElement) {
 enforceAuthenticatedAccess();
 setupUserAuthentication();
 
+function setupPowerBIIntegration() {
+    const params = new URLSearchParams(window.location.search);
+    const isEmbed = params.get('embed') === 'true' || window.self !== window.top;
+
+    if (isEmbed) {
+        document.body.classList.add('nora-embed-mode');
+        const style = document.createElement('style');
+        style.textContent = `
+            .nora-embed-mode #nora-top-header,
+            .nora-embed-mode .nora-header,
+            .nora-embed-mode .sidebar-toggle-btn {
+                display: none !important;
+            }
+            .nora-embed-mode #app {
+                width: 100vw !important;
+                height: 100vh !important;
+            }
+        `;
+        document.head.appendChild(style);
+    }
+
+    try {
+        if (window.parent && window.parent !== window) {
+            window.parent.postMessage({ type: 'NORA_VIEWER_READY', timestamp: Date.now() }, '*');
+        }
+    } catch (_) {}
+
+    window.addEventListener('message', async (event) => {
+        try {
+            const data = event.data;
+            if (!data || typeof data !== 'object') return;
+
+            if (data.type === 'NORA_PBI_FILTER') {
+                const expressIds = Array.isArray(data.expressIds) ? data.expressIds.map(Number).filter(n => !isNaN(n)) : [];
+                const shouldIsolate = data.isolate !== false;
+
+                if (loadedModels.size === 0) return;
+
+                if (expressIds.length === 0) {
+                    await hider.set(true);
+                    highlighter.clear('select');
+                    return;
+                }
+
+                const filterMap: Record<string, number[]> = {};
+                for (const [modelUuid] of loadedModels.entries()) {
+                    filterMap[modelUuid] = expressIds;
+                }
+
+                if (shouldIsolate) {
+                    await hider.isolate(filterMap as any);
+                } else {
+                    await hider.set(true);
+                }
+
+                try {
+                    highlighter.highlightByID('select', filterMap as any, true, true);
+                } catch (err) {
+                    console.warn('[PowerBI Integration] Highlight error:', err);
+                }
+            }
+        } catch (e) {
+            console.error('[PowerBI Integration] Error handling message:', e);
+        }
+    });
+
+    try {
+        highlighter?.events?.select?.onHighlight?.add((selection: any) => {
+            if (!window.parent || window.parent === window) return;
+            const entries = selection instanceof Map ? Array.from(selection.entries()) : Object.entries(selection || {});
+            const allIds: number[] = [];
+            for (const [, ids] of entries) {
+                if (Array.isArray(ids)) allIds.push(...ids);
+                else if (ids instanceof Set) allIds.push(...Array.from(ids));
+            }
+            if (allIds.length > 0) {
+                window.parent.postMessage({
+                    type: 'NORA_VIEWER_CLICK',
+                    expressId: allIds[0],
+                    expressIds: allIds
+                }, '*');
+            }
+        });
+    } catch (e) {
+        console.warn('[PowerBI Integration] Click event hook error:', e);
+    }
+}
+
 if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', () => setupNoraAI());
+    document.addEventListener('DOMContentLoaded', () => {
+        setupNoraAI();
+        setupPowerBIIntegration();
+    });
 } else {
     setupNoraAI();
+    setupPowerBIIntegration();
 }
 
 // --- Test Runner (solo bajo flag; evita incluir vitest en build) ---
