@@ -21,6 +21,8 @@ export class Visual implements IVisual {
     private formattingSettingsService: FormattingSettingsService;
 
     private currentSrc: string = "";
+    private currentFragId: string = "";
+    private currentJsonId: string = "";
     private iframeLoaded: boolean = false;
     private pendingFilter: any = null;
     private lastSentIdsJson: string = "";
@@ -97,6 +99,15 @@ export class Visual implements IVisual {
                     this.loader.style.display = "none";
                 }, 400);
             }, 1200);
+
+            // Trigger model loading explicitly via message as backup to URL param
+            if (this.currentFragId) {
+                this.sendPostMessage({
+                    type: "NORA_LOAD_MODEL",
+                    fragId: this.currentFragId,
+                    jsonId: this.currentJsonId
+                });
+            }
 
             if (this.pendingFilter) {
                 setTimeout(() => {
@@ -262,7 +273,7 @@ export class Visual implements IVisual {
             // Build target URL with version tag to bypass stale WebView2 caching
             const url = new URL(viewerBaseUrl);
             url.searchParams.set("embed", "true");
-            url.searchParams.set("_v", "20261028-09");
+            url.searchParams.set("_v", "20261028-10");
             if (fragId) url.searchParams.set("fileId", fragId);
             if (jsonId) url.searchParams.set("jsonId", jsonId);
             if (forceLogin) url.searchParams.set("forceLogin", "true");
@@ -270,6 +281,8 @@ export class Visual implements IVisual {
             const targetUrlStr = url.toString();
             if (this.currentSrc !== targetUrlStr) {
                 this.currentSrc = targetUrlStr;
+                this.currentFragId = fragId;
+                this.currentJsonId = jsonId;
                 this.iframeLoaded = false;
                 this.loader.style.display = "flex";
                 this.loader.style.opacity = "1";

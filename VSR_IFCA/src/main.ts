@@ -4901,8 +4901,11 @@ function initTheme() {
     const logoImg = document.getElementById('logo-img') as HTMLImageElement;
 
     // Default to Light (false)
-    const savedTheme = localStorage.getItem('theme');
-    const isDark = savedTheme === 'dark';
+    let isDark = false;
+    try {
+        const savedTheme = typeof localStorage !== 'undefined' ? localStorage.getItem('theme') : null;
+        isDark = savedTheme === 'dark';
+    } catch (_) {}
 
     const updateThemeUI = (dark: boolean) => {
         if (dark) {
@@ -6049,23 +6052,61 @@ async function toggleModel(m: RemoteModelItem, baseUrl: string, liElement?: HTML
     }
 }
 
-logToScreen('Initializing That Open Engine...');
-initSidebar();
-initSidebarTabs();
-initNavigationControls();
-initClassificationControls();
-initTheme();
-initProjectionToggle();
-initGridToggle();
-initMultiSelectToggle();
-initClipperTool();
-initFitModelTool();
-setupUserAuthentication();
-enforceAuthenticatedAccess();
-loadModelList();
-initPropertiesPanel();
-initQuantitiesPanel();
-initStatusPanel();
+logToScreen('Inicializando motor 3D...');
+try { initSidebar(); } catch (e) { console.warn('initSidebar error:', e); }
+try { initSidebarTabs(); } catch (e) { console.warn('initSidebarTabs error:', e); }
+try { initNavigationControls(); } catch (e) { console.warn('initNavigationControls error:', e); }
+try { initClassificationControls(); } catch (e) { console.warn('initClassificationControls error:', e); }
+try { initTheme(); } catch (e) { console.warn('initTheme error:', e); }
+try { initProjectionToggle(); } catch (e) { console.warn('initProjectionToggle error:', e); }
+try { initGridToggle(); } catch (e) { console.warn('initGridToggle error:', e); }
+try { initMultiSelectToggle(); } catch (e) { console.warn('initMultiSelectToggle error:', e); }
+try { initClipperTool(); } catch (e) { console.warn('initClipperTool error:', e); }
+try { initFitModelTool(); } catch (e) { console.warn('initFitModelTool error:', e); }
+try { setupUserAuthentication(); } catch (e) { console.warn('setupUserAuthentication error:', e); }
+try { enforceAuthenticatedAccess(); } catch (e) { console.warn('enforceAuthenticatedAccess error:', e); }
+try { initPropertiesPanel(); } catch (e) { console.warn('initPropertiesPanel error:', e); }
+try { initQuantitiesPanel(); } catch (e) { console.warn('initQuantitiesPanel error:', e); }
+try { initStatusPanel(); } catch (e) { console.warn('initStatusPanel error:', e); }
+
+// Auto-cargar modelo si fileId está presente en URL (Modo Power BI directo)
+try {
+    const urlParamsCheck = new URLSearchParams(window.location.search);
+    const directFragId = urlParamsCheck.get('fileId');
+    if (directFragId) {
+        const directName = urlParamsCheck.get('file') || 'ESTRUCTURAL.frag';
+        const directJson = urlParamsCheck.get('jsonId');
+        const directModelItem: RemoteModelItem = {
+            name: directName,
+            path: 'models/' + directName,
+            driveFragId: directFragId,
+            driveJsonId: directJson ?? null,
+            status: 'EN_PROGRESO',
+            changedBy: 'PowerBI',
+            changedByEmail: '',
+            fileId: directFragId,
+            filename: directName,
+            folder: 'General'
+        };
+        logToScreen(`Cargando modelo 3D: ${directName} (${directFragId.slice(0, 8)}...)`);
+        toggleModel(directModelItem, '', null).then(() => {
+            fitModelToScreen();
+            logToScreen(`Modelo 3D cargado y centrado.`);
+            try {
+                if (window.parent && window.parent !== window) {
+                    window.parent.postMessage({ type: 'NORA_VIEWER_READY', loaded: true }, '*');
+                }
+            } catch (_) {}
+        }).catch(err => {
+            console.error('Direct embed model load failed:', err);
+            logToScreen('Error cargando modelo: ' + (err?.message || err), true);
+        });
+    } else {
+        try { loadModelList(); } catch (e) { console.warn('loadModelList error:', e); }
+    }
+} catch (loadErr) {
+    console.error('Autoload error:', loadErr);
+}
 
 // --- View Controls & Console Toggle ---
 

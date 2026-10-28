@@ -12,6 +12,8 @@ export declare class Visual implements IVisual {
     private formattingSettings;
     private formattingSettingsService;
     private currentSrc;
+    private currentFragId;
+    private currentJsonId;
     private iframeLoaded;
     private pendingFilter;
     private lastSentIdsJson;
