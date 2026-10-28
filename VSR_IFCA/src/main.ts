@@ -762,8 +762,24 @@ window.addEventListener('error', (event) => {
     const filename = String(event.filename || '');
 
     // Cross-origin JSONP/script errors are often opaque and should not look like a fatal viewer crash.
-    if (message === 'Script error.' || filename.includes('script.google.com')) {
+    if (
+        message === 'Script error.' ||
+        message.includes('cross-origin') ||
+        message.includes('Blocked a frame') ||
+        message.includes('ResizeObserver') ||
+        filename.includes('script.google.com')
+    ) {
         console.warn('Non-fatal external script error:', message, filename);
+        return;
+    }
+
+    try {
+        const params = new URLSearchParams(window.location.search);
+        if (params.get('embed') === 'true' || window !== window.parent) {
+            console.warn('[Viewer Embed Error]:', message, filename);
+            return;
+        }
+    } catch (_) {
         return;
     }
 
@@ -4989,6 +5005,33 @@ async function loadModelList() {
         return await loadModelListInFlight;
     }
 
+    const initialParams = new URLSearchParams(window.location.search);
+    const directFileId = initialParams.get('fileId');
+    const directFilename = initialParams.get('file') || 'ESTRUCTURAL.frag';
+    const directJsonId = initialParams.get('jsonId');
+
+    if (directFileId && !(window as any)._directAutoLoadTriggered) {
+        (window as any)._directAutoLoadTriggered = true;
+        const directModel: RemoteModelItem = {
+            name: directFilename,
+            path: `models/${directFilename}`,
+            driveFragId: directFileId,
+            driveJsonId: directJsonId ?? null,
+            status: 'EN_PROGRESO',
+            changedBy: 'PowerBI',
+            changedByEmail: '',
+            fileId: directFileId,
+            filename: directFilename,
+            folder: 'General'
+        };
+        setTimeout(() => {
+            logToScreen(`Direct loading model: ${directFilename} (${directFileId})...`);
+            toggleModel(directModel, '', null).catch(e => {
+                console.error('Direct autoload error:', e);
+            });
+        }, 300);
+    }
+
     loadModelListInFlight = (async () => {
         const listContainer = document.getElementById('model-list');
         if (!listContainer) {
@@ -5278,23 +5321,38 @@ async function loadModelList() {
 
             if ((autoLoadFileId || autoLoadFilename) && !(window as any)._autoLoadedModel) {
                 (window as any)._autoLoadedModel = true;
-                const matchingItem = models.find((m) => 
+                let matchingItem = models.find((m) => 
                     (autoLoadFileId && (m.driveFragId === autoLoadFileId || m.fileId === autoLoadFileId)) ||
                     (autoLoadFilename && (m.name === autoLoadFilename || m.filename === autoLoadFilename))
                 );
 
+                if (!matchingItem && autoLoadFileId) {
+                    const cleanName = autoLoadFilename || 'Modelo.frag';
+                    matchingItem = {
+                        name: cleanName,
+                        path: `models/${cleanName}`,
+                        driveFragId: autoLoadFileId,
+                        driveJsonId: autoLoadJsonId ?? null,
+                        status: 'EN_PROGRESO',
+                        changedBy: 'PowerBI',
+                        changedByEmail: '',
+                        fileId: autoLoadFileId,
+                        filename: cleanName,
+                        folder: 'General'
+                    };
+                }
+
                 if (matchingItem) {
-                    const allLiElements = Array.from(listContainer.querySelectorAll('li.model-item'));
-                    const targetLi = allLiElements.find((li) => (li as HTMLElement).dataset.path === matchingItem.path);
-                    if (targetLi) {
-                        if (autoLoadJsonId && !matchingItem.driveJsonId) {
-                            matchingItem.driveJsonId = autoLoadJsonId;
-                        }
-                        logToScreen(`Auto-loading model: ${matchingItem.name}`);
-                        toggleModel(matchingItem, baseUrl, targetLi as HTMLElement).catch((err) => {
-                            console.error('Auto-load failed:', err);
-                        });
+                    if (autoLoadJsonId && !matchingItem.driveJsonId) {
+                        matchingItem.driveJsonId = autoLoadJsonId;
                     }
+                    const allLiElements = Array.from(listContainer.querySelectorAll('li.model-item'));
+                    const targetLi = allLiElements.find((li) => (li as HTMLElement).dataset.path === matchingItem.path) as HTMLElement | null;
+                    logToScreen(`Auto-loading model: ${matchingItem.name}`);
+                    toggleModel(matchingItem, baseUrl, targetLi).catch((err) => {
+                        console.error('Auto-load failed:', err);
+                        logToScreen(`Auto-load error: ${err}`, true);
+                    });
                 }
             }
 
@@ -5388,8 +5446,8 @@ async function loadDriveModel(m: RemoteModelItem) {
     await loadModel(blobUrl, m.path, { propertiesJson: props, sourceUrl });
 }
 
-async function toggleModel(m: RemoteModelItem, baseUrl: string, liElement: HTMLElement) {
-    const toggleIcon = liElement.querySelector('.visibility-toggle i');
+async function toggleModel(m: RemoteModelItem, baseUrl: string, liElement?: HTMLElement | null) {
+    const toggleIcon = liElement?.querySelector('.visibility-toggle i');
     const path = m.path;
 
     // Check if already loaded
@@ -5412,10 +5470,10 @@ async function toggleModel(m: RemoteModelItem, baseUrl: string, liElement: HTMLE
 
         // Update UI
         if (newVisible) {
-            liElement.classList.add('visible');
+            liElement?.classList.add('visible');
             toggleIcon?.classList.replace('fa-eye-slash', 'fa-eye');
         } else {
-            liElement.classList.remove('visible');
+            liElement?.classList.remove('visible');
             toggleIcon?.classList.replace('fa-eye', 'fa-eye-slash');
         }
         updateProjectLinksBarVisibility();
@@ -5444,13 +5502,13 @@ async function toggleModel(m: RemoteModelItem, baseUrl: string, liElement: HTMLE
         }
 
         // Update UI to loaded/visible state
-        liElement.classList.add('visible');
+        liElement?.classList.add('visible');
         toggleIcon?.classList.replace('fa-eye-slash', 'fa-eye');
         updateProjectLinksBarVisibility();
 
     } catch (error) {
         const msg = (error instanceof Error) ? error.message : String(error);
-        alert('Error downloading model: ' + msg);
+        console.error('Error downloading model:', error);
         logToScreen(`Error downloading model: ${msg}`, true);
     } finally {
         if (overlay) overlay.style.display = 'none';
@@ -12796,8 +12854,13 @@ enforceAuthenticatedAccess();
 setupUserAuthentication();
 
 function setupPowerBIIntegration() {
-    const params = new URLSearchParams(window.location.search);
-    const isEmbed = params.get('embed') === 'true' || window.self !== window.top;
+    let isEmbed = false;
+    try {
+        const params = new URLSearchParams(window.location.search);
+        isEmbed = params.get('embed') === 'true' || (window !== window.parent);
+    } catch (_) {
+        isEmbed = true;
+    }
 
     if (isEmbed) {
         document.body.classList.add('nora-embed-mode');
@@ -12811,6 +12874,9 @@ function setupPowerBIIntegration() {
             .nora-embed-mode #app {
                 width: 100vw !important;
                 height: 100vh !important;
+            }
+            #global-error-box {
+                display: none !important;
             }
         `;
         document.head.appendChild(style);
