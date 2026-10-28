@@ -12714,34 +12714,177 @@ function enforceAuthenticatedAccess() {
 
     const overlay = document.createElement('div');
     overlay.id = 'auth-gate-overlay';
-    overlay.style.position = 'fixed';
-    overlay.style.inset = '0';
-    overlay.style.zIndex = '10000';
-    overlay.style.display = 'flex';
-    overlay.style.alignItems = 'center';
-    overlay.style.justifyContent = 'center';
-    overlay.style.padding = '24px';
-    overlay.style.background = 'radial-gradient(circle at top, rgba(2, 73, 89, 0.18), rgba(2, 73, 89, 0) 30%), linear-gradient(135deg, rgba(255,255,255,0.97), rgba(246,246,244,0.97))';
+    overlay.style.cssText = 'position:fixed; inset:0; z-index:10000; display:flex; align-items:center; justify-content:center; padding:16px; background:rgba(15, 23, 42, 0.85); backdrop-filter:blur(8px);';
     overlay.innerHTML = `
-        <div style="width:min(520px, 100%); background:#ffffff; border:1px solid rgba(2, 73, 89, 0.12); border-radius:24px; padding:36px 32px; box-shadow:0 30px 80px rgba(64, 69, 66, 0.14); text-align:center; font-family:Inter, Arial, sans-serif;">
-            <img src="https://i.postimg.cc/L4r0gSvV/LOGO-TEXTO-NORA-NEGRO.png" alt="nora" style="height:44px; width:auto; margin:0 auto 22px; display:block;" />
-            <div style="width:72px; height:72px; margin:0 auto 18px; border-radius:50%; display:flex; align-items:center; justify-content:center; background:rgba(2, 73, 89, 0.08); color:#024959; font-size:28px;">
-                <i class="fa-solid fa-lock"></i>
+        <div style="width:min(440px, 94vw); background:#1e293b; border:1px solid rgba(148, 163, 184, 0.2); border-radius:20px; padding:32px 28px; box-shadow:0 25px 50px -12px rgba(0, 0, 0, 0.5); text-align:center; font-family:Inter, Segoe UI, sans-serif; color:#f8fafc;">
+            <img src="https://i.postimg.cc/SQ6JTZqj/LOGO-NORA-BLANCO.png" alt="nora" style="height:36px; width:auto; margin:0 auto 16px; display:block;" />
+            <h2 style="margin:0 0 6px; font-size:22px; font-weight:700; color:#ffffff;">Iniciar Sesión</h2>
+            <p style="margin:0 0 20px; font-size:13px; color:#94a3b8; line-height:1.5;">
+                Valida tus credenciales de <strong>nora BIM</strong> para acceder a los modelos y datos autorizados.
+            </p>
+            <div id="nora-auth-error" style="display:none; padding:10px 14px; margin-bottom:16px; border-radius:8px; background:rgba(239, 68, 68, 0.2); border:1px solid #ef4444; color:#fca5a5; font-size:12px; text-align:left;"></div>
+            <form id="nora-embedded-login-form" style="display:flex; flex-direction:column; gap:14px; text-align:left;">
+                <div>
+                    <label style="display:block; font-size:12px; font-weight:600; color:#cbd5e1; margin-bottom:6px;">Correo electrónico</label>
+                    <input type="email" id="nora-login-email" required placeholder="tu@correo.com" style="width:100%; box-sizing:border-box; padding:11px 14px; border-radius:10px; border:1px solid #334155; background:#0f172a; color:#ffffff; font-size:14px; outline:none;" />
+                </div>
+                <div>
+                    <label style="display:block; font-size:12px; font-weight:600; color:#cbd5e1; margin-bottom:6px;">Contraseña</label>
+                    <input type="password" id="nora-login-password" required placeholder="••••••••" style="width:100%; box-sizing:border-box; padding:11px 14px; border-radius:10px; border:1px solid #334155; background:#0f172a; color:#ffffff; font-size:14px; outline:none;" />
+                </div>
+                <div style="display:flex; align-items:center; gap:8px; font-size:12px; color:#94a3b8; cursor:pointer;">
+                    <input type="checkbox" id="nora-login-remember" checked style="cursor:pointer;" />
+                    <label for="nora-login-remember" style="cursor:pointer; user-select:none;">Mantener sesión iniciada en este tablero</label>
+                </div>
+                <button type="submit" id="nora-login-btn" style="margin-top:6px; padding:12px; border-radius:10px; border:none; background:#0284c7; color:#ffffff; font-weight:600; font-size:14px; cursor:pointer; transition:background 0.2s ease;">
+                    Validar Acceso
+                </button>
+            </form>
+            <div style="margin-top:16px; font-size:11px; color:#64748b;">
+                Tus permisos y modelos disponibles se filtrarán según tu rol en nora CDE.
             </div>
-            <h1 style="margin:0 0 10px; font-size:28px; line-height:1.15; color:#1f1f1f;">Inicia sesión para continuar</h1>
-            <p style="margin:0 0 22px; font-size:15px; line-height:1.6; color:#605e62;">
-                Debes autenticarte para acceder al visor VSR IFCA de nora. Si abriste este enlace directamente, primero inicia sesión y luego vuelve a entrar.
-            </p>
-            <a href="${LOGIN_URL}" style="display:inline-flex; align-items:center; justify-content:center; gap:10px; min-width:220px; padding:14px 18px; border-radius:12px; background:#024959; color:#fff; text-decoration:none; font-weight:700; font-size:15px; box-shadow:0 12px 28px rgba(2, 73, 89, 0.22);">
-                <i class="fa-solid fa-right-to-bracket"></i>
-                <span>Ir a iniciar sesión</span>
-            </a>
-            <p style="margin:16px 0 0; font-size:12px; color:#a49fa6;">
-                Cuando tu sesión esté activa, recarga esta página para ingresar.
-            </p>
         </div>
     `;
     document.body.appendChild(overlay);
+
+    const form = document.getElementById('nora-embedded-login-form');
+    const errBox = document.getElementById('nora-auth-error');
+    const btn = document.getElementById('nora-login-btn') as HTMLButtonElement;
+
+    form?.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const email = (document.getElementById('nora-login-email') as HTMLInputElement)?.value.trim();
+        const password = (document.getElementById('nora-login-password') as HTMLInputElement)?.value;
+        const remember = (document.getElementById('nora-login-remember') as HTMLInputElement)?.checked;
+
+        if (!email || !password) return;
+
+        if (btn) {
+            btn.disabled = true;
+            btn.textContent = 'Validando credenciales...';
+            btn.style.opacity = '0.7';
+        }
+        if (errBox) {
+            errBox.style.display = 'none';
+            errBox.textContent = '';
+        }
+
+        try {
+            // 1. Firebase Auth REST API
+            const fbRes = await fetch('https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=AIzaSyBQIlXsDtDFlc6VqCfamJERBjTUcBTb2hA', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ email, password, returnSecureToken: true })
+            });
+
+            const fbData = await fbRes.json();
+            if (!fbRes.ok) {
+                const code = fbData.error?.message || '';
+                if (code.includes('INVALID_LOGIN_CREDENTIALS') || code.includes('EMAIL_NOT_FOUND') || code.includes('INVALID_PASSWORD')) {
+                    throw new Error('Correo o contraseña incorrectos.');
+                }
+                throw new Error(code || 'No fue posible validar credenciales.');
+            }
+
+            // 2. Resolve Role & Permissions
+            const normalizedEmail = email.toLowerCase().trim();
+            let userRole = 'INVITADO';
+            let adminEmpresaId: string | null = null;
+            let userName = fbData.displayName || email.split('@')[0];
+
+            try {
+                const configRes = await fetch('portal-config.json?t=' + Date.now());
+                if (configRes.ok) {
+                    const cfg = await configRes.json();
+                    const supers = cfg.superAdmins || ['imagina3ddesign@gmail.com', 'mcmartinezg@unal.edu.co'];
+                    if (supers.some((s: string) => s.toLowerCase() === normalizedEmail)) {
+                        userRole = 'SUPER_ADMINISTRADOR';
+                    }
+                }
+            } catch (_) {}
+
+            if (userRole === 'INVITADO') {
+                try {
+                    const empRes = await fetch('empresas.json?t=' + Date.now());
+                    if (empRes.ok) {
+                        const emps = await empRes.json();
+                        for (const emp of emps) {
+                            if (emp.admins && emp.admins.some((a: string) => a.toLowerCase() === normalizedEmail)) {
+                                userRole = 'ADMINISTRADOR_EMPRESA';
+                                adminEmpresaId = emp.id;
+                                break;
+                            }
+                            if (emp.members) {
+                                const m = emp.members.find((x: any) => x.email && x.email.toLowerCase() === normalizedEmail);
+                                if (m) {
+                                    userRole = m.role || 'INVITADO';
+                                    adminEmpresaId = emp.id;
+                                    if (m.name) userName = m.name;
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                } catch (_) {}
+            }
+
+            if (userRole === 'INVITADO') {
+                try {
+                    const rolesRes = await fetch('https://script.google.com/macros/s/AKfycbx2RAQx_8K4o22xE0Mw-ETc7K_58vIoi6-PgVi64u80inuiw144ks3cgWSdCtXqIgB02g/exec');
+                    const rData = await rolesRes.json();
+                    if (Array.isArray(rData)) {
+                        const match = rData.reverse().find((u: any) => u.email && u.email.trim().toLowerCase() === normalizedEmail);
+                        if (match) {
+                            userRole = match.rol || userRole;
+                            if (match.nombre) userName = match.nombre;
+                        }
+                    }
+                } catch (_) {}
+            }
+
+            const userProfile = {
+                name: userName,
+                username: normalizedEmail,
+                email: normalizedEmail,
+                role: userRole,
+                adminEmpresaId: adminEmpresaId,
+                picture: ''
+            };
+
+            if (remember) {
+                localStorage.setItem('userAccount', JSON.stringify(userProfile));
+            } else {
+                sessionStorage.setItem('userAccount', JSON.stringify(userProfile));
+            }
+
+            // Remove overlay and unblur
+            overlay.remove();
+            app.style.pointerEvents = '';
+            app.style.userSelect = '';
+            app.style.filter = '';
+            document.body.style.overflow = '';
+
+            // Reload security context and re-filter models based on this user's authorizations!
+            const params = new URLSearchParams(window.location.search);
+            const project = params.get('project') || '';
+            const companyId = params.get('empresa') || '';
+            activeSecurityContext = await loadSecurityContext(project, companyId);
+            setupUserAuthentication();
+            await loadModelList();
+
+        } catch (err: any) {
+            console.error('[Nora Auth Error]:', err);
+            if (errBox) {
+                errBox.style.display = 'block';
+                errBox.textContent = err?.message || 'Error al validar credenciales.';
+            }
+            if (btn) {
+                btn.disabled = false;
+                btn.textContent = 'Validar Acceso';
+                btn.style.opacity = '1';
+            }
+        }
+    });
 }
 
 // Initialize Viewpoints

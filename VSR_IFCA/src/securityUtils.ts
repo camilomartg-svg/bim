@@ -244,11 +244,7 @@ export const isUserAuthorizedForFile = (
     return true;
   }
   if (!currentUser) {
-    // If viewing in viewer and no user session is loaded, allow viewing project models
-    if (action === 'view') {
-      return true;
-    }
-    console.log('[SECURITY] Denegado: No hay usuario autenticado');
+    console.log('[SECURITY] Denegado: No hay usuario autenticado. Se requiere inicio de sesión en nora BIM.');
     return false;
   }
   const email = (currentUser.username || currentUser.email || currentUser.userAccount || '').toLowerCase().trim();
