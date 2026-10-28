@@ -1,0 +1,103 @@
+{
+  "dataRoles": [
+    {
+      "displayName": "ID Elemento (expressID)",
+      "name": "expressId",
+      "kind": "Grouping"
+    },
+    {
+      "displayName": "ID Modelo FRAG (Opcional)",
+      "name": "fragId",
+      "kind": "Grouping"
+    },
+    {
+      "displayName": "ID Metadata JSON (Opcional)",
+      "name": "jsonId",
+      "kind": "Grouping"
+    }
+  ],
+  "objects": {
+    "modelSettings": {
+      "displayName": "Configuración de Modelo NoraBIM",
+      "properties": {
+        "viewerUrl": {
+          "displayName": "URL del Visor",
+          "description": "Dirección web del visor NoraBIM (por defecto: https://norabim.com/VSR_IFC_simplificado/)",
+          "type": {
+            "text": true
+          }
+        },
+        "defaultFragId": {
+          "displayName": "ID Archivo FRAG (Google Drive)",
+          "description": "ID de Google Drive del archivo .frag",
+          "type": {
+            "text": true
+          }
+        },
+        "defaultJsonId": {
+          "displayName": "ID Archivo JSON (Google Drive)",
+          "description": "ID de Google Drive del archivo .json de propiedades",
+          "type": {
+            "text": true
+          }
+        },
+        "autoIsolate": {
+          "displayName": "Aislar elementos filtrados",
+          "description": "Oculta los demás elementos cuando se filtra en Power BI",
+          "type": {
+            "bool": true
+          }
+        },
+        "forceLogin": {
+          "displayName": "Forzar inicio de sesión (Probar Login)",
+          "description": "Muestra la pantalla de inicio de sesión de nora BIM para validar credenciales y roles",
+          "type": {
+            "bool": true
+          }
+        }
+      }
+    }
+  },
+  "dataViewMappings": [
+    {
+      "categorical": {
+        "categories": {
+          "for": {
+            "in": "expressId"
+          },
+          "dataReductionAlgorithm": {
+            "window": {
+              "count": 30000
+            }
+          }
+        },
+        "values": {
+          "select": [
+            {
+              "bind": {
+                "to": "fragId"
+              }
+            },
+            {
+              "bind": {
+                "to": "jsonId"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "privileges": [
+    {
+      "name": "WebAccess",
+      "essential": true,
+      "parameters": [
+        "https://norabim.com",
+        "https://*.google.com",
+        "https://*.googleapis.com",
+        "https://*.googleusercontent.com"
+      ]
+    }
+  ]
+}

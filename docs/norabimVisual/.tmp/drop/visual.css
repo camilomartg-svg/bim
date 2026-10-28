@@ -1,0 +1,16 @@
+.norabim-container {
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  position: relative;
+  background-color: #0f172a;
+}
+.norabim-iframe {
+  width: 100%;
+  height: 100%;
+  border: none;
+  display: block;
+}
+

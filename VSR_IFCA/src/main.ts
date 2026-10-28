@@ -4996,6 +4996,382 @@ function initGridToggle() {
 
 
 
+// --- User Authentication and Security Enforcement ---
+const LOGIN_URL = 'https://norabim.com/inse.html';
+
+function getStoredUserAccount() {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('forceLogin') === 'true') {
+        return null;
+    }
+    if (params.get('bypassAuth') === 'true') {
+        return { name: 'Model Testing Agent', email: 'agent@nora.com', role: 'Tester' };
+    }
+    const userAccountStr = sessionStorage.getItem('userAccount') || localStorage.getItem('userAccount');
+    if (!userAccountStr) return null;
+    try {
+        const userAccount = JSON.parse(userAccountStr);
+        if (!userAccount || typeof userAccount !== 'object') return null;
+        return userAccount;
+    } catch (e) {
+        console.error('[Auth] Error parsing user account:', e);
+        return null;
+    }
+}
+
+function renderFloatingUserBadge(userAccount: any) {
+    let badge = document.getElementById('nora-floating-auth-badge');
+    if (!badge) {
+        badge = document.createElement('div');
+        badge.id = 'nora-floating-auth-badge';
+        badge.style.cssText = 'position:fixed; top:8px; right:330px; z-index:99999999; display:flex; align-items:center; gap:8px; background:rgba(15, 23, 42, 0.94); border:1px solid rgba(56, 189, 248, 0.35); border-radius:24px; padding:5px 12px; color:#f8fafc; font-family:Inter, Segoe UI, sans-serif; font-size:12px; backdrop-filter:blur(10px); box-shadow:0 4px 18px rgba(0,0,0,0.5); user-select:none; transition:right 0.3s ease;';
+        document.body.appendChild(badge);
+    }
+    if (userAccount) {
+        const name = userAccount.name || userAccount.username || 'Usuario';
+        const role = userAccount.role || 'Usuario';
+        const initial = name.charAt(0).toUpperCase();
+        badge.innerHTML = `
+            <div style="display:flex; align-items:center; gap:6px;">
+                <div style="width:22px; height:22px; border-radius:50%; background:#0284c7; display:flex; align-items:center; justify-content:center; font-weight:700; font-size:11px; color:#fff;">
+                    ${initial}
+                </div>
+                <div style="display:flex; flex-direction:column; line-height:1.15; max-width:130px; text-align:left;">
+                    <span style="font-weight:600; color:#ffffff; font-size:11px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${name}</span>
+                    <span style="font-size:9px; color:#38bdf8; font-weight:500;">${role}</span>
+                </div>
+            </div>
+            <button id="nora-floating-logout-btn" title="Cerrar sesión para probar otro usuario" style="background:#ef4444; border:none; color:#fff; border-radius:10px; padding:3px 8px; font-size:10px; font-weight:600; cursor:pointer; display:flex; align-items:center; gap:4px; margin-left:4px;" onmouseover="this.style.background='#dc2626'" onmouseout="this.style.background='#ef4444'">
+                <i class="fa-solid fa-right-from-bracket"></i> Salir
+            </button>
+        `;
+        document.getElementById('nora-floating-logout-btn')?.addEventListener('click', () => {
+            if (confirm('¿Cerrar sesión de nora BIM? Se solicitarán credenciales nuevamente.')) {
+                sessionStorage.removeItem('userAccount');
+                localStorage.removeItem('userAccount');
+                activeSecurityContext = null;
+                for (const [, model] of loadedModels.entries()) {
+                    try {
+                        if (model?.object) model.object.visible = false;
+                    } catch (_) {}
+                }
+                try {
+                    highlighter.clear('select');
+                } catch (_) {}
+                setupUserAuthentication();
+                enforceAuthenticatedAccess(true);
+            }
+        });
+    } else {
+        badge.innerHTML = `
+            <button id="nora-floating-login-btn" style="background:#0284c7; border:none; color:#fff; border-radius:14px; padding:5px 12px; font-size:11px; font-weight:600; cursor:pointer; display:flex; align-items:center; gap:6px;">
+                <i class="fa-solid fa-lock"></i> Iniciar Sesión
+            </button>
+        `;
+        document.getElementById('nora-floating-login-btn')?.addEventListener('click', () => {
+            enforceAuthenticatedAccess(true);
+        });
+    }
+}
+
+function setupUserAuthentication() {
+    console.log('[Auth] Setting up user authentication...');
+    const userAccount = getStoredUserAccount();
+    renderFloatingUserBadge(userAccount);
+
+    const userContainer = document.getElementById('user-profile-container');
+    if (!userContainer) {
+        return;
+    }
+
+    userContainer.innerHTML = '';
+
+    if (userAccount) {
+        try {
+            console.log('[Auth] User found:', userAccount.name);
+
+            const nameSpan = document.createElement('span');
+            const firstName = userAccount.name ? userAccount.name.split(' ')[0] : 'Usuario';
+            nameSpan.textContent = `Hola, ${firstName}`;
+            nameSpan.style.fontSize = '14px';
+            nameSpan.style.fontWeight = '500';
+            nameSpan.style.color = 'var(--text-dark-gray)';
+
+            const avatar = document.createElement('div');
+            avatar.style.width = '32px';
+            avatar.style.height = '32px';
+            avatar.style.borderRadius = '50%';
+            avatar.style.backgroundColor = 'var(--primary-color)';
+            avatar.style.color = 'white';
+            avatar.style.display = 'flex';
+            avatar.style.alignItems = 'center';
+            avatar.style.justifyContent = 'center';
+            avatar.style.fontSize = '14px';
+            avatar.style.fontWeight = 'bold';
+
+            let initials = 'U';
+            if (userAccount.name) {
+                const parts = userAccount.name.split(' ');
+                if (parts.length >= 2) {
+                    initials = (parts[0][0] + parts[1][0]).toUpperCase();
+                } else {
+                    initials = parts[0][0].toUpperCase();
+                }
+            }
+            avatar.textContent = initials;
+            avatar.title = userAccount.name + (userAccount.role ? ` (${userAccount.role})` : '');
+
+            const logoutBtn = document.createElement('button');
+            logoutBtn.innerHTML = '<i class="fa-solid fa-right-from-bracket"></i>';
+            logoutBtn.title = "Cerrar Sesión";
+            logoutBtn.style.background = 'none';
+            logoutBtn.style.border = 'none';
+            logoutBtn.style.cursor = 'pointer';
+            logoutBtn.style.fontSize = '16px';
+            logoutBtn.style.color = '#666';
+            logoutBtn.style.marginLeft = '5px';
+
+            logoutBtn.onmouseover = () => { logoutBtn.style.color = 'var(--primary-color)'; };
+            logoutBtn.onmouseout = () => { logoutBtn.style.color = '#666'; };
+
+            logoutBtn.onclick = () => {
+                if (confirm('¿Cerrar sesión?')) {
+                    sessionStorage.removeItem('userAccount');
+                    localStorage.removeItem('userAccount');
+                    activeSecurityContext = null;
+                    setupUserAuthentication();
+                    enforceAuthenticatedAccess(true);
+                }
+            };
+
+            userContainer.appendChild(nameSpan);
+            userContainer.appendChild(avatar);
+            userContainer.appendChild(logoutBtn);
+
+        } catch (e) {
+            console.error('[Auth] Error rendering user account:', e);
+            renderGuestMode(userContainer);
+        }
+    } else {
+        console.log('[Auth] No user found. Rendering guest mode.');
+        renderGuestMode(userContainer);
+    }
+}
+
+function renderGuestMode(container: HTMLElement) {
+    const loginLink = document.createElement('a');
+    loginLink.href = LOGIN_URL;
+    loginLink.innerHTML = '<i class="fa-solid fa-user"></i> <span style="margin-left:5px; font-size:14px;">Iniciar Sesión</span>';
+    loginLink.style.textDecoration = "none";
+    loginLink.style.color = "var(--primary-color)";
+    loginLink.style.display = "flex";
+    loginLink.style.alignItems = "center";
+    loginLink.style.fontWeight = "500";
+    loginLink.removeAttribute('target');
+    loginLink.onclick = (e) => {
+        e.preventDefault();
+        enforceAuthenticatedAccess(true);
+    };
+
+    container.appendChild(loginLink);
+}
+
+function enforceAuthenticatedAccess(forcePrompt = false) {
+    const app = document.getElementById('app');
+    if (!app) return;
+    const userAccount = forcePrompt ? null : getStoredUserAccount();
+    const existingGate = document.getElementById('auth-gate-overlay');
+
+    if (userAccount && !forcePrompt) {
+        existingGate?.remove();
+        app.style.pointerEvents = '';
+        app.style.userSelect = '';
+        app.style.filter = '';
+        document.body.style.overflow = '';
+        return;
+    }
+
+    if (existingGate) return;
+
+    app.style.pointerEvents = 'none';
+    app.style.userSelect = 'none';
+    app.style.filter = 'blur(6px)';
+    document.body.style.overflow = 'hidden';
+
+    const overlay = document.createElement('div');
+    overlay.id = 'auth-gate-overlay';
+    overlay.style.cssText = 'position:fixed; inset:0; z-index:999999999 !important; display:flex; align-items:center; justify-content:center; padding:16px; background:rgba(15, 23, 42, 0.88); backdrop-filter:blur(10px);';
+    overlay.innerHTML = `
+        <div style="width:min(440px, 94vw); background:#1e293b; border:1px solid rgba(148, 163, 184, 0.25); border-radius:20px; padding:32px 28px; box-shadow:0 25px 50px -12px rgba(0, 0, 0, 0.7); text-align:center; font-family:Inter, Segoe UI, sans-serif; color:#f8fafc;">
+            <img src="https://i.postimg.cc/SQ6JTZqj/LOGO-NORA-BLANCO.png" alt="nora" style="height:38px; width:auto; margin:0 auto 16px; display:block;" />
+            <h2 style="margin:0 0 6px; font-size:22px; font-weight:700; color:#ffffff;">Iniciar Sesión</h2>
+            <p style="margin:0 0 20px; font-size:13px; color:#94a3b8; line-height:1.5;">
+                Valida tus credenciales de <strong>nora BIM</strong> para visualizar los modelos 3D y datos autorizados.
+            </p>
+            <div id="nora-auth-error" style="display:none; padding:10px 14px; margin-bottom:16px; border-radius:8px; background:rgba(239, 68, 68, 0.2); border:1px solid #ef4444; color:#fca5a5; font-size:12px; text-align:left;"></div>
+            <form id="nora-embedded-login-form" style="display:flex; flex-direction:column; gap:14px; text-align:left;">
+                <div>
+                    <label style="display:block; font-size:12px; font-weight:600; color:#cbd5e1; margin-bottom:6px;">Correo electrónico</label>
+                    <input type="email" id="nora-login-email" required placeholder="tu@correo.com" style="width:100%; box-sizing:border-box; padding:11px 14px; border-radius:10px; border:1px solid #334155; background:#0f172a; color:#ffffff; font-size:14px; outline:none;" />
+                </div>
+                <div>
+                    <label style="display:block; font-size:12px; font-weight:600; color:#cbd5e1; margin-bottom:6px;">Contraseña</label>
+                    <input type="password" id="nora-login-password" required placeholder="••••••••" style="width:100%; box-sizing:border-box; padding:11px 14px; border-radius:10px; border:1px solid #334155; background:#0f172a; color:#ffffff; font-size:14px; outline:none;" />
+                </div>
+                <div style="display:flex; align-items:center; gap:8px; font-size:12px; color:#94a3b8; cursor:pointer;">
+                    <input type="checkbox" id="nora-login-remember" checked style="cursor:pointer;" />
+                    <label for="nora-login-remember" style="cursor:pointer; user-select:none;">Mantener sesión iniciada</label>
+                </div>
+                <button type="submit" id="nora-login-btn" style="margin-top:6px; padding:12px; border-radius:10px; border:none; background:#0284c7; color:#ffffff; font-weight:600; font-size:14px; cursor:pointer; transition:background 0.2s ease;">
+                    Validar Acceso
+                </button>
+            </form>
+            <div style="margin-top:16px; font-size:11px; color:#64748b;">
+                Tus permisos de visualización de modelos se filtrarán según tu rol en nora CDE.
+            </div>
+        </div>
+    `;
+    document.body.appendChild(overlay);
+
+    const form = document.getElementById('nora-embedded-login-form');
+    const errBox = document.getElementById('nora-auth-error');
+    const btn = document.getElementById('nora-login-btn') as HTMLButtonElement;
+
+    form?.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const email = (document.getElementById('nora-login-email') as HTMLInputElement)?.value.trim();
+        const password = (document.getElementById('nora-login-password') as HTMLInputElement)?.value;
+        const remember = (document.getElementById('nora-login-remember') as HTMLInputElement)?.checked;
+
+        if (!email || !password) return;
+
+        if (btn) {
+            btn.disabled = true;
+            btn.textContent = 'Validando credenciales...';
+            btn.style.opacity = '0.7';
+        }
+        if (errBox) {
+            errBox.style.display = 'none';
+            errBox.textContent = '';
+        }
+
+        try {
+            const fbRes = await fetch('https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=AIzaSyBQIlXsDtDFlc6VqCfamJERBjTUcBTb2hA', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ email, password, returnSecureToken: true })
+            });
+
+            const fbData = await fbRes.json();
+            if (!fbRes.ok) {
+                const code = fbData.error?.message || '';
+                if (code.includes('INVALID_LOGIN_CREDENTIALS') || code.includes('EMAIL_NOT_FOUND') || code.includes('INVALID_PASSWORD')) {
+                    throw new Error('Correo o contraseña incorrectos.');
+                }
+                throw new Error(code || 'No fue posible validar credenciales.');
+            }
+
+            const normalizedEmail = email.toLowerCase().trim();
+            let userRole = 'INVITADO';
+            let adminEmpresaId: string | null = null;
+            let userName = fbData.displayName || email.split('@')[0];
+
+            try {
+                const configRes = await fetch('portal-config.json?t=' + Date.now());
+                if (configRes.ok) {
+                    const cfg = await configRes.json();
+                    const supers = cfg.superAdmins || ['imagina3ddesign@gmail.com', 'mcmartinezg@unal.edu.co'];
+                    if (supers.some((s: string) => s.toLowerCase() === normalizedEmail)) {
+                        userRole = 'SUPER_ADMINISTRADOR';
+                    }
+                }
+            } catch (_) {}
+
+            if (userRole === 'INVITADO') {
+                try {
+                    const empRes = await fetch('empresas.json?t=' + Date.now());
+                    if (empRes.ok) {
+                        const emps = await empRes.json();
+                        for (const emp of emps) {
+                            if (emp.admins && emp.admins.some((a: string) => a.toLowerCase() === normalizedEmail)) {
+                                userRole = 'ADMINISTRADOR_EMPRESA';
+                                adminEmpresaId = emp.id;
+                                break;
+                            }
+                            if (emp.members) {
+                                const m = emp.members.find((x: any) => x.email && x.email.toLowerCase() === normalizedEmail);
+                                if (m) {
+                                    userRole = m.role || 'INVITADO';
+                                    adminEmpresaId = emp.id;
+                                    if (m.name) userName = m.name;
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                } catch (_) {}
+            }
+
+            if (userRole === 'INVITADO') {
+                try {
+                    const rolesRes = await fetch('https://script.google.com/macros/s/AKfycbx2RAQx_8K4o22xE0Mw-ETc7K_58vIoi6-PgVi64u80inuiw144ks3cgWSdCtXqIgB02g/exec');
+                    const rData = await rolesRes.json();
+                    if (Array.isArray(rData)) {
+                        const match = rData.reverse().find((u: any) => u.email && u.email.trim().toLowerCase() === normalizedEmail);
+                        if (match) {
+                            userRole = match.rol || userRole;
+                            if (match.nombre) userName = match.nombre;
+                        }
+                    }
+                } catch (_) {}
+            }
+
+            const userProfile = {
+                name: userName,
+                username: normalizedEmail,
+                email: normalizedEmail,
+                role: userRole,
+                adminEmpresaId: adminEmpresaId,
+                picture: ''
+            };
+
+            if (remember) {
+                localStorage.setItem('userAccount', JSON.stringify(userProfile));
+            } else {
+                sessionStorage.setItem('userAccount', JSON.stringify(userProfile));
+            }
+
+            overlay.remove();
+            app.style.pointerEvents = '';
+            app.style.userSelect = '';
+            app.style.filter = '';
+            document.body.style.overflow = '';
+
+            const params = new URLSearchParams(window.location.search);
+            const project = params.get('project') || '';
+            const companyId = params.get('empresa') || '';
+            activeSecurityContext = await loadSecurityContext(project, companyId);
+            activeSecurityContext.currentUser = userProfile;
+            setupUserAuthentication();
+
+            (window as any)._directAutoLoadTriggered = false;
+            await loadModelList();
+
+        } catch (err: any) {
+            console.error('[Nora Auth Error]:', err);
+            if (errBox) {
+                errBox.style.display = 'block';
+                errBox.textContent = err?.message || 'Error al validar credenciales.';
+            }
+            if (btn) {
+                btn.disabled = false;
+                btn.textContent = 'Validar Acceso';
+                btn.style.opacity = '1';
+            }
+        }
+    });
+}
+
 // Add global state for folder open/close
 const folderStates: Record<string, boolean> = {};
 
@@ -5003,6 +5379,13 @@ const folderStates: Record<string, boolean> = {};
 async function loadModelList() {
     if (loadModelListInFlight) {
         return await loadModelListInFlight;
+    }
+
+    const currentUser = getStoredUserAccount();
+    if (!currentUser) {
+        console.warn('[Nora Security] Esperando autenticación para listar modelos...');
+        enforceAuthenticatedAccess(true);
+        return;
     }
 
     const initialParams = new URLSearchParams(window.location.search);
@@ -5526,6 +5909,8 @@ initGridToggle();
 initMultiSelectToggle();
 initClipperTool();
 initFitModelTool();
+setupUserAuthentication();
+enforceAuthenticatedAccess();
 loadModelList();
 initPropertiesPanel();
 initQuantitiesPanel();
@@ -12672,369 +13057,8 @@ function setupViewpoints() {
     }
 }
 
-const LOGIN_URL = 'https://norabim.com/inse.html';
-
-function getStoredUserAccount() {
-    if (window.location.search.includes('bypassAuth=true')) {
-        return { name: 'Model Testing Agent', email: 'agent@nora.com', role: 'Tester' };
-    }
-    const userAccountStr = sessionStorage.getItem('userAccount') || localStorage.getItem('userAccount');
-    if (!userAccountStr) return null;
-    try {
-        const userAccount = JSON.parse(userAccountStr);
-        if (!userAccount || typeof userAccount !== 'object') return null;
-        return userAccount;
-    } catch (e) {
-        console.error('[Auth] Error parsing user account:', e);
-        return null;
-    }
-}
-
-function enforceAuthenticatedAccess() {
-    const app = document.getElementById('app');
-    if (!app) return;
-    const userAccount = getStoredUserAccount();
-    const existingGate = document.getElementById('auth-gate-overlay');
-
-    if (userAccount) {
-        existingGate?.remove();
-        app.style.pointerEvents = '';
-        app.style.userSelect = '';
-        app.style.filter = '';
-        document.body.style.overflow = '';
-        return;
-    }
-
-    if (existingGate) return;
-
-    app.style.pointerEvents = 'none';
-    app.style.userSelect = 'none';
-    app.style.filter = 'blur(4px)';
-    document.body.style.overflow = 'hidden';
-
-    const overlay = document.createElement('div');
-    overlay.id = 'auth-gate-overlay';
-    overlay.style.cssText = 'position:fixed; inset:0; z-index:10000; display:flex; align-items:center; justify-content:center; padding:16px; background:rgba(15, 23, 42, 0.85); backdrop-filter:blur(8px);';
-    overlay.innerHTML = `
-        <div style="width:min(440px, 94vw); background:#1e293b; border:1px solid rgba(148, 163, 184, 0.2); border-radius:20px; padding:32px 28px; box-shadow:0 25px 50px -12px rgba(0, 0, 0, 0.5); text-align:center; font-family:Inter, Segoe UI, sans-serif; color:#f8fafc;">
-            <img src="https://i.postimg.cc/SQ6JTZqj/LOGO-NORA-BLANCO.png" alt="nora" style="height:36px; width:auto; margin:0 auto 16px; display:block;" />
-            <h2 style="margin:0 0 6px; font-size:22px; font-weight:700; color:#ffffff;">Iniciar Sesión</h2>
-            <p style="margin:0 0 20px; font-size:13px; color:#94a3b8; line-height:1.5;">
-                Valida tus credenciales de <strong>nora BIM</strong> para acceder a los modelos y datos autorizados.
-            </p>
-            <div id="nora-auth-error" style="display:none; padding:10px 14px; margin-bottom:16px; border-radius:8px; background:rgba(239, 68, 68, 0.2); border:1px solid #ef4444; color:#fca5a5; font-size:12px; text-align:left;"></div>
-            <form id="nora-embedded-login-form" style="display:flex; flex-direction:column; gap:14px; text-align:left;">
-                <div>
-                    <label style="display:block; font-size:12px; font-weight:600; color:#cbd5e1; margin-bottom:6px;">Correo electrónico</label>
-                    <input type="email" id="nora-login-email" required placeholder="tu@correo.com" style="width:100%; box-sizing:border-box; padding:11px 14px; border-radius:10px; border:1px solid #334155; background:#0f172a; color:#ffffff; font-size:14px; outline:none;" />
-                </div>
-                <div>
-                    <label style="display:block; font-size:12px; font-weight:600; color:#cbd5e1; margin-bottom:6px;">Contraseña</label>
-                    <input type="password" id="nora-login-password" required placeholder="••••••••" style="width:100%; box-sizing:border-box; padding:11px 14px; border-radius:10px; border:1px solid #334155; background:#0f172a; color:#ffffff; font-size:14px; outline:none;" />
-                </div>
-                <div style="display:flex; align-items:center; gap:8px; font-size:12px; color:#94a3b8; cursor:pointer;">
-                    <input type="checkbox" id="nora-login-remember" checked style="cursor:pointer;" />
-                    <label for="nora-login-remember" style="cursor:pointer; user-select:none;">Mantener sesión iniciada en este tablero</label>
-                </div>
-                <button type="submit" id="nora-login-btn" style="margin-top:6px; padding:12px; border-radius:10px; border:none; background:#0284c7; color:#ffffff; font-weight:600; font-size:14px; cursor:pointer; transition:background 0.2s ease;">
-                    Validar Acceso
-                </button>
-            </form>
-            <div style="margin-top:16px; font-size:11px; color:#64748b;">
-                Tus permisos y modelos disponibles se filtrarán según tu rol en nora CDE.
-            </div>
-        </div>
-    `;
-    document.body.appendChild(overlay);
-
-    const form = document.getElementById('nora-embedded-login-form');
-    const errBox = document.getElementById('nora-auth-error');
-    const btn = document.getElementById('nora-login-btn') as HTMLButtonElement;
-
-    form?.addEventListener('submit', async (e) => {
-        e.preventDefault();
-        const email = (document.getElementById('nora-login-email') as HTMLInputElement)?.value.trim();
-        const password = (document.getElementById('nora-login-password') as HTMLInputElement)?.value;
-        const remember = (document.getElementById('nora-login-remember') as HTMLInputElement)?.checked;
-
-        if (!email || !password) return;
-
-        if (btn) {
-            btn.disabled = true;
-            btn.textContent = 'Validando credenciales...';
-            btn.style.opacity = '0.7';
-        }
-        if (errBox) {
-            errBox.style.display = 'none';
-            errBox.textContent = '';
-        }
-
-        try {
-            // 1. Firebase Auth REST API
-            const fbRes = await fetch('https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=AIzaSyBQIlXsDtDFlc6VqCfamJERBjTUcBTb2hA', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ email, password, returnSecureToken: true })
-            });
-
-            const fbData = await fbRes.json();
-            if (!fbRes.ok) {
-                const code = fbData.error?.message || '';
-                if (code.includes('INVALID_LOGIN_CREDENTIALS') || code.includes('EMAIL_NOT_FOUND') || code.includes('INVALID_PASSWORD')) {
-                    throw new Error('Correo o contraseña incorrectos.');
-                }
-                throw new Error(code || 'No fue posible validar credenciales.');
-            }
-
-            // 2. Resolve Role & Permissions
-            const normalizedEmail = email.toLowerCase().trim();
-            let userRole = 'INVITADO';
-            let adminEmpresaId: string | null = null;
-            let userName = fbData.displayName || email.split('@')[0];
-
-            try {
-                const configRes = await fetch('portal-config.json?t=' + Date.now());
-                if (configRes.ok) {
-                    const cfg = await configRes.json();
-                    const supers = cfg.superAdmins || ['imagina3ddesign@gmail.com', 'mcmartinezg@unal.edu.co'];
-                    if (supers.some((s: string) => s.toLowerCase() === normalizedEmail)) {
-                        userRole = 'SUPER_ADMINISTRADOR';
-                    }
-                }
-            } catch (_) {}
-
-            if (userRole === 'INVITADO') {
-                try {
-                    const empRes = await fetch('empresas.json?t=' + Date.now());
-                    if (empRes.ok) {
-                        const emps = await empRes.json();
-                        for (const emp of emps) {
-                            if (emp.admins && emp.admins.some((a: string) => a.toLowerCase() === normalizedEmail)) {
-                                userRole = 'ADMINISTRADOR_EMPRESA';
-                                adminEmpresaId = emp.id;
-                                break;
-                            }
-                            if (emp.members) {
-                                const m = emp.members.find((x: any) => x.email && x.email.toLowerCase() === normalizedEmail);
-                                if (m) {
-                                    userRole = m.role || 'INVITADO';
-                                    adminEmpresaId = emp.id;
-                                    if (m.name) userName = m.name;
-                                    break;
-                                }
-                            }
-                        }
-                    }
-                } catch (_) {}
-            }
-
-            if (userRole === 'INVITADO') {
-                try {
-                    const rolesRes = await fetch('https://script.google.com/macros/s/AKfycbx2RAQx_8K4o22xE0Mw-ETc7K_58vIoi6-PgVi64u80inuiw144ks3cgWSdCtXqIgB02g/exec');
-                    const rData = await rolesRes.json();
-                    if (Array.isArray(rData)) {
-                        const match = rData.reverse().find((u: any) => u.email && u.email.trim().toLowerCase() === normalizedEmail);
-                        if (match) {
-                            userRole = match.rol || userRole;
-                            if (match.nombre) userName = match.nombre;
-                        }
-                    }
-                } catch (_) {}
-            }
-
-            const userProfile = {
-                name: userName,
-                username: normalizedEmail,
-                email: normalizedEmail,
-                role: userRole,
-                adminEmpresaId: adminEmpresaId,
-                picture: ''
-            };
-
-            if (remember) {
-                localStorage.setItem('userAccount', JSON.stringify(userProfile));
-            } else {
-                sessionStorage.setItem('userAccount', JSON.stringify(userProfile));
-            }
-
-            // Remove overlay and unblur
-            overlay.remove();
-            app.style.pointerEvents = '';
-            app.style.userSelect = '';
-            app.style.filter = '';
-            document.body.style.overflow = '';
-
-            // Reload security context and re-filter models based on this user's authorizations!
-            const params = new URLSearchParams(window.location.search);
-            const project = params.get('project') || '';
-            const companyId = params.get('empresa') || '';
-            activeSecurityContext = await loadSecurityContext(project, companyId);
-            setupUserAuthentication();
-            await loadModelList();
-
-        } catch (err: any) {
-            console.error('[Nora Auth Error]:', err);
-            if (errBox) {
-                errBox.style.display = 'block';
-                errBox.textContent = err?.message || 'Error al validar credenciales.';
-            }
-            if (btn) {
-                btn.disabled = false;
-                btn.textContent = 'Validar Acceso';
-                btn.style.opacity = '1';
-            }
-        }
-    });
-}
-
 // Initialize Viewpoints
 setupViewpoints();
-
-
-// --- User Authentication Setup (Reused from home.html) ---
-function renderFloatingUserBadge(userAccount: any) {
-    let badge = document.getElementById('nora-floating-auth-badge');
-    if (!badge) {
-        badge = document.createElement('div');
-        badge.id = 'nora-floating-auth-badge';
-        badge.style.cssText = 'position:fixed; top:12px; right:12px; z-index:9999; display:flex; align-items:center; gap:8px; background:rgba(15, 23, 42, 0.88); border:1px solid rgba(148, 163, 184, 0.3); border-radius:20px; padding:6px 14px; color:#f8fafc; font-family:Inter, Segoe UI, sans-serif; font-size:12px; backdrop-filter:blur(8px); box-shadow:0 4px 14px rgba(0,0,0,0.35); user-select:none;';
-        document.body.appendChild(badge);
-    }
-    if (userAccount) {
-        const name = userAccount.name || userAccount.username || 'Usuario';
-        const role = userAccount.role || 'Usuario';
-        const initial = name.charAt(0).toUpperCase();
-        badge.innerHTML = `
-            <div style="width:22px; height:22px; border-radius:50%; background:#0284c7; display:flex; align-items:center; justify-content:center; font-weight:700; font-size:11px; color:#fff;">
-                ${initial}
-            </div>
-            <span style="font-weight:600; max-width:140px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${name}</span>
-            <span style="font-size:10px; color:#38bdf8; background:rgba(56, 189, 248, 0.12); padding:2px 6px; border-radius:10px; border:1px solid rgba(56, 189, 248, 0.25);">${role}</span>
-            <button id="nora-floating-logout-btn" title="Cerrar sesión para probar otro usuario" style="background:none; border:none; color:#f87171; cursor:pointer; font-size:13px; margin-left:4px; padding:2px 4px; display:flex; align-items:center;" onmouseover="this.style.color='#ef4444'" onmouseout="this.style.color='#f87171'">
-                <i class="fa-solid fa-right-from-bracket"></i>
-            </button>
-        `;
-        document.getElementById('nora-floating-logout-btn')?.addEventListener('click', () => {
-            if (confirm('¿Cerrar sesión de nora BIM? Se solicitarán credenciales nuevamente.')) {
-                sessionStorage.removeItem('userAccount');
-                localStorage.removeItem('userAccount');
-                window.location.reload();
-            }
-        });
-    } else {
-        badge.innerHTML = `
-            <button id="nora-floating-login-btn" style="background:#0284c7; border:none; color:#fff; border-radius:12px; padding:5px 12px; font-size:12px; font-weight:600; cursor:pointer; display:flex; align-items:center; gap:6px;">
-                <i class="fa-solid fa-lock"></i> Iniciar Sesión
-            </button>
-        `;
-        document.getElementById('nora-floating-login-btn')?.addEventListener('click', () => {
-            enforceAuthenticatedAccess();
-        });
-    }
-}
-
-function setupUserAuthentication() {
-    console.log('[Auth] Setting up user authentication...');
-    const userAccount = getStoredUserAccount();
-    renderFloatingUserBadge(userAccount);
-
-    const userContainer = document.getElementById('user-profile-container');
-    if (!userContainer) {
-        return;
-    }
-
-    if (userAccount) {
-        try {
-            console.log('[Auth] User found:', userAccount.name);
-
-            // User Name Display
-            const nameSpan = document.createElement('span');
-            // Get first name
-            const firstName = userAccount.name ? userAccount.name.split(' ')[0] : 'Usuario';
-            nameSpan.textContent = `Hola, ${firstName}`;
-            nameSpan.style.fontSize = '14px';
-            nameSpan.style.fontWeight = '500';
-            nameSpan.style.color = 'var(--text-dark-gray)'; // Adapt to theme if needed
-
-            // Avatar (Initials)
-            const avatar = document.createElement('div');
-            avatar.style.width = '32px';
-            avatar.style.height = '32px';
-            avatar.style.borderRadius = '50%';
-            avatar.style.backgroundColor = 'var(--primary-color)'; // Brand color
-            avatar.style.color = 'white';
-            avatar.style.display = 'flex';
-            avatar.style.alignItems = 'center';
-            avatar.style.justifyContent = 'center';
-            avatar.style.fontSize = '14px';
-            avatar.style.fontWeight = 'bold';
-
-            // Initials logic
-            let initials = 'U';
-            if (userAccount.name) {
-                const parts = userAccount.name.split(' ');
-                if (parts.length >= 2) {
-                    initials = (parts[0][0] + parts[1][0]).toUpperCase();
-                } else {
-                    initials = parts[0][0].toUpperCase();
-                }
-            }
-            avatar.textContent = initials;
-            avatar.title = userAccount.name + (userAccount.role ? ` (${userAccount.role})` : '');
-
-            // Logout Button
-            const logoutBtn = document.createElement('button');
-            logoutBtn.innerHTML = '<i class="fa-solid fa-right-from-bracket"></i>';
-            logoutBtn.title = "Cerrar Sesión";
-            logoutBtn.style.background = 'none';
-            logoutBtn.style.border = 'none';
-            logoutBtn.style.cursor = 'pointer';
-            logoutBtn.style.fontSize = '16px';
-            logoutBtn.style.color = '#666';
-            logoutBtn.style.marginLeft = '5px';
-
-            logoutBtn.onmouseover = () => { logoutBtn.style.color = 'var(--primary-color)'; };
-            logoutBtn.onmouseout = () => { logoutBtn.style.color = '#666'; };
-
-            logoutBtn.onclick = () => {
-                if (confirm('¿Cerrar sesión?')) {
-                    sessionStorage.removeItem('userAccount');
-                    localStorage.removeItem('userAccount');
-                    window.location.reload();
-                }
-            };
-
-            userContainer.appendChild(nameSpan);
-            userContainer.appendChild(avatar);
-            userContainer.appendChild(logoutBtn);
-
-        } catch (e) {
-            console.error('[Auth] Error rendering user account:', e);
-            renderGuestMode(userContainer);
-        }
-    } else {
-        console.log('[Auth] No user found. Rendering guest mode.');
-        renderGuestMode(userContainer);
-    }
-}
-
-function renderGuestMode(container: HTMLElement) {
-    const loginLink = document.createElement('a');
-    loginLink.href = LOGIN_URL;
-    loginLink.innerHTML = '<i class="fa-solid fa-user"></i> <span style="margin-left:5px; font-size:14px;">Iniciar Sesión</span>';
-    loginLink.style.textDecoration = "none";
-    loginLink.style.color = "var(--primary-color)"; // Brand color
-    loginLink.style.display = "flex";
-    loginLink.style.alignItems = "center";
-    loginLink.style.fontWeight = "500";
-    loginLink.removeAttribute('target');
-
-    container.appendChild(loginLink);
-}
-
-// Call it
-enforceAuthenticatedAccess();
-setupUserAuthentication();
 
 function setupPowerBIIntegration() {
     let isEmbed = false;
