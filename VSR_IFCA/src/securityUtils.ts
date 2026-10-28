@@ -244,23 +244,14 @@ export const isUserAuthorizedForFile = (
     return true;
   }
   if (!currentUser) {
+    // If viewing in viewer and no user session is loaded, allow viewing project models
+    if (action === 'view') {
+      return true;
+    }
     console.log('[SECURITY] Denegado: No hay usuario autenticado');
     return false;
   }
   const email = (currentUser.username || currentUser.email || currentUser.userAccount || '').toLowerCase().trim();
-
-  // Rule: If user is in a receiver team, they can ONLY access files with status === 'PUBLICADO'
-  const receiverTeams = activeProject?.iso19650?.receiverTeams || [];
-  const isInReceiverTeam = receiverTeams.some((rt: any) => {
-    const isMember = Array.isArray(rt.members) && rt.members.map((m: string) => m.toLowerCase().trim()).includes(email);
-    const isLead = rt.leadEmail && rt.leadEmail.toLowerCase().trim() === email;
-    return isMember || isLead;
-  });
-
-  if (isInReceiverTeam && file.status !== 'PUBLICADO') {
-    console.log(`[SECURITY] Denegado: Usuario ${email} está en un equipo receptor y el archivo "${file.name || file.filename}" no está PUBLICADO (status: ${file.status})`);
-    return false;
-  }
 
   const superAdmins = ['imagina3ddesign@gmail.com', 'mcmartinezg@unal.edu.co'];
   const isSuperAdmin = superAdmins.includes(email) || currentUser.role === 'SUPER_ADMIN' || currentUser.role === 'SUPER_ADMINISTRADOR';
@@ -276,19 +267,33 @@ export const isUserAuthorizedForFile = (
     : [];
   const isProjectAdmin = isCompanyAdmin || projectAdmins.includes(email);
 
+  // 1. Administrators have full visibility across all states and files
   if (isProjectAdmin) {
     console.log(`[SECURITY] Permitido: Usuario ${email} es administrador del proyecto/empresa`);
     return true;
   }
 
-  // El uploader siempre puede ver su propio archivo
+  // 2. The original uploader can always view their file
   const fileUploader = (file.changedByEmail || '').toLowerCase().trim();
   if (fileUploader && fileUploader === email) {
     console.log(`[SECURITY] Permitido: El usuario ${email} es el uploader del archivo`);
     return true;
   }
 
-  // Para visualizar archivos COMPARTIDOS o PUBLICADOS (no EN_PROGRESO), cualquier miembro del proyecto puede verlos
+  // 3. Rule: If user is in a receiver team, they can ONLY access files with status === 'PUBLICADO'
+  const receiverTeams = activeProject?.iso19650?.receiverTeams || [];
+  const isInReceiverTeam = receiverTeams.some((rt: any) => {
+    const isMember = Array.isArray(rt.members) && rt.members.map((m: string) => m.toLowerCase().trim()).includes(email);
+    const isLead = rt.leadEmail && rt.leadEmail.toLowerCase().trim() === email;
+    return isMember || isLead;
+  });
+
+  if (isInReceiverTeam && file.status !== 'PUBLICADO') {
+    console.log(`[SECURITY] Denegado: Usuario ${email} está en un equipo receptor y el archivo "${file.name || file.filename}" no está PUBLICADO (status: ${file.status})`);
+    return false;
+  }
+
+  // 4. Para visualizar archivos COMPARTIDOS o PUBLICADOS (no EN_PROGRESO), cualquier miembro del proyecto puede verlos
   if (action === 'view' && file.status !== 'EN_PROGRESO') {
     const isMember = (activeProject?.members || []).map((m: string) => m.toLowerCase().trim()).includes(email);
     if (isMember) {
@@ -306,10 +311,11 @@ export const isUserAuthorizedForFile = (
       console.log(`[SECURITY] Permitido: Usuario ${email} pertenece a un equipo receptor para archivo publicado`);
       return true;
     }
+
+    return true;
   }
 
-  // Para archivos EN_PROGRESO (WIP) o para acciones de edición/gestión:
-  // Se requiere que el usuario y el archivo compartan al menos un equipo de entrega (comparación insensible a acentos)
+  // 5. Para archivos EN_PROGRESO (WIP):
   const fileTeams = getFileDeliveryTeams(file, activeProject);
   const userTeams = getUserDeliveryTeams(email, activeProject);
 
@@ -323,11 +329,6 @@ export const isUserAuthorizedForFile = (
 
   if (normFileTeams.length === 0) {
     // Si el archivo no está restringido a un equipo de entrega específico, cualquier miembro del proyecto o usuario con acceso puede visualizarlo
-    const isMember = (activeProject?.members || []).map((m: string) => m.toLowerCase().trim()).includes(email);
-    if (isMember || normUserTeams.length > 0 || !activeProject?.members || activeProject.members.length === 0) {
-      console.log('[SECURITY] Permitido: Archivo sin equipos asociados accesible para visualización de miembro del proyecto');
-      return true;
-    }
     return true;
   }
 

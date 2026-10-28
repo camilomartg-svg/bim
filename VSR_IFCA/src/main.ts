@@ -1750,17 +1750,117 @@ const shouldUseDriveModels = () => {
 
 const driveApiUrl = () => new URL(String(DRIVE_MODELS_API_URL || '').trim());
 
-const listDriveModels = async (): Promise<Array<{ name: string; fragId: string; jsonId?: string | null }>> => {
-    const url = driveApiUrl();
+interface DriveModelItem {
+    name: string;
+    fragId: string;
+    jsonId?: string | null;
+    folder?: string;
+    ownerEmail?: string;
+    ownerName?: string;
+    lastUpdated?: string;
+}
+
+const listDriveModels = async (overrideContext?: any): Promise<DriveModelItem[]> => {
+    const secCtx = overrideContext || activeSecurityContext;
+    const targetFolderId = extractDriveFolderId(
+        secCtx?.activeProject?.dataSources?.driveFolderId ||
+        currentParams.get('driveFolderId') ||
+        DRIVE_MODELS_FOLDER_ID
+    );
+    const prj = secCtx?.activeProject?.slug || currentParams.get('project') || '';
+    const dfn = secCtx?.activeProject?.dataSources?.driveFolderName || currentParams.get('driveFolderName') || '';
+    const scriptUrlStr = secCtx?.activeProject?.dataSources?.driveScriptUrl || currentParams.get('driveScriptUrl') || DRIVE_MODELS_API_URL;
+
+    const url = new URL(String(scriptUrlStr || '').trim());
     url.searchParams.set('action', 'list');
-    url.searchParams.set('folderId', DRIVE_MODELS_FOLDER_ID);
-    const prj = currentParams.get('project') || '';
-    const dfn = currentParams.get('driveFolderName') || '';
+    if (targetFolderId) url.searchParams.set('folderId', targetFolderId);
     if (prj) url.searchParams.set('project', prj);
     if (dfn) url.searchParams.set('driveFolderName', dfn);
-    const data = await jsonpRequest<{ models?: Array<{ name: string; fragId: string; jsonId?: string | null }> }>(url, 45000);
-    const models = Array.isArray(data?.models) ? data.models : [];
-    return models.filter((m) => m && m.name && m.fragId);
+
+    let data: { models?: any[]; allModels?: any[] } | null = null;
+
+    // Try POST fetch first (faster and handles large payloads without URL length limits)
+    try {
+        const resp = await fetch(url.toString(), {
+            method: 'POST',
+            mode: 'cors',
+            headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+            body: JSON.stringify({
+                action: 'list',
+                folderId: targetFolderId,
+                driveFolderName: dfn,
+                project: prj
+            })
+        });
+        if (resp.ok) {
+            data = await resp.json();
+        }
+    } catch (_e) {
+        // Fallback to JSONP if fetch is blocked by CORS/network
+    }
+
+    if (!data) {
+        data = await jsonpRequest<{ models?: any[]; allModels?: any[] }>(url, 45000);
+    }
+
+    const modelsMap = new Map<string, DriveModelItem>();
+
+    // 1. Ingest data.models
+    if (Array.isArray(data?.models)) {
+        data.models.forEach((m: any) => {
+            if (m && m.name && m.fragId) {
+                const cleanName = String(m.name).trim();
+                const key = cleanName.toLowerCase();
+                modelsMap.set(key, {
+                    name: cleanName,
+                    fragId: String(m.fragId).trim(),
+                    jsonId: m.jsonId ? String(m.jsonId).trim() : null,
+                    folder: m.folder || '',
+                    ownerEmail: m.ownerEmail || '',
+                    ownerName: m.ownerName || '',
+                    lastUpdated: m.lastUpdated || ''
+                });
+            }
+        });
+    }
+
+    // 2. Ingest any .frag models from data.allModels that might have been uploaded separately or paired with RVT
+    if (Array.isArray(data?.allModels)) {
+        // Build map of JSONs by base name
+        const jsonByBase = new Map<string, string>();
+        data.allModels.forEach((item: any) => {
+            const iname = String(item?.name || '').trim();
+            if (iname.toLowerCase().endsWith('.json')) {
+                const base = iname.slice(0, -5).toLowerCase().trim();
+                const fid = item.fileId || item.id;
+                if (fid) jsonByBase.set(base, String(fid).trim());
+            }
+        });
+
+        data.allModels.forEach((item: any) => {
+            const iname = String(item?.name || '').trim();
+            const lower = iname.toLowerCase();
+            const fid = item?.fileId || item?.id;
+            if (fid && lower.endsWith('.frag')) {
+                const key = lower;
+                if (!modelsMap.has(key)) {
+                    const base = lower.slice(0, -5).trim();
+                    const jsonId = jsonByBase.get(base) || null;
+                    modelsMap.set(key, {
+                        name: iname,
+                        fragId: String(fid).trim(),
+                        jsonId: jsonId,
+                        folder: item.folder || '',
+                        ownerEmail: item.ownerEmail || '',
+                        ownerName: item.ownerName || '',
+                        lastUpdated: item.lastUpdated || ''
+                    });
+                }
+            }
+        });
+    }
+
+    return Array.from(modelsMap.values());
 };
 
 const fetchDriveBytes = async (id: string): Promise<Uint8Array> => {
@@ -4919,7 +5019,7 @@ async function loadModelList() {
             if (shouldUseDriveModels()) {
                 logToScreen('Loading models from Google Drive (Apps Script)...');
                 try {
-                    const driveModels = await listDriveModels();
+                    const driveModels = await listDriveModels(activeSecurityContext);
                     const processed = driveModels
                         .filter((m) => String(m.name || '').toLowerCase().endsWith('.frag'))
                         .map((m) => {
@@ -4932,18 +5032,18 @@ async function loadModelList() {
                                           activeSecurityContext?.statusMap?.[rvtName] ||
                                           activeSecurityContext?.statusMap?.[ifcName] ||
                                           null;
-                            const ownerEmail = (m as any).ownerEmail || '';
+                            const ownerEmail = m.ownerEmail || '';
                             return {
                                 name: m.name,
                                 path: `models/${m.name}`,
                                 driveFragId: m.fragId,
                                 driveJsonId: m.jsonId ?? null,
                                 status: match?.status || 'EN_PROGRESO',
-                                changedBy: match?.changedBy || (m as any).ownerName || 'UNASSIGNED',
+                                changedBy: match?.changedBy || m.ownerName || 'UNASSIGNED',
                                 changedByEmail: match?.changedByEmail || ownerEmail || 'unassigned@nora.cde',
                                 fileId: fid,
                                 filename: fname,
-                                folder: (m as any).folder || 'General',
+                                folder: m.folder || 'General',
                                 deliveryTeams: match?.deliveryTeams || []
                             };
                         });
@@ -5049,13 +5149,15 @@ async function loadModelList() {
             const autoLoadJsonId = params.get('jsonId');
 
             if (autoLoadFileId || autoLoadFilename) {
+                const normAutoName = autoLoadFilename ? autoLoadFilename.replace(/\.(rvt|ifc)$/i, '.frag') : '';
                 let matchingItem = models.find((m) => 
                     (autoLoadFileId && (m.driveFragId === autoLoadFileId || m.fileId === autoLoadFileId)) ||
-                    (autoLoadFilename && (m.name === autoLoadFilename || m.filename === autoLoadFilename))
+                    (autoLoadFilename && (m.name === autoLoadFilename || m.filename === autoLoadFilename)) ||
+                    (normAutoName && (m.name === normAutoName || m.filename === normAutoName))
                 );
 
                 if (!matchingItem && autoLoadFileId) {
-                    const rawName = autoLoadFilename || 'Modelo.frag';
+                    const rawName = normAutoName || autoLoadFilename || 'Modelo.frag';
                     const cleanName = rawName.endsWith('.frag') ? rawName : `${rawName.replace(/\.[^/.]+$/, '')}.frag`;
                     matchingItem = {
                         name: cleanName,
@@ -5075,8 +5177,15 @@ async function loadModelList() {
 
             // Group models by specialty
             const groups: Record<string, any[]> = {};
-            models.forEach((m: { name: string; path: string; url: string; folder?: string }) => {
-                const specialty = m.folder && m.folder !== 'General' ? cleanSpecialty(m.folder) : getSpecialtyFromIfcPath(m.path);
+            models.forEach((m: { name: string; path: string; url: string; folder?: string; deliveryTeams?: any }) => {
+                let specialty = 'General';
+                if (m.folder && m.folder !== 'General' && m.folder !== '') {
+                    specialty = cleanSpecialty(m.folder);
+                } else if (Array.isArray(m.deliveryTeams) && m.deliveryTeams.length > 0) {
+                    specialty = cleanSpecialty(m.deliveryTeams[0]);
+                } else {
+                    specialty = getSpecialtyFromIfcPath(m.path);
+                }
                 if (!groups[specialty]) groups[specialty] = [];
                 groups[specialty].push(m);
             });
