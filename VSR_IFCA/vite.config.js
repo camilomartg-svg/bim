@@ -262,7 +262,8 @@ const syncIfcbPlugin = () => {
         const ifcaAssetsDir = path.resolve(__dirname, '../docs/VSR_IFCA/assets');
         const targetDirs = [
           path.resolve(__dirname, '../docs/VSR_IFCB/assets'),
-          path.resolve(__dirname, '../VSR_IFCB/assets')
+          path.resolve(__dirname, '../VSR_IFCB/assets'),
+          path.resolve(__dirname, '../docs/VSR_IFC_simplificado/assets')
         ];
 
         targetDirs.forEach(td => {
@@ -279,7 +280,8 @@ const syncIfcbPlugin = () => {
 
         const targetHtmls = [
           path.resolve(__dirname, '../docs/VSR_IFCB/index.html'),
-          path.resolve(__dirname, '../VSR_IFCB/index.html')
+          path.resolve(__dirname, '../VSR_IFCB/index.html'),
+          path.resolve(__dirname, '../docs/VSR_IFC_simplificado/index.html')
         ];
 
         targetHtmls.forEach(th => {

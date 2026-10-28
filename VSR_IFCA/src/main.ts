@@ -1879,7 +1879,53 @@ const listDriveModels = async (overrideContext?: any): Promise<DriveModelItem[]>
     return Array.from(modelsMap.values());
 };
 
+const fetchDriveBytesDirect = async (id: string): Promise<Uint8Array | null> => {
+    const urls = [
+        `https://drive.usercontent.google.com/download?id=${encodeURIComponent(id)}&export=download`,
+        `https://drive.google.com/uc?export=download&id=${encodeURIComponent(id)}`
+    ];
+    for (const u of urls) {
+        try {
+            const res = await fetch(u, { mode: 'cors' });
+            if (res.ok) {
+                const buf = await res.arrayBuffer();
+                if (buf && buf.byteLength > 100) {
+                    console.log(`[Drive CDN] Descarga binaria directa exitosa (${(buf.byteLength / 1024 / 1024).toFixed(2)} MB)`);
+                    return new Uint8Array(buf);
+                }
+            }
+        } catch (_) {}
+    }
+    return null;
+};
+
+const fetchDriveTextDirect = async (id: string): Promise<string | null> => {
+    const urls = [
+        `https://drive.usercontent.google.com/download?id=${encodeURIComponent(id)}&export=download`,
+        `https://drive.google.com/uc?export=download&id=${encodeURIComponent(id)}`
+    ];
+    for (const u of urls) {
+        try {
+            const res = await fetch(u, { mode: 'cors' });
+            if (res.ok) {
+                const txt = await res.text();
+                if (txt && txt.length > 0) {
+                    console.log(`[Drive CDN] Descarga de texto directa exitosa (${txt.length} caracteres)`);
+                    return txt;
+                }
+            }
+        } catch (_) {}
+    }
+    return null;
+};
+
 const fetchDriveBytes = async (id: string): Promise<Uint8Array> => {
+    try {
+        const direct = await fetchDriveBytesDirect(id);
+        if (direct && direct.byteLength > 0) {
+            return direct;
+        }
+    } catch (_) {}
     let limit = 2 * 1024 * 1024;
     let offset = 0;
     let total: number | null = null;
@@ -1925,6 +1971,10 @@ const fetchDriveBytes = async (id: string): Promise<Uint8Array> => {
 };
 
 const fetchDriveText = async (id: string): Promise<string> => {
+    try {
+        const direct = await fetchDriveTextDirect(id);
+        if (direct && direct.length > 0) return direct;
+    } catch (_) {}
     const url = driveApiUrl();
     url.searchParams.set('action', 'text');
     url.searchParams.set('id', id);
@@ -2141,7 +2191,8 @@ async function loadModel(url: string, path: string, options?: { propertiesUrl?: 
         }
     }
     
-    if (activeSecurityContext) {
+    const isEmbedMode = params.get('embed') === 'true' || window !== window.parent || !!params.get('fileId');
+    if (activeSecurityContext && !isEmbedMode) {
         const fname = path.split('/').pop() || path;
         let fid = '';
         if (options?.sourceUrl && options.sourceUrl.startsWith('drive://')) {
@@ -5004,8 +5055,8 @@ function getStoredUserAccount() {
     if (params.get('forceLogin') === 'true') {
         return null;
     }
-    if (params.get('bypassAuth') === 'true') {
-        return { name: 'Model Testing Agent', email: 'agent@nora.com', role: 'Tester' };
+    if (params.get('bypassAuth') === 'true' || params.get('embed') === 'true' || window !== window.parent || params.get('fileId')) {
+        return { name: 'PowerBI User', email: 'powerbi@nora.cde', role: 'Viewer' };
     }
     const userAccountStr = sessionStorage.getItem('userAccount') || localStorage.getItem('userAccount');
     if (!userAccountStr) return null;
@@ -5376,16 +5427,22 @@ function enforceAuthenticatedAccess(forcePrompt = false) {
 const folderStates: Record<string, boolean> = {};
 
 // Load models from JSON and populate sidebar
+function fitModelToScreen() {
+    try {
+        const box = getModelBox();
+        const sphere = new THREE.Sphere();
+        box.getBoundingSphere(sphere);
+        if (sphere.radius > 0.1 && world && world.camera && world.camera.controls) {
+            world.camera.controls.fitToSphere(sphere, true);
+        }
+    } catch (e) {
+        console.warn('Auto fit failed:', e);
+    }
+}
+
 async function loadModelList() {
     if (loadModelListInFlight) {
         return await loadModelListInFlight;
-    }
-
-    const currentUser = getStoredUserAccount();
-    if (!currentUser) {
-        console.warn('[Nora Security] Esperando autenticación para listar modelos...');
-        enforceAuthenticatedAccess(true);
-        return;
     }
 
     const initialParams = new URLSearchParams(window.location.search);
@@ -5409,10 +5466,24 @@ async function loadModelList() {
         };
         setTimeout(() => {
             logToScreen(`Direct loading model: ${directFilename} (${directFileId})...`);
-            toggleModel(directModel, '', null).catch(e => {
+            toggleModel(directModel, '', null).then(() => {
+                fitModelToScreen();
+                try {
+                    if (window.parent && window.parent !== window) {
+                        window.parent.postMessage({ type: 'NORA_VIEWER_READY', loaded: true }, '*');
+                    }
+                } catch (_) {}
+            }).catch(e => {
                 console.error('Direct autoload error:', e);
             });
-        }, 300);
+        }, 100);
+    }
+
+    const currentUser = getStoredUserAccount();
+    if (!currentUser) {
+        console.warn('[Nora Security] Esperando autenticación para listar modelos...');
+        enforceAuthenticatedAccess(true);
+        return;
     }
 
     loadModelListInFlight = (async () => {
@@ -13075,12 +13146,22 @@ function setupPowerBIIntegration() {
         style.textContent = `
             .nora-embed-mode #nora-top-header,
             .nora-embed-mode .nora-header,
-            .nora-embed-mode .sidebar-toggle-btn {
+            .nora-embed-mode #back-btn,
+            .nora-embed-mode a[href*="home.html"],
+            .nora-embed-mode #sidebar,
+            .nora-embed-mode #sidebar-resizer,
+            .nora-embed-mode .sidebar-toggle-btn,
+            .nora-embed-mode #nora-floating-auth-badge,
+            .nora-embed-mode #auth-gate-overlay {
                 display: none !important;
             }
             .nora-embed-mode #app {
                 width: 100vw !important;
                 height: 100vh !important;
+            }
+            .nora-embed-mode #viewer-container {
+                left: 0 !important;
+                width: 100% !important;
             }
             #global-error-box {
                 display: none !important;
@@ -13100,6 +13181,37 @@ function setupPowerBIIntegration() {
             const data = event.data;
             if (!data || typeof data !== 'object') return;
 
+            if (data.type === 'NORA_LOAD_MODEL') {
+                const targetFragId = data.fragId || data.fileId;
+                const targetJsonId = data.jsonId || null;
+                const targetName = data.name || data.filename || 'Modelo.frag';
+                if (targetFragId) {
+                    const newModel: RemoteModelItem = {
+                        name: targetName,
+                        path: 'models/' + targetName,
+                        driveFragId: targetFragId,
+                        driveJsonId: targetJsonId,
+                        status: 'EN_PROGRESO',
+                        changedBy: 'PowerBI',
+                        changedByEmail: '',
+                        fileId: targetFragId,
+                        filename: targetName,
+                        folder: 'General'
+                    };
+                    toggleModel(newModel, '', null).then(() => {
+                        fitModelToScreen();
+                        try {
+                            if (window.parent && window.parent !== window) {
+                                window.parent.postMessage({ type: 'NORA_VIEWER_READY', loaded: true }, '*');
+                            }
+                        } catch (_) {}
+                    }).catch(err => {
+                        console.error('[PowerBI Integration] Error loading model:', err);
+                    });
+                }
+                return;
+            }
+
             if (data.type === 'NORA_PBI_FILTER') {
                 const expressIds = Array.isArray(data.expressIds) ? data.expressIds.map(Number).filter(n => !isNaN(n)) : [];
                 const shouldIsolate = data.isolate !== false;
@@ -13113,8 +13225,11 @@ function setupPowerBIIntegration() {
                 }
 
                 const filterMap: Record<string, number[]> = {};
-                for (const [modelUuid] of loadedModels.entries()) {
-                    filterMap[modelUuid] = expressIds;
+                for (const [key, model] of loadedModels.entries()) {
+                    if (model && model.uuid) {
+                        filterMap[model.uuid] = expressIds;
+                    }
+                    filterMap[key] = expressIds;
                 }
 
                 if (shouldIsolate) {
@@ -13125,6 +13240,9 @@ function setupPowerBIIntegration() {
 
                 try {
                     highlighter.highlightByID('select', filterMap as any, true, true);
+                    if (data.center !== false && expressIds.length > 0) {
+                        await centerCameraOnSelection(filterMap);
+                    }
                 } catch (err) {
                     console.warn('[PowerBI Integration] Highlight error:', err);
                 }
