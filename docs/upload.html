@@ -3949,34 +3949,24 @@
             (jsonId ? '<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800/40">JSON listo</span>' : '<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 dark:bg-amber-950/60 text-amber-600 dark:text-amber-400 border border-amber-200 dark:border-amber-800/40">Sin JSON</span>');
         }
 
-        const scriptUrl = (activeProject?.dataSources?.driveScriptUrl || DEFAULT_DRIVE_SCRIPT_URL);
-        const apiUrl = jsonId ? `${scriptUrl}?action=text&id=${encodeURIComponent(jsonId)}` : '';
+        const directDriveUrl = jsonId ? `https://drive.usercontent.google.com/download?id=${encodeURIComponent(jsonId)}&export=download` : '';
+        const apiUrl = directDriveUrl || (jsonId ? `${scriptUrl}?action=text&id=${encodeURIComponent(jsonId)}` : '');
         if (pbiDirectUrl) pbiDirectUrl.value = apiUrl;
 
         const mQuery = [
           'let',
-          '    // 1. Conexión directa a nora BIM Cloud - Modelo: ' + name,
-          '    UrlDatos = "' + (apiUrl || `${scriptUrl}?action=text&id=${jsonId || 'ID_DEL_JSON'}`) + '",',
+          '    // 1. Conexión directa a nora BIM Cloud (Google Drive CDN) - Modelo: ' + name,
+          '    UrlDirecta = "' + apiUrl + '",',
+          '    Origen = Json.Document(Web.Contents(UrlDirecta)),',
           '    ',
-          '    // 2. Búfer binario en memoria: evita peticiones repetidas y congelamientos de Power Query',
-          '    Binario = Binary.Buffer(Web.Contents(UrlDatos)),',
-          '    DocOrigen = Json.Document(Binario),',
+          '    // 2. Convertir diccionario de elementos a tabla relacional',
+          '    Tabla = Record.ToTable(Origen),',
           '    ',
-          '    // 3. Extraer estructura JSON de propiedades',
-          '    Contenido = if Value.Is(DocOrigen, type record) and Record.HasFields(DocOrigen, "text") then Json.Document(DocOrigen[text]) else DocOrigen,',
+          '    // 3. Expandir propiedades principales del elemento BIM',
+          '    Columnas = {"expressID", "type", "ifcType", "Name", "ObjectType", "Tag"},',
+          '    TablaExpandida = Table.ExpandRecordColumn(Tabla, "Value", Columnas),',
           '    ',
-          '    // 4. Búfer relacional en RAM: procesa miles de elementos BIM en menos de un segundo',
-          '    TablaBase = Table.Buffer(Record.ToTable(Contenido)),',
-          '    ',
-          '    // 5. Columnas del primer elemento sin recorrer toda la lista',
-          '    PrimerElemento = TablaBase{0}[Value],',
-          '    NombresColumnas = Record.FieldNames(PrimerElemento),',
-          '    ',
-          '    // 6. Expandir columnas de propiedades del elemento',
-          '    QuitarClaveExterna = Table.RemoveColumns(TablaBase, {"Name"}),',
-          '    TablaExpandida = Table.ExpandRecordColumn(QuitarClaveExterna, "Value", NombresColumnas),',
-          '    ',
-          '    // 7. Vincular ID del modelo 3D (.frag) con tipo de texto explícito',
+          '    // 4. Vincular ID del modelo 3D (.frag) con tipo de texto explícito',
           '    TablaFinal = Table.AddColumn(TablaExpandida, "ID Modelo FRAG", each "' + (fragId || '') + '", type text)',
           'in',
           '    TablaFinal'
