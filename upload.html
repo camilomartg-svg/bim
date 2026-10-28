@@ -79,7 +79,11 @@
           <span id="project-now">--:--</span>
         </div>
 
-        <div class="flex items-center gap-4">
+                <div class="flex items-center gap-4">
+          <button id="btn-powerbi-hub" onclick="window.openPowerBIHubModal()" class="inline-flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-widest text-amber-700 dark:text-amber-300 hover:text-amber-800 dark:hover:text-amber-200 transition-all px-2.5 py-1 rounded-lg border border-amber-300/80 dark:border-amber-700/60 bg-amber-50 dark:bg-amber-950/40 shadow-sm" title="Centro de Conexión Power BI (Datos + 3D)">
+            <span class="material-symbols-outlined text-[16px] text-amber-600 dark:text-amber-400">bar_chart</span>
+            <span>Power BI</span>
+          </button>
           <a id="btn-goto-simplified" href="CARGA_SIMPLIFICADA.html" aria-label="Carga Simplificada por Carpetas" class="hidden sm:inline-flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-widest text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 transition-colors px-2.5 py-1 rounded-lg border border-blue-200/60 dark:border-blue-800/30 bg-blue-50/50 dark:bg-blue-950/20" title="Carga Simplificada (Empresa ❯ Proyecto ❯ Archivos)">
             <span class="material-symbols-outlined text-[16px]">account_tree</span>
             <span class="hidden lg:inline">Carga Simplificada</span>
@@ -378,6 +382,135 @@
         <p id="project-footer">© 2026 nora CDE - Todos los derechos reservados.</p>
       </div>
     </footer>
+
+    
+    <!-- MODAL: Conector Power BI -->
+    <div id="modal-powerbi-connector" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-md hidden transition-opacity duration-200">
+      <div class="w-full max-w-3xl glass rounded-2xl p-6 sm:p-7 shadow-2xl border border-slate-200 dark:border-slate-800 bg-white/95 dark:bg-slate-900/95 max-h-[90vh] flex flex-col overflow-hidden transform transition-all">
+        <!-- Header -->
+        <div class="flex items-center justify-between pb-4 mb-4 border-b border-slate-200 dark:border-slate-800 shrink-0">
+          <div class="flex items-center gap-3">
+            <div class="w-10 h-10 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-500">
+              <span class="material-symbols-outlined text-2xl">bar_chart</span>
+            </div>
+            <div>
+              <div class="flex items-center gap-2">
+                <h3 class="text-lg font-bold text-slate-900 dark:text-white">Conector de Datos y 3D para Power BI</h3>
+                <span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 dark:bg-amber-950 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800/50">nora BIM Cloud</span>
+              </div>
+              <p class="text-xs text-slate-500 dark:text-slate-400">Conecta los datos de propiedades y el modelo 3D (.frag) directamente a tus tableros en Power BI.</p>
+            </div>
+          </div>
+          <button id="btn-close-pbi-modal" class="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800">
+            <span class="material-symbols-outlined text-xl">close</span>
+          </button>
+        </div>
+
+        <!-- Scrollable Body -->
+        <div class="overflow-y-auto space-y-6 pr-1 custom-scrollbar text-xs">
+          <!-- 1. Selector de Modelo -->
+          <div class="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700/60 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+            <div class="w-full sm:w-auto flex-1">
+              <label class="block text-[11px] font-bold uppercase tracking-wider text-slate-600 dark:text-slate-400 mb-1.5">Modelo 3D del Proyecto</label>
+              <select id="pbi-model-select" class="w-full px-3 py-2 text-xs font-semibold rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-200 outline-none focus:ring-2 focus:ring-amber-500">
+                <!-- Injected by JS -->
+              </select>
+            </div>
+            <div id="pbi-model-info" class="flex items-center gap-2 shrink-0 text-[11px]">
+              <!-- Pill info injected by JS -->
+            </div>
+          </div>
+
+          <!-- 2. Paso 1: Datos para Power BI (JSON de Propiedades) -->
+          <div class="p-5 rounded-xl border border-blue-200 dark:border-blue-900/40 bg-blue-50/40 dark:bg-blue-950/20 space-y-3">
+            <div class="flex items-center justify-between">
+              <div class="flex items-center gap-2">
+                <span class="w-5 h-5 rounded-full bg-blue-600 text-white flex items-center justify-center font-bold text-[11px]">1</span>
+                <h4 class="font-bold text-slate-900 dark:text-white text-sm">Obtener Datos en la Nube (Power Query)</h4>
+              </div>
+              <span class="text-[10px] text-blue-600 dark:text-blue-400 font-semibold">Sin archivos en tu escritorio</span>
+            </div>
+            <p class="text-slate-600 dark:text-slate-300 leading-relaxed text-[11.5px]">
+              Para no depender de archivos sueltos en tu computador, copia la siguiente consulta. Power BI cargará la tabla directamente desde la nube de nora BIM con todas las columnas (<code class="bg-blue-100 dark:bg-blue-900/60 px-1 py-0.5 rounded text-blue-800 dark:text-blue-200 font-mono">expressID</code>, niveles, materiales, etc.) y se refrescará con el botón "Actualizar":
+            </p>
+
+            <!-- Code block M Query -->
+            <div class="relative rounded-lg bg-slate-900 text-slate-200 p-3.5 font-mono text-[11px] overflow-x-auto border border-slate-800 shadow-inner">
+              <pre id="pbi-m-code" class="whitespace-pre">Cargando consulta...</pre>
+              <button id="btn-copy-m-code" class="absolute top-2.5 right-2.5 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-blue-600 hover:bg-blue-500 text-white font-sans font-bold text-[11px] shadow transition-all">
+                <span class="material-symbols-outlined text-[14px]">content_copy</span> Copiar Consulta Power Query (M)
+              </button>
+            </div>
+
+            <!-- Alternative direct URL -->
+            <div class="flex items-center gap-2 pt-1 text-[11px]">
+              <span class="text-slate-500 shrink-0">O por URL Web:</span>
+              <input id="pbi-direct-url" type="text" readonly class="flex-1 px-2.5 py-1 rounded border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-400 font-mono text-[10px] truncate select-all" />
+              <button id="btn-copy-direct-url" class="px-2 py-1 rounded bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 font-semibold shrink-0 transition-colors">
+                Copiar URL
+              </button>
+            </div>
+
+            <p class="text-[10.5px] text-slate-500 dark:text-slate-400">
+              💡 <em>En Power BI Desktop:</em> Ve a <strong>Inicio > Transformar Datos > Editor Avanzado</strong>, pega este código y haz clic en <strong>Listo</strong>.
+            </p>
+          </div>
+
+          <!-- 3. Paso 2: Conectar Geometría 3D (.FRAG) -->
+          <div class="p-5 rounded-xl border border-amber-200 dark:border-amber-900/40 bg-amber-50/40 dark:bg-amber-950/20 space-y-3">
+            <div class="flex items-center justify-between">
+              <div class="flex items-center gap-2">
+                <span class="w-5 h-5 rounded-full bg-amber-600 text-white flex items-center justify-center font-bold text-[11px]">2</span>
+                <h4 class="font-bold text-slate-900 dark:text-white text-sm">Objeto Visual 3D (VSR_IFC_simplificado)</h4>
+              </div>
+              <a href="NoraBIM_3D_Viewer.pbiviz" download class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-500 text-white font-bold text-[11px] shadow transition-all">
+                <span class="material-symbols-outlined text-[15px]">download</span> Descargar NoraBIM_3D_Viewer.pbiviz
+              </a>
+            </div>
+            <p class="text-slate-600 dark:text-slate-300 leading-relaxed text-[11.5px]">
+              Importa el objeto visual en Power BI Desktop. El visor se conecta de forma segura a <strong>VSR_IFC_simplificado</strong> y descarga la geometría 3D optimizada (.frag):
+            </p>
+
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-2.5 pt-1">
+              <div class="p-2.5 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
+                <span class="block text-[10px] font-bold text-slate-400 uppercase">URL del Visor</span>
+                <span class="block font-mono text-[11px] text-slate-800 dark:text-slate-200 truncate mt-0.5">https://norabim.com/VSR_IFC_simplificado/</span>
+              </div>
+              <div class="p-2.5 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
+                <span class="block text-[10px] font-bold text-slate-400 uppercase">ID Archivo FRAG (3D)</span>
+                <div class="flex items-center justify-between gap-1 mt-0.5">
+                  <span id="pbi-frag-id-val" class="font-mono text-[11px] text-slate-800 dark:text-slate-200 truncate">—</span>
+                  <button id="btn-copy-frag-id" class="text-slate-400 hover:text-amber-500 p-0.5" title="Copiar ID FRAG"><span class="material-symbols-outlined text-sm">content_copy</span></button>
+                </div>
+              </div>
+              <div class="p-2.5 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
+                <span class="block text-[10px] font-bold text-slate-400 uppercase">ID Metadata JSON</span>
+                <div class="flex items-center justify-between gap-1 mt-0.5">
+                  <span id="pbi-json-id-val" class="font-mono text-[11px] text-slate-800 dark:text-slate-200 truncate">—</span>
+                  <button id="btn-copy-json-id" class="text-slate-400 hover:text-amber-500 p-0.5" title="Copiar ID JSON"><span class="material-symbols-outlined text-sm">content_copy</span></button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- 4. Paso 3: Sincronización Interactiva -->
+          <div class="p-4 rounded-xl border border-emerald-200 dark:border-emerald-900/40 bg-emerald-50/30 dark:bg-emerald-950/20 flex items-start gap-3">
+            <span class="material-symbols-outlined text-emerald-600 dark:text-emerald-400 text-xl shrink-0 mt-0.5">sync_alt</span>
+            <div class="space-y-1 text-[11.5px] text-slate-600 dark:text-slate-300">
+              <span class="font-bold text-slate-900 dark:text-white block">Sincronización Bidireccional Activada:</span>
+              <p>Arrastra el campo <strong class="text-emerald-700 dark:text-emerald-300">expressID</strong> de tu tabla de Power BI al campo <em>ID Elemento (expressID)</em> del objeto visual. Al seleccionar barras, niveles o tipos de elementos en Power BI, el visor 3D aislará y resaltará en vivo esos elementos.</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Footer -->
+        <div class="pt-4 mt-4 border-t border-slate-200 dark:border-slate-800 flex items-center justify-end shrink-0">
+          <button id="btn-close-pbi-modal-bottom" class="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 font-semibold text-xs transition-colors">
+            Cerrar
+          </button>
+        </div>
+      </div>
+    </div>
 
     <!-- MODAL: Guardar Nueva Versión -->
     <div id="modal-new-version" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-sm hidden transition-opacity duration-200">
@@ -3537,6 +3670,11 @@
               <div class="flex items-center justify-end gap-1.5 flex-wrap sm:flex-nowrap">
                 ${openButton}
                 ${downloadButton}
+                ${isModel ? `
+                <button onclick="window.openPowerBIConnectorModal('${fileDataStr}')" class="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 font-semibold text-[10px] uppercase tracking-wider hover:bg-amber-100 dark:hover:bg-amber-900/40 border border-amber-200 dark:border-amber-800/40 transition-colors whitespace-nowrap" title="Conectar este modelo a Power BI (Datos y 3D)">
+                  <span class="material-symbols-outlined text-[13px] text-amber-600 dark:text-amber-400">bar_chart</span> Power BI
+                </button>
+                ` : ''}
                 ${canManage ? `
                 <button onclick="window.promoteFile(this, '${fileDataStr}', 'COMPARTIDO')" class="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-bold text-[10px] uppercase tracking-wider shadow-sm transition-all whitespace-nowrap" title="Pasar a Compartido">
                   <span class="material-symbols-outlined text-[13px]">share</span> COMPARTIDO
@@ -3562,6 +3700,11 @@
               <div class="flex items-center justify-end gap-1.5 flex-wrap sm:flex-nowrap">
                 ${openButton}
                 ${downloadButton}
+                ${isModel ? `
+                <button onclick="window.openPowerBIConnectorModal('${fileDataStr}')" class="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 font-semibold text-[10px] uppercase tracking-wider hover:bg-amber-100 dark:hover:bg-amber-900/40 border border-amber-200 dark:border-amber-800/40 transition-colors whitespace-nowrap" title="Conectar este modelo a Power BI (Datos y 3D)">
+                  <span class="material-symbols-outlined text-[13px] text-amber-600 dark:text-amber-400">bar_chart</span> Power BI
+                </button>
+                ` : ''}
                 ${canManage ? `
                 <button onclick="window.promoteFile(this, '${fileDataStr}', 'PUBLICADO')" class="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-green-600 hover:bg-green-700 text-white font-bold text-[10px] uppercase tracking-wider shadow-sm transition-all whitespace-nowrap" title="Pasar a Publicado">
                   <span class="material-symbols-outlined text-[13px]">publish</span> PUBLICADO
@@ -3584,6 +3727,11 @@
               <div class="flex items-center justify-end gap-1.5 flex-wrap sm:flex-nowrap">
                 ${openButton}
                 ${downloadButton}
+                ${isModel ? `
+                <button onclick="window.openPowerBIConnectorModal('${fileDataStr}')" class="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 font-semibold text-[10px] uppercase tracking-wider hover:bg-amber-100 dark:hover:bg-amber-900/40 border border-amber-200 dark:border-amber-800/40 transition-colors whitespace-nowrap" title="Conectar este modelo a Power BI (Datos y 3D)">
+                  <span class="material-symbols-outlined text-[13px] text-amber-600 dark:text-amber-400">bar_chart</span> Power BI
+                </button>
+                ` : ''}
                 <span class="inline-flex items-center gap-1 text-green-600 dark:text-green-400 font-bold text-[10px] uppercase tracking-wider mr-1">
                   <span class="material-symbols-outlined text-[14px]">verified</span> PUBLICADO
                 </span>
@@ -3728,6 +3876,148 @@
       // ==========================================
       // VERSION MANAGEMENT MODALS & HANDLERS
       // ==========================================
+      
+      // ==========================================
+      // POWER BI CONNECTOR HUB
+      // ==========================================
+      const modalPowerBi = document.getElementById('modal-powerbi-connector');
+      const pbiModelSelect = document.getElementById('pbi-model-select');
+      const pbiModelInfo = document.getElementById('pbi-model-info');
+      const pbiMCode = document.getElementById('pbi-m-code');
+      const pbiDirectUrl = document.getElementById('pbi-direct-url');
+      const pbiFragIdVal = document.getElementById('pbi-frag-id-val');
+      const pbiJsonIdVal = document.getElementById('pbi-json-id-val');
+
+      function getAvailableModelsForPowerBi() {
+        if (!Array.isArray(allDriveFiles)) return [];
+        return allDriveFiles.filter(f => {
+          const name = String(f.name || '').toLowerCase();
+          const ext = getFileExtension(f.name);
+          return f.type === 'model' || ext === 'frag' || ext === 'ifc' || f.fragId || f.pairedFragId || f.jsonId;
+        });
+      }
+
+      function updatePowerBiModalDetails(selectedFile) {
+        if (!selectedFile) {
+          pbiMCode.textContent = '// No hay modelos disponibles con metadata JSON en este proyecto.';
+          pbiDirectUrl.value = '';
+          pbiFragIdVal.textContent = '—';
+          pbiJsonIdVal.textContent = '—';
+          pbiModelInfo.innerHTML = '<span class="text-slate-400">Sin modelo</span>';
+          return;
+        }
+
+        const fragId = selectedFile.pairedFragId || selectedFile.fragId || selectedFile.driveFragId || (selectedFile.name.endsWith('.frag') ? selectedFile.fileId : '') || '';
+        const jsonId = selectedFile.jsonId || selectedFile.driveJsonId || '';
+        const name = selectedFile.name || 'Modelo';
+        const status = selectedFile.status || 'EN_PROGRESO';
+
+        pbiFragIdVal.textContent = fragId || 'No asignado';
+        pbiJsonIdVal.textContent = jsonId || 'No asignado';
+
+        pbiModelInfo.innerHTML = '<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700">' + status + '</span> ' +
+          (jsonId ? '<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800/40">JSON listo</span>' : '<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 dark:bg-amber-950/60 text-amber-600 dark:text-amber-400 border border-amber-200 dark:border-amber-800/40">Sin JSON</span>');
+
+        const apiUrl = jsonId ? 'https://script.google.com/macros/s/AKfycbx2RAQx_8K4o22xE0Mw-ETc7K_58vIoi6-PgVi64u80inuiw144ks3cgWSdCtXqIgB02g/exec?action=text&id=' + encodeURIComponent(jsonId) : '';
+        pbiDirectUrl.value = apiUrl;
+
+        const mQuery = 'let\n' +
+          '    // 1. Conexión directa a nora BIM Cloud - Modelo: ' + name + '\n' +
+          '    Origen = Json.Document(Web.Contents("' + (apiUrl || 'https://norabim.com/...') + '")),\n' +
+          '    TextoContenido = Origen[text],\n' +
+          '    PropiedadesJSON = Json.Document(TextoContenido),\n' +
+          '    // 2. Transformar elementos a filas y columnas relacionales\n' +
+          '    Registros = Record.ToTable(PropiedadesJSON),\n' +
+          '    NombresColumnas = Record.FieldNames(Record.FieldValues(PropiedadesJSON){0}),\n' +
+          '    TablaExpandida = Table.ExpandRecordColumn(Registros, "Value", NombresColumnas),\n' +
+          '    TablaFinal = Table.RenameColumns(TablaExpandida, {{"Name", "expressID"}})\n' +
+          'in\n' +
+          '    TablaFinal';
+
+        pbiMCode.textContent = mQuery;
+      }
+
+      window.openPowerBIHubModal = () => {
+        const models = getAvailableModelsForPowerBi();
+        pbiModelSelect.innerHTML = '';
+        if (models.length === 0) {
+          const opt = document.createElement('option');
+          opt.textContent = 'No hay modelos 3D en este proyecto';
+          pbiModelSelect.appendChild(opt);
+          updatePowerBiModalDetails(null);
+        } else {
+          models.forEach((m, idx) => {
+            const opt = document.createElement('option');
+            opt.value = m.fileId || String(idx);
+            opt.textContent = m.name + ' (' + (m.status || 'EN_PROGRESO') + ')';
+            pbiModelSelect.appendChild(opt);
+          });
+          updatePowerBiModalDetails(models[0]);
+        }
+        modalPowerBi?.classList.remove('hidden');
+      };
+
+      window.openPowerBIConnectorModal = (encodedData) => {
+        let f;
+        try { f = JSON.parse(decodeURIComponent(encodedData)); } catch(e) { return; }
+        if (!f) return;
+
+        const models = getAvailableModelsForPowerBi();
+        pbiModelSelect.innerHTML = '';
+        let foundIndex = 0;
+        models.forEach((m, idx) => {
+          const opt = document.createElement('option');
+          opt.value = m.fileId || String(idx);
+          opt.textContent = m.name + ' (' + (m.status || 'EN_PROGRESO') + ')';
+          if (m.name === f.name || m.fileId === f.fileId) {
+            opt.selected = true;
+            foundIndex = idx;
+          }
+          pbiModelSelect.appendChild(opt);
+        });
+
+        updatePowerBiModalDetails(models[foundIndex] || f);
+        modalPowerBi?.classList.remove('hidden');
+      };
+
+      pbiModelSelect?.addEventListener('change', () => {
+        const models = getAvailableModelsForPowerBi();
+        const selVal = pbiModelSelect.value;
+        const matched = models.find(m => m.fileId === selVal) || models[0];
+        updatePowerBiModalDetails(matched);
+      });
+
+      document.getElementById('btn-close-pbi-modal')?.addEventListener('click', () => modalPowerBi?.classList.add('hidden'));
+      document.getElementById('btn-close-pbi-modal-bottom')?.addEventListener('click', () => modalPowerBi?.classList.add('hidden'));
+
+      document.getElementById('btn-copy-m-code')?.addEventListener('click', () => {
+        navigator.clipboard.writeText(pbiMCode.textContent);
+        const btn = document.getElementById('btn-copy-m-code');
+        const prev = btn.innerHTML;
+        btn.innerHTML = '<span class="material-symbols-outlined text-[14px]">check</span> ¡Copiado!';
+        btn.classList.replace('bg-blue-600', 'bg-emerald-600');
+        setTimeout(() => {
+          btn.innerHTML = prev;
+          btn.classList.replace('bg-emerald-600', 'bg-blue-600');
+        }, 2000);
+      });
+
+      document.getElementById('btn-copy-direct-url')?.addEventListener('click', () => {
+        navigator.clipboard.writeText(pbiDirectUrl.value);
+        const btn = document.getElementById('btn-copy-direct-url');
+        const prev = btn.textContent;
+        btn.textContent = '¡Copiado!';
+        setTimeout(() => { btn.textContent = prev; }, 2000);
+      });
+
+      document.getElementById('btn-copy-frag-id')?.addEventListener('click', () => {
+        navigator.clipboard.writeText(pbiFragIdVal.textContent.trim());
+      });
+
+      document.getElementById('btn-copy-json-id')?.addEventListener('click', () => {
+        navigator.clipboard.writeText(pbiJsonIdVal.textContent.trim());
+      });
+
       window.openNewVersionModal = (encodedData) => {
         let f;
         try { f = JSON.parse(decodeURIComponent(encodedData)); } catch(e) { return; }
