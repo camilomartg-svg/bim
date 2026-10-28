@@ -144,35 +144,35 @@ export class Visual implements IVisual {
                 viewerBaseUrl += "/";
             }
 
+            // 1. Resolve fragId & jsonId from settings
             let fragId = (modelSettings?.defaultFragId?.value || "").trim();
             let jsonId = (modelSettings?.defaultJsonId?.value || "").trim();
             const autoIsolate = modelSettings?.autoIsolate?.value !== false;
             const forceLogin = modelSettings?.forceLogin?.value === true;
 
-            // Extract fields from dataView roles (expressId, fragId, jsonId)
             const expressIds: number[] = [];
-            if (dataView?.categorical?.categories && dataView.categorical.categories.length > 0) {
+
+            // 2. Check categorical.categories
+            if (dataView?.categorical?.categories) {
                 for (const cat of dataView.categorical.categories) {
                     const roles = cat.source?.roles || {};
-                    if (roles["fragId"]) {
+                    const colName = String(cat.source?.displayName || "").toLowerCase();
+                    const isFrag = roles["fragId"] || colName.includes("frag") || colName.includes("modelo");
+                    const isJson = roles["jsonId"] || (colName.includes("json") && !colName.includes("frag"));
+                    const isExpress = roles["expressId"] || colName.includes("express") || colName === "id";
+
+                    if (isFrag && !fragId) {
                         const val = cat.values?.find(v => v !== null && v !== undefined && String(v).trim() !== "");
-                        if (val && !fragId) {
-                            fragId = String(val).trim();
-                        }
-                    } else if (roles["jsonId"]) {
+                        if (val) fragId = String(val).trim();
+                    } else if (isJson && !jsonId) {
                         const val = cat.values?.find(v => v !== null && v !== undefined && String(v).trim() !== "");
-                        if (val && !jsonId) {
-                            jsonId = String(val).trim();
-                        }
-                    } else {
-                        // ExpressID role or default category
+                        if (val) jsonId = String(val).trim();
+                    } else if (isExpress || (!isFrag && !isJson)) {
                         if (Array.isArray(cat.values)) {
                             for (const val of cat.values) {
                                 if (val !== null && val !== undefined && val !== "") {
                                     const num = Number(val);
-                                    if (!isNaN(num)) {
-                                        expressIds.push(num);
-                                    }
+                                    if (!isNaN(num)) expressIds.push(num);
                                 }
                             }
                         }
@@ -180,10 +180,59 @@ export class Visual implements IVisual {
                 }
             }
 
+            // 3. Check categorical.values
+            if (dataView?.categorical?.values) {
+                for (const valCol of dataView.categorical.values) {
+                    const roles = valCol.source?.roles || {};
+                    const colName = String(valCol.source?.displayName || "").toLowerCase();
+                    const isFrag = roles["fragId"] || colName.includes("frag") || colName.includes("modelo");
+                    const isJson = roles["jsonId"] || (colName.includes("json") && !colName.includes("frag"));
+
+                    if (isFrag && !fragId) {
+                        const val = valCol.values?.find(v => v !== null && v !== undefined && String(v).trim() !== "");
+                        if (val) fragId = String(val).trim();
+                    } else if (isJson && !jsonId) {
+                        const val = valCol.values?.find(v => v !== null && v !== undefined && String(v).trim() !== "");
+                        if (val) jsonId = String(val).trim();
+                    }
+                }
+            }
+
+            // 4. Check table columns and rows as fallback
+            if ((!fragId || expressIds.length === 0) && dataView?.table?.columns && dataView?.table?.rows) {
+                const cols = dataView.table.columns;
+                let fragIdx = -1;
+                let jsonIdx = -1;
+                let expIdx = -1;
+
+                cols.forEach((c, idx) => {
+                    const roles = c.roles || {};
+                    const name = String(c.displayName || "").toLowerCase();
+                    if (roles["fragId"] || name.includes("frag") || name.includes("modelo")) fragIdx = idx;
+                    else if (roles["jsonId"] || (name.includes("json") && !name.includes("frag"))) jsonIdx = idx;
+                    else if (roles["expressId"] || name.includes("express") || name === "id") expIdx = idx;
+                });
+
+                if (expIdx === -1 && cols.length > 0) expIdx = 0;
+
+                for (const row of dataView.table.rows) {
+                    if (fragIdx >= 0 && !fragId && row[fragIdx]) {
+                        fragId = String(row[fragIdx]).trim();
+                    }
+                    if (jsonIdx >= 0 && !jsonId && row[jsonIdx]) {
+                        jsonId = String(row[jsonIdx]).trim();
+                    }
+                    if (expIdx >= 0 && expressIds.length < 50000) {
+                        const num = Number(row[expIdx]);
+                        if (!isNaN(num)) expressIds.push(num);
+                    }
+                }
+            }
+
             // Build target URL with version tag to bypass stale WebView2 caching
             const url = new URL(viewerBaseUrl);
             url.searchParams.set("embed", "true");
-            url.searchParams.set("_v", "20261028-06");
+            url.searchParams.set("_v", "20261028-07");
             if (fragId) url.searchParams.set("fileId", fragId);
             if (jsonId) url.searchParams.set("jsonId", jsonId);
             if (forceLogin) url.searchParams.set("forceLogin", "true");
@@ -195,6 +244,12 @@ export class Visual implements IVisual {
                 this.loader.style.display = "flex";
                 this.loader.style.opacity = "1";
                 this.iframe.src = targetUrlStr;
+            } else if (this.iframeLoaded && fragId) {
+                this.sendPostMessage({
+                    type: "NORA_LOAD_MODEL",
+                    fragId: fragId,
+                    jsonId: jsonId
+                });
             }
 
             const filterPayload = {
