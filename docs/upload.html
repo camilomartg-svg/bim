@@ -3972,12 +3972,12 @@
           '    PrimerElemento = TablaBase{0}[Value],',
           '    NombresColumnas = Record.FieldNames(PrimerElemento),',
           '    ',
-          '    // 6. Expandir columnas y renombrar expressID',
-          '    TablaExpandida = Table.ExpandRecordColumn(TablaBase, "Value", NombresColumnas),',
-          '    TablaConExpressID = Table.RenameColumns(TablaExpandida, {{"Name", "expressID"}}),',
+          '    // 6. Expandir columnas de propiedades del elemento',
+          '    QuitarClaveExterna = Table.RemoveColumns(TablaBase, {"Name"}),',
+          '    TablaExpandida = Table.ExpandRecordColumn(QuitarClaveExterna, "Value", NombresColumnas),',
           '    ',
           '    // 7. Vincular ID del modelo 3D (.frag) con tipo de texto explícito',
-          '    TablaFinal = Table.AddColumn(TablaConExpressID, "ID Modelo FRAG", each "' + (fragId || '') + '", type text)',
+          '    TablaFinal = Table.AddColumn(TablaExpandida, "ID Modelo FRAG", each "' + (fragId || '') + '", type text)',
           'in',
           '    TablaFinal'
         ].join('\n');
