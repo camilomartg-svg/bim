@@ -473,9 +473,9 @@
       }
     },
     {
-      "name": "Estudiantes",
+      "name": "Estudaintes",
       "title": "NUEVO PROYECTO",
-      "slug": "nuevo-proyecto-1793276848430",
+      "slug": "nuevo-proyecto-1793277006090",
       "status": "Activo",
       "enabled": true,
       "hasLicense": true,
@@ -485,7 +485,7 @@
         "map": {
           "lat": 4.60971,
           "lng": -74.08175,
-          "zoom": 13
+          "zoom": 15
         },
         "eyebrow": "nora",
         "subtitle": "Accesos rápidos, seguimiento y contexto del proyecto.",
@@ -511,8 +511,8 @@
         "equipo": "equipo.html"
       },
       "dataSources": {
-        "driveFolderName": "Estudiantes",
-        "driveFolderId": "1EkNyiX3x7BqD2JBIJPFri_IOC-0dJNNa",
+        "driveFolderName": "Estudaintes",
+        "driveFolderId": "161TooRrqCdAjs-eXVUFxJ-0tpFnrbXKt",
         "driveScriptUrl": "",
         "statusSheetId": "",
         "statusScriptUrl": "",
@@ -528,12 +528,12 @@
       },
       "code": "EST-001",
       "country": "Colombia",
-      "state": "Cundinamarca",
       "city": "Bogotá",
       "type": [
         "Otro"
       ],
-      "description": "Proyecto para estudiantes de los diplomados de Mesh Estudio"
+      "description": "Proyeto para los diplomados de Mesh Estudio",
+      "client": "Mesh Estudio"
     }
   ],
   "portal": {
