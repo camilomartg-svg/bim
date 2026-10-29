@@ -1566,26 +1566,26 @@ function logToScreen(msg: string, isError = false) {
 
     try {
         const isEmbed = window.location.search.includes('embed=true') || (window !== window.parent) || window.location.search.includes('fileId');
-        if (isEmbed && window === window.parent) {
-            let hud = document.getElementById('nora-embed-hud');
-            if (!hud) {
-                hud = document.createElement('div');
-                hud.id = 'nora-embed-hud';
-                hud.style.cssText = 'position:fixed; bottom:8px; left:8px; z-index:999999; font-family:Segoe UI, sans-serif; font-size:11px; padding:4px 10px; border-radius:6px; pointer-events:none; transition:all 0.3s ease; box-shadow:0 4px 12px rgba(0,0,0,0.5); max-width:90vw; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;';
-                document.body.appendChild(hud);
-            }
-            hud.style.background = isError ? 'rgba(220, 38, 38, 0.92)' : 'rgba(15, 23, 42, 0.88)';
-            hud.style.color = isError ? '#ffffff' : '#38bdf8';
-            hud.style.border = isError ? '1px solid #ef4444' : '1px solid rgba(56, 189, 248, 0.4)';
-            hud.innerText = (isError ? '⚠️ ' : '⚡ ') + msg;
-            hud.style.opacity = '1';
-
-            if (!isError && (msg.includes('completado') || msg.includes('Cargado') || msg.includes('listo') || msg.includes('análisis') || msg.includes('Mallas:'))) {
-                setTimeout(() => { if (hud) hud.style.opacity = '0.35'; }, 6000);
-            }
-
+        if (isEmbed) {
             if (window.parent && window.parent !== window) {
                 window.parent.postMessage({ type: 'NORA_VIEWER_STATUS', text: msg, isError }, '*');
+            } else {
+                let hud = document.getElementById('nora-embed-hud');
+                if (!hud) {
+                    hud = document.createElement('div');
+                    hud.id = 'nora-embed-hud';
+                    hud.style.cssText = 'position:fixed; bottom:8px; left:8px; z-index:999999; font-family:Segoe UI, sans-serif; font-size:11px; padding:4px 10px; border-radius:6px; pointer-events:none; transition:all 0.3s ease; box-shadow:0 4px 12px rgba(0,0,0,0.5); max-width:90vw; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;';
+                    document.body.appendChild(hud);
+                }
+                hud.style.background = isError ? 'rgba(220, 38, 38, 0.92)' : 'rgba(15, 23, 42, 0.88)';
+                hud.style.color = isError ? '#ffffff' : '#38bdf8';
+                hud.style.border = isError ? '1px solid #ef4444' : '1px solid rgba(56, 189, 248, 0.4)';
+                hud.innerText = (isError ? '⚠️ ' : '⚡ ') + msg;
+                hud.style.opacity = '1';
+
+                if (!isError && (msg.includes('completado') || msg.includes('Cargado') || msg.includes('listo') || msg.includes('análisis') || msg.includes('Mallas:'))) {
+                    setTimeout(() => { if (hud) hud.style.opacity = '0.35'; }, 6000);
+                }
             }
         }
     } catch (_) {}
