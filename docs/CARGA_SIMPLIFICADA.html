@@ -403,6 +403,14 @@
         console.error(e);
       }
 
+      const urlQuery = new URLSearchParams(window.location.search);
+      const queryEmail = (urlQuery.get('email') || urlQuery.get('user') || urlQuery.get('username') || '').toLowerCase().trim();
+      if (!userAccount && queryEmail) {
+        userAccount = { username: queryEmail, email: queryEmail, name: queryEmail.split('@')[0], role: 'MIEMBRO' };
+      }
+      const userEmail = (queryEmail || userAccount?.username || userAccount?.email || '').toLowerCase().trim();
+      const isSuperAdmin = userAccount && (userAccount.role === 'SUPER_ADMINISTRADOR' || userEmail === 'imagina3ddesign@gmail.com');
+
       // --- DOM Elements ---
       const authContainer = document.getElementById('auth-container');
       const stepEmpresas = document.getElementById('step-empresas');
@@ -590,7 +598,46 @@
             });
           }
 
-          allCompanies = Array.from(map.values());
+          const rawCompanies = Array.from(map.values());
+
+          // Pre-cache projects per company to avoid duplicate network calls
+          window._userAccessibleProjectsByCompany = new Map();
+          let filteredCompanies = [];
+
+          if (isSuperAdmin) {
+            filteredCompanies = rawCompanies;
+          } else if (userEmail) {
+            await Promise.allSettled(
+              rawCompanies.map(async (c) => {
+                try {
+                  const configUrl = c.configUrl || `config-${c.id}.json`;
+                  const res = await fetch(`${configUrl}?t=${Date.now()}`);
+                  if (res.ok) {
+                    const conf = await res.json();
+                    const allP = Array.isArray(conf.projects) ? conf.projects.filter(p => p && p.enabled !== false) : [];
+                    const userProjects = allP.filter(p => {
+                      const members = Array.isArray(p.members) ? p.members : [];
+                      return members.some(m => {
+                        const mEmail = (typeof m === 'string' ? m : (m.email || m.username || '')).toLowerCase().trim();
+                        return mEmail === userEmail;
+                      });
+                    });
+
+                    if (userProjects.length > 0) {
+                      window._userAccessibleProjectsByCompany.set(c.id, userProjects);
+                      filteredCompanies.push(c);
+                    }
+                  }
+                } catch (e) {
+                  console.warn('Error verificando proyectos para empresa:', c.name, e);
+                }
+              })
+            );
+          } else {
+            filteredCompanies = [];
+          }
+
+          allCompanies = filteredCompanies;
           empresasLoading.classList.add('hidden');
           empresasGrid.classList.remove('hidden');
 
@@ -616,7 +663,15 @@
       function renderEmpresasGrid(companies) {
         const grid = document.getElementById('empresas-grid');
         if (!companies.length) {
-          grid.innerHTML = '<div class="col-span-full py-12 text-center text-slate-400 text-xs">No se encontraron empresas disponibles.</div>';
+          grid.innerHTML = `
+            <div class="col-span-full py-16 text-center">
+              <div class="w-12 h-12 rounded-2xl bg-amber-50 dark:bg-amber-950/50 text-amber-600 dark:text-amber-400 border border-amber-200 dark:border-amber-800 flex items-center justify-center mx-auto mb-3">
+                <span class="material-symbols-outlined text-2xl">folder_off</span>
+              </div>
+              <h3 class="text-sm font-bold text-slate-800 dark:text-slate-200">Sin empresas o proyectos asignados</h3>
+              <p class="text-xs text-slate-400 mt-1 max-w-sm mx-auto">No tienes proyectos asignados actualmente en ninguna empresa. Solicita al administrador que te agregue como miembro de un proyecto.</p>
+            </div>
+          `;
           return;
         }
 
@@ -695,11 +750,29 @@
         proyectosGrid.innerHTML = '';
 
         try {
-          const configUrl = company.configUrl || `config-${company.id}.json`;
-          const res = await fetch(`${configUrl}?t=${Date.now()}`);
-          if (!res.ok) throw new Error('No se pudo leer la configuración de proyectos');
-          const data = await res.json();
-          const projects = Array.isArray(data.projects) ? data.projects.filter(p => p && p.enabled !== false) : [];
+          let projects = [];
+          if (!isSuperAdmin && window._userAccessibleProjectsByCompany && window._userAccessibleProjectsByCompany.has(company.id)) {
+            projects = window._userAccessibleProjectsByCompany.get(company.id);
+          } else {
+            const configUrl = company.configUrl || `config-${company.id}.json`;
+            const res = await fetch(`${configUrl}?t=${Date.now()}`);
+            if (!res.ok) throw new Error('No se pudo leer la configuración de proyectos');
+            const data = await res.json();
+            const allP = Array.isArray(data.projects) ? data.projects.filter(p => p && p.enabled !== false) : [];
+            if (isSuperAdmin) {
+              projects = allP;
+            } else if (userEmail) {
+              projects = allP.filter(p => {
+                const members = Array.isArray(p.members) ? p.members : [];
+                return members.some(m => {
+                  const mEmail = (typeof m === 'string' ? m : (m.email || m.username || '')).toLowerCase().trim();
+                  return mEmail === userEmail;
+                });
+              });
+            } else {
+              projects = [];
+            }
+          }
 
           proyectosLoading.classList.add('hidden');
           renderProyectosGrid(projects);
@@ -721,7 +794,15 @@
         window._currentEmpresaProjects = projects;
 
         if (!projects.length) {
-          grid.innerHTML = '<div class="col-span-full py-12 text-center text-slate-400 text-xs">No hay proyectos activos en esta empresa.</div>';
+          grid.innerHTML = `
+            <div class="col-span-full py-16 text-center">
+              <div class="w-12 h-12 rounded-2xl bg-amber-50 dark:bg-amber-950/50 text-amber-600 dark:text-amber-400 border border-amber-200 dark:border-amber-800 flex items-center justify-center mx-auto mb-3">
+                <span class="material-symbols-outlined text-2xl">folder_off</span>
+              </div>
+              <h3 class="text-sm font-bold text-slate-800 dark:text-slate-200">Sin proyectos asignados</h3>
+              <p class="text-xs text-slate-400 mt-1 max-w-sm mx-auto">No tienes proyectos asignados como miembro en esta empresa.</p>
+            </div>
+          `;
           return;
         }
 
