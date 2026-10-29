@@ -3560,18 +3560,18 @@
           let viewerJsonId = f.jsonId || '';
 
           if (ext === 'pdf') {
-            viewerPath = 'VSR_PDFA/index.html';
+            viewerPath = 'VSR_PDFA/';
             viewerIcon = 'picture_as_pdf';
           } else if (ext === 'dwg' || ext === 'dxf') {
-            viewerPath = 'VSR_DWGA/index.html';
+            viewerPath = 'VSR_DWGA/';
             viewerIcon = 'architecture';
           } else if (ext === 'frag') {
-            viewerPath = 'VSR_IFCA/index.html';
+            viewerPath = 'VSR_IFCA/';
             viewerIcon = 'view_in_ar';
           } else if (ext === 'ifc') {
             // Para IFC: usar el .frag emparejado si existe, si no, no mostrar botón del visor
             if (!f.pairedFragId) return '';
-            viewerPath = 'VSR_IFCA/index.html';
+            viewerPath = 'VSR_IFCA/';
             viewerIcon = 'view_in_ar';
             viewerFileId = f.pairedFragId;
             viewerFileName = f.pairedFragName || f.name.replace(/\.ifc$/i, '.frag');
@@ -3579,7 +3579,7 @@
           } else if (ext === 'rvt') {
             // Para RVT: usar el .frag emparejado si existe; si se subió sin FRAG+JSON, no se mostrará visor
             if (!f.pairedFragId) return '';
-            viewerPath = 'VSR_IFCA/index.html';
+            viewerPath = 'VSR_IFCA/';
             viewerIcon = 'view_in_ar';
             viewerFileId = f.pairedFragId;
             viewerFileName = f.pairedFragName || f.name.replace(/\.rvt$/i, '.frag');

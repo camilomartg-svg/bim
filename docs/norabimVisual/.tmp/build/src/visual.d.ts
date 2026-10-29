@@ -4,7 +4,9 @@ import VisualConstructorOptions = powerbi.extensibility.visual.VisualConstructor
 import VisualUpdateOptions = powerbi.extensibility.visual.VisualUpdateOptions;
 import IVisual = powerbi.extensibility.visual.IVisual;
 export declare class Visual implements IVisual {
+    private host;
     private events;
+    private selectionManager;
     private target;
     private container;
     private iframe;
@@ -16,9 +18,14 @@ export declare class Visual implements IVisual {
     private currentJsonId;
     private iframeLoaded;
     private pendingFilter;
-    private lastSentIdsJson;
+    private latestFilterPayload;
+    private lastSentIdsSig;
+    private expressCategory;
+    private badgeFadeTimer;
     private statusBadge;
     constructor(options: VisualConstructorOptions);
+    private hideLoaderSoon;
+    private cleanDriveId;
     private sendPostMessage;
     update(options: VisualUpdateOptions): void;
     getFormattingModel(): powerbi.visuals.FormattingModel;

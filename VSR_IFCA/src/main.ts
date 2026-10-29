@@ -5179,59 +5179,9 @@ function getStoredUserAccount() {
     }
 }
 
-function renderFloatingUserBadge(userAccount: any) {
-    let badge = document.getElementById('nora-floating-auth-badge');
-    if (!badge) {
-        badge = document.createElement('div');
-        badge.id = 'nora-floating-auth-badge';
-        badge.style.cssText = 'position:fixed; top:8px; right:330px; z-index:99999999; display:flex; align-items:center; gap:8px; background:rgba(15, 23, 42, 0.94); border:1px solid rgba(56, 189, 248, 0.35); border-radius:24px; padding:5px 12px; color:#f8fafc; font-family:Inter, Segoe UI, sans-serif; font-size:12px; backdrop-filter:blur(10px); box-shadow:0 4px 18px rgba(0,0,0,0.5); user-select:none; transition:right 0.3s ease;';
-        document.body.appendChild(badge);
-    }
-    if (userAccount) {
-        const name = userAccount.name || userAccount.username || 'Usuario';
-        const role = userAccount.role || 'Usuario';
-        const initial = name.charAt(0).toUpperCase();
-        badge.innerHTML = `
-            <div style="display:flex; align-items:center; gap:6px;">
-                <div style="width:22px; height:22px; border-radius:50%; background:#0284c7; display:flex; align-items:center; justify-content:center; font-weight:700; font-size:11px; color:#fff;">
-                    ${initial}
-                </div>
-                <div style="display:flex; flex-direction:column; line-height:1.15; max-width:130px; text-align:left;">
-                    <span style="font-weight:600; color:#ffffff; font-size:11px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${name}</span>
-                    <span style="font-size:9px; color:#38bdf8; font-weight:500;">${role}</span>
-                </div>
-            </div>
-            <button id="nora-floating-logout-btn" title="Cerrar sesión para probar otro usuario" style="background:#ef4444; border:none; color:#fff; border-radius:10px; padding:3px 8px; font-size:10px; font-weight:600; cursor:pointer; display:flex; align-items:center; gap:4px; margin-left:4px;" onmouseover="this.style.background='#dc2626'" onmouseout="this.style.background='#ef4444'">
-                <i class="fa-solid fa-right-from-bracket"></i> Salir
-            </button>
-        `;
-        document.getElementById('nora-floating-logout-btn')?.addEventListener('click', () => {
-            if (confirm('¿Cerrar sesión de nora BIM? Se solicitarán credenciales nuevamente.')) {
-                sessionStorage.removeItem('userAccount');
-                localStorage.removeItem('userAccount');
-                activeSecurityContext = null;
-                for (const [, model] of loadedModels.entries()) {
-                    try {
-                        if (model?.object) model.object.visible = false;
-                    } catch (_) {}
-                }
-                try {
-                    highlighter.clear('select');
-                } catch (_) {}
-                setupUserAuthentication();
-                enforceAuthenticatedAccess(true);
-            }
-        });
-    } else {
-        badge.innerHTML = `
-            <button id="nora-floating-login-btn" style="background:#0284c7; border:none; color:#fff; border-radius:14px; padding:5px 12px; font-size:11px; font-weight:600; cursor:pointer; display:flex; align-items:center; gap:6px;">
-                <i class="fa-solid fa-lock"></i> Iniciar Sesión
-            </button>
-        `;
-        document.getElementById('nora-floating-login-btn')?.addEventListener('click', () => {
-            enforceAuthenticatedAccess(true);
-        });
-    }
+function renderFloatingUserBadge(_userAccount: any) {
+    const existing = document.getElementById('nora-floating-auth-badge');
+    if (existing) existing.remove();
 }
 
 function setupUserAuthentication() {
@@ -5837,11 +5787,12 @@ async function loadModelList() {
     }
 
     const initialParams = new URLSearchParams(window.location.search);
+    const isPbiEmbed = initialParams.get('embed') === 'true' || window !== window.parent;
     const directFileId = initialParams.get('fileId');
     const directFilename = initialParams.get('file') || 'ESTRUCTURAL.frag';
     const directJsonId = initialParams.get('jsonId');
 
-    if (directFileId && !(window as any)._directAutoLoadTriggered) {
+    if (isPbiEmbed && directFileId && !(window as any)._directAutoLoadTriggered) {
         (window as any)._directAutoLoadTriggered = true;
         setTimeout(() => {
             ensurePowerBIModelLoaded(directFileId, directJsonId ?? null, directFilename).catch(e => {
@@ -6146,25 +6097,33 @@ async function loadModelList() {
 
             if ((autoLoadFileId || autoLoadFilename) && !(window as any)._autoLoadedModel) {
                 (window as any)._autoLoadedModel = true;
-                let matchingItem = models.find((m) => 
-                    (autoLoadFileId && (m.driveFragId === autoLoadFileId || m.fileId === autoLoadFileId)) ||
-                    (autoLoadFilename && (m.name === autoLoadFilename || m.filename === autoLoadFilename))
-                );
+                const normAutoName = autoLoadFilename ? autoLoadFilename.toLowerCase().trim() : '';
+                const normAutoBase = normAutoName.replace(/\.(frag|rvt|ifc)$/i, '');
+
+                let matchingItem = models.find((m) => {
+                    const mNormName = (m.name || '').toLowerCase().trim();
+                    const mNormBase = mNormName.replace(/\.(frag|rvt|ifc)$/i, '');
+                    if (autoLoadFileId && (m.driveFragId === autoLoadFileId || m.fileId === autoLoadFileId)) return true;
+                    if (normAutoName && (mNormName === normAutoName || (m.filename && m.filename.toLowerCase().trim() === normAutoName))) return true;
+                    if (normAutoBase && mNormBase === normAutoBase) return true;
+                    return false;
+                });
 
                 if (!matchingItem && autoLoadFileId) {
-                    const cleanName = autoLoadFilename || 'Modelo.frag';
+                    const cleanName = autoLoadFilename ? (autoLoadFilename.toLowerCase().endsWith('.frag') ? autoLoadFilename : autoLoadFilename.replace(/\.(rvt|ifc)$/i, '') + '.frag') : 'Modelo.frag';
                     matchingItem = {
                         name: cleanName,
-                        path: `models/${cleanName}`,
+                        path: 'models/' + cleanName,
                         driveFragId: autoLoadFileId,
                         driveJsonId: autoLoadJsonId ?? null,
                         status: 'EN_PROGRESO',
-                        changedBy: 'PowerBI',
+                        changedBy: 'Drive',
                         changedByEmail: '',
                         fileId: autoLoadFileId,
                         filename: cleanName,
                         folder: 'General'
                     };
+                    models.push(matchingItem);
                 }
 
                 if (matchingItem) {
@@ -6174,10 +6133,15 @@ async function loadModelList() {
                     const allLiElements = Array.from(listContainer.querySelectorAll('li.model-item'));
                     const targetLi = allLiElements.find((li) => (li as HTMLElement).dataset.path === matchingItem.path) as HTMLElement | null;
                     logToScreen(`Auto-loading model: ${matchingItem.name}`);
-                    toggleModel(matchingItem, baseUrl, targetLi).catch((err) => {
+                    try {
+                        await toggleModel(matchingItem, baseUrl, targetLi);
+                        setTimeout(() => {
+                            try { fitModelToScreen(); } catch (_) {}
+                        }, 250);
+                    } catch (err) {
                         console.error('Auto-load failed:', err);
-                        logToScreen(`Auto-load error: ${err}`, true);
-                    });
+                    logToScreen(`Auto-load error: ${err}`, true);
+                    }
                 }
             }
 
@@ -6334,6 +6298,7 @@ async function toggleModel(m: RemoteModelItem, baseUrl: string, liElement?: HTML
         liElement?.classList.add('visible');
         toggleIcon?.classList.replace('fa-eye-slash', 'fa-eye');
         updateProjectLinksBarVisibility();
+        try { fitModelToScreen(); } catch (_) {}
 
     } catch (error) {
         const msg = (error instanceof Error) ? error.message : String(error);
