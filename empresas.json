@@ -89,7 +89,8 @@
         "email": "dataguardar@gmail.com",
         "role": "INVITADO",
         "empresaUsuario": "",
-        "cargo": ""
+        "cargo": "",
+        "especialidad": ""
       }
     ],
     "razonSocial": "Mesh Estudio SAS",

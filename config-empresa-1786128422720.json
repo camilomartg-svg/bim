@@ -471,6 +471,69 @@
         "cantidadesSheetId": "",
         "cantidadesScriptUrl": ""
       }
+    },
+    {
+      "name": "Estudaintes",
+      "title": "NUEVO PROYECTO",
+      "slug": "nuevo-proyecto-1793277006090",
+      "status": "Activo",
+      "enabled": true,
+      "hasLicense": true,
+      "landing": {
+        "enabled": true,
+        "title": "NUEVO PROYECTO",
+        "map": {
+          "lat": 4.60971,
+          "lng": -74.08175,
+          "zoom": 15
+        },
+        "eyebrow": "nora",
+        "subtitle": "Accesos rápidos, seguimiento y contexto del proyecto.",
+        "actionEyebrow": "Panel",
+        "actionTitle": "Acciones",
+        "actionDescription": "Atajos para equipo, incidencias y gestión del proyecto.",
+        "logoUrl": "https://i.postimg.cc/J4Fy2Qsx/LOGO-(1).jpg",
+        "portalLogoLight": "https://i.postimg.cc/tR3YSryT/LOGO-NORA-NEGRO.png",
+        "portalLogoDark": "https://i.postimg.cc/SQ6JTZqj/LOGO-NORA-BLANCO.png",
+        "viewerLogoLight": "https://i.postimg.cc/L4r0gSvV/LOGO-TEXTO-NORA-NEGRO.png",
+        "viewerLogoDark": "https://i.postimg.cc/FFfBKzb8/LOGO-TEXTO-NORA-BLANCO.png"
+      },
+      "modules": {
+        "ifc": "VSR_IFCA/",
+        "status": "STATUS/",
+        "cantidades": "CANTIDADES/",
+        "pdf": "VSR_PDFA/",
+        "dwg": "VSR_DWGA/"
+      },
+      "actions": {
+        "publicaciones": "Publicaciones.html",
+        "solicitudes": "index.html",
+        "equipo": "equipo.html"
+      },
+      "dataSources": {
+        "driveFolderName": "Estudaintes",
+        "driveFolderId": "161TooRrqCdAjs-eXVUFxJ-0tpFnrbXKt",
+        "driveScriptUrl": "",
+        "statusSheetId": "",
+        "statusScriptUrl": "",
+        "cantidadesSheetId": "",
+        "cantidadesScriptUrl": ""
+      },
+      "members": [],
+      "equiposDeTarea": [],
+      "iso19650": {
+        "projectAdmins": [],
+        "deliveryTeams": [],
+        "siteTeams": []
+      },
+      "code": "EST-001",
+      "country": "Colombia",
+      "city": "Bogotá",
+      "type": [
+        "Otro"
+      ],
+      "description": "Proyeto para los diplomados de Mesh Estudio",
+      "client": "Mesh Estudio"
     }
   ],
   "portal": {
