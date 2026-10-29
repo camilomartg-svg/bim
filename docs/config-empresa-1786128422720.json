@@ -473,7 +473,7 @@
       }
     },
     {
-      "name": "Estudaintes",
+      "name": "Estudiantes",
       "title": "NUEVO PROYECTO",
       "slug": "nuevo-proyecto-1793277006090",
       "status": "Activo",
@@ -511,7 +511,7 @@
         "equipo": "equipo.html"
       },
       "dataSources": {
-        "driveFolderName": "Estudaintes",
+        "driveFolderName": "Estudiantes",
         "driveFolderId": "161TooRrqCdAjs-eXVUFxJ-0tpFnrbXKt",
         "driveScriptUrl": "",
         "statusSheetId": "",
@@ -524,7 +524,15 @@
       "iso19650": {
         "projectAdmins": [],
         "deliveryTeams": [],
-        "siteTeams": []
+        "siteTeams": [],
+        "receiverTeams": [
+          {
+            "id": "recv-nuevo-proyecto-1793277006090",
+            "name": "EQUIPO RECEPTOR / OBRA",
+            "leadEmail": "",
+            "members": []
+          }
+        ]
       },
       "code": "EST-001",
       "country": "Colombia",
@@ -533,7 +541,8 @@
         "Otro"
       ],
       "description": "Proyeto para los diplomados de Mesh Estudio",
-      "client": "Mesh Estudio"
+      "client": "Mesh Estudio",
+      "fileVisibilityConfig": {}
     }
   ],
   "portal": {
