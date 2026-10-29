@@ -411,6 +411,22 @@
       const userEmail = (queryEmail || userAccount?.username || userAccount?.email || '').toLowerCase().trim();
       const isSuperAdmin = userAccount && (userAccount.role === 'SUPER_ADMINISTRADOR' || userEmail === 'imagina3ddesign@gmail.com');
 
+      function isCompanyAdmin(c) {
+        if (!c || !userEmail) return false;
+        const cleanEmail = userEmail.toLowerCase().trim();
+        if (Array.isArray(c.admins) && c.admins.some(a => String(a || '').toLowerCase().trim() === cleanEmail)) return true;
+        if (c.email && String(c.email).toLowerCase().trim() === cleanEmail) return true;
+        if (Array.isArray(c.members) && c.members.some(m =>
+          m.email && String(m.email).toLowerCase().trim() === cleanEmail &&
+          (m.role === 'ADMINISTRADOR_EMPRESA' || m.role === 'ADMINISTRADOR')
+        )) return true;
+        if (userAccount && (userAccount.role === 'ADMINISTRADOR_EMPRESA' || userAccount.role === 'ADMINISTRADOR')) {
+          const userEmp = String(userAccount.adminEmpresaId || userAccount.empresa || '').trim();
+          if (userEmp && (userEmp === c.id || slugify(userEmp) === slugify(c.name))) return true;
+        }
+        return false;
+      }
+
       // --- DOM Elements ---
       const authContainer = document.getElementById('auth-container');
       const stepEmpresas = document.getElementById('step-empresas');
@@ -609,19 +625,26 @@
           } else if (userEmail) {
             await Promise.allSettled(
               rawCompanies.map(async (c) => {
+                const isAdmin = isCompanyAdmin(c);
                 try {
                   const configUrl = c.configUrl || `config-${c.id}.json`;
                   const res = await fetch(`${configUrl}?t=${Date.now()}`);
                   if (res.ok) {
                     const conf = await res.json();
                     const allP = Array.isArray(conf.projects) ? conf.projects.filter(p => p && p.enabled !== false) : [];
-                    const userProjects = allP.filter(p => {
-                      const members = Array.isArray(p.members) ? p.members : [];
-                      return members.some(m => {
-                        const mEmail = (typeof m === 'string' ? m : (m.email || m.username || '')).toLowerCase().trim();
-                        return mEmail === userEmail;
+                    
+                    let userProjects = [];
+                    if (isAdmin) {
+                      userProjects = allP;
+                    } else {
+                      userProjects = allP.filter(p => {
+                        const members = Array.isArray(p.members) ? p.members : [];
+                        return members.some(m => {
+                          const mEmail = (typeof m === 'string' ? m : (m.email || m.username || '')).toLowerCase().trim();
+                          return mEmail === userEmail;
+                        });
                       });
-                    });
+                    }
 
                     if (userProjects.length > 0) {
                       window._userAccessibleProjectsByCompany.set(c.id, userProjects);
@@ -759,7 +782,8 @@
             if (!res.ok) throw new Error('No se pudo leer la configuración de proyectos');
             const data = await res.json();
             const allP = Array.isArray(data.projects) ? data.projects.filter(p => p && p.enabled !== false) : [];
-            if (isSuperAdmin) {
+            const isAdmin = isCompanyAdmin(company);
+            if (isSuperAdmin || isAdmin) {
               projects = allP;
             } else if (userEmail) {
               projects = allP.filter(p => {
