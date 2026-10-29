@@ -273,7 +273,7 @@ export class Visual implements IVisual {
             // Build target URL with version tag to bypass stale WebView2 caching
             const url = new URL(viewerBaseUrl);
             url.searchParams.set("embed", "true");
-            url.searchParams.set("_v", "20261028-10");
+            url.searchParams.set("_v", "20261028-11");
             if (fragId) url.searchParams.set("fileId", fragId);
             if (jsonId) url.searchParams.set("jsonId", jsonId);
             if (forceLogin) url.searchParams.set("forceLogin", "true");
