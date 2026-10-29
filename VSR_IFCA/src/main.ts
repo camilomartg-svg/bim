@@ -898,7 +898,36 @@ const fragments = components.get(OBC.FragmentsManager);
 // Initialize fragments with the worker BEFORE getting other components
 // that might depend on it (like Classifier or Hider)
 try {
-    await fragments.init(`${baseUrl}fragments/fragments.mjs`);
+    const workerScriptUrl = new URL(`${baseUrl}fragments/fragments.mjs`, window.location.href).href;
+    let initWorkerTarget = workerScriptUrl;
+    let useClassicBlobWorker = false;
+    try {
+        const wResp = await fetch(workerScriptUrl);
+        if (wResp.ok) {
+            const wRaw = await wResp.text();
+            // Strip trailing ES module export so the bundle runs cleanly as a Classic Worker inside sandbox="allow-scripts" (origin === 'null')
+            const wClassicCode = wRaw.replace(/\bexport\s*\{[^}]*\}\s*;?\s*$/, '');
+            const wBlob = new Blob([wClassicCode], { type: 'text/javascript' });
+            const blobWorkerUrl = URL.createObjectURL(wBlob);
+            initWorkerTarget = blobWorkerUrl;
+            useClassicBlobWorker = true;
+
+            const NativeWorker = window.Worker;
+            const PatchedWorker: any = function (scriptURL: string | URL, options?: WorkerOptions) {
+                const urlStr = String(scriptURL);
+                if (urlStr === blobWorkerUrl) {
+                    // Force classic worker (omit type: 'module' which fails CORS in opaque 'null' origin)
+                    return new NativeWorker(scriptURL);
+                }
+                return options ? new NativeWorker(scriptURL, options) : new NativeWorker(scriptURL);
+            };
+            PatchedWorker.prototype = NativeWorker.prototype;
+            window.Worker = PatchedWorker;
+        }
+    } catch (workerBlobErr) {
+        console.warn('[Fragments] Blob worker fallback:', workerBlobErr);
+    }
+    await (fragments as any).init(initWorkerTarget, useClassicBlobWorker ? { classicWorker: true } : undefined);
 } catch (error) {
     console.error("Critical Error: Fragments init failed", error);
     throw new Error(`Fragments init failed: ${error}`);
@@ -1537,12 +1566,12 @@ function logToScreen(msg: string, isError = false) {
 
     try {
         const isEmbed = window.location.search.includes('embed=true') || (window !== window.parent) || window.location.search.includes('fileId');
-        if (isEmbed) {
+        if (isEmbed && window === window.parent) {
             let hud = document.getElementById('nora-embed-hud');
             if (!hud) {
                 hud = document.createElement('div');
                 hud.id = 'nora-embed-hud';
-                hud.style.cssText = 'position:fixed; top:8px; left:8px; z-index:999999; font-family:Segoe UI, sans-serif; font-size:11px; padding:4px 10px; border-radius:6px; pointer-events:none; transition:all 0.3s ease; box-shadow:0 4px 12px rgba(0,0,0,0.5); max-width:90vw; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;';
+                hud.style.cssText = 'position:fixed; bottom:8px; left:8px; z-index:999999; font-family:Segoe UI, sans-serif; font-size:11px; padding:4px 10px; border-radius:6px; pointer-events:none; transition:all 0.3s ease; box-shadow:0 4px 12px rgba(0,0,0,0.5); max-width:90vw; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;';
                 document.body.appendChild(hud);
             }
             hud.style.background = isError ? 'rgba(220, 38, 38, 0.92)' : 'rgba(15, 23, 42, 0.88)';
@@ -2446,6 +2475,14 @@ async function loadModel(url: string, path: string, options?: { propertiesUrl?: 
         if (model.uuid) loadedModels.set(model.uuid, model);
         if (model.id) loadedModels.set(model.id, model);
         if (model.modelId) loadedModels.set(model.modelId, model);
+        try {
+            if (typeof model.getItemsIdsWithGeometry === 'function') {
+                const rawGeomIds = await model.getItemsIdsWithGeometry();
+                (model as any)._geometryIdsSet = new Set(Array.from(rawGeomIds || []).map(Number));
+            }
+        } catch (geomCacheErr) {
+            console.warn('[GeometryCache] Failed caching geometry IDs:', geomCacheErr);
+        }
         updateProjectLinksBarVisibility();
 
         // Generar bordes para snapping
@@ -2489,7 +2526,7 @@ async function loadModel(url: string, path: string, options?: { propertiesUrl?: 
                 }
             } catch {
             }
-        } else {
+        } else if ((options && options.propertiesUrl) || !url.startsWith('blob:')) {
             const jsonPath = (options && options.propertiesUrl) ? options.propertiesUrl : url.replace(/\.frag$/i, '.json');
             try {
                 logToScreen(`Checking for external properties at ${jsonPath}...`);
@@ -2657,7 +2694,7 @@ async function loadModel(url: string, path: string, options?: { propertiesUrl?: 
 
                     // Fallback if scanning failed
                     if (totalMapped === 0) {
-                        logToScreen('WARNING: Could not find items on fragments directly. Using fallback mapping to first fragment.', true);
+                        console.log('[Fragments v3] Using getItemsIdsWithGeometry mapping.');
                         const mainFragment = fragmentsList[0];
                         const fragmentId = mainFragment.uuid;
 
@@ -5554,6 +5591,246 @@ function fitModelToScreen() {
     }
 }
 
+function getPbiState(): {
+    loads: Map<string, Promise<void>>;
+    activeFragId: string;
+    pendingFilter: any;
+    isApplying: boolean;
+    wasSubsetIsolated: boolean;
+} {
+    const w = window as any;
+    if (!w.__noraPbiState) {
+        w.__noraPbiState = {
+            loads: new Map<string, Promise<void>>(),
+            activeFragId: '',
+            pendingFilter: null,
+            isApplying: false,
+            wasSubsetIsolated: false
+        };
+    }
+    return w.__noraPbiState;
+}
+
+function cleanPowerBIDriveId(raw: any): string {
+    const s = String(raw ?? '').trim();
+    if (!s) return '';
+    const mFile = s.match(/\/file\/d\/([a-zA-Z0-9_-]{15,})/);
+    if (mFile) return mFile[1];
+    const mId = s.match(/[?&]id=([a-zA-Z0-9_-]{15,})/);
+    if (mId) return mId[1];
+    return s;
+}
+
+async function applyPowerBIFilter(data: any) {
+    if (!data || typeof data !== 'object') return;
+    const expressIds: number[] = Array.isArray(data.expressIds)
+        ? data.expressIds.map(Number).filter((n: number) => !isNaN(n))
+        : [];
+    const shouldIsolate = data.isolate !== false && data.autoIsolate !== false;
+
+    const st = getPbiState();
+    const uniqueModels = getUniqueLoadedModels();
+    if (uniqueModels.length === 0) {
+        st.pendingFilter = data;
+        return;
+    }
+
+    if (expressIds.length === 0) {
+        st.isApplying = true;
+        try {
+            await hider.set(true);
+            try { await highlighter.clear('select'); } catch (_) {}
+            await fragments.core.update(true);
+            if (st.wasSubsetIsolated) {
+                st.wasSubsetIsolated = false;
+                fitModelToScreen();
+            }
+        } finally {
+            st.isApplying = false;
+        }
+        logToScreen('Power BI: Modelo completo visible');
+        return;
+    }
+
+    const reqSet = new Set<number>(expressIds);
+    const visibleMap: Record<string, Set<number>> = {};
+    let totalGeomCount = 0;
+    let totalMatchedCount = 0;
+
+    for (const { uuid, model } of uniqueModels) {
+        if (!model) continue;
+        if (model.object) model.object.visible = true;
+
+        let geomSet: Set<number> | undefined = (model as any)._geometryIdsSet;
+        if (!geomSet || geomSet.size === 0) {
+            try {
+                const gIds = await model.getItemsIdsWithGeometry();
+                geomSet = new Set(Array.from(gIds || []).map(Number));
+                (model as any)._geometryIdsSet = geomSet;
+            } catch (_) {
+                geomSet = new Set<number>();
+            }
+        }
+
+        totalGeomCount += geomSet.size;
+        const matched = new Set<number>();
+
+        for (const id of reqSet) {
+            if (geomSet.has(id)) {
+                matched.add(id);
+            }
+        }
+
+        if (matched.size === 0 && (model as any).properties) {
+            const props = (model as any).properties;
+            for (const id of reqSet) {
+                const ent = props[id] || props[String(id)];
+                if (ent && typeof ent.localId === 'number' && geomSet.has(ent.localId)) {
+                    matched.add(ent.localId);
+                }
+            }
+        }
+
+        const modelKey = (fragments.list && model.modelId && fragments.list.has(model.modelId))
+            ? model.modelId
+            : ((fragments.list && model.uuid && fragments.list.has(model.uuid)) ? model.uuid : (model.uuid || uuid));
+
+        if (matched.size > 0) {
+            visibleMap[modelKey] = matched;
+            totalMatchedCount += matched.size;
+        }
+    }
+
+    if (totalMatchedCount === 0) {
+        st.isApplying = true;
+        try {
+            await hider.set(true);
+            try { await highlighter.clear('select'); } catch (_) {}
+            await fragments.core.update(true);
+        } finally {
+            st.isApplying = false;
+        }
+        logToScreen(`Modelo 3D activo (${totalGeomCount} elem)`);
+        return;
+    }
+
+    if (totalGeomCount > 0 && totalMatchedCount >= totalGeomCount) {
+        st.isApplying = true;
+        try {
+            await hider.set(true);
+            try { await highlighter.clear('select'); } catch (_) {}
+            await fragments.core.update(true);
+            if (st.wasSubsetIsolated) {
+                st.wasSubsetIsolated = false;
+                fitModelToScreen();
+            }
+        } finally {
+            st.isApplying = false;
+        }
+        logToScreen(`Conectado con Power BI (${totalMatchedCount} elementos 3D)`);
+        return;
+    }
+
+    st.wasSubsetIsolated = true;
+    st.isApplying = true;
+    try {
+        if (shouldIsolate) {
+            await hider.isolate(visibleMap);
+        } else {
+            await hider.set(true);
+        }
+        await fragments.core.update(true);
+        await highlighter.highlightByID('select', visibleMap as any, true, data.center !== false);
+        await fragments.core.update(true);
+    } catch (err) {
+        console.warn('[PowerBI Integration] Filter/Highlight error:', err);
+    } finally {
+        st.isApplying = false;
+    }
+
+    logToScreen(`Filtro Power BI: ${totalMatchedCount} de ${totalGeomCount} elementos 3D`);
+}
+
+async function ensurePowerBIModelLoaded(rawFragId: any, rawJsonId?: any, rawName?: string): Promise<void> {
+    const st = getPbiState();
+    const fragId = cleanPowerBIDriveId(rawFragId);
+    const jsonId = cleanPowerBIDriveId(rawJsonId) || null;
+    if (!fragId) return;
+
+    const canonicalPath = `models/pbi_${fragId}.frag`;
+    const loadKey = `${fragId}|${jsonId || ''}`;
+
+    if (st.activeFragId && st.activeFragId !== fragId) {
+        for (const [k, m] of Array.from(loadedModels.entries())) {
+            if (String(k).startsWith('models/pbi_') || (m && String(m.uuid || '').startsWith('models/pbi_'))) {
+                try {
+                    if (m?.object) {
+                        m.object.visible = false;
+                        world.scene.three.remove(m.object);
+                    }
+                } catch (_) {}
+                loadedModels.delete(k);
+                try { fragments.list.delete(k); } catch (_) {}
+            }
+        }
+        st.loads.clear();
+    }
+    st.activeFragId = fragId;
+
+    if (st.loads.has(loadKey)) {
+        await st.loads.get(loadKey);
+        const existing = loadedModels.get(canonicalPath);
+        if (existing?.object) existing.object.visible = true;
+        return;
+    }
+
+    const promise = (async () => {
+        const displayName = rawName || 'ESTRUCTURAL.frag';
+        const pbiModel: RemoteModelItem = {
+            name: displayName,
+            path: canonicalPath,
+            driveFragId: fragId,
+            driveJsonId: jsonId,
+            status: 'EN_PROGRESO',
+            changedBy: 'PowerBI',
+            changedByEmail: '',
+            fileId: fragId,
+            filename: displayName,
+            folder: 'General'
+        };
+        logToScreen(`Cargando modelo 3D (${fragId.slice(0, 8)}...)...`);
+        await loadDriveModel(pbiModel);
+        fitModelToScreen();
+
+        try {
+            if (window.parent && window.parent !== window) {
+                window.parent.postMessage({ type: 'NORA_VIEWER_READY', loaded: true, fragId }, '*');
+            }
+        } catch (_) {}
+
+        if (st.pendingFilter) {
+            const pending = st.pendingFilter;
+            st.pendingFilter = null;
+            await applyPowerBIFilter(pending);
+        } else {
+            const uModels = getUniqueLoadedModels();
+            let count = 0;
+            for (const um of uModels) count += ((um.model as any)?._geometryIdsSet?.size || 0);
+            logToScreen(`Modelo 3D listo (${count} elementos)`);
+        }
+    })();
+
+    st.loads.set(loadKey, promise);
+    try {
+        await promise;
+    } catch (err) {
+        st.loads.delete(loadKey);
+        console.error('[PowerBI Integration] Model load failed:', err);
+        logToScreen(`Error cargando FRAG: ${(err as any)?.message || err}`, true);
+        throw err;
+    }
+}
+
 async function loadModelList() {
     if (loadModelListInFlight) {
         return await loadModelListInFlight;
@@ -5566,31 +5843,11 @@ async function loadModelList() {
 
     if (directFileId && !(window as any)._directAutoLoadTriggered) {
         (window as any)._directAutoLoadTriggered = true;
-        const directModel: RemoteModelItem = {
-            name: directFilename,
-            path: `models/${directFilename}`,
-            driveFragId: directFileId,
-            driveJsonId: directJsonId ?? null,
-            status: 'EN_PROGRESO',
-            changedBy: 'PowerBI',
-            changedByEmail: '',
-            fileId: directFileId,
-            filename: directFilename,
-            folder: 'General'
-        };
         setTimeout(() => {
-            logToScreen(`Direct loading model: ${directFilename} (${directFileId})...`);
-            toggleModel(directModel, '', null).then(() => {
-                fitModelToScreen();
-                try {
-                    if (window.parent && window.parent !== window) {
-                        window.parent.postMessage({ type: 'NORA_VIEWER_READY', loaded: true }, '*');
-                    }
-                } catch (_) {}
-            }).catch(e => {
+            ensurePowerBIModelLoaded(directFileId, directJsonId ?? null, directFilename).catch(e => {
                 console.error('Direct autoload error:', e);
             });
-        }, 100);
+        }, 80);
     }
 
     const currentUser = getStoredUserAccount();
@@ -6007,7 +6264,10 @@ async function loadDriveModel(m: RemoteModelItem) {
             props = null;
         }
     } else {
-        logToScreen(`[Drive] ⚠️ Sin driveJsonId — la clasificación no tendrá datos`, true);
+        const isEmbedLoad = window.location.search.includes('embed=true') || (window !== window.parent);
+        if (!isEmbedLoad) {
+            logToScreen(`[Drive] ⚠️ Sin driveJsonId — la clasificación no tendrá datos`, true);
+        }
     }
 
     const sourceUrl = `drive://${encodeURIComponent(m.driveFragId)}${m.driveJsonId ? `?jsonId=${encodeURIComponent(String(m.driveJsonId))}` : ''}`;
@@ -6108,28 +6368,7 @@ try {
     if (directFragId) {
         const directName = urlParamsCheck.get('file') || 'ESTRUCTURAL.frag';
         const directJson = urlParamsCheck.get('jsonId');
-        const directModelItem: RemoteModelItem = {
-            name: directName,
-            path: 'models/' + directName,
-            driveFragId: directFragId,
-            driveJsonId: directJson ?? null,
-            status: 'EN_PROGRESO',
-            changedBy: 'PowerBI',
-            changedByEmail: '',
-            fileId: directFragId,
-            filename: directName,
-            folder: 'General'
-        };
-        logToScreen(`Cargando modelo 3D: ${directName} (${directFragId.slice(0, 8)}...)`);
-        toggleModel(directModelItem, '', null).then(() => {
-            fitModelToScreen();
-            logToScreen(`Modelo 3D cargado y centrado.`);
-            try {
-                if (window.parent && window.parent !== window) {
-                    window.parent.postMessage({ type: 'NORA_VIEWER_READY', loaded: true }, '*');
-                }
-            } catch (_) {}
-        }).catch(err => {
+        ensurePowerBIModelLoaded(directFragId, directJson ?? null, directName).catch(err => {
             console.error('Direct embed model load failed:', err);
             logToScreen('Error cargando modelo: ' + (err?.message || err), true);
         });
@@ -13362,87 +13601,16 @@ function setupPowerBIIntegration() {
             if (data.type === 'NORA_LOAD_MODEL') {
                 const targetFragId = data.fragId || data.fileId;
                 const targetJsonId = data.jsonId || null;
-                const targetName = data.name || data.filename || 'Modelo.frag';
+                const targetName = data.name || data.filename || 'ESTRUCTURAL.frag';
                 if (targetFragId) {
-                    const newModel: RemoteModelItem = {
-                        name: targetName,
-                        path: 'models/' + targetName,
-                        driveFragId: targetFragId,
-                        driveJsonId: targetJsonId,
-                        status: 'EN_PROGRESO',
-                        changedBy: 'PowerBI',
-                        changedByEmail: '',
-                        fileId: targetFragId,
-                        filename: targetName,
-                        folder: 'General'
-                    };
-                    toggleModel(newModel, '', null).then(() => {
-                        fitModelToScreen();
-                        try {
-                            if (window.parent && window.parent !== window) {
-                                window.parent.postMessage({ type: 'NORA_VIEWER_READY', loaded: true }, '*');
-                            }
-                        } catch (_) {}
-                    }).catch(err => {
-                        console.error('[PowerBI Integration] Error loading model:', err);
-                    });
+                    await ensurePowerBIModelLoaded(targetFragId, targetJsonId, targetName);
                 }
                 return;
             }
 
             if (data.type === 'NORA_PBI_FILTER') {
-                const expressIds = Array.isArray(data.expressIds) ? data.expressIds.map(Number).filter(n => !isNaN(n)) : [];
-                const shouldIsolate = data.isolate !== false;
-
-                if (loadedModels.size === 0) return;
-
-                if (expressIds.length === 0) {
-                    await hider.set(true);
-                    highlighter.clear('select');
-                    logToScreen('Power BI: Todos los elementos visibles');
-                    return;
-                }
-
-                // Verificar si los expressIds corresponden a geometrías 3D reales
-                let hasMatchingGeometry = false;
-                const filterMap: Record<string, number[]> = {};
-                for (const [key, model] of loadedModels.entries()) {
-                    if (model && model.uuid) {
-                        filterMap[model.uuid] = expressIds;
-                        if (typeof model.getFragmentMap === 'function') {
-                            try {
-                                const fMap = model.getFragmentMap(expressIds);
-                                if (fMap && Object.keys(fMap).length > 0) {
-                                    hasMatchingGeometry = true;
-                                }
-                            } catch (_) {}
-                        }
-                    }
-                    filterMap[key] = expressIds;
-                }
-
-                // Si los IDs no coinciden con ninguna malla (ej. son IDs de IfcMaterial o metadatos), no ocultar el modelo
-                if (!hasMatchingGeometry) {
-                    logToScreen(`Power BI: ${expressIds.length} elementos sin malla 3D directa. Modelo visible.`);
-                    await hider.set(true);
-                    return;
-                }
-
-                if (shouldIsolate) {
-                    await hider.isolate(filterMap as any);
-                } else {
-                    await hider.set(true);
-                }
-
-                try {
-                    highlighter.highlightByID('select', filterMap as any, true, true);
-                    if (data.center !== false && expressIds.length > 0) {
-                        await centerCameraOnSelection(filterMap);
-                    }
-                } catch (err) {
-                    console.warn('[PowerBI Integration] Highlight error:', err);
-                }
-                logToScreen(`Power BI filtro aplicado: ${expressIds.length} elementos`);
+                await applyPowerBIFilter(data);
+                return;
             }
         } catch (e) {
             console.error('[PowerBI Integration] Error handling message:', e);
@@ -13451,6 +13619,7 @@ function setupPowerBIIntegration() {
 
     try {
         highlighter?.events?.select?.onHighlight?.add((selection: any) => {
+            if (getPbiState().isApplying) return;
             if (!window.parent || window.parent === window) return;
             const entries = selection instanceof Map ? Array.from(selection.entries()) : Object.entries(selection || {});
             const allIds: number[] = [];
@@ -13465,6 +13634,11 @@ function setupPowerBIIntegration() {
                     expressIds: allIds
                 }, '*');
             }
+        });
+        highlighter?.events?.select?.onClear?.add(() => {
+            if (getPbiState().isApplying) return;
+            if (!window.parent || window.parent === window) return;
+            window.parent.postMessage({ type: 'NORA_VIEWER_CLEAR' }, '*');
         });
     } catch (e) {
         console.warn('[PowerBI Integration] Click event hook error:', e);

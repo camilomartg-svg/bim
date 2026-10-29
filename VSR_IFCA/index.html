@@ -3,10 +3,83 @@
 
 <head>
     <script>
-        if (!sessionStorage.getItem('userAccount') && !localStorage.getItem('userAccount')) {
+        (function () {
+            function makeMemStorage() {
+                var store = Object.create(null);
+                return {
+                    get length() { return Object.keys(store).length; },
+                    key: function (i) { return Object.keys(store)[i] || null; },
+                    getItem: function (k) { return Object.prototype.hasOwnProperty.call(store, k) ? store[k] : null; },
+                    setItem: function (k, v) { store[String(k)] = String(v); },
+                    removeItem: function (k) { delete store[k]; },
+                    clear: function () { store = Object.create(null); }
+                };
+            }
+            try {
+                window.localStorage.getItem('__nora_probe__');
+            } catch (e) {
+                try { Object.defineProperty(window, 'localStorage', { value: makeMemStorage(), configurable: true }); } catch (_) {}
+            }
+            try {
+                window.sessionStorage.getItem('__nora_probe__');
+            } catch (e) {
+                try { Object.defineProperty(window, 'sessionStorage', { value: makeMemStorage(), configurable: true }); } catch (_) {}
+            }
+            try {
+                if (window.origin === 'null') {
+                    Object.defineProperty(window, 'indexedDB', {
+                        value: {
+                            open: function () {
+                                var req = { result: null, error: new Error('IDB sandboxed'), onsuccess: null, onerror: null, onupgradeneeded: null };
+                                setTimeout(function () { if (typeof req.onerror === 'function') req.onerror({ target: req }); }, 0);
+                                return req;
+                            },
+                            deleteDatabase: function () {
+                                var req = { result: null, onsuccess: null, onerror: null };
+                                setTimeout(function () { if (typeof req.onsuccess === 'function') req.onsuccess({ target: req }); }, 0);
+                                return req;
+                            }
+                        },
+                        configurable: true
+                    });
+                }
+            } catch (_) {}
+        })();
+        const isEmbed = window.location.search.includes('embed=true') || (window !== window.parent);
+        if (!isEmbed && !sessionStorage.getItem('userAccount') && !localStorage.getItem('userAccount')) {
             window.location.replace('https://norabim.com/inse.html');
         }
+        if (isEmbed) {
+            document.documentElement.classList.add('nora-embed-mode');
+        }
     </script>
+    <style>
+        .nora-embed-mode #sidebar,
+        .nora-embed-mode #sidebar-resizer,
+        .nora-embed-mode .sidebar-toggle-btn,
+        .nora-embed-mode #back-btn,
+        .nora-embed-mode a[href*="home.html"],
+        .nora-embed-mode #nora-floating-auth-badge,
+        .nora-embed-mode #auth-gate-overlay,
+        .nora-embed-mode #properties-panel,
+        .nora-embed-mode #properties-resizer,
+        .nora-embed-mode #properties-toggle,
+        .nora-embed-mode #right-tab-nora,
+        .nora-embed-mode #update-banner,
+        .nora-embed-mode #loading-overlay {
+            display: none !important;
+        }
+        .nora-embed-mode #app {
+            width: 100vw !important;
+            height: 100vh !important;
+        }
+        .nora-embed-mode #viewer-container {
+            left: 0 !important;
+            right: 0 !important;
+            width: 100vw !important;
+            height: 100vh !important;
+        }
+    </style>
 
     <meta charset="UTF-8" />
     <meta name="version" content="v27-EventSnap" />
@@ -175,7 +248,7 @@
                     style="background: none; border: none; font-size: 18px; cursor: pointer; color: var(--text-dark-gray);">
                     <span class="material-symbols-outlined">dark_mode</span>
                 </button>
-                <button id="cache-clear-btn" class="theme-btn" title="Vaciar búfer local y recargar modelos"
+                <button id="cache-clear-btn" class="theme-btn" title="Vaciar bï¿½fer local y recargar modelos"
                     style="background: none; border: none; font-size: 18px; cursor: pointer; color: var(--text-dark-gray);">
                     <span class="material-symbols-outlined">cached</span>
                 </button>
