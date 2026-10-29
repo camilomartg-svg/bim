@@ -91,6 +91,13 @@
         "empresaUsuario": "",
         "cargo": "",
         "especialidad": ""
+      },
+      {
+        "name": "Ximena Baquero",
+        "email": "ximenabaquero1@gmail.com",
+        "role": "MIEMBRO",
+        "empresaUsuario": "Mesh Estudio",
+        "cargo": "Arquitecto Senior"
       }
     ],
     "razonSocial": "Mesh Estudio SAS",
