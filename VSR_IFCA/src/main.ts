@@ -1565,7 +1565,7 @@ function logToScreen(msg: string, isError = false) {
     else console.log(msg);
 
     try {
-        const isEmbed = window.location.search.includes('embed=true') || (window !== window.parent) || window.location.search.includes('fileId');
+        const isEmbed = window.location.search.includes('embed=true') || (window !== window.parent);
         if (isEmbed) {
             if (window.parent && window.parent !== window) {
                 window.parent.postMessage({ type: 'NORA_VIEWER_STATUS', text: msg, isError }, '*');
@@ -2249,7 +2249,7 @@ const attachExternalPropertiesToLocalIds = async (model: any, externalProperties
 async function loadModel(url: string, path: string, options?: { propertiesUrl?: string; propertiesJson?: any | null; sourceUrl?: string }) {
     resetFilters();
     const urlParams = new URLSearchParams(window.location.search);
-    const isEmbedMode = urlParams.get('embed') === 'true' || window !== window.parent || !!urlParams.get('fileId');
+    const isEmbedMode = urlParams.get('embed') === 'true' || window !== window.parent;
     
     // Security check
     if (!activeSecurityContext && !isEmbedMode) {
@@ -5164,7 +5164,12 @@ function getStoredUserAccount() {
     if (params.get('forceLogin') === 'true') {
         return null;
     }
-    if (params.get('bypassAuth') === 'true' || params.get('embed') === 'true' || window !== window.parent || params.get('fileId')) {
+    const isPbiEmbed = params.get('embed') === 'true' || window !== window.parent;
+    if (params.get('bypassAuth') === 'true' || isPbiEmbed) {
+        const stored = sessionStorage.getItem('userAccount') || localStorage.getItem('userAccount');
+        if (stored) {
+            try { return JSON.parse(stored); } catch (_) {}
+        }
         return { name: 'PowerBI User', email: 'powerbi@nora.cde', role: 'Viewer' };
     }
     const userAccountStr = sessionStorage.getItem('userAccount') || localStorage.getItem('userAccount');
@@ -5290,7 +5295,7 @@ function enforceAuthenticatedAccess(forcePrompt = false) {
     const app = document.getElementById('app');
     if (!app) return;
     const urlParams = new URLSearchParams(window.location.search);
-    const isEmbedMode = urlParams.get('embed') === 'true' || window !== window.parent || !!urlParams.get('fileId');
+    const isEmbedMode = urlParams.get('embed') === 'true' || window !== window.parent;
     if (isEmbedMode) {
         const existingGate = document.getElementById('auth-gate-overlay');
         existingGate?.remove();
@@ -6276,7 +6281,7 @@ async function toggleModel(m: RemoteModelItem, baseUrl: string, liElement?: HTML
 
     // Not loaded, load it
     const overlay = document.getElementById('loading-overlay');
-    const isEmbedForOverlay = window.location.search.includes('embed=true') || (window !== window.parent) || window.location.search.includes('fileId');
+    const isEmbedForOverlay = window.location.search.includes('embed=true') || (window !== window.parent);
     if (overlay && !isEmbedForOverlay) overlay.style.display = 'flex';
 
     try {
@@ -6329,8 +6334,9 @@ try { initStatusPanel(); } catch (e) { console.warn('initStatusPanel error:', e)
 // Auto-cargar modelo si fileId está presente en URL (Modo Power BI directo)
 try {
     const urlParamsCheck = new URLSearchParams(window.location.search);
+    const isPbiEmbed = urlParamsCheck.get('embed') === 'true' || window !== window.parent;
     const directFragId = urlParamsCheck.get('fileId');
-    if (directFragId) {
+    if (isPbiEmbed && directFragId) {
         const directName = urlParamsCheck.get('file') || 'ESTRUCTURAL.frag';
         const directJson = urlParamsCheck.get('jsonId');
         ensurePowerBIModelLoaded(directFragId, directJson ?? null, directName).catch(err => {
@@ -13492,7 +13498,7 @@ function setupPowerBIIntegration() {
     let isEmbed = false;
     try {
         const params = new URLSearchParams(window.location.search);
-        isEmbed = params.get('embed') === 'true' || (window !== window.parent) || !!params.get('fileId');
+        isEmbed = params.get('embed') === 'true' || (window !== window.parent);
     } catch (_) {
         isEmbed = true;
     }
