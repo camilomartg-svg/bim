@@ -473,7 +473,7 @@
       }
     },
     {
-      "name": "Estudaintes",
+      "name": "Estudiantes",
       "title": "NUEVO PROYECTO",
       "slug": "nuevo-proyecto-1793277006090",
       "status": "Activo",
@@ -511,7 +511,7 @@
         "equipo": "equipo.html"
       },
       "dataSources": {
-        "driveFolderName": "Estudaintes",
+        "driveFolderName": "Estudiantes",
         "driveFolderId": "161TooRrqCdAjs-eXVUFxJ-0tpFnrbXKt",
         "driveScriptUrl": "",
         "statusSheetId": "",
