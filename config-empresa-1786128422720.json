@@ -530,9 +530,12 @@
             "id": "recv-nuevo-proyecto-1793277006090",
             "name": "EQUIPO RECEPTOR / OBRA",
             "leadEmail": "",
-            "members": []
+            "members": [],
+            "taskTeams": []
           }
-        ]
+        ],
+        "liderEquipoEntrega": "",
+        "directorDeObra": ""
       },
       "code": "EST-001",
       "country": "Colombia",
