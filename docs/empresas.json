@@ -113,6 +113,14 @@
         "email": "marlellybonilla17@gmail.com",
         "role": "MIEMBRO",
         "empresaUsuario": "Mesh Estudio",
+        "cargo": "",
+        "especialidad": ""
+      },
+      {
+        "name": "Valentina Reyes Paredes",
+        "email": "valentinareyesparedes@gmail.com",
+        "role": "MIEMBRO",
+        "empresaUsuario": "Mesh Estudio",
         "cargo": "Arquitecto Senior"
       }
     ],
