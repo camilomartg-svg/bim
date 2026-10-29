@@ -105,6 +105,14 @@
         "email": "ivansavoa.00@gmail.com",
         "role": "MIEMBRO",
         "empresaUsuario": "Mesh Estudio",
+        "cargo": "",
+        "especialidad": ""
+      },
+      {
+        "name": "Katherine Bonilla",
+        "email": "marlellybonilla17@gmail.com",
+        "role": "MIEMBRO",
+        "empresaUsuario": "Mesh Estudio",
         "cargo": "Arquitecto Senior"
       }
     ],
