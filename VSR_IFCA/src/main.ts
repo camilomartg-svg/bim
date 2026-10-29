@@ -2302,53 +2302,60 @@ async function loadModel(url: string, path: string, options?: { propertiesUrl?: 
 
         logToScreen(`Fetched ${(buffer.byteLength / 1024 / 1024).toFixed(2)} MB`);
 
-        // Check for GZIP signature
+        // Robust compression detection and client-side decompression
         const isGzip = data[0] === 0x1f && data[1] === 0x8b;
-        logToScreen(`Compression: ${isGzip ? 'GZIP' : 'Uncompressed'}`);
+        const isZlib = data[0] === 0x78 && (data[1] === 0x9c || data[1] === 0x01 || data[1] === 0xda || data[1] === 0x5e);
+        let decompressedData: Uint8Array = data;
+        let isRaw = !isGzip && !isZlib;
+
+        if (isGzip && typeof DecompressionStream !== 'undefined') {
+            try {
+                logToScreen('Descomprimiendo GZIP...');
+                const ds = new DecompressionStream('gzip');
+                const writer = ds.writable.getWriter();
+                writer.write(data);
+                writer.close();
+                const ab = await new Response(ds.readable).arrayBuffer();
+                decompressedData = new Uint8Array(ab);
+                isRaw = true;
+                logToScreen(`GZIP descomprimido: ${(decompressedData.byteLength / 1024 / 1024).toFixed(2)} MB`);
+            } catch (decErr) {
+                console.warn('GZIP manual decompression error, will fallback to worker:', decErr);
+            }
+        } else if (isZlib && typeof DecompressionStream !== 'undefined') {
+            try {
+                logToScreen('Descomprimiendo ZLIB...');
+                const ds = new DecompressionStream('deflate');
+                const writer = ds.writable.getWriter();
+                writer.write(data);
+                writer.close();
+                const ab = await new Response(ds.readable).arrayBuffer();
+                decompressedData = new Uint8Array(ab);
+                isRaw = true;
+                logToScreen(`ZLIB descomprimido: ${(decompressedData.byteLength / 1024 / 1024).toFixed(2)} MB`);
+            } catch (decErr) {
+                console.warn('ZLIB manual decompression error, will fallback to worker:', decErr);
+            }
+        }
 
         let model;
-        logToScreen(`Procesando geometría 3D (${isGzip ? 'GZIP' : 'RAW'})...`);
+        logToScreen(`Procesando geometría 3D (${isRaw ? 'RAW' : 'COMPRIMIDO'})...`);
         try {
-            // Pass raw: true if uncompressed so the worker doesn't hang trying to gzip-decompress it
-            model = await fragments.core.load(data, { 
+            model = await fragments.core.load(decompressedData, { 
                 modelId: path, 
-                raw: !isGzip,
+                raw: isRaw,
                 camera: world?.camera?.three 
             });
         } catch (loadErr) {
-            console.warn('Direct load failed, attempting fallback...', loadErr);
-
-            if (isGzip && 'DecompressionStream' in window) {
-                try {
-                    logToScreen('Descomprimiendo manualmente...');
-                    const ds = new DecompressionStream('gzip');
-                    const writer = ds.writable.getWriter();
-                    writer.write(new Uint8Array(buffer));
-                    writer.close();
-                    const response = new Response(ds.readable);
-                    const decompressedBuffer = await response.arrayBuffer();
-                    const decompressedData = new Uint8Array(decompressedBuffer);
-                    logToScreen(`Descomprimido: ${(decompressedBuffer.byteLength / 1024 / 1024).toFixed(2)} MB`);
-
-                    model = await fragments.core.load(decompressedData, { 
-                        modelId: path, 
-                        raw: true,
-                        camera: world?.camera?.three 
-                    });
-                } catch (decompressErr) {
-                    throw new Error(`Manual decompression failed: ${decompressErr}`);
-                }
-            } else {
-                // If failed without raw or with raw, try the opposite as ultimate fallback
-                try {
-                    model = await fragments.core.load(data, { 
-                        modelId: path, 
-                        raw: isGzip,
-                        camera: world?.camera?.three 
-                    });
-                } catch (secondErr) {
-                    throw loadErr;
-                }
+            console.warn('Primary load failed, attempting fallback with worker decompressor...', loadErr);
+            try {
+                model = await fragments.core.load(data, { 
+                    modelId: path, 
+                    raw: false,
+                    camera: world?.camera?.three 
+                });
+            } catch (fallbackErr) {
+                throw loadErr;
             }
         }
 
@@ -2802,7 +2809,12 @@ async function loadModel(url: string, path: string, options?: { propertiesUrl?: 
 
         // Auto-center camera if it's the first model
         if (loadedModels.size === 1) {
-            const bbox = new THREE.Box3().setFromObject(model.object);
+            const bbox = new THREE.Box3();
+            if ((model as any).box && !(model as any).box.isEmpty()) {
+                bbox.copy((model as any).box);
+            } else {
+                bbox.setFromObject(model.object);
+            }
             const sphere = new THREE.Sphere();
             bbox.getBoundingSphere(sphere);
 
@@ -5516,6 +5528,9 @@ function fitModelToScreen() {
                 box.expandByObject(model.object);
                 meshCount++;
             }
+            if (model && (model as any).box && !(model as any).box.isEmpty()) {
+                box.union((model as any).box);
+            }
         }
 
         if (box.isEmpty()) {
@@ -6037,7 +6052,8 @@ async function toggleModel(m: RemoteModelItem, baseUrl: string, liElement?: HTML
 
     // Not loaded, load it
     const overlay = document.getElementById('loading-overlay');
-    if (overlay) overlay.style.display = 'flex';
+    const isEmbedForOverlay = window.location.search.includes('embed=true') || (window !== window.parent) || window.location.search.includes('fileId');
+    if (overlay && !isEmbedForOverlay) overlay.style.display = 'flex';
 
     try {
         if (m.driveFragId) {
