@@ -3344,6 +3344,17 @@
                 });
               }
 
+              const isCurVerComp = matches.COMPARTIDO && (
+                matches.COMPARTIDO.originalFileId === fid ||
+                matches.COMPARTIDO.fileId === fid ||
+                (matches.COMPARTIDO.version === fileVersion && progMatch && matches.COMPARTIDO.changedAt >= progMatch.changedAt)
+              );
+              const isCurVerPub = matches.PUBLICADO && (
+                matches.PUBLICADO.originalFileId === fid ||
+                matches.PUBLICADO.fileId === fid ||
+                (matches.PUBLICADO.version === fileVersion && progMatch && matches.PUBLICADO.changedAt >= progMatch.changedAt)
+              );
+
               const progFileObj = {
                 fileId: fid, // Original physical file ID
                 originalFileId: fid,
@@ -3355,8 +3366,8 @@
                 lastUpdated: fileChangedAt,
                 status: 'EN_PROGRESO',
                 hasProgreso: true,
-                hasCompartido: !!matches.COMPARTIDO,
-                hasPublicado: !!matches.PUBLICADO,
+                hasCompartido: !!isCurVerComp,
+                hasPublicado: !!isCurVerPub,
                 version: fileVersion,
                 comments: fileComments,
                 changedBy: (progMatch?.changedBy && progMatch.changedBy.trim()) || item.ownerName || 'Revit / Drive',
@@ -3498,27 +3509,28 @@
             }
           });
 
-          // Sincronizar flags hasCompartido y hasPublicado entre extensiones gemelas (IFC, RVT, FRAG) y estados
-          const flagsByBase = new Map();
+          // Sincronizar flags hasCompartido y hasPublicado entre extensiones gemelas (IFC, RVT, FRAG) del mismo estado y versión
+          const flagsByBaseAndState = new Map();
           rawProjectFiles.forEach(f => {
             const base = (f.name || '').replace(/\.[^/.]+$/, '').trim().toLowerCase();
             if (!base) return;
-            const cur = flagsByBase.get(base) || { hasCompartido: false, hasPublicado: false };
+            const key = `${base}|${f.status}|${f.version || 'v1.0'}`;
+            const cur = flagsByBaseAndState.get(key) || { hasCompartido: false, hasPublicado: false };
             if (f.hasCompartido) cur.hasCompartido = true;
             if (f.hasPublicado) cur.hasPublicado = true;
-            flagsByBase.set(base, cur);
+            flagsByBaseAndState.set(key, cur);
           });
           rawProjectFiles.forEach(f => {
             const base = (f.name || '').replace(/\.[^/.]+$/, '').trim().toLowerCase();
             if (!base) return;
-            const cur = flagsByBase.get(base);
+            const key = `${base}|${f.status}|${f.version || 'v1.0'}`;
+            const cur = flagsByBaseAndState.get(key);
             if (cur) {
               if (cur.hasCompartido) f.hasCompartido = true;
               if (cur.hasPublicado) f.hasPublicado = true;
             }
           });
 
-          // Guardar copia maestra de archivos del Drive y aplicar filtros de permisos/simulación
           rawProjectFilesCache = rawProjectFiles;
           refreshAuthorizedProjectFiles();
           if (typeof recheckSelectedFilesReplacements === 'function') {
