@@ -3255,6 +3255,11 @@
           // Sort statusEntries chronologically so most recent statuses take precedence
           statusEntries.sort((a, b) => new Date(a.changedAt || 0) - new Date(b.changedAt || 0));
 
+          const getCleanBase = (name) => {
+            if (!name) return '';
+            return name.replace(/\.(ifc|frag|rvt|dwg|pdf|json)$/i, '').trim().toLowerCase();
+          };
+
           // Helper to get status matches for a file chronologically
           const getStatusMatchesForFile = (fid, fname) => {
             const matches = {
@@ -3267,8 +3272,10 @@
               const matchesId = (entry.originalFileId && entry.originalFileId === fid) ||
                                 (entry.fileId && entry.fileId === fid);
               const matchesName = entry.filename && fname && entry.filename.trim().toLowerCase() === fname.trim().toLowerCase();
+              const cleanFname = getCleanBase(fname);
+              const matchesBaseName = entry.filename && cleanFname && getCleanBase(entry.filename) === cleanFname;
               
-              if (matchesId || matchesName) {
+              if (matchesId || matchesName || matchesBaseName) {
                 const status = entry.status;
                 if (status === 'EN_PROGRESO' || status === 'COMPARTIDO' || status === 'PUBLICADO') {
                   matches[status] = entry;
@@ -3321,6 +3328,9 @@
                   jsonId: type === 'model' ? (item.jsonId || progMatch.jsonId || '') : '',
                   filename: fname,
                   status: 'EN_PROGRESO',
+                hasProgreso: true,
+                hasCompartido: !!matches.COMPARTIDO,
+                hasPublicado: !!matches.PUBLICADO,
                   version: nextVer,
                   comments: fileComments,
                   deliveryTeams: progMatch.deliveryTeams || resolveCurrentUserDeliveryTeams(),
@@ -3344,6 +3354,9 @@
                 folder: fld,
                 lastUpdated: fileChangedAt,
                 status: 'EN_PROGRESO',
+                hasProgreso: true,
+                hasCompartido: !!matches.COMPARTIDO,
+                hasPublicado: !!matches.PUBLICADO,
                 version: fileVersion,
                 comments: fileComments,
                 changedBy: (progMatch?.changedBy && progMatch.changedBy.trim()) || item.ownerName || 'Revit / Drive',
@@ -3370,6 +3383,9 @@
                   folder: fld,
                   lastUpdated: compMatch.changedAt || item.lastUpdated,
                   status: 'COMPARTIDO',
+                  hasProgreso: true,
+                  hasCompartido: true,
+                  hasPublicado: !!matches.PUBLICADO,
                   version: compMatch.version || 'v1.0',
                   comments: compMatch.comments || '',
                   changedBy: (compMatch.changedBy && compMatch.changedBy.trim()) || 'UNASSIGNED',
@@ -3397,6 +3413,9 @@
                   folder: fld,
                   lastUpdated: pubMatch.changedAt || item.lastUpdated,
                   status: 'PUBLICADO',
+                  hasProgreso: true,
+                  hasCompartido: !!matches.COMPARTIDO,
+                  hasPublicado: true,
                   version: pubMatch.version || 'v1.0',
                   comments: pubMatch.comments || '',
                   changedBy: (pubMatch.changedBy && pubMatch.changedBy.trim()) || 'UNASSIGNED',
@@ -3476,6 +3495,26 @@
                   matchedJson._derivedFromRvt = true;
                 }
               }
+            }
+          });
+
+          // Sincronizar flags hasCompartido y hasPublicado entre extensiones gemelas (IFC, RVT, FRAG) y estados
+          const flagsByBase = new Map();
+          rawProjectFiles.forEach(f => {
+            const base = (f.name || '').replace(/\.[^/.]+$/, '').trim().toLowerCase();
+            if (!base) return;
+            const cur = flagsByBase.get(base) || { hasCompartido: false, hasPublicado: false };
+            if (f.hasCompartido) cur.hasCompartido = true;
+            if (f.hasPublicado) cur.hasPublicado = true;
+            flagsByBase.set(base, cur);
+          });
+          rawProjectFiles.forEach(f => {
+            const base = (f.name || '').replace(/\.[^/.]+$/, '').trim().toLowerCase();
+            if (!base) return;
+            const cur = flagsByBase.get(base);
+            if (cur) {
+              if (cur.hasCompartido) f.hasCompartido = true;
+              if (cur.hasPublicado) f.hasPublicado = true;
             }
           });
 
@@ -3633,6 +3672,74 @@
 
           // Status Badge Pill
           let statusBadge = '';
+          const buildLifecycleStatusBadge = (fileObj) => {
+            if (fileObj.status === 'EN_PROGRESO') {
+              return `
+                <div class="flex flex-col gap-1 items-start">
+                  <span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-amber-50 dark:bg-amber-950/50 text-amber-700 dark:text-amber-300 font-semibold text-[11px] border border-amber-200 dark:border-amber-800/40">
+                    <span class="w-1.5 h-1.5 rounded-full bg-amber-500"></span> En Progreso
+                  </span>
+                  ${fileObj.hasCompartido ? `
+                    <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 font-semibold text-[10px] border border-blue-200 dark:border-blue-800/40" title="Modelo disponible en Compartido">
+                      <span class="material-symbols-outlined text-[12px] text-blue-600 dark:text-blue-400">share</span> Compartido ✓
+                    </span>` : ''}
+                  ${fileObj.hasPublicado ? `
+                    <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 font-semibold text-[10px] border border-emerald-200 dark:border-emerald-800/40" title="Modelo disponible en Publicado">
+                      <span class="material-symbols-outlined text-[12px] text-emerald-600 dark:text-emerald-400">verified</span> Publicado ✓
+                    </span>` : ''}
+                </div>`;
+            } else if (fileObj.status === 'COMPARTIDO') {
+              return `
+                <div class="flex flex-col gap-1 items-start">
+                  <span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-blue-50 dark:bg-blue-950/50 text-blue-700 dark:text-blue-300 font-semibold text-[11px] border border-blue-200 dark:border-blue-800/40">
+                    <span class="w-1.5 h-1.5 rounded-full bg-blue-500"></span> Compartido
+                  </span>
+                  ${fileObj.hasPublicado ? `
+                    <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 font-semibold text-[10px] border border-emerald-200 dark:border-emerald-800/40" title="Modelo disponible en Publicado">
+                      <span class="material-symbols-outlined text-[12px] text-emerald-600 dark:text-emerald-400">verified</span> Publicado ✓
+                    </span>` : ''}
+                </div>`;
+            } else {
+              return `
+                <span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-green-50 dark:bg-green-950/50 text-green-700 dark:text-green-300 font-semibold text-[11px] border border-green-200 dark:border-green-800/40">
+                  <span class="w-1.5 h-1.5 rounded-full bg-green-500"></span> Publicado
+                </span>`;
+            }
+          };
+          // statusBadge_declared
+          if (f.status === 'EN_PROGRESO') {
+            statusBadge = `
+              <div class="flex flex-col gap-1 items-start">
+                <span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-amber-50 dark:bg-amber-950/50 text-amber-700 dark:text-amber-300 font-semibold text-[11px] border border-amber-200 dark:border-amber-800/40">
+                  <span class="w-1.5 h-1.5 rounded-full bg-amber-500"></span> En Progreso
+                </span>
+                ${f.hasCompartido ? `
+                  <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 font-semibold text-[10px] border border-blue-200 dark:border-blue-800/40" title="Modelo disponible en Compartido">
+                    <span class="material-symbols-outlined text-[12px] text-blue-600 dark:text-blue-400">share</span> Compartido ✓
+                  </span>` : ''}
+                ${f.hasPublicado ? `
+                  <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 font-semibold text-[10px] border border-emerald-200 dark:border-emerald-800/40" title="Modelo disponible en Publicado">
+                    <span class="material-symbols-outlined text-[12px] text-emerald-600 dark:text-emerald-400">verified</span> Publicado ✓
+                  </span>` : ''}
+              </div>`;
+          } else if (f.status === 'COMPARTIDO') {
+            statusBadge = `
+              <div class="flex flex-col gap-1 items-start">
+                <span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-blue-50 dark:bg-blue-950/50 text-blue-700 dark:text-blue-300 font-semibold text-[11px] border border-blue-200 dark:border-blue-800/40">
+                  <span class="w-1.5 h-1.5 rounded-full bg-blue-500"></span> Compartido
+                </span>
+                ${f.hasPublicado ? `
+                  <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 font-semibold text-[10px] border border-emerald-200 dark:border-emerald-800/40" title="Modelo disponible en Publicado">
+                    <span class="material-symbols-outlined text-[12px] text-emerald-600 dark:text-emerald-400">verified</span> Publicado ✓
+                  </span>` : ''}
+              </div>`;
+          } else {
+            statusBadge = `
+              <span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-green-50 dark:bg-green-950/50 text-green-700 dark:text-green-300 font-semibold text-[11px] border border-green-200 dark:border-green-800/40">
+                <span class="w-1.5 h-1.5 rounded-full bg-green-500"></span> Publicado
+              </span>`;
+          }
+          // statusBadge_declared
           if (f.status === 'EN_PROGRESO') {
             statusBadge = `
               <span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-amber-50 dark:bg-amber-950/50 text-amber-700 dark:text-amber-300 font-semibold text-[11px] border border-amber-200 dark:border-amber-800/40">
@@ -3649,6 +3756,7 @@
                 <span class="w-1.5 h-1.5 rounded-full bg-green-500"></span> Publicado
               </span>`;
           }
+
 
           const canManage = isUserAuthorizedForFile(f, 'manage');
           const openButton = getOpenViewerButtonHtml(f);
@@ -3676,11 +3784,14 @@
                 </button>
                 ` : ''}
                 ${canManage ? `
-                <button onclick="window.promoteFile(this, '${fileDataStr}', 'COMPARTIDO')" class="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-bold text-[10px] uppercase tracking-wider shadow-sm transition-all whitespace-nowrap" title="Pasar a Compartido">
-                  <span class="material-symbols-outlined text-[13px]">share</span> COMPARTIDO
+                <button onclick="window.promoteFile(this, '${fileDataStr}', 'COMPARTIDO')" class="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg ${f.hasCompartido ? 'bg-blue-700 hover:bg-blue-800 ring-2 ring-blue-400 dark:ring-blue-500' : 'bg-blue-600 hover:bg-blue-700'} text-white font-bold text-[10px] uppercase tracking-wider shadow-sm transition-all whitespace-nowrap" title="${f.hasCompartido ? 'Ya enviado a Compartido. Clic para volver a enviar o sincronizar.' : 'Pasar a Compartido'}">
+                  <span class="material-symbols-outlined text-[13px]">${f.hasCompartido ? 'check_circle' : 'share'}</span> ${f.hasCompartido ? '✓ COMPARTIDO' : 'COMPARTIDO'}<!--
                 </button>
-                <button onclick="window.promoteFile(this, '${fileDataStr}', 'PUBLICADO')" class="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-green-600 hover:bg-green-700 text-white font-bold text-[10px] uppercase tracking-wider shadow-sm transition-all whitespace-nowrap" title="Pasar a Publicado">
-                  <span class="material-symbols-outlined text-[13px]">publish</span> PUBLICADO
+
+-->
+                </button>
+                <button onclick="window.promoteFile(this, '${fileDataStr}', 'PUBLICADO')" class="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg ${f.hasPublicado ? 'bg-emerald-700 hover:bg-emerald-800 ring-2 ring-emerald-400 dark:ring-emerald-500' : 'bg-green-600 hover:bg-green-700'} text-white font-bold text-[10px] uppercase tracking-wider shadow-sm transition-all whitespace-nowrap" title="${f.hasPublicado ? 'Ya publicado. Clic para volver a publicar o sincronizar.' : 'Pasar a Publicado'}">
+                  <span class="material-symbols-outlined text-[13px]">${f.hasPublicado ? 'verified' : 'publish'}</span> ${f.hasPublicado ? '✓ PUBLICADO' : 'PUBLICADO'}
                 </button>
                 <button onclick="window.openNewVersionModal('${fileDataStr}')" class="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 font-semibold text-[10px] uppercase tracking-wider hover:bg-indigo-100 dark:hover:bg-indigo-900/40 transition-colors whitespace-nowrap" title="Guardar Nueva Versión">
                   <span class="material-symbols-outlined text-[13px]">history_edu</span> + Versión
@@ -3706,8 +3817,8 @@
                 </button>
                 ` : ''}
                 ${canManage ? `
-                <button onclick="window.promoteFile(this, '${fileDataStr}', 'PUBLICADO')" class="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-green-600 hover:bg-green-700 text-white font-bold text-[10px] uppercase tracking-wider shadow-sm transition-all whitespace-nowrap" title="Pasar a Publicado">
-                  <span class="material-symbols-outlined text-[13px]">publish</span> PUBLICADO
+                <button onclick="window.promoteFile(this, '${fileDataStr}', 'PUBLICADO')" class="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg ${f.hasPublicado ? 'bg-emerald-700 hover:bg-emerald-800 ring-2 ring-emerald-400 dark:ring-emerald-500' : 'bg-green-600 hover:bg-green-700'} text-white font-bold text-[10px] uppercase tracking-wider shadow-sm transition-all whitespace-nowrap" title="${f.hasPublicado ? 'Ya publicado. Clic para volver a publicar o sincronizar.' : 'Pasar a Publicado'}">
+                  <span class="material-symbols-outlined text-[13px]">${f.hasPublicado ? 'verified' : 'publish'}</span> ${f.hasPublicado ? '✓ PUBLICADO' : 'PUBLICADO'}
                 </button>
                 <button onclick="window.openNewVersionModal('${fileDataStr}')" class="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 font-semibold text-[10px] uppercase tracking-wider hover:bg-indigo-100 dark:hover:bg-indigo-900/40 transition-colors whitespace-nowrap" title="Guardar Nueva Versión">
                   <span class="material-symbols-outlined text-[13px]">history_edu</span> + Versión
@@ -3756,7 +3867,9 @@
               <td class="py-3 px-4 font-medium text-slate-800 dark:text-slate-200">
                 <div class="flex items-center gap-2">
                   <span class="material-symbols-outlined text-base ${iconClass} shrink-0">${icon}</span>
-                  <span class="truncate max-w-xs sm:max-w-md md:max-w-lg lg:max-w-xl xl:max-w-3xl" title="${f.name}">${f.name}</span>
+                  <span class="truncate max-w-xs sm:max-w-md md:max-w-lg lg:max-w-xl xl:max-w-3xl font-semibold" title="${f.name}">${f.name}</span>
+                  ${f.hasCompartido ? '<span class="inline-flex items-center gap-0.5 text-[9px] px-2 py-0.5 rounded-full font-bold bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800 shrink-0" title="Modelo promovido a Compartido"><span class="material-symbols-outlined text-[11px]">share</span>COMPARTIDO</span>' : ''}
+                  ${f.hasPublicado ? '<span class="inline-flex items-center gap-0.5 text-[9px] px-2 py-0.5 rounded-full font-bold bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 shrink-0" title="Modelo promovido a Publicado"><span class="material-symbols-outlined text-[11px]">verified</span>PUBLICADO</span>' : ''}
                   ${isModel && f.jsonId ? '<span class="text-[9px] px-1.5 py-0.5 rounded bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 font-mono font-medium shrink-0">+json</span>' : ''}
                   ${ext === 'ifc' && f.pairedFragId ? '<span class="text-[9px] px-1.5 py-0.5 rounded bg-indigo-100 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 font-mono font-medium shrink-0" title="Convertido a .frag">→FRAG</span>' : ''}
                   ${ext === 'ifc' && !f.pairedFragId ? '<span class="text-[9px] px-1.5 py-0.5 rounded bg-amber-100 dark:bg-amber-950 text-amber-700 dark:text-amber-300 font-mono font-medium shrink-0" title="Sin conversión FRAG disponible">sin FRAG</span>' : ''}
@@ -3768,7 +3881,7 @@
                 </button>
               </td>
               <td class="py-3 px-4 text-slate-600 dark:text-slate-300 font-medium whitespace-nowrap">${specialty}</td>
-              <td class="py-3 px-4 whitespace-nowrap">${statusBadge}</td>
+              <td class="py-3 px-4 whitespace-nowrap">${buildLifecycleStatusBadge(f)}</td>
               <td class="py-3 px-4 text-slate-500 dark:text-slate-400 whitespace-nowrap">${formatDate(f.lastUpdated)}</td>
               <td class="py-3 px-4 whitespace-nowrap">
                 <div class="flex flex-col">
@@ -4286,6 +4399,7 @@
             const d = new Date(isoString);
             return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
           };
+
 
           const canManage = isUserAuthorizedForFile(f, 'manage');
 
