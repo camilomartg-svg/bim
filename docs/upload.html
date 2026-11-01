@@ -3384,6 +3384,13 @@
               // 2. If promoted to COMPARTIDO, add that entry
               if (matches.COMPARTIDO) {
                 const compMatch = matches.COMPARTIDO;
+                const compVer = compMatch.version || 'v1.0';
+                const isCompSameAsPub = matches.PUBLICADO && (
+                  matches.PUBLICADO.version === compVer ||
+                  (matches.PUBLICADO.originalFileId && (matches.PUBLICADO.originalFileId === compMatch.originalFileId || matches.PUBLICADO.originalFileId === compMatch.fileId)) ||
+                  (compMatch.fileId && matches.PUBLICADO.fileId === compMatch.fileId)
+                );
+
                 const compFileObj = {
                   fileId: compMatch.fileId || fid, // Use copied file's ID
                   originalFileId: fid,
@@ -3396,8 +3403,8 @@
                   status: 'COMPARTIDO',
                   hasProgreso: true,
                   hasCompartido: true,
-                  hasPublicado: !!matches.PUBLICADO,
-                  version: compMatch.version || 'v1.0',
+                  hasPublicado: !!isCompSameAsPub,
+                  version: compVer,
                   comments: compMatch.comments || '',
                   changedBy: (compMatch.changedBy && compMatch.changedBy.trim()) || 'UNASSIGNED',
                   changedByEmail: (compMatch.changedByEmail && compMatch.changedByEmail.trim()) || 'unassigned@nora.cde',
@@ -3414,6 +3421,13 @@
               // 3. If promoted to PUBLICADO, add that entry
               if (matches.PUBLICADO) {
                 const pubMatch = matches.PUBLICADO;
+                const pubVer = pubMatch.version || 'v1.0';
+                const isPubSameAsComp = matches.COMPARTIDO && (
+                  matches.COMPARTIDO.version === pubVer ||
+                  (matches.COMPARTIDO.originalFileId && (matches.COMPARTIDO.originalFileId === pubMatch.originalFileId || matches.COMPARTIDO.originalFileId === pubMatch.fileId)) ||
+                  (pubMatch.fileId && matches.COMPARTIDO.fileId === pubMatch.fileId)
+                );
+
                 const pubFileObj = {
                   fileId: pubMatch.fileId || fid, // Use copied file's ID
                   originalFileId: fid,
@@ -3425,9 +3439,9 @@
                   lastUpdated: pubMatch.changedAt || item.lastUpdated,
                   status: 'PUBLICADO',
                   hasProgreso: true,
-                  hasCompartido: !!matches.COMPARTIDO,
+                  hasCompartido: !!isPubSameAsComp,
                   hasPublicado: true,
-                  version: pubMatch.version || 'v1.0',
+                  version: pubVer,
                   comments: pubMatch.comments || '',
                   changedBy: (pubMatch.changedBy && pubMatch.changedBy.trim()) || 'UNASSIGNED',
                   changedByEmail: (pubMatch.changedByEmail && pubMatch.changedByEmail.trim()) || 'unassigned@nora.cde',
