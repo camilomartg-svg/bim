@@ -3344,16 +3344,8 @@
                 });
               }
 
-              const isCurVerComp = matches.COMPARTIDO && (
-                matches.COMPARTIDO.originalFileId === fid ||
-                matches.COMPARTIDO.fileId === fid ||
-                (matches.COMPARTIDO.version === fileVersion && progMatch && matches.COMPARTIDO.changedAt >= progMatch.changedAt)
-              );
-              const isCurVerPub = matches.PUBLICADO && (
-                matches.PUBLICADO.originalFileId === fid ||
-                matches.PUBLICADO.fileId === fid ||
-                (matches.PUBLICADO.version === fileVersion && progMatch && matches.PUBLICADO.changedAt >= progMatch.changedAt)
-              );
+              const isCurVerComp = !!(matches.COMPARTIDO && (matches.COMPARTIDO.version || 'v1.0') === fileVersion);
+              const isCurVerPub = !!(matches.PUBLICADO && (matches.PUBLICADO.version || 'v1.0') === fileVersion);
 
               const progFileObj = {
                 fileId: fid, // Original physical file ID
@@ -3385,11 +3377,8 @@
               if (matches.COMPARTIDO) {
                 const compMatch = matches.COMPARTIDO;
                 const compVer = compMatch.version || 'v1.0';
-                const isCompSameAsPub = matches.PUBLICADO && (
-                  matches.PUBLICADO.version === compVer ||
-                  (matches.PUBLICADO.originalFileId && (matches.PUBLICADO.originalFileId === compMatch.originalFileId || matches.PUBLICADO.originalFileId === compMatch.fileId)) ||
-                  (compMatch.fileId && matches.PUBLICADO.fileId === compMatch.fileId)
-                );
+                const isCompSameAsPub = !!(matches.PUBLICADO && (matches.PUBLICADO.version || 'v1.0') === compVer);
+                const isCompSameAsProg = (fileVersion === compVer);
 
                 const compFileObj = {
                   fileId: compMatch.fileId || fid, // Use copied file's ID
@@ -3401,9 +3390,9 @@
                   folder: fld,
                   lastUpdated: compMatch.changedAt || item.lastUpdated,
                   status: 'COMPARTIDO',
-                  hasProgreso: true,
+                  hasProgreso: isCompSameAsProg,
                   hasCompartido: true,
-                  hasPublicado: !!isCompSameAsPub,
+                  hasPublicado: isCompSameAsPub,
                   version: compVer,
                   comments: compMatch.comments || '',
                   changedBy: (compMatch.changedBy && compMatch.changedBy.trim()) || 'UNASSIGNED',
@@ -3422,11 +3411,8 @@
               if (matches.PUBLICADO) {
                 const pubMatch = matches.PUBLICADO;
                 const pubVer = pubMatch.version || 'v1.0';
-                const isPubSameAsComp = matches.COMPARTIDO && (
-                  matches.COMPARTIDO.version === pubVer ||
-                  (matches.COMPARTIDO.originalFileId && (matches.COMPARTIDO.originalFileId === pubMatch.originalFileId || matches.COMPARTIDO.originalFileId === pubMatch.fileId)) ||
-                  (pubMatch.fileId && matches.COMPARTIDO.fileId === pubMatch.fileId)
-                );
+                const isPubSameAsComp = !!(matches.COMPARTIDO && (matches.COMPARTIDO.version || 'v1.0') === pubVer);
+                const isPubSameAsProg = (fileVersion === pubVer);
 
                 const pubFileObj = {
                   fileId: pubMatch.fileId || fid, // Use copied file's ID
@@ -3438,8 +3424,8 @@
                   folder: fld,
                   lastUpdated: pubMatch.changedAt || item.lastUpdated,
                   status: 'PUBLICADO',
-                  hasProgreso: true,
-                  hasCompartido: !!isPubSameAsComp,
+                  hasProgreso: isPubSameAsProg,
+                  hasCompartido: isPubSameAsComp,
                   hasPublicado: true,
                   version: pubVer,
                   comments: pubMatch.comments || '',
@@ -3523,13 +3509,14 @@
             }
           });
 
-          // Sincronizar flags hasCompartido y hasPublicado entre extensiones gemelas (IFC, RVT, FRAG) del mismo estado y versión
+          // Sincronizar flags hasProgreso, hasCompartido y hasPublicado entre extensiones gemelas (IFC, RVT, FRAG) del mismo estado y versión
           const flagsByBaseAndState = new Map();
           rawProjectFiles.forEach(f => {
             const base = (f.name || '').replace(/\.[^/.]+$/, '').trim().toLowerCase();
             if (!base) return;
             const key = `${base}|${f.status}|${f.version || 'v1.0'}`;
-            const cur = flagsByBaseAndState.get(key) || { hasCompartido: false, hasPublicado: false };
+            const cur = flagsByBaseAndState.get(key) || { hasProgreso: false, hasCompartido: false, hasPublicado: false };
+            if (f.hasProgreso) cur.hasProgreso = true;
             if (f.hasCompartido) cur.hasCompartido = true;
             if (f.hasPublicado) cur.hasPublicado = true;
             flagsByBaseAndState.set(key, cur);
@@ -3540,6 +3527,7 @@
             const key = `${base}|${f.status}|${f.version || 'v1.0'}`;
             const cur = flagsByBaseAndState.get(key);
             if (cur) {
+              if (cur.hasProgreso) f.hasProgreso = true;
               if (cur.hasCompartido) f.hasCompartido = true;
               if (cur.hasPublicado) f.hasPublicado = true;
             }
@@ -3894,6 +3882,7 @@
                 <div class="flex items-center gap-2">
                   <span class="material-symbols-outlined text-base ${iconClass} shrink-0">${icon}</span>
                   <span class="truncate max-w-xs sm:max-w-md md:max-w-lg lg:max-w-xl xl:max-w-3xl font-semibold" title="${f.name}">${f.name}</span>
+                  ${f.hasProgreso && f.status !== 'EN_PROGRESO' ? '<span class="inline-flex items-center gap-0.5 text-[9px] px-2 py-0.5 rounded-full font-bold bg-amber-100 dark:bg-amber-950 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800 shrink-0" title="Misma versión en Progreso"><span class="material-symbols-outlined text-[11px]">pending</span>PROGRESO</span>' : ''}
                   ${f.hasCompartido ? '<span class="inline-flex items-center gap-0.5 text-[9px] px-2 py-0.5 rounded-full font-bold bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800 shrink-0" title="Modelo promovido a Compartido"><span class="material-symbols-outlined text-[11px]">share</span>COMPARTIDO</span>' : ''}
                   ${f.hasPublicado ? '<span class="inline-flex items-center gap-0.5 text-[9px] px-2 py-0.5 rounded-full font-bold bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 shrink-0" title="Modelo promovido a Publicado"><span class="material-symbols-outlined text-[11px]">verified</span>PUBLICADO</span>' : ''}
                   ${isModel && f.jsonId ? '<span class="text-[9px] px-1.5 py-0.5 rounded bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 font-mono font-medium shrink-0">+json</span>' : ''}
