@@ -1,4 +1,4 @@
-:root {
+﻿:root {
   font-family: Inter, system-ui, Avenir, Helvetica, Arial, sans-serif;
   line-height: 1.5;
   font-weight: 400;
@@ -48,7 +48,7 @@ body {
   place-items: center;
   min-width: 320px;
   min-height: 100vh;
-  overflow: hidden;
+  overflow: visible;
   background-color: var(--bg-white);
   color: var(--text-dark-gray);
 }
@@ -274,7 +274,7 @@ body {
   border: none;
   border-bottom: 1px solid var(--border-color);
   border-radius: 0;
-  overflow: hidden;
+  overflow: visible;
 }
 
 .property-group-header {
@@ -434,8 +434,8 @@ body {
   padding-left: 0;
   list-style: none;
   margin: 5px 0 0 0;
-  max-height: 1000px;
-  overflow: hidden;
+  max-height: none;
+  overflow: visible;
   transition: max-height 0.3s ease;
 }
 
@@ -479,7 +479,7 @@ body {
   gap: 8px;
   flex: 1;
   white-space: nowrap;
-  overflow: hidden;
+  overflow: visible;
   text-overflow: ellipsis;
 }
 
@@ -1007,7 +1007,7 @@ bim-label {
     display: flex;
     flex-direction: column;
     flex: 1;
-    overflow: hidden;
+    overflow: visible;
     display: none; /* Hide by default */
 }
 
@@ -1690,7 +1690,7 @@ bim-label {
   background: var(--bg-white);
   border: 1px solid var(--border-color);
   border-radius: 6px;
-  overflow: hidden;
+  overflow: visible;
 }
 
 .q-cortes-card-header {
@@ -1883,7 +1883,7 @@ bim-label {
   border: 1px solid var(--border-color);
   border-radius: 6px;
   margin-bottom: 12px;
-  overflow: hidden;
+  overflow: visible;
   box-shadow: 0 1px 3px rgba(0,0,0,0.05);
 }
 
@@ -2000,7 +2000,7 @@ bim-label {
   transition: all 0.2s ease;
   text-align: center;
   white-space: nowrap;
-  overflow: hidden;
+  overflow: visible;
   text-overflow: ellipsis;
   text-transform: uppercase;
 }
