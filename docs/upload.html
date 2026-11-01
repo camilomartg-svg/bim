@@ -3303,46 +3303,11 @@
               // 1. Always keep the EN_PROGRESO (WIP) version of the file
               const progMatch = matches.EN_PROGRESO;
 
-              // Detección automática de subidas desde Revit o Google Drive directamente:
-              // Si el archivo en Drive tiene fecha de modificación más reciente que la del registro o cambió su fileId,
-              // generamos y respaldamos automáticamente la nueva versión decimal (ej: 1.0 -> 1.1, 1.9 -> 1.10, 3.9 -> 3.10)
+              // La versión es estática al cambiar de estado y se preserva fielmente.
+              // Solo cambia si se sube un nuevo archivo con el mismo nombre o se usa el botón "+ Versión".
               let fileVersion = progMatch?.version || 'v1.0';
               let fileComments = progMatch?.comments || '';
               let fileChangedAt = progMatch?.changedAt || item.lastUpdated;
-
-              const isDriveFileNewer = progMatch && item.lastUpdated && progMatch.changedAt && 
-                (new Date(item.lastUpdated).getTime() - new Date(progMatch.changedAt).getTime() > 20000);
-              const isDriveIdChanged = progMatch && fid && (progMatch.fileId || progMatch.originalFileId) && 
-                fid !== progMatch.fileId && fid !== progMatch.originalFileId;
-
-              if (progMatch && (isDriveFileNewer || isDriveIdChanged)) {
-                const currentVer = progMatch.version || 'v1.0';
-                const nextVer = calculateNextMinorVersion(currentVer);
-                fileVersion = nextVer;
-                fileChangedAt = item.lastUpdated;
-                fileComments = `Actualización automática detectada desde Revit / Google Drive (${nextVer})`;
-                addLog(`[AUTO-VERSIÓN] Detectada actualización externa en ${fname}. Incrementando automáticamente a ${nextVer}...`);
-
-                createProjectFileVersion({
-                  fileId: fid,
-                  jsonId: type === 'model' ? (item.jsonId || progMatch.jsonId || '') : '',
-                  filename: fname,
-                  status: 'EN_PROGRESO',
-                hasProgreso: true,
-                hasCompartido: !!matches.COMPARTIDO,
-                hasPublicado: !!matches.PUBLICADO,
-                  version: nextVer,
-                  comments: fileComments,
-                  deliveryTeams: progMatch.deliveryTeams || resolveCurrentUserDeliveryTeams(),
-                  originalFileId: progMatch.originalFileId || fid,
-                  type: type,
-                  uploadedFileId: fid
-                }).then(() => {
-                  addLog(`[AUTO-VERSIÓN] ✓ ${fname} actualizado a ${nextVer} con respaldo en .versiones/`);
-                }).catch(err => {
-                  console.warn('Auto-version error:', err);
-                });
-              }
 
               const isCurVerComp = !!(matches.COMPARTIDO && (matches.COMPARTIDO.version || 'v1.0') === fileVersion);
               const isCurVerPub = !!(matches.PUBLICADO && (matches.PUBLICADO.version || 'v1.0') === fileVersion);
