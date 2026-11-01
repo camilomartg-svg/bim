@@ -49,11 +49,32 @@
         if (!isEmbed && !sessionStorage.getItem('userAccount') && !localStorage.getItem('userAccount')) {
             window.location.replace('https://norabim.com/inse.html');
         }
+        window.cleanSpecialty = function (folder) {
+            if (!folder) return 'General';
+            var str = String(folder).replace(/^\.?estados\/?/i, '').replace(/^\.?versiones\/?/i, '').trim();
+            if (!str || str.startsWith('.')) return 'General';
+            var parts = str.split('/').filter(Boolean);
+            if (parts.length === 0) return 'General';
+            var last = parts[parts.length - 1];
+            return (last.toLowerCase() === 'compartido' || last.toLowerCase() === 'publicado' || last.toLowerCase() === 'en_progreso')
+                ? (parts.length > 1 ? parts[0] : 'General')
+                : (last.charAt(0).toUpperCase() + last.slice(1));
+        };
         if (isEmbed) {
             document.documentElement.classList.add('nora-embed-mode');
         }
     </script>
     <style>
+        .folder-items {
+            max-height: none !important;
+            overflow: visible !important;
+            transition: none !important;
+        }
+        .folder-items.collapsed {
+            max-height: 0 !important;
+            overflow: hidden !important;
+            display: none !important;
+        }
         #nora-floating-auth-badge {
             display: none !important;
         }
@@ -215,7 +236,7 @@
 
     <meta charset="UTF-8" />
     <meta name="version" content="v27-EventSnap" />
-    <meta name="x-app-version" data-app="vsr_ifca" content="20260420-01" />
+    <meta name="x-app-version" data-app="vsr_ifca" content="20261031-02" />
     <!--
     <script>
       // COI Service Worker Registration for SharedArrayBuffer support
