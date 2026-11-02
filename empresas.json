@@ -88,7 +88,7 @@
         "name": "data guardar",
         "email": "dataguardar@gmail.com",
         "role": "INVITADO",
-        "empresaUsuario": "Mesh Estudio",
+        "empresaUsuario": "",
         "cargo": "",
         "especialidad": ""
       },
@@ -206,7 +206,15 @@
     "admins": [],
     "zonaHoraria": "America/Bogota",
     "configUrl": "config-empresa-1793619605466.json",
-    "members": [],
+    "members": [
+      {
+        "name": "Camilo Martínez Guevara",
+        "email": "camilo.martinez@meshestudio.com",
+        "role": "ADMINISTRADOR_EMPRESA",
+        "empresaUsuario": "GLITCH",
+        "cargo": "BIM Manager"
+      }
+    ],
     "driveFolderId": "1ADgixAgAO9j7Z8bVaRUCZr3zd363Ij6l"
   }
 ]
