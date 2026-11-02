@@ -10,10 +10,15 @@
         function getPostLoginRedirect() {
             try {
                 const urlParams = new URLSearchParams(window.location.search);
-                const redirectParam = urlParams.get('redirect') || urlParams.get('returnUrl');
+                const redirectParam = urlParams.get('redirect') || urlParams.get('returnUrl') || sessionStorage.getItem('returnUrl') || localStorage.getItem('returnUrl');
                 const isRevit = urlParams.get('isRevit') === 'true' || urlParams.get('revit') === 'true' ||
                                 (window.chrome && window.chrome.webview) ||
                                 sessionStorage.getItem('isRevit') === 'true' || localStorage.getItem('isRevit') === 'true';
+
+                try {
+                    sessionStorage.removeItem('returnUrl');
+                    localStorage.removeItem('returnUrl');
+                } catch(e) {}
 
                 if (redirectParam) {
                     const clean = redirectParam.trim();
@@ -491,7 +496,7 @@
                     auth: {
                         clientId: "084a9828-6166-4fef-b012-b2bafbececdf", 
                         authority: "https://login.microsoftonline.com/common",
-                        redirectUri: window.location.href,
+                        redirectUri: window.location.origin + window.location.pathname,
                     },
                     cache: {
                         cacheLocation: cacheLocation,

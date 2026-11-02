@@ -24,10 +24,12 @@
 
       if (!sessionStorage.getItem('userAccount') && !localStorage.getItem('userAccount')) {
         if (inRevit) {
-          window.location.replace('https://norabim.com/inse.html?redirect=CARGA_SIMPLIFICADA&isRevit=true');
-        } else {
-          window.location.replace('https://norabim.com/inse.html');
+          try {
+            sessionStorage.setItem('returnUrl', 'CARGA_SIMPLIFICADA');
+          } catch(e) {}
         }
+        // Redirigir a inse.html limpio sin query string para evitar errores con Azure AD
+        window.location.replace('https://norabim.com/inse.html');
       }
     })();
   </script>
@@ -439,18 +441,50 @@
       const userEmail = (queryEmail || userAccount?.username || userAccount?.email || '').toLowerCase().trim();
       const isSuperAdmin = userAccount && (userAccount.role === 'SUPER_ADMINISTRADOR' || userEmail === 'imagina3ddesign@gmail.com');
 
+      // Helper: cleanText for resilient matching
+      const cleanText = (str) => {
+        if (!str) return '';
+        return String(str)
+          .toLowerCase()
+          .normalize("NFD")
+          .replace(/[\u0300-\u036f]/g, "")
+          .replace(/[^a-z0-9]/g, "")
+          .trim();
+      };
+
+      function isRevitEnvironment() {
+        try {
+          if (window.chrome && window.chrome.webview) return true;
+          const p = new URLSearchParams(window.location.search);
+          if (p.get('revit') === 'true' || p.get('isRevit') === 'true' || p.get('source') === 'revit') return true;
+          if (sessionStorage.getItem('isRevit') === 'true' || localStorage.getItem('isRevit') === 'true') return true;
+        } catch(e) {}
+        return false;
+      }
+
       function isCompanyAdmin(c) {
         if (!c || !userEmail) return false;
         const cleanEmail = userEmail.toLowerCase().trim();
         if (Array.isArray(c.admins) && c.admins.some(a => String(a || '').toLowerCase().trim() === cleanEmail)) return true;
         if (c.email && String(c.email).toLowerCase().trim() === cleanEmail) return true;
         if (Array.isArray(c.members) && c.members.some(m =>
-          m.email && String(m.email).toLowerCase().trim() === cleanEmail &&
+          m && m.email && String(m.email).toLowerCase().trim() === cleanEmail &&
           (m.role === 'ADMINISTRADOR_EMPRESA' || m.role === 'ADMINISTRADOR')
         )) return true;
         if (userAccount && (userAccount.role === 'ADMINISTRADOR_EMPRESA' || userAccount.role === 'ADMINISTRADOR')) {
           const userEmp = String(userAccount.adminEmpresaId || userAccount.empresa || '').trim();
-          if (userEmp && (userEmp === c.id || slugify(userEmp) === slugify(c.name))) return true;
+          if (userEmp && (userEmp === c.id || cleanText(userEmp) === cleanText(c.name) || (c.razonSocial && cleanText(userEmp) === cleanText(c.razonSocial)))) return true;
+        }
+        return false;
+      }
+
+      function isCompanyMemberOrGuest(c) {
+        if (!c || !userEmail) return false;
+        const cleanEmail = userEmail.toLowerCase().trim();
+        if (Array.isArray(c.members) && c.members.some(m => m && m.email && String(m.email).toLowerCase().trim() === cleanEmail)) return true;
+        if (userAccount && userAccount.empresa) {
+          const uEmpClean = cleanText(userAccount.empresa);
+          if (uEmpClean && (uEmpClean === cleanText(c.name) || (c.razonSocial && uEmpClean === cleanText(c.razonSocial)))) return true;
         }
         return false;
       }
@@ -576,20 +610,130 @@
         applyTheme(newTheme);
       });
 
-      // --- Auth Info ---
-      if (userAccount) {
+      // --- Logout & Profile Management ---
+      function handleLogout() {
+        const inRevit = isRevitEnvironment();
+        sessionStorage.removeItem('userAccount');
+        localStorage.removeItem('userAccount');
+        sessionStorage.removeItem('cachedCompanies_v2');
+        localStorage.removeItem('cachedCompanies_v2');
+
+        if (inRevit) {
+          try {
+            sessionStorage.setItem('isRevit', 'true');
+            localStorage.setItem('isRevit', 'true');
+            sessionStorage.setItem('returnUrl', 'CARGA_SIMPLIFICADA');
+          } catch (e) {}
+        } else {
+          try {
+            sessionStorage.removeItem('isRevit');
+            localStorage.removeItem('isRevit');
+            sessionStorage.removeItem('returnUrl');
+            localStorage.removeItem('returnUrl');
+          } catch (e) {}
+        }
+        // Redirigir a inse.html limpio sin query string
+        window.location.replace('https://norabim.com/inse.html');
+      }
+
+      function openUserProfileModal() {
+        if (!userAccount) return;
+        const modal = document.getElementById('modal-user-profile');
+        if (!modal) return;
+
+        const name = userAccount.name || userAccount.username || 'Usuario';
+        const email = userAccount.email || userAccount.username || '';
+        const role = userAccount.role || 'MIEMBRO';
+        const empresa = userAccount.empresa || (currentCompany ? currentCompany.name : 'No asignada');
+        const cargo = userAccount.cargo || 'Colaborador';
+        const especialidad = userAccount.especialidad || 'General';
+        const picture = userAccount.picture || '';
+
+        document.getElementById('profile-modal-name').textContent = name;
+        document.getElementById('profile-modal-email').textContent = email;
+        document.getElementById('profile-modal-role').textContent = role.replace(/_/g, ' ');
+        document.getElementById('profile-modal-empresa').textContent = empresa;
+        document.getElementById('profile-modal-cargo').textContent = cargo;
+        document.getElementById('profile-modal-especialidad').textContent = especialidad;
+
+        const originEl = document.getElementById('profile-modal-origin');
+        if (originEl) {
+          originEl.textContent = isRevitEnvironment() ? 'Autodesk Revit Add-in' : 'Navegador Web';
+        }
+
+        const avatarBox = document.getElementById('profile-modal-avatar');
+        if (avatarBox) {
+          if (picture) {
+            avatarBox.innerHTML = `<img src="${picture}" alt="${escapeHtml(name)}" class="w-full h-full object-cover rounded-2xl" />`;
+          } else {
+            const initial = (name.trim()[0] || 'U').toUpperCase();
+            avatarBox.innerHTML = `<span>${initial}</span>`;
+          }
+        }
+
+        modal.classList.remove('hidden');
+      }
+
+      function closeUserProfileModal() {
+        const modal = document.getElementById('modal-user-profile');
+        if (modal) modal.classList.add('hidden');
+      }
+
+      function renderAuthInfo() {
+        if (!userAccount) return;
+        const name = userAccount.name || userAccount.username || 'Usuario';
+        const email = userAccount.email || userAccount.username || '';
+        const role = userAccount.role || 'MIEMBRO';
+        const picture = userAccount.picture || '';
+        const initial = (name.trim()[0] || 'U').toUpperCase();
+
+        const avatarHtml = picture
+          ? `<img src="${picture}" alt="${escapeHtml(name)}" class="w-full h-full object-cover rounded-full" />`
+          : `<span>${initial}</span>`;
+
         authContainer.innerHTML = `
-          <div class="flex items-center gap-3">
-            <span class="hidden sm:inline">Hola, <strong class="font-bold">${escapeHtml(userAccount.name.split(' ')[0])}</strong></span>
-            <button id="btn-logout" type="button" class="text-[11px] font-bold text-red-600 dark:text-red-400 hover:underline uppercase">Cerrar Sesión</button>
+          <div class="flex items-center gap-2 sm:gap-3">
+            <button id="btn-user-profile" type="button" class="flex items-center gap-2 pl-1 pr-2.5 py-1 rounded-full border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:border-slate-400 dark:hover:border-slate-500 shadow-sm transition-all group cursor-pointer" title="Ver perfil del usuario activo">
+              <div class="w-7 h-7 rounded-full bg-slate-900 text-white dark:bg-white dark:text-slate-900 font-bold text-xs flex items-center justify-center border border-slate-200 dark:border-slate-700 flex-shrink-0 overflow-hidden">
+                ${avatarHtml}
+              </div>
+              <div class="text-left hidden sm:flex flex-col min-w-0 max-w-[130px] leading-tight">
+                <span class="text-xs font-bold text-slate-800 dark:text-slate-200 truncate group-hover:text-black dark:group-hover:text-white">${escapeHtml(name)}</span>
+                <span class="text-[9px] font-semibold text-slate-400 uppercase tracking-wider truncate">${escapeHtml(role.replace(/_/g, ' '))}</span>
+              </div>
+              <span class="material-symbols-outlined text-[16px] text-slate-400 group-hover:text-slate-600 dark:group-hover:text-slate-200">expand_more</span>
+            </button>
+
+            <button id="btn-logout" type="button" class="px-2.5 py-1.5 rounded-xl border border-red-200 dark:border-red-900/60 bg-red-50/70 dark:bg-red-950/40 text-red-600 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-900/60 transition-colors flex items-center gap-1 text-[11px] font-bold uppercase tracking-wider cursor-pointer" title="Cerrar sesión">
+              <span class="material-symbols-outlined text-[16px]">logout</span>
+              <span class="hidden md:inline">Cerrar Sesión</span>
+            </button>
           </div>
         `;
-        document.getElementById('btn-logout').addEventListener('click', () => {
-          sessionStorage.removeItem('userAccount');
-          localStorage.removeItem('userAccount');
-          window.location.replace('https://norabim.com/inse.html');
+
+        document.getElementById('btn-user-profile').addEventListener('click', openUserProfileModal);
+        document.getElementById('btn-logout').addEventListener('click', handleLogout);
+
+        const activeUploaderName = document.getElementById('active-uploader-name');
+        if (activeUploaderName) {
+          activeUploaderName.textContent = `${name} (${email})`;
+        }
+      }
+
+      // Profile modal event listeners
+      const btnCloseProfile = document.getElementById('btn-close-profile-modal');
+      if (btnCloseProfile) btnCloseProfile.addEventListener('click', closeUserProfileModal);
+      const btnModalLogout = document.getElementById('btn-modal-logout');
+      if (btnModalLogout) btnModalLogout.addEventListener('click', handleLogout);
+      const profileModalEl = document.getElementById('modal-user-profile');
+      if (profileModalEl) {
+        profileModalEl.addEventListener('click', (e) => {
+          if (e.target === profileModalEl) closeUserProfileModal();
         });
       }
+
+      // Initial render of user auth UI
+      renderAuthInfo();
 
       // ========================================================
       // 1. DATA INITIALIZATION & STEP 1 (EMPRESAS)
@@ -599,47 +743,154 @@
         const empresasGrid = document.getElementById('empresas-grid');
 
         try {
-          const [compRes, staticEmpRes] = await Promise.all([
+          // Fetch Google Sheets companies, Google Sheets users and static empresas concurrently
+          const [compRes, userRes, staticEmpRes] = await Promise.all([
             fetch(DEFAULT_API_URL + '?action=getCompanies&t=' + Date.now()).catch(() => null),
+            fetch(DEFAULT_API_URL + '?t=' + Date.now()).catch(() => null),
             fetch('empresas.json?t=' + Date.now()).catch(() => null)
           ]);
 
           let remoteCompanies = compRes && compRes.ok ? await compRes.json() : [];
-          let staticEmpresas = staticEmpRes && staticEmpRes.ok ? await staticEmpRes.json() : [];
+          let users = userRes && userRes.ok ? await userRes.json() : [];
+          let staticEmpresas = [];
+
+          try {
+            if (staticEmpRes && staticEmpRes.ok) {
+              staticEmpresas = await staticEmpRes.json();
+            } else {
+              const rawRes = await fetch('https://raw.githubusercontent.com/camilomartg-svg/bim/main/empresas.json?t=' + Date.now());
+              if (rawRes && rawRes.ok) staticEmpresas = await rawRes.json();
+            }
+          } catch (e) {
+            console.warn('Fallback empresas.json error:', e);
+          }
 
           const map = new Map();
 
-          // Merge static
+          // 1. Add static empresas first (preserves rich members & admin configuration)
           if (Array.isArray(staticEmpresas)) {
             staticEmpresas.forEach(se => {
               if (se.deleted) return;
               map.set(se.id, {
                 id: se.id,
                 name: se.name,
+                razonSocial: se.razonSocial || '',
                 code: se.code || (se.name ? se.name.substring(0, 3).toUpperCase() : 'BIM'),
                 location: se.location || se.city || 'Sede Principal',
                 configUrl: se.configUrl || `config-${se.id}.json`,
                 image: se.image || 'https://i.postimg.cc/02mTnnQv/21bd5ee9d2351270615280386caad1f3.jpg',
+                admins: Array.isArray(se.admins) ? [...se.admins] : [],
+                members: Array.isArray(se.members) ? [...se.members] : [],
+                driveFolderId: se.driveFolderId || ''
               });
             });
           }
 
-          // Merge remote
+          // 2. Merge Google Sheets companies
           if (Array.isArray(remoteCompanies)) {
             remoteCompanies.forEach(rc => {
               if (!rc.name) return;
-              const id = rc.id || 'empresa-' + slugify(rc.name);
-              if (!map.has(id)) {
+              const rcNameClean = cleanText(rc.name);
+              const rcRazonClean = cleanText(rc.razonSocial);
+              const adminEmail = rc.email ? rc.email.toLowerCase().trim() : '';
+
+              let foundKey = null;
+              for (const [key, existing] of map.entries()) {
+                if (existing.id === rc.id || cleanText(existing.name) === rcNameClean || (rcRazonClean && cleanText(existing.name) === rcRazonClean)) {
+                  foundKey = key;
+                  break;
+                }
+              }
+
+              if (foundKey) {
+                const existing = map.get(foundKey);
+                if (adminEmail && !existing.admins.some(a => a.toLowerCase().trim() === adminEmail)) {
+                  existing.admins.push(adminEmail);
+                }
+                map.set(foundKey, {
+                  ...existing,
+                  location: rc.ciudad || rc.location || existing.location,
+                  image: existing.image || rc.image || rc.logoBase64 || existing.image
+                });
+              } else {
+                const id = rc.id || 'company-' + Date.now();
+                const initialAdmins = adminEmail ? [adminEmail] : [];
+                const initialMembers = adminEmail ? [{
+                  name: adminEmail.split('@')[0],
+                  email: adminEmail,
+                  role: 'ADMINISTRADOR_EMPRESA',
+                  empresaUsuario: rc.name || rc.legalName,
+                  cargo: 'Administrador de Empresa'
+                }] : [];
+
                 map.set(id, {
                   id: id,
-                  name: rc.name,
-                  code: rc.code || rc.name.substring(0, 3).toUpperCase(),
+                  name: rc.name || rc.legalName,
+                  razonSocial: rc.razonSocial || '',
+                  code: rc.code || (rc.name ? rc.name.substring(0, 3).toUpperCase() : 'BIM'),
                   location: rc.ciudad || rc.location || 'Sede Principal',
+                  image: rc.image || rc.logoBase64 || 'https://i.postimg.cc/02mTnnQv/21bd5ee9d2351270615280386caad1f3.jpg',
                   configUrl: rc.configUrl || `config-${id}.json`,
-                  image: rc.image || 'https://i.postimg.cc/02mTnnQv/21bd5ee9d2351270615280386caad1f3.jpg'
+                  admins: initialAdmins,
+                  members: initialMembers,
+                  driveFolderId: rc.driveFolderId || ''
                 });
               }
             });
+          }
+
+          // 3. Enrich companies with users registered in Google Sheets
+          if (Array.isArray(users)) {
+            users.forEach(u => {
+              if (!u.email || !u.empresa) return;
+              const uEmailClean = u.email.toLowerCase().trim();
+              const uEmpClean = cleanText(u.empresa);
+
+              for (const [key, comp] of map.entries()) {
+                if (cleanText(comp.name) === uEmpClean || cleanText(comp.razonSocial) === uEmpClean) {
+                  if (u.rol === 'ADMINISTRADOR_EMPRESA') {
+                    if (!comp.admins.some(a => a.toLowerCase().trim() === uEmailClean)) {
+                      comp.admins.push(uEmailClean);
+                    }
+                  }
+                  const mIdx = comp.members.findIndex(m => m.email && m.email.toLowerCase().trim() === uEmailClean);
+                  const memberObj = {
+                    name: u.nombre || uEmailClean.split('@')[0],
+                    email: uEmailClean,
+                    role: u.rol || 'INVITADO',
+                    empresaUsuario: u.empresa,
+                    cargo: u.cargo || (u.rol === 'ADMINISTRADOR_EMPRESA' ? 'Administrador de Empresa' : '')
+                  };
+                  if (mIdx > -1) {
+                    comp.members[mIdx] = { ...comp.members[mIdx], ...memberObj };
+                  } else {
+                    comp.members.push(memberObj);
+                  }
+                }
+              }
+            });
+
+            // Refresh userAccount from live users DB
+            if (userEmail) {
+              const userEntries = users.filter(u => u.email && u.email.toLowerCase().trim() === userEmail);
+              const activeEntry = userEntries.slice().reverse().find(u => {
+                const dbEstado = (u.estado || '').toUpperCase().trim();
+                const dbRol = (u.rol || '').toUpperCase().trim();
+                return dbEstado === 'APROBADO' || dbRol === 'SUPER_ADMINISTRADOR' || dbRol === 'ADMINISTRADOR_EMPRESA' || dbRol === 'MIEMBRO';
+              });
+              if (activeEntry && userAccount) {
+                userAccount.role = activeEntry.rol || userAccount.role;
+                userAccount.empresa = activeEntry.empresa || userAccount.empresa;
+                if (activeEntry.nombre && activeEntry.nombre.trim()) userAccount.name = activeEntry.nombre.trim();
+                if (activeEntry.cargo) userAccount.cargo = activeEntry.cargo;
+                if (activeEntry.especialidad) userAccount.especialidad = activeEntry.especialidad;
+                try {
+                  const cacheLocation = localStorage.getItem('userAccount') ? 'localStorage' : 'sessionStorage';
+                  window[cacheLocation].setItem('userAccount', JSON.stringify(userAccount));
+                } catch(e) {}
+                renderAuthInfo();
+              }
+            }
           }
 
           const rawCompanies = Array.from(map.values());
@@ -654,6 +905,8 @@
             await Promise.allSettled(
               rawCompanies.map(async (c) => {
                 const isAdmin = isCompanyAdmin(c);
+                const isMember = isCompanyMemberOrGuest(c);
+
                 try {
                   const configUrl = c.configUrl || `config-${c.id}.json`;
                   const res = await fetch(`${configUrl}?t=${Date.now()}`);
@@ -674,13 +927,22 @@
                       });
                     }
 
-                    if (userProjects.length > 0) {
+                    if (isAdmin || userProjects.length > 0 || isMember) {
                       window._userAccessibleProjectsByCompany.set(c.id, userProjects);
+                      filteredCompanies.push(c);
+                    }
+                  } else {
+                    if (isAdmin || isMember) {
+                      window._userAccessibleProjectsByCompany.set(c.id, []);
                       filteredCompanies.push(c);
                     }
                   }
                 } catch (e) {
                   console.warn('Error verificando proyectos para empresa:', c.name, e);
+                  if (isAdmin || isMember) {
+                    window._userAccessibleProjectsByCompany.set(c.id, []);
+                    filteredCompanies.push(c);
+                  }
                 }
               })
             );
