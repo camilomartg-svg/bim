@@ -482,6 +482,19 @@
         });
 
         // --- LÓGICA DE INICIO DE SESIÓN CON MICROSOFT (MSAL) ---
+        function clearMsalInteractionState() {
+            [sessionStorage, localStorage].forEach(storage => {
+                try {
+                    for (let i = storage.length - 1; i >= 0; i--) {
+                        const key = storage.key(i);
+                        if (key && (key.includes('interaction') || (key.includes('msal') && (key.includes('status') || key.includes('request'))))) {
+                            storage.removeItem(key);
+                        }
+                    }
+                } catch (e) {}
+            });
+        }
+        clearMsalInteractionState();
         const loginButton = document.getElementById('login-button');
         const switchUserButton = document.getElementById('switch-user-button');
         const errorMessage = document.getElementById('error-message');
@@ -490,13 +503,19 @@
         async function handleLogin(forceAccountSelection = false) {
             try {
                 errorMessage.textContent = "";
+
+                // Limpiar cualquier estado previo de interacción atascado en MSAL
+                clearMsalInteractionState();
+
                 const cacheLocation = keepSignedInCheckbox.checked ? "localStorage" : "sessionStorage";
                 
+                const cleanRedirectUri = 'https://norabim.com/inse.html';
+
                 const msalConfig = {
                     auth: {
                         clientId: "084a9828-6166-4fef-b012-b2bafbececdf", 
                         authority: "https://login.microsoftonline.com/common",
-                        redirectUri: window.location.origin + window.location.pathname,
+                        redirectUri: cleanRedirectUri,
                     },
                     cache: {
                         cacheLocation: cacheLocation,
@@ -621,7 +640,7 @@
                         return;
                     }
                     
-                    userProfile = {
+                    const userProfile = {
                         name: dbUser.nombre || account.name,
                         username: dbUser.email,
                         role: dbUser.rol || 'INVITADO',
@@ -644,8 +663,21 @@
                     window.location.href = getPostLoginRedirect();
                 }
             } catch (error) {
-                console.error(error);
-                errorMessage.textContent = "Error al iniciar sesión. Por favor, inténtalo de nuevo.";
+                try {
+                    for (let i = sessionStorage.length - 1; i >= 0; i--) {
+                        const key = sessionStorage.key(i);
+                        if (key && key.includes('interaction')) {
+                            sessionStorage.removeItem(key);
+                        }
+                    }
+                } catch (e) {}
+                clearMsalInteractionState();
+                console.error('MSAL Login Error:', error);
+                if (error && (error.errorCode === 'user_cancelled' || String(error.message || '').includes('user_cancelled'))) {
+                    errorMessage.textContent = "";
+                    return;
+                }
+                errorMessage.textContent = error?.errorMessage || error?.message || "Error al iniciar sesión. Por favor, inténtalo de nuevo.";
             }
         }
 
