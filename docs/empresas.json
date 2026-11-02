@@ -88,7 +88,7 @@
         "name": "data guardar",
         "email": "dataguardar@gmail.com",
         "role": "INVITADO",
-        "empresaUsuario": "",
+        "empresaUsuario": "Mesh Estudio",
         "cargo": "",
         "especialidad": ""
       },
@@ -121,7 +121,8 @@
         "email": "valentinareyesparedes@gmail.com",
         "role": "MIEMBRO",
         "empresaUsuario": "Mesh Estudio",
-        "cargo": "Arquitecto Senior"
+        "cargo": "",
+        "especialidad": ""
       }
     ],
     "razonSocial": "Mesh Estudio SAS",
@@ -197,5 +198,15 @@
     "location": "Bogota DC, Colombia",
     "configUrl": "config-empresa-1786449656145.json",
     "driveFolderId": "1cUyCKpXtGD_-b_EAcjJLYm6BdsLtHkIc"
+  },
+  {
+    "id": "empresa-1793619605466",
+    "name": "GLITCH",
+    "code": "000",
+    "admins": [],
+    "zonaHoraria": "America/Bogota",
+    "configUrl": "config-empresa-1793619605466.json",
+    "members": [],
+    "driveFolderId": "1ADgixAgAO9j7Z8bVaRUCZr3zd363Ij6l"
   }
 ]
