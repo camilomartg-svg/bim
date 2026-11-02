@@ -6,11 +6,37 @@
     <title>Iniciar Sesión - nora</title>
     <script src="https://cdn.tailwindcss.com?plugins=forms,typography"></script>
     <script>
-        // Si el usuario ya está logueado, redirigir inmediatamente a home.html
+        // Helper para resolver redirección post-login respetando contexto Revit / retorno
+        function getPostLoginRedirect() {
+            try {
+                const urlParams = new URLSearchParams(window.location.search);
+                const redirectParam = urlParams.get('redirect') || urlParams.get('returnUrl');
+                const isRevit = urlParams.get('isRevit') === 'true' || urlParams.get('revit') === 'true' ||
+                                (window.chrome && window.chrome.webview) ||
+                                sessionStorage.getItem('isRevit') === 'true' || localStorage.getItem('isRevit') === 'true';
+
+                if (redirectParam) {
+                    const clean = redirectParam.trim();
+                    if (clean.toLowerCase().includes('carga_simplificada')) {
+                        return 'https://norabim.com/CARGA_SIMPLIFICADA';
+                    }
+                    return clean.startsWith('http') ? clean : ('https://norabim.com/' + clean.replace(/^\//, ''));
+                }
+
+                if (isRevit) {
+                    return 'https://norabim.com/CARGA_SIMPLIFICADA';
+                }
+            } catch (e) {
+                console.warn('Error resolviendo redirect:', e);
+            }
+            return 'https://norabim.com/empresas.html';
+        }
+
+        // Si el usuario ya está logueado, redirigir inmediatamente
         (function() {
             const userAccount = JSON.parse(sessionStorage.getItem('userAccount') || localStorage.getItem('userAccount'));
             if (userAccount) {
-                window.location.replace('https://norabim.com/empresas.html');
+                window.location.replace(getPostLoginRedirect());
             }
         })();
     </script>
@@ -610,7 +636,7 @@
                     sessionStorage.removeItem('cachedCompanies_v2');
                     localStorage.removeItem('cachedCompanies_v2');
 
-                    window.location.href = 'https://norabim.com/empresas.html';
+                    window.location.href = getPostLoginRedirect();
                 }
             } catch (error) {
                 console.error(error);
@@ -711,7 +737,7 @@
                                 window[cacheLocation].setItem('userAccount', JSON.stringify(userProfile));
                                 sessionStorage.removeItem('cachedCompanies_v2');
                                 localStorage.removeItem('cachedCompanies_v2');
-                                window.location.href = 'https://norabim.com/empresas.html';
+                                window.location.href = getPostLoginRedirect();
                             } else {
                                 window.showRegistrationForm({
                                     name: profile.name,
@@ -1112,7 +1138,7 @@
                 window[cacheLocation].setItem('userAccount', JSON.stringify(userProfile));
                 sessionStorage.removeItem('cachedCompanies_v2');
                 localStorage.removeItem('cachedCompanies_v2');
-                window.location.href = 'https://norabim.com/empresas.html';
+                window.location.href = getPostLoginRedirect();
                 return;
             } catch (e) {
                 console.error("Error saving registration", e);
@@ -1242,7 +1268,7 @@
                     window[cacheLocation].setItem('userAccount', JSON.stringify(userProfile));
                     sessionStorage.removeItem('cachedCompanies_v2');
                     localStorage.removeItem('cachedCompanies_v2');
-                    window.location.href = 'https://norabim.com/empresas.html';
+                    window.location.href = getPostLoginRedirect();
                 } else {
                     document.getElementById('error-message').textContent = "Tu usuario no tiene un rol asignado en el sistema.";
                     btn.innerHTML = originalBtnText;

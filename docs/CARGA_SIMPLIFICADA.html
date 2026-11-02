@@ -3,9 +3,33 @@
 
 <head>
   <script>
-    if (!sessionStorage.getItem('userAccount') && !localStorage.getItem('userAccount')) {
-      window.location.replace('https://norabim.com/inse.html');
-    }
+    (function() {
+      const isRevitSession = () => {
+        try {
+          if (window.chrome && window.chrome.webview) return true;
+          const p = new URLSearchParams(window.location.search);
+          if (p.get('revit') === 'true' || p.get('isRevit') === 'true' || p.get('source') === 'revit') return true;
+          if (sessionStorage.getItem('isRevit') === 'true' || localStorage.getItem('isRevit') === 'true') return true;
+        } catch(e) {}
+        return false;
+      };
+
+      const inRevit = isRevitSession();
+      if (inRevit) {
+        try {
+          sessionStorage.setItem('isRevit', 'true');
+          localStorage.setItem('isRevit', 'true');
+        } catch(e) {}
+      }
+
+      if (!sessionStorage.getItem('userAccount') && !localStorage.getItem('userAccount')) {
+        if (inRevit) {
+          window.location.replace('https://norabim.com/inse.html?redirect=CARGA_SIMPLIFICADA&isRevit=true');
+        } else {
+          window.location.replace('https://norabim.com/inse.html');
+        }
+      }
+    })();
   </script>
 
   <meta charset="utf-8" />
@@ -76,22 +100,22 @@
 
 <body class="bg-[#F4F4F4] text-[#111] dark:bg-[#171717] dark:text-[#F3F4F6] min-h-screen flex flex-col transition-colors duration-300">
   <!-- Top Navigation Header -->
-  <header class="hidden">
-    <div class="max-w-7xl mx-auto flex items-center justify-between">
-      <div class="flex items-center gap-3 sm:gap-5">
-        <a href="empresas.html" id="btn-header-back" class="p-1.5 rounded-lg border border-slate-200 bg-white/80 hover:bg-slate-100 transition-colors dark:bg-slate-800 dark:border-slate-700 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300" title="Volver al portal">
+  <header class="sticky top-0 z-30 w-full border-b border-slate-200/80 dark:border-slate-800/80 bg-white/85 dark:bg-slate-900/85 backdrop-blur-md px-4 sm:px-6 lg:px-8 py-2.5 transition-colors shadow-sm">
+    <div class="max-w-7xl mx-auto flex items-center justify-between gap-4">
+      <div class="flex items-center gap-3 sm:gap-4">
+        <button type="button" id="btn-header-back" class="p-1.5 rounded-lg border border-slate-200 bg-white/80 hover:bg-slate-100 transition-colors dark:bg-slate-800 dark:border-slate-700 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 cursor-pointer" title="Volver">
           <span class="material-symbols-outlined text-[18px] align-middle">arrow_back</span>
-        </a>
+        </button>
         <div class="flex items-center gap-2.5">
           <img class="h-6 w-auto dark:hidden" src="https://i.postimg.cc/tR3YSryT/LOGO-NORA-NEGRO.png" alt="nora CDE" />
           <img class="h-6 w-auto hidden dark:block" src="https://i.postimg.cc/SQ6JTZqj/LOGO-NORA-BLANCO.png" alt="nora CDE" />
-          <span class="text-xs font-black tracking-widest uppercase text-slate-400">|</span>
+          <span class="text-xs font-black tracking-widest uppercase text-slate-300 dark:text-slate-700">|</span>
           <span class="text-xs font-bold tracking-widest uppercase text-slate-600 dark:text-slate-300">Carga Simplificada</span>
         </div>
       </div>
 
-      <div class="flex items-center gap-3 sm:gap-5">
-        <button id="theme-toggle" aria-label="Cambiar tema" class="p-1.5 rounded-lg border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
+      <div class="flex items-center gap-2 sm:gap-3">
+        <button id="theme-toggle" aria-label="Cambiar tema" class="p-1.5 rounded-lg border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer">
           <span class="material-symbols-outlined text-[18px]">dark_mode</span>
         </button>
         <div id="auth-container" class="flex items-center text-xs font-semibold text-slate-700 dark:text-slate-300">
@@ -102,21 +126,21 @@
   </header>
 
   <!-- Interactive Breadcrumb Bar -->
-  <nav class="hidden">
+  <nav id="top-nav-breadcrumbs" class="w-full border-b border-slate-200/50 dark:border-slate-800/50 bg-slate-50/70 dark:bg-slate-900/50 px-4 sm:px-6 lg:px-8 py-2">
     <div class="max-w-7xl mx-auto flex items-center flex-wrap gap-2 text-xs font-medium text-slate-500 dark:text-slate-400">
-      <button id="crumb-root" type="button" class="flex items-center gap-1 hover:text-slate-900 dark:hover:text-white transition-colors">
+      <button id="crumb-root" type="button" class="flex items-center gap-1 hover:text-slate-900 dark:hover:text-white transition-colors cursor-pointer">
         <span class="material-symbols-outlined text-sm">domain</span>
         <span>Empresas</span>
       </button>
 
       <span id="crumb-sep-1" class="text-slate-400 dark:text-slate-600 hidden">❯</span>
-      <button id="crumb-empresa" type="button" class="hidden items-center gap-1 hover:text-slate-900 dark:hover:text-white transition-colors font-semibold text-slate-700 dark:text-slate-200">
+      <button id="crumb-empresa" type="button" class="hidden items-center gap-1 hover:text-slate-900 dark:hover:text-white transition-colors font-semibold text-slate-700 dark:text-slate-200 cursor-pointer">
         <span class="material-symbols-outlined text-sm">folder</span>
         <span id="crumb-empresa-name">Empresa</span>
       </button>
 
       <span id="crumb-sep-2" class="text-slate-400 dark:text-slate-600 hidden">❯</span>
-      <button id="crumb-proyecto" type="button" class="hidden items-center gap-1 hover:text-slate-900 dark:hover:text-white transition-colors font-semibold text-slate-700 dark:text-slate-200">
+      <button id="crumb-proyecto" type="button" class="hidden items-center gap-1 hover:text-slate-900 dark:hover:text-white transition-colors font-semibold text-slate-700 dark:text-slate-200 cursor-pointer">
         <span class="material-symbols-outlined text-sm">account_tree</span>
         <span id="crumb-proyecto-name">Proyecto</span>
       </button>
@@ -214,6 +238,10 @@
           <span id="active-project-company">EMPRESA</span>
           <span>|</span>
           <span>CDE NORA</span>
+        </div>
+        <div id="active-uploader-pill" class="mt-3 inline-flex items-center gap-2 px-3 py-1 rounded-full bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs text-slate-600 dark:text-slate-300">
+          <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+          <span>Subiendo como: <strong id="active-uploader-name" class="font-bold text-slate-900 dark:text-white">...</strong></span>
         </div>
 
         <!-- Preserved DOM hooks for JS without visual disruption -->
@@ -1659,5 +1687,60 @@
       initEmpresas();
     })();
   </script>
+
+  <!-- Modal: Perfil de Usuario Completo -->
+  <div id="modal-user-profile" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm hidden" style="z-index: 9999;">
+    <div class="glass-card rounded-3xl w-full max-w-md p-6 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-2xl relative animate-in fade-in zoom-in-95 duration-200">
+      <button type="button" id="btn-close-profile-modal" class="absolute top-5 right-5 p-1.5 rounded-xl text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer" title="Cerrar ventana">
+        <span class="material-symbols-outlined text-xl">close</span>
+      </button>
+
+      <div class="flex items-center gap-4 border-b border-slate-100 dark:border-slate-800 pb-5">
+        <div id="profile-modal-avatar" class="w-14 h-14 rounded-2xl bg-slate-900 text-white dark:bg-white dark:text-slate-900 font-extrabold text-xl flex items-center justify-center shadow-md overflow-hidden flex-shrink-0 border border-slate-200 dark:border-slate-700">
+        </div>
+        <div class="min-w-0 flex-1">
+          <div class="flex items-center gap-2">
+            <h3 id="profile-modal-name" class="text-base font-extrabold text-slate-900 dark:text-white truncate">Usuario</h3>
+            <span id="profile-modal-badge" class="px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider bg-emerald-100 text-emerald-800 dark:bg-emerald-950/80 dark:text-emerald-300">Activo</span>
+          </div>
+          <p id="profile-modal-email" class="text-xs text-slate-400 truncate mt-0.5"></p>
+          <div class="mt-1 flex items-center gap-1.5">
+            <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+            <span id="profile-modal-origin" class="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Navegador Web</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-2 gap-2.5 py-4 text-xs border-b border-slate-100 dark:border-slate-800">
+        <div class="p-3 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-100 dark:border-slate-800">
+          <span class="text-[10px] font-bold uppercase tracking-wider text-slate-400 block mb-0.5">Rol en nora</span>
+          <span id="profile-modal-role" class="font-bold text-slate-800 dark:text-slate-200 truncate block">Miembro</span>
+        </div>
+        <div class="p-3 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-100 dark:border-slate-800">
+          <span class="text-[10px] font-bold uppercase tracking-wider text-slate-400 block mb-0.5">Empresa Asignada</span>
+          <span id="profile-modal-empresa" class="font-bold text-slate-800 dark:text-slate-200 truncate block">-</span>
+        </div>
+        <div class="p-3 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-100 dark:border-slate-800">
+          <span class="text-[10px] font-bold uppercase tracking-wider text-slate-400 block mb-0.5">Cargo</span>
+          <span id="profile-modal-cargo" class="font-bold text-slate-800 dark:text-slate-200 truncate block">-</span>
+        </div>
+        <div class="p-3 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-100 dark:border-slate-800">
+          <span class="text-[10px] font-bold uppercase tracking-wider text-slate-400 block mb-0.5">Especialidad</span>
+          <span id="profile-modal-especialidad" class="font-bold text-slate-800 dark:text-slate-200 truncate block">-</span>
+        </div>
+      </div>
+
+      <div class="pt-4 flex items-center justify-between gap-3">
+        <a href="perfil.html?from=CARGA_SIMPLIFICADA" class="inline-flex items-center gap-1.5 text-xs font-bold text-slate-700 dark:text-slate-300 hover:text-black dark:hover:text-white px-3.5 py-2 rounded-xl border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors">
+          <span class="material-symbols-outlined text-[16px]">person</span>
+          <span>Ver Perfil Completo</span>
+        </a>
+        <button type="button" id="btn-modal-logout" class="inline-flex items-center gap-1.5 text-xs font-bold text-red-600 dark:text-red-400 hover:text-red-700 px-3.5 py-2 rounded-xl border border-red-200 dark:border-red-900/60 bg-red-50/60 dark:bg-red-950/30 hover:bg-red-100 dark:hover:bg-red-900/50 transition-colors cursor-pointer">
+          <span class="material-symbols-outlined text-[16px]">logout</span>
+          <span>Cerrar Sesión</span>
+        </button>
+      </div>
+    </div>
+  </div>
 </body>
 </html>

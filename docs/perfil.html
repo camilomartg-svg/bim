@@ -423,6 +423,12 @@
 
             // Back & Cancel Button logic
             const goBack = () => {
+                const urlParams = new URLSearchParams(window.location.search);
+                const fromParam = urlParams.get('from');
+                if (fromParam === 'CARGA_SIMPLIFICADA' || fromParam === 'CARGA_SIMPLIFICADA.html') {
+                    window.location.href = 'CARGA_SIMPLIFICADA.html';
+                    return;
+                }
                 if (window.history.length > 1) {
                     window.history.back();
                 } else {
