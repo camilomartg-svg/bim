@@ -3613,7 +3613,7 @@ async function applyFiltersToViewerGlobal() {
             Array.from(selectedCategories).some(c => (el.name && el.name.toLowerCase().includes(c.toLowerCase())) || (el.detail && el.detail.toLowerCase().includes(c.toLowerCase())));
         const levelMatch = !isLevelFilterActive || selectedLevels.has(el.level);
         const materialMatch = !isMaterialFilterActive || selectedMaterials.has(el.material);
-        const nombreMatch = !isNombreFilterActive || selectedNombresIntegrados.has(el.nombreIntegrado);
+        const nombreMatch = !isNombreFilterActive || (el.nombreIntegrado ? selectedNombresIntegrados.has(el.nombreIntegrado.trim()) : false);
         const piloteMatch = !isPiloteFilterActive || selectedPilotes.has(el.pilote);
         const diameterMatch = !isDiameterFilterActive || el.diameter === selectedDiameter;
 
@@ -3647,7 +3647,7 @@ async function applyFiltersToViewerGlobal() {
 
 function renderIntegratedClassificationUI(container: HTMLElement) {
     const uniqueModels = getUniqueLoadedModels();
-    const { tree, levels, materials, pilotes, diameters } = getFilterDataGlobal(activeModelFilter);
+    const { tree, levels, materials, nombresIntegrados, pilotes, diameters } = getFilterDataGlobal(activeModelFilter);
     const isSanitary = isSanitaryModelGlobal();
 
     container.innerHTML = '';
