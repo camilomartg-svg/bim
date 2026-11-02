@@ -2155,7 +2155,7 @@ const attachExternalPropertiesToLocalIds = async (model: any, externalProperties
         }
 
         // Bridge material aliases
-        const matVal = getValGlobal(entity, 'MATERIAL INTEGRADO', 'Material Integrado', 'material integrado', 'MATERIAL', 'Material', 'material', 'Tipo de Material', 'tipo de material', 'Material Name', 'Structural Material');
+        const matVal = getValGlobal(entity, 'MATERIAL INTEGRADO', 'Material Integrado', 'material integrado', 'MATERIAL_INTEGRADO', 'material_integrado');
         if (matVal) {
             entity['MATERIAL INTEGRADO'] = matVal;
             entity['Material Integrado'] = matVal;
@@ -2998,15 +2998,17 @@ const selectedCategories = new Set<string>();
 const selectedLevels = new Set<string>();
 const selectedMaterials = new Set<string>();
 const selectedPilotes = new Set<string>();
+const selectedNombresIntegrados = new Set<string>();
 let selectedDiameter = 'Todos';
 
 let activeModelFilter = 'ALL';
 let isolateActiveModel = true;
 
 const expandedClassifications = new Set<string>();
+const expandedSubgroups = new Set<string>();
 const collapsedSections = new Set<string>();
 
-type ClassificationColorMode = 'none' | 'classification' | 'levels' | 'materials' | 'pilotes';
+type ClassificationColorMode = 'none' | 'classification' | 'levels' | 'materials' | 'nombres' | 'pilotes';
 let activeColorMode: ClassificationColorMode = 'none';
 const currentClassificationColorsMap = new Map<string, string>();
 let activeColorStyles: string[] = [];
@@ -3053,7 +3055,7 @@ function applyClassificationColorizationToViewer() {
     const allElements = extractAllElementsGlobal();
     if (allElements.length === 0) return;
 
-    const { tree, levels, materials, pilotes } = getFilterDataGlobal();
+    const { tree, levels, materials, nombresIntegrados, pilotes } = getFilterDataGlobal();
     let keys: string[] = [];
 
     if (activeColorMode === 'classification') {
@@ -3062,6 +3064,8 @@ function applyClassificationColorizationToViewer() {
         keys = levels;
     } else if (activeColorMode === 'materials') {
         keys = materials;
+    } else if (activeColorMode === 'nombres') {
+        keys = nombresIntegrados;
     } else if (activeColorMode === 'pilotes') {
         keys = pilotes;
     }
@@ -3086,6 +3090,8 @@ function applyClassificationColorizationToViewer() {
             elKey = el.level || 'SIN NIVEL';
         } else if (activeColorMode === 'materials') {
             elKey = el.material ? el.material.trim() : 'SIN MATERIAL';
+        } else if (activeColorMode === 'nombres') {
+            elKey = el.nombreIntegrado ? el.nombreIntegrado.trim() : '(Sin Nombre Integrado)';
         } else if (activeColorMode === 'pilotes') {
             elKey = el.pilote ? el.pilote.trim() : '';
         }
@@ -3132,6 +3138,7 @@ function resetFilters() {
     selectedCategories.clear();
     selectedLevels.clear();
     selectedMaterials.clear();
+    selectedNombresIntegrados.clear();
     selectedPilotes.clear();
     selectedDiameter = 'Todos';
 
@@ -3139,6 +3146,7 @@ function resetFilters() {
     clearClassificationColorization();
 
     expandedClassifications.clear();
+    expandedSubgroups.clear();
     collapsedSections.clear();
 }
 
@@ -3223,6 +3231,7 @@ const modelElementData = new Map<string, Map<number, {
     level: string;
     material: string;
     name: string;
+    nombreIntegrado: string;
     classification: string;
     volume: number;
     area: number;
@@ -3294,13 +3303,14 @@ function rebuildAllElements(): any[] {
         for (const expressID of allIds) {
             const cached = idsFromCache?.get(expressID);
 
-            let level: string, material: string, name: string, classification: string;
+            let level: string, material: string, name: string, nombreIntegrado: string, classification: string;
             let volume: number, area: number, length: number, detail: string, category: string, pilote: string;
 
             if (cached) {
                 level = cached.level;
                 material = cached.material;
                 name = cached.name;
+                nombreIntegrado = cached.nombreIntegrado || 'SIN NOMBRE INTEGRADO';
                 classification = cached.classification;
                 volume = cached.volume;
                 area = cached.area;
@@ -3312,10 +3322,11 @@ function rebuildAllElements(): any[] {
                 const attrs = modelAny.properties[String(expressID)] || modelAny.properties[expressID] || (modelAny._propertiesByTag?.get(String(expressID))) || (modelAny._propertiesByGuid?.get(String(expressID)));
                 if (!attrs || typeof attrs !== 'object') continue;
                 category = getValGlobal(attrs, 'type', 'ifcType', 'Category', 'ObjectType', 'CLASIFICACIÓN', 'CLASIFICACION', 'CLASIFICACIÃ"N', 'CLASIFICACIÃ“N', 'Clasificación', 'Clasificacion', 'clasificación', 'clasificacion', 'CATEGORÍA', 'CATEGORIA', 'Categoría', 'categoria', 'TIPO', 'Tipo', 'tipo', 'DETALLE', 'Detalle', 'detalle') || 'Elemento';
-                name = getValGlobal(attrs, 'NOMBRE INTEGRADO', 'Nombre Integrado', 'nombre integrado', 'Name', 'name') || `${category} - ${expressID}`;
+                nombreIntegrado = getValGlobal(attrs, 'NOMBRE INTEGRADO', 'Nombre Integrado', 'nombre integrado', 'NOMBRE_INTEGRADO', 'nombre_integrado') || 'SIN NOMBRE INTEGRADO';
+                name = getValGlobal(attrs, 'Name', 'name', 'tag', 'Tag') || (nombreIntegrado !== 'SIN NOMBRE INTEGRADO' ? nombreIntegrado : `${category} - ${expressID}`);
                 classification = getValGlobal(attrs, 'CLASIFICACIÓN', 'CLASIFICACION', 'CLASIFICACIÃ"N', 'CLASIFICACIÃ“N', 'CLASIFICACI\u00c3\u0093N', 'Clasificación', 'Clasificacion', 'clasificación', 'clasificacion', 'classification', 'Classification') || 'SIN CLASIFICAR';
                 level = getValGlobal(attrs, 'NIVEL INTEGRADO', 'Nivel Integrado', 'nivel integrado', 'NIVEL', 'Nivel', 'nivel', 'Level', 'level', 'LEVEL', 'Storey', 'storey', 'Piso', 'piso', 'Planta', 'planta') || 'SIN NIVEL';
-                material = getValGlobal(attrs, 'MATERIAL INTEGRADO', 'Material Integrado', 'material integrado', 'MATERIAL', 'Material', 'material', 'Tipo de Material', 'tipo de material', 'Material Name', 'Structural Material') || 'SIN MATERIAL';
+                material = getValGlobal(attrs, 'MATERIAL INTEGRADO', 'Material Integrado', 'material integrado', 'MATERIAL_INTEGRADO', 'material_integrado') || 'SIN MATERIAL';
                 volume = parseNumGlobal(getValGlobal(attrs, 'VOLUMEN INTEGRADO', 'Volumen', 'Volume', 'Volume integrado', 'Volumen integrado'));
                 area = parseNumGlobal(getValGlobal(attrs, 'ÁREA INTEGRADO', 'Area', 'Area integrado', 'Área', 'Área integrado', 'AREA INTEGRADO'));
                 length = parseNumGlobal(getValGlobal(attrs, 'LONGITUD INTEGRADO', 'Longitud', 'Length', 'Longitud integrado', 'Longitud integrado', 'LONGITUD', 'longitud'));
@@ -3337,6 +3348,7 @@ function rebuildAllElements(): any[] {
                 expressID,
                 id: String(expressID),
                 name,
+                nombreIntegrado,
                 category,
                 classification,
                 level,
@@ -3409,27 +3421,50 @@ function isSanitaryModelGlobal(): boolean {
 function getFilterDataGlobal(modelFilter: string = 'ALL') {
     const allElements = extractAllElementsGlobal(modelFilter);
 
-    const classMap = new Map<string, Set<string>>();
+    interface TreeSubGroup {
+        nombre: string;
+        items: string[];
+    }
+    interface TreeGroup {
+        name: string;
+        subgroups: TreeSubGroup[];
+        categories: string[];
+    }
+
+    const classMap = new Map<string, Map<string, Set<string>>>();
     const levelsSet = new Set<string>();
     const materialsSet = new Set<string>();
+    const nombresSet = new Set<string>();
     const pilotesSet = new Set<string>();
     const diametersSet = new Set<string>();
 
     for (const el of allElements) {
         const classification = el.classification || 'SIN CLASIFICAR';
+        const rawNom = (el.nombreIntegrado && el.nombreIntegrado !== 'SIN NOMBRE INTEGRADO' && el.nombreIntegrado.trim() !== '')
+            ? el.nombreIntegrado.trim()
+            : '(Sin Nombre Integrado)';
         const categoryName = el.name || 'Sin Categoría';
 
         if (!classMap.has(classification)) {
-            classMap.set(classification, new Set());
+            classMap.set(classification, new Map());
         }
-        classMap.get(classification)!.add(categoryName);
+        const nombresMap = classMap.get(classification)!;
+        if (!nombresMap.has(rawNom)) {
+            nombresMap.set(rawNom, new Set());
+        }
+        nombresMap.get(rawNom)!.add(categoryName);
 
         if (el.level && el.level !== 'SIN NIVEL') {
             levelsSet.add(el.level);
         }
 
+        // Filtro MATERIAL INTEGRADO: Solo basado en el parámetro real
         if (el.material && el.material !== 'SIN MATERIAL' && el.material.trim() !== '') {
             materialsSet.add(el.material.trim());
+        }
+
+        if (el.nombreIntegrado && el.nombreIntegrado !== 'SIN NOMBRE INTEGRADO' && el.nombreIntegrado.trim() !== '') {
+            nombresSet.add(el.nombreIntegrado.trim());
         }
 
         if (el.pilote && el.pilote.trim() !== '') {
@@ -3441,8 +3476,8 @@ function getFilterDataGlobal(modelFilter: string = 'ALL') {
         }
     }
 
-    // Direct fallback from model properties if allElements had unmapped level/material values
-    if (levelsSet.size === 0 || materialsSet.size === 0) {
+    // Direct fallback from model properties if allElements had unmapped values
+    if (levelsSet.size === 0 || materialsSet.size === 0 || nombresSet.size === 0) {
         const uniqueModels = getUniqueLoadedModels();
         for (const { model } of uniqueModels) {
             const props = (model as any)?.properties;
@@ -3455,19 +3490,38 @@ function getFilterDataGlobal(modelFilter: string = 'ALL') {
                         if (l && l !== 'SIN NIVEL') levelsSet.add(l.trim());
                     }
                     if (materialsSet.size === 0) {
-                        const m = getValGlobal(item, 'MATERIAL INTEGRADO', 'Material Integrado', 'material integrado', 'MATERIAL', 'Material', 'material', 'Tipo de Material', 'tipo de material', 'Material Name', 'Structural Material');
+                        const m = getValGlobal(item, 'MATERIAL INTEGRADO', 'Material Integrado', 'material integrado', 'MATERIAL_INTEGRADO', 'material_integrado');
                         if (m && m !== 'SIN MATERIAL') materialsSet.add(m.trim());
+                    }
+                    if (nombresSet.size === 0) {
+                        const n = getValGlobal(item, 'NOMBRE INTEGRADO', 'Nombre Integrado', 'nombre integrado', 'NOMBRE_INTEGRADO', 'nombre_integrado');
+                        if (n && n !== 'SIN NOMBRE INTEGRADO') nombresSet.add(n.trim());
                     }
                 }
             }
         }
     }
 
-    const tree: { name: string; categories: string[] }[] = [];
-    for (const [className, catSet] of classMap.entries()) {
+    const tree: TreeGroup[] = [];
+    for (const [className, nombresMap] of classMap.entries()) {
+        const subgroups: TreeSubGroup[] = [];
+        const allItemsInClass: string[] = [];
+
+        for (const [nombre, itemsSet] of nombresMap.entries()) {
+            const sortedItems = Array.from(itemsSet).sort((a, b) => a.localeCompare(b, 'es'));
+            subgroups.push({
+                nombre,
+                items: sortedItems
+            });
+            allItemsInClass.push(...sortedItems);
+        }
+
+        subgroups.sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'));
+
         tree.push({
             name: className,
-            categories: Array.from(catSet).sort((a, b) => a.localeCompare(b, 'es'))
+            subgroups,
+            categories: allItemsInClass
         });
     }
     tree.sort((a, b) => a.name.localeCompare(b.name, 'es'));
@@ -3484,6 +3538,7 @@ function getFilterDataGlobal(modelFilter: string = 'ALL') {
     });
 
     const materials = Array.from(materialsSet).sort((a, b) => a.localeCompare(b, 'es'));
+    const nombresIntegrados = Array.from(nombresSet).sort((a, b) => a.localeCompare(b, 'es'));
 
     const pilotes = Array.from(pilotesSet).sort((a, b) => {
         const na = parseInt(a, 10);
@@ -3505,7 +3560,7 @@ function getFilterDataGlobal(modelFilter: string = 'ALL') {
         return a.localeCompare(b, 'es');
     });
 
-    return { tree, levels, materials, pilotes, diameters };
+    return { tree, levels, materials, nombresIntegrados, pilotes, diameters };
 }
 
 async function applyFiltersToViewerGlobal() {
@@ -3517,10 +3572,11 @@ async function applyFiltersToViewerGlobal() {
     const isTreeFilterActive = selectedClassifications.size > 0 || selectedCategories.size > 0;
     const isLevelFilterActive = selectedLevels.size > 0;
     const isMaterialFilterActive = selectedMaterials.size > 0;
+    const isNombreFilterActive = selectedNombresIntegrados.size > 0;
     const isPiloteFilterActive = selectedPilotes.size > 0;
     const isDiameterFilterActive = isSanitary && selectedDiameter !== 'Todos';
 
-    const hasAnyFilter = isTreeFilterActive || isLevelFilterActive || isMaterialFilterActive || isPiloteFilterActive || isDiameterFilterActive;
+    const hasAnyFilter = isTreeFilterActive || isLevelFilterActive || isMaterialFilterActive || isNombreFilterActive || isPiloteFilterActive || isDiameterFilterActive;
 
     // 1. Control instantáneo de visibilidad a nivel de mesh Three.js (0ms)
     // Si un modelo específico está seleccionado:
@@ -3557,10 +3613,11 @@ async function applyFiltersToViewerGlobal() {
             Array.from(selectedCategories).some(c => (el.name && el.name.toLowerCase().includes(c.toLowerCase())) || (el.detail && el.detail.toLowerCase().includes(c.toLowerCase())));
         const levelMatch = !isLevelFilterActive || selectedLevels.has(el.level);
         const materialMatch = !isMaterialFilterActive || selectedMaterials.has(el.material);
+        const nombreMatch = !isNombreFilterActive || selectedNombresIntegrados.has(el.nombreIntegrado);
         const piloteMatch = !isPiloteFilterActive || selectedPilotes.has(el.pilote);
         const diameterMatch = !isDiameterFilterActive || el.diameter === selectedDiameter;
 
-        return treeMatch && levelMatch && materialMatch && piloteMatch && diameterMatch;
+        return treeMatch && levelMatch && materialMatch && nombreMatch && piloteMatch && diameterMatch;
     });
 
     const visibleMap: Record<string, Set<number>> = {};
@@ -3620,6 +3677,27 @@ function renderIntegratedClassificationUI(container: HTMLElement) {
             chv.classList.remove('fa-chevron-down');
             chv.classList.add('fa-chevron-right');
             expandedClassifications.delete(catName);
+        }
+    };
+
+    const toggleSubgroupExpansion = (sgNode: HTMLElement, sgKey: string, force?: boolean) => {
+        const ch = sgNode.querySelector(':scope > .filter-subgroup-children') as HTMLElement | null;
+        const chv = sgNode.querySelector(':scope > .filter-subgroup-header > i.fa-solid') as HTMLElement | null;
+        if (!ch || !chv) return;
+
+        const isCurrentlyCollapsed = ch.classList.contains('collapsed');
+        const shouldExpand = (force !== undefined) ? force : isCurrentlyCollapsed;
+
+        if (shouldExpand) {
+            ch.classList.remove('collapsed');
+            chv.classList.remove('fa-chevron-right');
+            chv.classList.add('fa-chevron-down');
+            expandedSubgroups.add(sgKey);
+        } else {
+            ch.classList.add('collapsed');
+            chv.classList.remove('fa-chevron-down');
+            chv.classList.add('fa-chevron-right');
+            expandedSubgroups.delete(sgKey);
         }
     };
 
@@ -3773,6 +3851,11 @@ function renderIntegratedClassificationUI(container: HTMLElement) {
             const catName = tn.dataset.classificationName;
             if (catName) toggleCategoryExpansion(tn, catName, true);
         });
+        const allSubgroups = wrapper.querySelectorAll<HTMLElement>('.filter-subgroup-node');
+        allSubgroups.forEach(sg => {
+            const sgKey = sg.dataset.subgroupKey;
+            if (sgKey) toggleSubgroupExpansion(sg, sgKey, true);
+        });
     });
 
     const collapseAllBtn = document.createElement('button');
@@ -3788,7 +3871,13 @@ function renderIntegratedClassificationUI(container: HTMLElement) {
             const catName = tn.dataset.classificationName;
             if (catName) toggleCategoryExpansion(tn, catName, false);
         });
+        const allSubgroups = wrapper.querySelectorAll<HTMLElement>('.filter-subgroup-node');
+        allSubgroups.forEach(sg => {
+            const sgKey = sg.dataset.subgroupKey;
+            if (sgKey) toggleSubgroupExpansion(sg, sgKey, false);
+        });
         expandedClassifications.clear();
+        expandedSubgroups.clear();
     });
 
     actionToolbar.appendChild(resetBtn);
@@ -3849,7 +3938,7 @@ function renderIntegratedClassificationUI(container: HTMLElement) {
         treeNode.className = 'filter-tree-node';
         treeNode.dataset.classificationName = node.name;
 
-        const allCatsSelected = node.categories.every(cat => selectedCategories.has(cat));
+        const allCatsSelected = node.categories.length > 0 && node.categories.every(cat => selectedCategories.has(cat));
         const someCatsSelected = node.categories.some(cat => selectedCategories.has(cat));
         const isClassSelected = selectedClassifications.has(node.name) || allCatsSelected;
 
@@ -3874,24 +3963,6 @@ function renderIntegratedClassificationUI(container: HTMLElement) {
         checkbox.style.margin = '0 5px';
         // @ts-ignore
         checkbox.indeterminate = someCatsSelected && !allCatsSelected;
-        checkbox.addEventListener('change', async (e) => {
-            const checked = (e.target as HTMLInputElement).checked;
-            checkbox.indeterminate = false;
-            if (checked) {
-                selectedClassifications.add(node.name);
-                for (const cat of node.categories) {
-                    selectedCategories.add(cat);
-                }
-            } else {
-                selectedClassifications.delete(node.name);
-                for (const cat of node.categories) {
-                    selectedCategories.delete(cat);
-                }
-            }
-            const childInputs = childrenDiv.querySelectorAll<HTMLInputElement>('input[type="checkbox"]');
-            childInputs.forEach(ci => { ci.checked = checked; });
-            await applyFiltersToViewerGlobal();
-        });
         nodeHeader.appendChild(checkbox);
 
         const labelText = document.createElement('span');
@@ -3915,45 +3986,157 @@ function renderIntegratedClassificationUI(container: HTMLElement) {
         childrenDiv.className = 'filter-tree-children';
         if (isCollapsed) childrenDiv.classList.add('collapsed');
 
-        for (const category of node.categories) {
-            const childItem = document.createElement('label');
-            childItem.className = 'filter-checkbox-item';
+        const updateParentNodeCheckbox = () => {
+            const allNowSelected = node.categories.length > 0 && node.categories.every(cat => selectedCategories.has(cat));
+            const someNowSelected = node.categories.some(cat => selectedCategories.has(cat));
+            if (allNowSelected) {
+                selectedClassifications.add(node.name);
+                checkbox.checked = true;
+                checkbox.indeterminate = false;
+            } else if (someNowSelected) {
+                selectedClassifications.delete(node.name);
+                checkbox.checked = false;
+                checkbox.indeterminate = true;
+            } else {
+                selectedClassifications.delete(node.name);
+                checkbox.checked = false;
+                checkbox.indeterminate = false;
+            }
+        };
 
-            const childCheckbox = document.createElement('input');
-            childCheckbox.type = 'checkbox';
-            childCheckbox.checked = selectedCategories.has(category);
-            childCheckbox.addEventListener('change', async (e) => {
+        checkbox.addEventListener('change', async (e) => {
+            const checked = (e.target as HTMLInputElement).checked;
+            checkbox.indeterminate = false;
+            if (checked) {
+                selectedClassifications.add(node.name);
+                for (const cat of node.categories) {
+                    selectedCategories.add(cat);
+                }
+            } else {
+                selectedClassifications.delete(node.name);
+                for (const cat of node.categories) {
+                    selectedCategories.delete(cat);
+                }
+            }
+            const childInputs = childrenDiv.querySelectorAll<HTMLInputElement>('input[type="checkbox"]');
+            childInputs.forEach(ci => { 
+                ci.checked = checked; 
+                ci.indeterminate = false;
+            });
+            await applyFiltersToViewerGlobal();
+        });
+
+        // Segundo nivel: NOMBRE INTEGRADO
+        for (const subgroup of node.subgroups) {
+            const sgKey = `${node.name}:::${subgroup.nombre}`;
+            const isSgExpanded = expandedSubgroups.has(sgKey);
+            const isSgCollapsed = !isSgExpanded;
+
+            const allSgSelected = subgroup.items.length > 0 && subgroup.items.every(cat => selectedCategories.has(cat));
+            const someSgSelected = subgroup.items.some(cat => selectedCategories.has(cat));
+
+            const subgroupDiv = document.createElement('div');
+            subgroupDiv.className = 'filter-subgroup-node';
+            subgroupDiv.dataset.subgroupKey = sgKey;
+
+            const subgroupHeader = document.createElement('div');
+            subgroupHeader.className = 'filter-subgroup-header';
+
+            const sgChevron = document.createElement('i');
+            sgChevron.className = isSgCollapsed ? 'fa-solid fa-chevron-right' : 'fa-solid fa-chevron-down';
+            sgChevron.style.cursor = 'pointer';
+            sgChevron.style.fontSize = '9px';
+            sgChevron.style.width = '12px';
+            sgChevron.addEventListener('click', (e) => {
+                e.stopPropagation();
+                toggleSubgroupExpansion(subgroupDiv, sgKey);
+            });
+            subgroupHeader.appendChild(sgChevron);
+
+            const sgCheckbox = document.createElement('input');
+            sgCheckbox.type = 'checkbox';
+            sgCheckbox.checked = allSgSelected;
+            // @ts-ignore
+            sgCheckbox.indeterminate = someSgSelected && !allSgSelected;
+            sgCheckbox.style.margin = '0 4px';
+            subgroupHeader.appendChild(sgCheckbox);
+
+            const sgLabel = document.createElement('span');
+            sgLabel.innerHTML = `<span style="color: #60a5fa; font-weight: 600;">${subgroup.nombre}</span> <span style="font-size: 10px; opacity: 0.7;">(${subgroup.items.length})</span>`;
+            sgLabel.style.flex = '1';
+            sgLabel.style.cursor = 'pointer';
+            sgLabel.addEventListener('click', () => {
+                toggleSubgroupExpansion(subgroupDiv, sgKey);
+            });
+            subgroupHeader.appendChild(sgLabel);
+
+            subgroupDiv.appendChild(subgroupHeader);
+
+            const sgChildrenDiv = document.createElement('div');
+            sgChildrenDiv.className = 'filter-subgroup-children';
+            if (isSgCollapsed) sgChildrenDiv.classList.add('collapsed');
+
+            sgCheckbox.addEventListener('change', async (e) => {
                 const checked = (e.target as HTMLInputElement).checked;
+                sgCheckbox.indeterminate = false;
                 if (checked) {
-                    selectedCategories.add(category);
+                    for (const it of subgroup.items) {
+                        selectedCategories.add(it);
+                    }
                 } else {
-                    selectedCategories.delete(category);
+                    for (const it of subgroup.items) {
+                        selectedCategories.delete(it);
+                    }
                 }
-                const allNowSelected = node.categories.every(cat => selectedCategories.has(cat));
-                const someNowSelected = node.categories.some(cat => selectedCategories.has(cat));
-                if (allNowSelected) {
-                    selectedClassifications.add(node.name);
-                    checkbox.checked = true;
-                    checkbox.indeterminate = false;
-                } else if (someNowSelected) {
-                    selectedClassifications.delete(node.name);
-                    checkbox.checked = false;
-                    checkbox.indeterminate = true;
-                } else {
-                    selectedClassifications.delete(node.name);
-                    checkbox.checked = false;
-                    checkbox.indeterminate = false;
-                }
+                const leafInputs = sgChildrenDiv.querySelectorAll<HTMLInputElement>('input[type="checkbox"]');
+                leafInputs.forEach(li => { 
+                    li.checked = checked; 
+                    li.indeterminate = false;
+                });
+                updateParentNodeCheckbox();
                 await applyFiltersToViewerGlobal();
             });
 
-            childItem.appendChild(childCheckbox);
+            // Tercer nivel: Elementos individuales bajo el NOMBRE INTEGRADO
+            for (const category of subgroup.items) {
+                const childItem = document.createElement('label');
+                childItem.className = 'filter-checkbox-item';
 
-            const childSpan = document.createElement('span');
-            childSpan.textContent = category;
-            childItem.appendChild(childSpan);
+                const childCheckbox = document.createElement('input');
+                childCheckbox.type = 'checkbox';
+                childCheckbox.checked = selectedCategories.has(category);
+                childCheckbox.addEventListener('change', async (e) => {
+                    const checked = (e.target as HTMLInputElement).checked;
+                    if (checked) {
+                        selectedCategories.add(category);
+                    } else {
+                        selectedCategories.delete(category);
+                    }
 
-            childrenDiv.appendChild(childItem);
+                    // Update subgroup checkbox
+                    const allNowSg = subgroup.items.every(cat => selectedCategories.has(cat));
+                    const someNowSg = subgroup.items.some(cat => selectedCategories.has(cat));
+                    sgCheckbox.checked = allNowSg;
+                    // @ts-ignore
+                    sgCheckbox.indeterminate = someNowSg && !allNowSg;
+
+                    // Update parent node checkbox
+                    updateParentNodeCheckbox();
+
+                    await applyFiltersToViewerGlobal();
+                });
+
+                childItem.appendChild(childCheckbox);
+
+                const childSpan = document.createElement('span');
+                childSpan.textContent = category;
+                childItem.appendChild(childSpan);
+
+                sgChildrenDiv.appendChild(childItem);
+            }
+
+            subgroupDiv.appendChild(sgChildrenDiv);
+            childrenDiv.appendChild(subgroupDiv);
         }
 
         treeNode.appendChild(childrenDiv);
@@ -4152,6 +4335,103 @@ function renderIntegratedClassificationUI(container: HTMLElement) {
         materialsContent.appendChild(materialsGrid);
         materialsSection.appendChild(materialsContent);
         wrapper.appendChild(materialsSection);
+    }
+
+    // --- 4° Filtro: NOMBRE INTEGRADO únicamente ---
+    if (nombresIntegrados.length > 0 || uniqueModels.length > 0) {
+        const nombresSection = document.createElement('div');
+        nombresSection.className = 'filter-section';
+
+        const nombresHeader = document.createElement('div');
+        nombresHeader.className = 'filter-section-header';
+        const isNombresCollapsed = collapsedSections.has('nombres');
+        if (isNombresCollapsed) nombresHeader.classList.add('collapsed');
+
+        const nombresTitleDiv = document.createElement('div');
+        nombresTitleDiv.style.display = 'flex';
+        nombresTitleDiv.style.alignItems = 'center';
+        nombresTitleDiv.style.gap = '8px';
+
+        const nombresSpan = document.createElement('span');
+        nombresSpan.textContent = 'Nombre Integrado';
+        nombresTitleDiv.appendChild(nombresSpan);
+
+        if (nombresIntegrados.length > 0) {
+            const nombresColorBtn = document.createElement('button');
+            nombresColorBtn.className = `filter-color-toggle-btn ${activeColorMode === 'nombres' ? 'active' : ''}`;
+            nombresColorBtn.title = 'Colorear modelo por Nombre Integrado';
+            nombresColorBtn.innerHTML = '<i class="fa-solid fa-palette"></i>';
+            nombresColorBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                if (activeColorMode === 'nombres') {
+                    activeColorMode = 'none';
+                    clearClassificationColorization();
+                } else {
+                    activeColorMode = 'nombres';
+                    applyClassificationColorizationToViewer();
+                }
+                renderIntegratedClassificationUI(container);
+            });
+            nombresTitleDiv.appendChild(nombresColorBtn);
+        }
+
+        const nombresChevron = document.createElement('i');
+        nombresChevron.className = isNombresCollapsed ? 'fa-solid fa-chevron-right' : 'fa-solid fa-chevron-down';
+
+        nombresHeader.appendChild(nombresTitleDiv);
+        nombresHeader.appendChild(nombresChevron);
+        nombresHeader.addEventListener('click', () => {
+            toggleSectionCollapse(nombresSection, 'nombres');
+        });
+        nombresSection.appendChild(nombresHeader);
+
+        const nombresContent = document.createElement('div');
+        nombresContent.className = 'filter-section-content';
+        if (isNombresCollapsed) nombresContent.classList.add('collapsed');
+
+        const nombresGrid = document.createElement('div');
+        nombresGrid.className = 'levels-grid';
+
+        if (nombresIntegrados.length === 0) {
+            const emptyNotice = document.createElement('div');
+            emptyNotice.style.fontSize = '11px';
+            emptyNotice.style.color = '#888';
+            emptyNotice.style.padding = '4px 6px';
+            emptyNotice.textContent = 'Sin nombres integrados detectados en el modelo';
+            nombresGrid.appendChild(emptyNotice);
+        } else {
+            for (const nom of nombresIntegrados) {
+                const nomBtn = document.createElement('button');
+                nomBtn.className = 'level-filter-btn';
+                if (selectedNombresIntegrados.has(nom)) nomBtn.classList.add('active');
+
+                if (activeColorMode === 'nombres' && currentClassificationColorsMap.has(nom)) {
+                    const dot = document.createElement('span');
+                    dot.className = 'level-color-bar';
+                    dot.style.backgroundColor = currentClassificationColorsMap.get(nom)!;
+                    nomBtn.appendChild(dot);
+                }
+
+                const nomText = document.createTextNode(nom);
+                nomBtn.appendChild(nomText);
+                nomBtn.title = nom;
+                nomBtn.addEventListener('click', async () => {
+                    if (selectedNombresIntegrados.has(nom)) {
+                        selectedNombresIntegrados.delete(nom);
+                        nomBtn.classList.remove('active');
+                    } else {
+                        selectedNombresIntegrados.add(nom);
+                        nomBtn.classList.add('active');
+                    }
+                    await applyFiltersToViewerGlobal();
+                });
+                nombresGrid.appendChild(nomBtn);
+            }
+        }
+
+        nombresContent.appendChild(nombresGrid);
+        nombresSection.appendChild(nombresContent);
+        wrapper.appendChild(nombresSection);
     }
 
     if (pilotes.length > 0) {
@@ -10332,6 +10612,7 @@ async function classifyModel(model: any) {
     const integratedLevelById = new Map<number, string>();
     const integratedMaterialById = new Map<number, string>();
     const integratedNameById = new Map<number, string>();
+    const elementNameById = new Map<number, string>();
     const integratedSubById = new Map<number, string>();
     const elementFallbackById = new Map<number, string>();
     const integratedCategoryById = new Map<number, string>();
@@ -10405,14 +10686,15 @@ async function classifyModel(model: any) {
         if (nivel) integratedLevelById.set(expressID, nivel);
 
         const material = getVal(attrs,
-            'MATERIAL INTEGRADO', 'Material Integrado', 'material integrado',
-            'MATERIAL', 'Material', 'material', 'Tipo de Material', 'tipo de material',
-            'Material Name', 'Structural Material', 'Material estructural');
+            'MATERIAL INTEGRADO', 'Material Integrado', 'material integrado', 'MATERIAL_INTEGRADO', 'material_integrado');
         if (material) integratedMaterialById.set(expressID, material);
 
         const nombre = getVal(attrs,
-            'NOMBRE INTEGRADO', 'Nombre Integrado', 'nombre integrado', 'Name', 'name');
+            'NOMBRE INTEGRADO', 'Nombre Integrado', 'nombre integrado', 'NOMBRE_INTEGRADO', 'nombre_integrado');
         if (nombre) integratedNameById.set(expressID, nombre);
+
+        const instName = getVal(attrs, 'Name', 'name', 'tag', 'Tag');
+        if (instName) elementNameById.set(expressID, instName);
 
         const sub = getVal(attrs,
             'SUBPROYECTOS INTEGRADO', 'Subproyectos Integrado', 'subproyectos integrado',
@@ -10531,7 +10813,7 @@ async function classifyModel(model: any) {
     );
 
     // --- Populate modelElementData global cache so extractAllElementsGlobal can use it ---
-    const modelCache = new Map<number, { level: string; material: string; name: string; classification: string; volume: number; area: number; length: number; detail: string; category: string; }>();
+    const modelCache = new Map<number, { level: string; material: string; name: string; nombreIntegrado: string; classification: string; volume: number; area: number; length: number; detail: string; category: string; }>();
 
     let cachedCount = 0;
     for (const id of allIds) {
@@ -10559,15 +10841,13 @@ async function classifyModel(model: any) {
         }
         if (!mat && propEntry) {
             mat = getVal(propEntry,
-                'MATERIAL INTEGRADO', 'Material Integrado', 'material integrado',
-                'MATERIAL', 'Material', 'material', 'Tipo de Material', 'tipo de material',
-                'Material Name', 'Structural Material', 'Material estructural');
+                'MATERIAL INTEGRADO', 'Material Integrado', 'material integrado', 'MATERIAL_INTEGRADO', 'material_integrado');
         }
         if (!cls && propEntry) {
             cls = getVal(propEntry, 'CLASIFICACIÓN', 'CLASIFICACION', 'CLASIFICACIÃ"N', 'CLASIFICACIÃ“N', 'Clasificación', 'Clasificacion', 'classification');
         }
         if (!nm && propEntry) {
-            nm = getVal(propEntry, 'NOMBRE INTEGRADO', 'Nombre Integrado', 'nombre integrado', 'Name', 'name');
+            nm = getVal(propEntry, 'NOMBRE INTEGRADO', 'Nombre Integrado', 'nombre integrado', 'NOMBRE_INTEGRADO', 'nombre_integrado');
         }
         if (!cat && propEntry) {
             cat = getVal(propEntry, 'type', 'ifcType', 'Category', 'ObjectType', 'CLASIFICACIÓN', 'Clasificación', 'CATEGORÍA', 'Categoría', 'TIPO', 'Tipo');
@@ -10577,10 +10857,13 @@ async function classifyModel(model: any) {
         const ar = integratedAreaById.get(id) ?? (propEntry ? parseNumGlobal(getValGlobal(propEntry, 'ÁREA INTEGRADO', 'Area', 'Área', 'AREA INTEGRADO')) : 0);
         const len = integratedLengthById.get(id) ?? (propEntry ? parseNumGlobal(getValGlobal(propEntry, 'LONGITUD INTEGRADO', 'Longitud', 'Length', 'LONGITUD', 'longitud')) : 0);
 
+        const finalInstName = elementNameById.get(id) || (propEntry ? getVal(propEntry, 'Name', 'name', 'tag', 'Tag') : null);
+
         modelCache.set(id, {
             level: lvl ?? 'SIN NIVEL',
             material: mat ?? 'SIN MATERIAL',
-            name: nm ?? `${cls || 'Elemento'}-${id}`,
+            nombreIntegrado: nm ?? 'SIN NOMBRE INTEGRADO',
+            name: finalInstName ?? nm ?? `${cls || 'Elemento'}-${id}`,
             classification: cls ?? 'SIN CLASIFICAR',
             volume: vol,
             area: ar,

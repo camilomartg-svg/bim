@@ -49,32 +49,11 @@
         if (!isEmbed && !sessionStorage.getItem('userAccount') && !localStorage.getItem('userAccount')) {
             window.location.replace('https://norabim.com/inse.html');
         }
-        window.cleanSpecialty = function (folder) {
-            if (!folder) return 'General';
-            var str = String(folder).replace(/^\.?estados\/?/i, '').replace(/^\.?versiones\/?/i, '').trim();
-            if (!str || str.startsWith('.')) return 'General';
-            var parts = str.split('/').filter(Boolean);
-            if (parts.length === 0) return 'General';
-            var last = parts[parts.length - 1];
-            return (last.toLowerCase() === 'compartido' || last.toLowerCase() === 'publicado' || last.toLowerCase() === 'en_progreso')
-                ? (parts.length > 1 ? parts[0] : 'General')
-                : (last.charAt(0).toUpperCase() + last.slice(1));
-        };
         if (isEmbed) {
             document.documentElement.classList.add('nora-embed-mode');
         }
     </script>
     <style>
-        .folder-items {
-            max-height: none !important;
-            overflow: visible !important;
-            transition: none !important;
-        }
-        .folder-items.collapsed {
-            max-height: 0 !important;
-            overflow: hidden !important;
-            display: none !important;
-        }
         #nora-floating-auth-badge {
             display: none !important;
         }
@@ -103,140 +82,11 @@
             width: 100vw !important;
             height: 100vh !important;
         }
-
-        /* ISO 19650 State Filter & Status Badges */
-        .nora-model-state-filter {
-            display: flex;
-            gap: 4px;
-            padding: 8px 10px;
-            background: var(--bg-white);
-            border-bottom: 1px solid var(--border-color);
-            position: sticky;
-            top: 0;
-            z-index: 5;
-            overflow-x: auto;
-            scrollbar-width: none;
-        }
-        .nora-model-state-filter::-webkit-scrollbar {
-            display: none;
-        }
-        .nora-state-btn {
-            flex: 1;
-            min-width: 0;
-            padding: 5px 6px;
-            border-radius: 6px;
-            border: 1px solid var(--border-color);
-            background: var(--bg-light-gray);
-            color: var(--text-dark-gray);
-            font-size: 10px;
-            font-weight: 700;
-            cursor: pointer;
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            gap: 4px;
-            white-space: nowrap;
-            transition: all 0.2s ease;
-            text-transform: uppercase;
-        }
-        .nora-state-btn:hover {
-            border-color: var(--primary-color);
-            color: var(--primary-color);
-        }
-        .nora-state-btn.active {
-            background: var(--primary-color);
-            color: #ffffff !important;
-            border-color: var(--primary-color);
-            box-shadow: 0 1px 3px rgba(0,0,0,0.15);
-        }
-        .nora-state-btn[data-state="EN_PROGRESO"].active {
-            background: #d97706 !important;
-            border-color: #d97706 !important;
-            color: #ffffff !important;
-        }
-        .nora-state-btn[data-state="COMPARTIDO"].active {
-            background: #2563eb !important;
-            border-color: #2563eb !important;
-            color: #ffffff !important;
-        }
-        .nora-state-btn[data-state="PUBLICADO"].active {
-            background: #059669 !important;
-            border-color: #059669 !important;
-            color: #ffffff !important;
-        }
-        .nora-state-btn .state-dot {
-            width: 6px;
-            height: 6px;
-            border-radius: 50%;
-            display: inline-block;
-        }
-        .nora-state-btn .dot-progreso { background-color: #f59e0b; }
-        .nora-state-btn .dot-compartido { background-color: #3b82f6; }
-        .nora-state-btn .dot-publicado { background-color: #10b981; }
-
-        .nora-state-pills-wrap {
-            display: inline-flex;
-            align-items: center;
-            gap: 3px;
-            margin-left: auto;
-            margin-right: 6px;
-        }
-        .nora-state-pill {
-            font-size: 8px;
-            font-weight: 800;
-            text-transform: uppercase;
-            letter-spacing: 0.04em;
-            padding: 1px 5px;
-            border-radius: 4px;
-            display: inline-flex;
-            align-items: center;
-            gap: 3px;
-            border: 1px solid transparent;
-            line-height: 1.3;
-            flex-shrink: 0;
-            user-select: none;
-        }
-        .nora-state-pill.progreso {
-            background-color: #fef3c7;
-            color: #92400e;
-            border-color: #fde68a;
-        }
-        .nora-state-pill.compartido {
-            background-color: #dbeafe;
-            color: #1e40af;
-            border-color: #bfdbfe;
-        }
-        .nora-state-pill.publicado {
-            background-color: #d1fae5;
-            color: #065f46;
-            border-color: #a7f3d0;
-        }
-        .dark-mode .nora-state-pill.progreso,
-        .dark .nora-state-pill.progreso,
-        [data-theme=dark] .nora-state-pill.progreso {
-            background-color: rgba(245, 158, 11, 0.2);
-            color: #fde68a;
-            border-color: rgba(245, 158, 11, 0.4);
-        }
-        .dark-mode .nora-state-pill.compartido,
-        .dark .nora-state-pill.compartido,
-        [data-theme=dark] .nora-state-pill.compartido {
-            background-color: rgba(59, 130, 246, 0.2);
-            color: #bfdbfe;
-            border-color: rgba(59, 130, 246, 0.4);
-        }
-        .dark-mode .nora-state-pill.publicado,
-        .dark .nora-state-pill.publicado,
-        [data-theme=dark] .nora-state-pill.publicado {
-            background-color: rgba(16, 185, 129, 0.2);
-            color: #a7f3d0;
-            border-color: rgba(16, 185, 129, 0.4);
-        }
     </style>
 
     <meta charset="UTF-8" />
     <meta name="version" content="v27-EventSnap" />
-    <meta name="x-app-version" data-app="vsr_ifca" content="20261031-02" />
+    <meta name="x-app-version" data-app="vsr_ifca" content="20260420-01" />
     <!--
     <script>
       // COI Service Worker Registration for SharedArrayBuffer support
@@ -261,9 +111,9 @@
     <title>VSR IFCA | nora</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet" />
-  <script type="module" crossorigin src="./assets/main-Bj4mHcys.js"></script>
+  <script type="module" crossorigin src="./assets/main-DXDq0Yx0.js"></script>
   <link rel="modulepreload" crossorigin href="./assets/viewpoints-manager-DcOIyzzy.js">
-  <link rel="stylesheet" crossorigin href="./assets/main-CXK13Wy_.css">
+  <link rel="stylesheet" crossorigin href="./assets/main-C8C_u3De.css">
 </head>
 
 <body>
@@ -292,9 +142,6 @@
                 <div class="sidebar-header">
                     <h3><span class="material-symbols-outlined">inventory_2</span> Modelos IFC</h3>
                 </div>
-                <div id="model-state-filter-bar" class="nora-model-state-filter" style="display: none;">
-                    <!-- ISO 19650 state filters rendered dynamically -->
-                </div>
 
                 <div class="sidebar-content" id="model-list">
                     <!-- Populated by JS -->
@@ -313,6 +160,7 @@
                             <option value="CLASIFICACIÓN">CLASIFICACIÓN</option>
                             <option value="NIVEL INTEGRADO">NIVEL INTEGRADO</option>
                             <option value="MATERIAL INTEGRADO">MATERIAL INTEGRADO</option>
+                            <option value="NOMBRE INTEGRADO">NOMBRE INTEGRADO</option>
                         </select>
                         <select id="classification-mode" class="classification-select" title="Modo">
                             <option value="filtrar">Filtrar</option>
