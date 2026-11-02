@@ -2569,6 +2569,14 @@
 
         selectedFilesList.innerHTML = selectedFiles.map(fileObj => {
           const ext = fileObj.file.name.split('.').pop().toLowerCase();
+          const freshExistingMatch = fileObj.existingFile || findExistingProjectFile(fileObj.file.name);
+          if (freshExistingMatch) {
+            fileObj.isReplacement = true;
+            fileObj.existingFile = freshExistingMatch;
+            if (!fileObj.targetVersion || fileObj.targetVersion === 'v1.0') {
+              fileObj.targetVersion = calculateNextMinorVersion(freshExistingMatch.version || 'v1.0');
+            }
+          }
           let icon = 'description';
           let iconClass = 'text-blue-500';
           if (ext === 'pdf') {
@@ -2758,7 +2766,7 @@
 
         const initPayload = {
           action: 'initResumableUpload',
-          folderId: ds.driveFolderId || '',
+          folderId: (ds.driveFolderId && String(ds.driveFolderId).trim().length > 15) ? ds.driveFolderId.trim() : '',
           driveFolderName: driveFolderName,
           project: activeProject.slug || slugify(activeProject.name),
           filename: filename,
@@ -2821,7 +2829,7 @@
             changedBy: userAccount ? (userAccount.name || '') : '',
             changedByEmail: userAccount ? (userAccount.email || userAccount.username || '') : '',
             deliveryTeams: resolveCurrentUserDeliveryTeams(),
-            folderId: ds.driveFolderId || '',
+            folderId: (ds.driveFolderId && String(ds.driveFolderId).trim().length > 15) ? ds.driveFolderId.trim() : '',
             driveFolderName: driveFolderName,
             skipStatusRegister: (fileObj && fileObj.isReplacement) ? true : false,
             isVersionUpload: (fileObj && fileObj.isReplacement) ? true : false,
@@ -2872,7 +2880,7 @@
 
         const payload = {
           action: 'uploadFile',
-          folderId: ds.driveFolderId || '',
+          folderId: (ds.driveFolderId && String(ds.driveFolderId).trim().length > 15) ? ds.driveFolderId.trim() : '',
           driveFolderName: driveFolderName,
           project: activeProject.slug || slugify(activeProject.name),
           filename: filename,
@@ -2952,7 +2960,7 @@
           deliveryTeams: params.deliveryTeams || resolveCurrentUserDeliveryTeams(),
           originalFileId: params.originalFileId || params.fileId,
           type: params.type || '',
-          folderId: ds.driveFolderId || '',
+          folderId: (ds.driveFolderId && String(ds.driveFolderId).trim().length > 15) ? ds.driveFolderId.trim() : '',
           driveFolderName: ds.driveFolderName || activeProject.name,
           uploadedFileId: params.uploadedFileId || '',
           content: '',
@@ -2989,6 +2997,7 @@
           return;
         }
 
+        recheckSelectedFilesReplacements();
         isUploading = true;
         uploadBtn.disabled = true;
         clearQueueBtn.classList.add('hidden');
@@ -3010,6 +3019,14 @@
           globalProgressBar.style.width = `${globalProgressStart}%`;
 
           const ext = fileObj.file.name.split('.').pop().toLowerCase();
+          const freshExistingMatch = fileObj.existingFile || findExistingProjectFile(fileObj.file.name);
+          if (freshExistingMatch) {
+            fileObj.isReplacement = true;
+            fileObj.existingFile = freshExistingMatch;
+            if (!fileObj.targetVersion || fileObj.targetVersion === 'v1.0') {
+              fileObj.targetVersion = calculateNextMinorVersion(freshExistingMatch.version || 'v1.0');
+            }
+          }
           
           try {
             if (ext === 'ifc') {
@@ -3148,7 +3165,7 @@
                   addLog(`[VERSIÓN] ¡${fileObj.file.name} reemplazado y actualizado exitosamente a la versión ${nextVer}!`);
                 } catch (vErr) {
                   console.error('Error al versionar archivo:', vErr);
-                  updateFileUI(fileObj, 100, 'Completado');
+                  updateFileUI(fileObj, 100, `Advertencia versión: ${vErr.message}`);
                   addLog(`[VERSIÓN] Advertencia al registrar versión automática: ${vErr.message}`);
                 }
               } else {
@@ -3225,7 +3242,7 @@
             headers: { 'Content-Type': 'text/plain;charset=utf-8' },
             body: JSON.stringify({
               action: 'list',
-              folderId: ds.driveFolderId || '',
+              folderId: (ds.driveFolderId && String(ds.driveFolderId).trim().length > 15) ? ds.driveFolderId.trim() : '',
               driveFolderName: ds.driveFolderName || activeProject.name,
               project: projectSlug
             })
@@ -4479,7 +4496,7 @@
             status: v.status || 'EN_PROGRESO',
             originalFileId: v.originalFileId,
             type: v.type || '',
-            folderId: ds.driveFolderId || '',
+            folderId: (ds.driveFolderId && String(ds.driveFolderId).trim().length > 15) ? ds.driveFolderId.trim() : '',
             driveFolderName: ds.driveFolderName || activeProject.name,
             changedBy: userAccount ? (userAccount.name || '') : '',
             changedByEmail: userAccount ? (userAccount.email || userAccount.username || '') : '',
@@ -4542,7 +4559,7 @@
             filename: f.name,
             newStatus: newStatus,
             project: activeProject.slug || slugify(activeProject.name),
-            folderId: ds.driveFolderId || '',
+            folderId: (ds.driveFolderId && String(ds.driveFolderId).trim().length > 15) ? ds.driveFolderId.trim() : '',
             driveFolderName: ds.driveFolderName || activeProject.name,
             originalFileId: f.originalFileId || f.fileId,
             type: f.type || '',
@@ -4574,7 +4591,7 @@
                   filename: f.pairedFragName,
                   newStatus: newStatus,
                   project: activeProject.slug || slugify(activeProject.name),
-                  folderId: ds.driveFolderId || '',
+                  folderId: (ds.driveFolderId && String(ds.driveFolderId).trim().length > 15) ? ds.driveFolderId.trim() : '',
                   driveFolderName: ds.driveFolderName || activeProject.name,
                   originalFileId: f.pairedFragId,
                   type: 'model',
@@ -4662,7 +4679,7 @@
           const payload = {
             action: 'deleteFiles',
             fileIds: uniqueFileIds,
-            folderId: ds.driveFolderId || '',
+            folderId: (ds.driveFolderId && String(ds.driveFolderId).trim().length > 15) ? ds.driveFolderId.trim() : '',
             driveFolderName: ds.driveFolderName || activeProject.name,
             project: activeProject.slug || slugify(activeProject.name),
             filename: f.name
@@ -4697,7 +4714,7 @@
                 body: JSON.stringify({
                   action: 'deleteFiles',
                   fileIds: [f.pairedFragId, f.pairedFragJsonId].filter(Boolean),
-                  folderId: ds.driveFolderId || '',
+                  folderId: (ds.driveFolderId && String(ds.driveFolderId).trim().length > 15) ? ds.driveFolderId.trim() : '',
                   driveFolderName: ds.driveFolderName || activeProject.name,
                   project: activeProject.slug || slugify(activeProject.name),
                   filename: fragName

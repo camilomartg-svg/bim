@@ -1256,11 +1256,40 @@ function findFolderRecursively(parentFolder, targetName) {
   return null;
 }
 
+function resolveProjectRootFolder_(folderId, project, driveFolderName) {
+  var root = null;
+  var fid = String(folderId || '').trim();
+  if (fid && fid !== 'undefined' && fid !== 'null') {
+    try {
+      root = DriveApp.getFolderById(fid);
+    } catch (eF) {
+      root = null;
+    }
+  }
+  if (!root || fid === DRIVE_ROOT_FOLDER_ID || fid === '1fn1umYzIYsxymmwbmap6YbjTB33XJrG8' || fid === '1aWUNnLgjWBkA6wdCM99XMY9SU7eSDP-H') {
+    try {
+      var base = DriveApp.getFolderById(DRIVE_ROOT_FOLDER_ID);
+      var target = findProjectFolderRecursively(base, project, driveFolderName);
+      if (target) root = target;
+      else if (!root) root = base;
+    } catch (eR) {
+      if (!root) {
+        try {
+          root = DriveApp.getRootFolder();
+        } catch (eRoot) {}
+      }
+    }
+  }
+  return root;
+}
+
 function listModels_(e, body) {
   let folderId = String(((body && body.folderId) || (e && e.parameter && e.parameter.folderId) || DRIVE_ROOT_FOLDER_ID) ?? '').trim();
   if (!folderId) return { error: 'Falta folderId' };
+  const driveFolderName = String(((body && body.driveFolderName) || (e && e.parameter && e.parameter.driveFolderName) || '') ?? '').trim();
+  const projectSlug = String(((body && body.project) || (e && e.parameter && e.parameter.project) || '') ?? '').trim();
   
-  let root = DriveApp.getFolderById(folderId);
+  let root = resolveProjectRootFolder_(folderId, projectSlug, driveFolderName);
   
   // Dynamic resolution if we are at the root level or default
   if (folderId === '1aWUNnLgjWBkA6wdCM99XMY9SU7eSDP-H' || folderId === '1fn1umYzIYsxymmwbmap6YbjTB33XJrG8') {
@@ -1532,7 +1561,9 @@ function textFile_(e, body) {
 function resolveUploadFolder_(e, body) {
   let folderId = String(((body && body.folderId) || (e && e.parameter && e.parameter.folderId) || DRIVE_ROOT_FOLDER_ID) ?? '').trim();
   if (!folderId) throw new Error('Falta folderId');
-  let root = DriveApp.getFolderById(folderId);
+  const driveFolderName = String(((body && body.driveFolderName) || (e && e.parameter && e.parameter.driveFolderName) || '') ?? '').trim();
+  const projectSlug = String(((body && body.project) || (e && e.parameter && e.parameter.project) || '') ?? '').trim();
+  let root = resolveProjectRootFolder_(folderId, projectSlug, driveFolderName);
   if (folderId === DRIVE_ROOT_FOLDER_ID || folderId === '1fn1umYzIYsxymmwbmap6YbjTB33XJrG8') {
     const driveFolderName = String(((body && body.driveFolderName) || (e && e.parameter && e.parameter.driveFolderName) || '') ?? '').trim();
     const projectSlug = String(((body && body.project) || (e && e.parameter && e.parameter.project) || '') ?? '').trim();
@@ -1639,8 +1670,10 @@ function uploadResumableChunk_(e, body) {
 function uploadFile_(e, body) {
   let folderId = String(((body && body.folderId) || (e && e.parameter && e.parameter.folderId) || DRIVE_ROOT_FOLDER_ID) ?? '').trim();
   if (!folderId) return { error: 'Falta folderId' };
+  const driveFolderName = String(((body && body.driveFolderName) || (e && e.parameter && e.parameter.driveFolderName) || '') ?? '').trim();
+  const projectSlug = String(((body && body.project) || (e && e.parameter && e.parameter.project) || '') ?? '').trim();
   
-  let root = DriveApp.getFolderById(folderId);
+  let root = resolveProjectRootFolder_(folderId, projectSlug, driveFolderName);
   
   // Dynamic resolution if we are at the root level or default
   if (folderId === '1aWUNnLgjWBkA6wdCM99XMY9SU7eSDP-H' || folderId === '1fn1umYzIYsxymmwbmap6YbjTB33XJrG8') {
@@ -1796,7 +1829,7 @@ function changeFileStatus_(e, body) {
   if (['COMPARTIDO', 'PUBLICADO'].indexOf(newStatus) === -1) return { status: 'error', message: 'Estado invalido' };
 
   try {
-    var root = DriveApp.getFolderById(folderId);
+    var root = resolveProjectRootFolder_(folderId, project, driveFolderName);
     if (folderId === DRIVE_ROOT_FOLDER_ID || folderId === '1fn1umYzIYsxymmwbmap6YbjTB33XJrG8') {
       var targetFolder = findProjectFolderRecursively(root, project, driveFolderName);
       if (targetFolder) root = targetFolder;
@@ -1925,7 +1958,7 @@ function createVersion_(e, body) {
   if (!fileId && !content && !uploadedFileId) return { status: 'error', message: 'Falta fileId, contenido o ID del archivo cargado' };
 
   try {
-    var root = DriveApp.getFolderById(folderId);
+    var root = resolveProjectRootFolder_(folderId, project, driveFolderName);
     if (folderId === DRIVE_ROOT_FOLDER_ID || folderId === '1fn1umYzIYsxymmwbmap6YbjTB33XJrG8') {
       var targetFolder = findProjectFolderRecursively(root, project, driveFolderName);
       if (targetFolder) root = targetFolder;
@@ -2206,7 +2239,7 @@ function restoreVersion_(e, body) {
   if (!backupFileId) return { status: 'error', message: 'Falta backupFileId para restaurar' };
 
   try {
-    var root = DriveApp.getFolderById(folderId);
+    var root = resolveProjectRootFolder_(folderId, project, driveFolderName);
     if (folderId === DRIVE_ROOT_FOLDER_ID || folderId === '1fn1umYzIYsxymmwbmap6YbjTB33XJrG8') {
       var targetFolder = findProjectFolderRecursively(root, project, driveFolderName);
       if (targetFolder) root = targetFolder;
