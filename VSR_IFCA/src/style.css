@@ -71,6 +71,7 @@ body {
 /* Sidebar Styles (Left) */
 .sidebar {
   position: fixed;
+  overflow: hidden;
   top: 60px; /* Below top bar */
   left: 0;
   width: 280px;
@@ -1007,12 +1008,41 @@ bim-label {
     display: flex;
     flex-direction: column;
     flex: 1;
-    overflow: visible;
+    min-height: 0;
+    overflow: hidden;
     display: none; /* Hide by default */
 }
 
 .tab-content.active {
     display: flex; /* Flex when active */
+    min-height: 0;
+    overflow: hidden;
+}
+
+#classification-list {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto !important;
+    overflow-x: hidden;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(100, 116, 139, 0.4) transparent;
+}
+
+#classification-list::-webkit-scrollbar {
+    width: 6px;
+}
+
+#classification-list::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+#classification-list::-webkit-scrollbar-thumb {
+    background: rgba(100, 116, 139, 0.35);
+    border-radius: 4px;
+}
+
+#classification-list::-webkit-scrollbar-thumb:hover {
+    background: rgba(100, 116, 139, 0.6);
 }
 
 /* --- Quantities Panel (Bottom) --- */

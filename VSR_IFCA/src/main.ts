@@ -2163,13 +2163,12 @@ const attachExternalPropertiesToLocalIds = async (model: any, externalProperties
             entity['material'] = matVal;
         }
 
-        // Bridge name aliases
-        const nmVal = getValGlobal(entity, 'NOMBRE INTEGRADO', 'Nombre Integrado', 'nombre integrado', 'Name', 'name');
+        // Bridge NOMBRE INTEGRADO aliases (STRICT: only parameter, NEVER fallback to element instance Name)
+        const nmVal = getValGlobal(entity, 'NOMBRE INTEGRADO', 'Nombre Integrado', 'nombre integrado', 'NOMBRE_INTEGRADO', 'nombre_integrado');
         if (nmVal) {
             entity['NOMBRE INTEGRADO'] = nmVal;
             entity['Nombre Integrado'] = nmVal;
             entity['nombre integrado'] = nmVal;
-            entity['name'] = nmVal;
         }
 
         const guid = getGuid(entity);
@@ -3651,12 +3650,18 @@ function renderIntegratedClassificationUI(container: HTMLElement) {
     const isSanitary = isSanitaryModelGlobal();
 
     container.innerHTML = '';
+    container.style.overflowY = 'auto';
+    container.style.overflowX = 'hidden';
+    container.style.height = '100%';
+    container.style.flex = '1';
+    container.style.minHeight = '0';
 
     const wrapper = document.createElement('div');
     wrapper.style.display = 'flex';
     wrapper.style.flexDirection = 'column';
     wrapper.style.gap = '12px';
     wrapper.style.padding = '10px';
+    wrapper.style.paddingBottom = '50px';
 
     // --- In-place expansion helpers for 0ms, zero-DOM-rebuild interaction ---
     const toggleCategoryExpansion = (tNode: HTMLElement, catName: string, force?: boolean) => {
