@@ -8139,45 +8139,201 @@ function initQuantitiesPanel() {
 
     // Render logic
     // --- 3D Colorization and Filtering for Despiece ---
+    let despieceLabelsUpdateFn: (() => void) | null = null;
+
+    function getElementCenter(expressID: number, modelUUID: string): THREE.Vector3 | null {
+        try {
+            const uniqueModels = getUniqueLoadedModels();
+            const modelEntry = uniqueModels.find(m => m.uuid === modelUUID || m.name === modelUUID);
+            const model = modelEntry ? modelEntry.model : (fragments.groups as any)?.[modelUUID];
+            if (!model) return null;
+
+            if (model.getFragmentMap && typeof model.getFragmentMap === 'function') {
+                const fragmentIdMap = model.getFragmentMap([expressID]);
+                if (fragmentIdMap) {
+                    const box = new THREE.Box3();
+                    let hasPoint = false;
+                    for (const [fragId, itemIds] of Object.entries(fragmentIdMap)) {
+                        const fragment = model.items?.find((f: any) => f.id === fragId) || (model.keyFragments as any)?.[fragId];
+                        if (fragment && fragment.mesh) {
+                            const mesh = fragment.mesh as THREE.InstancedMesh;
+                            const geom = mesh.geometry;
+                            if (!geom) continue;
+                            mesh.updateMatrixWorld();
+                            if (!geom.boundingBox) geom.computeBoundingBox();
+                            if (!geom.boundingBox) continue;
+
+                            const itemIdsSet = itemIds as Set<number>;
+                            for (const itemId of itemIdsSet) {
+                                let instIndex = -1;
+                                if (typeof fragment.getItemInstance === 'function') {
+                                    instIndex = fragment.getItemInstance(itemId);
+                                }
+                                if (instIndex !== undefined && instIndex >= 0) {
+                                    const matrix = new THREE.Matrix4();
+                                    mesh.getMatrixAt(instIndex, matrix);
+                                    matrix.premultiply(mesh.matrixWorld);
+                                    const itemBox = geom.boundingBox.clone().applyMatrix4(matrix);
+                                    box.union(itemBox);
+                                    hasPoint = true;
+                                }
+                            }
+                        }
+                    }
+                    if (hasPoint && !box.isEmpty()) {
+                        const center = new THREE.Vector3();
+                        box.getCenter(center);
+                        // Subir en el eje vertical (Z o Y según el modelo) para que la etiqueta flote sobre el muro
+                        center.z += Math.max(0.2, (box.max.z - box.min.z) * 0.25);
+                        return center;
+                    }
+                }
+            }
+        } catch (e) {
+            console.warn('[Despiece] Error calculando centro de elemento:', e);
+        }
+        return null;
+    }
+
+    function clearDespiece3DLabels() {
+        const container = document.getElementById('despiece-3d-labels-container');
+        if (container) container.remove();
+        if (despieceLabelsUpdateFn && world?.camera?.controls) {
+            world.camera.controls.removeEventListener('update', despieceLabelsUpdateFn);
+            despieceLabelsUpdateFn = null;
+        }
+    }
+
+    function renderDespiece3DLabels(sheets: CutSheet[]) {
+        clearDespiece3DLabels();
+        if (!despieceColors3DEnabled || activeTab !== 'despiece') return;
+
+        const viewerContainer = document.getElementById('viewer-container') || document.body;
+        const labelsContainer = document.createElement('div');
+        labelsContainer.id = 'despiece-3d-labels-container';
+        labelsContainer.style.cssText = 'position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 500; overflow: hidden;';
+        viewerContainer.appendChild(labelsContainer);
+
+        const markers: Array<{ element: HTMLElement; pos3D: THREE.Vector3 }> = [];
+
+        sheets.forEach(sheet => {
+            sheet.placedPieces.forEach(p => {
+                const elem = p.piece.elementRef;
+                const expressID = Number(p.piece.expressID || p.piece.id);
+                if (!expressID) return;
+                const modelUUID = elem?.modelUUID || Array.from(loadedModels.keys())[0] || 'local';
+
+                const centerPos = getElementCenter(expressID, modelUUID);
+                if (!centerPos) return;
+
+                const marker = document.createElement('div');
+                marker.className = 'despiece-3d-marker';
+                marker.style.cssText = `
+                    position: absolute;
+                    transform: translate(-50%, -50%);
+                    background: ${p.color};
+                    color: #0f172a;
+                    border: 2px solid #0f172a;
+                    border-radius: 12px;
+                    padding: 2px 7px;
+                    font-size: 11px;
+                    font-weight: 800;
+                    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+                    box-shadow: 0 3px 10px rgba(0,0,0,0.45);
+                    cursor: pointer;
+                    pointer-events: auto;
+                    user-select: none;
+                    white-space: nowrap;
+                    transition: transform 0.12s ease;
+                `;
+                marker.innerHTML = `<strong>#${p.orderIndex}</strong> <span style="font-size: 9px; opacity: 0.85; margin-left: 2px;">${p.piece.tag || ''}</span>`;
+                marker.title = `${p.piece.name}&#10;Lámina #${sheet.sheetIndex} • Corte #${p.orderIndex}&#10;Medidas: ${(p.w/1000).toFixed(2)} × ${(p.h/1000).toFixed(2)} m`;
+
+                marker.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    try {
+                        const highlighter = components.get(OBF.Highlighter);
+                        if (typeof (window as any).highlightElementById === 'function') {
+                            (window as any).highlightElementById(expressID);
+                        } else if (highlighter) {
+                            highlighter.highlightByID('select', [expressID]);
+                        }
+                    } catch (_) {}
+                });
+
+                labelsContainer.appendChild(marker);
+                markers.push({ element: marker, pos3D: centerPos });
+            });
+        });
+
+        const updatePositions = () => {
+            if (!world?.camera?.three) return;
+            const rect = viewerContainer.getBoundingClientRect();
+            const width = rect.width;
+            const height = rect.height;
+
+            markers.forEach(({ element, pos3D }) => {
+                const projected = pos3D.clone().project(world.camera.three);
+                if (projected.z > 1) {
+                    element.style.display = 'none';
+                } else {
+                    element.style.display = 'block';
+                    const x = (projected.x * 0.5 + 0.5) * width;
+                    const y = (-projected.y * 0.5 + 0.5) * height;
+                    element.style.left = `${x}px`;
+                    element.style.top = `${y}px`;
+                }
+            });
+        };
+
+        despieceLabelsUpdateFn = updatePositions;
+        if (world?.camera?.controls) {
+            world.camera.controls.addEventListener('update', updatePositions);
+        }
+        updatePositions();
+    }
+
     function applyDespieceColorization(sheets: CutSheet[], targetSheetIndex: string = 'ALL') {
         const highlighter = components.get(OBF.Highlighter);
         if (!highlighter) return;
 
-        // Limpiar estilos previos de despiece
+        // Limpiar estilos anteriores
         PIECE_COLORS.forEach((_, idx) => {
             try { highlighter.clear("despiece_col_" + idx); } catch (_) {}
         });
 
-        // Actualizar o remover HUD flotante en el visor 3D
+        // Asegurar que los estilos existan en highlighter
+        PIECE_COLORS.forEach((hex, idx) => {
+            const sName = "despiece_col_" + idx;
+            if (!highlighter.styles.has(sName)) {
+                highlighter.styles.set(sName, {
+                    color: new THREE.Color(hex),
+                    opacity: 0.95,
+                    transparent: false,
+                    depthTest: true,
+                    depthWrite: true,
+                    renderedFaces: (FRAGS as any).RenderedFaces?.ONE ?? 1
+                });
+            }
+        });
+
+        // Limpiar HUD y etiquetas si está deshabilitado o fuera de despiece
         let hud = document.getElementById('despiece-3d-hud');
         if (!despieceColors3DEnabled || activeTab !== 'despiece') {
             if (hud) hud.remove();
-            try { hider.set(true); } catch (_) {}
+            clearDespiece3DLabels();
             return;
-        }
-
-        if (!hud) {
-            hud = document.createElement('div');
-            hud.id = 'despiece-3d-hud';
-            hud.className = 'despiece-3d-hud';
-            document.body.appendChild(hud);
         }
 
         const isSpecific = targetSheetIndex !== 'ALL';
         const targetSheet = isSpecific ? sheets.find(s => String(s.sheetIndex) === targetSheetIndex) : null;
-
-        if (isSpecific && targetSheet) {
-            hud.innerHTML = `<span class="badge-dot" style="background: #22c55e;"></span> Despiece 3D: Lámina #${targetSheet.sheetIndex} &bull; ${targetSheet.placedPieces.length} piezas (${targetSheet.material})`;
-        } else {
-            const totalPieces = sheets.reduce((sum, s) => sum + s.placedPieces.length, 0);
-            hud.innerHTML = `<span class="badge-dot" style="background: var(--primary-color);"></span> Despiece 3D: Todas las Láminas &bull; ${sheets.length} láminas (${totalPieces} piezas)`;
-        }
-
-        // Mapear elementos por índice de color
-        const colorMaps: Record<number, Record<string, number[]>> = {};
-        const isolationMap: Record<string, number[]> = {};
-
         const activeSheets = (isSpecific && targetSheet) ? [targetSheet] : sheets;
+
+        // 1. Aislamiento en 3D:
+        // Si es una lámina específica: aislar SOLAMENTE los muros de esa lámina.
+        // Si son todas las láminas: aislar TODOS los muros modulares del despiece (¡ocultar techos, pisos, etc.!).
+        const isolationMap: Record<string, Set<number>> = {};
+        const colorMaps: Record<number, Record<string, number[]>> = {};
 
         activeSheets.forEach(sheet => {
             sheet.placedPieces.forEach(p => {
@@ -8194,26 +8350,30 @@ function initQuantitiesPanel() {
                 if (!colorMaps[colorIdx][modelUUID]) colorMaps[colorIdx][modelUUID] = [];
                 colorMaps[colorIdx][modelUUID].push(expressID);
 
-                if (!isolationMap[modelUUID]) isolationMap[modelUUID] = [];
-                isolationMap[modelUUID].push(expressID);
+                if (!isolationMap[modelUUID]) isolationMap[modelUUID] = new Set();
+                isolationMap[modelUUID].add(expressID);
             });
         });
 
-        // Aislar o mostrar según corresponda
-        if (isSpecific && Object.keys(isolationMap).length > 0) {
-            try {
-                hider.isolate(isolationMap as any);
-                if (typeof (world.camera as any).fit === 'function') {
-                    (world.camera as any).fit(isolationMap);
-                }
-            } catch (_) {}
-        } else {
-            try {
-                hider.set(true);
-            } catch (_) {}
+        // Convertir Sets a arrays para hider.isolate
+        const isoObj: Record<string, number[]> = {};
+        for (const [uuid, idsSet] of Object.entries(isolationMap)) {
+            isoObj[uuid] = Array.from(idsSet);
         }
 
-        // Aplicar estilos de resaltado de cada color
+        // Aislar los muros correspondientes
+        if (Object.keys(isoObj).length > 0) {
+            try {
+                hider.isolate(isoObj as any);
+                if (isSpecific && typeof (world.camera as any).fit === 'function') {
+                    (world.camera as any).fit(isoObj);
+                }
+            } catch (err) {
+                console.warn('[Despiece] Error al aislar muros:', err);
+            }
+        }
+
+        // 2. Colorear con Highlighter
         Object.keys(colorMaps).forEach(idxStr => {
             const idx = parseInt(idxStr, 10);
             const styleName = "despiece_col_" + idx;
@@ -8221,9 +8381,26 @@ function initQuantitiesPanel() {
             try {
                 highlighter.highlightByID(styleName, map as any, true, false);
             } catch (err) {
-                console.warn('[Despiece] Error al colorear estilo:', styleName, err);
+                console.warn('[Despiece] Error al aplicar color:', styleName, err);
             }
         });
+
+        // 3. Renderizar las etiquetas 3D con los números y tags sobre el modelo
+        renderDespiece3DLabels(activeSheets);
+
+        // 4. Actualizar HUD informativo
+        if (!hud) {
+            hud = document.createElement('div');
+            hud.id = 'despiece-3d-hud';
+            hud.className = 'despiece-3d-hud';
+            document.body.appendChild(hud);
+        }
+        if (isSpecific && targetSheet) {
+            hud.innerHTML = `<span class="badge-dot" style="background: #22c55e;"></span> Despiece 3D: Lámina #${targetSheet.sheetIndex} &bull; ${targetSheet.placedPieces.length} piezas (${targetSheet.material})`;
+        } else {
+            const totalPieces = sheets.reduce((sum, s) => sum + s.placedPieces.length, 0);
+            hud.innerHTML = `<span class="badge-dot" style="background: var(--primary-color);"></span> Despiece 3D: Todas las Láminas &bull; ${sheets.length} láminas (${totalPieces} piezas)`;
+        }
     }
 
     // Modal para ver lámina a pantalla completa
@@ -8364,8 +8541,21 @@ function initQuantitiesPanel() {
         });
         if (tabDespiece) tabDespiece.style.display = (hasModularWalls || hasAnyWall) ? 'inline-block' : 'none';
 
-        // Apply status highlighting in viewer
-        applyStatusColorizationToViewer(elements);
+        // Apply status highlighting in viewer (only if not on despiece tab)
+        if (activeTab !== 'despiece') {
+            applyStatusColorizationToViewer(elements);
+            clearDespiece3DLabels();
+            const hud = document.getElementById('despiece-3d-hud');
+            if (hud) hud.remove();
+        } else {
+            // Limpiar estilos de status para que no interfieran con el despiece
+            const highlighter = components.get(OBF.Highlighter);
+            if (highlighter) {
+                ['status_PENDIENTE', 'status_PEDIDO', 'status_COMPRADO', 'status_ALMACEN', 'status_INSTALADO'].forEach(st => {
+                    try { highlighter.clear(st); } catch (_) {}
+                });
+            }
+        }
 
         // Render toolbar first
         renderToolbar(elements);
