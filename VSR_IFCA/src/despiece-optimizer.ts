@@ -76,15 +76,84 @@ const PIECE_COLORS = [
 ];
 
 /**
+ * Determina de forma profunda y tolerante si un objeto de atributos o elemento
+ * contiene el parámetro MODULAR en true.
+ */
+export function checkIsModular(attrs: any): boolean {
+    if (!attrs || typeof attrs !== 'object') return false;
+
+    const isTruthy = (v: any): boolean => {
+        if (v === true || v === 1 || v === '1') return true;
+        if (typeof v === 'string') {
+            const s = v.trim().toLowerCase();
+            return s === 'true' || s === 'si' || s === 'sí' || s === '1' || s === 'yes' || s === 'verdadero';
+        }
+        if (typeof v === 'object' && v !== null && 'value' in v) {
+            return isTruthy((v as any).value);
+        }
+        return false;
+    };
+
+    const directKeys = ['MODULAR', 'Modular', 'modular', 'MODULO', 'Modulo', 'modulo'];
+
+    // 1. Direct top-level keys
+    for (const k of directKeys) {
+        if (k in attrs && isTruthy(attrs[k])) return true;
+    }
+
+    // 2. Direct scan of all keys matching MODULAR case-insensitively
+    for (const k of Object.keys(attrs)) {
+        if (k.trim().toUpperCase() === 'MODULAR' && isTruthy(attrs[k])) return true;
+    }
+
+    // 3. Inspect common sub-containers (psets, data, attributes, properties)
+    const subContainers = [attrs.psets, attrs.data, attrs.attributes, attrs.properties];
+    for (const sub of subContainers) {
+        if (sub && typeof sub === 'object') {
+            // Level 1: direct in container
+            for (const k of directKeys) {
+                if (k in sub && isTruthy(sub[k])) return true;
+            }
+            for (const k of Object.keys(sub)) {
+                if (k.trim().toUpperCase() === 'MODULAR' && isTruthy(sub[k])) return true;
+            }
+            // Level 2: inside Psets like "Propiedades del Elemento", "Identity Data", etc.
+            for (const psetName of Object.keys(sub)) {
+                const pset = sub[psetName];
+                if (pset && typeof pset === 'object') {
+                    for (const k of directKeys) {
+                        if (k in pset && isTruthy(pset[k])) return true;
+                    }
+                    for (const k of Object.keys(pset)) {
+                        if (k.trim().toUpperCase() === 'MODULAR' && isTruthy(pset[k])) return true;
+                    }
+                }
+            }
+        }
+    }
+
+    return false;
+}
+
+/**
  * Extrae las piezas de muros modulares del listado global de elementos.
  */
 export function extractModularWallPieces(
     elements: any[],
     onlySelected: boolean = false,
-    selectedIds: number[] = []
+    selectedIds: number[] = [],
+    scopeMode: 'ALL_MODULAR' | 'ALL_WALLS' | 'SELECTED' = 'ALL_MODULAR'
 ): ModularPiece[] {
     const pieces: ModularPiece[] = [];
     const selectedSet = new Set(selectedIds.map(Number));
+
+    // Determinar si hay algún muro modular en el set
+    const hasAnyModularWall = elements.some(el => {
+        const cls = String(el.classification || '').toUpperCase();
+        const cat = String(el.category || '').toUpperCase();
+        const isWall = cls.includes('MURO') || cat.includes('WALL') || cat.includes('MURO');
+        return isWall && (el.isModular === true || checkIsModular(el) || checkIsModular(el.elementRef));
+    });
 
     elements.forEach(el => {
         const cls = String(el.classification || '').toUpperCase();
@@ -92,14 +161,16 @@ export function extractModularWallPieces(
         const isWall = cls.includes('MURO') || cat.includes('WALL') || cat.includes('MURO');
         if (!isWall) return;
 
-        // Comprobar si tiene el parámetro MODULAR en true
         const isMod = el.isModular === true ||
-                      String(el.modular).toLowerCase() === 'true' ||
-                      String(el.MODULAR).toLowerCase() === 'true';
-        if (!isMod) return;
+                      checkIsModular(el) ||
+                      checkIsModular(el.elementRef);
+
+        // Si scopeMode es ALL_MODULAR y existe algún modular, filtramos solo los modulares.
+        // Si no se encontró ningún modular marcado explícitamente, no dejamos al usuario con la pantalla vacía.
+        if (scopeMode === 'ALL_MODULAR' && hasAnyModularWall && !isMod) return;
 
         const elemIdNum = Number(el.expressID || el.id);
-        if (onlySelected && selectedIds.length > 0 && !selectedSet.has(elemIdNum)) {
+        if (scopeMode === 'SELECTED' && selectedIds.length > 0 && !selectedSet.has(elemIdNum)) {
             return;
         }
 

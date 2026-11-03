@@ -20,7 +20,8 @@ import {
     optimizeSheetCutting,
     generateSheetSvg,
     CutSheet,
-    ModularPiece
+    ModularPiece,
+    checkIsModular
 } from './despiece-optimizer';
 
 
@@ -3341,8 +3342,7 @@ function rebuildAllElements(): any[] {
                 area = parseNumGlobal(getValGlobal(attrs, 'ÁREA INTEGRADO', 'Area', 'Area integrado', 'Área', 'Área integrado', 'AREA INTEGRADO'));
                 length = parseNumGlobal(getValGlobal(attrs, 'LONGITUD INTEGRADO', 'Longitud', 'Length', 'Longitud integrado', 'Longitud integrado', 'LONGITUD', 'longitud'));
                 detail = getValGlobal(attrs, 'DETALLE', 'Detalle', 'detalle') || '-';
-                const rawMod = getValGlobal(attrs, 'MODULAR', 'Modular', 'modular');
-                if (rawMod !== null && (String(rawMod).toLowerCase() === 'true' || String(rawMod) === '1' || String(rawMod).toLowerCase() === 'si' || String(rawMod).toLowerCase() === 'sí')) {
+                if (checkIsModular(attrs)) {
                     isModular = true;
                 }
                 pilote = getValGlobal(attrs, 'NÚMERO DE PILOTE', 'NUMERO DE PILOTE', 'Número de pilote', 'Numero de pilote', 'NÚMERO PILOTE', 'NUMERO PILOTE', 'Número Pilote', 'Numero Pilote', 'N° PILOTE', 'Nº PILOTE', 'N° Pilote', 'Nº Pilote', 'PILOTE', 'Pilote', 'pilote') || '';
@@ -8156,9 +8156,14 @@ function initQuantitiesPanel() {
             const cls = String(el.classification || '').toUpperCase();
             const cat = String(el.category || '').toUpperCase();
             const isWall = cls.includes('MURO') || cat.includes('WALL') || cat.includes('MURO');
-            return isWall && el.isModular;
+            return isWall && (el.isModular || checkIsModular(el));
         });
-        if (tabDespiece) tabDespiece.style.display = hasModularWalls ? 'inline-block' : 'none';
+        const hasAnyWall = elements.some(el => {
+            const cls = String(el.classification || '').toUpperCase();
+            const cat = String(el.category || '').toUpperCase();
+            return cls.includes('MURO') || cat.includes('WALL') || cat.includes('MURO');
+        });
+        if (tabDespiece) tabDespiece.style.display = (hasModularWalls || hasAnyWall) ? 'inline-block' : 'none';
 
         // Apply status highlighting in viewer
         applyStatusColorizationToViewer(elements);
@@ -8247,7 +8252,8 @@ function initQuantitiesPanel() {
                 <div class="q-control-group">
                     Alcance
                     <select id="q-despiece-scope" class="q-select">
-                        <option value="ALL" ${despieceScope === 'ALL' ? 'selected' : ''}>Todos los Muros Modulares</option>
+                        <option value="ALL" ${despieceScope === 'ALL' ? 'selected' : ''}>Muros Modulares (MODULAR = true)</option>
+                        <option value="ALL_WALLS" ${despieceScope === 'ALL_WALLS' ? 'selected' : ''}>Todos los Muros Filtrados</option>
                         <option value="SELECTED" ${despieceScope === 'SELECTED' ? 'selected' : ''}>Solo Seleccionados (${selectedElementIds.length})</option>
                     </select>
                 </div>
@@ -8922,7 +8928,8 @@ function initQuantitiesPanel() {
             const headers = ['Lamina Nro', 'Material', 'Espesor (mm)', 'Tamano Lamina (mm)', 'Pieza Nro', 'ID Elemento', 'Tag Revit', 'Nombre Muro', 'Largo Corte (mm)', 'Ancho Corte (mm)', 'Rotado', 'Area (m2)', 'Nivel'];
             csvContent += headers.join(',') + '\r\n';
 
-            const pieces = extractModularWallPieces(filtered, despieceScope === 'SELECTED', selectedElementIds);
+            const scopeMode = despieceScope === 'SELECTED' ? 'SELECTED' : (despieceScope === 'ALL_WALLS' ? 'ALL_WALLS' : 'ALL_MODULAR');
+            const pieces = extractModularWallPieces(filtered, despieceScope === 'SELECTED', selectedElementIds, scopeMode);
             const sheets = optimizeSheetCutting(pieces, commercialSheetW, commercialSheetH, sawKerfMm, sheetTrimMm, allowPieceRotation);
 
             sheets.forEach(sheet => {
@@ -8946,7 +8953,8 @@ function initQuantitiesPanel() {
                 });
             });
         } else if (activeTab === 'despiece') {
-            const modularPieces = extractModularWallPieces(filtered, despieceScope === 'SELECTED', selectedElementIds);
+            const scopeMode = despieceScope === 'SELECTED' ? 'SELECTED' : (despieceScope === 'ALL_WALLS' ? 'ALL_WALLS' : 'ALL_MODULAR');
+            const modularPieces = extractModularWallPieces(filtered, despieceScope === 'SELECTED', selectedElementIds, scopeMode);
 
             if (modularPieces.length === 0) {
                 contentArea.innerHTML = `
@@ -10927,6 +10935,7 @@ async function classifyModel(model: any) {
     const integratedVolumeById = new Map<number, number>();
     const integratedAreaById = new Map<number, number>();
     const integratedLengthById = new Map<number, number>();
+    const integratedModularById = new Map<number, boolean>();
 
     // Helper: unwrap {type, value} objects or return plain string
     const extractRaw = (val: any): string | null => {
@@ -11022,6 +11031,10 @@ async function classifyModel(model: any) {
 
         const length = getVal(attrs, 'LONGITUD INTEGRADO', 'Longitud', 'Length', 'Longitud integrado', 'Longitud integrado', 'LONGITUD', 'longitud');
         if (length) integratedLengthById.set(expressID, parseNumGlobal(length));
+
+        if (checkIsModular(attrs)) {
+            integratedModularById.set(expressID, true);
+        }
 
         if (!clasif) {
             const name = getVal(attrs, 'Name', 'name', 'ObjectType', 'objectType');
@@ -11177,7 +11190,7 @@ async function classifyModel(model: any) {
             length: len,
             detail: det ?? '-',
             category: cat ?? (cls || 'Elemento'),
-            isModular: (propEntry ? (function() { const m = getVal(propEntry, 'MODULAR', 'Modular', 'modular'); return m !== null && (String(m).toLowerCase() === 'true' || String(m) === '1' || String(m).toLowerCase() === 'si'); })() : false)
+            isModular: (integratedModularById.get(id) || (propEntry ? checkIsModular(propEntry) : false) || false)
         });
         if (++cachedCount % 2000 === 0) await yieldToMain();
     }
