@@ -47,12 +47,17 @@
         "cantidadesSheetId": "",
         "cantidadesScriptUrl": ""
       },
-      "members": [],
+      "members": [
+        "glitchplan@gmail.com"
+      ],
       "equiposDeTarea": [],
       "iso19650": {
         "projectAdmins": [],
         "deliveryTeams": [],
-        "siteTeams": []
+        "siteTeams": [],
+        "liderEquipoEntrega": "",
+        "directorDeObra": "",
+        "receiverTeams": []
       },
       "code": "GLI-001",
       "country": "Colombia",
