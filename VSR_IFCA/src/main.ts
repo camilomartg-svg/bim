@@ -8923,35 +8923,7 @@ function initQuantitiesPanel() {
                 });
             });
 
-        } else if (activeTab === 'despiece') {
-            filename = 'despiece_laminas_modulares.csv';
-            const headers = ['Lamina Nro', 'Material', 'Espesor (mm)', 'Tamano Lamina (mm)', 'Pieza Nro', 'ID Elemento', 'Tag Revit', 'Nombre Muro', 'Largo Corte (mm)', 'Ancho Corte (mm)', 'Rotado', 'Area (m2)', 'Nivel'];
-            csvContent += headers.join(',') + '\r\n';
 
-            const scopeMode = despieceScope === 'SELECTED' ? 'SELECTED' : (despieceScope === 'ALL_WALLS' ? 'ALL_WALLS' : 'ALL_MODULAR');
-            const pieces = extractModularWallPieces(filtered, despieceScope === 'SELECTED', selectedElementIds, scopeMode);
-            const sheets = optimizeSheetCutting(pieces, commercialSheetW, commercialSheetH, sawKerfMm, sheetTrimMm, allowPieceRotation);
-
-            sheets.forEach(sheet => {
-                sheet.placedPieces.forEach(p => {
-                    const row = [
-                        `Lamina ${sheet.sheetIndex}`,
-                        sheet.material,
-                        sheet.thicknessMm,
-                        `${sheet.sheetWidth}x${sheet.sheetHeight}`,
-                        `#${p.orderIndex}`,
-                        p.piece.id,
-                        p.piece.tag,
-                        p.piece.name,
-                        Math.round(p.w),
-                        Math.round(p.h),
-                        p.rotated ? 'SI' : 'NO',
-                        p.piece.areaM2,
-                        p.piece.level
-                    ];
-                    csvContent += row.map(escapeCsvValue).join(',') + '\r\n';
-                });
-            });
         } else if (activeTab === 'despiece') {
             const scopeMode = despieceScope === 'SELECTED' ? 'SELECTED' : (despieceScope === 'ALL_WALLS' ? 'ALL_WALLS' : 'ALL_MODULAR');
             const modularPieces = extractModularWallPieces(filtered, despieceScope === 'SELECTED', selectedElementIds, scopeMode);
@@ -9504,6 +9476,35 @@ function initQuantitiesPanel() {
                         tube.pieces.map(piece => piece.length.toFixed(2)).join(' + '),
                         tube.usedLength.toFixed(2),
                         tube.waste.toFixed(2)
+                    ];
+                    csvContent += row.map(escapeCsvValue).join(',') + '\r\n';
+                });
+            });
+        } else if (activeTab === 'despiece') {
+            filename = 'despiece_laminas_modulares.csv';
+            const headers = ['Lamina Nro', 'Material', 'Espesor (mm)', 'Tamano Lamina (mm)', 'Pieza Nro', 'ID Elemento', 'Tag Revit', 'Nombre Muro', 'Largo Corte (mm)', 'Ancho Corte (mm)', 'Rotado', 'Area (m2)', 'Nivel'];
+            csvContent += headers.join(',') + '\r\n';
+
+            const scopeMode = despieceScope === 'SELECTED' ? 'SELECTED' : (despieceScope === 'ALL_WALLS' ? 'ALL_WALLS' : 'ALL_MODULAR');
+            const pieces = extractModularWallPieces(filtered, despieceScope === 'SELECTED', selectedElementIds, scopeMode);
+            const sheets = optimizeSheetCutting(pieces, commercialSheetW, commercialSheetH, sawKerfMm, sheetTrimMm, allowPieceRotation);
+
+            sheets.forEach(sheet => {
+                sheet.placedPieces.forEach(p => {
+                    const row = [
+                        `Lamina ${sheet.sheetIndex}`,
+                        sheet.material,
+                        sheet.thicknessMm,
+                        `${sheet.sheetWidth}x${sheet.sheetHeight}`,
+                        `#${p.orderIndex}`,
+                        p.piece.id,
+                        p.piece.tag,
+                        p.piece.name,
+                        Math.round(p.w),
+                        Math.round(p.h),
+                        p.rotated ? 'SI' : 'NO',
+                        p.piece.areaM2,
+                        p.piece.level
                     ];
                     csvContent += row.map(escapeCsvValue).join(',') + '\r\n';
                 });
