@@ -202,7 +202,7 @@
   {
     "id": "empresa-1793619605466",
     "name": "GLITCH",
-    "code": "000",
+    "code": "GLI",
     "admins": [],
     "zonaHoraria": "America/Bogota",
     "configUrl": "config-empresa-1793619605466.json",
@@ -213,6 +213,13 @@
         "role": "ADMINISTRADOR_EMPRESA",
         "empresaUsuario": "GLITCH",
         "cargo": "BIM Manager"
+      },
+      {
+        "name": "GLITCH PLANNING FOR PERFECTION",
+        "email": "glitchplan@gmail.com",
+        "role": "MIEMBRO",
+        "empresaUsuario": "GLITCH",
+        "cargo": "Gerente General / CEO"
       }
     ],
     "driveFolderId": "1ADgixAgAO9j7Z8bVaRUCZr3zd363Ij6l"
