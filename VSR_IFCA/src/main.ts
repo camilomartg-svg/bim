@@ -3457,9 +3457,20 @@ function getFilterDataGlobal(modelFilter: string = 'ALL') {
 
     for (const el of allElements) {
         const classification = el.classification || 'SIN CLASIFICAR';
-        const rawNom = (el.nombreIntegrado && el.nombreIntegrado !== 'SIN NOMBRE INTEGRADO' && el.nombreIntegrado.trim() !== '')
+        let rawNom = (el.nombreIntegrado && el.nombreIntegrado !== 'SIN NOMBRE INTEGRADO' && el.nombreIntegrado.trim() !== '')
             ? el.nombreIntegrado.trim()
-            : '(Sin Nombre Integrado)';
+            : '';
+        if (!rawNom && el.name) {
+            const parts = el.name.split(':');
+            if (parts.length >= 3 && /^\d+$/.test(parts[parts.length - 1].trim())) {
+                rawNom = parts[parts.length - 2].trim();
+            } else if (parts.length === 2 && /^\d+$/.test(parts[1].trim())) {
+                rawNom = parts[0].trim();
+            } else {
+                rawNom = el.name.trim();
+            }
+        }
+        if (!rawNom) rawNom = '(Sin Nombre Integrado)';
         const categoryName = el.name || 'Sin Categoría';
 
         if (!classMap.has(classification)) {
@@ -7790,6 +7801,7 @@ function initQuantitiesPanel() {
     const prevStatusApplied: Record<string, boolean> = {};
 
     function applyStatusColorizationToViewer(elements: any[]) {
+        if (activeTab === 'despiece') return;
         const highlighter = components.get(OBF.Highlighter);
         if (!highlighter) return;
 
@@ -8334,6 +8346,8 @@ function initQuantitiesPanel() {
         // Si son todas las láminas: aislar TODOS los muros modulares del despiece (¡ocultar techos, pisos, etc.!).
         const isolationMap: Record<string, Set<number>> = {};
         const colorMaps: Record<number, Record<string, number[]>> = {};
+        const uniqueModels = getUniqueLoadedModels();
+        const fallbackUUID = uniqueModels[0]?.uuid || Array.from(fragments.list.keys())[0] || 'local';
 
         activeSheets.forEach(sheet => {
             sheet.placedPieces.forEach(p => {
@@ -8362,14 +8376,40 @@ function initQuantitiesPanel() {
         }
 
         // Aislar los muros correspondientes
+        // 1. Aislar los muros correspondientes
         if (Object.keys(isoObj).length > 0) {
             try {
                 hider.isolate(isoObj as any);
-                if (isSpecific && typeof (world.camera as any).fit === 'function') {
-                    (world.camera as any).fit(isoObj);
-                }
             } catch (err) {
                 console.warn('[Despiece] Error al aislar muros:', err);
+            }
+        }
+
+        // Si es una lámina específica, enfocar suavemente sin desorbitar la cámara
+        if (isSpecific && targetSheet && world?.camera?.controls) {
+            try {
+                const targetBox = new THREE.Box3();
+                let pointsCount = 0;
+                targetSheet.placedPieces.forEach(p => {
+                    const expressID = Number(p.piece.expressID || p.piece.id);
+                    const mUUID = p.piece.elementRef?.modelUUID || fallbackUUID;
+                    const center = getElementCenter(expressID, mUUID);
+                    if (center && isFinite(center.x) && isFinite(center.y) && isFinite(center.z)) {
+                        targetBox.expandByPoint(center);
+                        pointsCount++;
+                    }
+                });
+
+                if (pointsCount > 0 && !targetBox.isEmpty()) {
+                    const sphere = new THREE.Sphere();
+                    targetBox.getBoundingSphere(sphere);
+                    if (sphere.radius >= 0.1 && isFinite(sphere.radius) && isFinite(sphere.center.x)) {
+                        sphere.radius = Math.max(sphere.radius * 1.35, 1.5);
+                        world.camera.controls.fitToSphere(sphere, true);
+                    }
+                }
+            } catch (cameraErr) {
+                console.warn('[Despiece] Error seguro de centrado de cámara:', cameraErr);
             }
         }
 
@@ -8689,7 +8729,7 @@ function initQuantitiesPanel() {
                 ` : ''}
             </div>
             <div class="q-toolbar-right">
-                <button type="button" id="q-toggle-colors" class="q-btn-xs ${statusColorsEnabled ? 'active' : ''}">Colores 3D</button>
+                <button type="button" id="q-toggle-colors" class="q-btn-xs ${(activeTab === 'despiece' ? despieceColors3DEnabled : statusColorsEnabled) ? 'active' : ''}">Colores 3D</button>
                 <button type="button" id="q-btn-sync" class="q-btn-xs"><i class="fa-solid fa-rotate"></i> Sync</button>
                 <span class="q-sync-badge ${syncState.status}">${syncState.label}</span>
             </div>
@@ -8775,6 +8815,11 @@ function initQuantitiesPanel() {
             const btn = e.currentTarget as HTMLElement;
             if (despieceColors3DEnabled) btn.classList.add('active');
             else btn.classList.remove('active');
+            const bColors = toolbar.querySelector('#q-toggle-colors');
+            if (bColors) {
+                if (despieceColors3DEnabled) bColors.classList.add('active');
+                else bColors.classList.remove('active');
+            }
             applyDespieceColorization(currentCutSheets, despieceActiveSheet3D);
         });
 
@@ -8798,6 +8843,19 @@ function initQuantitiesPanel() {
         });
 
         toolbar.querySelector('#q-toggle-colors')?.addEventListener('click', (e) => {
+            if (activeTab === 'despiece') {
+                despieceColors3DEnabled = !despieceColors3DEnabled;
+                const btn = e.currentTarget as HTMLElement;
+                if (despieceColors3DEnabled) btn.classList.add('active');
+                else btn.classList.remove('active');
+                const dBtn = toolbar.querySelector('#q-btn-toggle-despiece-3d');
+                if (dBtn) {
+                    if (despieceColors3DEnabled) dBtn.classList.add('active');
+                    else dBtn.classList.remove('active');
+                }
+                applyDespieceColorization(currentCutSheets, despieceActiveSheet3D);
+                return;
+            }
             statusColorsEnabled = !statusColorsEnabled;
             const btn = e.currentTarget as HTMLElement;
             if (statusColorsEnabled) btn.classList.add('active');

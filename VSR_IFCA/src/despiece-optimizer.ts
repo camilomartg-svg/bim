@@ -1,5 +1,5 @@
 /**
- * Módulo de Optimización de Despiece 2D (Cutting Stock & Guillotine Nesting)
+ * Módulo de Optimización de Despiece 2D (Cutting Stock & MaxRects Nesting)
  * para muros y paneles modulares en Nora BIM.
  */
 
@@ -88,7 +88,6 @@ export function roundToModularStepM(valM: number, stepM: number = 0.05): number 
     return Math.max(stepM, Number(rounded.toFixed(2)));
 }
 
-
 /**
  * Determina de forma profunda y tolerante si un objeto de atributos o elemento
  * contiene el parámetro MODULAR en true.
@@ -124,14 +123,12 @@ export function checkIsModular(attrs: any): boolean {
     const subContainers = [attrs.psets, attrs.data, attrs.attributes, attrs.properties];
     for (const sub of subContainers) {
         if (sub && typeof sub === 'object') {
-            // Level 1: direct in container
             for (const k of directKeys) {
                 if (k in sub && isTruthy(sub[k])) return true;
             }
             for (const k of Object.keys(sub)) {
                 if (k.trim().toUpperCase() === 'MODULAR' && isTruthy(sub[k])) return true;
             }
-            // Level 2: inside Psets like "Propiedades del Elemento", "Identity Data", etc.
             for (const psetName of Object.keys(sub)) {
                 const pset = sub[psetName];
                 if (pset && typeof pset === 'object') {
@@ -161,7 +158,7 @@ export function extractModularWallPieces(
     const pieces: ModularPiece[] = [];
     const selectedSet = new Set(selectedIds.map(Number));
 
-    // Determinar si hay algún muro modular en el set
+    // Determinar si hay algún muro modular en el conjunto
     const hasAnyModularWall = elements.some(el => {
         const cls = String(el.classification || '').toUpperCase();
         const cat = String(el.category || '').toUpperCase();
@@ -179,8 +176,6 @@ export function extractModularWallPieces(
                       checkIsModular(el) ||
                       checkIsModular(el.elementRef);
 
-        // Si scopeMode es ALL_MODULAR y existe algún modular, filtramos solo los modulares.
-        // Si no se encontró ningún modular marcado explícitamente, no dejamos al usuario con la pantalla vacía.
         if (scopeMode === 'ALL_MODULAR' && hasAnyModularWall && !isMod) return;
 
         const elemIdNum = Number(el.expressID || el.id);
@@ -201,14 +196,22 @@ export function extractModularWallPieces(
         const lengthMm = Math.round(lengthM * 1000);
         const heightMm = Math.round(heightM * 1000);
 
-        // Espesor en mm
+        // Espesor en mm exacto
         let thicknessMm = 18;
-        if (el.volume > 0 && el.area > 0) {
-            thicknessMm = Math.max(1, Math.round((el.volume / el.area) * 1000));
-        } else if (el.material && el.material.includes('18')) {
-            thicknessMm = 18;
-        } else if (el.material && el.material.includes('2.5')) {
+        const matStr = String(el.material || '').toUpperCase();
+        const nameStr = String(el.name || '').toUpperCase();
+        if (matStr.includes('2.5') || nameStr.includes('2.5')) {
             thicknessMm = 2.5;
+        } else if (matStr.includes('18') || nameStr.includes('18')) {
+            thicknessMm = 18;
+        } else if (matStr.includes('15') || nameStr.includes('15')) {
+            thicknessMm = 15;
+        } else if (matStr.includes('12') || nameStr.includes('12')) {
+            thicknessMm = 12;
+        } else if (matStr.includes('9') || nameStr.includes('9')) {
+            thicknessMm = 9;
+        } else if (el.volume > 0 && el.area > 0) {
+            thicknessMm = Math.max(1, Math.round((el.volume / el.area) * 1000));
         }
 
         const rawName = String(el.name || '');
@@ -219,7 +222,7 @@ export function extractModularWallPieces(
             expressID: elemIdNum,
             tag: tag.trim(),
             name: rawName || `Muro ${el.id}`,
-            material: String(el.material || 'MDF 18 MM').trim(),
+            material: String(el.material || `MDF ${thicknessMm} MM`).trim(),
             nombreIntegrado: String(el.nombreIntegrado || el.name || 'Muro Modular').trim(),
             width: lengthMm,
             height: heightMm,
@@ -237,7 +240,236 @@ export function extractModularWallPieces(
 }
 
 /**
- * Algoritmo 2D Guillotine Cutting Stock / Bin Packing con soporte de rotación y kerf.
+ * Representación interna de un contenedor MaxRects para una lámina comercial.
+ */
+class MaxRectsSheet {
+    sheetIndex: number;
+    material: string;
+    thicknessMm: number;
+    binWidth: number;
+    binHeight: number;
+    placedPieces: PlacedPiece[] = [];
+    freeRects: FreeRect[] = [];
+    usedAreaMm2: number = 0;
+
+    constructor(index: number, material: string, thickness: number, width: number, height: number, trim: number = 0) {
+        this.sheetIndex = index;
+        this.material = material;
+        this.thicknessMm = thickness;
+        this.binWidth = width;
+        this.binHeight = height;
+
+        const usableW = Math.max(50, width - 2 * trim);
+        const usableH = Math.max(50, height - 2 * trim);
+        this.freeRects.push({ x: trim, y: trim, w: usableW, h: usableH });
+    }
+
+    /**
+     * Evalúa el mejor encaje para una pieza (Best Short Side Fit / Best Area Fit).
+     */
+    findBestFit(w: number, h: number, allowRot: boolean): { bestRectIdx: number; bestScore: number; rotated: boolean } | null {
+        let bestRectIdx = -1;
+        let bestScore = Infinity;
+        let bestRotated = false;
+
+        for (let i = 0; i < this.freeRects.length; i++) {
+            const r = this.freeRects[i];
+
+            // Opción 1: Sin rotar
+            if (w <= r.w && h <= r.h) {
+                const leftoverW = r.w - w;
+                const leftoverH = r.h - h;
+                const shortSide = Math.min(leftoverW, leftoverH);
+                const longSide = Math.max(leftoverW, leftoverH);
+                const score = shortSide * 100000 + longSide; // BSSF prioritario
+
+                if (score < bestScore) {
+                    bestScore = score;
+                    bestRectIdx = i;
+                    bestRotated = false;
+                }
+            }
+
+            // Opción 2: Rotada 90°
+            if (allowRot && h <= r.w && w <= r.h) {
+                const leftoverW = r.w - h;
+                const leftoverH = r.h - w;
+                const shortSide = Math.min(leftoverW, leftoverH);
+                const longSide = Math.max(leftoverW, leftoverH);
+                const score = shortSide * 100000 + longSide;
+
+                if (score < bestScore) {
+                    bestScore = score;
+                    bestRectIdx = i;
+                    bestRotated = true;
+                }
+            }
+        }
+
+        if (bestRectIdx === -1) return null;
+        return { bestRectIdx, bestScore, rotated: bestRotated };
+    }
+
+    /**
+     * Coloca la pieza en el rectángulo seleccionado y actualiza los rectángulos libres con MaxRects split.
+     */
+    placePiece(piece: ModularPiece, pw: number, ph: number, targetRect: FreeRect, rotated: boolean, color: string, orderIndex: number, kerf: number) {
+        const px = targetRect.x;
+        const py = targetRect.y;
+
+        this.placedPieces.push({
+            piece,
+            x: px,
+            y: py,
+            w: pw,
+            h: ph,
+            rotated,
+            color,
+            orderIndex
+        });
+
+        this.usedAreaMm2 += (pw * ph);
+
+        // Rectángulo ocupado incluyendo sierra (kerf)
+        const pieceWithKerf: FreeRect = {
+            x: px,
+            y: py,
+            w: pw + kerf,
+            h: ph + kerf
+        };
+
+        // Algoritmo MaxRects: Recortar todos los rectángulos libres que intersequen con la nueva pieza
+        const nextFreeRects: FreeRect[] = [];
+        for (const fr of this.freeRects) {
+            this.splitFreeRect(fr, pieceWithKerf, nextFreeRects);
+        }
+
+        // Eliminar rectángulos contenidos en otros
+        this.freeRects = this.pruneFreeRects(nextFreeRects);
+    }
+
+    private splitFreeRect(freeNode: FreeRect, piece: FreeRect, outList: FreeRect[]) {
+        // Verificar si hay intersección
+        if (piece.x >= freeNode.x + freeNode.w || piece.x + piece.w <= freeNode.x ||
+            piece.y >= freeNode.y + freeNode.h || piece.y + piece.h <= freeNode.y) {
+            outList.push(freeNode);
+            return;
+        }
+
+        // Generar hasta 4 nuevos rectángulos máximos
+        // 1. Nuevo rectángulo arriba
+        if (piece.x < freeNode.x + freeNode.w && piece.x + piece.w > freeNode.x) {
+            if (piece.y > freeNode.y && piece.y < freeNode.y + freeNode.h) {
+                outList.push({
+                    x: freeNode.x,
+                    y: freeNode.y,
+                    w: freeNode.w,
+                    h: piece.y - freeNode.y
+                });
+            }
+            if (piece.y + piece.h < freeNode.y + freeNode.h) {
+                outList.push({
+                    x: freeNode.x,
+                    y: piece.y + piece.h,
+                    w: freeNode.w,
+                    h: freeNode.y + freeNode.h - (piece.y + piece.h)
+                });
+            }
+        }
+
+        // 2. Nuevo rectángulo a los lados
+        if (piece.y < freeNode.y + freeNode.h && piece.y + piece.h > freeNode.y) {
+            if (piece.x > freeNode.x && piece.x < freeNode.x + freeNode.w) {
+                outList.push({
+                    x: freeNode.x,
+                    y: freeNode.y,
+                    w: piece.x - freeNode.x,
+                    h: freeNode.h
+                });
+            }
+            if (piece.x + piece.w < freeNode.x + freeNode.w) {
+                outList.push({
+                    x: piece.x + piece.w,
+                    y: freeNode.y,
+                    w: freeNode.x + freeNode.w - (piece.x + piece.w),
+                    h: freeNode.h
+                });
+            }
+        }
+    }
+
+    private pruneFreeRects(rects: FreeRect[]): FreeRect[] {
+        const filtered: FreeRect[] = [];
+        for (let i = 0; i < rects.length; i++) {
+            const r1 = rects[i];
+            if (r1.w <= 5 || r1.h <= 5) continue; // Descartar ranuras insignificantes
+            let isContained = false;
+            for (let j = 0; j < rects.length; j++) {
+                if (i === j) continue;
+                const r2 = rects[j];
+                if (r1.x >= r2.x && r1.y >= r2.y &&
+                    r1.x + r1.w <= r2.x + r2.w &&
+                    r1.y + r1.h <= r2.y + r2.h) {
+                    isContained = true;
+                    break;
+                }
+            }
+            if (!isContained) {
+                filtered.push(r1);
+            }
+        }
+        return filtered;
+    }
+
+    /**
+     * Calcula los rectángulos de sobrante disjuntos (sin solapamiento) para visualización en SVG.
+     */
+    getDisjointWasteRects(): FreeRect[] {
+        // Enfoque guillotina inverso: desde la lámina base, restar las piezas colocadas
+        // O tomar los rectángulos libres más grandes sin solapar
+        const result: FreeRect[] = [];
+        // Ordenar rectángulos libres por área descendente
+        const sorted = [...this.freeRects].sort((a, b) => (b.w * b.h) - (a.w * a.h));
+        for (const r of sorted) {
+            // Evitar agregar rectángulos que se solapen fuertemente con los ya seleccionados
+            const overlaps = result.some(sel => {
+                const xOverlap = Math.max(0, Math.min(r.x + r.w, sel.x + sel.w) - Math.max(r.x, sel.x));
+                const yOverlap = Math.max(0, Math.min(r.y + r.h, sel.y + sel.h) - Math.max(r.y, sel.y));
+                return (xOverlap * yOverlap) > (0.35 * r.w * r.h);
+            });
+            if (!overlaps && r.w >= 50 && r.h >= 50) {
+                result.push(r);
+            }
+        }
+        return result;
+    }
+
+    toCutSheet(index: number): CutSheet {
+        const sheetAreaM2 = Number(((this.binWidth * this.binHeight) / 1000000).toFixed(4));
+        const usedAreaM2 = Number((this.usedAreaMm2 / 1000000).toFixed(4));
+        const efficiencyPercent = sheetAreaM2 > 0 ? Math.min(100, Number(((usedAreaM2 / sheetAreaM2) * 100).toFixed(1))) : 0;
+        const wasteAreaM2 = Math.max(0, Number((sheetAreaM2 - usedAreaM2).toFixed(4)));
+        const wastePercent = Math.max(0, Number((100 - efficiencyPercent).toFixed(1)));
+
+        return {
+            sheetIndex: index,
+            material: this.material,
+            thicknessMm: this.thicknessMm,
+            sheetWidth: this.binWidth,
+            sheetHeight: this.binHeight,
+            placedPieces: this.placedPieces,
+            usedAreaM2,
+            sheetAreaM2,
+            efficiencyPercent,
+            wasteAreaM2,
+            wastePercent,
+            freeRects: this.getDisjointWasteRects()
+        };
+    }
+}
+
+/**
+ * Algoritmo 2D MaxRects Cutting Stock / Bin Packing Industrial con soporte estricto de materiales.
  */
 export function optimizeSheetCutting(
     pieces: ModularPiece[],
@@ -247,23 +479,23 @@ export function optimizeSheetCutting(
     trim: number = 0,
     allowRot: boolean = true
 ): CutSheet[] {
+    if (!pieces || pieces.length === 0) return [];
+
     const usableW = Math.max(100, sheetW - 2 * trim);
     const usableH = Math.max(100, sheetH - 2 * trim);
-
     const maxDim = Math.max(usableW, usableH);
     const minDim = Math.min(usableW, usableH);
 
-    // Si alguna pieza excede las dimensiones de la lámina, la modulamos en submódulos
-    const workablePieces: ModularPiece[] = [];
+    // 1. Modulación de muros gigantes que excedan el tablero comercial
+    const normalizedPieces: ModularPiece[] = [];
     pieces.forEach(p => {
         const fitsNormal = p.width <= usableW && p.height <= usableH;
         const fitsRotated = allowRot && p.width <= usableH && p.height <= usableW;
 
         if (fitsNormal || fitsRotated) {
-            workablePieces.push({ ...p });
+            normalizedPieces.push({ ...p });
         } else {
-            // Muro de gran escala que excede el tamaño comercial del tablero:
-            // Subdividir en paneles estándar (altura comercial + remate)
+            // Subdivisión modular
             let remH = p.height;
             let partIdx = 1;
             while (remH > 0) {
@@ -272,7 +504,7 @@ export function optimizeSheetCutting(
                 let subIdx = 1;
                 while (remW > 0) {
                     const curW = Math.min(remW, minDim);
-                    workablePieces.push({
+                    normalizedPieces.push({
                         ...p,
                         id: `${p.id}-M${partIdx}${p.width > minDim ? `.${subIdx}` : ''}`,
                         width: curW,
@@ -290,177 +522,103 @@ export function optimizeSheetCutting(
         }
     });
 
-    // Heurística de ordenación: De mayor área a menor área
-    workablePieces.sort((a, b) => {
-        const areaA = a.width * a.height;
-        const areaB = b.width * b.height;
-        if (areaB !== areaA) return areaB - areaA;
-        return Math.max(b.width, b.height) - Math.max(a.width, a.height);
+    // 2. Agrupación ESTRICTA por Material y Espesor
+    // Nunca mezclar tableros de 18mm con 2.5mm ni diferentes materiales
+    const materialGroups = new Map<string, ModularPiece[]>();
+    normalizedPieces.forEach(p => {
+        const groupKey = `${p.material}__${p.thicknessMm}mm`;
+        if (!materialGroups.has(groupKey)) {
+            materialGroups.set(groupKey, []);
+        }
+        materialGroups.get(groupKey)!.push(p);
     });
 
-    const sheets: CutSheet[] = [];
-    let globalOrder = 1;
+    const finalSheets: CutSheet[] = [];
+    let globalSheetCounter = 1;
+    let globalOrderCounter = 1;
 
-    workablePieces.forEach(piece => {
-        let placed = false;
+    // 3. Procesar cada material y espesor por separado
+    for (const [, groupPieces] of materialGroups.entries()) {
+        const samplePiece = groupPieces[0];
+        const groupMaterial = samplePiece.material;
+        const groupThickness = samplePiece.thicknessMm;
 
-        // Intentar ubicar en láminas existentes
-        for (const sheet of sheets) {
-            let bestRectIdx = -1;
-            let bestScore = Infinity;
-            let bestRotated = false;
+        // Ordenar piezas de mayor área a menor área
+        const pendingPieces = [...groupPieces].sort((a, b) => {
+            const areaA = a.width * a.height;
+            const areaB = b.width * b.height;
+            if (areaB !== areaA) return areaB - areaA;
+            return Math.max(b.width, b.height) - Math.max(a.width, a.height);
+        });
 
-            for (let i = 0; i < sheet.freeRects.length; i++) {
-                const r = sheet.freeRects[i];
+        const activeBins: MaxRectsSheet[] = [];
 
-                // Opción A: Normal
-                if (piece.width <= r.w && piece.height <= r.h) {
-                    const leftoverW = r.w - piece.width;
-                    const leftoverH = r.h - piece.height;
-                    const score = Math.min(leftoverW, leftoverH); // Best Short Side Fit
-                    if (score < bestScore) {
-                        bestScore = score;
-                        bestRectIdx = i;
-                        bestRotated = false;
-                    }
-                }
+        // Empaquetamiento MaxRects Best-Fit
+        while (pendingPieces.length > 0) {
+            let bestBinIdx = -1;
+            let bestPieceIdx = -1;
+            let bestFitData: { bestRectIdx: number; bestScore: number; rotated: boolean } | null = null;
+            let bestGlobalScore = Infinity;
 
-                // Opción B: Rotada 90°
-                if (allowRot && piece.height <= r.w && piece.width <= r.h) {
-                    const leftoverW = r.w - piece.height;
-                    const leftoverH = r.h - piece.width;
-                    const score = Math.min(leftoverW, leftoverH);
-                    if (score < bestScore) {
-                        bestScore = score;
-                        bestRectIdx = i;
-                        bestRotated = true;
+            // Evaluar todas las piezas pendientes en todos los tableros abiertos
+            for (let b = 0; b < activeBins.length; b++) {
+                const bin = activeBins[b];
+                for (let p = 0; p < pendingPieces.length; p++) {
+                    const piece = pendingPieces[p];
+                    const fit = bin.findBestFit(piece.width, piece.height, allowRot);
+                    if (fit && fit.bestScore < bestGlobalScore) {
+                        bestGlobalScore = fit.bestScore;
+                        bestBinIdx = b;
+                        bestPieceIdx = p;
+                        bestFitData = fit;
                     }
                 }
             }
 
-            if (bestRectIdx >= 0) {
-                const targetRect = sheet.freeRects[bestRectIdx];
-                sheet.freeRects.splice(bestRectIdx, 1);
+            // Si se encontró un hueco óptimo en un tablero abierto, colocarlo
+            if (bestBinIdx !== -1 && bestPieceIdx !== -1 && bestFitData) {
+                const targetBin = activeBins[bestBinIdx];
+                const piece = pendingPieces.splice(bestPieceIdx, 1)[0];
+                const targetRect = targetBin.freeRects[bestFitData.bestRectIdx];
 
-                const pw = bestRotated ? piece.height : piece.width;
-                const ph = bestRotated ? piece.width : piece.height;
+                const pw = bestFitData.rotated ? piece.height : piece.width;
+                const ph = bestFitData.rotated ? piece.width : piece.height;
+                const color = PIECE_COLORS[(globalOrderCounter - 1) % PIECE_COLORS.length];
 
-                const color = PIECE_COLORS[(globalOrder - 1) % PIECE_COLORS.length];
+                targetBin.placePiece(piece, pw, ph, targetRect, bestFitData.rotated, color, globalOrderCounter++, kerf);
+            } else {
+                // Si ninguna pieza pendiente cabe en los tableros abiertos, abrir un NUEVO tablero comercial
+                const newBin = new MaxRectsSheet(
+                    activeBins.length + 1,
+                    groupMaterial,
+                    groupThickness,
+                    sheetW,
+                    sheetH,
+                    trim
+                );
 
-                sheet.placedPieces.push({
-                    piece,
-                    x: targetRect.x,
-                    y: targetRect.y,
-                    w: pw,
-                    h: ph,
-                    rotated: bestRotated,
-                    color,
-                    orderIndex: globalOrder++
-                });
+                // Colocar la pieza pendiente más grande
+                const piece = pendingPieces.shift()!;
+                const initialFit = newBin.findBestFit(piece.width, piece.height, allowRot);
+                if (initialFit) {
+                    const targetRect = newBin.freeRects[initialFit.bestRectIdx];
+                    const pw = initialFit.rotated ? piece.height : piece.width;
+                    const ph = initialFit.rotated ? piece.width : piece.height;
+                    const color = PIECE_COLORS[(globalOrderCounter - 1) % PIECE_COLORS.length];
 
-                // Guillotine Cut (Corte de sierra ortogonal)
-                const rightW = targetRect.w - pw - kerf;
-                const topH = targetRect.h - ph - kerf;
-
-                if (rightW > 0 && topH > 0) {
-                    if (rightW * targetRect.h > targetRect.w * topH) {
-                        sheet.freeRects.push({ x: targetRect.x + pw + kerf, y: targetRect.y, w: rightW, h: targetRect.h });
-                        sheet.freeRects.push({ x: targetRect.x, y: targetRect.y + ph + kerf, w: pw, h: topH });
-                    } else {
-                        sheet.freeRects.push({ x: targetRect.x + pw + kerf, y: targetRect.y, w: rightW, h: ph });
-                        sheet.freeRects.push({ x: targetRect.x, y: targetRect.y + ph + kerf, w: targetRect.w, h: topH });
-                    }
-                } else if (rightW > 0) {
-                    sheet.freeRects.push({ x: targetRect.x + pw + kerf, y: targetRect.y, w: rightW, h: targetRect.h });
-                } else if (topH > 0) {
-                    sheet.freeRects.push({ x: targetRect.x, y: targetRect.y + ph + kerf, w: targetRect.w, h: topH });
+                    newBin.placePiece(piece, pw, ph, targetRect, initialFit.rotated, color, globalOrderCounter++, kerf);
                 }
-
-                sheet.usedAreaM2 += (piece.width * piece.height) / 1000000;
-                placed = true;
-                break;
+                activeBins.push(newBin);
             }
         }
 
-        // Si no cupo en ninguna lámina abierta, crear una nueva lámina
-        if (!placed) {
-            const newSheetIndex = sheets.length + 1;
-            const newSheet: CutSheet = {
-                sheetIndex: newSheetIndex,
-                material: piece.material,
-                thicknessMm: piece.thicknessMm,
-                sheetWidth: sheetW,
-                sheetHeight: sheetH,
-                placedPieces: [],
-                usedAreaM2: 0,
-                sheetAreaM2: Number(((sheetW * sheetH) / 1000000).toFixed(4)),
-                efficiencyPercent: 0,
-                wasteAreaM2: 0,
-                wastePercent: 0,
-                freeRects: [{ x: trim, y: trim, w: usableW, h: usableH }]
-            };
+        // Convertir bins a CutSheets finales
+        activeBins.forEach(bin => {
+            finalSheets.push(bin.toCutSheet(globalSheetCounter++));
+        });
+    }
 
-            const targetRect = newSheet.freeRects[0];
-            newSheet.freeRects.splice(0, 1);
-
-            let rotated = false;
-            if (!(piece.width <= targetRect.w && piece.height <= targetRect.h)) {
-                if (allowRot && piece.height <= targetRect.w && piece.width <= targetRect.h) {
-                    rotated = true;
-                }
-            } else if (allowRot) {
-                if (piece.width < piece.height && targetRect.w > targetRect.h) {
-                    rotated = true;
-                }
-            }
-
-            const pw = rotated ? piece.height : piece.width;
-            const ph = rotated ? piece.width : piece.height;
-
-            const color = PIECE_COLORS[(globalOrder - 1) % PIECE_COLORS.length];
-
-            newSheet.placedPieces.push({
-                piece,
-                x: targetRect.x,
-                y: targetRect.y,
-                w: pw,
-                h: ph,
-                rotated,
-                color,
-                orderIndex: globalOrder++
-            });
-
-            const rightW = targetRect.w - pw - kerf;
-            const topH = targetRect.h - ph - kerf;
-
-            if (rightW > 0 && topH > 0) {
-                if (rightW * targetRect.h > targetRect.w * topH) {
-                    newSheet.freeRects.push({ x: targetRect.x + pw + kerf, y: targetRect.y, w: rightW, h: targetRect.h });
-                    newSheet.freeRects.push({ x: targetRect.x, y: targetRect.y + ph + kerf, w: pw, h: topH });
-                } else {
-                    newSheet.freeRects.push({ x: targetRect.x + pw + kerf, y: targetRect.y, w: rightW, h: ph });
-                    newSheet.freeRects.push({ x: targetRect.x, y: targetRect.y + ph + kerf, w: targetRect.w, h: topH });
-                }
-            } else if (rightW > 0) {
-                newSheet.freeRects.push({ x: targetRect.x + pw + kerf, y: targetRect.y, w: rightW, h: targetRect.h });
-            } else if (topH > 0) {
-                newSheet.freeRects.push({ x: targetRect.x, y: targetRect.y + ph + kerf, w: targetRect.w, h: topH });
-            }
-
-            newSheet.usedAreaM2 += (piece.width * piece.height) / 1000000;
-            sheets.push(newSheet);
-        }
-    });
-
-    // Calcular estadísticas de rendimiento y sobrantes
-    sheets.forEach(s => {
-        s.usedAreaM2 = Number(s.usedAreaM2.toFixed(4));
-        s.efficiencyPercent = Math.min(100, Number(((s.usedAreaM2 / s.sheetAreaM2) * 100).toFixed(1)));
-        s.wasteAreaM2 = Math.max(0, Number((s.sheetAreaM2 - s.usedAreaM2).toFixed(4)));
-        s.wastePercent = Math.max(0, Number((100 - s.efficiencyPercent).toFixed(1)));
-    });
-
-    return sheets;
+    return finalSheets;
 }
 
 /**
@@ -505,18 +663,18 @@ export function generateSheetSvg(sheet: CutSheet): string {
                 return `
                 <g class="q-despiece-piece-group" data-id="${p.piece.expressID || p.piece.id}">
                     <rect x="${p.x}" y="${p.y}" width="${p.w}" height="${p.h}" 
-                          fill="${p.color}" fill-opacity="0.82" 
+                          fill="${p.color}" fill-opacity="0.85" 
                           stroke="#0f172a" stroke-width="2" rx="3" 
                           class="q-despiece-piece-rect"
                           data-id="${p.piece.expressID || p.piece.id}">
-                        <title>${p.piece.name}&#10;Corte #${p.orderIndex}&#10;Medidas: ${(p.w / 1000).toFixed(2)} × ${(p.h / 1000).toFixed(2)} m${p.rotated ? ' (Rotado 90°)' : ''}&#10;Nivel: ${p.piece.level}&#10;Tag: ${p.piece.tag}</title>
+                        <title>${p.piece.name}&#10;Corte #${p.orderIndex}&#10;Medidas: ${(p.w / 1000).toFixed(2)} × ${(p.h / 1000).toFixed(2)} m${p.rotated ? ' (Rotado 90°)' : ''}&#10;Nivel: ${p.piece.level}&#10;Tag: ${p.piece.tag}&#10;Material: ${p.piece.material}</title>
                     </rect>
                     
                     ${(p.w >= 100 && p.h >= 60) ? `
                         <text x="${p.x + p.w / 2}" y="${p.y + p.h / 2 - fontSize * 0.6}" 
                               text-anchor="middle" dominant-baseline="middle" 
                               font-size="${fontSize}" fill="#0f172a" 
-                              class="q-despiece-piece-label">
+                              class="q-despiece-piece-label" font-weight="bold">
                             #${p.orderIndex} ${p.piece.tag}
                         </text>
                         <text x="${p.x + p.w / 2}" y="${p.y + p.h / 2 + fontSize * 0.7}" 
