@@ -14,6 +14,14 @@ import {
 import './style.css';
 import { loadSecurityContext, isUserAuthorizedForFile } from './securityUtils';
 import { NoraAIWidget, NoraAIAction } from './nora-ai-widget';
+import {
+    COMMERCIAL_SHEET_PRESETS,
+    extractModularWallPieces,
+    optimizeSheetCutting,
+    generateSheetSvg,
+    CutSheet,
+    ModularPiece
+} from './despiece-optimizer';
 
 
 const currentUrl = typeof window !== 'undefined' ? new URL(window.location.href) : null;
@@ -3238,6 +3246,7 @@ const modelElementData = new Map<string, Map<number, {
     detail: string;
     category: string;
     pilote: string;
+    isModular?: boolean;
 }>>();
 
 function getUniqueLoadedModels(): { uuid: string; name: string; model: any; elementCount: number }[] {
@@ -3304,6 +3313,7 @@ function rebuildAllElements(): any[] {
 
             let level: string, material: string, name: string, nombreIntegrado: string, classification: string;
             let volume: number, area: number, length: number, detail: string, category: string, pilote: string;
+            let isModular: boolean = false;
 
             if (cached) {
                 level = cached.level;
@@ -3317,6 +3327,7 @@ function rebuildAllElements(): any[] {
                 detail = cached.detail;
                 category = cached.category;
                 pilote = cached.pilote || '';
+                isModular = Boolean(cached.isModular);
             } else if (modelAny.properties) {
                 const attrs = modelAny.properties[String(expressID)] || modelAny.properties[expressID] || (modelAny._propertiesByTag?.get(String(expressID))) || (modelAny._propertiesByGuid?.get(String(expressID)));
                 if (!attrs || typeof attrs !== 'object') continue;
@@ -3330,6 +3341,10 @@ function rebuildAllElements(): any[] {
                 area = parseNumGlobal(getValGlobal(attrs, 'ÁREA INTEGRADO', 'Area', 'Area integrado', 'Área', 'Área integrado', 'AREA INTEGRADO'));
                 length = parseNumGlobal(getValGlobal(attrs, 'LONGITUD INTEGRADO', 'Longitud', 'Length', 'Longitud integrado', 'Longitud integrado', 'LONGITUD', 'longitud'));
                 detail = getValGlobal(attrs, 'DETALLE', 'Detalle', 'detalle') || '-';
+                const rawMod = getValGlobal(attrs, 'MODULAR', 'Modular', 'modular');
+                if (rawMod !== null && (String(rawMod).toLowerCase() === 'true' || String(rawMod) === '1' || String(rawMod).toLowerCase() === 'si' || String(rawMod).toLowerCase() === 'sí')) {
+                    isModular = true;
+                }
                 pilote = getValGlobal(attrs, 'NÚMERO DE PILOTE', 'NUMERO DE PILOTE', 'Número de pilote', 'Numero de pilote', 'NÚMERO PILOTE', 'NUMERO PILOTE', 'Número Pilote', 'Numero Pilote', 'N° PILOTE', 'Nº PILOTE', 'N° Pilote', 'Nº Pilote', 'PILOTE', 'Pilote', 'pilote') || '';
             } else {
                 continue;
@@ -3359,7 +3374,8 @@ function rebuildAllElements(): any[] {
                 diameter,
                 pilote,
                 isPipe,
-                isUnion
+                isUnion,
+                isModular
             });
         }
     }
@@ -7211,6 +7227,17 @@ function initQuantitiesPanel() {
     const tabTuberias = document.getElementById('q-tab-tuberias');
     const tabUniones = document.getElementById('q-tab-uniones');
     const tabCortes = document.getElementById('q-tab-cortes');
+    const tabDespiece = document.getElementById('q-tab-despiece');
+
+    // Despiece configuration state
+    let commercialSheetKey = '2440x1220';
+    let commercialSheetW = 2440;
+    let commercialSheetH = 1220;
+    let sawKerfMm = 3;
+    let sheetTrimMm = 0;
+    let allowPieceRotation = true;
+    let despieceScope: 'ALL' | 'SELECTED' = 'ALL';
+    let despieceSelectedMaterial = 'TODOS';
 
     if (!panel || !toggleBtn) return;
     const qPanel = panel;
@@ -8125,6 +8152,14 @@ function initQuantitiesPanel() {
         if (tabUniones) tabUniones.style.display = hasSanitary ? 'inline-block' : 'none';
         if (tabCortes) tabCortes.style.display = hasSanitary ? 'inline-block' : 'none';
 
+        const hasModularWalls = elements.some(el => {
+            const cls = String(el.classification || '').toUpperCase();
+            const cat = String(el.category || '').toUpperCase();
+            const isWall = cls.includes('MURO') || cat.includes('WALL') || cat.includes('MURO');
+            return isWall && el.isModular;
+        });
+        if (tabDespiece) tabDespiece.style.display = hasModularWalls ? 'inline-block' : 'none';
+
         // Apply status highlighting in viewer
         applyStatusColorizationToViewer(elements);
 
@@ -8186,6 +8221,40 @@ function initQuantitiesPanel() {
                         ${STATUS_ORDER.map(s => `<option value="${s}" ${filterStatus === s ? 'selected' : ''}>${s}</option>`).join('')}
                     </select>
                 </div>
+                ${activeTab === 'despiece' ? `
+                <div class="q-control-group" style="border-left: 1px solid var(--border-color); padding-left: 10px;">
+                    Lámina Comercial
+                    <select id="q-sheet-preset" class="q-select" style="max-width: 220px;">
+                        ${COMMERCIAL_SHEET_PRESETS.map(p => `<option value="${p.key}" ${commercialSheetKey === p.key ? 'selected' : ''}>${p.label}</option>`).join('')}
+                    </select>
+                </div>
+                <div id="q-custom-sheet-dims" class="q-control-group" style="${commercialSheetKey === 'custom' ? 'display: flex;' : 'display: none;'} gap: 4px;">
+                    <span>Largo(m):</span>
+                    <input type="number" id="q-custom-sheet-w" class="q-input-number" value="${(commercialSheetW / 1000).toFixed(2)}" step="0.05" min="0.5" max="10" style="width: 55px;" />
+                    <span>Ancho(m):</span>
+                    <input type="number" id="q-custom-sheet-h" class="q-input-number" value="${(commercialSheetH / 1000).toFixed(2)}" step="0.05" min="0.5" max="10" style="width: 55px;" />
+                </div>
+                <div class="q-control-group">
+                    Sierra
+                    <input type="number" id="q-sheet-kerf" class="q-input-number" value="${sawKerfMm}" step="1" min="0" max="10" style="width: 40px;" title="Espesor de la hoja de corte (kerf) en mm" /> mm
+                </div>
+                <div class="q-control-group">
+                    <label style="display: flex; align-items: center; gap: 4px; cursor: pointer; text-transform: none;" title="Permite rotar las piezas 90 grados para reducir el desperdicio">
+                        <input type="checkbox" id="q-sheet-rotation" ${allowPieceRotation ? 'checked' : ''} />
+                        Rotar 90°
+                    </label>
+                </div>
+                <div class="q-control-group">
+                    Alcance
+                    <select id="q-despiece-scope" class="q-select">
+                        <option value="ALL" ${despieceScope === 'ALL' ? 'selected' : ''}>Todos los Muros Modulares</option>
+                        <option value="SELECTED" ${despieceScope === 'SELECTED' ? 'selected' : ''}>Solo Seleccionados (${selectedElementIds.length})</option>
+                    </select>
+                </div>
+                <button type="button" id="q-btn-print-despiece" class="q-btn-xs" style="background: var(--card-bg); border: 1px solid var(--border-color); font-weight: bold; cursor: pointer;" title="Imprimir plano de taller">
+                    <i class="fa-solid fa-print"></i> Imprimir Plano
+                </button>
+                ` : ''}
                 
                 ${activeTab === 'tuberias' || activeTab === 'cortes' ? `
                 <div class="q-control-group" style="border-left: 1px solid var(--border-color); padding-left: 10px;">
@@ -8238,6 +8307,48 @@ function initQuantitiesPanel() {
         toolbar.querySelector('#q-filter-status')?.addEventListener('change', (e) => {
             filterStatus = (e.target as HTMLSelectElement).value;
             renderTableData(elements);
+        });
+        const sheetPresetSelect = toolbar.querySelector('#q-sheet-preset') as HTMLSelectElement;
+        sheetPresetSelect?.addEventListener('change', (e) => {
+            const key = (e.target as HTMLSelectElement).value;
+            commercialSheetKey = key;
+            const preset = COMMERCIAL_SHEET_PRESETS.find(p => p.key === key);
+            if (preset && preset.key !== 'custom') {
+                commercialSheetW = preset.w;
+                commercialSheetH = preset.h;
+            }
+            renderQuantitiesContent();
+        });
+
+        toolbar.querySelector('#q-custom-sheet-w')?.addEventListener('change', (e) => {
+            const val = parseFloat((e.target as HTMLInputElement).value) || 2.44;
+            commercialSheetW = Math.max(100, Math.round(val * 1000));
+            renderTableData(elements);
+        });
+
+        toolbar.querySelector('#q-custom-sheet-h')?.addEventListener('change', (e) => {
+            const val = parseFloat((e.target as HTMLInputElement).value) || 1.22;
+            commercialSheetH = Math.max(100, Math.round(val * 1000));
+            renderTableData(elements);
+        });
+
+        toolbar.querySelector('#q-sheet-kerf')?.addEventListener('change', (e) => {
+            sawKerfMm = Math.max(0, parseInt((e.target as HTMLInputElement).value, 10) || 0);
+            renderTableData(elements);
+        });
+
+        toolbar.querySelector('#q-sheet-rotation')?.addEventListener('change', (e) => {
+            allowPieceRotation = (e.target as HTMLInputElement).checked;
+            renderTableData(elements);
+        });
+
+        toolbar.querySelector('#q-despiece-scope')?.addEventListener('change', (e) => {
+            despieceScope = (e.target as HTMLSelectElement).value as 'ALL' | 'SELECTED';
+            renderTableData(elements);
+        });
+
+        toolbar.querySelector('#q-btn-print-despiece')?.addEventListener('click', () => {
+            window.print();
         });
 
         toolbar.querySelector('#q-pipe-len')?.addEventListener('change', (e) => {
@@ -8806,6 +8917,197 @@ function initQuantitiesPanel() {
                 });
             });
 
+        } else if (activeTab === 'despiece') {
+            filename = 'despiece_laminas_modulares.csv';
+            const headers = ['Lamina Nro', 'Material', 'Espesor (mm)', 'Tamano Lamina (mm)', 'Pieza Nro', 'ID Elemento', 'Tag Revit', 'Nombre Muro', 'Largo Corte (mm)', 'Ancho Corte (mm)', 'Rotado', 'Area (m2)', 'Nivel'];
+            csvContent += headers.join(',') + '\r\n';
+
+            const pieces = extractModularWallPieces(filtered, despieceScope === 'SELECTED', selectedElementIds);
+            const sheets = optimizeSheetCutting(pieces, commercialSheetW, commercialSheetH, sawKerfMm, sheetTrimMm, allowPieceRotation);
+
+            sheets.forEach(sheet => {
+                sheet.placedPieces.forEach(p => {
+                    const row = [
+                        `Lamina ${sheet.sheetIndex}`,
+                        sheet.material,
+                        sheet.thicknessMm,
+                        `${sheet.sheetWidth}x${sheet.sheetHeight}`,
+                        `#${p.orderIndex}`,
+                        p.piece.id,
+                        p.piece.tag,
+                        p.piece.name,
+                        Math.round(p.w),
+                        Math.round(p.h),
+                        p.rotated ? 'SI' : 'NO',
+                        p.piece.areaM2,
+                        p.piece.level
+                    ];
+                    csvContent += row.map(escapeCsvValue).join(',') + '\r\n';
+                });
+            });
+        } else if (activeTab === 'despiece') {
+            const modularPieces = extractModularWallPieces(filtered, despieceScope === 'SELECTED', selectedElementIds);
+
+            if (modularPieces.length === 0) {
+                contentArea.innerHTML = `
+                    <div style="text-align: center; color: var(--text-med-gray); padding: 40px; font-style: italic; background: white; border: 1px solid var(--border-color); border-radius: 8px;">
+                        <i class="fa-solid fa-shapes" style="font-size: 24px; color: var(--primary-color); margin-bottom: 8px; display: block;"></i>
+                        No se encontraron muros con el parámetro <strong>MODULAR en true</strong> con los filtros actuales.<br>
+                        ${despieceScope === 'SELECTED' ? 'Selecciona uno o más muros modulares en el visor 3D o cambia el Alcance a "Todos los Muros Modulares".' : 'Asegúrate de que los muros tengan MODULAR=true en sus propiedades.'}
+                    </div>
+                `;
+            } else {
+                const materials = Array.from(new Set(modularPieces.map(p => p.material))).sort();
+                let activePieces = modularPieces;
+                if (despieceSelectedMaterial !== 'TODOS' && materials.includes(despieceSelectedMaterial)) {
+                    activePieces = modularPieces.filter(p => p.material === despieceSelectedMaterial);
+                }
+
+                const cutSheets = optimizeSheetCutting(
+                    activePieces,
+                    commercialSheetW,
+                    commercialSheetH,
+                    sawKerfMm,
+                    sheetTrimMm,
+                    allowPieceRotation
+                );
+
+                const totalSheets = cutSheets.length;
+                const totalPiecesCount = activePieces.length;
+                const totalPiecesArea = activePieces.reduce((sum, p) => sum + p.areaM2, 0);
+                const totalSheetsArea = totalSheets * ((commercialSheetW * commercialSheetH) / 1000000);
+                const globalEfficiency = totalSheetsArea > 0 ? ((totalPiecesArea / totalSheetsArea) * 100).toFixed(1) : '0';
+                const globalWaste = totalSheetsArea > 0 ? (100 - parseFloat(globalEfficiency)).toFixed(1) : '0';
+                const globalWasteArea = Math.max(0, totalSheetsArea - totalPiecesArea).toFixed(2);
+
+                let html = `
+                    <div class="q-despiece-container">
+                        <div class="q-despiece-summary-header">
+                            <div class="q-despiece-title">
+                                <i class="fa-solid fa-layer-group"></i> Optimización de Despiece Comercial (2D Nesting)
+                                ${materials.length > 1 ? `
+                                    <select id="q-despiece-material-filter" class="q-select" style="margin-left: 14px; font-weight: normal; text-transform: none;">
+                                        <option value="TODOS" ${despieceSelectedMaterial === 'TODOS' ? 'selected' : ''}>Todos los Materiales (${modularPieces.length} piezas)</option>
+                                        ${materials.map(m => `<option value="${m}" ${despieceSelectedMaterial === m ? 'selected' : ''}>${m} (${modularPieces.filter(p => p.material === m).length} piezas)</option>`).join('')}
+                                    </select>
+                                ` : ''}
+                            </div>
+                            <div class="q-despiece-stats">
+                                <div class="q-despiece-stat-box">
+                                    <span class="q-despiece-stat-label">Láminas Requeridas</span>
+                                    <span class="q-despiece-stat-val" style="color: var(--primary-color);">${totalSheets} láminas</span>
+                                </div>
+                                <div class="q-despiece-stat-box">
+                                    <span class="q-despiece-stat-label">Piezas / Módulos</span>
+                                    <span class="q-despiece-stat-val">${totalPiecesCount}</span>
+                                </div>
+                                <div class="q-despiece-stat-box">
+                                    <span class="q-despiece-stat-label">Área Muros</span>
+                                    <span class="q-despiece-stat-val">${totalPiecesArea.toFixed(2)} m²</span>
+                                </div>
+                                <div class="q-despiece-stat-box">
+                                    <span class="q-despiece-stat-label">Área Láminas</span>
+                                    <span class="q-despiece-stat-val">${totalSheetsArea.toFixed(2)} m²</span>
+                                </div>
+                                <div class="q-despiece-stat-box">
+                                    <span class="q-despiece-stat-label">Aprovechamiento</span>
+                                    <span class="q-despiece-stat-val efficiency">${globalEfficiency}%</span>
+                                </div>
+                                <div class="q-despiece-stat-box">
+                                    <span class="q-despiece-stat-label">Desperdicio / Merma</span>
+                                    <span class="q-despiece-stat-val waste">${globalWaste}% (${globalWasteArea} m²)</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="q-despiece-grid">
+                            ${cutSheets.map(sheet => `
+                                <div class="q-despiece-sheet-card">
+                                    <div class="q-despiece-sheet-header">
+                                        <div class="q-despiece-sheet-title">
+                                            <i class="fa-solid fa-sheet-plastic" style="color: var(--primary-color);"></i>
+                                            Lámina #${sheet.sheetIndex} &bull; ${sheet.material} (${sheet.sheetWidth} × ${sheet.sheetHeight} mm)
+                                        </div>
+                                        <div class="q-despiece-sheet-badges">
+                                            <span class="q-despiece-badge green" title="Área aprovechada en piezas">
+                                                ✓ ${sheet.efficiencyPercent}% Usado
+                                            </span>
+                                            <span class="q-despiece-badge orange" title="Área de retazo sobrante">
+                                                ${sheet.wastePercent}% Sobrante (${sheet.wasteAreaM2} m²)
+                                            </span>
+                                            <span class="q-despiece-badge blue">
+                                                ${sheet.placedPieces.length} piezas
+                                            </span>
+                                        </div>
+                                    </div>
+
+                                    <div class="q-despiece-canvas-container">
+                                        ${generateSheetSvg(sheet)}
+                                    </div>
+
+                                    <div class="q-despiece-sheet-table">
+                                        <table class="q-despiece-table">
+                                            <thead>
+                                                <tr>
+                                                    <th>Corte</th>
+                                                    <th>Tag / ID</th>
+                                                    <th>Nombre Muro</th>
+                                                    <th style="text-align: right;">Medidas (mm)</th>
+                                                    <th style="text-align: center;">Giro</th>
+                                                    <th style="text-align: right;">Área (m²)</th>
+                                                    <th>Nivel</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                ${sheet.placedPieces.map(p => `
+                                                    <tr class="q-despiece-row" data-id="${p.piece.expressID || p.piece.id}">
+                                                        <td>
+                                                            <span style="display: inline-block; width: 10px; height: 10px; border-radius: 2px; background: ${p.color}; margin-right: 4px; vertical-align: middle;"></span>
+                                                            <strong>#${p.orderIndex}</strong>
+                                                        </td>
+                                                        <td style="font-family: monospace; font-weight: bold;">${p.piece.tag}</td>
+                                                        <td title="${p.piece.name}">${p.piece.nombreIntegrado}</td>
+                                                        <td style="text-align: right; font-family: monospace;">${Math.round(p.w)} × ${Math.round(p.h)}</td>
+                                                        <td style="text-align: center;">${p.rotated ? '<span style="color: #6366f1; font-weight: bold;" title="Rotado 90°">⟳ 90°</span>' : '<span style="color: #94a3b8;">-</span>'}</td>
+                                                        <td style="text-align: right; font-family: monospace;">${p.piece.areaM2.toFixed(3)}</td>
+                                                        <td>${p.piece.level}</td>
+                                                    </tr>
+                                                `).join('')}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            `).join('')}
+                        </div>
+                    </div>
+                `;
+
+                contentArea.innerHTML = html;
+
+                contentArea.querySelector('#q-despiece-material-filter')?.addEventListener('change', (e) => {
+                    despieceSelectedMaterial = (e.target as HTMLSelectElement).value;
+                    renderTableData(elements);
+                });
+
+                contentArea.querySelectorAll('.q-despiece-piece-group, .q-despiece-row').forEach(el => {
+                    el.addEventListener('click', () => {
+                        const idStr = el.getAttribute('data-id');
+                        if (!idStr) return;
+                        const numId = parseInt(idStr, 10);
+                        if (isNaN(numId)) return;
+
+                        try {
+                            if (typeof (window as any).highlightElementById === 'function') {
+                                (window as any).highlightElementById(numId);
+                            } else if (highlighter) {
+                                highlighter.highlightByID('select', [numId]);
+                            }
+                        } catch (err) {
+                            console.warn('No se pudo enfocar en 3D:', err);
+                        }
+                    });
+                });
+            }
         } else if (activeTab === 'cortes') {
             const pipeCutPlans = generatePipeCutPlans(filtered);
             const totalPiecesCount = pipeCutPlans.reduce((sum, p) => sum + p.pieces.length, 0);
@@ -10874,7 +11176,8 @@ async function classifyModel(model: any) {
             area: ar,
             length: len,
             detail: det ?? '-',
-            category: cat ?? (cls || 'Elemento')
+            category: cat ?? (cls || 'Elemento'),
+            isModular: (propEntry ? (function() { const m = getVal(propEntry, 'MODULAR', 'Modular', 'modular'); return m !== null && (String(m).toLowerCase() === 'true' || String(m) === '1' || String(m).toLowerCase() === 'si'); })() : false)
         });
         if (++cachedCount % 2000 === 0) await yieldToMain();
     }

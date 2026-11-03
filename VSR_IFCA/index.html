@@ -1,4 +1,4 @@
-<!doctype html>
+﻿<!doctype html>
 <html lang="en">
 
 <head>
@@ -53,36 +53,7 @@
             document.documentElement.classList.add('nora-embed-mode');
         }
     </script>
-    <style>
-        #nora-floating-auth-badge {
-            display: none !important;
-        }
-        .nora-embed-mode #sidebar,
-        .nora-embed-mode #sidebar-resizer,
-        .nora-embed-mode .sidebar-toggle-btn,
-        .nora-embed-mode #back-btn,
-        .nora-embed-mode a[href*="home.html"],
-        .nora-embed-mode #nora-floating-auth-badge,
-        .nora-embed-mode #auth-gate-overlay,
-        .nora-embed-mode #properties-panel,
-        .nora-embed-mode #properties-resizer,
-        .nora-embed-mode #properties-toggle,
-        .nora-embed-mode #right-tab-nora,
-        .nora-embed-mode #update-banner,
-        .nora-embed-mode #loading-overlay {
-            display: none !important;
-        }
-        .nora-embed-mode #app {
-            width: 100vw !important;
-            height: 100vh !important;
-        }
-        .nora-embed-mode #viewer-container {
-            left: 0 !important;
-            right: 0 !important;
-            width: 100vw !important;
-            height: 100vh !important;
-        }
-    </style>
+    
 
     <meta charset="UTF-8" />
     <meta name="version" content="v27-EventSnap" />
@@ -447,6 +418,7 @@
                     <button class="q-tab-btn active" data-tab="detalle">Detalle</button>
                     <button class="q-tab-btn" data-tab="estados">Estados</button>
                     <button class="q-tab-btn" data-tab="historial">Historial</button>
+                    <button class="q-tab-btn" data-tab="despiece" id="q-tab-despiece" style="display: none;">Despiece</button>
                     <button class="q-tab-btn" data-tab="tuberias" id="q-tab-tuberias"
                         style="display: none;">Tuberías</button>
                     <button class="q-tab-btn" data-tab="uniones" id="q-tab-uniones"
@@ -476,6 +448,7 @@
                     <button class="q-tab-btn active" data-tab="detalle">Detalle</button>
                     <button class="q-tab-btn" data-tab="estados">Estados</button>
                     <button class="q-tab-btn" data-tab="historial">Historial</button>
+                    <button class="q-tab-btn" data-tab="despiece" id="s-tab-despiece" style="display: none;">Despiece</button>
                 </div>
                 <div id="s-header-totals" class="q-header-totals"></div>
                 <div class="quantities-actions">

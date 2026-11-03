@@ -2340,3 +2340,310 @@ bim-label {
   font-size: 11px;
   padding: 10px 12px;
 }
+
+/* NORA EMBED MODE OVERRIDES */
+#nora-floating-auth-badge {
+    display: none !important;
+}
+.nora-embed-mode #sidebar,
+.nora-embed-mode #sidebar-resizer,
+.nora-embed-mode .sidebar-toggle-btn,
+.nora-embed-mode #back-btn,
+.nora-embed-mode a[href*="home.html"],
+.nora-embed-mode #nora-floating-auth-badge,
+.nora-embed-mode #auth-gate-overlay,
+.nora-embed-mode #properties-panel,
+.nora-embed-mode #properties-resizer,
+.nora-embed-mode #properties-toggle,
+.nora-embed-mode #right-tab-nora,
+.nora-embed-mode #update-banner,
+.nora-embed-mode #loading-overlay {
+    display: none !important;
+}
+.nora-embed-mode #app {
+    width: 100vw !important;
+    height: 100vh !important;
+}
+.nora-embed-mode #viewer-container {
+    left: 0 !important;
+    right: 0 !important;
+    width: 100vw !important;
+    height: 100vh !important;
+}
+
+/* ==========================================================================
+   DESPIECE Y OPTIMIZADOR 2D DE LÃMINAS COMERCIALES (CUTTING STOCK)
+   ========================================================================== */
+
+.q-despiece-container {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    padding: 4px;
+}
+
+.q-despiece-summary-header {
+    background: var(--bg-white, #ffffff);
+    border: 1px solid var(--border-color, #e2e8f0);
+    border-radius: 8px;
+    padding: 12px 18px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+}
+
+.q-despiece-title {
+    font-size: 13px;
+    font-weight: 800;
+    color: var(--primary-color, #6F42C1);
+    text-transform: uppercase;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    letter-spacing: 0.5px;
+}
+
+.q-despiece-stats {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+}
+
+.q-despiece-stat-box {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+}
+
+.q-despiece-stat-label {
+    font-size: 9px;
+    font-weight: 700;
+    color: var(--text-med-gray, #64748b);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.q-despiece-stat-val {
+    font-size: 14px;
+    font-weight: 800;
+    color: var(--text-dark-gray, #1e293b);
+    font-family: monospace;
+}
+
+.q-despiece-stat-val.efficiency {
+    color: #16a34a; /* verde */
+}
+
+.q-despiece-stat-val.waste {
+    color: #ea580c; /* naranja */
+}
+
+/* Selector y Toolbar de Despiece */
+.q-despiece-toolbar-controls {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+    background: #f8fafc;
+    border: 1px solid var(--border-color, #e2e8f0);
+    border-radius: 6px;
+    padding: 8px 12px;
+    margin-bottom: 8px;
+}
+
+.q-despiece-control-group {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 11px;
+    font-weight: 600;
+    color: #334155;
+}
+
+.q-despiece-control-group select,
+.q-despiece-control-group input[type="number"],
+.q-despiece-control-group input[type="text"] {
+    background: #ffffff;
+    border: 1px solid #cbd5e1;
+    border-radius: 4px;
+    padding: 4px 8px;
+    font-size: 11px;
+    font-weight: 500;
+    color: #0f172a;
+    outline: none;
+}
+
+.q-despiece-control-group select:focus,
+.q-despiece-control-group input:focus {
+    border-color: var(--primary-color, #6F42C1);
+    box-shadow: 0 0 0 1px var(--primary-color, #6F42C1);
+}
+
+/* CuadrÃ­cula de LÃ¡minas */
+.q-despiece-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(380px, 1fr));
+    gap: 16px;
+}
+
+.q-despiece-sheet-card {
+    background: #ffffff;
+    border: 1px solid var(--border-color, #e2e8f0);
+    border-radius: 8px;
+    overflow: hidden;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.05);
+    display: flex;
+    flex-direction: column;
+    transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.q-despiece-sheet-card:hover {
+    box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+}
+
+.q-despiece-sheet-header {
+    background: #f8fafc;
+    border-bottom: 1px solid #e2e8f0;
+    padding: 10px 14px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.q-despiece-sheet-title {
+    font-size: 12px;
+    font-weight: 800;
+    color: #1e293b;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.q-despiece-sheet-badges {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.q-despiece-badge {
+    font-size: 10px;
+    font-weight: 700;
+    padding: 2px 8px;
+    border-radius: 12px;
+}
+
+.q-despiece-badge.green {
+    background: #dcfce7;
+    color: #166534;
+}
+
+.q-despiece-badge.orange {
+    background: #ffedd5;
+    color: #9a3412;
+}
+
+.q-despiece-badge.blue {
+    background: #e0f2fe;
+    color: #0369a1;
+}
+
+/* Contenedor del plano SVG de corte */
+.q-despiece-canvas-container {
+    padding: 14px;
+    background: #fafaf9;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 240px;
+    border-bottom: 1px solid #f1f5f9;
+}
+
+.q-despiece-svg {
+    width: 100%;
+    max-height: 320px;
+    background: #fffdf5; /* tono madera / tablero claro */
+    border: 2px solid #b45309; /* borde de tablero */
+    border-radius: 4px;
+    box-shadow: inset 0 0 10px rgba(180, 83, 9, 0.08);
+    display: block;
+}
+
+.q-despiece-piece-rect {
+    stroke-width: 1.5;
+    cursor: pointer;
+    transition: opacity 0.15s ease, stroke 0.15s ease;
+}
+
+.q-despiece-piece-rect:hover {
+    opacity: 0.9;
+    stroke: #000000 !important;
+    stroke-width: 2.5 !important;
+}
+
+.q-despiece-waste-rect {
+    fill: url(#wastePattern) #f1f5f9;
+    stroke: #94a3b8;
+    stroke-width: 1;
+    stroke-dasharray: 3 3;
+}
+
+.q-despiece-piece-label {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    font-weight: 700;
+    pointer-events: none;
+    user-select: none;
+    text-shadow: 0 0 2px rgba(255,255,255,0.8);
+}
+
+/* Tabla de piezas de la lÃ¡mina */
+.q-despiece-sheet-table {
+    padding: 8px 12px;
+    max-height: 180px;
+    overflow-y: auto;
+}
+
+.q-despiece-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 10px;
+}
+
+.q-despiece-table th {
+    background: #f1f5f9;
+    color: #475569;
+    font-weight: 700;
+    text-transform: uppercase;
+    font-size: 8.5px;
+    padding: 5px 8px;
+    text-align: left;
+    position: sticky;
+    top: 0;
+}
+
+.q-despiece-table td {
+    padding: 4px 8px;
+    border-bottom: 1px solid #f8fafc;
+    color: #334155;
+}
+
+.q-despiece-table tr:hover {
+    background: #f8fafc;
+    cursor: pointer;
+}
+
+/* Modal y print preview para taller */
+@media print {
+    body * {
+        visibility: hidden;
+    }
+    .q-despiece-print-area, .q-despiece-print-area * {
+        visibility: visible;
+    }
+    .q-despiece-print-area {
+        position: absolute;
+        left: 0;
+        top: 0;
+        width: 100%;
+    }
+}
