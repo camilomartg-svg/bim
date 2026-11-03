@@ -8156,13 +8156,21 @@ function initQuantitiesPanel() {
     function getElementCenter(expressID: number, modelUUID: string): THREE.Vector3 | null {
         try {
             const uniqueModels = getUniqueLoadedModels();
-            const modelEntry = uniqueModels.find(m => m.uuid === modelUUID || m.name === modelUUID);
-            const model = modelEntry ? modelEntry.model : (fragments.groups as any)?.[modelUUID];
+            let modelEntry = uniqueModels.find(m => m.uuid === modelUUID || m.name === modelUUID);
+            if (!modelEntry && uniqueModels.length > 0) modelEntry = uniqueModels[0];
+
+            let model = modelEntry ? modelEntry.model : null;
+            if (!model && loadedModels.size > 0) {
+                model = Array.from(loadedModels.values())[0];
+            }
+            if (!model && fragments.list.size > 0) {
+                model = Array.from(fragments.list.values())[0];
+            }
             if (!model) return null;
 
             if (model.getFragmentMap && typeof model.getFragmentMap === 'function') {
                 const fragmentIdMap = model.getFragmentMap([expressID]);
-                if (fragmentIdMap) {
+                if (fragmentIdMap && Object.keys(fragmentIdMap).length > 0) {
                     const box = new THREE.Box3();
                     let hasPoint = false;
                     for (const [fragId, itemIds] of Object.entries(fragmentIdMap)) {
@@ -8171,7 +8179,7 @@ function initQuantitiesPanel() {
                             const mesh = fragment.mesh as THREE.InstancedMesh;
                             const geom = mesh.geometry;
                             if (!geom) continue;
-                            mesh.updateMatrixWorld();
+                            mesh.updateMatrixWorld(true);
                             if (!geom.boundingBox) geom.computeBoundingBox();
                             if (!geom.boundingBox) continue;
 
@@ -8195,8 +8203,8 @@ function initQuantitiesPanel() {
                     if (hasPoint && !box.isEmpty()) {
                         const center = new THREE.Vector3();
                         box.getCenter(center);
-                        // Subir en el eje vertical (Z o Y según el modelo) para que la etiqueta flote sobre el muro
-                        center.z += Math.max(0.2, (box.max.z - box.min.z) * 0.25);
+                        // Elevar sobre el borde superior del muro
+                        center.y = Math.max(center.y, box.max.y) + 0.20;
                         return center;
                     }
                 }
@@ -8212,6 +8220,7 @@ function initQuantitiesPanel() {
         if (container) container.remove();
         if (despieceLabelsUpdateFn && world?.camera?.controls) {
             world.camera.controls.removeEventListener('update', despieceLabelsUpdateFn);
+            world.camera.controls.removeEventListener('rest', despieceLabelsUpdateFn);
             despieceLabelsUpdateFn = null;
         }
     }
@@ -8220,73 +8229,113 @@ function initQuantitiesPanel() {
         clearDespiece3DLabels();
         if (!despieceColors3DEnabled || activeTab !== 'despiece') return;
 
-        const viewerContainer = document.getElementById('viewer-container') || document.body;
+        // Montar contenedor flotante de alta prioridad en el body (z-index 9999 para que nunca se tape)
         const labelsContainer = document.createElement('div');
         labelsContainer.id = 'despiece-3d-labels-container';
-        labelsContainer.style.cssText = 'position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 500; overflow: hidden;';
-        viewerContainer.appendChild(labelsContainer);
+        labelsContainer.style.cssText = 'position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; pointer-events: none; z-index: 9999; overflow: hidden;';
+        document.body.appendChild(labelsContainer);
 
         const markers: Array<{ element: HTMLElement; pos3D: THREE.Vector3 }> = [];
+        const uniqueModels = getUniqueLoadedModels();
+        const fallbackUUID = uniqueModels[0]?.uuid || Array.from(fragments.list.keys())[0] || 'local';
+
+        // Agrupar piezas por expressID para manejar muros subdivididos (ej: #2 y #4)
+        const elementPiecesMap = new Map<number, { pieces: Array<{ piece: any; orderIndex: number; color: string; sheetIndex: number }>; modelUUID: string }>();
 
         sheets.forEach(sheet => {
             sheet.placedPieces.forEach(p => {
-                const elem = p.piece.elementRef;
                 const expressID = Number(p.piece.expressID || p.piece.id);
                 if (!expressID) return;
-                const modelUUID = elem?.modelUUID || Array.from(loadedModels.keys())[0] || 'local';
-
-                const centerPos = getElementCenter(expressID, modelUUID);
-                if (!centerPos) return;
-
-                const marker = document.createElement('div');
-                marker.className = 'despiece-3d-marker';
-                marker.style.cssText = `
-                    position: absolute;
-                    transform: translate(-50%, -50%);
-                    background: ${p.color};
-                    color: #0f172a;
-                    border: 2px solid #0f172a;
-                    border-radius: 12px;
-                    padding: 2px 7px;
-                    font-size: 11px;
-                    font-weight: 800;
-                    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-                    box-shadow: 0 3px 10px rgba(0,0,0,0.45);
-                    cursor: pointer;
-                    pointer-events: auto;
-                    user-select: none;
-                    white-space: nowrap;
-                    transition: transform 0.12s ease;
-                `;
-                marker.innerHTML = `<strong>#${p.orderIndex}</strong> <span style="font-size: 9px; opacity: 0.85; margin-left: 2px;">${p.piece.tag || ''}</span>`;
-                marker.title = `${p.piece.name}&#10;Lámina #${sheet.sheetIndex} • Corte #${p.orderIndex}&#10;Medidas: ${(p.w/1000).toFixed(2)} × ${(p.h/1000).toFixed(2)} m`;
-
-                marker.addEventListener('click', (e) => {
-                    e.stopPropagation();
-                    try {
-                        const highlighter = components.get(OBF.Highlighter);
-                        if (typeof (window as any).highlightElementById === 'function') {
-                            (window as any).highlightElementById(expressID);
-                        } else if (highlighter) {
-                            highlighter.highlightByID('select', [expressID]);
-                        }
-                    } catch (_) {}
+                const mUUID = p.piece.elementRef?.modelUUID || fallbackUUID;
+                if (!elementPiecesMap.has(expressID)) {
+                    elementPiecesMap.set(expressID, { pieces: [], modelUUID: mUUID });
+                }
+                elementPiecesMap.get(expressID)!.pieces.push({
+                    piece: p.piece,
+                    orderIndex: p.orderIndex,
+                    color: p.color,
+                    sheetIndex: sheet.sheetIndex
                 });
-
-                labelsContainer.appendChild(marker);
-                markers.push({ element: marker, pos3D: centerPos });
             });
+        });
+
+        elementPiecesMap.forEach(({ pieces: pList, modelUUID }, expressID) => {
+            const centerPos = getElementCenter(expressID, modelUUID);
+            if (!centerPos) return;
+
+            const first = pList[0];
+            const marker = document.createElement('div');
+            marker.className = 'despiece-3d-marker';
+
+            // Construir texto de corte (ej: '#1' o '#2 y #4' si está subdividido)
+            const orderLabels = pList.map(item => `#${item.orderIndex}`).join(' & ');
+            const tagText = first.piece.tag || String(expressID);
+            const isSplitWall = pList.length > 1 || first.piece.isSplit;
+
+            marker.style.cssText = `
+                position: absolute;
+                transform: translate(-50%, -50%);
+                background: ${first.color};
+                color: #0f172a;
+                border: 2px solid #0f172a;
+                border-radius: 14px;
+                padding: 4px 9px;
+                font-size: 12px;
+                font-weight: 900;
+                font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+                box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+                cursor: pointer;
+                pointer-events: auto;
+                user-select: none;
+                white-space: nowrap;
+                transition: transform 0.1s ease, box-shadow 0.1s ease;
+                display: none;
+            `;
+
+            marker.innerHTML = `<strong>${orderLabels}</strong> <span style="font-size: 10px; font-weight: bold; opacity: 0.9; margin-left: 3px;">${tagText}</span>${isSplitWall ? ' <span style="font-size: 9px; background: rgba(0,0,0,0.15); padding: 1px 4px; border-radius: 4px; margin-left: 3px;">✂ Subdividido</span>' : ''}`;
+            marker.title = `${first.piece.name}&#10;Cortes asignados: ${orderLabels}&#10;Tag: ${tagText}&#10;Click para enfocar en la tabla de despiece`;
+
+            marker.addEventListener('mouseenter', () => {
+                marker.style.transform = 'translate(-50%, -50%) scale(1.15)';
+                marker.style.boxShadow = '0 6px 18px rgba(0,0,0,0.6)';
+            });
+            marker.addEventListener('mouseleave', () => {
+                marker.style.transform = 'translate(-50%, -50%) scale(1.0)';
+                marker.style.boxShadow = '0 4px 12px rgba(0,0,0,0.5)';
+            });
+
+            marker.addEventListener('click', (e) => {
+                e.stopPropagation();
+                try {
+                    const highlighter = components.get(OBF.Highlighter);
+                    if (typeof (window as any).highlightElementById === 'function') {
+                        (window as any).highlightElementById(expressID);
+                    } else if (highlighter) {
+                        highlighter.highlightByID('select', [expressID]);
+                    }
+                    // Resaltar en la tabla 2D
+                    const rowEl = document.querySelector(`.q-despiece-row[data-id="${expressID}"]`) as HTMLElement;
+                    if (rowEl) {
+                        rowEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                        rowEl.style.backgroundColor = 'rgba(59, 130, 246, 0.2)';
+                        setTimeout(() => { rowEl.style.backgroundColor = ''; }, 1800);
+                    }
+                } catch (_) {}
+            });
+
+            labelsContainer.appendChild(marker);
+            markers.push({ element: marker, pos3D: centerPos });
         });
 
         const updatePositions = () => {
             if (!world?.camera?.three) return;
-            const rect = viewerContainer.getBoundingClientRect();
-            const width = rect.width;
-            const height = rect.height;
+            const width = window.innerWidth;
+            const height = window.innerHeight;
 
             markers.forEach(({ element, pos3D }) => {
                 const projected = pos3D.clone().project(world.camera.three);
-                if (projected.z > 1) {
+                // Ocultar si está detrás de la cámara
+                if (projected.z > 1 || projected.z < -1) {
                     element.style.display = 'none';
                 } else {
                     element.style.display = 'block';
@@ -8301,6 +8350,7 @@ function initQuantitiesPanel() {
         despieceLabelsUpdateFn = updatePositions;
         if (world?.camera?.controls) {
             world.camera.controls.addEventListener('update', updatePositions);
+            world.camera.controls.addEventListener('rest', updatePositions);
         }
         updatePositions();
     }
@@ -8311,12 +8361,12 @@ function initQuantitiesPanel() {
 
         // Limpiar estilos anteriores
         PIECE_COLORS.forEach((_, idx) => {
-            try { highlighter.clear("despiece_col_" + idx); } catch (_) {}
+            try { highlighter.clear('despiece_col_' + idx); } catch (_) {}
         });
 
         // Asegurar que los estilos existan en highlighter
         PIECE_COLORS.forEach((hex, idx) => {
-            const sName = "despiece_col_" + idx;
+            const sName = 'despiece_col_' + idx;
             if (!highlighter.styles.has(sName)) {
                 highlighter.styles.set(sName, {
                     color: new THREE.Color(hex),
@@ -8341,9 +8391,6 @@ function initQuantitiesPanel() {
         const targetSheet = isSpecific ? sheets.find(s => String(s.sheetIndex) === targetSheetIndex) : null;
         const activeSheets = (isSpecific && targetSheet) ? [targetSheet] : sheets;
 
-        // 1. Aislamiento en 3D:
-        // Si es una lámina específica: aislar SOLAMENTE los muros de esa lámina.
-        // Si son todas las láminas: aislar TODOS los muros modulares del despiece (¡ocultar techos, pisos, etc.!).
         const isolationMap: Record<string, Set<number>> = {};
         const colorMaps: Record<number, Record<string, number[]>> = {};
         const uniqueModels = getUniqueLoadedModels();
@@ -8355,7 +8402,7 @@ function initQuantitiesPanel() {
                 const expressID = Number(p.piece.expressID || p.piece.id);
                 if (!expressID) return;
 
-                const modelUUID = elem?.modelUUID || Array.from(loadedModels.keys())[0] || 'local';
+                const modelUUID = elem?.modelUUID || fallbackUUID;
 
                 let colorIdx = PIECE_COLORS.indexOf(p.color);
                 if (colorIdx < 0) colorIdx = (p.orderIndex - 1) % PIECE_COLORS.length;
@@ -8375,7 +8422,6 @@ function initQuantitiesPanel() {
             isoObj[uuid] = Array.from(idsSet);
         }
 
-        // Aislar los muros correspondientes
         // 1. Aislar los muros correspondientes
         if (Object.keys(isoObj).length > 0) {
             try {
@@ -8385,7 +8431,7 @@ function initQuantitiesPanel() {
             }
         }
 
-        // Si es una lámina específica, enfocar suavemente sin desorbitar la cámara
+        // Si es una lámina específica, enfocar suavemente abarcando todos los elementos (muros y zócalos)
         if (isSpecific && targetSheet && world?.camera?.controls) {
             try {
                 const targetBox = new THREE.Box3();
@@ -8404,19 +8450,19 @@ function initQuantitiesPanel() {
                     const sphere = new THREE.Sphere();
                     targetBox.getBoundingSphere(sphere);
                     if (sphere.radius >= 0.1 && isFinite(sphere.radius) && isFinite(sphere.center.x)) {
-                        sphere.radius = Math.max(sphere.radius * 1.35, 1.5);
+                        sphere.radius = Math.max(sphere.radius * 1.45, 1.8);
                         world.camera.controls.fitToSphere(sphere, true);
                     }
                 }
             } catch (cameraErr) {
-                console.warn('[Despiece] Error seguro de centrado de cámara:', cameraErr);
+                console.warn('[Despiece] Error en centrado seguro de cámara:', cameraErr);
             }
         }
 
         // 2. Colorear con Highlighter
         Object.keys(colorMaps).forEach(idxStr => {
             const idx = parseInt(idxStr, 10);
-            const styleName = "despiece_col_" + idx;
+            const styleName = 'despiece_col_' + idx;
             const map = colorMaps[idx];
             try {
                 highlighter.highlightByID(styleName, map as any, true, false);
@@ -8442,7 +8488,6 @@ function initQuantitiesPanel() {
             hud.innerHTML = `<span class="badge-dot" style="background: var(--primary-color);"></span> Despiece 3D: Todas las Láminas &bull; ${sheets.length} láminas (${totalPieces} piezas)`;
         }
     }
-
     // Modal para ver lámina a pantalla completa
     function openSheetModal(sheetIndex: number, sheets: CutSheet[]) {
         const sheet = sheets.find(s => s.sheetIndex === sheetIndex);
@@ -8511,7 +8556,13 @@ function initQuantitiesPanel() {
                                             <span style="display: inline-block; width: 12px; height: 12px; border-radius: 2px; background: ${p.color}; margin-right: 4px; vertical-align: middle;"></span>
                                             <strong>#${p.orderIndex}</strong>
                                         </td>
-                                        <td style="font-family: monospace; font-weight: bold;">${p.piece.tag}</td>
+                                                        <td style="font-family: monospace; font-weight: bold;">
+                                                            ${p.piece.tag}${p.piece.isSplit ? ` <span style="font-size: 10px; color: #f59e0b; background: rgba(245, 158, 11, 0.15); padding: 1px 4px; border-radius: 3px;" title="Muro modular seccionado en módulos para optimizar el tablero">[P${p.piece.partIndex || 1}/${p.piece.totalParts || 2}]</span>` : ''}
+                                                        </td>
+                                                        <td title="${p.piece.name}">
+                                                            ${p.piece.nombreIntegrado}
+                                                            ${p.piece.hasArcCutout ? ` <span style="font-size: 9px; background: rgba(220, 38, 38, 0.12); color: #dc2626; border: 1px solid rgba(220, 38, 38, 0.3); padding: 1px 4px; border-radius: 4px; font-weight: bold;" title="Pieza con corte curvo / vano semicircular">&#8978; Vano Curvo</span>` : ''}
+                                                        </td>
                                         <td>${p.piece.nombreIntegrado}</td>
                                         <td style="text-align: right; font-family: monospace; font-weight: bold; color: var(--primary-color);">${(p.w / 1000).toFixed(2)} &times; ${(p.h / 1000).toFixed(2)} m</td>
                                         <td style="text-align: center;">${p.rotated ? '<span style="color: #6366f1; font-weight: bold;">⟳ 90&deg;</span>' : '-'}</td>
@@ -9455,6 +9506,11 @@ function initQuantitiesPanel() {
                         <div class="q-despiece-summary-header">
                             <div class="q-despiece-title">
                                 <i class="fa-solid fa-layer-group"></i> Optimización de Despiece Comercial (2D Nesting)
+                                ${despieceActiveSheet3D !== 'ALL' ? `
+                                    <button type="button" id="q-btn-reset-sheet-3d" class="q-btn-xs" style="margin-left: 12px; background: #3b82f6; color: white; border: none; border-radius: 4px; cursor: pointer; padding: 4px 10px; font-weight: bold; font-size: 11px;">
+                                        <i class="fa-solid fa-layer-group"></i> Mostrando solo Lámina #${despieceActiveSheet3D} &bull; Ver Todas (${cutSheets.length})
+                                    </button>
+                                ` : ''}
                                 ${materials.length > 1 ? `
                                     <select id="q-despiece-material-filter" class="q-select" style="margin-left: 14px; font-weight: normal; text-transform: none;">
                                         <option value="TODOS" ${despieceSelectedMaterial === 'TODOS' ? 'selected' : ''}>Todos los Materiales (${modularPieces.length} piezas)</option>
@@ -9543,8 +9599,13 @@ function initQuantitiesPanel() {
                                                             <span style="display: inline-block; width: 10px; height: 10px; border-radius: 2px; background: ${p.color}; margin-right: 4px; vertical-align: middle;"></span>
                                                             <strong>#${p.orderIndex}</strong>
                                                         </td>
-                                                        <td style="font-family: monospace; font-weight: bold;">${p.piece.tag}</td>
-                                                        <td title="${p.piece.name}">${p.piece.nombreIntegrado}</td>
+                                                        <td style="font-family: monospace; font-weight: bold;">
+                                                            ${p.piece.tag}${p.piece.isSplit ? ` <span style="font-size: 10px; color: #f59e0b; background: rgba(245, 158, 11, 0.15); padding: 1px 4px; border-radius: 3px;" title="Muro modular seccionado en módulos para optimizar el tablero">[P${p.piece.partIndex || 1}/${p.piece.totalParts || 2}]</span>` : ''}
+                                                        </td>
+                                                        <td title="${p.piece.name}">
+                                                            ${p.piece.nombreIntegrado}
+                                                            ${p.piece.hasArcCutout ? ` <span style="font-size: 9px; background: rgba(220, 38, 38, 0.12); color: #dc2626; border: 1px solid rgba(220, 38, 38, 0.3); padding: 1px 4px; border-radius: 4px; font-weight: bold;" title="Pieza con corte curvo / vano semicircular">&#8978; Vano Curvo</span>` : ''}
+                                                        </td>
                                                         <td style="text-align: right; font-family: monospace; font-weight: bold; color: var(--primary-color);">${(p.w / 1000).toFixed(2)} &times; ${(p.h / 1000).toFixed(2)} m</td>
                                                         <td style="text-align: center;">${p.rotated ? '<span style="color: #6366f1; font-weight: bold;" title="Rotado 90°">⟳ 90°</span>' : '<span style="color: #94a3b8;">-</span>'}</td>
                                                         <td style="text-align: right; font-family: monospace;">${p.piece.areaM2.toFixed(3)}</td>
@@ -9562,6 +9623,12 @@ function initQuantitiesPanel() {
 
                 contentArea.innerHTML = html;
 
+                contentArea.querySelector('#q-btn-reset-sheet-3d')?.addEventListener('click', () => {
+                    despieceActiveSheet3D = 'ALL';
+                    applyDespieceColorization(cutSheets, 'ALL');
+                    renderToolbar(elements);
+                    renderTableData(elements);
+                });
                 contentArea.querySelector('#q-despiece-material-filter')?.addEventListener('change', (e) => {
                     despieceSelectedMaterial = (e.target as HTMLSelectElement).value;
                     renderTableData(elements);

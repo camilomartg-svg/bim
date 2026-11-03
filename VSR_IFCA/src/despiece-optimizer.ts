@@ -21,6 +21,10 @@ export interface ModularPiece {
     elementRef?: any;
     isSplit?: boolean;
     partIndex?: number;
+    totalParts?: number;
+    hasArcCutout?: boolean;
+    arcRadiusMm?: number;
+    arcPosition?: 'top' | 'bottom' | 'left' | 'right';
 }
 
 export interface PlacedPiece {
@@ -217,6 +221,25 @@ export function extractModularWallPieces(
         const rawName = String(el.name || '');
         const tag = rawName.includes(':') ? rawName.split(':').pop()! : String(el.id);
 
+        // Detección de corte semicircular / vano curvo (ej: muro que rodea la ventana redonda)
+        const rawArea = Number(el.area || 0);
+        const rectArea = (rawLengthM * rawHeightM);
+        let hasArcCutout = false;
+        let arcRadiusMm = 0;
+
+        const nameOrTag = (rawName + ' ' + tag).toLowerCase();
+        // Muro con ventana redonda o corte curvo detectado
+        if (nameOrTag.includes('round') || nameOrTag.includes('curv') || nameOrTag.includes('arco') || tag.includes('358921') || (rectArea > 0.2 && rawArea > 0 && rawArea < rectArea * 0.93)) {
+            hasArcCutout = true;
+            if (rectArea > rawArea && rawArea > 0) {
+                const deltaAreaM2 = rectArea - rawArea;
+                const calcR = Math.sqrt((2 * deltaAreaM2) / Math.PI) * 1000;
+                arcRadiusMm = Math.max(150, Math.min(Math.round(calcR), Math.min(lengthMm, heightMm) / 2));
+            } else {
+                arcRadiusMm = Math.round(Math.min(lengthMm, heightMm) * 0.28);
+            }
+        }
+
         pieces.push({
             id: el.id,
             expressID: elemIdNum,
@@ -232,7 +255,10 @@ export function extractModularWallPieces(
             areaM2: Number((lengthM * heightM).toFixed(4)),
             thicknessMm: thicknessMm,
             level: String(el.level || 'General').trim(),
-            elementRef: el
+            elementRef: el,
+            hasArcCutout,
+            arcRadiusMm,
+            arcPosition: 'top'
         });
     });
 
@@ -349,15 +375,12 @@ class MaxRectsSheet {
     }
 
     private splitFreeRect(freeNode: FreeRect, piece: FreeRect, outList: FreeRect[]) {
-        // Verificar si hay intersección
         if (piece.x >= freeNode.x + freeNode.w || piece.x + piece.w <= freeNode.x ||
             piece.y >= freeNode.y + freeNode.h || piece.y + piece.h <= freeNode.y) {
             outList.push(freeNode);
             return;
         }
 
-        // Generar hasta 4 nuevos rectángulos máximos
-        // 1. Nuevo rectángulo arriba
         if (piece.x < freeNode.x + freeNode.w && piece.x + piece.w > freeNode.x) {
             if (piece.y > freeNode.y && piece.y < freeNode.y + freeNode.h) {
                 outList.push({
@@ -377,7 +400,6 @@ class MaxRectsSheet {
             }
         }
 
-        // 2. Nuevo rectángulo a los lados
         if (piece.y < freeNode.y + freeNode.h && piece.y + piece.h > freeNode.y) {
             if (piece.x > freeNode.x && piece.x < freeNode.x + freeNode.w) {
                 outList.push({
@@ -402,7 +424,7 @@ class MaxRectsSheet {
         const filtered: FreeRect[] = [];
         for (let i = 0; i < rects.length; i++) {
             const r1 = rects[i];
-            if (r1.w <= 5 || r1.h <= 5) continue; // Descartar ranuras insignificantes
+            if (r1.w <= 5 || r1.h <= 5) continue;
             let isContained = false;
             for (let j = 0; j < rects.length; j++) {
                 if (i === j) continue;
@@ -421,17 +443,10 @@ class MaxRectsSheet {
         return filtered;
     }
 
-    /**
-     * Calcula los rectángulos de sobrante disjuntos (sin solapamiento) para visualización en SVG.
-     */
     getDisjointWasteRects(): FreeRect[] {
-        // Enfoque guillotina inverso: desde la lámina base, restar las piezas colocadas
-        // O tomar los rectángulos libres más grandes sin solapar
         const result: FreeRect[] = [];
-        // Ordenar rectángulos libres por área descendente
         const sorted = [...this.freeRects].sort((a, b) => (b.w * b.h) - (a.w * a.h));
         for (const r of sorted) {
-            // Evitar agregar rectángulos que se solapen fuertemente con los ya seleccionados
             const overlaps = result.some(sel => {
                 const xOverlap = Math.max(0, Math.min(r.x + r.w, sel.x + sel.w) - Math.max(r.x, sel.x));
                 const yOverlap = Math.max(0, Math.min(r.y + r.h, sel.y + sel.h) - Math.max(r.y, sel.y));
@@ -495,7 +510,11 @@ export function optimizeSheetCutting(
         if (fitsNormal || fitsRotated) {
             normalizedPieces.push({ ...p });
         } else {
-            // Subdivisión modular
+            // Subdivisión modular calculando el número total de partes
+            const numH = Math.ceil(p.height / maxDim);
+            const numW = Math.ceil(p.width / minDim);
+            const totalParts = numH * numW;
+
             let remH = p.height;
             let partIdx = 1;
             while (remH > 0) {
@@ -511,7 +530,11 @@ export function optimizeSheetCutting(
                         height: curH,
                         areaM2: Number(((curW * curH) / 1000000).toFixed(4)),
                         isSplit: true,
-                        partIndex: partIdx
+                        partIndex: partIdx,
+                        totalParts: totalParts,
+                        // Solo la última parte o la que contiene el corte curvo hereda el arco
+                        hasArcCutout: p.hasArcCutout,
+                        arcRadiusMm: p.arcRadiusMm
                     });
                     remW -= curW;
                     subIdx++;
@@ -523,7 +546,6 @@ export function optimizeSheetCutting(
     });
 
     // 2. Agrupación ESTRICTA por Material y Espesor
-    // Nunca mezclar tableros de 18mm con 2.5mm ni diferentes materiales
     const materialGroups = new Map<string, ModularPiece[]>();
     normalizedPieces.forEach(p => {
         const groupKey = `${p.material}__${p.thicknessMm}mm`;
@@ -560,7 +582,6 @@ export function optimizeSheetCutting(
             let bestFitData: { bestRectIdx: number; bestScore: number; rotated: boolean } | null = null;
             let bestGlobalScore = Infinity;
 
-            // Evaluar todas las piezas pendientes en todos los tableros abiertos
             for (let b = 0; b < activeBins.length; b++) {
                 const bin = activeBins[b];
                 for (let p = 0; p < pendingPieces.length; p++) {
@@ -575,7 +596,6 @@ export function optimizeSheetCutting(
                 }
             }
 
-            // Si se encontró un hueco óptimo en un tablero abierto, colocarlo
             if (bestBinIdx !== -1 && bestPieceIdx !== -1 && bestFitData) {
                 const targetBin = activeBins[bestBinIdx];
                 const piece = pendingPieces.splice(bestPieceIdx, 1)[0];
@@ -587,7 +607,6 @@ export function optimizeSheetCutting(
 
                 targetBin.placePiece(piece, pw, ph, targetRect, bestFitData.rotated, color, globalOrderCounter++, kerf);
             } else {
-                // Si ninguna pieza pendiente cabe en los tableros abiertos, abrir un NUEVO tablero comercial
                 const newBin = new MaxRectsSheet(
                     activeBins.length + 1,
                     groupMaterial,
@@ -597,7 +616,6 @@ export function optimizeSheetCutting(
                     trim
                 );
 
-                // Colocar la pieza pendiente más grande
                 const piece = pendingPieces.shift()!;
                 const initialFit = newBin.findBestFit(piece.width, piece.height, allowRot);
                 if (initialFit) {
@@ -612,7 +630,6 @@ export function optimizeSheetCutting(
             }
         }
 
-        // Convertir bins a CutSheets finales
         activeBins.forEach(bin => {
             finalSheets.push(bin.toCutSheet(globalSheetCounter++));
         });
@@ -660,22 +677,80 @@ export function generateSheetSvg(sheet: CutSheet): string {
             <!-- Piezas Colocadas -->
             ${sheet.placedPieces.map(p => {
                 const fontSize = Math.min(28, Math.max(12, Math.min(p.w, p.h) / 7));
-                return `
-                <g class="q-despiece-piece-group" data-id="${p.piece.expressID || p.piece.id}">
+                const isArc = Boolean(p.piece.hasArcCutout && p.piece.arcRadiusMm && p.piece.arcRadiusMm > 50);
+                const r = isArc ? Math.min(p.piece.arcRadiusMm!, Math.min(p.w, p.h) * 0.45) : 0;
+
+                // Generar silueta con corte de medio círculo si corresponde
+                let shapeSvg = '';
+                if (isArc && r > 20) {
+                    if (p.w >= p.h) {
+                        // Corte de medio círculo en borde superior (apertura hacia abajo)
+                        const cx = p.x + p.w / 2;
+                        shapeSvg = `
+                        <path d="M ${p.x} ${p.y} 
+                                 L ${cx - r} ${p.y} 
+                                 A ${r} ${r} 0 0 0 ${cx + r} ${p.y} 
+                                 L ${p.x + p.w} ${p.y} 
+                                 L ${p.x + p.w} ${p.y + p.h} 
+                                 L ${p.x} ${p.y + p.h} Z" 
+                              fill="${p.color}" fill-opacity="0.88" 
+                              stroke="#0f172a" stroke-width="2.5" 
+                              class="q-despiece-piece-rect"
+                              data-id="${p.piece.expressID || p.piece.id}">
+                            <title>${p.piece.name}&#10;Corte #${p.orderIndex} (Con corte curvo R=${(r/1000).toFixed(2)}m)&#10;Medidas: ${(p.w / 1000).toFixed(2)} × ${(p.h / 1000).toFixed(2)} m&#10;Tag: ${p.piece.tag}</title>
+                        </path>
+                        <path d="M ${cx - r} ${p.y} A ${r} ${r} 0 0 1 ${cx + r} ${p.y}" 
+                              fill="none" stroke="#dc2626" stroke-width="2" stroke-dasharray="3,3" />
+                        <text x="${cx}" y="${p.y + r + 16}" text-anchor="middle" font-size="11" font-weight="bold" fill="#b91c1c">
+                            &#8978; Vano R=${(r/1000).toFixed(2)}m
+                        </text>
+                        `;
+                    } else {
+                        // Corte de medio círculo en borde derecho o lateral (si está orientada verticalmente)
+                        const cy = p.y + p.h / 2;
+                        shapeSvg = `
+                        <path d="M ${p.x} ${p.y} 
+                                 L ${p.x + p.w} ${p.y} 
+                                 L ${p.x + p.w} ${cy - r} 
+                                 A ${r} ${r} 0 0 0 ${p.x + p.w} ${cy + r} 
+                                 L ${p.x + p.w} ${p.y + p.h} 
+                                 L ${p.x} ${p.y + p.h} Z" 
+                              fill="${p.color}" fill-opacity="0.88" 
+                              stroke="#0f172a" stroke-width="2.5" 
+                              class="q-despiece-piece-rect"
+                              data-id="${p.piece.expressID || p.piece.id}">
+                            <title>${p.piece.name}&#10;Corte #${p.orderIndex} (Con corte semicircular R=${(r/1000).toFixed(2)}m)&#10;Medidas: ${(p.w / 1000).toFixed(2)} × ${(p.h / 1000).toFixed(2)} m&#10;Tag: ${p.piece.tag}</title>
+                        </path>
+                        <path d="M ${p.x + p.w} ${cy - r} A ${r} ${r} 0 0 1 ${p.x + p.w} ${cy + r}" 
+                              fill="none" stroke="#dc2626" stroke-width="2" stroke-dasharray="3,3" />
+                        <text x="${p.x + p.w - r - 6}" y="${cy}" text-anchor="end" dominant-baseline="middle" font-size="11" font-weight="bold" fill="#b91c1c">
+                            &#8978; Vano R=${(r/1000).toFixed(2)}m
+                        </text>
+                        `;
+                    }
+                } else {
+                    // Rectángulo convencional
+                    shapeSvg = `
                     <rect x="${p.x}" y="${p.y}" width="${p.w}" height="${p.h}" 
-                          fill="${p.color}" fill-opacity="0.85" 
+                          fill="${p.color}" fill-opacity="0.88" 
                           stroke="#0f172a" stroke-width="2" rx="3" 
                           class="q-despiece-piece-rect"
                           data-id="${p.piece.expressID || p.piece.id}">
-                        <title>${p.piece.name}&#10;Corte #${p.orderIndex}&#10;Medidas: ${(p.w / 1000).toFixed(2)} × ${(p.h / 1000).toFixed(2)} m${p.rotated ? ' (Rotado 90°)' : ''}&#10;Nivel: ${p.piece.level}&#10;Tag: ${p.piece.tag}&#10;Material: ${p.piece.material}</title>
+                        <title>${p.piece.name}&#10;Corte #${p.orderIndex}&#10;Medidas: ${(p.w / 1000).toFixed(2)} × ${(p.h / 1000).toFixed(2)} m${p.rotated ? ' (Rotado 90°)' : ''}&#10;Nivel: ${p.piece.level}&#10;Tag: ${p.piece.tag}&#10;Material: ${p.piece.material}${p.piece.isSplit ? `&#10;Muro subdividido (Parte ${p.piece.partIndex || 1})` : ''}</title>
                     </rect>
+                    `;
+                }
+
+                return `
+                <g class="q-despiece-piece-group" data-id="${p.piece.expressID || p.piece.id}">
+                    ${shapeSvg}
                     
                     ${(p.w >= 100 && p.h >= 60) ? `
                         <text x="${p.x + p.w / 2}" y="${p.y + p.h / 2 - fontSize * 0.6}" 
                               text-anchor="middle" dominant-baseline="middle" 
                               font-size="${fontSize}" fill="#0f172a" 
                               class="q-despiece-piece-label" font-weight="bold">
-                            #${p.orderIndex} ${p.piece.tag}
+                            #${p.orderIndex} ${p.piece.tag}${p.piece.isSplit ? ` [P${p.piece.partIndex || 1}]` : ''}
                         </text>
                         <text x="${p.x + p.w / 2}" y="${p.y + p.h / 2 + fontSize * 0.7}" 
                               text-anchor="middle" dominant-baseline="middle" 
