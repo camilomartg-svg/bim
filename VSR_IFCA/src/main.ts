@@ -21,7 +21,9 @@ import {
     generateSheetSvg,
     CutSheet,
     ModularPiece,
-    checkIsModular
+    checkIsModular,
+    PIECE_COLORS,
+    roundToModularStepM
 } from './despiece-optimizer';
 
 
@@ -7238,6 +7240,10 @@ function initQuantitiesPanel() {
     let allowPieceRotation = true;
     let despieceScope: 'ALL' | 'SELECTED' = 'ALL';
     let despieceSelectedMaterial = 'TODOS';
+    let despieceGridCols: 'grid' | 'single' = 'grid';
+    let despieceColors3DEnabled: boolean = true;
+    let despieceActiveSheet3D: string = 'ALL';
+    let currentCutSheets: CutSheet[] = [];
 
     if (!panel || !toggleBtn) return;
     const qPanel = panel;
@@ -8132,6 +8138,199 @@ function initQuantitiesPanel() {
     }
 
     // Render logic
+    // --- 3D Colorization and Filtering for Despiece ---
+    function applyDespieceColorization(sheets: CutSheet[], targetSheetIndex: string = 'ALL') {
+        const highlighter = components.get(OBF.Highlighter);
+        if (!highlighter) return;
+
+        // Limpiar estilos previos de despiece
+        PIECE_COLORS.forEach((_, idx) => {
+            try { highlighter.clear("despiece_col_" + idx); } catch (_) {}
+        });
+
+        // Actualizar o remover HUD flotante en el visor 3D
+        let hud = document.getElementById('despiece-3d-hud');
+        if (!despieceColors3DEnabled || activeTab !== 'despiece') {
+            if (hud) hud.remove();
+            try { hider.set(true); } catch (_) {}
+            return;
+        }
+
+        if (!hud) {
+            hud = document.createElement('div');
+            hud.id = 'despiece-3d-hud';
+            hud.className = 'despiece-3d-hud';
+            document.body.appendChild(hud);
+        }
+
+        const isSpecific = targetSheetIndex !== 'ALL';
+        const targetSheet = isSpecific ? sheets.find(s => String(s.sheetIndex) === targetSheetIndex) : null;
+
+        if (isSpecific && targetSheet) {
+            hud.innerHTML = `<span class="badge-dot" style="background: #22c55e;"></span> Despiece 3D: Lámina #${targetSheet.sheetIndex} &bull; ${targetSheet.placedPieces.length} piezas (${targetSheet.material})`;
+        } else {
+            const totalPieces = sheets.reduce((sum, s) => sum + s.placedPieces.length, 0);
+            hud.innerHTML = `<span class="badge-dot" style="background: var(--primary-color);"></span> Despiece 3D: Todas las Láminas &bull; ${sheets.length} láminas (${totalPieces} piezas)`;
+        }
+
+        // Mapear elementos por índice de color
+        const colorMaps: Record<number, Record<string, number[]>> = {};
+        const isolationMap: Record<string, number[]> = {};
+
+        const activeSheets = (isSpecific && targetSheet) ? [targetSheet] : sheets;
+
+        activeSheets.forEach(sheet => {
+            sheet.placedPieces.forEach(p => {
+                const elem = p.piece.elementRef;
+                const expressID = Number(p.piece.expressID || p.piece.id);
+                if (!expressID) return;
+
+                const modelUUID = elem?.modelUUID || Array.from(loadedModels.keys())[0] || 'local';
+
+                let colorIdx = PIECE_COLORS.indexOf(p.color);
+                if (colorIdx < 0) colorIdx = (p.orderIndex - 1) % PIECE_COLORS.length;
+
+                if (!colorMaps[colorIdx]) colorMaps[colorIdx] = {};
+                if (!colorMaps[colorIdx][modelUUID]) colorMaps[colorIdx][modelUUID] = [];
+                colorMaps[colorIdx][modelUUID].push(expressID);
+
+                if (!isolationMap[modelUUID]) isolationMap[modelUUID] = [];
+                isolationMap[modelUUID].push(expressID);
+            });
+        });
+
+        // Aislar o mostrar según corresponda
+        if (isSpecific && Object.keys(isolationMap).length > 0) {
+            try {
+                hider.isolate(isolationMap as any);
+                if (typeof (world.camera as any).fit === 'function') {
+                    (world.camera as any).fit(isolationMap);
+                }
+            } catch (_) {}
+        } else {
+            try {
+                hider.set(true);
+            } catch (_) {}
+        }
+
+        // Aplicar estilos de resaltado de cada color
+        Object.keys(colorMaps).forEach(idxStr => {
+            const idx = parseInt(idxStr, 10);
+            const styleName = "despiece_col_" + idx;
+            const map = colorMaps[idx];
+            try {
+                highlighter.highlightByID(styleName, map as any, true, false);
+            } catch (err) {
+                console.warn('[Despiece] Error al colorear estilo:', styleName, err);
+            }
+        });
+    }
+
+    // Modal para ver lámina a pantalla completa
+    function openSheetModal(sheetIndex: number, sheets: CutSheet[]) {
+        const sheet = sheets.find(s => s.sheetIndex === sheetIndex);
+        if (!sheet) return;
+
+        let modal = document.getElementById('q-despiece-modal');
+        if (modal) modal.remove();
+
+        modal = document.createElement('div');
+        modal.id = 'q-despiece-modal';
+        modal.className = 'q-despiece-modal';
+
+        const prevIndex = sheetIndex > 1 ? sheetIndex - 1 : sheets.length;
+        const nextIndex = sheetIndex < sheets.length ? sheetIndex + 1 : 1;
+
+        modal.innerHTML = `
+            <div class="q-despiece-modal-content">
+                <div class="q-despiece-modal-header">
+                    <div class="q-despiece-modal-title">
+                        <i class="fa-solid fa-sheet-plastic" style="color: var(--primary-color);"></i>
+                        Lámina #${sheet.sheetIndex} de ${sheets.length} &bull; ${sheet.material} (${(sheet.sheetWidth / 1000).toFixed(2)} &times; ${(sheet.sheetHeight / 1000).toFixed(2)} m)
+                        <span class="q-despiece-badge green" style="margin-left: 10px;">${sheet.efficiencyPercent}% Usado</span>
+                        <span class="q-despiece-badge orange">${sheet.wastePercent}% Sobrante (${sheet.wasteAreaM2} m&sup2;)</span>
+                    </div>
+                    <div class="q-despiece-modal-nav">
+                        <button type="button" class="q-btn-sheet-action" id="modal-btn-isolate-3d">
+                            <i class="fa-solid fa-cube"></i> Ver en 3D
+                        </button>
+                        <button type="button" class="q-btn-sheet-action" id="modal-btn-prev">
+                            <i class="fa-solid fa-chevron-left"></i> Anterior
+                        </button>
+                        <button type="button" class="q-btn-sheet-action" id="modal-btn-next">
+                            Siguiente <i class="fa-solid fa-chevron-right"></i>
+                        </button>
+                        <button type="button" class="q-btn-sheet-action" id="modal-btn-print" title="Imprimir esta lámina">
+                            <i class="fa-solid fa-print"></i> Imprimir
+                        </button>
+                        <button type="button" class="q-btn-sheet-action" id="modal-btn-close" style="background: #f1f5f9; font-size: 14px; font-weight: bold;">
+                            &times;
+                        </button>
+                    </div>
+                </div>
+                <div class="q-despiece-modal-body">
+                    <div class="q-despiece-modal-canvas">
+                        ${generateSheetSvg(sheet)}
+                    </div>
+                    <div class="q-despiece-modal-table-pane">
+                        <div style="font-weight: 800; font-size: 12px; margin-bottom: 8px; color: #334155;">
+                            TABLA DE CORTES (${sheet.placedPieces.length} piezas)
+                        </div>
+                        <table class="q-despiece-table" style="font-size: 11px;">
+                            <thead>
+                                <tr>
+                                    <th>Corte</th>
+                                    <th>Tag / ID</th>
+                                    <th>Nombre Muro</th>
+                                    <th style="text-align: right;">Medidas (m)</th>
+                                    <th style="text-align: center;">Giro</th>
+                                    <th style="text-align: right;">Área (m&sup2;)</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${sheet.placedPieces.map(p => `
+                                    <tr class="q-despiece-row" data-id="${p.piece.expressID || p.piece.id}">
+                                        <td>
+                                            <span style="display: inline-block; width: 12px; height: 12px; border-radius: 2px; background: ${p.color}; margin-right: 4px; vertical-align: middle;"></span>
+                                            <strong>#${p.orderIndex}</strong>
+                                        </td>
+                                        <td style="font-family: monospace; font-weight: bold;">${p.piece.tag}</td>
+                                        <td>${p.piece.nombreIntegrado}</td>
+                                        <td style="text-align: right; font-family: monospace; font-weight: bold; color: var(--primary-color);">${(p.w / 1000).toFixed(2)} &times; ${(p.h / 1000).toFixed(2)} m</td>
+                                        <td style="text-align: center;">${p.rotated ? '<span style="color: #6366f1; font-weight: bold;">⟳ 90&deg;</span>' : '-'}</td>
+                                        <td style="text-align: right; font-family: monospace;">${p.piece.areaM2.toFixed(3)}</td>
+                                    </tr>
+                                `).join('')}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        `;
+
+        document.body.appendChild(modal);
+
+        modal.querySelector('#modal-btn-close')?.addEventListener('click', () => modal.remove());
+        modal.querySelector('#modal-btn-prev')?.addEventListener('click', () => { modal.remove(); openSheetModal(prevIndex, sheets); });
+        modal.querySelector('#modal-btn-next')?.addEventListener('click', () => { modal.remove(); openSheetModal(nextIndex, sheets); });
+        modal.querySelector('#modal-btn-print')?.addEventListener('click', () => window.print());
+        modal.querySelector('#modal-btn-isolate-3d')?.addEventListener('click', () => {
+            despieceActiveSheet3D = String(sheet.sheetIndex);
+            applyDespieceColorization(sheets, despieceActiveSheet3D);
+            modal.remove();
+            renderToolbar(extractAllElements());
+            renderTableData(extractAllElements());
+        });
+
+        const handleKey = (e: KeyboardEvent) => {
+            if (e.key === 'Escape') {
+                modal.remove();
+                window.removeEventListener('keydown', handleKey);
+            }
+        };
+        window.addEventListener('keydown', handleKey);
+    }
+
     function renderQuantitiesContent() {
         if (!contentArea) return;
         const elements = extractAllElements();
@@ -8257,6 +8456,23 @@ function initQuantitiesPanel() {
                         <option value="SELECTED" ${despieceScope === 'SELECTED' ? 'selected' : ''}>Solo Seleccionados (${selectedElementIds.length})</option>
                     </select>
                 </div>
+                <div class="q-control-group" style="border-left: 1px solid var(--border-color); padding-left: 10px;">
+                    Vista
+                    <select id="q-despiece-grid-view" class="q-select">
+                        <option value="grid" ${despieceGridCols === 'grid' ? 'selected' : ''}>Cuadrícula</option>
+                        <option value="single" ${despieceGridCols === 'single' ? 'selected' : ''}>1 Lámina Grande</option>
+                    </select>
+                </div>
+                <div class="q-control-group" style="border-left: 1px solid var(--border-color); padding-left: 10px;">
+                    Filtrar en 3D
+                    <select id="q-despiece-sheet-3d-filter" class="q-select" style="max-width: 175px; font-weight: bold;">
+                        <option value="ALL" ${despieceActiveSheet3D === 'ALL' ? 'selected' : ''}>🌐 Todas las Láminas</option>
+                        ${currentCutSheets.map(s => `<option value="${s.sheetIndex}" ${despieceActiveSheet3D === String(s.sheetIndex) ? 'selected' : ''}>📄 Lámina #${s.sheetIndex} (${s.placedPieces.length} pzas)</option>`).join('')}
+                    </select>
+                </div>
+                <button type="button" id="q-btn-toggle-despiece-3d" class="q-btn-xs ${despieceColors3DEnabled ? 'active' : ''}" style="background: var(--card-bg); border: 1px solid var(--border-color); font-weight: bold; cursor: pointer;" title="Alternar coloreado 3D del despiece">
+                    <i class="fa-solid fa-cube"></i> Colores 3D
+                </button>
                 <button type="button" id="q-btn-print-despiece" class="q-btn-xs" style="background: var(--card-bg); border: 1px solid var(--border-color); font-weight: bold; cursor: pointer;" title="Imprimir plano de taller">
                     <i class="fa-solid fa-print"></i> Imprimir Plano
                 </button>
@@ -8351,6 +8567,25 @@ function initQuantitiesPanel() {
         toolbar.querySelector('#q-despiece-scope')?.addEventListener('change', (e) => {
             despieceScope = (e.target as HTMLSelectElement).value as 'ALL' | 'SELECTED';
             renderTableData(elements);
+        });
+
+        toolbar.querySelector('#q-despiece-grid-view')?.addEventListener('change', (e) => {
+            despieceGridCols = (e.target as HTMLSelectElement).value as 'grid' | 'single';
+            renderTableData(elements);
+        });
+
+        toolbar.querySelector('#q-despiece-sheet-3d-filter')?.addEventListener('change', (e) => {
+            despieceActiveSheet3D = (e.target as HTMLSelectElement).value;
+            applyDespieceColorization(currentCutSheets, despieceActiveSheet3D);
+            renderTableData(elements);
+        });
+
+        toolbar.querySelector('#q-btn-toggle-despiece-3d')?.addEventListener('click', (e) => {
+            despieceColors3DEnabled = !despieceColors3DEnabled;
+            const btn = e.currentTarget as HTMLElement;
+            if (despieceColors3DEnabled) btn.classList.add('active');
+            else btn.classList.remove('active');
+            applyDespieceColorization(currentCutSheets, despieceActiveSheet3D);
         });
 
         toolbar.querySelector('#q-btn-print-despiece')?.addEventListener('click', () => {
@@ -8952,6 +9187,8 @@ function initQuantitiesPanel() {
                     allowPieceRotation
                 );
 
+                currentCutSheets = cutSheets;
+
                 const totalSheets = cutSheets.length;
                 const totalPiecesCount = activePieces.length;
                 const totalPiecesArea = activePieces.reduce((sum, p) => sum + p.areaM2, 0);
@@ -8959,6 +9196,11 @@ function initQuantitiesPanel() {
                 const globalEfficiency = totalSheetsArea > 0 ? ((totalPiecesArea / totalSheetsArea) * 100).toFixed(1) : '0';
                 const globalWaste = totalSheetsArea > 0 ? (100 - parseFloat(globalEfficiency)).toFixed(1) : '0';
                 const globalWasteArea = Math.max(0, totalSheetsArea - totalPiecesArea).toFixed(2);
+
+                let filteredSheets = cutSheets;
+                if (despieceActiveSheet3D !== 'ALL') {
+                    filteredSheets = cutSheets.filter(s => String(s.sheetIndex) === despieceActiveSheet3D);
+                }
 
                 let html = `
                     <div class="q-despiece-container">
@@ -9000,13 +9242,13 @@ function initQuantitiesPanel() {
                             </div>
                         </div>
 
-                        <div class="q-despiece-grid">
-                            ${cutSheets.map(sheet => `
-                                <div class="q-despiece-sheet-card">
+                        <div class="q-despiece-grid ${despieceGridCols === 'single' ? 'single-col' : ''}">
+                            ${filteredSheets.map(sheet => `
+                                <div class="q-despiece-sheet-card" data-sheet-index="${sheet.sheetIndex}">
                                     <div class="q-despiece-sheet-header">
                                         <div class="q-despiece-sheet-title">
                                             <i class="fa-solid fa-sheet-plastic" style="color: var(--primary-color);"></i>
-                                            Lámina #${sheet.sheetIndex} &bull; ${sheet.material} (${sheet.sheetWidth} × ${sheet.sheetHeight} mm)
+                                            Lámina #${sheet.sheetIndex} &bull; ${sheet.material} (${(sheet.sheetWidth / 1000).toFixed(2)} &times; ${(sheet.sheetHeight / 1000).toFixed(2)} m)
                                         </div>
                                         <div class="q-despiece-sheet-badges">
                                             <span class="q-despiece-badge green" title="Área aprovechada en piezas">
@@ -9018,6 +9260,14 @@ function initQuantitiesPanel() {
                                             <span class="q-despiece-badge blue">
                                                 ${sheet.placedPieces.length} piezas
                                             </span>
+                                        </div>
+                                        <div class="q-sheet-action-btns">
+                                            <button type="button" class="q-btn-sheet-action q-btn-sheet-expand" data-sheet-index="${sheet.sheetIndex}" title="Maximizar Lámina (Ver en Grande)">
+                                                <i class="fa-solid fa-maximize"></i> Ampliar
+                                            </button>
+                                            <button type="button" class="q-btn-sheet-action q-btn-sheet-3d ${despieceActiveSheet3D === String(sheet.sheetIndex) ? 'active' : ''}" data-sheet-index="${sheet.sheetIndex}" title="Aislar y ver esta lámina en 3D">
+                                                <i class="fa-solid fa-cube"></i> Ver en 3D
+                                            </button>
                                         </div>
                                     </div>
 
@@ -9032,7 +9282,7 @@ function initQuantitiesPanel() {
                                                     <th>Corte</th>
                                                     <th>Tag / ID</th>
                                                     <th>Nombre Muro</th>
-                                                    <th style="text-align: right;">Medidas (mm)</th>
+                                                    <th style="text-align: right;">Medidas (m)</th>
                                                     <th style="text-align: center;">Giro</th>
                                                     <th style="text-align: right;">Área (m²)</th>
                                                     <th>Nivel</th>
@@ -9047,7 +9297,7 @@ function initQuantitiesPanel() {
                                                         </td>
                                                         <td style="font-family: monospace; font-weight: bold;">${p.piece.tag}</td>
                                                         <td title="${p.piece.name}">${p.piece.nombreIntegrado}</td>
-                                                        <td style="text-align: right; font-family: monospace;">${Math.round(p.w)} × ${Math.round(p.h)}</td>
+                                                        <td style="text-align: right; font-family: monospace; font-weight: bold; color: var(--primary-color);">${(p.w / 1000).toFixed(2)} &times; ${(p.h / 1000).toFixed(2)} m</td>
                                                         <td style="text-align: center;">${p.rotated ? '<span style="color: #6366f1; font-weight: bold;" title="Rotado 90°">⟳ 90°</span>' : '<span style="color: #94a3b8;">-</span>'}</td>
                                                         <td style="text-align: right; font-family: monospace;">${p.piece.areaM2.toFixed(3)}</td>
                                                         <td>${p.piece.level}</td>
@@ -9068,6 +9318,36 @@ function initQuantitiesPanel() {
                     despieceSelectedMaterial = (e.target as HTMLSelectElement).value;
                     renderTableData(elements);
                 });
+
+                // Botones para ampliar lámina
+                contentArea.querySelectorAll('.q-btn-sheet-expand').forEach(btn => {
+                    btn.addEventListener('click', (e) => {
+                        e.stopPropagation();
+                        const sIdx = parseInt((btn as HTMLElement).getAttribute('data-sheet-index') || '1', 10);
+                        openSheetModal(sIdx, cutSheets);
+                    });
+                });
+
+                // Botones para aislar lámina en 3D
+                contentArea.querySelectorAll('.q-btn-sheet-3d').forEach(btn => {
+                    btn.addEventListener('click', (e) => {
+                        e.stopPropagation();
+                        const sIdx = (btn as HTMLElement).getAttribute('data-sheet-index') || 'ALL';
+                        if (despieceActiveSheet3D === sIdx) {
+                            despieceActiveSheet3D = 'ALL';
+                        } else {
+                            despieceActiveSheet3D = sIdx;
+                        }
+                        applyDespieceColorization(cutSheets, despieceActiveSheet3D);
+                        renderToolbar(elements);
+                        renderTableData(elements);
+                    });
+                });
+
+                // Aplicar coloreado 3D automáticamente si está habilitado
+                if (despieceColors3DEnabled) {
+                    applyDespieceColorization(cutSheets, despieceActiveSheet3D);
+                }
 
                 contentArea.querySelectorAll('.q-despiece-piece-group, .q-despiece-row').forEach(el => {
                     el.addEventListener('click', () => {
@@ -9482,7 +9762,7 @@ function initQuantitiesPanel() {
             });
         } else if (activeTab === 'despiece') {
             filename = 'despiece_laminas_modulares.csv';
-            const headers = ['Lamina Nro', 'Material', 'Espesor (mm)', 'Tamano Lamina (mm)', 'Pieza Nro', 'ID Elemento', 'Tag Revit', 'Nombre Muro', 'Largo Corte (mm)', 'Ancho Corte (mm)', 'Rotado', 'Area (m2)', 'Nivel'];
+            const headers = ['Lamina Nro', 'Material', 'Espesor (mm)', 'Tamano Lamina (m)', 'Pieza Nro', 'ID Elemento', 'Tag Revit', 'Nombre Muro', 'Largo Corte (m)', 'Ancho Corte (m)', 'Rotado', 'Area (m2)', 'Nivel'];
             csvContent += headers.join(',') + '\r\n';
 
             const scopeMode = despieceScope === 'SELECTED' ? 'SELECTED' : (despieceScope === 'ALL_WALLS' ? 'ALL_WALLS' : 'ALL_MODULAR');

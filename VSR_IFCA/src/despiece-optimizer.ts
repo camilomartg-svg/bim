@@ -12,6 +12,9 @@ export interface ModularPiece {
     nombreIntegrado: string;
     width: number;       // mm
     height: number;      // mm
+    widthM: number;      // m (cerrado a 0.05m)
+    heightM: number;     // m (cerrado a 0.05m)
+    dimensionsLabelM: string; // ej: "1.20 × 2.45 m"
     areaM2: number;      // m²
     thicknessMm: number; // mm
     level: string;
@@ -69,11 +72,22 @@ export const COMMERCIAL_SHEET_PRESETS: CommercialSheetOption[] = [
     { key: 'custom', label: "Personalizado...", w: 2440, h: 1220 }
 ];
 
-const PIECE_COLORS = [
+export const PIECE_COLORS = [
     '#38bdf8', '#818cf8', '#34d399', '#fbbf24', '#f472b6',
     '#a78bfa', '#fb923c', '#4ade80', '#2dd4bf', '#f87171',
     '#60a5fa', '#c084fc', '#facc15', '#22c55e', '#e879f9'
 ];
+
+/**
+ * Redondea una medida en metros al paso modular exacto de obra (por defecto 0.05m = 5cm).
+ * Ej: 1.236m -> 1.25m, 1.02m -> 1.00m, 1.18m -> 1.20m
+ */
+export function roundToModularStepM(valM: number, stepM: number = 0.05): number {
+    if (!valM || isNaN(valM) || valM <= 0) return stepM;
+    const rounded = Math.round(valM / stepM) * stepM;
+    return Math.max(stepM, Number(rounded.toFixed(2)));
+}
+
 
 /**
  * Determina de forma profunda y tolerante si un objeto de atributos o elemento
@@ -174,15 +188,17 @@ export function extractModularWallPieces(
             return;
         }
 
-        // Longitud en mm
+        // Medidas cerradas en metros (pasos de 0.05m / 5cm)
         const rawLengthM = Math.max(0.05, el.length || 0);
-        const lengthMm = Math.round(rawLengthM * 1000);
-
-        // Altura en mm: calculada desde area / length
-        let heightM = 2.40;
+        let rawHeightM = 2.40;
         if (el.area > 0 && rawLengthM > 0.001) {
-            heightM = Math.max(0.1, el.area / rawLengthM);
+            rawHeightM = Math.max(0.1, el.area / rawLengthM);
         }
+
+        const lengthM = roundToModularStepM(rawLengthM, 0.05);
+        const heightM = roundToModularStepM(rawHeightM, 0.05);
+
+        const lengthMm = Math.round(lengthM * 1000);
         const heightMm = Math.round(heightM * 1000);
 
         // Espesor en mm
@@ -207,7 +223,10 @@ export function extractModularWallPieces(
             nombreIntegrado: String(el.nombreIntegrado || el.name || 'Muro Modular').trim(),
             width: lengthMm,
             height: heightMm,
-            areaM2: Number((el.area || ((lengthMm * heightMm) / 1000000)).toFixed(4)),
+            widthM: lengthM,
+            heightM: heightM,
+            dimensionsLabelM: `${lengthM.toFixed(2)} × ${heightM.toFixed(2)} m`,
+            areaM2: Number((lengthM * heightM).toFixed(4)),
             thicknessMm: thicknessMm,
             level: String(el.level || 'General').trim(),
             elementRef: el
@@ -475,7 +494,7 @@ export function generateSheetSvg(sheet: CutSheet): string {
                           text-anchor="middle" dominant-baseline="middle" 
                           font-size="${Math.min(26, Math.max(12, Math.min(r.w, r.h) / 8))}" 
                           fill="#64748b" font-weight="bold" font-family="sans-serif">
-                        Sobrante: ${Math.round(r.w)} × ${Math.round(r.h)} mm
+                        Sobrante: ${(r.w / 1000).toFixed(2)} × ${(r.h / 1000).toFixed(2)} m
                     </text>
                 ` : ''}
             `).join('')}
@@ -490,7 +509,7 @@ export function generateSheetSvg(sheet: CutSheet): string {
                           stroke="#0f172a" stroke-width="2" rx="3" 
                           class="q-despiece-piece-rect"
                           data-id="${p.piece.expressID || p.piece.id}">
-                        <title>${p.piece.name}&#10;Medidas: ${Math.round(p.w)} × ${Math.round(p.h)} mm${p.rotated ? ' (Rotado 90°)' : ''}&#10;Nivel: ${p.piece.level}&#10;Tag: ${p.piece.tag}</title>
+                        <title>${p.piece.name}&#10;Corte #${p.orderIndex}&#10;Medidas: ${(p.w / 1000).toFixed(2)} × ${(p.h / 1000).toFixed(2)} m${p.rotated ? ' (Rotado 90°)' : ''}&#10;Nivel: ${p.piece.level}&#10;Tag: ${p.piece.tag}</title>
                     </rect>
                     
                     ${(p.w >= 100 && p.h >= 60) ? `
@@ -504,19 +523,19 @@ export function generateSheetSvg(sheet: CutSheet): string {
                               text-anchor="middle" dominant-baseline="middle" 
                               font-size="${Math.max(10, fontSize * 0.8)}" fill="#1e293b" 
                               class="q-despiece-piece-label" font-weight="600">
-                            ${Math.round(p.w)} × ${Math.round(p.h)} mm${p.rotated ? ' ⟳' : ''}
+                            ${(p.w / 1000).toFixed(2)} × ${(p.h / 1000).toFixed(2)} m${p.rotated ? ' ⟳' : ''}
                         </text>
                     ` : ''}
                 </g>
                 `;
             }).join('')}
 
-            <!-- Cotas exteriores de la Lámina -->
-            <text x="${sheet.sheetWidth / 2}" y="-12" text-anchor="middle" font-size="22" font-weight="bold" fill="#78350f" font-family="sans-serif">
-                Largo Comercial: ${sheet.sheetWidth} mm (${(sheet.sheetWidth / 1000).toFixed(2)} m)
+            <!-- Cotas exteriores de la Lámina en Metros -->
+            <text x="${sheet.sheetWidth / 2}" y="-12" text-anchor="middle" font-size="24" font-weight="bold" fill="#78350f" font-family="sans-serif">
+                Largo Comercial: ${(sheet.sheetWidth / 1000).toFixed(2)} m
             </text>
-            <text x="-14" y="${sheet.sheetHeight / 2}" text-anchor="middle" transform="rotate(-90, -14, ${sheet.sheetHeight / 2})" font-size="22" font-weight="bold" fill="#78350f" font-family="sans-serif">
-                Ancho Comercial: ${sheet.sheetHeight} mm (${(sheet.sheetHeight / 1000).toFixed(2)} m)
+            <text x="-14" y="${sheet.sheetHeight / 2}" text-anchor="middle" transform="rotate(-90, -14, ${sheet.sheetHeight / 2})" font-size="24" font-weight="bold" fill="#78350f" font-family="sans-serif">
+                Ancho Comercial: ${(sheet.sheetHeight / 1000).toFixed(2)} m
             </text>
         </g>
     </svg>
