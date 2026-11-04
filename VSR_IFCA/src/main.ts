@@ -8153,89 +8153,101 @@ function initQuantitiesPanel() {
     // --- 3D Colorization and Filtering for Despiece ---
     let despieceLabelsUpdateFn: (() => void) | null = null;
 
-    function getElement3DBounds(expressID: number, modelUUID?: string): { widthM: number; heightM: number; depthM: number; box: THREE.Box3; center: THREE.Vector3 } | null {
-        try {
-            const uniqueModels = getUniqueLoadedModels();
-            const allCandidateModels: any[] = [];
-            if (modelUUID) {
-                const targetEntry = uniqueModels.find(m => m.uuid === modelUUID || m.name === modelUUID);
-                if (targetEntry?.model) allCandidateModels.push(targetEntry.model);
-            }
-            uniqueModels.forEach(m => {
-                if (m.model && !allCandidateModels.includes(m.model)) allCandidateModels.push(m.model);
-            });
-            for (const [, m] of loadedModels.entries()) {
-                if (m && !allCandidateModels.includes(m)) allCandidateModels.push(m);
-            }
-            if (fragments.list.size > 0) {
-                for (const [, m] of fragments.list.entries()) {
-                    if (m && !allCandidateModels.includes(m)) allCandidateModels.push(m);
-                }
-            }
+    // Cache de dimensiones 3D exactas de elementos (extraídas directamente de FragmentsModel)
+    const element3DBoundsCache = new Map<number, { widthM: number; heightM: number; depthM: number; box: THREE.Box3; center: THREE.Vector3 }>();
 
-            for (const model of allCandidateModels) {
-                if (!model || !model.getFragmentMap || typeof model.getFragmentMap !== 'function') continue;
-                const fragmentIdMap = model.getFragmentMap([expressID]);
-                if (!fragmentIdMap || Object.keys(fragmentIdMap).length === 0) continue;
+    async function prefetchElements3DBounds(ids: number[]): Promise<void> {
+        if (!ids || ids.length === 0) return;
+        const missingIds = ids.map(Number).filter(id => !isNaN(id) && id > 0 && !element3DBoundsCache.has(id));
+        if (missingIds.length === 0) return;
 
-                const box = new THREE.Box3();
-                let hasPoint = false;
-                for (const [fragId, itemIds] of Object.entries(fragmentIdMap)) {
-                    const fragment = model.items?.find((f: any) => f.id === fragId) || (model.keyFragments as any)?.[fragId];
-                    if (fragment && fragment.mesh) {
-                        const mesh = fragment.mesh as THREE.InstancedMesh;
-                        const geom = mesh.geometry;
-                        if (!geom) continue;
-                        mesh.updateMatrixWorld(true);
-                        if (!geom.boundingBox) geom.computeBoundingBox();
-                        if (!geom.boundingBox) continue;
+        const uniqueModels = getUniqueLoadedModels();
+        const modelsToCheck: any[] = [];
+        uniqueModels.forEach(m => { if (m.model && !modelsToCheck.includes(m.model)) modelsToCheck.push(m.model); });
+        for (const [, m] of loadedModels.entries()) {
+            if (m && !modelsToCheck.includes(m)) modelsToCheck.push(m);
+        }
+        if ((fragments as any)?.list && typeof (fragments as any).list.values === 'function') {
+            for (const m of (fragments as any).list.values()) {
+                if (m && !modelsToCheck.includes(m)) modelsToCheck.push(m);
+            }
+        }
 
-                        const itemIdsSet = itemIds as Set<number>;
-                        for (const itemId of itemIdsSet) {
-                            let instIndex = -1;
-                            if (typeof fragment.getItemInstance === 'function') {
-                                instIndex = fragment.getItemInstance(itemId);
-                            }
-                            if (instIndex !== undefined && instIndex >= 0) {
-                                const matrix = new THREE.Matrix4();
-                                mesh.getMatrixAt(instIndex, matrix);
-                                matrix.premultiply(mesh.matrixWorld);
-                                const itemBox = geom.boundingBox.clone().applyMatrix4(matrix);
-                                box.union(itemBox);
-                                hasPoint = true;
+        for (const model of modelsToCheck) {
+            if (!model) continue;
+            try {
+                if (model.object) model.object.updateMatrixWorld(true);
+
+                // 1. Obtener cajas en lote con model.getBoxes(missingIds) nativo de FragmentsModel
+                if (typeof model.getBoxes === 'function') {
+                    const boxes: THREE.Box3[] = await model.getBoxes(missingIds);
+                    if (boxes && Array.isArray(boxes) && boxes.length === missingIds.length) {
+                        for (let i = 0; i < missingIds.length; i++) {
+                            const id = missingIds[i];
+                            const box = boxes[i];
+                            if (box && !box.isEmpty() && isFinite(box.min.x) && isFinite(box.max.x)) {
+                                const dx = Math.abs(box.max.x - box.min.x);
+                                const dy = Math.abs(box.max.y - box.min.y);
+                                const dz = Math.abs(box.max.z - box.min.z);
+
+                                const heightM = dy;
+                                const horizMax = Math.max(dx, dz);
+                                const horizMin = Math.min(dx, dz);
+                                let widthM = horizMax;
+                                if (horizMin > 0.15) {
+                                    widthM = Math.hypot(dx, dz);
+                                }
+                                const depthM = horizMin;
+
+                                const center = new THREE.Vector3();
+                                box.getCenter(center);
+                                center.y = Math.max(center.y, box.max.y) + 0.20;
+
+                                element3DBoundsCache.set(id, { widthM, heightM, depthM, box, center });
                             }
                         }
                     }
                 }
-                if (hasPoint && !box.isEmpty()) {
-                    const dx = Math.abs(box.max.x - box.min.x);
-                    const dy = Math.abs(box.max.y - box.min.y);
-                    const dz = Math.abs(box.max.z - box.min.z);
 
-                    const heightM = dy;
-                    const horizMax = Math.max(dx, dz);
-                    const horizMin = Math.min(dx, dz);
-                    let widthM = horizMax;
-                    if (horizMin > 0.15) {
-                        widthM = Math.hypot(dx, dz);
+                // 2. Si quedan IDs por resolver, intentar getMergedBox individual
+                const stillMissing = missingIds.filter(id => !element3DBoundsCache.has(id));
+                if (stillMissing.length > 0 && typeof model.getMergedBox === 'function') {
+                    for (const id of stillMissing) {
+                        try {
+                            const box: THREE.Box3 = await model.getMergedBox([id]);
+                            if (box && !box.isEmpty() && isFinite(box.min.x) && isFinite(box.max.x)) {
+                                const dx = Math.abs(box.max.x - box.min.x);
+                                const dy = Math.abs(box.max.y - box.min.y);
+                                const dz = Math.abs(box.max.z - box.min.z);
+
+                                const heightM = dy;
+                                const horizMax = Math.max(dx, dz);
+                                const horizMin = Math.min(dx, dz);
+                                let widthM = horizMax;
+                                if (horizMin > 0.15) widthM = Math.hypot(dx, dz);
+                                const depthM = horizMin;
+
+                                const center = new THREE.Vector3();
+                                box.getCenter(center);
+                                center.y = Math.max(center.y, box.max.y) + 0.20;
+
+                                element3DBoundsCache.set(id, { widthM, heightM, depthM, box, center });
+                            }
+                        } catch (_) {}
                     }
-                    const depthM = horizMin;
-
-                    const center = new THREE.Vector3();
-                    box.getCenter(center);
-                    center.y = Math.max(center.y, box.max.y) + 0.20;
-
-                    return { widthM, heightM, depthM, box, center };
                 }
+            } catch (err) {
+                console.warn('[BoundsCache] Error fetching batch boxes for model:', err);
             }
-        } catch (e) {
-            console.warn('[Despiece] Error calculando 3D bounds:', e);
         }
-        return null;
+    }
+
+    function getElement3DBounds(expressID: number, modelUUID?: string): { widthM: number; heightM: number; depthM: number; box: THREE.Box3; center: THREE.Vector3 } | null {
+        return element3DBoundsCache.get(expressID) || null;
     }
 
     function getElementCenter(expressID: number, modelUUID: string): THREE.Vector3 | null {
-        return getElement3DBounds(expressID, modelUUID)?.center || null;
+        return element3DBoundsCache.get(expressID)?.center || null;
     }
 
     function clearDespiece3DLabels() {
@@ -8622,7 +8634,7 @@ function initQuantitiesPanel() {
         window.addEventListener('keydown', handleKey);
     }
 
-    function renderQuantitiesContent() {
+    async function renderQuantitiesContent() {
         if (!contentArea) return;
         const elements = extractAllElements();
 
@@ -8942,7 +8954,7 @@ function initQuantitiesPanel() {
         });
     }
 
-    function renderTableData(elements: any[]) {
+    async function renderTableData(elements: any[]) {
         if (!contentArea) return;
 
         let filtered = elements;
@@ -9482,6 +9494,10 @@ function initQuantitiesPanel() {
 
 
         } else if (activeTab === 'despiece') {
+            const allTargetIds = filtered.map(el => Number(el.expressID || el.id)).filter(id => !isNaN(id) && id > 0);
+            if (allTargetIds.length > 0) {
+                await prefetchElements3DBounds(allTargetIds);
+            }
             const scopeMode = despieceScope === 'SELECTED' ? 'SELECTED' : (despieceScope === 'ALL_WALLS' ? 'ALL_WALLS' : 'ALL_MODULAR');
             const modularPieces = extractModularWallPieces(filtered, despieceScope === 'SELECTED', selectedElementIds, scopeMode, getElement3DBounds);
 
@@ -11817,6 +11833,9 @@ async function classifyModel(model: any) {
     invalidateElementsCache();
 
     logToScreen(`✓ Clasificado: ${allIds.size} elem | CLASIF:${integratedClassById.size} NIVEL:${integratedLevelById.size} MAT:${integratedMaterialById.size} NOMBRE:${integratedNameById.size} SUB:${integratedSubById.size}`);
+    if (idsWithGeometry && idsWithGeometry.length > 0) {
+        prefetchElements3DBounds(idsWithGeometry).catch(() => {});
+    }
 
     if (typeof (window as any).refreshQuantitiesUI === 'function') {
         try {

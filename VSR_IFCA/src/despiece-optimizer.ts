@@ -520,58 +520,38 @@ export function optimizeSheetCutting(
     const maxDim = Math.max(usableW, usableH);
     const minDim = Math.min(usableW, usableH);
 
-    // 1. Modulación inteligente de muros gigantes que excedan el tablero comercial
+    // 1. Modulación inteligente de muros: mantener piezas exactas y solo seccionar donde física y estrictamente exceda el tablero comercial
     const normalizedPieces: ModularPiece[] = [];
+    const tol = 25; // Tolerancia de 25mm para evitar seccionar piezas que caben justas
+
     pieces.forEach(p => {
-        const fitsNormal = p.width <= usableW && p.height <= usableH;
-        const fitsRotated = allowRot && p.width <= usableH && p.height <= usableW;
+        const fitsNormal = (p.width <= usableW + tol) && (p.height <= usableH + tol);
+        const fitsRotated = allowRot && (p.width <= usableH + tol) && (p.height <= usableW + tol);
 
         if (fitsNormal || fitsRotated) {
-            normalizedPieces.push({ ...p });
+            // Cabe íntegra en la lámina comercial: NUNCA seccionar
+            const wAdj = Math.min(p.width, fitsNormal ? usableW : usableH);
+            const hAdj = Math.min(p.height, fitsNormal ? usableH : usableW);
+            normalizedPieces.push({
+                ...p,
+                width: fitsNormal ? wAdj : p.width,
+                height: fitsNormal ? hAdj : p.height
+            });
         } else {
-            // Evaluar cuál de las dos orientaciones de corte genera menos piezas/desperdicio
-            // Orientación A: Ancho a lo largo del lado mayor del tablero (maxDim), Alto a lo largo del menor (minDim)
-            const numW_A = Math.max(1, Math.ceil(p.width / maxDim));
-            const numH_A = Math.max(1, Math.ceil(p.height / minDim));
-            const totalParts_A = numW_A * numH_A;
-
-            // Orientación B: Ancho a lo largo del lado menor (minDim), Alto a lo largo del mayor (maxDim)
-            const numW_B = Math.max(1, Math.ceil(p.width / minDim));
-            const numH_B = Math.max(1, Math.ceil(p.height / maxDim));
-            const totalParts_B = allowRot ? (numW_B * numH_B) : Infinity;
-
-            let stepW: number;
-            let stepH: number;
-            let totalParts: number;
-
-            // Preferir la opción con menos partes; en caso de empate, preferir la que conserve el ancho íntegro (numW === 1)
-            if (totalParts_A < totalParts_B || (totalParts_A === totalParts_B && numW_A === 1)) {
-                stepW = maxDim;
-                stepH = minDim;
-                totalParts = totalParts_A;
-            } else {
-                stepW = minDim;
-                stepH = maxDim;
-                totalParts = totalParts_B;
-            }
-
-            let remH = p.height;
-            let partY = 1;
-            const totalCols = Math.ceil(p.width / stepW);
-
-            while (remH > 0) {
-                const curH = Math.min(remH, stepH);
-                let remW = p.width;
-                let partX = 1;
-                while (remW > 0) {
-                    const curW = Math.min(remW, stepW);
-                    const curPartIndex = (partY - 1) * totalCols + partX;
+            // Caso 1: El ancho cabe en el largo comercial (maxDim), solo la altura excede el ancho comercial (minDim)
+            // Ej: Marco o arco de 2.04m de ancho x 1.71m de alto en lámina de 2.44 x 1.22m -> Conserva ancho 2.04m íntegro
+            if (p.width <= maxDim + tol && p.height > minDim) {
+                let remH = p.height;
+                let partIdx = 1;
+                const totalParts = Math.ceil(p.height / minDim);
+                while (remH > 0) {
+                    const curH = Math.min(remH, minDim);
+                    const curW = p.width;
                     const wM = Number((curW / 1000).toFixed(2));
                     const hM = Number((curH / 1000).toFixed(2));
-
                     normalizedPieces.push({
                         ...p,
-                        id: `${p.id}-P${curPartIndex}`,
+                        id: `${p.id}-P${partIdx}`,
                         width: curW,
                         height: curH,
                         widthM: wM,
@@ -579,17 +559,84 @@ export function optimizeSheetCutting(
                         dimensionsLabelM: `${wM.toFixed(2)} × ${hM.toFixed(2)} m`,
                         areaM2: Number(((curW * curH) / 1000000).toFixed(4)),
                         isSplit: true,
-                        partIndex: curPartIndex,
+                        partIndex: partIdx,
                         totalParts: totalParts,
-                        // Heredar el vano curvo solo si está en la sección que le corresponde
-                        hasArcCutout: Boolean(p.hasArcCutout && partY === 1),
+                        hasArcCutout: Boolean(p.hasArcCutout && partIdx === 1),
+                        arcRadiusMm: p.arcRadiusMm
+                    });
+                    remH -= curH;
+                    partIdx++;
+                }
+            }
+            // Caso 2: La altura cabe en minDim, solo el ancho excede maxDim (ej: muro largo corrido de 4.00m x 1.00m)
+            else if (p.height <= minDim + tol && p.width > maxDim) {
+                let remW = p.width;
+                let partIdx = 1;
+                const totalParts = Math.ceil(p.width / maxDim);
+                while (remW > 0) {
+                    const curW = Math.min(remW, maxDim);
+                    const curH = p.height;
+                    const wM = Number((curW / 1000).toFixed(2));
+                    const hM = Number((curH / 1000).toFixed(2));
+                    normalizedPieces.push({
+                        ...p,
+                        id: `${p.id}-P${partIdx}`,
+                        width: curW,
+                        height: curH,
+                        widthM: wM,
+                        heightM: hM,
+                        dimensionsLabelM: `${wM.toFixed(2)} × ${hM.toFixed(2)} m`,
+                        areaM2: Number(((curW * curH) / 1000000).toFixed(4)),
+                        isSplit: true,
+                        partIndex: partIdx,
+                        totalParts: totalParts,
+                        hasArcCutout: Boolean(p.hasArcCutout && partIdx === 1),
                         arcRadiusMm: p.arcRadiusMm
                     });
                     remW -= curW;
-                    partX++;
+                    partIdx++;
                 }
-                remH -= curH;
-                partY++;
+            }
+            // Caso 3: Ambas dimensiones exceden el tablero comercial (muro gigante en ambas direcciones)
+            else {
+                const stepW = maxDim;
+                const stepH = minDim;
+                const totalCols = Math.ceil(p.width / stepW);
+                const totalRows = Math.ceil(p.height / stepH);
+                const totalParts = totalCols * totalRows;
+
+                let remH = p.height;
+                let partY = 1;
+                while (remH > 0) {
+                    const curH = Math.min(remH, stepH);
+                    let remW = p.width;
+                    let partX = 1;
+                    while (remW > 0) {
+                        const curW = Math.min(remW, stepW);
+                        const curPartIndex = (partY - 1) * totalCols + partX;
+                        const wM = Number((curW / 1000).toFixed(2));
+                        const hM = Number((curH / 1000).toFixed(2));
+                        normalizedPieces.push({
+                            ...p,
+                            id: `${p.id}-P${curPartIndex}`,
+                            width: curW,
+                            height: curH,
+                            widthM: wM,
+                            heightM: hM,
+                            dimensionsLabelM: `${wM.toFixed(2)} × ${hM.toFixed(2)} m`,
+                            areaM2: Number(((curW * curH) / 1000000).toFixed(4)),
+                            isSplit: true,
+                            partIndex: curPartIndex,
+                            totalParts: totalParts,
+                            hasArcCutout: Boolean(p.hasArcCutout && partY === 1),
+                            arcRadiusMm: p.arcRadiusMm
+                        });
+                        remW -= curW;
+                        partX++;
+                    }
+                    remH -= curH;
+                    partY++;
+                }
             }
         }
     });
@@ -607,6 +654,17 @@ export function optimizeSheetCutting(
     const finalSheets: CutSheet[] = [];
     let globalSheetCounter = 1;
     let globalOrderCounter = 1;
+
+    // Asignación de color consistente y fija por elemento (expressID)
+    const elementColorMap = new Map<number, string>();
+    const getPieceColor = (p: ModularPiece): string => {
+        const idNum = Number(p.expressID || p.id);
+        if (!elementColorMap.has(idNum)) {
+            const nextCol = PIECE_COLORS[elementColorMap.size % PIECE_COLORS.length];
+            elementColorMap.set(idNum, nextCol);
+        }
+        return elementColorMap.get(idNum)!;
+    };
 
     // 3. Procesar cada material y espesor por separado
     for (const [, groupPieces] of materialGroups.entries()) {
@@ -652,7 +710,7 @@ export function optimizeSheetCutting(
 
                 const pw = bestFitData.rotated ? piece.height : piece.width;
                 const ph = bestFitData.rotated ? piece.width : piece.height;
-                const color = PIECE_COLORS[(globalOrderCounter - 1) % PIECE_COLORS.length];
+                const color = getPieceColor(piece);
 
                 targetBin.placePiece(piece, pw, ph, targetRect, bestFitData.rotated, color, globalOrderCounter++, kerf);
             } else {
@@ -671,7 +729,7 @@ export function optimizeSheetCutting(
                     const targetRect = newBin.freeRects[initialFit.bestRectIdx];
                     const pw = initialFit.rotated ? piece.height : piece.width;
                     const ph = initialFit.rotated ? piece.width : piece.height;
-                    const color = PIECE_COLORS[(globalOrderCounter - 1) % PIECE_COLORS.length];
+                    const color = getPieceColor(piece);
 
                     newBin.placePiece(piece, pw, ph, targetRect, initialFit.rotated, color, globalOrderCounter++, kerf);
                 }
