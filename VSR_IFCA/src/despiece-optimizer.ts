@@ -82,11 +82,13 @@ export const PIECE_COLORS = [
     '#60a5fa', '#c084fc', '#facc15', '#22c55e', '#e879f9'
 ];
 
+export type ElementBoundsGetter = (expressID: number, modelUUID?: string) => { widthM: number; heightM: number; depthM: number } | null;
+
 /**
- * Redondea una medida en metros al paso modular exacto de obra (por defecto 0.05m = 5cm).
- * Ej: 1.236m -> 1.25m, 1.02m -> 1.00m, 1.18m -> 1.20m
+ * Redondea una medida en metros al paso modular exacto de obra (por defecto 0.01m = 1cm).
+ * Ej: 2.042m -> 2.04m, 0.501m -> 0.50m, 1.71m -> 1.71m
  */
-export function roundToModularStepM(valM: number, stepM: number = 0.05): number {
+export function roundToModularStepM(valM: number, stepM: number = 0.01): number {
     if (!valM || isNaN(valM) || valM <= 0) return stepM;
     const rounded = Math.round(valM / stepM) * stepM;
     return Math.max(stepM, Number(rounded.toFixed(2)));
@@ -157,7 +159,8 @@ export function extractModularWallPieces(
     elements: any[],
     onlySelected: boolean = false,
     selectedIds: number[] = [],
-    scopeMode: 'ALL_MODULAR' | 'ALL_WALLS' | 'SELECTED' = 'ALL_MODULAR'
+    scopeMode: 'ALL_MODULAR' | 'ALL_WALLS' | 'SELECTED' = 'ALL_MODULAR',
+    getBoundsFn?: ElementBoundsGetter
 ): ModularPiece[] {
     const pieces: ModularPiece[] = [];
     const selectedSet = new Set(selectedIds.map(Number));
@@ -187,21 +190,37 @@ export function extractModularWallPieces(
             return;
         }
 
-        // Medidas cerradas en metros (pasos de 0.05m / 5cm)
-        const rawLengthM = Math.max(0.05, el.length || 0);
-        let rawHeightM = 2.40;
-        if (el.area > 0 && rawLengthM > 0.001) {
-            rawHeightM = Math.max(0.1, el.area / rawLengthM);
-        }
+        // 1. Obtener dimensiones 3D reales del elemento si getBoundsFn está presente
+        const bounds3D = getBoundsFn ? getBoundsFn(elemIdNum, el.modelUUID || el.elementRef?.modelUUID) : null;
 
-        const lengthM = roundToModularStepM(rawLengthM, 0.05);
-        const heightM = roundToModularStepM(rawHeightM, 0.05);
+        let lengthM: number;
+        let heightM: number;
+        let thicknessMm: number = 18;
+
+        if (bounds3D && bounds3D.widthM > 0.05 && bounds3D.heightM > 0.05) {
+            lengthM = roundToModularStepM(bounds3D.widthM, 0.01);
+            heightM = roundToModularStepM(bounds3D.heightM, 0.01);
+            if (bounds3D.depthM > 0 && bounds3D.depthM < 0.20) {
+                const calcThick = Math.round(bounds3D.depthM * 1000);
+                if (calcThick >= 1 && calcThick <= 50) {
+                    thicknessMm = calcThick === 2 || calcThick === 3 ? 2.5 : calcThick;
+                }
+            }
+        } else {
+            // Medidas cerradas en metros (pasos de 0.01m)
+            const rawLengthM = Math.max(0.05, el.length || 0);
+            let rawHeightM = 2.40;
+            if (el.area > 0 && rawLengthM > 0.001) {
+                rawHeightM = Math.max(0.1, el.area / rawLengthM);
+            }
+            lengthM = roundToModularStepM(rawLengthM, 0.01);
+            heightM = roundToModularStepM(rawHeightM, 0.01);
+        }
 
         const lengthMm = Math.round(lengthM * 1000);
         const heightMm = Math.round(heightM * 1000);
 
         // Espesor en mm exacto
-        let thicknessMm = 18;
         const matStr = String(el.material || '').toUpperCase();
         const nameStr = String(el.name || '').toUpperCase();
         if (matStr.includes('2.5') || nameStr.includes('2.5')) {
@@ -223,7 +242,7 @@ export function extractModularWallPieces(
 
         // Detección de corte semicircular / vano curvo (ej: muro que rodea la ventana redonda)
         const rawArea = Number(el.area || 0);
-        const rectArea = (rawLengthM * rawHeightM);
+        const rectArea = (lengthM * heightM);
         let hasArcCutout = false;
         let arcRadiusMm = 0;
 
@@ -501,7 +520,7 @@ export function optimizeSheetCutting(
     const maxDim = Math.max(usableW, usableH);
     const minDim = Math.min(usableW, usableH);
 
-    // 1. Modulación de muros gigantes que excedan el tablero comercial
+    // 1. Modulación inteligente de muros gigantes que excedan el tablero comercial
     const normalizedPieces: ModularPiece[] = [];
     pieces.forEach(p => {
         const fitsNormal = p.width <= usableW && p.height <= usableH;
@@ -510,37 +529,67 @@ export function optimizeSheetCutting(
         if (fitsNormal || fitsRotated) {
             normalizedPieces.push({ ...p });
         } else {
-            // Subdivisión modular calculando el número total de partes
-            const numH = Math.ceil(p.height / maxDim);
-            const numW = Math.ceil(p.width / minDim);
-            const totalParts = numH * numW;
+            // Evaluar cuál de las dos orientaciones de corte genera menos piezas/desperdicio
+            // Orientación A: Ancho a lo largo del lado mayor del tablero (maxDim), Alto a lo largo del menor (minDim)
+            const numW_A = Math.max(1, Math.ceil(p.width / maxDim));
+            const numH_A = Math.max(1, Math.ceil(p.height / minDim));
+            const totalParts_A = numW_A * numH_A;
+
+            // Orientación B: Ancho a lo largo del lado menor (minDim), Alto a lo largo del mayor (maxDim)
+            const numW_B = Math.max(1, Math.ceil(p.width / minDim));
+            const numH_B = Math.max(1, Math.ceil(p.height / maxDim));
+            const totalParts_B = allowRot ? (numW_B * numH_B) : Infinity;
+
+            let stepW: number;
+            let stepH: number;
+            let totalParts: number;
+
+            // Preferir la opción con menos partes; en caso de empate, preferir la que conserve el ancho íntegro (numW === 1)
+            if (totalParts_A < totalParts_B || (totalParts_A === totalParts_B && numW_A === 1)) {
+                stepW = maxDim;
+                stepH = minDim;
+                totalParts = totalParts_A;
+            } else {
+                stepW = minDim;
+                stepH = maxDim;
+                totalParts = totalParts_B;
+            }
 
             let remH = p.height;
-            let partIdx = 1;
+            let partY = 1;
+            const totalCols = Math.ceil(p.width / stepW);
+
             while (remH > 0) {
-                const curH = Math.min(remH, maxDim);
+                const curH = Math.min(remH, stepH);
                 let remW = p.width;
-                let subIdx = 1;
+                let partX = 1;
                 while (remW > 0) {
-                    const curW = Math.min(remW, minDim);
+                    const curW = Math.min(remW, stepW);
+                    const curPartIndex = (partY - 1) * totalCols + partX;
+                    const wM = Number((curW / 1000).toFixed(2));
+                    const hM = Number((curH / 1000).toFixed(2));
+
                     normalizedPieces.push({
                         ...p,
-                        id: `${p.id}-M${partIdx}${p.width > minDim ? `.${subIdx}` : ''}`,
+                        id: `${p.id}-P${curPartIndex}`,
                         width: curW,
                         height: curH,
+                        widthM: wM,
+                        heightM: hM,
+                        dimensionsLabelM: `${wM.toFixed(2)} × ${hM.toFixed(2)} m`,
                         areaM2: Number(((curW * curH) / 1000000).toFixed(4)),
                         isSplit: true,
-                        partIndex: partIdx,
+                        partIndex: curPartIndex,
                         totalParts: totalParts,
-                        // Solo la última parte o la que contiene el corte curvo hereda el arco
-                        hasArcCutout: p.hasArcCutout,
+                        // Heredar el vano curvo solo si está en la sección que le corresponde
+                        hasArcCutout: Boolean(p.hasArcCutout && partY === 1),
                         arcRadiusMm: p.arcRadiusMm
                     });
                     remW -= curW;
-                    subIdx++;
+                    partX++;
                 }
                 remH -= curH;
-                partIdx++;
+                partY++;
             }
         }
     });

@@ -8153,66 +8153,89 @@ function initQuantitiesPanel() {
     // --- 3D Colorization and Filtering for Despiece ---
     let despieceLabelsUpdateFn: (() => void) | null = null;
 
-    function getElementCenter(expressID: number, modelUUID: string): THREE.Vector3 | null {
+    function getElement3DBounds(expressID: number, modelUUID?: string): { widthM: number; heightM: number; depthM: number; box: THREE.Box3; center: THREE.Vector3 } | null {
         try {
             const uniqueModels = getUniqueLoadedModels();
-            let modelEntry = uniqueModels.find(m => m.uuid === modelUUID || m.name === modelUUID);
-            if (!modelEntry && uniqueModels.length > 0) modelEntry = uniqueModels[0];
-
-            let model = modelEntry ? modelEntry.model : null;
-            if (!model && loadedModels.size > 0) {
-                model = Array.from(loadedModels.values())[0];
+            const allCandidateModels: any[] = [];
+            if (modelUUID) {
+                const targetEntry = uniqueModels.find(m => m.uuid === modelUUID || m.name === modelUUID);
+                if (targetEntry?.model) allCandidateModels.push(targetEntry.model);
             }
-            if (!model && fragments.list.size > 0) {
-                model = Array.from(fragments.list.values())[0];
+            uniqueModels.forEach(m => {
+                if (m.model && !allCandidateModels.includes(m.model)) allCandidateModels.push(m.model);
+            });
+            for (const [, m] of loadedModels.entries()) {
+                if (m && !allCandidateModels.includes(m)) allCandidateModels.push(m);
             }
-            if (!model) return null;
+            if (fragments.list.size > 0) {
+                for (const [, m] of fragments.list.entries()) {
+                    if (m && !allCandidateModels.includes(m)) allCandidateModels.push(m);
+                }
+            }
 
-            if (model.getFragmentMap && typeof model.getFragmentMap === 'function') {
+            for (const model of allCandidateModels) {
+                if (!model || !model.getFragmentMap || typeof model.getFragmentMap !== 'function') continue;
                 const fragmentIdMap = model.getFragmentMap([expressID]);
-                if (fragmentIdMap && Object.keys(fragmentIdMap).length > 0) {
-                    const box = new THREE.Box3();
-                    let hasPoint = false;
-                    for (const [fragId, itemIds] of Object.entries(fragmentIdMap)) {
-                        const fragment = model.items?.find((f: any) => f.id === fragId) || (model.keyFragments as any)?.[fragId];
-                        if (fragment && fragment.mesh) {
-                            const mesh = fragment.mesh as THREE.InstancedMesh;
-                            const geom = mesh.geometry;
-                            if (!geom) continue;
-                            mesh.updateMatrixWorld(true);
-                            if (!geom.boundingBox) geom.computeBoundingBox();
-                            if (!geom.boundingBox) continue;
+                if (!fragmentIdMap || Object.keys(fragmentIdMap).length === 0) continue;
 
-                            const itemIdsSet = itemIds as Set<number>;
-                            for (const itemId of itemIdsSet) {
-                                let instIndex = -1;
-                                if (typeof fragment.getItemInstance === 'function') {
-                                    instIndex = fragment.getItemInstance(itemId);
-                                }
-                                if (instIndex !== undefined && instIndex >= 0) {
-                                    const matrix = new THREE.Matrix4();
-                                    mesh.getMatrixAt(instIndex, matrix);
-                                    matrix.premultiply(mesh.matrixWorld);
-                                    const itemBox = geom.boundingBox.clone().applyMatrix4(matrix);
-                                    box.union(itemBox);
-                                    hasPoint = true;
-                                }
+                const box = new THREE.Box3();
+                let hasPoint = false;
+                for (const [fragId, itemIds] of Object.entries(fragmentIdMap)) {
+                    const fragment = model.items?.find((f: any) => f.id === fragId) || (model.keyFragments as any)?.[fragId];
+                    if (fragment && fragment.mesh) {
+                        const mesh = fragment.mesh as THREE.InstancedMesh;
+                        const geom = mesh.geometry;
+                        if (!geom) continue;
+                        mesh.updateMatrixWorld(true);
+                        if (!geom.boundingBox) geom.computeBoundingBox();
+                        if (!geom.boundingBox) continue;
+
+                        const itemIdsSet = itemIds as Set<number>;
+                        for (const itemId of itemIdsSet) {
+                            let instIndex = -1;
+                            if (typeof fragment.getItemInstance === 'function') {
+                                instIndex = fragment.getItemInstance(itemId);
+                            }
+                            if (instIndex !== undefined && instIndex >= 0) {
+                                const matrix = new THREE.Matrix4();
+                                mesh.getMatrixAt(instIndex, matrix);
+                                matrix.premultiply(mesh.matrixWorld);
+                                const itemBox = geom.boundingBox.clone().applyMatrix4(matrix);
+                                box.union(itemBox);
+                                hasPoint = true;
                             }
                         }
                     }
-                    if (hasPoint && !box.isEmpty()) {
-                        const center = new THREE.Vector3();
-                        box.getCenter(center);
-                        // Elevar sobre el borde superior del muro
-                        center.y = Math.max(center.y, box.max.y) + 0.20;
-                        return center;
+                }
+                if (hasPoint && !box.isEmpty()) {
+                    const dx = Math.abs(box.max.x - box.min.x);
+                    const dy = Math.abs(box.max.y - box.min.y);
+                    const dz = Math.abs(box.max.z - box.min.z);
+
+                    const heightM = dy;
+                    const horizMax = Math.max(dx, dz);
+                    const horizMin = Math.min(dx, dz);
+                    let widthM = horizMax;
+                    if (horizMin > 0.15) {
+                        widthM = Math.hypot(dx, dz);
                     }
+                    const depthM = horizMin;
+
+                    const center = new THREE.Vector3();
+                    box.getCenter(center);
+                    center.y = Math.max(center.y, box.max.y) + 0.20;
+
+                    return { widthM, heightM, depthM, box, center };
                 }
             }
         } catch (e) {
-            console.warn('[Despiece] Error calculando centro de elemento:', e);
+            console.warn('[Despiece] Error calculando 3D bounds:', e);
         }
         return null;
+    }
+
+    function getElementCenter(expressID: number, modelUUID: string): THREE.Vector3 | null {
+        return getElement3DBounds(expressID, modelUUID)?.center || null;
     }
 
     function clearDespiece3DLabels() {
@@ -9460,7 +9483,7 @@ function initQuantitiesPanel() {
 
         } else if (activeTab === 'despiece') {
             const scopeMode = despieceScope === 'SELECTED' ? 'SELECTED' : (despieceScope === 'ALL_WALLS' ? 'ALL_WALLS' : 'ALL_MODULAR');
-            const modularPieces = extractModularWallPieces(filtered, despieceScope === 'SELECTED', selectedElementIds, scopeMode);
+            const modularPieces = extractModularWallPieces(filtered, despieceScope === 'SELECTED', selectedElementIds, scopeMode, getElement3DBounds);
 
             if (modularPieces.length === 0) {
                 contentArea.innerHTML = `
@@ -10081,7 +10104,7 @@ function initQuantitiesPanel() {
             csvContent += headers.join(',') + '\r\n';
 
             const scopeMode = despieceScope === 'SELECTED' ? 'SELECTED' : (despieceScope === 'ALL_WALLS' ? 'ALL_WALLS' : 'ALL_MODULAR');
-            const pieces = extractModularWallPieces(filtered, despieceScope === 'SELECTED', selectedElementIds, scopeMode);
+            const pieces = extractModularWallPieces(filtered, despieceScope === 'SELECTED', selectedElementIds, scopeMode, getElement3DBounds);
             const sheets = optimizeSheetCutting(pieces, commercialSheetW, commercialSheetH, sawKerfMm, sheetTrimMm, allowPieceRotation);
 
             sheets.forEach(sheet => {
