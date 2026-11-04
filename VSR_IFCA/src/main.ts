@@ -1541,6 +1541,28 @@ function getSpecialtyFromIfcPath(path: string): string {
     return 'General';
 }
 
+function isNonPhysicalIfcEntity(categoryOrType: string): boolean {
+    if (!categoryOrType) return false;
+    const cat = categoryOrType.toUpperCase().trim();
+    return (
+        cat === 'IFCPROJECT' ||
+        cat === 'IFCSITE' ||
+        cat === 'IFCBUILDING' ||
+        cat === 'IFCBUILDINGSTOREY' ||
+        cat.endsWith('TYPE') ||
+        cat.endsWith('STYLE') ||
+        cat.startsWith('IFCREL') ||
+        cat.startsWith('IFCPROPERTY') ||
+        cat.startsWith('IFCMATERIAL') ||
+        cat.startsWith('IFCPRESENTATION') ||
+        cat.startsWith('IFCORGANIZATION') ||
+        cat.startsWith('IFCPERSON') ||
+        cat.startsWith('IFCAPPLICATION') ||
+        cat.startsWith('IFCOWNERHISTORY')
+    );
+}
+
+
 // Configure Fragments Manager (Culling, etc.)
 // Offload heavy tasks to worker if possible (FragmentsManager has internal workers for geometry)
 // Note: We are not setting up a separate Fragments worker URL here as we are loading IFCs directly mostly,
@@ -2208,6 +2230,31 @@ const attachExternalPropertiesToLocalIds = async (model: any, externalProperties
             entity['NOMBRE INTEGRADO'] = nmVal;
             entity['Nombre Integrado'] = nmVal;
             entity['nombre integrado'] = nmVal;
+        }
+
+        // Bridge AREA INTEGRADO aliases
+        const areaVal = getValGlobal(entity, 'AREA INTEGRADO', 'ÁREA INTEGRADO', 'Area Integrado', 'Área Integrado', 'area integrado', 'área integrado', 'AREA_INTEGRADO', 'ÁREA_INTEGRADO');
+        if (areaVal) {
+            entity['AREA INTEGRADO'] = areaVal;
+            entity['ÁREA INTEGRADO'] = areaVal;
+            entity['Area Integrado'] = areaVal;
+            entity['Área Integrado'] = areaVal;
+        }
+
+        // Bridge VOLUMEN INTEGRADO aliases
+        const volVal = getValGlobal(entity, 'VOLUMEN INTEGRADO', 'Volumen Integrado', 'volumen integrado', 'VOLUMEN_INTEGRADO', 'volumen_integrado');
+        if (volVal) {
+            entity['VOLUMEN INTEGRADO'] = volVal;
+            entity['Volumen Integrado'] = volVal;
+            entity['volumen integrado'] = volVal;
+        }
+
+        // Bridge LONGITUD INTEGRADO aliases
+        const lenVal = getValGlobal(entity, 'LONGITUD INTEGRADO', 'Longitud Integrado', 'longitud integrado', 'LONGITUD_INTEGRADO', 'longitud_integrado');
+        if (lenVal) {
+            entity['LONGITUD INTEGRADO'] = lenVal;
+            entity['Longitud Integrado'] = lenVal;
+            entity['longitud integrado'] = lenVal;
         }
 
         const guid = getGuid(entity);
@@ -3432,7 +3479,16 @@ function rebuildAllElements(): any[] {
             for (const id of idsFromCache.keys()) allIds.add(id);
         } else if (modelAny.properties) {
             const propsKeys = Object.keys(modelAny.properties);
-            for (const k of propsKeys) { const n = parseInt(k, 10); if (!isNaN(n)) allIds.add(n); }
+            for (const k of propsKeys) {
+                const n = parseInt(k, 10);
+                if (isNaN(n)) continue;
+                const entity = modelAny.properties[k];
+                if (!entity || typeof entity !== 'object') continue;
+                if (entity.localId !== undefined && Number(entity.localId) !== n) continue;
+                const cat = String(entity.type || entity.category || entity._category || '');
+                if (isNonPhysicalIfcEntity(cat)) continue;
+                allIds.add(n);
+            }
         }
 
         for (const expressID of allIds) {
@@ -3464,9 +3520,9 @@ function rebuildAllElements(): any[] {
                 classification = getValGlobal(attrs, 'CLASIFICACIÓN', 'CLASIFICACION', 'CLASIFICACIÃ"N', 'CLASIFICACIÃ“N', 'CLASIFICACI\u00c3\u0093N', 'Clasificación', 'Clasificacion', 'clasificación', 'clasificacion', 'classification', 'Classification') || 'SIN CLASIFICAR';
                 level = getValGlobal(attrs, 'NIVEL INTEGRADO', 'Nivel Integrado', 'nivel integrado', 'NIVEL', 'Nivel', 'nivel', 'Level', 'level', 'LEVEL', 'Storey', 'storey', 'Piso', 'piso', 'Planta', 'planta') || 'SIN NIVEL';
                 material = getValGlobal(attrs, 'MATERIAL INTEGRADO', 'Material Integrado', 'material integrado', 'MATERIAL_INTEGRADO', 'material_integrado') || 'SIN MATERIAL';
-                volume = parseNumGlobal(getValGlobal(attrs, 'VOLUMEN INTEGRADO', 'Volumen', 'Volume', 'Volume integrado', 'Volumen integrado'));
-                area = parseNumGlobal(getValGlobal(attrs, 'ÁREA INTEGRADO', 'Area', 'Area integrado', 'Área', 'Área integrado', 'AREA INTEGRADO'));
-                length = parseNumGlobal(getValGlobal(attrs, 'LONGITUD INTEGRADO', 'Longitud', 'Length', 'Longitud integrado', 'Longitud integrado', 'LONGITUD', 'longitud'));
+                volume = parseNumGlobal(getValGlobal(attrs, 'VOLUMEN INTEGRADO', 'Volumen Integrado', 'volumen integrado', 'VOLUMEN_INTEGRADO', 'volumen_integrado', 'NetVolume', 'GrossVolume', 'Volumen', 'Volume'));
+                area = parseNumGlobal(getValGlobal(attrs, 'AREA INTEGRADO', 'ÁREA INTEGRADO', 'Area Integrado', 'Área Integrado', 'area integrado', 'área integrado', 'AREA_INTEGRADO', 'ÁREA_INTEGRADO', 'NetSideArea', 'GrossSideArea', 'NetArea', 'GrossArea', 'Area', 'Área'));
+                length = parseNumGlobal(getValGlobal(attrs, 'LONGITUD INTEGRADO', 'Longitud Integrado', 'longitud integrado', 'LONGITUD_INTEGRADO', 'longitud_integrado', 'Length', 'Longitud', 'length', 'longitud', 'LONGITUD'));
                 detail = getValGlobal(attrs, 'DETALLE', 'Detalle', 'detalle') || '-';
                 if (checkIsModular(attrs)) {
                     isModular = true;
@@ -11889,13 +11945,13 @@ async function classifyModel(model: any) {
         const detail = getVal(attrs, 'DETALLE', 'Detalle', 'detalle');
         if (detail) integratedDetailById.set(expressID, detail);
 
-        const volume = getVal(attrs, 'VOLUMEN INTEGRADO', 'Volumen', 'Volume', 'Volume integrado', 'Volumen integrado');
+        const volume = getVal(attrs, 'VOLUMEN INTEGRADO', 'Volumen Integrado', 'volumen integrado', 'VOLUMEN_INTEGRADO', 'volumen_integrado', 'NetVolume', 'GrossVolume', 'Volumen', 'Volume');
         if (volume) integratedVolumeById.set(expressID, parseNumGlobal(volume));
 
-        const area = getVal(attrs, 'ÁREA INTEGRADO', 'Area', 'Area integrado', 'Área', 'Área integrado', 'AREA INTEGRADO');
+        const area = getVal(attrs, 'AREA INTEGRADO', 'ÁREA INTEGRADO', 'Area Integrado', 'Área Integrado', 'area integrado', 'área integrado', 'AREA_INTEGRADO', 'ÁREA_INTEGRADO', 'NetSideArea', 'GrossSideArea', 'NetArea', 'GrossArea', 'Area', 'Área');
         if (area) integratedAreaById.set(expressID, parseNumGlobal(area));
 
-        const length = getVal(attrs, 'LONGITUD INTEGRADO', 'Longitud', 'Length', 'Longitud integrado', 'Longitud integrado', 'LONGITUD', 'longitud');
+        const length = getVal(attrs, 'LONGITUD INTEGRADO', 'Longitud Integrado', 'longitud integrado', 'LONGITUD_INTEGRADO', 'longitud_integrado', 'Length', 'Longitud', 'length', 'longitud', 'LONGITUD');
         if (length) integratedLengthById.set(expressID, parseNumGlobal(length));
 
         if (checkIsModular(attrs)) {
@@ -11947,11 +12003,11 @@ async function classifyModel(model: any) {
             if (isNaN(numericId)) continue;
             const entity = model.properties[keyStr];
             if (!entity || typeof entity !== 'object') continue;
+            const cat = String(entity.type || entity.category || entity._category || '');
+            if (isNonPhysicalIfcEntity(cat)) continue;
+
             const targetId = entity.localId !== undefined ? Number(entity.localId) : numericId;
             readFields(entity, targetId);
-            if (entity.localId !== undefined && targetId !== numericId) {
-                readFields(entity, numericId);
-            }
             if (++processed % 3000 === 0) await yieldToMain();
         }
     }
@@ -11972,14 +12028,20 @@ async function classifyModel(model: any) {
         }
     }
 
-    let allIds = new Set<number>([
-        ...idsWithGeometry,
-        ...integratedClassById.keys(),
-        ...integratedLevelById.keys(),
-        ...integratedMaterialById.keys(),
-        ...integratedNameById.keys(),
-        ...integratedSubById.keys(),
-    ]);
+    let allIds: Set<number>;
+    if (idsWithGeometry && idsWithGeometry.length > 0) {
+        // En modelos 3D (Fragments), solo existen físicamente los elementos con geometría
+        allIds = new Set<number>(idsWithGeometry);
+    } else {
+        allIds = new Set<number>();
+        for (const id of integratedClassById.keys()) {
+            const ent = model.properties ? (model.properties[id] || model.properties[String(id)]) : null;
+            const cat = ent ? String(ent.type || ent.category || ent._category || '') : '';
+            if (!isNonPhysicalIfcEntity(cat)) {
+                allIds.add(id);
+            }
+        }
+    }
 
     let indexedCount = 0;
     for (const id of allIds) {
@@ -12039,9 +12101,9 @@ async function classifyModel(model: any) {
             cat = getVal(propEntry, 'type', 'ifcType', 'Category', 'ObjectType', 'CLASIFICACIÓN', 'Clasificación', 'CATEGORÍA', 'Categoría', 'TIPO', 'Tipo');
         }
 
-        const vol = integratedVolumeById.get(id) ?? (propEntry ? parseNumGlobal(getValGlobal(propEntry, 'VOLUMEN INTEGRADO', 'Volumen', 'Volume')) : 0);
-        const ar = integratedAreaById.get(id) ?? (propEntry ? parseNumGlobal(getValGlobal(propEntry, 'ÁREA INTEGRADO', 'Area', 'Área', 'AREA INTEGRADO')) : 0);
-        const len = integratedLengthById.get(id) ?? (propEntry ? parseNumGlobal(getValGlobal(propEntry, 'LONGITUD INTEGRADO', 'Longitud', 'Length', 'LONGITUD', 'longitud')) : 0);
+        const vol = integratedVolumeById.get(id) ?? (propEntry ? parseNumGlobal(getValGlobal(propEntry, 'VOLUMEN INTEGRADO', 'Volumen Integrado', 'volumen integrado', 'VOLUMEN_INTEGRADO', 'volumen_integrado', 'NetVolume', 'GrossVolume', 'Volumen', 'Volume')) : 0);
+        const ar = integratedAreaById.get(id) ?? (propEntry ? parseNumGlobal(getValGlobal(propEntry, 'AREA INTEGRADO', 'ÁREA INTEGRADO', 'Area Integrado', 'Área Integrado', 'area integrado', 'área integrado', 'AREA_INTEGRADO', 'ÁREA_INTEGRADO', 'NetSideArea', 'GrossSideArea', 'Area', 'Área')) : 0);
+        const len = integratedLengthById.get(id) ?? (propEntry ? parseNumGlobal(getValGlobal(propEntry, 'LONGITUD INTEGRADO', 'Longitud Integrado', 'longitud integrado', 'LONGITUD_INTEGRADO', 'longitud_integrado', 'Length', 'Longitud')) : 0);
 
         const finalInstName = elementNameById.get(id) || (propEntry ? getVal(propEntry, 'Name', 'name', 'tag', 'Tag') : null);
 
