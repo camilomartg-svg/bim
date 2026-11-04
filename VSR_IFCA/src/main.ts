@@ -3252,6 +3252,101 @@ const modelElementData = new Map<string, Map<number, {
     isModular?: boolean;
 }>>();
 
+// GLOBAL BOUNDS CACHE FOR 3D ELEMENTS (extracted directly from FragmentsModel)
+// element3DBoundsCache is defined in module scope
+
+async function _localPrefetchElements3DBounds(ids: number[]): Promise<void> {
+    if (!ids || ids.length === 0) return;
+    const missingIds = ids.map(Number).filter(id => !isNaN(id) && id > 0 && !element3DBoundsCache.has(id));
+    if (missingIds.length === 0) return;
+
+    const uniqueModels = getUniqueLoadedModels();
+    const modelsToCheck: any[] = [];
+    uniqueModels.forEach(m => { if (m.model && !modelsToCheck.includes(m.model)) modelsToCheck.push(m.model); });
+    for (const [, m] of loadedModels.entries()) {
+        if (m && !modelsToCheck.includes(m)) modelsToCheck.push(m);
+    }
+    if ((fragments as any)?.list && typeof (fragments as any).list.values === 'function') {
+        for (const m of (fragments as any).list.values()) {
+            if (m && !modelsToCheck.includes(m)) modelsToCheck.push(m);
+        }
+    }
+
+    for (const model of modelsToCheck) {
+        if (!model) continue;
+        try {
+            if (model.object) model.object.updateMatrixWorld(true);
+
+            if (typeof model.getBoxes === 'function') {
+                const boxes: THREE.Box3[] = await model.getBoxes(missingIds);
+                if (boxes && Array.isArray(boxes) && boxes.length === missingIds.length) {
+                    for (let i = 0; i < missingIds.length; i++) {
+                        const id = missingIds[i];
+                        const box = boxes[i];
+                        if (box && !box.isEmpty() && isFinite(box.min.x) && isFinite(box.max.x)) {
+                            const dx = Math.abs(box.max.x - box.min.x);
+                            const dy = Math.abs(box.max.y - box.min.y);
+                            const dz = Math.abs(box.max.z - box.min.z);
+
+                            const heightM = dy;
+                            const horizMax = Math.max(dx, dz);
+                            const horizMin = Math.min(dx, dz);
+                            let widthM = horizMax;
+                            if (horizMin > 0.15) {
+                                widthM = Math.hypot(dx, dz);
+                            }
+                            const depthM = horizMin;
+
+                            const center = new THREE.Vector3();
+                            box.getCenter(center);
+                            center.y = Math.max(center.y, box.max.y) + 0.20;
+
+                            element3DBoundsCache.set(id, { widthM, heightM, depthM, box, center });
+                        }
+                    }
+                }
+            }
+
+            const stillMissing = missingIds.filter(id => !element3DBoundsCache.has(id));
+            if (stillMissing.length > 0 && typeof model.getMergedBox === 'function') {
+                for (const id of stillMissing) {
+                    try {
+                        const box: THREE.Box3 = await model.getMergedBox([id]);
+                        if (box && !box.isEmpty() && isFinite(box.min.x) && isFinite(box.max.x)) {
+                            const dx = Math.abs(box.max.x - box.min.x);
+                            const dy = Math.abs(box.max.y - box.min.y);
+                            const dz = Math.abs(box.max.z - box.min.z);
+
+                            const heightM = dy;
+                            const horizMax = Math.max(dx, dz);
+                            const horizMin = Math.min(dx, dz);
+                            let widthM = horizMax;
+                            if (horizMin > 0.15) widthM = Math.hypot(dx, dz);
+                            const depthM = horizMin;
+
+                            const center = new THREE.Vector3();
+                            box.getCenter(center);
+                            center.y = Math.max(center.y, box.max.y) + 0.20;
+
+                            element3DBoundsCache.set(id, { widthM, heightM, depthM, box, center });
+                        }
+                    } catch (_) {}
+                }
+            }
+        } catch (err) {
+            console.warn('[BoundsCache] Error fetching batch boxes for model:', err);
+        }
+    }
+}
+
+function getElement3DBounds(expressID: number, modelUUID?: string): { widthM: number; heightM: number; depthM: number; box: THREE.Box3; center: THREE.Vector3 } | null {
+    return element3DBoundsCache.get(expressID) || null;
+}
+
+function getElementCenter(expressID: number, modelUUID?: string): THREE.Vector3 | null {
+    return element3DBoundsCache.get(expressID)?.center || null;
+}
+
 function getUniqueLoadedModels(): { uuid: string; name: string; model: any; elementCount: number }[] {
     const seen = new Set<any>();
     const list: { uuid: string; name: string; model: any; elementCount: number }[] = [];
@@ -4707,14 +4802,26 @@ function updateHiddenItems(map: Record<string, any> | Map<string, any>, visible:
 }
 
 function isElementHidden(e: any): boolean {
-    if (!e || e.expressID === undefined) return false;
-    const expressID = Number(e.expressID);
+    if (!e) return false;
+    const expressID = Number(e.expressID !== undefined ? e.expressID : e.id);
     if (isNaN(expressID)) return false;
 
+    // Check direct modelUUID
     if (e.modelUUID && hiddenItems[e.modelUUID]) {
         return hiddenItems[e.modelUUID].has(expressID);
     }
-
+    // Check partial key match (path vs uuid vs name)
+    for (const key in hiddenItems) {
+        if (e.modelUUID && (key.includes(e.modelUUID) || e.modelUUID.includes(key))) {
+            return hiddenItems[key].has(expressID);
+        }
+    }
+    // Check across all models in hiddenItems
+    for (const key in hiddenItems) {
+        if (hiddenItems[key] && hiddenItems[key].has(expressID)) {
+            return true;
+        }
+    }
     return false;
 }
 
@@ -7955,6 +8062,16 @@ function initQuantitiesPanel() {
             </div>
         `;
 
+        bulkBar.querySelector('#q-btn-clear-table-sel')?.addEventListener('click', () => {
+            selectedElementIds = [];
+            (window as any).__noraCurrentSelectedIds = new Set();
+            (window as any).__noraCurrentSelectedElements = [];
+            highlighter.clear('select');
+            updateSelectedRowsInUI();
+            updateBulkActionBar();
+            renderTableData(extractAllElements());
+        });
+
         bulkBar.querySelectorAll('.q-btn-xs[data-status]').forEach((btn) => {
             btn.addEventListener('click', () => {
                 const targetStatus = btn.getAttribute('data-status') as PurchaseStatus;
@@ -10868,6 +10985,16 @@ function initStatusPanel() {
             </div>
         `;
 
+        bulkBar.querySelector('#q-btn-clear-table-sel')?.addEventListener('click', () => {
+            selectedElementIds = [];
+            (window as any).__noraCurrentSelectedIds = new Set();
+            (window as any).__noraCurrentSelectedElements = [];
+            highlighter.clear('select');
+            updateSelectedRowsInUI();
+            updateBulkActionBar();
+            renderTableData(extractAllElements());
+        });
+
         bulkBar.querySelectorAll('.q-btn-xs[data-status]').forEach((btn) => {
             btn.addEventListener('click', () => {
                 const targetStatus = btn.getAttribute('data-status') as ConstructionStatus;
@@ -11833,9 +11960,7 @@ async function classifyModel(model: any) {
     invalidateElementsCache();
 
     logToScreen(`✓ Clasificado: ${allIds.size} elem | CLASIF:${integratedClassById.size} NIVEL:${integratedLevelById.size} MAT:${integratedMaterialById.size} NOMBRE:${integratedNameById.size} SUB:${integratedSubById.size}`);
-    if (idsWithGeometry && idsWithGeometry.length > 0) {
-        prefetchElements3DBounds(idsWithGeometry).catch(() => {});
-    }
+    // Pre-fetching 3D bounds done on demand
 
     if (typeof (window as any).refreshQuantitiesUI === 'function') {
         try {

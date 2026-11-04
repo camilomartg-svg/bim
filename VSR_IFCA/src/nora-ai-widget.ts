@@ -480,7 +480,7 @@ export class NoraAIWidget {
 
         const isReset = /(?:re*st[aá]blec|reset|limpi|mostra?r?\s*todo|ver\s*todo|todo\s*el\s*modelo|despejar|mostrar\s*modelo|quitar\s*filtros|restaurar|todo\s*visible|ver\s*todos?|^todos?$|^todo$)/i.test(qNorm);
         const isSameType = /(?:mismo\s+tipo|mismo\s+nombre|misma\s+categor[ií]a|iguales|similares|de\s+(?:este|ese|aquel)\s*tipo|del\s+mismo|de\s+esa\s+categor[ií]a|de\s+esta\s+categor[ií]a|como\s+(?:este|ese))/i.test(qNorm);
-        const isSelectionInfo = ['seleccionad', 'este', 'esta', 'tocado', 'marcado', 'que toque', 'actual', 'que seleccione', 'que elemento es', 'cual es este', 'que es esto'].some(k => qNorm.includes(k)) && !qNorm.includes('aisla');
+        const isSelectionInfo = /(?:seleccionad[ao]s?|est[eoa]s?|es[eoa]s?|aquel(?:los|las)?|tocad[ao]s?|marcad[ao]s?|que\s*toqu[eé]|actual(?:es)?|que\s*seleccion[eé]|que\s*elemento\s*es|cual\s*es\s*est[eoa]|que\s*es\s*esto|de\s*los\s*elementos\s*(?:visibles|activos)|volumen\s+de\s+(?:est[eoa]s?|la\s*selecci[oó]n)|cuanto\s+(?:miden|pesan|tienen)\s+est[eoa]s?)/i.test(qNorm) && !qNorm.includes('aisla');
         const isOnlyThisSelected = /(?:aisla\s*(?:solo|solamente)?\s*(?:este|el\s*seleccionado|esta\s*pieza)|ver\s*solo\s*este)/i.test(qNorm) && !isSameType;
 
         // Comandos contextuales directos se resuelven en 0ms localmente sin riesgo de timeout o alucinación de red
@@ -516,8 +516,8 @@ ${JSON.stringify(bimContext.anomalies || {}, null, 2)}
 
 TOTAL ELEMENTOS EN EL MODELO: ${bimContext.totalElements || 0}
 
-ELEMENTO SELECCIONADO O DE REFERENCIA:
-${JSON.stringify(this.lastInspectedElement || bimContext.selectedElements?.[0] || null, null, 2)}
+ELEMENTOS SELECCIONADOS ACTUALMENTE EN EL VISOR 3D (Si el usuario pregunta por "estos", "este", "la seleccion", o metrados de los elementos seleccionados, responde con estos datos):
+${JSON.stringify((bimContext.selectedElements && bimContext.selectedElements.length > 0) ? bimContext.selectedElements : ((window as any).__noraCurrentSelectedElements || (this.lastInspectedElement ? [this.lastInspectedElement] : [])), null, 2)}
 
 TIPOS Y NOMBRES DE PUERTAS EN EL MODELO:
 ${JSON.stringify(bimContext.sampleDoorTypes || [], null, 2)}
@@ -691,15 +691,21 @@ SIEMPRE responde ÚNICAMENTE en formato JSON:
         // 0. Inspección de Selección Activa (DOM o Memoria)
         // =========================================================================
         let selectedEls: any[] = bimContext?.selectedElements || [];
+        if (selectedEls.length === 0 && Array.isArray((window as any).__noraCurrentSelectedElements) && (window as any).__noraCurrentSelectedElements.length > 0) {
+            selectedEls = (window as any).__noraCurrentSelectedElements;
+        }
         if (selectedEls.length === 0 && typeof document !== 'undefined') {
             const tableRows = document.querySelectorAll('table tbody tr');
             for (let i = 0; i < tableRows.length; i++) {
                 const r = tableRows[i] as HTMLElement;
-                const isSelected = r.classList.contains('selected') || r.classList.contains('active') || r.querySelector('input:checked');
+                const isSelected = r.classList.contains('q-table-row-selected') || r.classList.contains('selected') || r.classList.contains('active') || r.querySelector('input:checked');
                 if (isSelected) {
                     const cells = r.querySelectorAll('td');
-                    if (cells.length >= 8) {
+                    if (cells.length >= 7) {
+                        const idStr = r.getAttribute('data-id') || cells[1]?.innerText?.trim() || '';
                         selectedEls.push({
+                            id: idStr,
+                            expressID: parseInt(idStr, 10) || 0,
                             name: cells[4]?.innerText?.trim() || cells[2]?.innerText?.trim() || 'Elemento seleccionado',
                             category: cells[3]?.innerText?.trim() || '',
                             classification: cells[1]?.innerText?.trim() || '',
@@ -709,7 +715,6 @@ SIEMPRE responde ÚNICAMENTE en formato JSON:
                             length: parseFloat(cells[9]?.innerText?.replace(',', '.') || '0') || 0,
                             volume: parseFloat(cells[10]?.innerText?.replace(',', '.') || '0') || 0
                         });
-                        break;
                     }
                 }
             }
@@ -762,24 +767,80 @@ SIEMPRE responde ÚNICAMENTE en formato JSON:
             };
         }
 
-        // Consultar qué elemento es el seleccionado actualmente
-        const isSelectionInfoQuery = ['seleccionad', 'este', 'esta', 'tocado', 'marcado', 'que toque', 'actual', 'que seleccione', 'que elemento es', 'cual es este', 'que es esto'].some(k => qNorm.includes(k)) && !qNorm.includes('aisla');
+        // Consultar qué elemento(s) están seleccionados actualmente o pedir su volumen/área/información
+        const isSelectionInfoQuery = /(?:seleccionad[ao]s?|est[eoa]s?|es[eoa]s?|aquel(?:los|las)?|tocad[ao]s?|marcad[ao]s?|que\s*toqu[eé]|actual(?:es)?|que\s*seleccion[eé]|que\s*elemento\s*es|cual\s*es\s*est[eoa]|que\s*es\s*esto|de\s*los\s*elementos\s*(?:visibles|activos)|volumen\s+de\s+(?:est[eoa]s?|la\s*selecci[oó]n)|cuanto\s+(?:miden|pesan|tienen)\s+est[eoa]s?)/i.test(qNorm) && !qNorm.includes('aisla');
 
-        if (activeRefEl && isSelectionInfoQuery) {
-            const el = activeRefEl;
-            const detailLines: string[] = [];
-            if (el.name) detailLines.push(`• <b>Nombre / Tipo:</b> ${el.name}`);
-            if (el.category) detailLines.push(`• <b>Categoría:</b> ${el.category}${el.classification ? ' (' + el.classification + ')' : ''}`);
-            if (el.level) detailLines.push(`• <b>Ubicación (Nivel):</b> ${el.level}`);
-            if (el.material) detailLines.push(`• <b>Material:</b> ${el.material}`);
-            if (el.area > 0) detailLines.push(`• <b>Área Individual:</b> ${el.area} m²`);
-            if (el.volume > 0) detailLines.push(`• <b>Volumen Individual:</b> ${el.volume} m³`);
-            if (el.length > 0) detailLines.push(`• <b>Longitud Individual:</b> ${el.length} m`);
+        if ((isSelectionInfoQuery || /(?:volumen|area|longitud|dimension|tamano|cuanto)/i.test(qNorm)) && (selectedEls.length > 0 || activeRefEl)) {
+            const isVolReq = /(?:volumen|m3|cubico|cubicos)/i.test(qNorm);
+            const isAreaReq = /(?:area|superficie|m2|cuadrado|cuadrados)/i.test(qNorm);
+            const isLenReq = /(?:longitud|largo|metros|m\b)/i.test(qNorm) && !isVolReq && !isAreaReq;
 
-            return {
-                answer: `📌 <b>Elemento seleccionado:</b><br>${detailLines.join('<br>')}`,
-                action: { type: 'none' }
-            };
+            if (selectedEls.length > 1) {
+                const totalVol = selectedEls.reduce((sum, e) => sum + (e.volume || 0), 0);
+                const totalArea = selectedEls.reduce((sum, e) => sum + (e.area || 0), 0);
+                const totalLen = selectedEls.reduce((sum, e) => sum + (e.length || 0), 0);
+
+                let header = `📌 <b>${selectedEls.length} elementos seleccionados en pantalla:</b><br>`;
+                if (isVolReq) {
+                    header += `• <b>Volumen Total:</b> <strong>${totalVol.toFixed(3)} m³</strong><br>`;
+                    if (totalArea > 0) header += `• <b>Área Total:</b> ${totalArea.toFixed(2)} m²<br>`;
+                } else if (isAreaReq) {
+                    header += `• <b>Área Total:</b> <strong>${totalArea.toFixed(2)} m²</strong><br>`;
+                    if (totalVol > 0) header += `• <b>Volumen Total:</b> ${totalVol.toFixed(3)} m³<br>`;
+                } else if (isLenReq) {
+                    header += `• <b>Longitud Total:</b> <strong>${totalLen.toFixed(2)} m</strong><br>`;
+                } else {
+                    if (totalVol > 0) header += `• <b>Volumen Total:</b> ${totalVol.toFixed(3)} m³<br>`;
+                    if (totalArea > 0) header += `• <b>Área Total:</b> ${totalArea.toFixed(2)} m²<br>`;
+                    if (totalLen > 0) header += `• <b>Longitud Total:</b> ${totalLen.toFixed(2)} m<br>`;
+                }
+
+                header += `<br><b>Desglose de elementos:</b><br>`;
+                selectedEls.slice(0, 10).forEach((e, idx) => {
+                    const idLabel = e.expressID || e.id || '';
+                    const nameLabel = e.name || e.category || 'Elemento';
+                    const volLabel = e.volume ? `${e.volume.toFixed(3)} m³` : '';
+                    const areaLabel = e.area ? `${e.area.toFixed(2)} m²` : '';
+                    const matLabel = e.material && e.material !== 'SIN MATERIAL' ? ` | ${e.material}` : '';
+                    const lvlLabel = e.level && e.level !== 'SIN NIVEL' ? ` | ${e.level}` : '';
+                    header += `${idx + 1}. <b>${nameLabel}</b> (ID: ${idLabel})${lvlLabel}${matLabel} ${volLabel ? `— <b>${volLabel}</b>` : ''} ${areaLabel ? `(${areaLabel})` : ''}<br>`;
+                });
+                if (selectedEls.length > 10) {
+                    header += `<i>... y ${selectedEls.length - 10} elementos más seleccionados.</i><br>`;
+                }
+                return {
+                    answer: header,
+                    action: { type: 'none' }
+                };
+            } else if (activeRefEl) {
+                const el = activeRefEl;
+                if (isVolReq && el.volume !== undefined) {
+                    return {
+                        answer: `📌 El elemento seleccionado (<b>${el.name}</b>, ID: ${el.expressID || el.id}) tiene un volumen de <b>${el.volume} m³</b> (Área: ${el.area || 0} m², Nivel: ${el.level || 'N/A'}, Material: ${el.material || 'N/A'}).`,
+                        action: { type: 'none' }
+                    };
+                }
+                if (isAreaReq && el.area !== undefined) {
+                    return {
+                        answer: `📌 El elemento seleccionado (<b>${el.name}</b>, ID: ${el.expressID || el.id}) tiene un área de <b>${el.area} m²</b> (Volumen: ${el.volume || 0} m³, Nivel: ${el.level || 'N/A'}, Material: ${el.material || 'N/A'}).`,
+                        action: { type: 'none' }
+                    };
+                }
+                const detailLines: string[] = [];
+                if (el.name) detailLines.push(`• <b>Nombre / Tipo:</b> ${el.name}`);
+                if (el.expressID || el.id) detailLines.push(`• <b>ID Express:</b> ${el.expressID || el.id}`);
+                if (el.category) detailLines.push(`• <b>Categoría:</b> ${el.category}${el.classification ? ' (' + el.classification + ')' : ''}`);
+                if (el.level) detailLines.push(`• <b>Ubicación (Nivel):</b> ${el.level}`);
+                if (el.material) detailLines.push(`• <b>Material:</b> ${el.material}`);
+                if (el.area > 0) detailLines.push(`• <b>Área:</b> ${el.area} m²`);
+                if (el.volume > 0) detailLines.push(`• <b>Volumen:</b> ${el.volume} m³`);
+                if (el.length > 0) detailLines.push(`• <b>Longitud:</b> ${el.length} m`);
+
+                return {
+                    answer: `📌 <b>Elemento seleccionado:</b><br>${detailLines.join('<br>')}`,
+                    action: { type: 'none' }
+                };
+            }
         }
 
         // Aislar exclusivamente el elemento seleccionado
