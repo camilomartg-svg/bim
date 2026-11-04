@@ -1496,21 +1496,49 @@ world.camera.controls.addEventListener('rest', () => {
 
 // --- Helper Functions ---
 function getSpecialtyFromIfcPath(path: string): string {
+    if (!path) return 'General';
     const filename = path.split('/').pop() ?? path;
     const cleanFilename = filename.split('?')[0];
     const baseName = cleanFilename.replace(/\.(ifc|frag)$/i, '');
-    const parts = baseName.split('_');
-    const raw = (parts[3] ?? '').trim();
 
-    if (!raw) return 'General';
-
-    const normalized = raw
+    const norm = baseName
         .normalize('NFD')
         .replace(/[\u0300-\u036f]/g, '')
-        .toLowerCase();
+        .toUpperCase();
 
-    if (normalized === 'desagues') return 'Desagües';
-    return raw;
+    // 1. Keyword-based detection by model filename
+    if (norm.includes('ARQUITECTURA') || norm.includes('ARCHITECTURE') || /(?:^|[\s_\.\-])ARQ(?:[\s_\.\-]|$)/i.test(norm)) {
+        return 'Arquitectura';
+    }
+    if (norm.includes('ESTRUCTURAL') || norm.includes('ESTRUCTURA') || norm.includes('STRUCTURAL') || norm.includes('STRUCTURE') || /(?:^|[\s_\.\-])(?:EST|ESTR)(?:[\s_\.\-]|$)/i.test(norm)) {
+        return 'Estructura';
+    }
+    if (norm.includes('HIDROSANITARIO') || norm.includes('HIDRAULICO') || norm.includes('PLOMERIA') || norm.includes('PLUMBING') || norm.includes('SANITARIO') || norm.includes('DESAGUE') || norm.includes('AGUA') || /(?:^|[\s_\.\-])(?:HID|SAN|HS)(?:[\s_\.\-]|$)/i.test(norm)) {
+        return 'Hidrosanitario';
+    }
+    if (norm.includes('ELECTRICO') || norm.includes('ELECTRICA') || norm.includes('ELECTRIC') || norm.includes('ILUMINACION') || norm.includes('LIGHTING') || /(?:^|[\s_\.\-])(?:ELE|ELEC)(?:[\s_\.\-]|$)/i.test(norm)) {
+        return 'Eléctrico';
+    }
+    if (norm.includes('MECANICO') || norm.includes('MECANICA') || norm.includes('MECHANICAL') || norm.includes('HVAC') || norm.includes('CLIMATIZACION') || norm.includes('AIRE') || /(?:^|[\s_\.\-])MEC(?:[\s_\.\-]|$)/i.test(norm)) {
+        return 'Mecánico';
+    }
+    if (norm.includes('GAS') || /(?:^|[\s_\.\-])GAS(?:[\s_\.\-]|$)/i.test(norm)) {
+        return 'Gas';
+    }
+    if (norm.includes('INCENDIO') || norm.includes('RCI') || norm.includes('FIRE') || /(?:^|[\s_\.\-])RCI(?:[\s_\.\-]|$)/i.test(norm)) {
+        return 'Red Contra Incendio';
+    }
+
+    // 2. ISO 19650 standard naming fallback: parts[3]
+    const parts = baseName.split('_');
+    const raw = (parts[3] ?? '').trim();
+    if (raw) {
+        const rawNorm = raw.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+        if (rawNorm === 'desagues') return 'Desagües';
+        return raw;
+    }
+
+    return 'General';
 }
 
 // Configure Fragments Manager (Culling, etc.)
@@ -3144,6 +3172,7 @@ function applyClassificationColorizationToViewer() {
 }
 
 function resetFilters() {
+    (window as any).__noraIsolatedVisibleIds = null;
     selectedClassifications.clear();
     selectedCategories.clear();
     selectedLevels.clear();
@@ -3751,12 +3780,15 @@ async function applyFiltersToViewerGlobal() {
 
     // 3. Aplicar aislamiento en el visor (1 sola llamada atómica en lugar de loops pesados)
     if (hasAnyFilter || activeModelFilter !== 'ALL') {
+        const visIds = new Set<number>(visibleElements.map(e => Number(e.expressID || e.id)));
+        (window as any).__noraIsolatedVisibleIds = visIds;
         if (visibleElements.length > 0) {
             await hider.isolate(visibleMap);
         } else {
             await hider.set(false);
         }
     } else {
+        (window as any).__noraIsolatedVisibleIds = null;
         await hider.set(true);
     }
 
@@ -6423,13 +6455,15 @@ async function loadModelList() {
             // Group models by specialty
             const groups: Record<string, any[]> = {};
             models.forEach((m: { name: string; path: string; url: string; folder?: string; deliveryTeams?: any }) => {
-                let specialty = 'General';
-                if (m.folder && m.folder !== 'General' && m.folder !== '') {
-                    specialty = cleanSpecialty(m.folder);
-                } else if (Array.isArray(m.deliveryTeams) && m.deliveryTeams.length > 0) {
-                    specialty = cleanSpecialty(m.deliveryTeams[0]);
-                } else {
-                    specialty = getSpecialtyFromIfcPath(m.path);
+                const namePath = m.name || m.path || '';
+                let specialty = getSpecialtyFromIfcPath(namePath);
+
+                if (specialty === 'General') {
+                    if (m.folder && m.folder !== 'General' && m.folder !== '') {
+                        specialty = cleanSpecialty(m.folder);
+                    } else if (Array.isArray(m.deliveryTeams) && m.deliveryTeams.length > 0) {
+                        specialty = cleanSpecialty(m.deliveryTeams[0]);
+                    }
                 }
                 if (!groups[specialty]) groups[specialty] = [];
                 groups[specialty].push(m);
@@ -8000,22 +8034,30 @@ function initQuantitiesPanel() {
     // Two-way selection listeners
     const onHighlightCallback = (modelIdMap: any) => {
         const ids: number[] = [];
-        for (const set of Object.values(modelIdMap)) {
+        const entries = modelIdMap instanceof Map ? Array.from(modelIdMap.entries()) : (typeof modelIdMap === 'object' ? Object.entries(modelIdMap) : []);
+        for (const [, set] of entries) {
             if (set instanceof Set) {
-                set.forEach((id) => ids.push(id));
+                set.forEach((id) => ids.push(Number(id)));
             } else if (Array.isArray(set)) {
                 (set as any[]).forEach((id) => ids.push(Number(id)));
             }
         }
         selectedElementIds = ids;
+        (window as any).__noraCurrentSelectedIds = new Set(ids);
+        const all = extractAllElements();
+        (window as any).__noraCurrentSelectedElements = all.filter(e => ids.includes(Number(e.expressID || e.id)));
         updateSelectedRowsInUI();
         updateBulkActionBar();
+        renderTableData(all);
     };
 
     const onClearCallback = () => {
         selectedElementIds = [];
+        (window as any).__noraCurrentSelectedIds = new Set();
+        (window as any).__noraCurrentSelectedElements = [];
         updateSelectedRowsInUI();
         updateBulkActionBar();
+        renderTableData(extractAllElements());
     };
 
     highlighter.events.select.onHighlight.add(onHighlightCallback);
@@ -8050,8 +8092,9 @@ function initQuantitiesPanel() {
         }
 
         bulkBar.innerHTML = `
-            <div class="q-bulk-bar-left">
+            <div class="q-bulk-bar-left" style="display: flex; align-items: center; gap: 8px;">
                 <span>${selectedElementIds.length} seleccionado(s)</span>
+                <button type="button" class="q-btn-xs" id="q-btn-clear-selection-filter" style="padding: 2px 8px; font-size: 11px; background: rgba(255,255,255,0.18); border: 1px solid rgba(255,255,255,0.3); border-radius: 4px; color: #fff; cursor: pointer;">Mostrar todos</button>
             </div>
             <div class="q-bulk-bar-right">
                 <button type="button" class="q-btn-xs" data-status="PENDIENTE">Pendiente</button>
@@ -8067,6 +8110,17 @@ function initQuantitiesPanel() {
             (window as any).__noraCurrentSelectedIds = new Set();
             (window as any).__noraCurrentSelectedElements = [];
             highlighter.clear('select');
+            updateSelectedRowsInUI();
+            updateBulkActionBar();
+            renderTableData(extractAllElements());
+        });
+
+        bulkBar.querySelector('#q-btn-clear-selection-filter')?.addEventListener('click', () => {
+            selectedElementIds = [];
+            (window as any).__noraCurrentSelectedIds = new Set();
+            (window as any).__noraCurrentSelectedElements = [];
+            const highlighter = components.get(OBF.Highlighter);
+            if (highlighter) highlighter.clear('select');
             updateSelectedRowsInUI();
             updateBulkActionBar();
             renderTableData(extractAllElements());
@@ -9076,22 +9130,32 @@ function initQuantitiesPanel() {
 
         let filtered = elements;
 
-        // Exclude elements that are hidden in 3D viewer (via Apagar / Aislar)
-        filtered = filtered.filter(e => !isElementHidden(e));
+        // 1. Filtrado prioritario por selección activa en 3D (Requerimiento 3)
+        if (selectedElementIds.length > 0) {
+            const selSet = new Set(selectedElementIds.map(Number));
+            filtered = filtered.filter(e => selSet.has(Number(e.expressID !== undefined ? e.expressID : e.id)));
+        } else if ((window as any).__noraIsolatedVisibleIds instanceof Set) {
+            // 2. Filtrado por aislamiento activo en 3D (Requerimiento 2)
+            const visSet: Set<number> = (window as any).__noraIsolatedVisibleIds;
+            filtered = filtered.filter(e => visSet.has(Number(e.expressID !== undefined ? e.expressID : e.id)));
+        } else {
+            // Excluir elementos apagados en 3D (via Apagar / hiddenItems)
+            filtered = filtered.filter(e => !isElementHidden(e));
 
-        // Apply global classification tree filters
-        const isTreeFilterActive = selectedClassifications.size > 0 || selectedCategories.size > 0;
-        if (isTreeFilterActive) {
-            filtered = filtered.filter(e => selectedCategories.has(e.name) || selectedClassifications.has(e.classification));
-        }
-        if (selectedLevels.size > 0) {
-            filtered = filtered.filter(e => selectedLevels.has(e.level));
-        }
-        if (selectedMaterials.size > 0) {
-            filtered = filtered.filter(e => selectedMaterials.has(e.material));
-        }
-        if (selectedPilotes.size > 0) {
-            filtered = filtered.filter(e => selectedPilotes.has(e.pilote));
+            // Aplicar filtros globales del árbol de clasificación
+            const isTreeFilterActive = selectedClassifications.size > 0 || selectedCategories.size > 0;
+            if (isTreeFilterActive) {
+                filtered = filtered.filter(e => selectedCategories.has(e.category) || selectedCategories.has(e.name) || selectedClassifications.has(e.classification));
+            }
+            if (selectedLevels.size > 0) {
+                filtered = filtered.filter(e => selectedLevels.has(e.level));
+            }
+            if (selectedMaterials.size > 0) {
+                filtered = filtered.filter(e => selectedMaterials.has(e.material));
+            }
+            if (selectedPilotes.size > 0) {
+                filtered = filtered.filter(e => selectedPilotes.has(e.pilote));
+            }
         }
 
         if (searchQuery.trim() !== '') {
@@ -9218,12 +9282,21 @@ function initQuantitiesPanel() {
                             selectedElementIds.push(id);
                         }
                     } else {
-                        selectedElementIds = [id];
+                        if (selectedElementIds.length === 1 && selectedElementIds[0] === id) {
+                            selectedElementIds = [];
+                        } else {
+                            selectedElementIds = [id];
+                        }
                     }
+
+                    (window as any).__noraCurrentSelectedIds = new Set(selectedElementIds);
+                    const all = extractAllElements();
+                    (window as any).__noraCurrentSelectedElements = all.filter(el => selectedElementIds.includes(Number(el.expressID || el.id)));
 
                     updateSelectedRowsInUI();
                     updateBulkActionBar();
-                    highlightSelectionInViewer(elements);
+                    highlightSelectionInViewer(all);
+                    renderTableData(all);
                 });
             });
 
@@ -10972,8 +11045,9 @@ function initStatusPanel() {
         }
 
         bulkBar.innerHTML = `
-            <div class="q-bulk-bar-left">
+            <div class="q-bulk-bar-left" style="display: flex; align-items: center; gap: 8px;">
                 <span>${selectedElementIds.length} seleccionado(s)</span>
+                <button type="button" class="q-btn-xs" id="q-btn-clear-selection-filter" style="padding: 2px 8px; font-size: 11px; background: rgba(255,255,255,0.18); border: 1px solid rgba(255,255,255,0.3); border-radius: 4px; color: #fff; cursor: pointer;">Mostrar todos</button>
             </div>
             <div class="q-bulk-bar-right">
                 <button type="button" class="q-btn-xs" data-status="NINGUNO">Ninguno</button>
@@ -10990,6 +11064,17 @@ function initStatusPanel() {
             (window as any).__noraCurrentSelectedIds = new Set();
             (window as any).__noraCurrentSelectedElements = [];
             highlighter.clear('select');
+            updateSelectedRowsInUI();
+            updateBulkActionBar();
+            renderTableData(extractAllElements());
+        });
+
+        bulkBar.querySelector('#q-btn-clear-selection-filter')?.addEventListener('click', () => {
+            selectedElementIds = [];
+            (window as any).__noraCurrentSelectedIds = new Set();
+            (window as any).__noraCurrentSelectedElements = [];
+            const highlighter = components.get(OBF.Highlighter);
+            if (highlighter) highlighter.clear('select');
             updateSelectedRowsInUI();
             updateBulkActionBar();
             renderTableData(extractAllElements());
@@ -11237,22 +11322,32 @@ function initStatusPanel() {
 
         let filtered = elements;
 
-        // Exclude elements that are hidden in 3D viewer (via Apagar / Aislar)
-        filtered = filtered.filter(e => !isElementHidden(e));
+        // 1. Filtrado prioritario por selección activa en 3D (Requerimiento 3)
+        if (selectedElementIds.length > 0) {
+            const selSet = new Set(selectedElementIds.map(Number));
+            filtered = filtered.filter(e => selSet.has(Number(e.expressID !== undefined ? e.expressID : e.id)));
+        } else if ((window as any).__noraIsolatedVisibleIds instanceof Set) {
+            // 2. Filtrado por aislamiento activo en 3D (Requerimiento 2)
+            const visSet: Set<number> = (window as any).__noraIsolatedVisibleIds;
+            filtered = filtered.filter(e => visSet.has(Number(e.expressID !== undefined ? e.expressID : e.id)));
+        } else {
+            // Excluir elementos que están apagados en 3D (via Apagar / hiddenItems)
+            filtered = filtered.filter(e => !isElementHidden(e));
 
-        // Apply global classification tree filters
-        const isTreeFilterActive = selectedClassifications.size > 0 || selectedCategories.size > 0;
-        if (isTreeFilterActive) {
-            filtered = filtered.filter(e => selectedCategories.has(e.category) || selectedCategories.has(e.name) || selectedClassifications.has(e.classification));
-        }
-        if (selectedLevels.size > 0) {
-            filtered = filtered.filter(e => selectedLevels.has(e.level));
-        }
-        if (selectedMaterials.size > 0) {
-            filtered = filtered.filter(e => selectedMaterials.has(e.material));
-        }
-        if (selectedPilotes.size > 0) {
-            filtered = filtered.filter(e => selectedPilotes.has(e.pilote));
+            // Aplicar filtros globales del árbol de clasificación
+            const isTreeFilterActive = selectedClassifications.size > 0 || selectedCategories.size > 0;
+            if (isTreeFilterActive) {
+                filtered = filtered.filter(e => selectedCategories.has(e.category) || selectedCategories.has(e.name) || selectedClassifications.has(e.classification));
+            }
+            if (selectedLevels.size > 0) {
+                filtered = filtered.filter(e => selectedLevels.has(e.level));
+            }
+            if (selectedMaterials.size > 0) {
+                filtered = filtered.filter(e => selectedMaterials.has(e.material));
+            }
+            if (selectedPilotes.size > 0) {
+                filtered = filtered.filter(e => selectedPilotes.has(e.pilote));
+            }
         }
 
         if (searchQuery.trim() !== '') {
@@ -11373,12 +11468,21 @@ function initStatusPanel() {
                             selectedElementIds.push(id);
                         }
                     } else {
-                        selectedElementIds = [id];
+                        if (selectedElementIds.length === 1 && selectedElementIds[0] === id) {
+                            selectedElementIds = [];
+                        } else {
+                            selectedElementIds = [id];
+                        }
                     }
+
+                    (window as any).__noraCurrentSelectedIds = new Set(selectedElementIds);
+                    const all = extractAllElements();
+                    (window as any).__noraCurrentSelectedElements = all.filter(el => selectedElementIds.includes(Number(el.expressID || el.id)));
 
                     updateSelectedRowsInUI();
                     updateBulkActionBar();
-                    highlightSelectionInViewer(elements);
+                    highlightSelectionInViewer(all);
+                    renderTableData(all);
                 });
             });
 
@@ -11995,6 +12099,15 @@ function setupVisibilityToolbar() {
         hideBtn.addEventListener('click', async () => {
             const selection = getCurrentSelection();
             if (selection) {
+                const hiddenIds = new Set<number>();
+                const entries = selection instanceof Map ? Array.from(selection.entries()) : (typeof selection === 'object' ? Object.entries(selection) : []);
+                for (const [, idSet] of entries) {
+                    const arr = idSet instanceof Set ? Array.from(idSet) : (Array.isArray(idSet) ? idSet : []);
+                    arr.forEach((id: any) => hiddenIds.add(Number(id)));
+                }
+                if ((window as any).__noraIsolatedVisibleIds instanceof Set) {
+                    hiddenIds.forEach(id => (window as any).__noraIsolatedVisibleIds.delete(id));
+                }
                 await hider.set(false, selection);
                 highlighter.clear('select');
                 window.dispatchEvent(new CustomEvent('classificationFilterChanged'));
@@ -12006,6 +12119,14 @@ function setupVisibilityToolbar() {
         isolateBtn.addEventListener('click', async () => {
             const selection = getCurrentSelection();
             if (selection) {
+                const visIds = new Set<number>();
+                const entries = selection instanceof Map ? Array.from(selection.entries()) : (typeof selection === 'object' ? Object.entries(selection) : []);
+                for (const [, idSet] of entries) {
+                    const arr = idSet instanceof Set ? Array.from(idSet) : (Array.isArray(idSet) ? idSet : []);
+                    arr.forEach((id: any) => visIds.add(Number(id)));
+                }
+                (window as any).__noraIsolatedVisibleIds = visIds;
+
                 await hider.isolate(selection);
                 highlighter.clear('select');
                 window.dispatchEvent(new CustomEvent('classificationFilterChanged'));
@@ -12015,6 +12136,10 @@ function setupVisibilityToolbar() {
 
     if (showAllBtn) {
         showAllBtn.addEventListener('click', async () => {
+            (window as any).__noraIsolatedVisibleIds = null;
+            (window as any).__noraCurrentSelectedIds = new Set();
+            (window as any).__noraCurrentSelectedElements = [];
+            for (const key in hiddenItems) delete hiddenItems[key];
             await hider.set(true);
             highlighter.clear('select');
 
@@ -12125,13 +12250,16 @@ function buildBIMContextForAI() {
     const selectedElements: any[] = [];
     try {
         const selectedIdSet = new Set<number>();
-        if (highlighter && highlighter.selection && highlighter.selection.select) {
-            const selMap = highlighter.selection.select;
-            for (const modelUUID in selMap) {
-                const ids = selMap[modelUUID];
-                const arr = ids instanceof Set ? Array.from(ids) : Array.isArray(ids) ? ids : [];
-                arr.forEach((id: number) => selectedIdSet.add(Number(id)));
+        const sel = getCurrentSelection();
+        if (sel) {
+            const entries = sel instanceof Map ? Array.from(sel.entries()) : (typeof sel === 'object' ? Object.entries(sel) : []);
+            for (const [, ids] of entries) {
+                const arr = ids instanceof Set ? Array.from(ids) : (Array.isArray(ids) ? ids : []);
+                arr.forEach((id: any) => selectedIdSet.add(Number(id)));
             }
+        }
+        if ((window as any).__noraCurrentSelectedIds instanceof Set) {
+            (window as any).__noraCurrentSelectedIds.forEach((id: any) => selectedIdSet.add(Number(id)));
         }
         
         if (selectedIdSet.size > 0) {
