@@ -2486,6 +2486,21 @@ bim-label {
     grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
     gap: 16px;
     padding-bottom: 24px;
+    align-items: start;
+}
+
+@media (min-width: 760px) {
+    .q-despiece-grid.two-sheets:not(.single-col) {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .q-despiece-grid.multi-sheets:not(.single-col) {
+        grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+    }
+}
+
+.q-despiece-grid.one-sheet:not(.single-col) .q-despiece-sheet-card {
+    max-width: 780px;
 }
 
 .q-despiece-sheet-card {
@@ -2509,6 +2524,8 @@ bim-label {
     border-bottom: 1px solid #e2e8f0;
     padding: 10px 14px;
     display: flex;
+    flex-wrap: wrap;
+    gap: 6px 10px;
     align-items: center;
     justify-content: space-between;
 }
@@ -2552,25 +2569,26 @@ bim-label {
 
 /* Contenedor del plano SVG de corte */
 .q-despiece-canvas-container {
-    padding: 10px 14px;
-    background: #fafaf9;
+    padding: 12px 14px;
+    background: #f8fafc;
     display: flex;
     align-items: center;
     justify-content: center;
-    min-height: 140px;
-    max-height: 220px;
+    min-height: 175px;
+    max-height: 275px;
     border-bottom: 1px solid #f1f5f9;
 }
 
 .q-despiece-svg {
     width: 100%;
-    max-height: 190px;
-    background: #fffdf5; /* tono madera / tablero claro */
-    border: 2px solid #b45309; /* borde de tablero */
-    border-radius: 4px;
-    box-shadow: inset 0 0 10px rgba(180, 83, 9, 0.08);
+    height: auto;
+    max-height: 245px;
+    background: transparent;
+    border: none;
+    box-shadow: none;
     display: block;
     object-fit: contain;
+    filter: drop-shadow(0 2px 6px rgba(15, 23, 42, 0.08));
 }
 
 .q-despiece-piece-rect {
@@ -2603,7 +2621,7 @@ bim-label {
 /* Tabla de piezas de la lÃ¡mina */
 .q-despiece-sheet-table {
     padding: 8px 12px;
-    max-height: 180px;
+    max-height: 220px;
     overflow-y: auto;
 }
 
@@ -2664,7 +2682,16 @@ bim-label {
 }
 
 .q-despiece-grid.single-col .q-despiece-canvas-container {
-    min-height: 480px;
+    min-height: 420px;
+    max-height: 560px;
+}
+
+.q-despiece-grid.single-col .q-despiece-svg {
+    max-height: 510px;
+}
+
+.q-despiece-grid.single-col .q-despiece-sheet-table {
+    max-height: none;
 }
 
 .q-sheet-action-btns {
@@ -2784,10 +2811,11 @@ bim-label {
     box-shadow: 0 1px 3px rgba(0,0,0,0.05);
 }
 
-.q-despiece-modal-canvas svg {
+.q-despiece-modal-canvas svg,
+.q-despiece-modal-canvas .q-despiece-svg {
     width: 100%;
     height: 100%;
-    max-height: 72vh;
+    max-height: 75vh !important;
 }
 
 .q-despiece-modal-table-pane {

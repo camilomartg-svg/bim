@@ -19,6 +19,7 @@ import {
     extractModularWallPieces,
     optimizeSheetCutting,
     generateSheetSvg,
+    escapeDespieceHtml,
     CutSheet,
     ModularPiece,
     checkIsModular,
@@ -8560,8 +8561,8 @@ function initQuantitiesPanel() {
                 display: none;
             `;
 
-            marker.innerHTML = `<strong>${orderLabels}</strong> <span style="font-size: 10px; font-weight: bold; opacity: 0.9; margin-left: 3px;">${tagText}</span>${isSplitWall ? ' <span style="font-size: 9px; background: rgba(0,0,0,0.15); padding: 1px 4px; border-radius: 4px; margin-left: 3px;">✂ Subdividido</span>' : ''}`;
-            marker.title = `${first.piece.name}&#10;Cortes asignados: ${orderLabels}&#10;Tag: ${tagText}&#10;Click para enfocar en la tabla de despiece`;
+            marker.innerHTML = `<strong>${escapeDespieceHtml(orderLabels)}</strong> <span style="font-size: 10px; font-weight: bold; opacity: 0.9; margin-left: 3px;">${escapeDespieceHtml(tagText)}</span>${isSplitWall ? ' <span style="font-size: 9px; background: rgba(0,0,0,0.15); padding: 1px 4px; border-radius: 4px; margin-left: 3px;">✂ Subdividido</span>' : ''}`;
+            marker.title = `${first.piece.name}\nCortes asignados: ${orderLabels}\nTag: ${tagText}\nClick para enfocar en la tabla de despiece`;
 
             marker.addEventListener('mouseenter', () => {
                 marker.style.transform = 'translate(-50%, -50%) scale(1.15)';
@@ -8750,10 +8751,10 @@ function initQuantitiesPanel() {
             document.body.appendChild(hud);
         }
         if (isSpecific && targetSheet) {
-            hud.innerHTML = `<span class="badge-dot" style="background: #22c55e;"></span> Despiece 3D: Lámina #${targetSheet.sheetIndex} &bull; ${targetSheet.placedPieces.length} piezas (${targetSheet.material})`;
+            hud.innerHTML = `<span class="badge-dot" style="background: #22c55e;"></span> Despiece 3D: Lámina #${targetSheet.sheetIndex} &bull; ${targetSheet.placedPieces.length} cortes (${escapeDespieceHtml(targetSheet.material)})`;
         } else {
             const totalPieces = sheets.reduce((sum, s) => sum + s.placedPieces.length, 0);
-            hud.innerHTML = `<span class="badge-dot" style="background: var(--primary-color);"></span> Despiece 3D: Todas las Láminas &bull; ${sheets.length} láminas (${totalPieces} piezas)`;
+            hud.innerHTML = `<span class="badge-dot" style="background: var(--primary-color);"></span> Despiece 3D: Todas las Láminas &bull; ${sheets.length} láminas (${totalPieces} cortes)`;
         }
     }
     // Modal para ver lámina a pantalla completa
@@ -8772,11 +8773,11 @@ function initQuantitiesPanel() {
         const nextIndex = sheetIndex < sheets.length ? sheetIndex + 1 : 1;
 
         modal.innerHTML = `
-            <div class="q-despiece-modal-content">
+            <div class="q-despiece-modal-content q-despiece-print-area">
                 <div class="q-despiece-modal-header">
                     <div class="q-despiece-modal-title">
                         <i class="fa-solid fa-sheet-plastic" style="color: var(--primary-color);"></i>
-                        Lámina #${sheet.sheetIndex} de ${sheets.length} &bull; ${sheet.material} (${(sheet.sheetWidth / 1000).toFixed(2)} &times; ${(sheet.sheetHeight / 1000).toFixed(2)} m)
+                        Lámina #${sheet.sheetIndex} de ${sheets.length} &bull; ${escapeDespieceHtml(sheet.material)} (${(sheet.sheetWidth / 1000).toFixed(2)} &times; ${(sheet.sheetHeight / 1000).toFixed(2)} m)
                         <span class="q-despiece-badge green" style="margin-left: 10px;">${sheet.efficiencyPercent}% Usado</span>
                         <span class="q-despiece-badge orange">${sheet.wastePercent}% Sobrante (${sheet.wasteAreaM2} m&sup2;)</span>
                     </div>
@@ -8804,7 +8805,7 @@ function initQuantitiesPanel() {
                     </div>
                     <div class="q-despiece-modal-table-pane">
                         <div style="font-weight: 800; font-size: 12px; margin-bottom: 8px; color: #334155;">
-                            TABLA DE CORTES (${sheet.placedPieces.length} piezas)
+                            TABLA DE CORTES (${sheet.placedPieces.length} ${sheet.placedPieces.length === 1 ? 'corte' : 'cortes'})
                         </div>
                         <table class="q-despiece-table" style="font-size: 11px;">
                             <thead>
@@ -8819,18 +8820,18 @@ function initQuantitiesPanel() {
                             </thead>
                             <tbody>
                                 ${sheet.placedPieces.map(p => `
-                                    <tr class="q-despiece-row" data-id="${p.piece.expressID || p.piece.id}">
+                                    <tr class="q-despiece-row" data-id="${escapeDespieceHtml(p.piece.expressID || p.piece.id)}">
                                         <td>
                                             <span style="display: inline-block; width: 12px; height: 12px; border-radius: 2px; background: ${p.color}; margin-right: 4px; vertical-align: middle;"></span>
                                             <strong>#${p.orderIndex}</strong>
                                         </td>
-                                                        <td style="font-family: monospace; font-weight: bold;">
-                                                            ${p.piece.tag}${p.piece.isSplit ? ` <span style="font-size: 10px; color: #f59e0b; background: rgba(245, 158, 11, 0.15); padding: 1px 4px; border-radius: 3px;" title="Muro modular seccionado en módulos para optimizar el tablero">[P${p.piece.partIndex || 1}/${p.piece.totalParts || 2}]</span>` : ''}
-                                                        </td>
-                                                        <td title="${p.piece.name}">
-                                                            ${p.piece.nombreIntegrado}
-                                                            ${p.piece.hasArcCutout ? ` <span style="font-size: 9px; background: rgba(220, 38, 38, 0.12); color: #dc2626; border: 1px solid rgba(220, 38, 38, 0.3); padding: 1px 4px; border-radius: 4px; font-weight: bold;" title="Pieza con corte curvo / vano semicircular">&#8978; Vano Curvo</span>` : ''}
-                                                        </td>
+                                        <td style="font-family: monospace; font-weight: bold;">
+                                            ${escapeDespieceHtml(p.piece.tag)}${p.piece.isSplit ? ` <span style="font-size: 10px; color: #f59e0b; background: rgba(245, 158, 11, 0.15); padding: 1px 4px; border-radius: 3px;" title="Muro modular seccionado en módulos para optimizar el tablero">[P${p.piece.partIndex || 1}/${p.piece.totalParts || 2}]</span>` : ''}
+                                        </td>
+                                        <td title="${escapeDespieceHtml(p.piece.name)}">
+                                            ${escapeDespieceHtml(p.piece.nombreIntegrado)}
+                                            ${p.piece.hasArcCutout ? ` <span style="font-size: 9px; background: rgba(220, 38, 38, 0.12); color: #dc2626; border: 1px solid rgba(220, 38, 38, 0.3); padding: 1px 4px; border-radius: 4px; font-weight: bold;" title="Pieza con corte curvo / vano semicircular">&#8978; Vano Curvo</span>` : ''}
+                                        </td>
                                         <td style="text-align: right; font-family: monospace; font-weight: bold; color: var(--primary-color);">${(p.w / 1000).toFixed(2)} &times; ${(p.h / 1000).toFixed(2)} m</td>
                                         <td style="text-align: center;">${p.rotated ? '<span style="color: #6366f1; font-weight: bold;">⟳ 90&deg;</span>' : '-'}</td>
                                         <td style="text-align: right; font-family: monospace;">${p.piece.areaM2 != null ? Number(p.piece.areaM2).toFixed(3) : ((p.w * p.h) / 1000000).toFixed(3)}</td>
@@ -9309,13 +9310,13 @@ function initQuantitiesPanel() {
                                     <option value="INSTALADO" ${st === 'INSTALADO' ? 'selected' : ''}>Instalado</option>
                                 </select>
                             </td>
-                            <td>${el.classification}</td>
-                            <td>${el.name}</td>
-                            <td>${el.category}</td>
-                            <td>${el.name}</td>
-                            <td>${el.detail}</td>
-                            <td>${el.material}</td>
-                            <td>${el.level}</td>
+                            <td>${escapeDespieceHtml(el.classification)}</td>
+                            <td>${escapeDespieceHtml(el.name)}</td>
+                            <td>${escapeDespieceHtml(el.category)}</td>
+                            <td>${escapeDespieceHtml(el.name)}</td>
+                            <td>${escapeDespieceHtml(el.detail)}</td>
+                            <td>${escapeDespieceHtml(el.material)}</td>
+                            <td>${escapeDespieceHtml(el.level)}</td>
                             <td style="text-align: right; font-family: monospace;">${el.area > 0 ? el.area.toFixed(2) : '-'}</td>
                             <td style="text-align: right; font-family: monospace;">${el.length > 0 ? el.length.toFixed(2) : '-'}</td>
                             <td style="text-align: right; font-family: monospace; font-weight: bold;">${el.volume > 0 ? el.volume.toFixed(3) : '-'}</td>
@@ -9781,49 +9782,68 @@ function initQuantitiesPanel() {
 
                 currentCutSheets = cutSheets;
 
+                if (despieceActiveSheet3D !== 'ALL' && !cutSheets.some(s => String(s.sheetIndex) === despieceActiveSheet3D)) {
+                    despieceActiveSheet3D = 'ALL';
+                }
+
+                // Sincronizar selector de láminas en la barra superior
+                const sheet3dSelect = qPanel.querySelector('#q-despiece-sheet-3d-filter') as HTMLSelectElement | null;
+                if (sheet3dSelect) {
+                    sheet3dSelect.innerHTML = `
+                        <option value="ALL" ${despieceActiveSheet3D === 'ALL' ? 'selected' : ''}>🌐 Todas las Láminas (${cutSheets.length})</option>
+                        ${cutSheets.map(s => `<option value="${s.sheetIndex}" ${despieceActiveSheet3D === String(s.sheetIndex) ? 'selected' : ''}>📄 Lámina #${s.sheetIndex} (${s.placedPieces.length} cortes)</option>`).join('')}
+                    `;
+                }
+
                 const totalSheets = cutSheets.length;
-                const totalPiecesCount = activePieces.length;
-                const totalPiecesArea = activePieces.reduce((sum, p) => sum + p.areaM2, 0);
-                const totalSheetsArea = totalSheets * ((commercialSheetW * commercialSheetH) / 1000000);
-                const isAllFull = totalSheetsArea > 0 && (totalPiecesArea >= totalSheetsArea * 0.995);
-                const globalEfficiency = isAllFull ? '100.0' : (totalSheetsArea > 0 ? ((totalPiecesArea / totalSheetsArea) * 100).toFixed(1) : '0');
-                const globalWaste = isAllFull ? '0.0' : (totalSheetsArea > 0 ? (100 - parseFloat(globalEfficiency)).toFixed(1) : '0');
-                const globalWasteArea = isAllFull ? '0.00' : Math.max(0, totalSheetsArea - totalPiecesArea).toFixed(2);
+                const totalPiecesCount = cutSheets.reduce((sum, s) => sum + s.placedPieces.length, 0);
+                const totalSheetsArea = cutSheets.reduce((sum, s) => sum + s.sheetAreaM2, 0);
+                const totalUsedArea = cutSheets.reduce((sum, s) => sum + s.usedAreaM2, 0);
+                const totalWasteAreaNum = Math.max(0, totalSheetsArea - totalUsedArea);
+                const effRatio = totalSheetsArea > 0 ? Math.min(100, (totalUsedArea / totalSheetsArea) * 100) : 0;
+                const wasteRatio = totalSheetsArea > 0 ? Math.max(0, 100 - effRatio) : 0;
+                const globalEfficiency = effRatio.toFixed(1);
+                const globalWaste = wasteRatio.toFixed(1);
+                const globalWasteArea = totalWasteAreaNum.toFixed(2);
 
                 let filteredSheets = cutSheets;
                 if (despieceActiveSheet3D !== 'ALL') {
                     filteredSheets = cutSheets.filter(s => String(s.sheetIndex) === despieceActiveSheet3D);
                 }
 
+                const gridLayoutClass = despieceGridCols === 'single'
+                    ? 'single-col'
+                    : (filteredSheets.length === 1 ? 'one-sheet' : (filteredSheets.length === 2 ? 'two-sheets' : 'multi-sheets'));
+
                 let html = `
-                    <div class="q-despiece-container">
+                    <div class="q-despiece-container q-despiece-print-area">
                         <div class="q-despiece-summary-header">
                             <div class="q-despiece-title">
                                 <i class="fa-solid fa-layer-group"></i> Optimización de Despiece Comercial (2D Nesting)
                                 ${despieceActiveSheet3D !== 'ALL' ? `
                                     <button type="button" id="q-btn-reset-sheet-3d" class="q-btn-xs" style="margin-left: 12px; background: #3b82f6; color: white; border: none; border-radius: 4px; cursor: pointer; padding: 4px 10px; font-weight: bold; font-size: 11px;">
-                                        <i class="fa-solid fa-layer-group"></i> Mostrando solo Lámina #${despieceActiveSheet3D} &bull; Ver Todas (${cutSheets.length})
+                                        <i class="fa-solid fa-layer-group"></i> Mostrando solo Lámina #${escapeDespieceHtml(despieceActiveSheet3D)} &bull; Ver Todas (${cutSheets.length})
                                     </button>
                                 ` : ''}
                                 ${materials.length > 1 ? `
                                     <select id="q-despiece-material-filter" class="q-select" style="margin-left: 14px; font-weight: normal; text-transform: none;">
-                                        <option value="TODOS" ${despieceSelectedMaterial === 'TODOS' ? 'selected' : ''}>Todos los Materiales (${modularPieces.length} piezas)</option>
-                                        ${materials.map(m => `<option value="${m}" ${despieceSelectedMaterial === m ? 'selected' : ''}>${m} (${modularPieces.filter(p => p.material === m).length} piezas)</option>`).join('')}
+                                        <option value="TODOS" ${despieceSelectedMaterial === 'TODOS' ? 'selected' : ''}>Todos los Materiales (${modularPieces.length} muros)</option>
+                                        ${materials.map(m => `<option value="${escapeDespieceHtml(m)}" ${despieceSelectedMaterial === m ? 'selected' : ''}>${escapeDespieceHtml(m)} (${modularPieces.filter(p => p.material === m).length} muros)</option>`).join('')}
                                     </select>
                                 ` : ''}
                             </div>
                             <div class="q-despiece-stats">
                                 <div class="q-despiece-stat-box">
                                     <span class="q-despiece-stat-label">Láminas Requeridas</span>
-                                    <span class="q-despiece-stat-val" style="color: var(--primary-color);">${totalSheets} láminas</span>
+                                    <span class="q-despiece-stat-val" style="color: var(--primary-color);">${totalSheets} ${totalSheets === 1 ? 'lámina' : 'láminas'}</span>
                                 </div>
                                 <div class="q-despiece-stat-box">
-                                    <span class="q-despiece-stat-label">Piezas / Módulos</span>
+                                    <span class="q-despiece-stat-label">Cortes / Piezas</span>
                                     <span class="q-despiece-stat-val">${totalPiecesCount}</span>
                                 </div>
                                 <div class="q-despiece-stat-box">
                                     <span class="q-despiece-stat-label">Área Muros</span>
-                                    <span class="q-despiece-stat-val">${totalPiecesArea.toFixed(2)} m²</span>
+                                    <span class="q-despiece-stat-val">${totalUsedArea.toFixed(2)} m²</span>
                                 </div>
                                 <div class="q-despiece-stat-box">
                                     <span class="q-despiece-stat-label">Área Láminas</span>
@@ -9840,23 +9860,23 @@ function initQuantitiesPanel() {
                             </div>
                         </div>
 
-                        <div class="q-despiece-grid ${despieceGridCols === 'single' ? 'single-col' : ''}">
+                        <div class="q-despiece-grid ${gridLayoutClass}">
                             ${filteredSheets.map(sheet => `
                                 <div class="q-despiece-sheet-card" data-sheet-index="${sheet.sheetIndex}">
                                     <div class="q-despiece-sheet-header">
                                         <div class="q-despiece-sheet-title">
                                             <i class="fa-solid fa-sheet-plastic" style="color: var(--primary-color);"></i>
-                                            Lámina #${sheet.sheetIndex} &bull; ${sheet.material || "Lámina Comercial"} (${(sheet.sheetWidth / 1000).toFixed(2)} &times; ${(sheet.sheetHeight / 1000).toFixed(2)} m)
+                                            Lámina #${sheet.sheetIndex} &bull; ${escapeDespieceHtml(sheet.material || "Tablero Comercial")} (${(sheet.sheetWidth / 1000).toFixed(2)} &times; ${(sheet.sheetHeight / 1000).toFixed(2)} m)
                                         </div>
                                         <div class="q-despiece-sheet-badges">
-                                            <span class="q-despiece-badge green" title="Área aprovechada en piezas">
+                                            <span class="q-despiece-badge green" title="Área aprovechada en cortes">
                                                 ✓ ${sheet.efficiencyPercent}% Usado
                                             </span>
                                             <span class="q-despiece-badge orange" title="Área de retazo sobrante">
                                                 ${sheet.wastePercent}% Sobrante (${sheet.wasteAreaM2} m²)
                                             </span>
                                             <span class="q-despiece-badge blue">
-                                                ${sheet.placedPieces.length} piezas
+                                                ${sheet.placedPieces.length} ${sheet.placedPieces.length === 1 ? 'corte' : 'cortes'}
                                             </span>
                                         </div>
                                         <div class="q-sheet-action-btns">
@@ -9888,22 +9908,22 @@ function initQuantitiesPanel() {
                                             </thead>
                                             <tbody>
                                                 ${sheet.placedPieces.map(p => `
-                                                    <tr class="q-despiece-row" data-id="${p.piece.expressID || p.piece.id}">
+                                                    <tr class="q-despiece-row" data-id="${escapeDespieceHtml(p.piece.expressID || p.piece.id)}">
                                                         <td>
                                                             <span style="display: inline-block; width: 10px; height: 10px; border-radius: 2px; background: ${p.color}; margin-right: 4px; vertical-align: middle;"></span>
                                                             <strong>#${p.orderIndex}</strong>
                                                         </td>
                                                         <td style="font-family: monospace; font-weight: bold;">
-                                                            ${p.piece.tag}${p.piece.isSplit ? ` <span style="font-size: 10px; color: #f59e0b; background: rgba(245, 158, 11, 0.15); padding: 1px 4px; border-radius: 3px;" title="Muro modular seccionado en módulos para optimizar el tablero">[P${p.piece.partIndex || 1}/${p.piece.totalParts || 2}]</span>` : ''}
+                                                            ${escapeDespieceHtml(p.piece.tag)}${p.piece.isSplit ? ` <span style="font-size: 10px; color: #f59e0b; background: rgba(245, 158, 11, 0.15); padding: 1px 4px; border-radius: 3px;" title="Muro modular seccionado en módulos para optimizar el tablero">[P${p.piece.partIndex || 1}/${p.piece.totalParts || 2}]</span>` : ''}
                                                         </td>
-                                                        <td title="${p.piece.name}">
-                                                            ${p.piece.nombreIntegrado}
+                                                        <td title="${escapeDespieceHtml(p.piece.name)}">
+                                                            ${escapeDespieceHtml(p.piece.nombreIntegrado)}
                                                             ${p.piece.hasArcCutout ? ` <span style="font-size: 9px; background: rgba(220, 38, 38, 0.12); color: #dc2626; border: 1px solid rgba(220, 38, 38, 0.3); padding: 1px 4px; border-radius: 4px; font-weight: bold;" title="Pieza con corte curvo / vano semicircular">&#8978; Vano Curvo</span>` : ''}
                                                         </td>
                                                         <td style="text-align: right; font-family: monospace; font-weight: bold; color: var(--primary-color);">${(p.w / 1000).toFixed(2)} &times; ${(p.h / 1000).toFixed(2)} m</td>
                                                         <td style="text-align: center;">${p.rotated ? '<span style="color: #6366f1; font-weight: bold;" title="Rotado 90°">⟳ 90°</span>' : '<span style="color: #94a3b8;">-</span>'}</td>
                                                         <td style="text-align: right; font-family: monospace;">${p.piece.areaM2 != null ? Number(p.piece.areaM2).toFixed(3) : ((p.w * p.h) / 1000000).toFixed(3)}</td>
-                                                        <td>${p.piece.level}</td>
+                                                        <td>${escapeDespieceHtml(p.piece.level)}</td>
                                                     </tr>
                                                 `).join('')}
                                             </tbody>
