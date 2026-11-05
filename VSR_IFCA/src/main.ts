@@ -7738,6 +7738,12 @@ function initQuantitiesPanel() {
             tabBtns.forEach(b => b.classList.remove('active'));
             btn.classList.add('active');
             activeTab = btn.getAttribute('data-tab') || 'detalle';
+            if (activeTab === 'despiece') {
+                const desiredH = Math.max(420, Math.round(window.innerHeight * 0.52));
+                if (qPanel.offsetHeight < desiredH) {
+                    qPanel.style.height = `${desiredH}px`;
+                }
+            }
             renderQuantitiesContent();
         });
     });
@@ -8825,7 +8831,6 @@ function initQuantitiesPanel() {
                                                             ${p.piece.nombreIntegrado}
                                                             ${p.piece.hasArcCutout ? ` <span style="font-size: 9px; background: rgba(220, 38, 38, 0.12); color: #dc2626; border: 1px solid rgba(220, 38, 38, 0.3); padding: 1px 4px; border-radius: 4px; font-weight: bold;" title="Pieza con corte curvo / vano semicircular">&#8978; Vano Curvo</span>` : ''}
                                                         </td>
-                                        <td>${p.piece.nombreIntegrado}</td>
                                         <td style="text-align: right; font-family: monospace; font-weight: bold; color: var(--primary-color);">${(p.w / 1000).toFixed(2)} &times; ${(p.h / 1000).toFixed(2)} m</td>
                                         <td style="text-align: center;">${p.rotated ? '<span style="color: #6366f1; font-weight: bold;">⟳ 90&deg;</span>' : '-'}</td>
                                         <td style="text-align: right; font-family: monospace;">${p.piece.areaM2.toFixed(3)}</td>

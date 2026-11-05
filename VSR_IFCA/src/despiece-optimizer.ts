@@ -317,13 +317,14 @@ class MaxRectsSheet {
         let bestScore = Infinity;
         let bestRotated = false;
 
+        const fitTol = 10; // Tolerancia de 10mm (sierra/retazo) para encajar piezas en cortes exactos del tablero
         for (let i = 0; i < this.freeRects.length; i++) {
             const r = this.freeRects[i];
 
             // Opción 1: Sin rotar
-            if (w <= r.w && h <= r.h) {
-                const leftoverW = r.w - w;
-                const leftoverH = r.h - h;
+            if (w <= r.w + fitTol && h <= r.h + fitTol) {
+                const leftoverW = Math.max(0, r.w - w);
+                const leftoverH = Math.max(0, r.h - h);
                 const shortSide = Math.min(leftoverW, leftoverH);
                 const longSide = Math.max(leftoverW, leftoverH);
                 const score = shortSide * 100000 + longSide; // BSSF prioritario
@@ -336,9 +337,9 @@ class MaxRectsSheet {
             }
 
             // Opción 2: Rotada 90°
-            if (allowRot && h <= r.w && w <= r.h) {
-                const leftoverW = r.w - h;
-                const leftoverH = r.h - w;
+            if (allowRot && h <= r.w + fitTol && w <= r.h + fitTol) {
+                const leftoverW = Math.max(0, r.w - h);
+                const leftoverH = Math.max(0, r.h - w);
                 const shortSide = Math.min(leftoverW, leftoverH);
                 const longSide = Math.max(leftoverW, leftoverH);
                 const score = shortSide * 100000 + longSide;
@@ -362,25 +363,32 @@ class MaxRectsSheet {
         const px = targetRect.x;
         const py = targetRect.y;
 
+        // Ajustar ancho/alto al espacio disponible del tablero si encaja por tolerancia
+        const actualW = Math.min(pw, targetRect.w);
+        const actualH = Math.min(ph, targetRect.h);
+
         this.placedPieces.push({
             piece,
             x: px,
             y: py,
-            w: pw,
-            h: ph,
+            w: actualW,
+            h: actualH,
             rotated,
             color,
             orderIndex
         });
 
-        this.usedAreaMm2 += (pw * ph);
+        this.usedAreaMm2 += (actualW * actualH);
 
-        // Rectángulo ocupado incluyendo sierra (kerf)
+        // Rectángulo ocupado incluyendo sierra (kerf). No añadir kerf fuera del borde del tablero.
+        const kerfW = (px + actualW + kerf >= this.binWidth) ? (this.binWidth - px) : (actualW + kerf);
+        const kerfH = (py + actualH + kerf >= this.binHeight) ? (this.binHeight - py) : (actualH + kerf);
+
         const pieceWithKerf: FreeRect = {
             x: px,
             y: py,
-            w: pw + kerf,
-            h: ph + kerf
+            w: kerfW,
+            h: kerfH
         };
 
         // Algoritmo MaxRects: Recortar todos los rectángulos libres que intersequen con la nueva pieza

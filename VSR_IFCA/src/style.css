@@ -2483,8 +2483,9 @@ bim-label {
 /* CuadrÃ­cula de LÃ¡minas */
 .q-despiece-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(380px, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
     gap: 16px;
+    padding-bottom: 24px;
 }
 
 .q-despiece-sheet-card {
@@ -2495,6 +2496,7 @@ bim-label {
     box-shadow: 0 2px 6px rgba(0,0,0,0.05);
     display: flex;
     flex-direction: column;
+    min-width: 0; /* Permite que el grid responsive funcione sin ser bloqueado por hijos SVG/tabla */
     transition: transform 0.15s ease, box-shadow 0.15s ease;
 }
 
@@ -2550,23 +2552,25 @@ bim-label {
 
 /* Contenedor del plano SVG de corte */
 .q-despiece-canvas-container {
-    padding: 14px;
+    padding: 10px 14px;
     background: #fafaf9;
     display: flex;
     align-items: center;
     justify-content: center;
-    min-height: 240px;
+    min-height: 140px;
+    max-height: 220px;
     border-bottom: 1px solid #f1f5f9;
 }
 
 .q-despiece-svg {
     width: 100%;
-    max-height: 320px;
+    max-height: 190px;
     background: #fffdf5; /* tono madera / tablero claro */
     border: 2px solid #b45309; /* borde de tablero */
     border-radius: 4px;
     box-shadow: inset 0 0 10px rgba(180, 83, 9, 0.08);
     display: block;
+    object-fit: contain;
 }
 
 .q-despiece-piece-rect {
