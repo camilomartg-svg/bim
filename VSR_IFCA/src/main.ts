@@ -17,11 +17,13 @@ import { NoraAIWidget, NoraAIAction } from './nora-ai-widget';
 import {
     COMMERCIAL_SHEET_PRESETS,
     extractModularWallPieces,
+    extractWallFaceProfileFromMeshes,
     optimizeSheetCutting,
     generateSheetSvg,
     escapeDespieceHtml,
     CutSheet,
     ModularPiece,
+    WallFaceProfile2D,
     checkIsModular,
     PIECE_COLORS,
     roundToModularStepM
@@ -8387,14 +8389,25 @@ function initQuantitiesPanel() {
     // --- 3D Colorization and Filtering for Despiece ---
     let despieceLabelsUpdateFn: (() => void) | null = null;
 
-    // Cache de dimensiones 3D exactas de elementos (extraídas directamente de FragmentsModel)
-    const element3DBoundsCache = new Map<number, { widthM: number; heightM: number; depthM: number; box: THREE.Box3; center: THREE.Vector3 }>();
+    interface CachedElement3DInfo {
+        widthM: number;
+        heightM: number;
+        depthM: number;
+        box: THREE.Box3;
+        center: THREE.Vector3;
+        profile2D?: WallFaceProfile2D | null;
+        profileFetched?: boolean;
+    }
 
-    async function prefetchElements3DBounds(ids: number[]): Promise<void> {
-        if (!ids || ids.length === 0) return;
-        const missingIds = ids.map(Number).filter(id => !isNaN(id) && id > 0 && !element3DBoundsCache.has(id));
-        if (missingIds.length === 0) return;
+    // Cache de dimensiones y perfiles 2D exactos por (modelKey::expressID)
+    const element3DBoundsCache = new Map<string, CachedElement3DInfo>();
+    let lastBoundsModelsSignature = '';
 
+    function getModelCacheId(model: any, idxFallback: number = 0): string {
+        return String(model?.modelId || model?.uuid || model?.object?.uuid || `model_${idxFallback}`);
+    }
+
+    function getActiveModelsForBounds(): any[] {
         const uniqueModels = getUniqueLoadedModels();
         const modelsToCheck: any[] = [];
         uniqueModels.forEach(m => { if (m.model && !modelsToCheck.includes(m.model)) modelsToCheck.push(m.model); });
@@ -8406,18 +8419,49 @@ function initQuantitiesPanel() {
                 if (m && !modelsToCheck.includes(m)) modelsToCheck.push(m);
             }
         }
+        return modelsToCheck;
+    }
 
-        for (const model of modelsToCheck) {
+    function getPieceShapeBadgeHtml(piece: ModularPiece): string {
+        if ((piece.holeCount || 0) > 0) {
+            const label = piece.holeCount === 1 ? '1 Perforación' : `${piece.holeCount} Perforaciones`;
+            return ` <span style="font-size: 9px; background: rgba(220, 38, 38, 0.12); color: #dc2626; border: 1px solid rgba(220, 38, 38, 0.3); padding: 1px 5px; border-radius: 4px; font-weight: bold;" title="Muro con abertura o perforación interna exacta">&#9678; ${label}</span>`;
+        }
+        if (piece.isIrregular) {
+            const label = piece.hasCurvedEdges ? 'Corte Curvo' : 'Perfil Especial';
+            return ` <span style="font-size: 9px; background: rgba(14, 165, 233, 0.12); color: #0369a1; border: 1px solid rgba(14, 165, 233, 0.3); padding: 1px 5px; border-radius: 4px; font-weight: bold;" title="Pieza con geometría no rectangular extraída del modelo 3D">&#9706; ${label}</span>`;
+        }
+        return '';
+    }
+
+    async function prefetchElements3DBounds(ids: number[], includeProfiles: boolean = false): Promise<void> {
+        if (!ids || ids.length === 0) return;
+        const cleanIds = Array.from(new Set(ids.map(Number).filter(id => !isNaN(id) && id > 0)));
+        if (cleanIds.length === 0) return;
+
+        const modelsToCheck = getActiveModelsForBounds();
+        const sig = modelsToCheck.map((m, idx) => getModelCacheId(m, idx)).sort().join('|');
+        if (sig !== lastBoundsModelsSignature) {
+            element3DBoundsCache.clear();
+            lastBoundsModelsSignature = sig;
+        }
+
+        for (let mIdx = 0; mIdx < modelsToCheck.length; mIdx++) {
+            const model = modelsToCheck[mIdx];
             if (!model) continue;
+            const mKey = getModelCacheId(model, mIdx);
+
             try {
                 if (model.object) model.object.updateMatrixWorld(true);
 
-                // 1. Obtener cajas en lote con model.getBoxes(missingIds) nativo de FragmentsModel
-                if (typeof model.getBoxes === 'function') {
-                    const boxes: THREE.Box3[] = await model.getBoxes(missingIds);
-                    if (boxes && Array.isArray(boxes) && boxes.length === missingIds.length) {
-                        for (let i = 0; i < missingIds.length; i++) {
-                            const id = missingIds[i];
+                const missingBoxIds = cleanIds.filter(id => !element3DBoundsCache.has(`${mKey}::${id}`));
+
+                // 1. Obtener cajas en lote con model.getBoxes(missingBoxIds)
+                if (missingBoxIds.length > 0 && typeof model.getBoxes === 'function') {
+                    const boxes: THREE.Box3[] = await model.getBoxes(missingBoxIds);
+                    if (boxes && Array.isArray(boxes) && boxes.length === missingBoxIds.length) {
+                        for (let i = 0; i < missingBoxIds.length; i++) {
+                            const id = missingBoxIds[i];
                             const box = boxes[i];
                             if (box && !box.isEmpty() && isFinite(box.min.x) && isFinite(box.max.x)) {
                                 const dx = Math.abs(box.max.x - box.min.x);
@@ -8425,26 +8469,21 @@ function initQuantitiesPanel() {
                                 const dz = Math.abs(box.max.z - box.min.z);
 
                                 const heightM = dy;
-                                const horizMax = Math.max(dx, dz);
-                                const horizMin = Math.min(dx, dz);
-                                let widthM = horizMax;
-                                if (horizMin > 0.15) {
-                                    widthM = Math.hypot(dx, dz);
-                                }
-                                const depthM = horizMin;
+                                const widthM = Math.max(dx, dz);
+                                const depthM = Math.min(dx, dz);
 
                                 const center = new THREE.Vector3();
                                 box.getCenter(center);
                                 center.y = Math.max(center.y, box.max.y) + 0.20;
 
-                                element3DBoundsCache.set(id, { widthM, heightM, depthM, box, center });
+                                element3DBoundsCache.set(`${mKey}::${id}`, { widthM, heightM, depthM, box, center });
                             }
                         }
                     }
                 }
 
-                // 2. Si quedan IDs por resolver, intentar getMergedBox individual
-                const stillMissing = missingIds.filter(id => !element3DBoundsCache.has(id));
+                // 2. Respaldo getMergedBox individual si quedan pendientes
+                const stillMissing = missingBoxIds.filter(id => !element3DBoundsCache.has(`${mKey}::${id}`));
                 if (stillMissing.length > 0 && typeof model.getMergedBox === 'function') {
                     for (const id of stillMissing) {
                         try {
@@ -8455,33 +8494,88 @@ function initQuantitiesPanel() {
                                 const dz = Math.abs(box.max.z - box.min.z);
 
                                 const heightM = dy;
-                                const horizMax = Math.max(dx, dz);
-                                const horizMin = Math.min(dx, dz);
-                                let widthM = horizMax;
-                                if (horizMin > 0.15) widthM = Math.hypot(dx, dz);
-                                const depthM = horizMin;
+                                const widthM = Math.max(dx, dz);
+                                const depthM = Math.min(dx, dz);
 
                                 const center = new THREE.Vector3();
                                 box.getCenter(center);
                                 center.y = Math.max(center.y, box.max.y) + 0.20;
 
-                                element3DBoundsCache.set(id, { widthM, heightM, depthM, box, center });
+                                element3DBoundsCache.set(`${mKey}::${id}`, { widthM, heightM, depthM, box, center });
                             }
                         } catch (_) {}
                     }
                 }
+
+                // 3. Extraer malla 3D exacta y perfil 2D real (contornos L/curvos + perforaciones internas)
+                if (includeProfiles && typeof model.getItemsGeometry === 'function') {
+                    const missingProfileIds = cleanIds.filter(id => {
+                        const entry = element3DBoundsCache.get(`${mKey}::${id}`);
+                        return entry ? !entry.profileFetched : true;
+                    });
+
+                    if (missingProfileIds.length > 0) {
+                        const geomBatch: any[][] = await model.getItemsGeometry(missingProfileIds);
+                        if (Array.isArray(geomBatch)) {
+                            for (let i = 0; i < geomBatch.length; i++) {
+                                const meshList = geomBatch[i];
+                                if (!Array.isArray(meshList) || meshList.length === 0) continue;
+                                const resolvedId = Number(meshList[0]?.localId ?? missingProfileIds[i]);
+                                if (!resolvedId || isNaN(resolvedId)) continue;
+
+                                const cacheKey = `${mKey}::${resolvedId}`;
+                                const profile = extractWallFaceProfileFromMeshes(meshList);
+                                const existing = element3DBoundsCache.get(cacheKey);
+
+                                if (profile) {
+                                    let center = existing?.center || new THREE.Vector3();
+                                    if (profile.topCenter3D) {
+                                        const tc = new THREE.Vector3(profile.topCenter3D.x, profile.topCenter3D.y, profile.topCenter3D.z);
+                                        if (existing?.box && Math.abs(tc.y - (existing.box.max.y + 0.20)) > 0.5 && model.object?.matrixWorld) {
+                                            tc.applyMatrix4(model.object.matrixWorld);
+                                        }
+                                        center = tc;
+                                    }
+                                    element3DBoundsCache.set(cacheKey, {
+                                        widthM: profile.widthMm / 1000,
+                                        heightM: profile.heightMm / 1000,
+                                        depthM: profile.thicknessMm / 1000,
+                                        box: existing?.box || new THREE.Box3(),
+                                        center,
+                                        profile2D: profile,
+                                        profileFetched: true
+                                    });
+                                } else if (existing) {
+                                    existing.profileFetched = true;
+                                }
+                            }
+                        }
+                    }
+                }
             } catch (err) {
-                console.warn('[BoundsCache] Error fetching batch boxes for model:', err);
+                console.warn('[BoundsCache] Error fetching batch boxes/profiles for model:', err);
             }
         }
     }
 
-    function getElement3DBounds(expressID: number, modelUUID?: string): { widthM: number; heightM: number; depthM: number; box: THREE.Box3; center: THREE.Vector3 } | null {
-        return element3DBoundsCache.get(expressID) || null;
+    function findCachedElement3D(expressID: number, modelUUID?: string): CachedElement3DInfo | null {
+        if (modelUUID) {
+            const direct = element3DBoundsCache.get(`${modelUUID}::${expressID}`);
+            if (direct) return direct;
+        }
+        const suffix = `::${expressID}`;
+        for (const [k, val] of element3DBoundsCache.entries()) {
+            if (k.endsWith(suffix)) return val;
+        }
+        return null;
+    }
+
+    function getElement3DBounds(expressID: number, modelUUID?: string): CachedElement3DInfo | null {
+        return findCachedElement3D(expressID, modelUUID);
     }
 
     function getElementCenter(expressID: number, modelUUID: string): THREE.Vector3 | null {
-        return element3DBoundsCache.get(expressID)?.center || null;
+        return findCachedElement3D(expressID, modelUUID)?.center || null;
     }
 
     function clearDespiece3DLabels() {
@@ -8829,8 +8923,7 @@ function initQuantitiesPanel() {
                                             ${escapeDespieceHtml(p.piece.tag)}${p.piece.isSplit ? ` <span style="font-size: 10px; color: #f59e0b; background: rgba(245, 158, 11, 0.15); padding: 1px 4px; border-radius: 3px;" title="Muro modular seccionado en módulos para optimizar el tablero">[P${p.piece.partIndex || 1}/${p.piece.totalParts || 2}]</span>` : ''}
                                         </td>
                                         <td title="${escapeDespieceHtml(p.piece.name)}">
-                                            ${escapeDespieceHtml(p.piece.nombreIntegrado)}
-                                            ${p.piece.hasArcCutout ? ` <span style="font-size: 9px; background: rgba(220, 38, 38, 0.12); color: #dc2626; border: 1px solid rgba(220, 38, 38, 0.3); padding: 1px 4px; border-radius: 4px; font-weight: bold;" title="Pieza con corte curvo / vano semicircular">&#8978; Vano Curvo</span>` : ''}
+                                            ${escapeDespieceHtml(p.piece.nombreIntegrado)}${getPieceShapeBadgeHtml(p.piece)}
                                         </td>
                                         <td style="text-align: right; font-family: monospace; font-weight: bold; color: var(--primary-color);">${(p.w / 1000).toFixed(2)} &times; ${(p.h / 1000).toFixed(2)} m</td>
                                         <td style="text-align: center;">${p.rotated ? '<span style="color: #6366f1; font-weight: bold;">⟳ 90&deg;</span>' : '-'}</td>
@@ -9749,9 +9842,16 @@ function initQuantitiesPanel() {
 
 
         } else if (activeTab === 'despiece') {
-            const allTargetIds = filtered.map(el => Number(el.expressID || el.id)).filter(id => !isNaN(id) && id > 0);
-            if (allTargetIds.length > 0) {
-                await prefetchElements3DBounds(allTargetIds);
+            const wallTargetIds = filtered
+                .filter(el => {
+                    const cls = String(el.classification || '').toUpperCase();
+                    const cat = String(el.category || '').toUpperCase();
+                    return cls.includes('MURO') || cat.includes('WALL') || cat.includes('MURO');
+                })
+                .map(el => Number(el.expressID || el.id))
+                .filter(id => !isNaN(id) && id > 0);
+            if (wallTargetIds.length > 0) {
+                await prefetchElements3DBounds(wallTargetIds, true);
             }
             const scopeMode = despieceScope === 'SELECTED' ? 'SELECTED' : (despieceScope === 'ALL_WALLS' ? 'ALL_WALLS' : 'ALL_MODULAR');
             const modularPieces = extractModularWallPieces(filtered, despieceScope === 'SELECTED', selectedElementIds, scopeMode, getElement3DBounds);
@@ -9917,8 +10017,7 @@ function initQuantitiesPanel() {
                                                             ${escapeDespieceHtml(p.piece.tag)}${p.piece.isSplit ? ` <span style="font-size: 10px; color: #f59e0b; background: rgba(245, 158, 11, 0.15); padding: 1px 4px; border-radius: 3px;" title="Muro modular seccionado en módulos para optimizar el tablero">[P${p.piece.partIndex || 1}/${p.piece.totalParts || 2}]</span>` : ''}
                                                         </td>
                                                         <td title="${escapeDespieceHtml(p.piece.name)}">
-                                                            ${escapeDespieceHtml(p.piece.nombreIntegrado)}
-                                                            ${p.piece.hasArcCutout ? ` <span style="font-size: 9px; background: rgba(220, 38, 38, 0.12); color: #dc2626; border: 1px solid rgba(220, 38, 38, 0.3); padding: 1px 4px; border-radius: 4px; font-weight: bold;" title="Pieza con corte curvo / vano semicircular">&#8978; Vano Curvo</span>` : ''}
+                                                            ${escapeDespieceHtml(p.piece.nombreIntegrado)}${getPieceShapeBadgeHtml(p.piece)}
                                                         </td>
                                                         <td style="text-align: right; font-family: monospace; font-weight: bold; color: var(--primary-color);">${(p.w / 1000).toFixed(2)} &times; ${(p.h / 1000).toFixed(2)} m</td>
                                                         <td style="text-align: center;">${p.rotated ? '<span style="color: #6366f1; font-weight: bold;" title="Rotado 90°">⟳ 90°</span>' : '<span style="color: #94a3b8;">-</span>'}</td>
