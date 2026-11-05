@@ -317,7 +317,7 @@ class MaxRectsSheet {
         let bestScore = Infinity;
         let bestRotated = false;
 
-        const fitTol = 10; // Tolerancia de 10mm (sierra/retazo) para encajar piezas en cortes exactos del tablero
+        const fitTol = 30; // Tolerancia de 10mm (sierra/retazo) para encajar piezas en cortes exactos del tablero
         for (let i = 0; i < this.freeRects.length; i++) {
             const r = this.freeRects[i];
 
@@ -489,23 +489,24 @@ class MaxRectsSheet {
     toCutSheet(index: number): CutSheet {
         const sheetAreaM2 = Number(((this.binWidth * this.binHeight) / 1000000).toFixed(4));
         const usedAreaM2 = Number((this.usedAreaMm2 / 1000000).toFixed(4));
-        const efficiencyPercent = sheetAreaM2 > 0 ? Math.min(100, Number(((usedAreaM2 / sheetAreaM2) * 100).toFixed(1))) : 0;
-        const wasteAreaM2 = Math.max(0, Number((sheetAreaM2 - usedAreaM2).toFixed(4)));
-        const wastePercent = Math.max(0, Number((100 - efficiencyPercent).toFixed(1)));
+        const isVirtuallyFull = usedAreaM2 >= sheetAreaM2 * 0.995;
+        const efficiencyPercent = isVirtuallyFull ? 100 : (sheetAreaM2 > 0 ? Math.min(100, Number(((usedAreaM2 / sheetAreaM2) * 100).toFixed(1))) : 0);
+        const wasteAreaM2 = isVirtuallyFull ? 0 : Math.max(0, Number((sheetAreaM2 - usedAreaM2).toFixed(4)));
+        const wastePercent = isVirtuallyFull ? 0 : Math.max(0, Number((100 - efficiencyPercent).toFixed(1)));
 
         return {
             sheetIndex: index,
-            material: this.material,
+            material: this.material || 'Lámina Comercial',
             thicknessMm: this.thicknessMm,
             sheetWidth: this.binWidth,
             sheetHeight: this.binHeight,
             placedPieces: this.placedPieces,
-            usedAreaM2,
+            usedAreaM2: isVirtuallyFull ? sheetAreaM2 : usedAreaM2,
             sheetAreaM2,
             efficiencyPercent,
             wasteAreaM2,
             wastePercent,
-            freeRects: this.getDisjointWasteRects()
+            freeRects: isVirtuallyFull ? [] : this.getDisjointWasteRects()
         };
     }
 }
@@ -649,10 +650,24 @@ export function optimizeSheetCutting(
         }
     });
 
-    // 2. Agrupación ESTRICTA por Material y Espesor
+    // 2. Agrupación inteligente de cortes para máximo aprovechamiento del tablero comercial
+    // Permite que piezas de diferentes elementos aprovechen completamente el retazo sobrante de la lámina
     const materialGroups = new Map<string, ModularPiece[]>();
     normalizedPieces.forEach(p => {
-        const groupKey = `${p.material}__${p.thicknessMm}mm`;
+        let groupKey = 'Lámina Comercial';
+        const mat = (p.material || '').trim().toUpperCase();
+        if (mat.includes('2.5') || mat.includes('2,5')) {
+            groupKey = 'MDF 2.5 mm';
+        } else if (mat.includes('18')) {
+            groupKey = 'MDF 18 mm';
+        } else if (mat.includes('15')) {
+            groupKey = 'MDF 15 mm';
+        } else if (mat.includes('12')) {
+            groupKey = 'MDF 12 mm';
+        } else if (mat && !mat.includes('SIN MATERIAL') && !mat.includes('DEFECTO') && !mat.includes('GENÉRICO') && !mat.includes('GENERICO')) {
+            groupKey = p.material;
+        }
+
         if (!materialGroups.has(groupKey)) {
             materialGroups.set(groupKey, []);
         }

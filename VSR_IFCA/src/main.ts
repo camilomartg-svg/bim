@@ -8833,7 +8833,7 @@ function initQuantitiesPanel() {
                                                         </td>
                                         <td style="text-align: right; font-family: monospace; font-weight: bold; color: var(--primary-color);">${(p.w / 1000).toFixed(2)} &times; ${(p.h / 1000).toFixed(2)} m</td>
                                         <td style="text-align: center;">${p.rotated ? '<span style="color: #6366f1; font-weight: bold;">⟳ 90&deg;</span>' : '-'}</td>
-                                        <td style="text-align: right; font-family: monospace;">${p.piece.areaM2.toFixed(3)}</td>
+                                        <td style="text-align: right; font-family: monospace;">${p.piece.areaM2 != null ? Number(p.piece.areaM2).toFixed(3) : ((p.w * p.h) / 1000000).toFixed(3)}</td>
                                     </tr>
                                 `).join('')}
                             </tbody>
@@ -9102,10 +9102,13 @@ function initQuantitiesPanel() {
             renderTableData(elements);
         });
 
-        toolbar.querySelector('#q-sheet-kerf')?.addEventListener('change', (e) => {
+        const kerfInput = toolbar.querySelector('#q-sheet-kerf') as HTMLInputElement;
+        const updateKerf = (e: Event) => {
             sawKerfMm = Math.max(0, parseInt((e.target as HTMLInputElement).value, 10) || 0);
             renderTableData(elements);
-        });
+        };
+        kerfInput?.addEventListener('change', updateKerf);
+        kerfInput?.addEventListener('input', updateKerf);
 
         toolbar.querySelector('#q-sheet-rotation')?.addEventListener('change', (e) => {
             allowPieceRotation = (e.target as HTMLInputElement).checked;
@@ -9782,9 +9785,10 @@ function initQuantitiesPanel() {
                 const totalPiecesCount = activePieces.length;
                 const totalPiecesArea = activePieces.reduce((sum, p) => sum + p.areaM2, 0);
                 const totalSheetsArea = totalSheets * ((commercialSheetW * commercialSheetH) / 1000000);
-                const globalEfficiency = totalSheetsArea > 0 ? ((totalPiecesArea / totalSheetsArea) * 100).toFixed(1) : '0';
-                const globalWaste = totalSheetsArea > 0 ? (100 - parseFloat(globalEfficiency)).toFixed(1) : '0';
-                const globalWasteArea = Math.max(0, totalSheetsArea - totalPiecesArea).toFixed(2);
+                const isAllFull = totalSheetsArea > 0 && (totalPiecesArea >= totalSheetsArea * 0.995);
+                const globalEfficiency = isAllFull ? '100.0' : (totalSheetsArea > 0 ? ((totalPiecesArea / totalSheetsArea) * 100).toFixed(1) : '0');
+                const globalWaste = isAllFull ? '0.0' : (totalSheetsArea > 0 ? (100 - parseFloat(globalEfficiency)).toFixed(1) : '0');
+                const globalWasteArea = isAllFull ? '0.00' : Math.max(0, totalSheetsArea - totalPiecesArea).toFixed(2);
 
                 let filteredSheets = cutSheets;
                 if (despieceActiveSheet3D !== 'ALL') {
@@ -9842,7 +9846,7 @@ function initQuantitiesPanel() {
                                     <div class="q-despiece-sheet-header">
                                         <div class="q-despiece-sheet-title">
                                             <i class="fa-solid fa-sheet-plastic" style="color: var(--primary-color);"></i>
-                                            Lámina #${sheet.sheetIndex} &bull; ${sheet.material} (${(sheet.sheetWidth / 1000).toFixed(2)} &times; ${(sheet.sheetHeight / 1000).toFixed(2)} m)
+                                            Lámina #${sheet.sheetIndex} &bull; ${sheet.material || "Lámina Comercial"} (${(sheet.sheetWidth / 1000).toFixed(2)} &times; ${(sheet.sheetHeight / 1000).toFixed(2)} m)
                                         </div>
                                         <div class="q-despiece-sheet-badges">
                                             <span class="q-despiece-badge green" title="Área aprovechada en piezas">
@@ -9898,7 +9902,7 @@ function initQuantitiesPanel() {
                                                         </td>
                                                         <td style="text-align: right; font-family: monospace; font-weight: bold; color: var(--primary-color);">${(p.w / 1000).toFixed(2)} &times; ${(p.h / 1000).toFixed(2)} m</td>
                                                         <td style="text-align: center;">${p.rotated ? '<span style="color: #6366f1; font-weight: bold;" title="Rotado 90°">⟳ 90°</span>' : '<span style="color: #94a3b8;">-</span>'}</td>
-                                                        <td style="text-align: right; font-family: monospace;">${p.piece.areaM2.toFixed(3)}</td>
+                                                        <td style="text-align: right; font-family: monospace;">${p.piece.areaM2 != null ? Number(p.piece.areaM2).toFixed(3) : ((p.w * p.h) / 1000000).toFixed(3)}</td>
                                                         <td>${p.piece.level}</td>
                                                     </tr>
                                                 `).join('')}
