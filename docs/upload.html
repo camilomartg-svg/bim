@@ -967,6 +967,8 @@
       let currentStatusSubTab = 'models';   // 'models', 'pdfs', 'dwgs'
       let rawProjectFilesCache = [];        // Master unfiltered Drive files
       let allProjectFiles = [];             // Combined & resolved list of all files with status and version
+      let statusEntriesCache = [];          // Global cache of status entries from EstadosArchivos
+      let versionEntriesCache = [];         // Global cache of version entries from VersionesArchivos
       const collapsedModelGroups = new Set();
       const collapsedSpecialtyGroups = new Set();
       const STATUS_ORDER = { 'EN_PROGRESO': 0, 'COMPARTIDO': 1, 'PUBLICADO': 2 };
@@ -2374,6 +2376,114 @@
       // Helper: cálculo de versión mayor (creación manual con botón "+ VERSIÓN" en la plataforma)
       // Regla obligatoria:
       // - Incrementa el entero y reinicia el decimal a .0: 1.0 -> 2.0, 1.2 -> 2.0, 2.5 -> 3.0, 3.10 -> 4.0
+      // Helper: cálculo unificado de historial de versiones
+      function buildFileHistory(filename, sEntries, vEntries) {
+        const cleanFn = String(filename || '').trim().toLowerCase();
+
+        // 1. Versiones formales en VersionesArchivos
+        const formal = (vEntries || [])
+          .filter(v => (v.filename || '').trim().toLowerCase() === cleanFn)
+          .sort((a, b) => new Date(a.fecha || 0) - new Date(b.fecha || 0));
+
+        // 2. Entradas de carga y estados en EstadosArchivos
+        const uploads = (sEntries || [])
+          .filter(s => (s.filename || '').trim().toLowerCase() === cleanFn && s.status === 'EN_PROGRESO')
+          .sort((a, b) => new Date(a.changedAt || 0) - new Date(b.changedAt || 0));
+
+        const history = [];
+        const seenFileIds = new Set();
+        const seenVerTags = new Set();
+
+        formal.forEach(f => {
+          const ver = f.version || 'v1.0';
+          history.push({
+            versionId: f.versionId,
+            version: ver,
+            fecha: f.fecha,
+            comments: f.comments || '',
+            createdBy: f.createdBy || 'CDE NORA',
+            createdByEmail: f.createdByEmail || '',
+            fileId: f.fileId,
+            backupFileId: f.backupFileId || f.fileId,
+            status: f.status || 'EN_PROGRESO',
+            isCurrent: false
+          });
+          if (f.fileId) seenFileIds.add(f.fileId);
+          if (f.backupFileId) seenFileIds.add(f.backupFileId);
+          seenVerTags.add(ver);
+        });
+
+        const distinctUploads = [];
+        uploads.forEach(u => {
+          const isNewId = u.fileId && !distinctUploads.some(d => d.fileId === u.fileId);
+          const isNewTime = !distinctUploads.some(d => Math.abs(new Date(d.changedAt).getTime() - new Date(u.changedAt).getTime()) < 30000);
+          if (isNewId || isNewTime) {
+            distinctUploads.push(u);
+          }
+        });
+
+        function calculateMinor(tags) {
+          let maxMinor = 0;
+          tags.forEach(t => {
+            const m = String(t).match(/v?(\d+)\.(\d+)/);
+            if (m) maxMinor = Math.max(maxMinor, parseInt(m[2], 10));
+          });
+          return 'v1.' + (maxMinor + 1);
+        }
+
+        distinctUploads.forEach((u, idx) => {
+          const computedTag = 'v1.' + idx;
+          let targetTag = (u.version && u.version !== 'v1.0') ? u.version : computedTag;
+          if (seenVerTags.has(targetTag)) {
+            targetTag = calculateMinor(Array.from(seenVerTags));
+          }
+
+          const fid = u.fileId || u.originalFileId;
+          if ((!fid || !seenFileIds.has(fid)) && !seenVerTags.has(targetTag)) {
+            history.push({
+              versionId: 'upload_' + (u.fileId || targetTag) + '_' + idx,
+              version: targetTag,
+              fecha: u.changedAt,
+              comments: u.comments || (idx === 0 ? 'Versión inicial' : ('Actualización de modelo (' + targetTag + ')')),
+              createdBy: u.changedBy || 'Revit / Drive',
+              createdByEmail: u.changedByEmail || '',
+              fileId: fid,
+              backupFileId: fid,
+              status: u.status || 'EN_PROGRESO',
+              isCurrent: false
+            });
+            if (fid) seenFileIds.add(fid);
+            seenVerTags.add(targetTag);
+          }
+        });
+
+        // 3. Garantizar siempre la versión base v1.0
+        if (!seenVerTags.has('v1.0')) {
+          const earliest = distinctUploads[0] || uploads[0];
+          const fid = earliest ? (earliest.fileId || earliest.originalFileId) : '';
+          history.push({
+            versionId: 'base_v1.0_' + Date.now(),
+            version: 'v1.0',
+            fecha: earliest ? earliest.changedAt : new Date().toISOString(),
+            comments: 'Versión inicial',
+            createdBy: earliest ? (earliest.changedBy || 'Revit / Drive') : 'Revit / Drive',
+            createdByEmail: earliest ? (earliest.changedByEmail || '') : '',
+            fileId: fid,
+            backupFileId: fid,
+            status: earliest ? (earliest.status || 'EN_PROGRESO') : 'EN_PROGRESO',
+            isCurrent: false
+          });
+          seenVerTags.add('v1.0');
+        }
+
+        history.sort((a, b) => new Date(b.fecha) - new Date(a.fecha));
+        if (history.length > 0) {
+          history.forEach((h, i) => { h.isCurrent = (i === 0); });
+        }
+
+        return history;
+      }
+
       function calculateNextMajorVersion(verStr) {
         if (!verStr) return 'v2.0';
         const clean = String(verStr).trim().replace(/^v/i, '');
@@ -3252,24 +3362,20 @@
         const projectSlug = activeProject.slug || slugify(activeProject.name);
 
         try {
-          // 1. Fetch Drive Files List
-          const listRes = await fetch(scriptUrl, {
-            method: 'POST',
-            mode: 'cors',
-            headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-            body: JSON.stringify({
-              action: 'list',
-              folderId: (ds.driveFolderId && String(ds.driveFolderId).trim().length > 15) ? ds.driveFolderId.trim() : '',
-              driveFolderName: ds.driveFolderName || activeProject.name,
-              project: projectSlug
-            })
-          });
-          const listData = listRes.ok ? await listRes.json() : { models: [], dwgs: [], pdfs: [] };
-
-          // 2. Fetch Status & Version History from Sheets
-          let statusEntries = [];
-          try {
-            const statusRes = await fetch(scriptUrl, {
+          // 1. Fetch Drive Files List, Status, and Version History in parallel
+          const [listRes, statusRes, versRes] = await Promise.all([
+            fetch(scriptUrl, {
+              method: 'POST',
+              mode: 'cors',
+              headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+              body: JSON.stringify({
+                action: 'list',
+                folderId: (ds.driveFolderId && String(ds.driveFolderId).trim().length > 15) ? ds.driveFolderId.trim() : '',
+                driveFolderName: ds.driveFolderName || activeProject.name,
+                project: projectSlug
+              })
+            }),
+            fetch(scriptUrl, {
               method: 'POST',
               mode: 'cors',
               headers: { 'Content-Type': 'text/plain;charset=utf-8' },
@@ -3277,16 +3383,38 @@
                 action: 'listStatus',
                 project: projectSlug
               })
-            });
-            if (statusRes.ok) {
+            }).catch(() => ({ ok: false })),
+            fetch(scriptUrl, {
+              method: 'POST',
+              mode: 'cors',
+              headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+              body: JSON.stringify({
+                action: 'listVersions',
+                project: projectSlug
+              })
+            }).catch(() => ({ ok: false }))
+          ]);
+
+          const listData = listRes.ok ? await listRes.json() : { models: [], dwgs: [], pdfs: [] };
+
+          let statusEntries = [];
+          if (statusRes.ok) {
+            try {
               const sData = await statusRes.json();
               statusEntries = Array.isArray(sData.entries) ? sData.entries : [];
-            }
-          } catch (se) {
-            console.warn('Status history fetch error:', se);
+            } catch (e) {}
           }
+          statusEntriesCache = statusEntries;
 
-          // Sort statusEntries chronologically so most recent statuses take precedence
+          let versionEntries = [];
+          if (versRes.ok) {
+            try {
+              const vData = await versRes.json();
+              versionEntries = Array.isArray(vData.versions) ? vData.versions : [];
+            } catch (e) {}
+          }
+          versionEntriesCache = versionEntries;
+
           statusEntries.sort((a, b) => new Date(a.changedAt || 0) - new Date(b.changedAt || 0));
 
           const getCleanBase = (name) => {
@@ -4423,10 +4551,7 @@
         try { f = JSON.parse(decodeURIComponent(encodedData)); } catch(e) { return; }
         if (!f || !activeProject) return;
 
-        historyModalTitle.textContent = `Historial: ${f.name}`;
-        historyModalSubtitle.textContent = `Especialidad: ${getFileDisplaySpecialty(f)} | Estado actual: ${f.status} | Versión activa: ${f.version || 'v1.0'}`;
         modalVersionHistory.classList.remove('hidden');
-
         historyLoading.classList.remove('hidden');
         historyEmpty.classList.add('hidden');
         historyList.classList.add('hidden');
@@ -4435,65 +4560,46 @@
         try {
           const ds = activeProject.dataSources || {};
           const scriptUrl = ds.driveScriptUrl || DEFAULT_DRIVE_SCRIPT_URL;
+          const projectSlug = activeProject.slug || slugify(activeProject.name);
 
-          const res = await fetch(scriptUrl, {
-            method: 'POST',
-            mode: 'cors',
-            headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-            body: JSON.stringify({
-              action: 'listVersions',
-              project: activeProject.slug || slugify(activeProject.name),
-              projectName: activeProject.name || '',
-              filename: f.name,
-              originalFileId: f.originalFileId || f.fileId
-            })
-          });
+          // Refresh caches if not yet populated
+          if (!statusEntriesCache || statusEntriesCache.length === 0 || !versionEntriesCache || versionEntriesCache.length === 0) {
+            const [sRes, vRes] = await Promise.all([
+              fetch(scriptUrl, {
+                method: 'POST',
+                mode: 'cors',
+                headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+                body: JSON.stringify({ action: 'listStatus', project: projectSlug })
+              }).catch(() => ({ ok: false })),
+              fetch(scriptUrl, {
+                method: 'POST',
+                mode: 'cors',
+                headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+                body: JSON.stringify({ action: 'listVersions', project: projectSlug })
+              }).catch(() => ({ ok: false }))
+            ]);
+            if (sRes.ok) {
+              try { const sd = await sRes.json(); statusEntriesCache = sd.entries || []; } catch(e) {}
+            }
+            if (vRes.ok) {
+              try { const vd = await vRes.json(); versionEntriesCache = vd.versions || []; } catch(e) {}
+            }
+          }
 
-          const data = res.ok ? await res.json() : { versions: [] };
-          let versions = Array.isArray(data.versions) ? data.versions : [];
+          const versions = buildFileHistory(f.name, statusEntriesCache, versionEntriesCache);
+          const activeVersion = versions[0]?.version || f.version || 'v1.0';
+
+          historyModalTitle.textContent = `Historial: ${f.name}`;
+          historyModalSubtitle.textContent = `Especialidad: ${getFileDisplaySpecialty(f)} | Estado actual: ${f.status || 'EN_PROGRESO'} | Versión activa: ${activeVersion}`;
 
           historyLoading.classList.add('hidden');
 
-          if (versions.length === 0) {
-            const currentVer = f.version || 'v1.0';
-            const dlId = f.fileId || f.originalFileId;
-            const dlUrl = `https://drive.google.com/uc?export=download&id=${dlId}`;
-            const stateLabels = { EN_PROGRESO: 'En Progreso', COMPARTIDO: 'Compartido', PUBLICADO: 'Publicado' };
-            const stateLabel = stateLabels[f.status] || f.status;
-            let stateBadgeClass = 'bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300';
-            if (f.status === 'COMPARTIDO') stateBadgeClass = 'bg-blue-100 text-blue-800 dark:bg-blue-950/60 dark:text-blue-300';
-            else if (f.status === 'PUBLICADO') stateBadgeClass = 'bg-green-100 text-green-800 dark:bg-green-950/60 dark:text-green-300';
-
-            historyEmpty.classList.add('hidden');
-            historyList.classList.remove('hidden');
-            historyList.innerHTML = `
-              <div class="p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-white/60 dark:bg-slate-900/60 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                <div class="flex items-start gap-3">
-                  <div class="flex flex-col items-center">
-                    <span class="px-2.5 py-1 rounded-lg bg-indigo-100 dark:bg-indigo-950/80 text-indigo-700 dark:text-indigo-300 font-mono font-bold text-xs">
-                      ${currentVer}
-                    </span>
-                    <span class="text-[9px] font-bold text-green-600 dark:text-green-400 mt-1 uppercase tracking-wider">Actual</span>
-                  </div>
-                  <div>
-                    <div class="flex items-center gap-2">
-                      <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold ${stateBadgeClass}">${stateLabel}</span>
-                      <span class="text-xs text-slate-400 font-medium">${formatDate(f.lastUpdated)}</span>
-                    </div>
-                    <p class="text-xs font-semibold text-slate-800 dark:text-slate-200 mt-1">${f.comments || 'Versión activa en plataforma.'}</p>
-                    <p class="text-[10px] text-slate-400 mt-0.5">Por: ${f.changedBy || 'Revit / Drive'} ${f.changedByEmail ? `(${f.changedByEmail})` : ''}</p>
-                  </div>
-                </div>
-                <div class="flex items-center gap-2 self-end sm:self-center shrink-0">
-                  <a href="${dlUrl}" target="_blank" rel="noopener noreferrer" class="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 font-semibold text-xs transition-colors" title="Descargar archivo de esta versión">
-                    <span class="material-symbols-outlined text-[14px]">download</span> Descargar
-                  </a>
-                </div>
-              </div>
-            `;
+          if (!versions || versions.length === 0) {
+            historyEmpty.classList.remove('hidden');
             return;
           }
 
+          historyEmpty.classList.add('hidden');
           historyList.classList.remove('hidden');
 
           const formatDate = (isoString) => {
@@ -4502,33 +4608,32 @@
             return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
           };
 
-
           const canManage = isUserAuthorizedForFile(f, 'manage');
 
           historyList.innerHTML = versions.map((ver, idx) => {
             const isLatest = idx === 0;
             const stateLabels = { EN_PROGRESO: 'En Progreso', COMPARTIDO: 'Compartido', PUBLICADO: 'Publicado' };
-            const stateLabel = stateLabels[ver.status] || ver.status;
+            const stateLabel = stateLabels[ver.status] || stateLabels[f.status] || 'En Progreso';
 
             let stateBadgeClass = 'bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300';
-            if (ver.status === 'COMPARTIDO') stateBadgeClass = 'bg-blue-100 text-blue-800 dark:bg-blue-950/60 dark:text-blue-300';
-            else if (ver.status === 'PUBLICADO') stateBadgeClass = 'bg-green-100 text-green-800 dark:bg-green-950/60 dark:text-green-300';
+            if (ver.status === 'COMPARTIDO' || f.status === 'COMPARTIDO') stateBadgeClass = 'bg-blue-100 text-blue-800 dark:bg-blue-950/60 dark:text-blue-300';
+            else if (ver.status === 'PUBLICADO' || f.status === 'PUBLICADO') stateBadgeClass = 'bg-green-100 text-green-800 dark:bg-green-950/60 dark:text-green-300';
 
             const verJsonStr = encodeURIComponent(JSON.stringify({
-              versionId: ver.versionId,
-              backupFileId: ver.backupFileId || ver.fileId,
-              filename: ver.filename,
+              versionId: ver.versionId || ('ver_' + ver.version + '_' + Date.now()),
+              backupFileId: ver.backupFileId || ver.fileId || f.fileId || f.originalFileId,
+              filename: f.name || ver.filename,
               version: ver.version,
-              status: f.status || ver.status,
+              status: f.status || ver.status || 'EN_PROGRESO',
               originalFileId: f.originalFileId || f.fileId,
               type: f.type || '',
-              folder: f.folder,
-              changedByEmail: f.changedByEmail || ver.createdByEmail || '',
+              folder: f.folder || 'General',
+              changedByEmail: ver.createdByEmail || f.changedByEmail || '',
               deliveryTeams: f.deliveryTeams || []
             }));
 
-            const targetDownloadId = isLatest ? (ver.fileId || ver.backupFileId) : (ver.backupFileId || ver.fileId);
-            const downloadUrl = `https://drive.google.com/uc?export=download&id=${targetDownloadId}`;
+            const targetDownloadId = ver.fileId || ver.backupFileId || f.fileId || f.originalFileId;
+            const downloadUrl = 'https://drive.google.com/uc?export=download&id=' + targetDownloadId;
 
             return `
               <div class="p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-white/60 dark:bg-slate-900/60 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-3">
@@ -4544,8 +4649,8 @@
                       <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold ${stateBadgeClass}">${stateLabel}</span>
                       <span class="text-xs text-slate-400 font-medium">${formatDate(ver.fecha)}</span>
                     </div>
-                    <p class="text-xs font-semibold text-slate-800 dark:text-slate-200 mt-1">${ver.comments || 'Sin comentarios registrados.'}</p>
-                    <p class="text-[10px] text-slate-400 mt-0.5">Por: ${ver.createdBy || 'CDE NORA'} ${ver.createdByEmail ? `(${ver.createdByEmail})` : ''}</p>
+                    <p class="text-xs font-semibold text-slate-800 dark:text-slate-200 mt-1">${ver.comments || (ver.version === 'v1.0' ? 'Versión inicial' : 'Actualización de modelo')}</p>
+                    <p class="text-[10px] text-slate-400 mt-0.5">Por: ${ver.createdBy || 'Revit / Drive'} ${ver.createdByEmail ? ('(' + ver.createdByEmail + ')') : ''}</p>
                   </div>
                 </div>
 
@@ -4564,7 +4669,7 @@
           }).join('');
 
         } catch(err) {
-          console.error(err);
+          console.error('Error loading version history:', err);
           historyLoading.classList.add('hidden');
           historyEmpty.classList.remove('hidden');
         }
