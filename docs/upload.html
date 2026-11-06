@@ -3989,13 +3989,7 @@
                 ` : ''}
                 ${canManage ? `
                 <button onclick="window.promoteFile(this, '${fileDataStr}', 'COMPARTIDO')" class="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg ${f.hasCompartido ? 'bg-blue-700 hover:bg-blue-800 ring-2 ring-blue-400 dark:ring-blue-500' : 'bg-blue-600 hover:bg-blue-700'} text-white font-bold text-[10px] uppercase tracking-wider shadow-sm transition-all whitespace-nowrap" title="${f.hasCompartido ? 'Ya enviado a Compartido. Clic para volver a enviar o sincronizar.' : 'Pasar a Compartido'}">
-                  <span class="material-symbols-outlined text-[13px]">${f.hasCompartido ? 'check_circle' : 'share'}</span> ${f.hasCompartido ? '✓ COMPARTIDO' : 'COMPARTIDO'}<!--
-                </button>
-
--->
-                </button>
-                <button onclick="window.demoteFile(this, '${fileDataStr}', 'COMPARTIDO')" class="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 font-semibold text-[10px] uppercase tracking-wider hover:bg-rose-100 dark:hover:bg-rose-900/40 border border-rose-200 dark:border-rose-800/40 transition-colors whitespace-nowrap" title="Retirar este modelo del estado Compartido (Descompartir)">
-                  <span class="material-symbols-outlined text-[13px] text-rose-600 dark:text-rose-400">undo</span> Descompartir
+                  <span class="material-symbols-outlined text-[13px]">${f.hasCompartido ? 'check_circle' : 'share'}</span> ${f.hasCompartido ? '✓ COMPARTIDO' : 'COMPARTIDO'}
                 </button>
                 <button onclick="window.promoteFile(this, '${fileDataStr}', 'PUBLICADO')" class="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg ${f.hasPublicado ? 'bg-emerald-700 hover:bg-emerald-800 ring-2 ring-emerald-400 dark:ring-emerald-500' : 'bg-green-600 hover:bg-green-700'} text-white font-bold text-[10px] uppercase tracking-wider shadow-sm transition-all whitespace-nowrap" title="${f.hasPublicado ? 'Ya publicado. Clic para volver a publicar o sincronizar.' : 'Pasar a Publicado'}">
                   <span class="material-symbols-outlined text-[13px]">${f.hasPublicado ? 'verified' : 'publish'}</span> ${f.hasPublicado ? '✓ PUBLICADO' : 'PUBLICADO'}
@@ -4024,6 +4018,9 @@
                 </button>
                 ` : ''}
                 ${canManage ? `
+                <button onclick="window.demoteFile(this, '${fileDataStr}', 'COMPARTIDO')" class="inline-flex items-center justify-center p-1.5 rounded-lg text-rose-600 hover:text-rose-700 hover:bg-rose-50 dark:hover:bg-rose-950/40 border border-rose-200 dark:border-rose-800/40 transition-colors shadow-sm" title="Retirar de Compartido">
+                  <span class="material-symbols-outlined text-[16px]">undo</span>
+                </button>
                 <button onclick="window.promoteFile(this, '${fileDataStr}', 'PUBLICADO')" class="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg ${f.hasPublicado ? 'bg-emerald-700 hover:bg-emerald-800 ring-2 ring-emerald-400 dark:ring-emerald-500' : 'bg-green-600 hover:bg-green-700'} text-white font-bold text-[10px] uppercase tracking-wider shadow-sm transition-all whitespace-nowrap" title="${f.hasPublicado ? 'Ya publicado. Clic para volver a publicar o sincronizar.' : 'Pasar a Publicado'}">
                   <span class="material-symbols-outlined text-[13px]">${f.hasPublicado ? 'verified' : 'publish'}</span> ${f.hasPublicado ? '✓ PUBLICADO' : 'PUBLICADO'}
                 </button>
@@ -4054,6 +4051,9 @@
                   <span class="material-symbols-outlined text-[14px]">verified</span> PUBLICADO
                 </span>
                 ${canManage ? `
+                <button onclick="window.demoteFile(this, '${fileDataStr}', 'PUBLICADO')" class="inline-flex items-center justify-center p-1.5 rounded-lg text-rose-600 hover:text-rose-700 hover:bg-rose-50 dark:hover:bg-rose-950/40 border border-rose-200 dark:border-rose-800/40 transition-colors shadow-sm" title="Retirar de Publicado">
+                  <span class="material-symbols-outlined text-[16px]">undo</span>
+                </button>
                 <button onclick="window.openNewVersionModal('${fileDataStr}')" class="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 font-semibold text-[10px] uppercase tracking-wider hover:bg-indigo-100 dark:hover:bg-indigo-900/40 transition-colors whitespace-nowrap" title="Guardar Nueva Versión">
                   <span class="material-symbols-outlined text-[13px]">history_edu</span> + Versión
                 </button>
