@@ -1034,6 +1034,8 @@
       async function selectEmpresa(company, autoSelectProjectSlug = null) {
         currentCompany = company;
         currentProject = null;
+        window.__noraCurrentCompany = company;
+        window.__noraCurrentProject = null;
 
         // Update Breadcrumb
         crumbSep1.classList.remove('hidden');
@@ -1092,7 +1094,7 @@
           renderProyectosGrid(projects);
 
           if (autoSelectProjectSlug) {
-            const targetP = projects.find(p => p.slug === autoSelectProjectSlug || slugify(p.name) === slugify(autoSelectProjectSlug));
+            const targetP = projects.find(p => p.id === autoSelectProjectSlug || p.slug === autoSelectProjectSlug || slugify(p.name) === slugify(autoSelectProjectSlug));
             if (targetP) {
               selectProyecto(targetP);
             }
@@ -1172,6 +1174,7 @@
       // ========================================================
       function selectProyecto(project) {
         currentProject = project;
+        window.__noraCurrentProject = project;
 
         // Update Breadcrumbs
         crumbSep2.classList.remove('hidden');
