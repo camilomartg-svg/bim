@@ -7455,6 +7455,8 @@ function initQuantitiesPanel() {
     let despieceColors3DEnabled: boolean = true;
     let despieceActiveSheet3D: string = 'ALL';
     let currentCutSheets: CutSheet[] = [];
+    let cachedDespieceKey = '';
+    let cachedDespieceCutSheets: CutSheet[] = [];
 
     if (!panel || !toggleBtn) return;
     const qPanel = panel;
@@ -8629,7 +8631,13 @@ function initQuantitiesPanel() {
             });
         });
 
+        const onlySelected = selectedElementIds.length > 0;
+        const selSet = new Set(selectedElementIds.map(Number));
+
         elementPiecesMap.forEach(({ pieces: pList, modelUUID }, expressID) => {
+            // Si el usuario tiene un elemento seleccionado, mostrar únicamente la etiqueta de ese elemento
+            if (onlySelected && !selSet.has(expressID)) return;
+
             const centerPos = getElementCenter(expressID, modelUUID);
             if (!centerPos) return;
 
@@ -8697,44 +8705,52 @@ function initQuantitiesPanel() {
             markers.push({ element: marker, pos3D: centerPos });
         });
 
-        const updatePositions = () => {
-            if (!world?.camera?.three) return;
-            const width = window.innerWidth;
-            const height = window.innerHeight;
-
-            // Calcular rectángulos de las barras y paneles de la interfaz para no pisar nada nunca
+        let cachedLimits = { minTop: 60, minLeft: 0, maxRight: window.innerWidth, maxBottom: window.innerHeight };
+        function updateLimits() {
             const topBar = document.querySelector('.top-bar') as HTMLElement | null;
             const sidebar = document.getElementById('sidebar') as HTMLElement | null;
             const propertiesPanel = document.getElementById('properties-panel') as HTMLElement | null;
             const quantitiesPanel = document.getElementById('quantities-panel') as HTMLElement | null;
 
-            const minTop = (topBar && topBar.offsetHeight) ? topBar.getBoundingClientRect().bottom : 60;
-            const minLeft = (sidebar && !sidebar.classList.contains('closed')) ? sidebar.getBoundingClientRect().right : 0;
-            const maxRight = (propertiesPanel && !propertiesPanel.classList.contains('closed')) ? propertiesPanel.getBoundingClientRect().left : width;
-            const maxBottom = (quantitiesPanel && !quantitiesPanel.classList.contains('closed')) ? quantitiesPanel.getBoundingClientRect().top : height;
+            cachedLimits = {
+                minTop: (topBar && topBar.offsetHeight) ? topBar.getBoundingClientRect().bottom : 60,
+                minLeft: (sidebar && !sidebar.classList.contains('closed')) ? sidebar.getBoundingClientRect().right : 0,
+                maxRight: (propertiesPanel && !propertiesPanel.classList.contains('closed')) ? propertiesPanel.getBoundingClientRect().left : window.innerWidth,
+                maxBottom: (quantitiesPanel && !quantitiesPanel.classList.contains('closed')) ? quantitiesPanel.getBoundingClientRect().top : window.innerHeight
+            };
+        }
+        updateLimits();
 
-            markers.forEach(({ element, pos3D }) => {
-                const projected = pos3D.clone().project(world.camera.three);
-                // Ocultar si está detrás de la cámara
-                if (projected.z > 1 || projected.z < -1) {
-                    element.style.display = 'none';
-                    return;
-                }
-
-                const x = (projected.x * 0.5 + 0.5) * width;
-                const y = (-projected.y * 0.5 + 0.5) * height;
-
-                // Ocultar si cae fuera del espacio de trabajo 3D visible
-                // (evitando que pise la barra superior, la barra lateral izquierda, el panel derecho o el panel de despiece inferior)
+        let updateRafId = 0;
+        const updatePositions = () => {
+            if (updateRafId) return;
+            updateRafId = requestAnimationFrame(() => {
+                updateRafId = 0;
+                if (!world?.camera?.three) return;
+                const width = window.innerWidth;
+                const height = window.innerHeight;
+                const { minTop, minLeft, maxRight, maxBottom } = cachedLimits;
                 const marginX = 25;
                 const marginY = 18;
-                if (x < minLeft + marginX || x > maxRight - marginX || y < minTop + marginY || y > maxBottom - marginY) {
-                    element.style.display = 'none';
-                } else {
-                    element.style.display = 'block';
-                    element.style.left = `${x}px`;
-                    element.style.top = `${y}px`;
-                }
+
+                markers.forEach(({ element, pos3D }) => {
+                    const projected = pos3D.clone().project(world.camera.three);
+                    if (projected.z > 1 || projected.z < -1) {
+                        element.style.display = 'none';
+                        return;
+                    }
+
+                    const x = (projected.x * 0.5 + 0.5) * width;
+                    const y = (-projected.y * 0.5 + 0.5) * height;
+
+                    if (x < minLeft + marginX || x > maxRight - marginX || y < minTop + marginY || y > maxBottom - marginY) {
+                        element.style.display = 'none';
+                    } else {
+                        element.style.display = 'block';
+                        element.style.left = `${x}px`;
+                        element.style.top = `${y}px`;
+                    }
+                });
             });
         };
 
@@ -8781,19 +8797,7 @@ function initQuantitiesPanel() {
 
         const isSpecific = targetSheetIndex !== 'ALL';
         const targetSheet = isSpecific ? sheets.find(s => String(s.sheetIndex) === targetSheetIndex) : null;
-        let activeSheets = (isSpecific && targetSheet) ? [targetSheet] : sheets;
-
-        // Si se están mostrando todas las láminas pero el usuario seleccionó muros concretos en 3D,
-        // enfocamos las etiquetas 3D en las láminas de esos muros manteniendo sus números fijos
-        if (!isSpecific && selectedElementIds.length > 0 && despieceScope !== 'SELECTED') {
-            const selSet = new Set(selectedElementIds.map(Number));
-            const matching = sheets.filter(s =>
-                s.placedPieces.some(p => selSet.has(Number(p.piece.expressID || p.piece.id)))
-            );
-            if (matching.length > 0) {
-                activeSheets = matching;
-            }
-        }
+        const activeSheets = (isSpecific && targetSheet) ? [targetSheet] : sheets;
 
         const isolationMap: Record<string, Set<number>> = {};
         const colorMaps: Record<number, Record<string, number[]>> = {};
@@ -8826,8 +8830,8 @@ function initQuantitiesPanel() {
             isoObj[uuid] = Array.from(idsSet);
         }
 
-        // 1. Aislar los muros correspondientes
-        if (Object.keys(isoObj).length > 0) {
+        // 1. Aislar los muros ÚNICAMENTE si el usuario eligió ver una lámina específica en 3D
+        if (isSpecific && targetSheet && Object.keys(isoObj).length > 0) {
             try {
                 hider.isolate(isoObj as any);
             } catch (err) {
@@ -9930,14 +9934,23 @@ function initQuantitiesPanel() {
                     activePieces = modularPieces.filter(p => p.material === despieceSelectedMaterial);
                 }
 
-                const cutSheets = optimizeSheetCutting(
-                    activePieces,
-                    commercialSheetW,
-                    commercialSheetH,
-                    sawKerfMm,
-                    sheetTrimMm,
-                    allowPieceRotation
-                );
+                const despieceCacheKey = `${activePieces.length}::${commercialSheetW}x${commercialSheetH}::k${sawKerfMm}::t${sheetTrimMm}::r${allowPieceRotation ? 1 : 0}::m${despieceSelectedMaterial}::s${despieceScope}::${activePieces.map(p => `${p.id}_${p.width}x${p.height}`).join(',')}`;
+
+                let cutSheets: CutSheet[];
+                if (despieceCacheKey === cachedDespieceKey && cachedDespieceCutSheets.length > 0) {
+                    cutSheets = cachedDespieceCutSheets;
+                } else {
+                    cutSheets = optimizeSheetCutting(
+                        activePieces,
+                        commercialSheetW,
+                        commercialSheetH,
+                        sawKerfMm,
+                        sheetTrimMm,
+                        allowPieceRotation
+                    );
+                    cachedDespieceKey = despieceCacheKey;
+                    cachedDespieceCutSheets = cutSheets;
+                }
 
                 currentCutSheets = cutSheets;
 
