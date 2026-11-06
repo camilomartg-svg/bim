@@ -2388,6 +2388,7 @@
             rawEvents.push({
               source: 'formal',
               version: v.version,
+              explicitVersion: v.version,
               fecha: v.fecha || v.createdDate,
               comments: v.comments || '',
               createdBy: v.createdBy || 'CDE NORA',
@@ -2401,10 +2402,12 @@
 
         // 2. Entradas de carga y estados en EstadosArchivos
         (sEntries || []).forEach(s => {
-          if ((s.filename || '').trim().toLowerCase() === cleanFn && s.status === 'EN_PROGRESO') {
+          if ((s.filename || '').trim().toLowerCase() === cleanFn) {
+            const isPromotion = s.status === 'COMPARTIDO' || s.status === 'PUBLICADO';
             rawEvents.push({
-              source: 'upload',
+              source: isPromotion ? 'promotion' : 'upload',
               version: (s.version && s.version !== 'v1.0') ? s.version : null,
+              explicitVersion: s.version || null,
               fecha: s.changedAt,
               comments: s.comments || '',
               createdBy: s.changedBy || 'Revit / Drive',
@@ -2418,13 +2421,13 @@
 
         rawEvents.sort((a, b) => new Date(a.fecha || 0) - new Date(b.fecha || 0));
 
-        // Deduplicar eventos concurrentes entre VersionesArchivos y EstadosArchivos
+        // Deduplicar eventos concurrentes entre VersionesArchivos y EstadosArchivos (< 15s)
         const distinctEvents = [];
         rawEvents.forEach(evt => {
           const isDuplicate = distinctEvents.some(d => {
             const timeDiff = Math.abs(new Date(d.fecha).getTime() - new Date(evt.fecha).getTime());
             if (d.fileId && evt.fileId && d.fileId === evt.fileId && timeDiff < 15000) return true;
-            if (d.version && evt.version && d.version === evt.version && timeDiff < 30000) return true;
+            if (d.status === evt.status && timeDiff < 15000) return true;
             return false;
           });
 
@@ -2434,9 +2437,9 @@
             const idx = distinctEvents.findIndex(d => {
               const timeDiff = Math.abs(new Date(d.fecha).getTime() - new Date(evt.fecha).getTime());
               return (d.fileId && evt.fileId && d.fileId === evt.fileId && timeDiff < 15000) ||
-                     (d.version && evt.version && d.version === evt.version && timeDiff < 30000);
+                     (d.status === evt.status && timeDiff < 15000);
             });
-            if (idx !== -1 && evt.source === 'formal') {
+            if (idx !== -1 && (evt.source === 'formal' || evt.source === 'promotion')) {
               distinctEvents[idx] = { ...distinctEvents[idx], ...evt };
             }
           }
@@ -2453,25 +2456,21 @@
 
         const history = [];
         let currentVer = 'v1.0';
-        const seenVersions = new Set();
 
         distinctEvents.forEach((evt, idx) => {
           let assignedVer;
 
-          if (idx === 0) {
+          if (evt.status === 'COMPARTIDO' || evt.status === 'PUBLICADO') {
+            assignedVer = evt.explicitVersion || evt.version || currentVer;
+          } else if (idx === 0) {
             assignedVer = evt.version || 'v1.0';
-          } else if (evt.version && evt.version !== currentVer) {
+          } else if (evt.version) {
             assignedVer = evt.version;
           } else {
             assignedVer = calculateMinor(currentVer);
           }
 
-          while (seenVersions.has(assignedVer)) {
-            assignedVer = calculateMinor(assignedVer);
-          }
-
           currentVer = assignedVer;
-          seenVersions.add(assignedVer);
 
           history.push({
             versionId: 'ver_' + assignedVer + '_' + idx,
@@ -2488,7 +2487,7 @@
         });
 
         // Garantizar versión base v1.0
-        if (!seenVersions.has('v1.0')) {
+        if (!distinctEvents.some(e => e.version === 'v1.0' || e.explicitVersion === 'v1.0')) {
           history.unshift({
             versionId: 'base_v1.0_' + Date.now(),
             version: 'v1.0',
@@ -2503,6 +2502,7 @@
           });
         }
 
+        // Ordenar descendente: la más reciente primero (índice 0)
         history.sort((a, b) => new Date(b.fecha) - new Date(a.fecha));
         if (history.length > 0) {
           history.forEach((h, i) => { h.isCurrent = (i === 0); });
@@ -3464,7 +3464,6 @@
             statusEntries.forEach(entry => {
               if (!entry || !entry.status) return;
               const status = entry.status;
-              if (status !== 'EN_PROGRESO' && status !== 'COMPARTIDO' && status !== 'PUBLICADO') return;
 
               const entryFn = String(entry.filename || '').trim().toLowerCase();
               const entryExt = getFileExtension(entryFn);
@@ -3482,17 +3481,27 @@
               else if (matchesIfcFrag) matchWeight = 1;
 
               if (matchWeight > 0) {
-                const current = matches[status];
-                if (!current || matchWeight > current.weight || (matchWeight === current.weight && new Date(entry.changedAt || 0).getTime() >= new Date(current.entry.changedAt || 0).getTime())) {
-                  matches[status] = { entry, weight: matchWeight };
+                if (status === 'COMPARTIDO') {
+                  matches.COMPARTIDO = entry;
+                } else if (status === 'DESCOMPARTIDO' || (entry.comments && entry.comments.includes('Descompartido'))) {
+                  matches.COMPARTIDO = null;
+                } else if (status === 'PUBLICADO') {
+                  matches.PUBLICADO = entry;
+                } else if (status === 'DESPUBLICADO' || (entry.comments && entry.comments.includes('Despublicado'))) {
+                  matches.PUBLICADO = null;
+                } else if (status === 'EN_PROGRESO') {
+                  const current = matches.EN_PROGRESO;
+                  if (!current || matchWeight > (current.weight || 0) || (matchWeight === (current.weight || 0) && new Date(entry.changedAt || 0).getTime() >= new Date(current.entry?.changedAt || current.changedAt || 0).getTime())) {
+                    matches.EN_PROGRESO = { entry, weight: matchWeight };
+                  }
                 }
               }
             });
             
             return {
-              EN_PROGRESO: matches.EN_PROGRESO ? matches.EN_PROGRESO.entry : null,
-              COMPARTIDO: matches.COMPARTIDO ? matches.COMPARTIDO.entry : null,
-              PUBLICADO: matches.PUBLICADO ? matches.PUBLICADO.entry : null
+              EN_PROGRESO: matches.EN_PROGRESO ? (matches.EN_PROGRESO.entry || matches.EN_PROGRESO) : null,
+              COMPARTIDO: matches.COMPARTIDO,
+              PUBLICADO: matches.PUBLICADO
             };
           };
 
@@ -3524,8 +3533,8 @@
               let fileBy = latestVerObj?.createdBy || (progMatch?.changedBy && progMatch.changedBy.trim()) || item.ownerName || 'Revit / Drive';
               let fileByEmail = latestVerObj?.createdByEmail || (progMatch?.changedByEmail && progMatch.changedByEmail.trim()) || item.ownerEmail || 'revit@nora.cde';
 
-              const isCurVerComp = !!(matches.COMPARTIDO && (matches.COMPARTIDO.version || 'v1.0') === fileVersion);
-              const isCurVerPub = !!(matches.PUBLICADO && (matches.PUBLICADO.version || 'v1.0') === fileVersion);
+              const hasComp = !!matches.COMPARTIDO;
+              const hasPub = !!matches.PUBLICADO;
 
               const progFileObj = {
                 fileId: fid, // Original physical file ID
@@ -3538,8 +3547,8 @@
                 lastUpdated: fileChangedAt,
                 status: 'EN_PROGRESO',
                 hasProgreso: true,
-                hasCompartido: !!isCurVerComp,
-                hasPublicado: !!isCurVerPub,
+                hasCompartido: hasComp,
+                hasPublicado: hasPub,
                 version: fileVersion,
                 history: fileHistory,
                 comments: fileComments,
@@ -3571,9 +3580,9 @@
                   folder: fld,
                   lastUpdated: compMatch.changedAt || item.lastUpdated,
                   status: 'COMPARTIDO',
-                  hasProgreso: isCompSameAsProg,
+                  hasProgreso: true,
                   hasCompartido: true,
-                  hasPublicado: isCompSameAsPub,
+                  hasPublicado: !!matches.PUBLICADO,
                   version: compVer,
                   comments: compMatch.comments || '',
                   changedBy: (compMatch.changedBy && compMatch.changedBy.trim()) || 'UNASSIGNED',
@@ -3596,7 +3605,7 @@
                 const isPubSameAsProg = (fileVersion === pubVer);
 
                 const pubFileObj = {
-                  fileId: pubMatch.fileId || fid, // Use copied file's ID
+                  fileId: pubMatch.fileId || fid,
                   originalFileId: fid,
                   jsonId: type === 'model' ? (pubMatch.jsonId || '') : '',
                   name: fname,
@@ -3605,8 +3614,8 @@
                   folder: fld,
                   lastUpdated: pubMatch.changedAt || item.lastUpdated,
                   status: 'PUBLICADO',
-                  hasProgreso: isPubSameAsProg,
-                  hasCompartido: isPubSameAsComp,
+                  hasProgreso: true,
+                  hasCompartido: !!matches.COMPARTIDO,
                   hasPublicado: true,
                   version: pubVer,
                   comments: pubMatch.comments || '',
@@ -3984,6 +3993,9 @@
                 </button>
 
 -->
+                </button>
+                <button onclick="window.demoteFile(this, '${fileDataStr}', 'COMPARTIDO')" class="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 font-semibold text-[10px] uppercase tracking-wider hover:bg-rose-100 dark:hover:bg-rose-900/40 border border-rose-200 dark:border-rose-800/40 transition-colors whitespace-nowrap" title="Retirar este modelo del estado Compartido (Descompartir)">
+                  <span class="material-symbols-outlined text-[13px] text-rose-600 dark:text-rose-400">undo</span> Descompartir
                 </button>
                 <button onclick="window.promoteFile(this, '${fileDataStr}', 'PUBLICADO')" class="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg ${f.hasPublicado ? 'bg-emerald-700 hover:bg-emerald-800 ring-2 ring-emerald-400 dark:ring-emerald-500' : 'bg-green-600 hover:bg-green-700'} text-white font-bold text-[10px] uppercase tracking-wider shadow-sm transition-all whitespace-nowrap" title="${f.hasPublicado ? 'Ya publicado. Clic para volver a publicar o sincronizar.' : 'Pasar a Publicado'}">
                   <span class="material-symbols-outlined text-[13px]">${f.hasPublicado ? 'verified' : 'publish'}</span> ${f.hasPublicado ? '✓ PUBLICADO' : 'PUBLICADO'}
@@ -4743,6 +4755,117 @@
       };
       btnCloseHistoryModal.addEventListener('click', closeHistoryModal);
       btnDoneHistoryModal.addEventListener('click', closeHistoryModal);
+
+      
+      // ==========================================
+      // DESCOMPARTIR Y DESPUBLICAR MODELOS / ARCHIVOS
+      // ==========================================
+      window.demoteFile = async (btn, encodedData, fromStatus) => {
+        let f;
+        try { f = JSON.parse(decodeURIComponent(encodedData)); } catch(e) { return; }
+        if (!f || !activeProject) return;
+
+        if (!isUserAuthorizedForFile(f, 'manage')) {
+          alert('No tienes autorización para realizar esta acción sobre este archivo.');
+          return;
+        }
+
+        const actionLabel = fromStatus === 'COMPARTIDO' ? 'descompartir' : 'despublicar';
+        const targetStateName = fromStatus === 'COMPARTIDO' ? 'Compartido' : 'Publicado';
+        
+        if (!confirm(`¿Estás seguro de que deseas retirar "${f.name}" del estado ${targetStateName}?\nEl archivo dejará de estar disponible en ${targetStateName}.`)) {
+          return;
+        }
+
+        const origHtml = btn.innerHTML;
+        btn.disabled = true;
+        btn.innerHTML = `<span class="inline-block w-3.5 h-3.5 border-2 border-rose-500 border-t-transparent rounded-full animate-spin"></span>`;
+
+        try {
+          const ds = activeProject.dataSources || {};
+          const scriptUrl = ds.driveScriptUrl || DEFAULT_DRIVE_SCRIPT_URL;
+          const projectSlug = activeProject.slug || slugify(activeProject.name);
+
+          // 1. Eliminar archivo físico de la subcarpeta .estados/{status} en Google Drive
+          const fileIdsToDelete = [f.fileId, f.pairedFragId, f.jsonId].filter(id => id && id !== f.originalFileId);
+          if (fileIdsToDelete.length > 0) {
+            try {
+              await fetch(scriptUrl, {
+                method: 'POST',
+                mode: 'cors',
+                headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+                body: JSON.stringify({
+                  action: 'deleteFiles',
+                  fileIds: fileIdsToDelete,
+                  folderId: (ds.driveFolderId && String(ds.driveFolderId).trim().length > 15) ? ds.driveFolderId.trim() : '',
+                  driveFolderName: ds.driveFolderName || activeProject.name,
+                  project: projectSlug,
+                  filename: f.name
+                })
+              });
+            } catch (delErr) {
+              console.warn('Error al eliminar archivo físico de estado:', delErr);
+            }
+          }
+
+          // 2. Registrar evento de despromoción en EstadosArchivos para auditoría y persistencia inmediata
+          const demoteStatus = fromStatus === 'COMPARTIDO' ? 'DESCOMPARTIDO' : 'DESPUBLICADO';
+          const payload = {
+            action: 'createVersion',
+            fileId: f.originalFileId || f.fileId,
+            jsonId: f.jsonId || '',
+            filename: f.name,
+            status: demoteStatus,
+            version: f.version || 'v1.0',
+            comments: `Modelo retirado de ${targetStateName} (${fromStatus === 'COMPARTIDO' ? 'Descompartido' : 'Despublicado'})`,
+            project: projectSlug,
+            folderId: (ds.driveFolderId && String(ds.driveFolderId).trim().length > 15) ? ds.driveFolderId.trim() : '',
+            driveFolderName: ds.driveFolderName || activeProject.name,
+            originalFileId: f.originalFileId || f.fileId,
+            type: f.type || '',
+            changedBy: userAccount ? (userAccount.name || '') : '',
+            changedByEmail: userAccount ? (userAccount.email || userAccount.username || '') : '',
+            deliveryTeams: f.deliveryTeams || resolveCurrentUserDeliveryTeams()
+          };
+
+          await fetch(scriptUrl, {
+            method: 'POST',
+            mode: 'cors',
+            headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+            body: JSON.stringify(payload)
+          });
+
+          // Si tiene .frag emparejado, registrar también despromoción del .frag
+          if (f.pairedFragId && f.pairedFragName) {
+            try {
+              await fetch(scriptUrl, {
+                method: 'POST',
+                mode: 'cors',
+                headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+                body: JSON.stringify({
+                  action: 'createVersion',
+                  fileId: f.pairedFragId,
+                  filename: f.pairedFragName,
+                  status: demoteStatus,
+                  version: f.version || 'v1.0',
+                  comments: `Modelo .frag retirado de ${targetStateName}`,
+                  project: projectSlug,
+                  originalFileId: f.pairedFragId,
+                  type: 'model'
+                })
+              });
+            } catch(e) {}
+          }
+
+          addLog(`✓ "${f.name}" ha sido retirado del estado ${targetStateName}.`);
+          await loadProjectFiles();
+        } catch(err) {
+          console.error(err);
+          alert(`Error al ${actionLabel}: ${err.message || err}`);
+          btn.disabled = false;
+          btn.innerHTML = origHtml;
+        }
+      };
 
       window.promoteFile = async (btn, encodedData, newStatus) => {
         let f;
