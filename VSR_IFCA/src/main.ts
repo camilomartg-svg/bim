@@ -7657,6 +7657,7 @@ function initQuantitiesPanel() {
             if (icon) {
                 icon.textContent = isMaximized ? 'fullscreen_exit' : 'fullscreen';
             }
+            if (despieceLabelsUpdateFn) despieceLabelsUpdateFn();
         });
     }
 
@@ -7723,6 +7724,7 @@ function initQuantitiesPanel() {
             const newHeight = window.innerHeight - e.clientY;
             if (newHeight > 100 && newHeight < window.innerHeight - 100) {
                 qPanel.style.height = `${newHeight}px`;
+                if (despieceLabelsUpdateFn) despieceLabelsUpdateFn();
             }
         });
         document.addEventListener('mouseup', () => {
@@ -8581,9 +8583,12 @@ function initQuantitiesPanel() {
     function clearDespiece3DLabels() {
         const container = document.getElementById('despiece-3d-labels-container');
         if (container) container.remove();
-        if (despieceLabelsUpdateFn && world?.camera?.controls) {
-            world.camera.controls.removeEventListener('update', despieceLabelsUpdateFn);
-            world.camera.controls.removeEventListener('rest', despieceLabelsUpdateFn);
+        if (despieceLabelsUpdateFn) {
+            if (world?.camera?.controls) {
+                world.camera.controls.removeEventListener('update', despieceLabelsUpdateFn);
+                world.camera.controls.removeEventListener('rest', despieceLabelsUpdateFn);
+            }
+            window.removeEventListener('resize', despieceLabelsUpdateFn);
             despieceLabelsUpdateFn = null;
         }
     }
@@ -8592,11 +8597,13 @@ function initQuantitiesPanel() {
         clearDespiece3DLabels();
         if (!despieceColors3DEnabled || activeTab !== 'despiece') return;
 
-        // Montar contenedor flotante de alta prioridad en el body (z-index 9999 para que nunca se tape)
+        // Montar contenedor flotante confinado al espacio de trabajo 3D (dentro de viewer-container)
+        // con z-index: 10 para quedar estrictamente por debajo de los menús, barras y paneles (z-index: 1000)
+        const viewerContainer = document.getElementById('viewer-container') || document.body;
         const labelsContainer = document.createElement('div');
         labelsContainer.id = 'despiece-3d-labels-container';
-        labelsContainer.style.cssText = 'position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; pointer-events: none; z-index: 9999; overflow: hidden;';
-        document.body.appendChild(labelsContainer);
+        labelsContainer.style.cssText = 'position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 10; overflow: hidden;';
+        viewerContainer.appendChild(labelsContainer);
 
         const markers: Array<{ element: HTMLElement; pos3D: THREE.Vector3 }> = [];
         const uniqueModels = getUniqueLoadedModels();
@@ -8695,15 +8702,36 @@ function initQuantitiesPanel() {
             const width = window.innerWidth;
             const height = window.innerHeight;
 
+            // Calcular rectángulos de las barras y paneles de la interfaz para no pisar nada nunca
+            const topBar = document.querySelector('.top-bar') as HTMLElement | null;
+            const sidebar = document.getElementById('sidebar') as HTMLElement | null;
+            const propertiesPanel = document.getElementById('properties-panel') as HTMLElement | null;
+            const quantitiesPanel = document.getElementById('quantities-panel') as HTMLElement | null;
+
+            const minTop = (topBar && topBar.offsetHeight) ? topBar.getBoundingClientRect().bottom : 60;
+            const minLeft = (sidebar && !sidebar.classList.contains('closed')) ? sidebar.getBoundingClientRect().right : 0;
+            const maxRight = (propertiesPanel && !propertiesPanel.classList.contains('closed')) ? propertiesPanel.getBoundingClientRect().left : width;
+            const maxBottom = (quantitiesPanel && !quantitiesPanel.classList.contains('closed')) ? quantitiesPanel.getBoundingClientRect().top : height;
+
             markers.forEach(({ element, pos3D }) => {
                 const projected = pos3D.clone().project(world.camera.three);
                 // Ocultar si está detrás de la cámara
                 if (projected.z > 1 || projected.z < -1) {
                     element.style.display = 'none';
+                    return;
+                }
+
+                const x = (projected.x * 0.5 + 0.5) * width;
+                const y = (-projected.y * 0.5 + 0.5) * height;
+
+                // Ocultar si cae fuera del espacio de trabajo 3D visible
+                // (evitando que pise la barra superior, la barra lateral izquierda, el panel derecho o el panel de despiece inferior)
+                const marginX = 25;
+                const marginY = 18;
+                if (x < minLeft + marginX || x > maxRight - marginX || y < minTop + marginY || y > maxBottom - marginY) {
+                    element.style.display = 'none';
                 } else {
                     element.style.display = 'block';
-                    const x = (projected.x * 0.5 + 0.5) * width;
-                    const y = (-projected.y * 0.5 + 0.5) * height;
                     element.style.left = `${x}px`;
                     element.style.top = `${y}px`;
                 }
@@ -8715,6 +8743,7 @@ function initQuantitiesPanel() {
             world.camera.controls.addEventListener('update', updatePositions);
             world.camera.controls.addEventListener('rest', updatePositions);
         }
+        window.addEventListener('resize', updatePositions);
         updatePositions();
     }
 
@@ -8752,7 +8781,19 @@ function initQuantitiesPanel() {
 
         const isSpecific = targetSheetIndex !== 'ALL';
         const targetSheet = isSpecific ? sheets.find(s => String(s.sheetIndex) === targetSheetIndex) : null;
-        const activeSheets = (isSpecific && targetSheet) ? [targetSheet] : sheets;
+        let activeSheets = (isSpecific && targetSheet) ? [targetSheet] : sheets;
+
+        // Si se están mostrando todas las láminas pero el usuario seleccionó muros concretos en 3D,
+        // enfocamos las etiquetas 3D en las láminas de esos muros manteniendo sus números fijos
+        if (!isSpecific && selectedElementIds.length > 0 && despieceScope !== 'SELECTED') {
+            const selSet = new Set(selectedElementIds.map(Number));
+            const matching = sheets.filter(s =>
+                s.placedPieces.some(p => selSet.has(Number(p.piece.expressID || p.piece.id)))
+            );
+            if (matching.length > 0) {
+                activeSheets = matching;
+            }
+        }
 
         const isolationMap: Record<string, Set<number>> = {};
         const colorMaps: Record<number, Record<string, number[]>> = {};
@@ -9842,7 +9883,25 @@ function initQuantitiesPanel() {
 
 
         } else if (activeTab === 'despiece') {
-            const wallTargetIds = filtered
+            // PLAN MAESTRO DE CORTE FIJO Y PERMANENTE:
+            // La optimización de corte comercial (#1..#N) representa el cálculo maestro del proyecto para el modelo.
+            // Para mantener los números de lámina (#1..#N) y números de corte (#1..#M) fijos y estables,
+            // la optimización base no se trunca a 1 sola lámina cuando el usuario hace clic o aísla elementos en 3D
+            // (a menos que se seleccione explícitamente el alcance 'Solo Seleccionados').
+            const despieceBaseElements = (despieceScope === 'SELECTED')
+                ? filtered
+                : elements.filter(el => {
+                    if (searchQuery.trim() !== '') {
+                        const q = searchQuery.toLowerCase();
+                        if (!el.id.includes(q) && !(el.name || '').toLowerCase().includes(q)) return false;
+                    }
+                    if (filterStatus !== 'Todos') {
+                        if ((elementStatuses[el.id] || 'PENDIENTE') !== filterStatus) return false;
+                    }
+                    return true;
+                });
+
+            const wallTargetIds = despieceBaseElements
                 .filter(el => {
                     const cls = String(el.classification || '').toUpperCase();
                     const cat = String(el.category || '').toUpperCase();
@@ -9854,7 +9913,7 @@ function initQuantitiesPanel() {
                 await prefetchElements3DBounds(wallTargetIds, true);
             }
             const scopeMode = despieceScope === 'SELECTED' ? 'SELECTED' : (despieceScope === 'ALL_WALLS' ? 'ALL_WALLS' : 'ALL_MODULAR');
-            const modularPieces = extractModularWallPieces(filtered, despieceScope === 'SELECTED', selectedElementIds, scopeMode, getElement3DBounds);
+            const modularPieces = extractModularWallPieces(despieceBaseElements, despieceScope === 'SELECTED', selectedElementIds, scopeMode, getElement3DBounds);
 
             if (modularPieces.length === 0) {
                 contentArea.innerHTML = `
@@ -9909,6 +9968,17 @@ function initQuantitiesPanel() {
                 let filteredSheets = cutSheets;
                 if (despieceActiveSheet3D !== 'ALL') {
                     filteredSheets = cutSheets.filter(s => String(s.sheetIndex) === despieceActiveSheet3D);
+                } else if (selectedElementIds.length > 0 && despieceScope !== 'SELECTED') {
+                    // Si el usuario seleccionó uno o más muros en el visor 3D, filtramos la vista
+                    // para mostrar únicamente las láminas maestras donde se ubican esos muros,
+                    // PRESERVANDO FIJOS sus números de lámina (ej: Lámina #14) y de corte (ej: Corte #50).
+                    const selSet = new Set(selectedElementIds.map(Number));
+                    const matchingSheets = cutSheets.filter(s =>
+                        s.placedPieces.some(p => selSet.has(Number(p.piece.expressID || p.piece.id)))
+                    );
+                    if (matchingSheets.length > 0) {
+                        filteredSheets = matchingSheets;
+                    }
                 }
 
                 const gridLayoutClass = despieceGridCols === 'single'
@@ -9924,7 +9994,11 @@ function initQuantitiesPanel() {
                                     <button type="button" id="q-btn-reset-sheet-3d" class="q-btn-xs" style="margin-left: 12px; background: #3b82f6; color: white; border: none; border-radius: 4px; cursor: pointer; padding: 4px 10px; font-weight: bold; font-size: 11px;">
                                         <i class="fa-solid fa-layer-group"></i> Mostrando solo Lámina #${escapeDespieceHtml(despieceActiveSheet3D)} &bull; Ver Todas (${cutSheets.length})
                                     </button>
-                                ` : ''}
+                                ` : (selectedElementIds.length > 0 && despieceScope !== 'SELECTED' && filteredSheets.length < cutSheets.length ? `
+                                    <button type="button" id="q-btn-reset-sel-despiece" class="q-btn-xs" style="margin-left: 12px; background: #8b5cf6; color: white; border: none; border-radius: 4px; cursor: pointer; padding: 4px 10px; font-weight: bold; font-size: 11px;">
+                                        <i class="fa-solid fa-filter"></i> Mostrando ${filteredSheets.length} de ${cutSheets.length} láminas con muros seleccionados &bull; Ver Todas
+                                    </button>
+                                ` : '')}
                                 ${materials.length > 1 ? `
                                     <select id="q-despiece-material-filter" class="q-select" style="margin-left: 14px; font-weight: normal; text-transform: none;">
                                         <option value="TODOS" ${despieceSelectedMaterial === 'TODOS' ? 'selected' : ''}>Todos los Materiales (${modularPieces.length} muros)</option>
@@ -10040,6 +10114,16 @@ function initQuantitiesPanel() {
                     despieceActiveSheet3D = 'ALL';
                     applyDespieceColorization(cutSheets, 'ALL');
                     renderToolbar(elements);
+                    renderTableData(elements);
+                });
+                contentArea.querySelector('#q-btn-reset-sel-despiece')?.addEventListener('click', () => {
+                    selectedElementIds = [];
+                    (window as any).__noraCurrentSelectedIds = new Set();
+                    (window as any).__noraCurrentSelectedElements = [];
+                    const hl = components.get(OBF.Highlighter);
+                    if (hl) {
+                        try { hl.clear('select'); } catch (_) {}
+                    }
                     renderTableData(elements);
                 });
                 contentArea.querySelector('#q-despiece-material-filter')?.addEventListener('change', (e) => {
