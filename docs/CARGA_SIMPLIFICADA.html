@@ -1475,6 +1475,7 @@
             console.error('Error subiendo archivo:', err);
             item.status = 'Error: ' + err.message;
             renderUploadQueue();
+            await new Promise(r => setTimeout(r, 1200));
           }
         }
 
@@ -1491,7 +1492,7 @@
         await loadProjectFiles();
       }
 
-      // Resumable upload chunker
+      // Resumable upload chunker with automatic retry and backoff
       async function uploadResumableToDrive(fileOrBlob, filename, item, scriptUrl, ds, progressCb) {
         const chunkSize = 2 * 1024 * 1024; // 2MB chunk
         const totalBytes = fileOrBlob.size;
@@ -1501,35 +1502,58 @@
         else if (ext === 'pdf') fileType = 'pdf';
         else if (ext === 'dwg' || ext === 'dxf') fileType = 'dwg';
 
-        // 1. Init Session
-        const initRes = await fetch(scriptUrl, {
-          method: 'POST',
-          mode: 'cors',
-          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-          body: JSON.stringify({
-            action: 'initResumableUpload',
-            folderId: ds.driveFolderId || '',
-            driveFolderName: ds.driveFolderName || currentProject.name,
-            project: currentProject.slug || slugify(currentProject.name),
-            filename: filename,
-            contentType: fileOrBlob.type || 'application/octet-stream',
-            totalBytes: totalBytes,
-            fileType: fileType,
-            changedBy: userAccount ? (userAccount.name || '') : '',
-            changedByEmail: userAccount ? (userAccount.email || userAccount.username || '') : '',
-            deliveryTeams: [],
-            skipStatusRegister: item.isReplacement ? true : false,
-            isVersionUpload: item.isReplacement ? true : false,
-            targetVersion: item.targetVersion || '',
-            originalFileId: (item.existingFile && (item.existingFile.originalFileId || item.existingFile.fileId)) || ''
-          })
-        });
+        // 1. Init Session with retry (up to 4 attempts)
+        let sessionUrl = '';
+        let initAttempts = 0;
+        const maxInitAttempts = 4;
+        while (!sessionUrl) {
+          initAttempts++;
+          try {
+            const initRes = await fetch(scriptUrl, {
+              method: 'POST',
+              mode: 'cors',
+              headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+              body: JSON.stringify({
+                action: 'initResumableUpload',
+                folderId: ds.driveFolderId || '',
+                driveFolderName: ds.driveFolderName || currentProject.name,
+                project: currentProject.slug || slugify(currentProject.name),
+                filename: filename,
+                contentType: fileOrBlob.type || 'application/octet-stream',
+                totalBytes: totalBytes,
+                fileType: fileType,
+                changedBy: userAccount ? (userAccount.name || '') : '',
+                changedByEmail: userAccount ? (userAccount.email || userAccount.username || '') : '',
+                deliveryTeams: [],
+                skipStatusRegister: item.isReplacement ? true : false,
+                isVersionUpload: item.isReplacement ? true : false,
+                targetVersion: item.targetVersion || '',
+                originalFileId: (item.existingFile && (item.existingFile.originalFileId || item.existingFile.fileId)) || ''
+              })
+            });
 
-        if (!initRes.ok) throw new Error('Error al iniciar subida en servidor');
-        const initData = await initRes.json();
-        if (initData.status === 'error') throw new Error(initData.message || 'Error en inicio de subida');
+            if (!initRes.ok) throw new Error(`HTTP ${initRes.status}: ${initRes.statusText}`);
+            const initData = await initRes.json();
+            if (initData.status === 'error') throw new Error(initData.message || 'Error en inicio de subida');
+            sessionUrl = initData.sessionUrl;
+          } catch (err) {
+            console.warn(`[Init Resumable] Intento ${initAttempts}/${maxInitAttempts} falló para ${filename}:`, err);
+            if (initAttempts >= maxInitAttempts) {
+              throw new Error(`Error al iniciar subida en servidor (${err.message})`);
+            }
+            if (item) {
+              item.status = `Conectando (${initAttempts}/${maxInitAttempts})...`;
+              renderUploadQueue();
+            }
+            const delay = 1500 * Math.pow(1.8, initAttempts - 1) + Math.random() * 400;
+            await new Promise(r => setTimeout(r, delay));
+            if (item) {
+              item.status = 'Subiendo...';
+              renderUploadQueue();
+            }
+          }
+        }
 
-        const sessionUrl = initData.sessionUrl;
         let offset = 0;
         let fileId = '';
 
@@ -1552,40 +1576,66 @@
             reader.readAsArrayBuffer(chunk);
           });
 
-          const chunkRes = await fetch(scriptUrl, {
-            method: 'POST',
-            mode: 'cors',
-            headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-            body: JSON.stringify({
-              action: 'uploadResumableChunk',
-              sessionUrl: sessionUrl,
-              content: chunkBase64,
-              start: offset,
-              totalBytes: totalBytes,
-              contentType: fileOrBlob.type || 'application/octet-stream',
-              filename: filename,
-              project: currentProject.slug || slugify(currentProject.name),
-              fileType: fileType,
-              changedBy: userAccount ? (userAccount.name || '') : '',
-              changedByEmail: userAccount ? (userAccount.email || userAccount.username || '') : '',
-              folderId: ds.driveFolderId || '',
-              driveFolderName: ds.driveFolderName || currentProject.name,
-              skipStatusRegister: item.isReplacement ? true : false
-            })
-          });
+          // Upload chunk with exponential backoff retry (up to 5 attempts)
+          let chunkSuccess = false;
+          let chunkAttempts = 0;
+          const maxChunkAttempts = 5;
 
-          if (!chunkRes.ok) throw new Error('Error en fragmento de subida');
-          const chunkData = await chunkRes.json();
-          if (chunkData.status === 'error') throw new Error(chunkData.message);
+          while (!chunkSuccess) {
+            chunkAttempts++;
+            try {
+              const chunkRes = await fetch(scriptUrl, {
+                method: 'POST',
+                mode: 'cors',
+                headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+                body: JSON.stringify({
+                  action: 'uploadResumableChunk',
+                  sessionUrl: sessionUrl,
+                  content: chunkBase64,
+                  start: offset,
+                  totalBytes: totalBytes,
+                  contentType: fileOrBlob.type || 'application/octet-stream',
+                  filename: filename,
+                  project: currentProject.slug || slugify(currentProject.name),
+                  fileType: fileType,
+                  changedBy: userAccount ? (userAccount.name || '') : '',
+                  changedByEmail: userAccount ? (userAccount.email || userAccount.username || '') : '',
+                  folderId: ds.driveFolderId || '',
+                  driveFolderName: ds.driveFolderName || currentProject.name,
+                  skipStatusRegister: item.isReplacement ? true : false
+                })
+              });
 
-          offset = chunkData.nextOffset;
-          fileId = chunkData.fileId;
+              if (!chunkRes.ok) throw new Error(`HTTP ${chunkRes.status}: ${chunkRes.statusText}`);
+              const chunkData = await chunkRes.json();
+              if (chunkData.status === 'error') throw new Error(chunkData.message || 'Error en fragmento');
 
-          if (progressCb) {
-            progressCb(Math.round((offset / totalBytes) * 100));
+              offset = chunkData.nextOffset;
+              fileId = chunkData.fileId;
+              chunkSuccess = true;
+
+              if (progressCb) {
+                progressCb(Math.round((offset / totalBytes) * 100));
+              }
+
+              if (chunkData.complete) break;
+            } catch (err) {
+              console.warn(`[Chunk Retry] Intento ${chunkAttempts}/${maxChunkAttempts} falló en offset ${offset}/${totalBytes}:`, err);
+              if (chunkAttempts >= maxChunkAttempts) {
+                throw new Error(`Error en fragmento (${Math.round(offset / 1024 / 1024)}MB/${Math.round(totalBytes / 1024 / 1024)}MB): ${err.message}`);
+              }
+              if (item) {
+                item.status = `Reintentando (${chunkAttempts}/${maxChunkAttempts})...`;
+                renderUploadQueue();
+              }
+              const delay = 1500 * Math.pow(1.8, chunkAttempts - 1) + Math.random() * 400;
+              await new Promise(r => setTimeout(r, delay));
+              if (item) {
+                item.status = 'Subiendo...';
+                renderUploadQueue();
+              }
+            }
           }
-
-          if (chunkData.complete) break;
         }
 
         return { status: 'success', fileId: fileId };

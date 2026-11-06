@@ -2928,25 +2928,41 @@
           totalBytes: fileOrBlob.size
         };
 
-        const initRes = await fetch(scriptUrl, {
-          method: 'POST',
-          mode: 'cors',
-          headers: {
-            'Content-Type': 'text/plain;charset=utf-8'
-          },
-          body: JSON.stringify(initPayload)
-        });
+        // 1. Init Session with retry (up to 4 attempts)
+        let sessionUrl = '';
+        let initAttempts = 0;
+        const maxInitAttempts = 4;
+        while (!sessionUrl) {
+          initAttempts++;
+          try {
+            const initRes = await fetch(scriptUrl, {
+              method: 'POST',
+              mode: 'cors',
+              headers: {
+                'Content-Type': 'text/plain;charset=utf-8'
+              },
+              body: JSON.stringify(initPayload)
+            });
 
-        if (!initRes.ok) {
-          throw new Error(`Error iniciando carga resumida: ${initRes.statusText}`);
+            if (!initRes.ok) {
+              throw new Error(`HTTP ${initRes.status}: ${initRes.statusText}`);
+            }
+
+            const initData = await initRes.json();
+            if (initData.status === 'error') {
+              throw new Error(initData.message || 'Error en inicio de carga resumida');
+            }
+            sessionUrl = initData.sessionUrl;
+          } catch (err) {
+            console.warn(`[Init Resumable] Intento ${initAttempts}/${maxInitAttempts} falló para ${filename}:`, err);
+            if (initAttempts >= maxInitAttempts) {
+              throw new Error(`Google Script Error (init): ${err.message}`);
+            }
+            const delay = 1500 * Math.pow(1.8, initAttempts - 1) + Math.random() * 400;
+            await new Promise(r => setTimeout(r, delay));
+          }
         }
 
-        const initData = await initRes.json();
-        if (initData.status === 'error') {
-          throw new Error(`Google Script Error (init): ${initData.message}`);
-        }
-
-        const sessionUrl = initData.sessionUrl;
         const chunkSize = 2 * 1024 * 1024; // 2MB chunk size
         let offset = 0;
         let fileId = '';
@@ -2991,34 +3007,52 @@
             originalFileId: (fileObj && fileObj.existingFile && (fileObj.existingFile.originalFileId || fileObj.existingFile.fileId)) || ''
           };
 
-          const chunkRes = await fetch(scriptUrl, {
-            method: 'POST',
-            mode: 'cors',
-            headers: {
-              'Content-Type': 'text/plain;charset=utf-8'
-            },
-            body: JSON.stringify(chunkPayload)
-          });
+          // Upload chunk with exponential backoff retry (up to 5 attempts)
+          let chunkSuccess = false;
+          let chunkAttempts = 0;
+          const maxChunkAttempts = 5;
 
-          if (!chunkRes.ok) {
-            throw new Error(`Error cargando fragmento: ${chunkRes.statusText}`);
-          }
+          while (!chunkSuccess) {
+            chunkAttempts++;
+            try {
+              const chunkRes = await fetch(scriptUrl, {
+                method: 'POST',
+                mode: 'cors',
+                headers: {
+                  'Content-Type': 'text/plain;charset=utf-8'
+                },
+                body: JSON.stringify(chunkPayload)
+              });
 
-          const chunkData = await chunkRes.json();
-          if (chunkData.status === 'error') {
-            throw new Error(`Google Script Error (chunk): ${chunkData.message}`);
-          }
+              if (!chunkRes.ok) {
+                throw new Error(`HTTP ${chunkRes.status}: ${chunkRes.statusText}`);
+              }
 
-          offset = chunkData.nextOffset;
-          fileId = chunkData.fileId;
+              const chunkData = await chunkRes.json();
+              if (chunkData.status === 'error') {
+                throw new Error(chunkData.message || 'Error cargando fragmento');
+              }
 
-          if (progressCallback) {
-            const pct = Math.round((offset / fileOrBlob.size) * 100);
-            progressCallback(pct);
-          }
+              offset = chunkData.nextOffset;
+              fileId = chunkData.fileId;
+              chunkSuccess = true;
 
-          if (chunkData.complete) {
-            break;
+              if (progressCallback) {
+                const pct = Math.round((offset / fileOrBlob.size) * 100);
+                progressCallback(pct);
+              }
+
+              if (chunkData.complete) {
+                break;
+              }
+            } catch (err) {
+              console.warn(`[Chunk Retry] Intento ${chunkAttempts}/${maxChunkAttempts} falló en offset ${offset}/${fileOrBlob.size}:`, err);
+              if (chunkAttempts >= maxChunkAttempts) {
+                throw new Error(`Error cargando fragmento (${Math.round(offset / 1024 / 1024)}MB/${Math.round(fileOrBlob.size / 1024 / 1024)}MB): ${err.message}`);
+              }
+              const delay = 1500 * Math.pow(1.8, chunkAttempts - 1) + Math.random() * 400;
+              await new Promise(r => setTimeout(r, delay));
+            }
           }
         }
 
