@@ -2430,6 +2430,23 @@
           fileObj.existingFile = match;
           fileObj.targetVersion = match ? calculateNextMinorVersion(match.version || 'v1.0') : 'v1.0';
         });
+
+        // Sincronizar versión de archivos acompañantes (.frag, .json) con su modelo .rvt si van en el mismo lote
+        selectedFiles.forEach(fileObj => {
+          const ext = getFileExtension(fileObj.file?.name);
+          if (ext === 'frag' || ext === 'json') {
+            const base = (fileObj.file?.name || '').replace(/\.[^/.]+$/, '').trim().toLowerCase();
+            const rvtParent = selectedFiles.find(f => getFileExtension(f.file?.name) === 'rvt' && (f.file?.name || '').replace(/\.[^/.]+$/, '').trim().toLowerCase() === base);
+            if (rvtParent && rvtParent.targetVersion) {
+              fileObj.isReplacement = true;
+              fileObj.targetVersion = rvtParent.targetVersion;
+              if (rvtParent.existingFile) {
+                fileObj.existingFile = fileObj.existingFile || rvtParent.existingFile;
+              }
+            }
+          }
+        });
+
         renderFilesList();
       }
 
@@ -3142,23 +3159,23 @@
               });
               
               const existingFile = fileObj.existingFile || findExistingProjectFile(fileObj.file.name);
-              if (existingFile && uploadResult && uploadResult.fileId) {
-                const currentVer = existingFile.version || 'v1.0';
+              if ((existingFile || fileObj.isReplacement) && uploadResult && uploadResult.fileId) {
+                const currentVer = existingFile?.version || 'v1.0';
                 const nextVer = fileObj.targetVersion || calculateNextMinorVersion(currentVer);
                 updateFileUI(fileObj, 92, `Creando versión ${nextVer}...`);
                 addLog(`[${fileObj.file.name}] Archivo existente detectado (${currentVer}). Registrando automáticamente versión ${nextVer}...`);
 
                 try {
                   await createProjectFileVersion({
-                    fileId: existingFile.fileId || existingFile.originalFileId,
-                    jsonId: existingFile.jsonId || '',
-                    filename: existingFile.name,
-                    status: existingFile.status || 'EN_PROGRESO',
+                    fileId: existingFile?.fileId || existingFile?.originalFileId || uploadResult.fileId,
+                    jsonId: existingFile?.jsonId || fileObj.jsonId || '',
+                    filename: existingFile?.name || fileObj.file.name,
+                    status: existingFile?.status || 'EN_PROGRESO',
                     version: nextVer,
                     comments: `Actualización automática: archivo reemplazado (${nextVer})`,
-                    deliveryTeams: existingFile.deliveryTeams || resolveCurrentUserDeliveryTeams(),
-                    originalFileId: existingFile.originalFileId || existingFile.fileId,
-                    type: existingFile.type || resolveUploadFileType(ext),
+                    deliveryTeams: existingFile?.deliveryTeams || resolveCurrentUserDeliveryTeams(),
+                    originalFileId: existingFile?.originalFileId || existingFile?.fileId || uploadResult.fileId,
+                    type: existingFile?.type || resolveUploadFileType(ext),
                     uploadedFileId: uploadResult.fileId
                   });
                   updateFileUI(fileObj, 100, `✓ Completado (${nextVer})`);
@@ -3277,7 +3294,7 @@
             return name.replace(/\.(ifc|frag|rvt|dwg|pdf|json)$/i, '').trim().toLowerCase();
           };
 
-          // Helper to get status matches for a file chronologically
+          // Helper to get status matches for a file chronologically with extension and ID priority
           const getStatusMatchesForFile = (fid, fname) => {
             const matches = {
               EN_PROGRESO: null,
@@ -3285,22 +3302,43 @@
               PUBLICADO: null
             };
             
+            const cleanFname = String(fname || '').trim().toLowerCase();
+            const ext = getFileExtension(cleanFname);
+            const baseName = cleanFname.replace(/\.[^/.]+$/, '');
+
             statusEntries.forEach(entry => {
-              const matchesId = (entry.originalFileId && entry.originalFileId === fid) ||
-                                (entry.fileId && entry.fileId === fid);
-              const matchesName = entry.filename && fname && entry.filename.trim().toLowerCase() === fname.trim().toLowerCase();
-              const cleanFname = getCleanBase(fname);
-              const matchesBaseName = entry.filename && cleanFname && getCleanBase(entry.filename) === cleanFname;
+              if (!entry || !entry.status) return;
+              const status = entry.status;
+              if (status !== 'EN_PROGRESO' && status !== 'COMPARTIDO' && status !== 'PUBLICADO') return;
+
+              const entryFn = String(entry.filename || '').trim().toLowerCase();
+              const entryExt = getFileExtension(entryFn);
+              const entryBase = entryFn.replace(/\.[^/.]+$/, '');
               
-              if (matchesId || matchesName || matchesBaseName) {
-                const status = entry.status;
-                if (status === 'EN_PROGRESO' || status === 'COMPARTIDO' || status === 'PUBLICADO') {
-                  matches[status] = entry;
+              const matchesId = (fid && entry.originalFileId && entry.originalFileId === fid) ||
+                                (fid && entry.fileId && entry.fileId === fid);
+              const matchesExactName = entryFn && entryFn === cleanFname;
+              const matchesIfcFrag = (ext === 'ifc' || ext === 'frag') && (entryExt === 'ifc' || entryExt === 'frag') && (baseName === entryBase);
+
+              let matchWeight = 0;
+              if (matchesId && matchesExactName) matchWeight = 4;
+              else if (matchesExactName) matchWeight = 3;
+              else if (matchesId) matchWeight = 2;
+              else if (matchesIfcFrag) matchWeight = 1;
+
+              if (matchWeight > 0) {
+                const current = matches[status];
+                if (!current || matchWeight > current.weight || (matchWeight === current.weight && new Date(entry.changedAt || 0).getTime() >= new Date(current.entry.changedAt || 0).getTime())) {
+                  matches[status] = { entry, weight: matchWeight };
                 }
               }
             });
             
-            return matches;
+            return {
+              EN_PROGRESO: matches.EN_PROGRESO ? matches.EN_PROGRESO.entry : null,
+              COMPARTIDO: matches.COMPARTIDO ? matches.COMPARTIDO.entry : null,
+              PUBLICADO: matches.PUBLICADO ? matches.PUBLICADO.entry : null
+            };
           };
 
           // Consolidate Drive files into allProjectFiles.
@@ -3317,14 +3355,45 @@
               const fid = type === 'model' ? (item.fragId || item.fileId || item.path) : item.fileId;
               const matches = getStatusMatchesForFile(fid, fname);
 
-              // 1. Always keep the EN_PROGRESO (WIP) version of the file
+                            // 1. Always keep the EN_PROGRESO (WIP) version of the file
               const progMatch = matches.EN_PROGRESO;
 
-              // La versión es estática al cambiar de estado y se preserva fielmente.
-              // Solo cambia si se sube un nuevo archivo con el mismo nombre o se usa el botón "+ Versión".
               let fileVersion = progMatch?.version || 'v1.0';
               let fileComments = progMatch?.comments || '';
               let fileChangedAt = progMatch?.changedAt || item.lastUpdated;
+
+              // Detección automática: si se subió un nuevo archivo a Google Drive con el mismo nombre
+              // (identificador de archivo modificado o fecha de modificación significativamente más reciente)
+              const isDriveFileNewer = progMatch && item.lastUpdated && progMatch.changedAt && 
+                (new Date(item.lastUpdated).getTime() - new Date(progMatch.changedAt).getTime() > 20000);
+              const isDriveIdChanged = progMatch && fid && (progMatch.fileId || progMatch.originalFileId) && 
+                fid !== progMatch.fileId && fid !== progMatch.originalFileId;
+
+              if (progMatch && (isDriveFileNewer || isDriveIdChanged)) {
+                const currentVer = progMatch.version || 'v1.0';
+                const nextVer = calculateNextMinorVersion(currentVer);
+                fileVersion = nextVer;
+                fileChangedAt = item.lastUpdated;
+                fileComments = `Actualización automática detectada desde Revit / Google Drive (${nextVer})`;
+                addLog(`[AUTO-VERSIÓN] Detectada actualización externa en ${fname}. Incrementando automáticamente a ${nextVer}...`);
+
+                createProjectFileVersion({
+                  fileId: fid,
+                  jsonId: type === 'model' ? (item.jsonId || progMatch.jsonId || '') : '',
+                  filename: fname,
+                  status: 'EN_PROGRESO',
+                  version: nextVer,
+                  comments: fileComments,
+                  deliveryTeams: progMatch.deliveryTeams || resolveCurrentUserDeliveryTeams(),
+                  originalFileId: progMatch.originalFileId || fid,
+                  type: type,
+                  uploadedFileId: fid
+                }).then(() => {
+                  addLog(`[AUTO-VERSIÓN] ✓ ${fname} actualizado a ${nextVer} con respaldo en .versiones/`);
+                }).catch(err => {
+                  console.warn('Auto-version error:', err);
+                });
+              }
 
               const isCurVerComp = !!(matches.COMPARTIDO && (matches.COMPARTIDO.version || 'v1.0') === fileVersion);
               const isCurVerPub = !!(matches.PUBLICADO && (matches.PUBLICADO.version || 'v1.0') === fileVersion);
@@ -3873,8 +3942,9 @@
                 </div>
               </td>
               <td class="py-3 px-3 text-center whitespace-nowrap">
-                <button onclick="window.openVersionHistoryModal('${fileDataStr}')" class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-slate-100 hover:bg-indigo-50 text-slate-700 hover:text-indigo-700 dark:bg-slate-800 dark:hover:bg-indigo-950/60 dark:text-slate-300 dark:hover:text-indigo-300 text-[11px] font-semibold transition-colors" title="Ver versiones guardadas">
-                  <span class="material-symbols-outlined text-[14px] text-indigo-500">history</span> Versiones
+                <button onclick="window.openVersionHistoryModal('${fileDataStr}')" class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-slate-100 hover:bg-indigo-50 text-slate-700 hover:text-indigo-700 dark:bg-slate-800 dark:hover:bg-indigo-950/60 dark:text-slate-300 dark:hover:text-indigo-300 text-[11px] font-semibold transition-colors cursor-pointer shadow-sm" title="Ver historial de versiones guardadas">
+                  <span class="font-mono font-bold px-1.5 py-0.5 rounded bg-indigo-100 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 text-[10px]">${f.version || 'v1.0'}</span>
+                  <span class="material-symbols-outlined text-[14px] text-indigo-500">history</span>
                 </button>
               </td>
               <td class="py-3 px-4 text-slate-600 dark:text-slate-300 font-medium whitespace-nowrap">${specialty}</td>
@@ -4354,7 +4424,7 @@
         if (!f || !activeProject) return;
 
         historyModalTitle.textContent = `Historial: ${f.name}`;
-        historyModalSubtitle.textContent = `Especialidad: ${getFileDisplaySpecialty(f)} | Estado actual: ${f.status}`;
+        historyModalSubtitle.textContent = `Especialidad: ${getFileDisplaySpecialty(f)} | Estado actual: ${f.status} | Versión activa: ${f.version || 'v1.0'}`;
         modalVersionHistory.classList.remove('hidden');
 
         historyLoading.classList.remove('hidden');
@@ -4385,7 +4455,42 @@
           historyLoading.classList.add('hidden');
 
           if (versions.length === 0) {
-            historyEmpty.classList.remove('hidden');
+            const currentVer = f.version || 'v1.0';
+            const dlId = f.fileId || f.originalFileId;
+            const dlUrl = `https://drive.google.com/uc?export=download&id=${dlId}`;
+            const stateLabels = { EN_PROGRESO: 'En Progreso', COMPARTIDO: 'Compartido', PUBLICADO: 'Publicado' };
+            const stateLabel = stateLabels[f.status] || f.status;
+            let stateBadgeClass = 'bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300';
+            if (f.status === 'COMPARTIDO') stateBadgeClass = 'bg-blue-100 text-blue-800 dark:bg-blue-950/60 dark:text-blue-300';
+            else if (f.status === 'PUBLICADO') stateBadgeClass = 'bg-green-100 text-green-800 dark:bg-green-950/60 dark:text-green-300';
+
+            historyEmpty.classList.add('hidden');
+            historyList.classList.remove('hidden');
+            historyList.innerHTML = `
+              <div class="p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-white/60 dark:bg-slate-900/60 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div class="flex items-start gap-3">
+                  <div class="flex flex-col items-center">
+                    <span class="px-2.5 py-1 rounded-lg bg-indigo-100 dark:bg-indigo-950/80 text-indigo-700 dark:text-indigo-300 font-mono font-bold text-xs">
+                      ${currentVer}
+                    </span>
+                    <span class="text-[9px] font-bold text-green-600 dark:text-green-400 mt-1 uppercase tracking-wider">Actual</span>
+                  </div>
+                  <div>
+                    <div class="flex items-center gap-2">
+                      <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold ${stateBadgeClass}">${stateLabel}</span>
+                      <span class="text-xs text-slate-400 font-medium">${formatDate(f.lastUpdated)}</span>
+                    </div>
+                    <p class="text-xs font-semibold text-slate-800 dark:text-slate-200 mt-1">${f.comments || 'Versión activa en plataforma.'}</p>
+                    <p class="text-[10px] text-slate-400 mt-0.5">Por: ${f.changedBy || 'Revit / Drive'} ${f.changedByEmail ? `(${f.changedByEmail})` : ''}</p>
+                  </div>
+                </div>
+                <div class="flex items-center gap-2 self-end sm:self-center shrink-0">
+                  <a href="${dlUrl}" target="_blank" rel="noopener noreferrer" class="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 font-semibold text-xs transition-colors" title="Descargar archivo de esta versión">
+                    <span class="material-symbols-outlined text-[14px]">download</span> Descargar
+                  </a>
+                </div>
+              </div>
+            `;
             return;
           }
 
