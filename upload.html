@@ -2376,104 +2376,131 @@
       // Helper: cálculo de versión mayor (creación manual con botón "+ VERSIÓN" en la plataforma)
       // Regla obligatoria:
       // - Incrementa el entero y reinicia el decimal a .0: 1.0 -> 2.0, 1.2 -> 2.0, 2.5 -> 3.0, 3.10 -> 4.0
-      // Helper: cálculo unificado de historial de versiones
+      // Helper: cálculo unificado de historial de versiones cronológico
       function buildFileHistory(filename, sEntries, vEntries) {
         const cleanFn = String(filename || '').trim().toLowerCase();
 
+        const rawEvents = [];
+
         // 1. Versiones formales en VersionesArchivos
-        const formal = (vEntries || [])
-          .filter(v => (v.filename || '').trim().toLowerCase() === cleanFn)
-          .sort((a, b) => new Date(a.fecha || 0) - new Date(b.fecha || 0));
+        (vEntries || []).forEach(v => {
+          if ((v.filename || '').trim().toLowerCase() === cleanFn) {
+            rawEvents.push({
+              source: 'formal',
+              version: v.version,
+              fecha: v.fecha || v.createdDate,
+              comments: v.comments || '',
+              createdBy: v.createdBy || 'CDE NORA',
+              createdByEmail: v.createdByEmail || '',
+              fileId: v.fileId,
+              backupFileId: v.backupFileId || v.fileId,
+              status: v.status || 'EN_PROGRESO'
+            });
+          }
+        });
 
         // 2. Entradas de carga y estados en EstadosArchivos
-        const uploads = (sEntries || [])
-          .filter(s => (s.filename || '').trim().toLowerCase() === cleanFn && s.status === 'EN_PROGRESO')
-          .sort((a, b) => new Date(a.changedAt || 0) - new Date(b.changedAt || 0));
-
-        const history = [];
-        const seenFileIds = new Set();
-        const seenVerTags = new Set();
-
-        formal.forEach(f => {
-          const ver = f.version || 'v1.0';
-          history.push({
-            versionId: f.versionId,
-            version: ver,
-            fecha: f.fecha,
-            comments: f.comments || '',
-            createdBy: f.createdBy || 'CDE NORA',
-            createdByEmail: f.createdByEmail || '',
-            fileId: f.fileId,
-            backupFileId: f.backupFileId || f.fileId,
-            status: f.status || 'EN_PROGRESO',
-            isCurrent: false
-          });
-          if (f.fileId) seenFileIds.add(f.fileId);
-          if (f.backupFileId) seenFileIds.add(f.backupFileId);
-          seenVerTags.add(ver);
-        });
-
-        const distinctUploads = [];
-        uploads.forEach(u => {
-          const isNewId = u.fileId && !distinctUploads.some(d => d.fileId === u.fileId);
-          const isNewTime = !distinctUploads.some(d => Math.abs(new Date(d.changedAt).getTime() - new Date(u.changedAt).getTime()) < 30000);
-          if (isNewId || isNewTime) {
-            distinctUploads.push(u);
+        (sEntries || []).forEach(s => {
+          if ((s.filename || '').trim().toLowerCase() === cleanFn && s.status === 'EN_PROGRESO') {
+            rawEvents.push({
+              source: 'upload',
+              version: (s.version && s.version !== 'v1.0') ? s.version : null,
+              fecha: s.changedAt,
+              comments: s.comments || '',
+              createdBy: s.changedBy || 'Revit / Drive',
+              createdByEmail: s.changedByEmail || '',
+              fileId: s.fileId || s.originalFileId,
+              backupFileId: s.fileId || s.originalFileId,
+              status: s.status || 'EN_PROGRESO'
+            });
           }
         });
 
-        function calculateMinor(tags) {
-          let maxMinor = 0;
-          tags.forEach(t => {
-            const m = String(t).match(/v?(\d+)\.(\d+)/);
-            if (m) maxMinor = Math.max(maxMinor, parseInt(m[2], 10));
+        rawEvents.sort((a, b) => new Date(a.fecha || 0) - new Date(b.fecha || 0));
+
+        // Deduplicar eventos concurrentes entre VersionesArchivos y EstadosArchivos
+        const distinctEvents = [];
+        rawEvents.forEach(evt => {
+          const isDuplicate = distinctEvents.some(d => {
+            const timeDiff = Math.abs(new Date(d.fecha).getTime() - new Date(evt.fecha).getTime());
+            if (d.fileId && evt.fileId && d.fileId === evt.fileId && timeDiff < 15000) return true;
+            if (d.version && evt.version && d.version === evt.version && timeDiff < 30000) return true;
+            return false;
           });
-          return 'v1.' + (maxMinor + 1);
+
+          if (!isDuplicate) {
+            distinctEvents.push(evt);
+          } else {
+            const idx = distinctEvents.findIndex(d => {
+              const timeDiff = Math.abs(new Date(d.fecha).getTime() - new Date(evt.fecha).getTime());
+              return (d.fileId && evt.fileId && d.fileId === evt.fileId && timeDiff < 15000) ||
+                     (d.version && evt.version && d.version === evt.version && timeDiff < 30000);
+            });
+            if (idx !== -1 && evt.source === 'formal') {
+              distinctEvents[idx] = { ...distinctEvents[idx], ...evt };
+            }
+          }
+        });
+
+        function calculateMinor(verStr) {
+          if (!verStr) return 'v1.1';
+          const clean = String(verStr).trim().replace(/^v/i, '');
+          const parts = clean.split('.');
+          const major = parseInt(parts[0], 10) || 1;
+          const minor = parseInt(parts[1] !== undefined ? parts[1] : '0', 10);
+          return 'v' + major + '.' + (minor + 1);
         }
 
-        distinctUploads.forEach((u, idx) => {
-          const computedTag = 'v1.' + idx;
-          let targetTag = (u.version && u.version !== 'v1.0') ? u.version : computedTag;
-          if (seenVerTags.has(targetTag)) {
-            targetTag = calculateMinor(Array.from(seenVerTags));
+        const history = [];
+        let currentVer = 'v1.0';
+        const seenVersions = new Set();
+
+        distinctEvents.forEach((evt, idx) => {
+          let assignedVer;
+
+          if (idx === 0) {
+            assignedVer = evt.version || 'v1.0';
+          } else if (evt.version && evt.version !== currentVer) {
+            assignedVer = evt.version;
+          } else {
+            assignedVer = calculateMinor(currentVer);
           }
 
-          const fid = u.fileId || u.originalFileId;
-          if ((!fid || !seenFileIds.has(fid)) && !seenVerTags.has(targetTag)) {
-            history.push({
-              versionId: 'upload_' + (u.fileId || targetTag) + '_' + idx,
-              version: targetTag,
-              fecha: u.changedAt,
-              comments: u.comments || (idx === 0 ? 'Versión inicial' : ('Actualización de modelo (' + targetTag + ')')),
-              createdBy: u.changedBy || 'Revit / Drive',
-              createdByEmail: u.changedByEmail || '',
-              fileId: fid,
-              backupFileId: fid,
-              status: u.status || 'EN_PROGRESO',
-              isCurrent: false
-            });
-            if (fid) seenFileIds.add(fid);
-            seenVerTags.add(targetTag);
+          while (seenVersions.has(assignedVer)) {
+            assignedVer = calculateMinor(assignedVer);
           }
-        });
 
-        // 3. Garantizar siempre la versión base v1.0
-        if (!seenVerTags.has('v1.0')) {
-          const earliest = distinctUploads[0] || uploads[0];
-          const fid = earliest ? (earliest.fileId || earliest.originalFileId) : '';
+          currentVer = assignedVer;
+          seenVersions.add(assignedVer);
+
           history.push({
-            versionId: 'base_v1.0_' + Date.now(),
-            version: 'v1.0',
-            fecha: earliest ? earliest.changedAt : new Date().toISOString(),
-            comments: 'Versión inicial',
-            createdBy: earliest ? (earliest.changedBy || 'Revit / Drive') : 'Revit / Drive',
-            createdByEmail: earliest ? (earliest.changedByEmail || '') : '',
-            fileId: fid,
-            backupFileId: fid,
-            status: earliest ? (earliest.status || 'EN_PROGRESO') : 'EN_PROGRESO',
+            versionId: 'ver_' + assignedVer + '_' + idx,
+            version: assignedVer,
+            fecha: evt.fecha,
+            comments: evt.comments || (idx === 0 ? 'Versión inicial' : ('Actualización de modelo (' + assignedVer + ')')),
+            createdBy: evt.createdBy || 'Revit / Drive',
+            createdByEmail: evt.createdByEmail || '',
+            fileId: evt.fileId,
+            backupFileId: evt.backupFileId || evt.fileId,
+            status: evt.status || 'EN_PROGRESO',
             isCurrent: false
           });
-          seenVerTags.add('v1.0');
+        });
+
+        // Garantizar versión base v1.0
+        if (!seenVersions.has('v1.0')) {
+          history.unshift({
+            versionId: 'base_v1.0_' + Date.now(),
+            version: 'v1.0',
+            fecha: distinctEvents[0] ? distinctEvents[0].fecha : new Date().toISOString(),
+            comments: 'Versión inicial',
+            createdBy: distinctEvents[0] ? distinctEvents[0].createdBy : 'Revit / Drive',
+            createdByEmail: distinctEvents[0] ? distinctEvents[0].createdByEmail : '',
+            fileId: distinctEvents[0] ? distinctEvents[0].fileId : '',
+            backupFileId: distinctEvents[0] ? distinctEvents[0].fileId : '',
+            status: 'EN_PROGRESO',
+            isCurrent: false
+          });
         }
 
         history.sort((a, b) => new Date(b.fecha) - new Date(a.fecha));
@@ -3462,46 +3489,21 @@
               const fid = type === 'model' ? (item.fragId || item.fileId || item.path) : item.fileId;
               const matches = getStatusMatchesForFile(fid, fname);
 
+              // Resuelve el historial unificado y la versión activa actual
+              const fileHistory = buildFileHistory(fname, statusEntries, versionEntries);
+              const latestVerObj = fileHistory && fileHistory.length > 0 ? fileHistory[0] : null;
+
               // 1. Always keep the EN_PROGRESO (WIP) version of the file
               const progMatch = matches.EN_PROGRESO;
 
-              // Detección automática de subidas desde Revit o Google Drive directamente:
-              // Si el archivo en Drive tiene fecha de modificación más reciente que la del registro o cambió su fileId,
-              // generamos y respaldamos automáticamente la nueva versión decimal (ej: 1.0 -> 1.1, 1.9 -> 1.10, 3.9 -> 3.10)
-              let fileVersion = progMatch?.version || 'v1.0';
-              let fileComments = progMatch?.comments || '';
-              let fileChangedAt = progMatch?.changedAt || item.lastUpdated;
+              let fileVersion = latestVerObj?.version || progMatch?.version || 'v1.0';
+              let fileComments = latestVerObj?.comments || progMatch?.comments || '';
+              let fileChangedAt = latestVerObj?.fecha || progMatch?.changedAt || item.lastUpdated;
+              let fileBy = latestVerObj?.createdBy || (progMatch?.changedBy && progMatch.changedBy.trim()) || item.ownerName || 'Revit / Drive';
+              let fileByEmail = latestVerObj?.createdByEmail || (progMatch?.changedByEmail && progMatch.changedByEmail.trim()) || item.ownerEmail || 'revit@nora.cde';
 
-              const isDriveFileNewer = progMatch && item.lastUpdated && progMatch.changedAt && 
-                (new Date(item.lastUpdated).getTime() - new Date(progMatch.changedAt).getTime() > 20000);
-              const isDriveIdChanged = progMatch && fid && (progMatch.fileId || progMatch.originalFileId) && 
-                fid !== progMatch.fileId && fid !== progMatch.originalFileId;
-
-              if (progMatch && (isDriveFileNewer || isDriveIdChanged)) {
-                const currentVer = progMatch.version || 'v1.0';
-                const nextVer = calculateNextMinorVersion(currentVer);
-                fileVersion = nextVer;
-                fileChangedAt = item.lastUpdated;
-                fileComments = `Actualización automática detectada desde Revit / Google Drive (${nextVer})`;
-                addLog(`[AUTO-VERSIÓN] Detectada actualización externa en ${fname}. Incrementando automáticamente a ${nextVer}...`);
-
-                createProjectFileVersion({
-                  fileId: fid,
-                  jsonId: type === 'model' ? (item.jsonId || progMatch.jsonId || '') : '',
-                  filename: fname,
-                  status: 'EN_PROGRESO',
-                  version: nextVer,
-                  comments: fileComments,
-                  deliveryTeams: progMatch.deliveryTeams || resolveCurrentUserDeliveryTeams(),
-                  originalFileId: progMatch.originalFileId || fid,
-                  type: type,
-                  uploadedFileId: fid
-                }).then(() => {
-                  addLog(`[AUTO-VERSIÓN] ✓ ${fname} actualizado a ${nextVer} con respaldo en .versiones/`);
-                }).catch(err => {
-                  console.warn('Auto-version error:', err);
-                });
-              }
+              const isCurVerComp = !!(matches.COMPARTIDO && (matches.COMPARTIDO.version || 'v1.0') === fileVersion);
+              const isCurVerPub = !!(matches.PUBLICADO && (matches.PUBLICADO.version || 'v1.0') === fileVersion);
 
               const progFileObj = {
                 fileId: fid, // Original physical file ID
@@ -3514,9 +3516,10 @@
                 lastUpdated: fileChangedAt,
                 status: 'EN_PROGRESO',
                 version: fileVersion,
+                history: fileHistory,
                 comments: fileComments,
-                changedBy: (progMatch?.changedBy && progMatch.changedBy.trim()) || item.ownerName || 'Revit / Drive',
-                changedByEmail: (progMatch?.changedByEmail && progMatch.changedByEmail.trim()) || item.ownerEmail || 'revit@nora.cde',
+                changedBy: fileBy,
+                changedByEmail: fileByEmail,
                 deliveryTeams: parseStoredDeliveryTeams(progMatch?.deliveryTeams || '')
               };
 
