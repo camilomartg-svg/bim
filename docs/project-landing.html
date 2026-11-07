@@ -66,6 +66,7 @@
     }
   </style>
   <script src="nora-drive-store.js"></script>
+  <script src="nora-navigation.js"></script>
 </head>
 <body class="bg-white text-text-light dark:bg-background-dark dark:text-text-dark">
   <div id="page-shell" class="min-h-screen bg-white dark:bg-slate-900 transition-colors duration-300">
@@ -108,7 +109,7 @@
         <section class="relative flex h-[270px] pt-14 overflow-hidden w-full">
             <!-- Panel Izquierdo (30%) con color sólido y logo -->
             <div class="hidden md:flex w-[30%] bg-[#f6f6f6] dark:bg-background-dark h-full items-center justify-center p-8">
-                <a href="empresas.html" class="flex flex-col items-center justify-center w-full max-w-[160px] group transition-transform hover:scale-105" title="Ir a Selección de Empresas">
+                <a id="project-portal-logo-link" href="home.html" class="flex flex-col items-center justify-center w-full max-w-[160px] group transition-transform hover:scale-105" title="Ir al Home de la Empresa">
                     <img id="portal-logo-light" alt="nora CDE" class="w-full h-auto object-contain dark:hidden"
                         src="https://i.postimg.cc/tR3YSryT/LOGO-NORA-NEGRO.png" />
                     <img id="portal-logo-dark" alt="nora CDE" class="hidden w-full h-auto object-contain dark:block"
@@ -675,13 +676,9 @@
 
       const backBtn = document.getElementById('back-btn');
       backBtn?.addEventListener('click', () => {
-        if (window.history.length > 1) {
-            window.history.back();
-        } else {
-            const urlParams = new URLSearchParams(window.location.search);
-            const empresaId = urlParams.get('empresa');
-            window.location.href = 'home.html' + (empresaId ? '?empresa=' + encodeURIComponent(empresaId) : '');
-        }
+        const urlParams = new URLSearchParams(window.location.search);
+        const empresaId = urlParams.get('empresa') || sessionStorage.getItem('currentEmpresa') || '';
+        window.location.href = 'home.html' + (empresaId ? '?empresa=' + encodeURIComponent(empresaId) : '');
       });
 
       const nowEl = document.getElementById('project-now');

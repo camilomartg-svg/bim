@@ -99,6 +99,7 @@
     }
   </style>
   <script src="nora-drive-store.js"></script>
+  <script src="nora-navigation.js"></script>
 </head>
 
 <body class="bg-[#F4F4F4] text-[#111] dark:bg-[#171717] dark:text-[#F3F4F6] min-h-screen flex flex-col transition-colors duration-300">
@@ -106,7 +107,7 @@
   <header class="sticky top-0 z-30 w-full border-b border-slate-200/80 dark:border-slate-800/80 bg-white/85 dark:bg-slate-900/85 backdrop-blur-md px-4 sm:px-6 lg:px-8 py-2.5 transition-colors shadow-sm">
     <div class="max-w-7xl mx-auto flex items-center justify-between gap-4">
       <div class="flex items-center gap-3 sm:gap-4">
-        <button type="button" id="btn-header-back" class="p-1.5 rounded-lg border border-slate-200 bg-white/80 hover:bg-slate-100 transition-colors dark:bg-slate-800 dark:border-slate-700 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 cursor-pointer" title="Volver">
+        <button type="button" id="btn-header-back" onclick="if(window.NoraNav){event.preventDefault();window.NoraNav.navigateUpper();}" class="p-1.5 rounded-lg border border-slate-200 bg-white/80 hover:bg-slate-100 transition-colors dark:bg-slate-800 dark:border-slate-700 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 cursor-pointer" title="Volver">
           <span class="material-symbols-outlined text-[18px] align-middle">arrow_back</span>
         </button>
         <div class="flex items-center gap-2.5">

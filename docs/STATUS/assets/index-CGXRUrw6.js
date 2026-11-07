@@ -162795,8 +162795,7 @@ RECHAZADO: ${c2["RECHAZADO"]}`;
   }, []);
   const onBack = reactExports.useCallback(() => {
     try {
-      if (window.history.length > 1) window.history.back();
-      else window.location.href = "../home.html";
+      if (window.NoraNav) window.NoraNav.navigateUpper(); else if (window.history.length > 1) window.history.back(); else window.location.href = "../home.html";
     } catch {
       window.location.href = "../home.html";
     }

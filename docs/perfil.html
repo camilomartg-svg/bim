@@ -86,6 +86,7 @@
         }
     </style>
   <script src="nora-drive-store.js"></script>
+    <script src="nora-navigation.js"></script>
 </head>
 
 <body class="bg-background-light dark:bg-background-dark text-text-light dark:text-text-dark min-h-screen w-full flex flex-col relative">
@@ -444,6 +445,7 @@
 
             // Back & Cancel Button logic
             const goBack = () => {
+                if (window.NoraNav) { window.NoraNav.navigateUpper(); return; }
                 const urlParams = new URLSearchParams(window.location.search);
                 const fromParam = urlParams.get('from');
                 if (fromParam === 'CARGA_SIMPLIFICADA' || fromParam === 'CARGA_SIMPLIFICADA.html') {

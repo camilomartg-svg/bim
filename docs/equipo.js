@@ -4623,5 +4623,30 @@
       .replace(/"/g, '&quot;');
   }
 
+  
+  // Navegación jerárquica ISO 19650
+  if (el.backBtn) {
+    el.backBtn.addEventListener('click', () => {
+      const empParam = companyId ? ('&empresa=' + encodeURIComponent(companyId)) : '';
+      window.location.href = 'project-landing.html?project=' + encodeURIComponent(projectSlug || '') + empParam;
+    });
+  }
+  if (el.breadcrumbEmpresa) {
+    el.breadcrumbEmpresa.classList.add('cursor-pointer', 'hover:underline');
+    el.breadcrumbEmpresa.title = 'Ir al Home de la Empresa';
+    el.breadcrumbEmpresa.addEventListener('click', () => {
+      const empParam = companyId ? ('?empresa=' + encodeURIComponent(companyId)) : '';
+      window.location.href = 'home.html' + empParam;
+    });
+  }
+  if (el.breadcrumbProyecto) {
+    el.breadcrumbProyecto.classList.add('cursor-pointer', 'hover:underline');
+    el.breadcrumbProyecto.title = 'Ir a la Landing del Proyecto';
+    el.breadcrumbProyecto.addEventListener('click', () => {
+      const empParam = companyId ? ('&empresa=' + encodeURIComponent(companyId)) : '';
+      window.location.href = 'project-landing.html?project=' + encodeURIComponent(projectSlug || '') + empParam;
+    });
+  }
+
   init();
 })();
