@@ -410,6 +410,7 @@
             } catch(e) {
                 console.warn('Error cargando empresas.json', e);
             }
+          }
 
           const response = await fetch(configUrl, { cache: 'no-store' });
           if (!response.ok) throw new Error('No se pudo cargar la configuración del portal');

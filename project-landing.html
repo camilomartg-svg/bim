@@ -65,6 +65,8 @@
       filter: grayscale(1) contrast(1.08);
     }
   </style>
+  <script src="nora-drive-store.js"></script>
+  <script src="nora-navigation.js"></script>
 </head>
 <body class="bg-white text-text-light dark:bg-background-dark dark:text-text-dark">
   <div id="page-shell" class="min-h-screen bg-white dark:bg-slate-900 transition-colors duration-300">
@@ -107,7 +109,7 @@
         <section class="relative flex h-[270px] pt-14 overflow-hidden w-full">
             <!-- Panel Izquierdo (30%) con color sólido y logo -->
             <div class="hidden md:flex w-[30%] bg-[#f6f6f6] dark:bg-background-dark h-full items-center justify-center p-8">
-                <a href="empresas.html" class="flex flex-col items-center justify-center w-full max-w-[160px] group transition-transform hover:scale-105" title="Ir a Selección de Empresas">
+                <a id="project-portal-logo-link" href="home.html" class="flex flex-col items-center justify-center w-full max-w-[160px] group transition-transform hover:scale-105" title="Ir al Home de la Empresa">
                     <img id="portal-logo-light" alt="nora CDE" class="w-full h-auto object-contain dark:hidden"
                         src="https://i.postimg.cc/tR3YSryT/LOGO-NORA-NEGRO.png" />
                     <img id="portal-logo-dark" alt="nora CDE" class="hidden w-full h-auto object-contain dark:block"
@@ -393,9 +395,16 @@
               const empRes = await fetch('empresas.json');
               if (empRes.ok) {
                 const empresas = await empRes.json();
-                const emp = empresas.find(e => e.id === empresaId);
+                const cleanEmpId = decodeURIComponent(empresaId).trim();
+                const emp = empresas.find(e => 
+                  e.id === cleanEmpId || 
+                  e.id === empresaId || 
+                  (e.name && e.name.toLowerCase() === cleanEmpId.toLowerCase())
+                );
                 if (emp && emp.configUrl) {
                   configUrl = `${emp.configUrl}?v=${encodeURIComponent(currentVersion)}`;
+                } else if (cleanEmpId) {
+                  configUrl = `config-${cleanEmpId.replace(/\s+/g, '_')}.json?v=${encodeURIComponent(currentVersion)}`;
                 }
               }
             } catch(e) {
@@ -431,7 +440,7 @@
       }
 
       const projects = Array.isArray(config.projects) ? config.projects.map(normalizeProject) : [];
-      let activeProject = projects.find((project) => project.slug === requestedProject) || projects.find((project) => project.slug === 'green-i') || projects[0] || DEFAULT_PROJECT;
+      let activeProject = projects.find((project) => project.slug === requestedProject) || projects.find((project) => slugify(project.name || '') === requestedProject) || projects.find((project) => project.slug === 'green-i') || projects[0] || DEFAULT_PROJECT;
 
       // Intentar obtener la versión más reciente del proyecto directamente desde Google Drive
       try {
@@ -456,9 +465,9 @@
       const setEl = (id, text) => { const el = document.getElementById(id); if (el) el.textContent = text; };
       setEl('project-eyebrow-main', project.landing.eyebrow || 'Dashboard');
       
-      const landingTitle = (project.landing?.title && project.landing.title.toUpperCase() !== 'NUEVO PROYECTO') 
+      const landingTitle = (project.landing?.title && project.landing.title.toUpperCase() !== 'NUEVO PROYECTO' && project.landing.title.toUpperCase() !== 'PROYECTO') 
         ? project.landing.title 
-        : project.name.toUpperCase();
+        : (project.name || 'PROYECTO').toUpperCase();
       setEl('project-title', landingTitle);
       
       setEl('project-subtitle', project.landing.subtitle || DEFAULT_PROJECT.landing.subtitle);
@@ -484,7 +493,12 @@
       const empresaIdProject = urlParamsProject.get('empresa');
       if (empresaIdProject) {
         fetch('empresas.json').then(r => r.json()).then(empresas => {
-          const emp = empresas.find(e => e.id === empresaIdProject);
+          const cleanEmpIdProj = decodeURIComponent(empresaIdProject).trim();
+          const emp = empresas.find(e => 
+            e.id === cleanEmpIdProj || 
+            e.id === empresaIdProject || 
+            (e.name && e.name.toLowerCase() === cleanEmpIdProj.toLowerCase())
+          );
           if (emp) {
             const heroImageEl = document.getElementById('project-hero-image');
             if (heroImageEl && emp.image) {
@@ -674,13 +688,9 @@
 
       const backBtn = document.getElementById('back-btn');
       backBtn?.addEventListener('click', () => {
-        if (window.history.length > 1) {
-            window.history.back();
-        } else {
-            const urlParams = new URLSearchParams(window.location.search);
-            const empresaId = urlParams.get('empresa');
-            window.location.href = 'home.html' + (empresaId ? '?empresa=' + encodeURIComponent(empresaId) : '');
-        }
+        const urlParams = new URLSearchParams(window.location.search);
+        const empresaId = urlParams.get('empresa') || sessionStorage.getItem('currentEmpresa') || '';
+        window.location.href = 'home.html' + (empresaId ? '?empresa=' + encodeURIComponent(empresaId) : '');
       });
 
       const nowEl = document.getElementById('project-now');
