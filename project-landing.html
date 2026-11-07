@@ -382,37 +382,37 @@
 
       const loadConfig = async () => {
         try {
-          // 1. Intentar cargar de la red primero (mostrar la última versión si hay conexión)
-          const metaVersion = document.querySelector('meta[name="x-app-version"]');
-          const currentVersion = metaVersion?.getAttribute('content') || Date.now().toString();
-          
           const urlParams = new URLSearchParams(window.location.search);
           const empresaId = urlParams.get('empresa');
-          let configUrl = `portal-config.json?v=${encodeURIComponent(currentVersion)}`;
+          let configFileName = 'portal-config.json';
           
           if (empresaId) {
             try {
-              const empRes = await fetch('empresas.json');
-              if (empRes.ok) {
-                const empresas = await empRes.json();
-                const cleanEmpId = decodeURIComponent(empresaId).trim();
-                const emp = empresas.find(e => 
-                  e.id === cleanEmpId || 
-                  e.id === empresaId || 
-                  (e.name && e.name.toLowerCase() === cleanEmpId.toLowerCase())
-                );
-                if (emp && emp.configUrl) {
-                  configUrl = `${emp.configUrl}?v=${encodeURIComponent(currentVersion)}`;
-                } else if (cleanEmpId) {
-                  configUrl = `config-${cleanEmpId.replace(/\s+/g, '_')}.json?v=${encodeURIComponent(currentVersion)}`;
-                }
+              const empresas = (window.NoraDriveStore && typeof window.NoraDriveStore.getJson === 'function')
+                ? await window.NoraDriveStore.getJson('empresas.json')
+                : await (await fetch('empresas.json')).json();
+              const cleanEmpId = decodeURIComponent(empresaId).trim();
+              const emp = Array.isArray(empresas) ? empresas.find(e => 
+                e.id === cleanEmpId || 
+                e.id === empresaId || 
+                (e.name && e.name.toLowerCase() === cleanEmpId.toLowerCase())
+              ) : null;
+              if (emp && emp.configUrl) {
+                configFileName = emp.configUrl.split('?')[0];
+              } else if (cleanEmpId) {
+                configFileName = `config-${cleanEmpId.replace(/\s+/g, '_')}.json`;
               }
             } catch(e) {
-                console.warn('Error cargando empresas.json', e);
+              console.warn('Error cargando empresas.json', e);
             }
           }
 
-          const response = await fetch(configUrl, { cache: 'no-store' });
+          if (window.NoraDriveStore && typeof window.NoraDriveStore.getJson === 'function') {
+            const data = await window.NoraDriveStore.getJson(configFileName);
+            if (data) return data;
+          }
+
+          const response = await fetch(configFileName);
           if (!response.ok) throw new Error('No se pudo cargar la configuración del portal');
           return await response.json();
         } catch (error) {

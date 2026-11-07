@@ -15,7 +15,8 @@
   var DRIVE_FOLDER_ID = '1ZyW39yfyecmD-G8cfb6UrhN9jsoL7rEx';
   var CACHE_PREFIX = 'nora_ds_v2_';
   var SEEDED_FLAG_KEY = 'nora_drive_json_seeded_v1';
-  var SESSION_TTL_MS = 15000; // 15s de lectura instantánea (0ms) entre pestañas/vistas; cualquier escritura invalida al instante
+  var FRESH_TTL_MS = 180000;   // 3 minutos considerado 100% fresco (0ms)
+  var STALE_TTL_MS = 86400000; // 24 horas utilizable inmediatamente en segundo plano (stale-while-revalidate)
 
   var originalFetch = global.fetch ? global.fetch.bind(global) : null;
   var memoryCache = {};
@@ -92,23 +93,35 @@
   }
 
   function readLocalCache(fileName, maxAgeMs) {
-    var ttl = typeof maxAgeMs === 'number' ? maxAgeMs : SESSION_TTL_MS;
+    var ttl = typeof maxAgeMs === 'number' ? maxAgeMs : FRESH_TTL_MS;
     var now = Date.now();
 
+    // 1. Memoria rápida
     var mem = memoryCache[fileName];
     if (mem && now - mem.ts <= ttl) {
-      try {
-        return JSON.parse(mem.raw);
-      } catch (e) {}
+      try { return JSON.parse(mem.raw); } catch (e) {}
     }
 
+    // 2. localStorage persistente (0ms entre pestañas, ventanas y recargas)
     try {
-      var rawEntry = global.sessionStorage.getItem(CACHE_PREFIX + fileName);
-      if (rawEntry) {
-        var parsedEntry = JSON.parse(rawEntry);
-        if (parsedEntry && parsedEntry.raw && now - parsedEntry.ts <= ttl) {
-          memoryCache[fileName] = parsedEntry;
-          return JSON.parse(parsedEntry.raw);
+      var rawLocal = global.localStorage.getItem(CACHE_PREFIX + fileName);
+      if (rawLocal) {
+        var parsedLocal = JSON.parse(rawLocal);
+        if (parsedLocal && parsedLocal.raw && now - parsedLocal.ts <= ttl) {
+          memoryCache[fileName] = parsedLocal;
+          return JSON.parse(parsedLocal.raw);
+        }
+      }
+    } catch (e) {}
+
+    // 3. sessionStorage
+    try {
+      var rawSession = global.sessionStorage.getItem(CACHE_PREFIX + fileName);
+      if (rawSession) {
+        var parsedSession = JSON.parse(rawSession);
+        if (parsedSession && parsedSession.raw && now - parsedSession.ts <= ttl) {
+          memoryCache[fileName] = parsedSession;
+          return JSON.parse(parsedSession.raw);
         }
       }
     } catch (e) {}
@@ -122,12 +135,17 @@
       try { return JSON.parse(mem.raw); } catch (e) {}
     }
     try {
-      var rawEntry = global.sessionStorage.getItem(CACHE_PREFIX + fileName);
-      if (rawEntry) {
-        var parsedEntry = JSON.parse(rawEntry);
-        if (parsedEntry && parsedEntry.raw) {
-          return JSON.parse(parsedEntry.raw);
-        }
+      var rawLocal = global.localStorage.getItem(CACHE_PREFIX + fileName);
+      if (rawLocal) {
+        var pLocal = JSON.parse(rawLocal);
+        if (pLocal && pLocal.raw) return JSON.parse(pLocal.raw);
+      }
+    } catch (e) {}
+    try {
+      var rawSession = global.sessionStorage.getItem(CACHE_PREFIX + fileName);
+      if (rawSession) {
+        var pSession = JSON.parse(rawSession);
+        if (pSession && pSession.raw) return JSON.parse(pSession.raw);
       }
     } catch (e) {}
     return undefined;
@@ -139,28 +157,34 @@
       var raw = JSON.stringify(data);
       var entry = { ts: Date.now(), raw: raw };
       memoryCache[fileName] = entry;
-      global.sessionStorage.setItem(CACHE_PREFIX + fileName, JSON.stringify(entry));
+      try { global.localStorage.setItem(CACHE_PREFIX + fileName, JSON.stringify(entry)); } catch (e) {}
+      try { global.sessionStorage.setItem(CACHE_PREFIX + fileName, JSON.stringify(entry)); } catch (e) {}
     } catch (e) {}
   }
 
   function clearLocalCacheInternal(fileName) {
     if (fileName) {
       delete memoryCache[fileName];
+      try { global.localStorage.removeItem(CACHE_PREFIX + fileName); } catch (e) {}
       try { global.sessionStorage.removeItem(CACHE_PREFIX + fileName); } catch (e) {}
       return;
     }
     memoryCache = {};
     try {
       var keysToRemove = [];
-      for (var i = 0; i < global.sessionStorage.length; i++) {
-        var k = global.sessionStorage.key(i);
-        if (k && k.indexOf(CACHE_PREFIX) === 0) {
-          keysToRemove.push(k);
-        }
+      for (var i = 0; i < (global.localStorage && global.localStorage.length || 0); i++) {
+        var kl = global.localStorage.key(i);
+        if (kl && kl.indexOf(CACHE_PREFIX) === 0) keysToRemove.push(kl);
       }
-      keysToRemove.forEach(function (k) {
-        global.sessionStorage.removeItem(k);
-      });
+      keysToRemove.forEach(function (k) { global.localStorage.removeItem(k); });
+    } catch (e) {}
+    try {
+      var keysToRemoveS = [];
+      for (var j = 0; j < (global.sessionStorage && global.sessionStorage.length || 0); j++) {
+        var ks = global.sessionStorage.key(j);
+        if (ks && ks.indexOf(CACHE_PREFIX) === 0) keysToRemoveS.push(ks);
+      }
+      keysToRemoveS.forEach(function (k) { global.sessionStorage.removeItem(k); });
     } catch (e) {}
   }
 
@@ -244,6 +268,12 @@
       var cached = readLocalCache(cleanFile, opts.maxAgeMs);
       if (cached !== undefined) {
         return cached;
+      }
+      // Stale-While-Revalidate: Retornar inmediatamente (0ms) y refrescar en segundo plano
+      var stale = readStaleLocalCache(cleanFile);
+      if (stale !== undefined) {
+        fetchDriveJsonNetwork(cleanFile, true, opts.fallbackUrl).catch(function () {});
+        return stale;
       }
     }
 
@@ -941,12 +971,22 @@
     syncDomNavigation();
   }
 
-  // Re-sincronizar periódicamente y con MutationObserver para React/Vue SPAs
-  try {
-    var obs = new MutationObserver(function () {
+  // Re-sincronizar de forma ultra-ligera y con debounce (máximo una vez cada 350ms)
+  var syncDebounceTimer = null;
+  function debouncedSyncDomNavigation() {
+    if (syncDebounceTimer) return;
+    syncDebounceTimer = setTimeout(function () {
+      syncDebounceTimer = null;
       syncDomNavigation();
-    });
-    obs.observe(document.documentElement || document.body, { childList: true, subtree: true });
+    }, 350);
+  }
+
+  try {
+    var navTarget = document.querySelector('header, nav, .top-bar, .header') || document.body;
+    if (navTarget) {
+      var obs = new MutationObserver(debouncedSyncDomNavigation);
+      obs.observe(navTarget, { childList: true, subtree: false });
+    }
   } catch (e) {}
 
   global.NoraNav = {

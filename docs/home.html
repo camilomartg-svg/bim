@@ -560,24 +560,28 @@
                         console.log('Using adminEmpresaId fallback:', empresaId);
                     }
 
-                    // Primero siempre cargamos la configuración global base
+                    // Primero siempre cargamos la configuración global base con SWR (0ms)
                     let baseConfig = { ...DEFAULT_PORTAL_CONFIG };
                     try {
-                        const globalRes = await fetch(`portal-config.json?v=${encodeURIComponent(currentVersion)}`, { cache: 'no-store' });
-                        if (globalRes.ok) {
-                            baseConfig = { ...baseConfig, ...(await globalRes.json()) };
+                        if (window.NoraDriveStore && typeof window.NoraDriveStore.getJson === 'function') {
+                            const cachedBase = await window.NoraDriveStore.getJson('portal-config.json');
+                            if (cachedBase) baseConfig = { ...baseConfig, ...cachedBase };
+                        } else {
+                            const globalRes = await fetch('portal-config.json');
+                            if (globalRes.ok) baseConfig = { ...baseConfig, ...(await globalRes.json()) };
                         }
                     } catch(e) { console.warn("No se pudo cargar portal-config base"); }
 
-                    let configUrl = `portal-config.json?v=${encodeURIComponent(currentVersion)}`;
+                    let configFileName = 'portal-config.json';
                     
                     if (empresaId) {
                         const cleanEmpId = decodeURIComponent(empresaId).trim();
-                        configUrl = `config-${cleanEmpId.replace(/\s+/g, '_')}.json?v=${encodeURIComponent(currentVersion)}`;
+                        configFileName = `config-${cleanEmpId.replace(/\s+/g, '_')}.json`;
                         try {
-                            const empRes = await fetch('empresas.json');
-                            if (empRes.ok) {
-                                const empresas = await empRes.json();
+                            const empresas = (window.NoraDriveStore && typeof window.NoraDriveStore.getJson === 'function')
+                                ? await window.NoraDriveStore.getJson('empresas.json')
+                                : await (await fetch('empresas.json')).json();
+                            if (Array.isArray(empresas)) {
                                 const emp = empresas.find(e => 
                                     e.id === cleanEmpId || 
                                     e.id === empresaId || 
@@ -585,7 +589,7 @@
                                 );
                                 if (emp) {
                                     if (emp.configUrl) {
-                                        configUrl = `${emp.configUrl}?v=${encodeURIComponent(currentVersion)}`;
+                                        configFileName = emp.configUrl.split('?')[0];
                                     }
                                     window.currentEmpresaName = emp.name;
                                     window.currentEmpresaData = emp;
@@ -601,16 +605,20 @@
                             console.warn('Error cargando empresas.json', e);
                         }
                         
-                        // Intentamos cargar la configuración específica de la empresa
                         try {
-                            const response = await fetch(configUrl, { cache: 'no-store' });
-                            if (response.ok) {
-                                const config = await response.json();
+                            let config = null;
+                            if (window.NoraDriveStore && typeof window.NoraDriveStore.getJson === 'function') {
+                                config = await window.NoraDriveStore.getJson(configFileName);
+                            }
+                            if (!config) {
+                                const response = await fetch(configFileName);
+                                if (response.ok) config = await response.json();
+                            }
+                            if (config) {
                                 const mergedPortal = { ...(baseConfig.portal || {}), ...(config.portal || {}) };
                                 applyPortalConfig({ ...baseConfig, ...config, portal: mergedPortal });
-                                return; // Éxito total
+                                return;
                             } else {
-                                // No existe el archivo de empresa (ej. recién creada), usamos la configuración global heredada
                                 applyPortalConfig(baseConfig);
                                 return;
                             }

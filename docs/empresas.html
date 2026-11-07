@@ -239,45 +239,36 @@
                 console.error('Error parsing user account:', e);
             }
 
-            try {
-                const url = 'https://script.google.com/macros/s/AKfycbx2RAQx_8K4o22xE0Mw-ETc7K_58vIoi6-PgVi64u80inuiw144ks3cgWSdCtXqIgB02g/exec';
+            // Render Auth UI inmediatamente (0ms)
+            if (userAccount && authContainer) {
+                authContainer.innerHTML = `
+                <a href="perfil.html" class="flex items-center gap-1 hover:underline text-[10px] uppercase tracking-wider font-medium text-text-light dark:text-white" title="Ver mi perfil">
+                    <span class="material-symbols-outlined text-[14px]">account_circle</span>
+                    <span>Hola, ${userAccount.name ? userAccount.name.split(' ')[0] : 'Usuario'}</span>
+                </a>
+                <button id="logout-button" class="text-text-light dark:text-white hover:text-primary text-[10px] uppercase tracking-wider font-medium">Cerrar sesión</button>
+                `;
+                document.getElementById('logout-button')?.addEventListener('click', () => {
+                    sessionStorage.removeItem('userAccount');
+                    localStorage.removeItem('userAccount');
+                    window.location.reload();
+                });
+            }
 
-                // Fetch ALL companies and users concurrently in real-time
-                const [compRes, userRes, staticEmpRes] = await Promise.all([
-                    fetch(url + '?action=getCompanies&t=' + Date.now()),
-                    fetch(url + '?t=' + Date.now()),
-                    fetch('empresas.json?t=' + Date.now())
-                ]);
-                
-                let allCompanies = await compRes.json();
-                let users = await userRes.json();
-                let staticEmpresas = [];
-                
-                try {
-                    if (staticEmpRes.ok) {
-                        staticEmpresas = await staticEmpRes.json();
-                    } else {
-                        const rawRes = await fetch('https://raw.githubusercontent.com/camilomartg-svg/bim/main/empresas.json?t=' + Date.now());
-                        if (rawRes.ok) staticEmpresas = await rawRes.json();
-                    }
-                } catch(e) { 
-                    console.warn('Could not merge static empresas', e); 
-                }
+            // Normalize text helper
+            const cleanText = (str) => {
+                if (!str) return '';
+                return str.toLowerCase()
+                          .normalize("NFD")
+                          .replace(/[\u0300-\u036f]/g, "")
+                          .replace(/[^a-z0-9]/g, "")
+                          .trim();
+            };
 
-                // Normalize text helper
-                const cleanText = (str) => {
-                    if (!str) return '';
-                    return str.toLowerCase()
-                              .normalize("NFD")
-                              .replace(/[\u0300-\u036f]/g, "")
-                              .replace(/[^a-z0-9]/g, "")
-                              .trim();
-                };
-
-                // Merge static empresas into allCompanies
+            // Función centralizada para consolidar y pintar empresas (0ms)
+            const renderCompaniesUI = (staticEmpresas = [], allCompanies = [], users = [], projectAccessSet = new Set()) => {
                 const mergedCompaniesMap = new Map();
 
-                // 1. Add static empresas first (contains rich members & admin configuration from Super Admin)
                 if (Array.isArray(staticEmpresas)) {
                     staticEmpresas.forEach(se => {
                         if (se.deleted) return;
@@ -294,7 +285,6 @@
                     });
                 }
 
-                // 2. Merge Google Sheets companies
                 if (Array.isArray(allCompanies)) {
                     allCompanies.forEach(c => {
                         if (!c.name) return;
@@ -302,7 +292,6 @@
                         const cRazonClean = cleanText(c.razonSocial);
                         const adminEmail = c.email ? c.email.toLowerCase().trim() : '';
 
-                        // Find matching static empresa by id or name
                         let foundKey = null;
                         for (const [key, existing] of mergedCompaniesMap.entries()) {
                             if (existing.id === c.id || cleanText(existing.name) === cNameClean || (cRazonClean && cleanText(existing.name) === cRazonClean)) {
@@ -346,7 +335,6 @@
                     });
                 }
 
-                // 3. Enrich companies with users registered in Google Sheets
                 if (Array.isArray(users)) {
                     users.forEach(u => {
                         if (!u.email || !u.empresa) return;
@@ -379,91 +367,7 @@
                 }
 
                 const consolidatedCompanies = Array.from(mergedCompaniesMap.values());
-
-                // Validate and update User
-                let userEmail = '';
-                if (userAccount && userAccount.username) {
-                    userEmail = userAccount.username.toLowerCase().trim();
-                    if (userAccount.role === 'SUPER_ADMINISTRADOR' || userEmail === 'imagina3ddesign@gmail.com') {
-                        // Bypass validation for super administrators
-                    } else {
-                        const userEntries = users.filter(u => u.email && u.email.toLowerCase().trim() === userEmail);
-
-                        // Block only if the user truly doesn't exist in the DB
-                        if (userEntries.length === 0) {
-                            alert('Tu acceso ha sido revocado o está pendiente. Cerrando sesión.');
-                            sessionStorage.removeItem('userAccount');
-                            localStorage.removeItem('userAccount');
-                            window.location.replace('https://norabim.com/inse.html');
-                            return;
-                        }
-
-                        // Find any approved entry - USE REVERSE TO GET NEWEST
-                        const activeEntry = userEntries.reverse().find(u => {
-                            const dbEstado = u.estado ? u.estado.toUpperCase().trim() : '';
-                            const dbRol = u.rol ? u.rol.toUpperCase().trim() : '';
-                            return dbEstado === 'APROBADO' || dbRol === 'SUPER_ADMINISTRADOR' || dbRol === 'ADMINISTRADOR_EMPRESA' || dbRol === 'MIEMBRO';
-                        });
-
-                        if (!activeEntry) {
-                            const anyPending = userEntries.some(u => (u.estado || '').toUpperCase().trim() === 'PENDIENTE');
-                            const msg = anyPending
-                                ? 'Tu solicitud de acceso está pendiente de aprobación.'
-                                : 'Tu acceso ha sido revocado. Contacta al administrador.';
-                            alert(msg);
-                            sessionStorage.removeItem('userAccount');
-                            localStorage.removeItem('userAccount');
-                            window.location.replace('https://norabim.com/inse.html');
-                            return;
-                        }
-
-                        // User is approved — update cache with freshest role/empresa/name
-                        userAccount.role = activeEntry.rol;
-                        userAccount.empresa = activeEntry.empresa || '';
-                        if (activeEntry.nombre && activeEntry.nombre.trim() !== '') {
-                            userAccount.name = activeEntry.nombre.trim();
-                        }
-                        const cacheLocation = localStorage.getItem('userAccount') ? 'localStorage' : 'sessionStorage';
-                        window[cacheLocation].setItem('userAccount', JSON.stringify(userAccount));
-                    }
-                }
-
-                // Render Auth UI
-                if (userAccount) {
-                    authContainer.innerHTML = `
-                    <a href="perfil.html" class="flex items-center gap-1 hover:underline text-[10px] uppercase tracking-wider font-medium text-text-light dark:text-white" title="Ver mi perfil">
-                        <span class="material-symbols-outlined text-[14px]">account_circle</span>
-                        <span>Hola, ${userAccount.name.split(' ')[0]}</span>
-                    </a>
-                    <button id="logout-button" class="text-text-light dark:text-white hover:text-primary text-[10px] uppercase tracking-wider font-medium">Cerrar sesión</button>
-                    `;
-                    document.getElementById('logout-button').addEventListener('click', () => {
-                        sessionStorage.removeItem('userAccount');
-                        localStorage.removeItem('userAccount');
-                        window.location.reload();
-                    });
-                }
-
-                // Pre-check project configs to discover project-level invitations
-                const projectAccessCompanyIds = new Set();
-                if (userEmail && userAccount && userAccount.role !== 'SUPER_ADMINISTRADOR') {
-                    await Promise.allSettled(
-                        consolidatedCompanies.filter(c => c.configUrl).map(async c => {
-                            try {
-                                const res = await fetch(`${c.configUrl}?t=${Date.now()}`);
-                                if (res.ok) {
-                                    const conf = await res.json();
-                                    const hasProject = Array.isArray(conf.projects) && conf.projects.some(p =>
-                                        Array.isArray(p.members) && p.members.some(pm => pm.toLowerCase().trim() === userEmail)
-                                    );
-                                    if (hasProject) {
-                                        projectAccessCompanyIds.add(c.id);
-                                    }
-                                }
-                            } catch(err) {}
-                        })
-                    );
-                }
+                const userEmail = (userAccount && userAccount.username) ? userAccount.username.toLowerCase().trim() : '';
 
                 // Helper to render individual company card
                 const renderCard = (c, isGuest = false) => {
@@ -534,11 +438,9 @@
                             </div>
                         </div>
                     `;
-                    return;
+                    return consolidatedCompanies;
                 }
 
-                // Segregate into Belonging ("Mi Empresa") vs Guest companies ("Empresas como Invitado")
-                // Guided strictly by Super Admin configuration (empresas.json & consolidatedCompanies)
                 const belongingCompanies = [];
                 const guestCompanies = [];
 
@@ -546,60 +448,57 @@
                     const cNameClean = cleanText(c.name);
                     const cRazonClean = cleanText(c.razonSocial);
                     
-                    // 1. Is user an administrator of this company?
                     const isAdminOfCompany = (Array.isArray(c.admins) && c.admins.some(a => a.toLowerCase().trim() === userEmail)) ||
                                             (c.email && c.email.toLowerCase().trim() === userEmail);
                     
-                    // 2. Is user an internal corporate employee of this company in Super Admin?
-                    // Internal corporate members must have role 'ADMINISTRADOR_EMPRESA', 'ADMINISTRADOR', or 'MIEMBRO' OR have empresaUsuario matching the company name AND role is not 'INVITADO'
-                    const isInternalMember = Array.isArray(c.members) && c.members.some(m => {
-                        if (!m.email || m.email.toLowerCase().trim() !== userEmail) return false;
-                        if (m.role === 'ADMINISTRADOR_EMPRESA' || m.role === 'ADMINISTRADOR' || m.role === 'MIEMBRO') return true;
-                        if (m.empresaUsuario && (cleanText(m.empresaUsuario) === cNameClean || (cRazonClean && cleanText(m.empresaUsuario) === cRazonClean)) && m.role !== 'INVITADO') return true;
-                        return false;
-                    });
+                    const memberMatch = Array.isArray(c.members) ? c.members.find(m => m.email && m.email.toLowerCase().trim() === userEmail) : null;
+                    const isRegisteredMember = Boolean(memberMatch);
+                    const isCorporateMember = memberMatch && (memberMatch.role === 'ADMINISTRADOR_EMPRESA' || memberMatch.role === 'ADMINISTRADOR' || memberMatch.role === 'MIEMBRO');
+                    const isExplicitGuest = memberMatch && memberMatch.role === 'INVITADO';
+                    
+                    const userHomeEmpClean = userAccount ? cleanText(userAccount.empresa) : '';
+                    const isCompanyMatchesUserHome = Boolean(userHomeEmpClean && (userHomeEmpClean === cNameClean || userHomeEmpClean === cRazonClean));
 
-                    // 3. Is this company assigned to the user in their account / live DB as company admin or member?
-                    const isAssignedCompany = userAccount && userAccount.empresa && 
-                        (cleanText(userAccount.empresa) === cNameClean || (cRazonClean && cleanText(userAccount.empresa) === cRazonClean)) && 
-                        (userAccount.role === 'ADMINISTRADOR_EMPRESA' || userAccount.role === 'ADMINISTRADOR' || userAccount.role === 'MIEMBRO');
+                    const hasProjectInvitation = projectAccessSet.has(c.id);
 
-                    if (isAdminOfCompany || isInternalMember || isAssignedCompany) {
+                    if (isAdminOfCompany || isCorporateMember || isCompanyMatchesUserHome) {
                         belongingCompanies.push(c);
-                    } else {
-                        // Check if user is an invited member / guest in this company
-                        const isExplicitGuestMember = Array.isArray(c.members) && c.members.some(m => 
-                            m.email && m.email.toLowerCase().trim() === userEmail
-                        );
-                        const hasProjectGuestAccess = projectAccessCompanyIds.has(c.id);
-
-                        if (isExplicitGuestMember || hasProjectGuestAccess) {
-                            guestCompanies.push(c);
-                        }
+                    } else if (isExplicitGuest || isRegisteredMember || hasProjectInvitation) {
+                        guestCompanies.push(c);
                     }
                 });
 
-                const totalCount = belongingCompanies.length + guestCompanies.length;
-                countEl.textContent = `(${totalCount})`;
+                if (belongingCompanies.length === 0 && guestCompanies.length === 0 && userAccount && userAccount.empresa) {
+                    const fallbackName = userAccount.empresa;
+                    const matchedFallback = consolidatedCompanies.find(c => 
+                        cleanText(c.name).includes(cleanText(fallbackName)) || 
+                        cleanText(fallbackName).includes(cleanText(c.name))
+                    );
+                    if (matchedFallback) {
+                        belongingCompanies.push(matchedFallback);
+                    }
+                }
 
-                if (totalCount === 0) {
+                countEl.textContent = `(${belongingCompanies.length + guestCompanies.length})`;
+
+                if (belongingCompanies.length === 0 && guestCompanies.length === 0) {
                     list.innerHTML = `
-                        <div class="flex flex-col items-center justify-center w-full h-full text-center p-12 mx-auto" style="width: 100%;">
-                            <span class="material-symbols-outlined text-4xl text-gray-400 mb-4">domain_disabled</span>
-                            <h3 class="text-lg font-medium text-gray-900 dark:text-white mb-2">Sin Empresas Asignadas</h3>
-                            <p class="text-sm text-gray-500 max-w-sm">Tu cuenta no tiene empresas asociadas ni invitaciones activas en este momento. Por favor contacta al administrador.</p>
+                        <div class="w-full py-16 text-center flex flex-col items-center justify-center">
+                            <span class="material-symbols-outlined text-gray-400 text-5xl mb-3">domain_disabled</span>
+                            <p class="text-sm font-semibold text-gray-600 dark:text-gray-300">No tienes empresas asignadas actualmente</p>
+                            <p class="text-xs text-gray-400 mt-1 max-w-sm">Comunícate con el Administrador de tu organización o con nora BIM para habilitar tu acceso corporativo.</p>
                         </div>
                     `;
-                    return;
+                    return consolidatedCompanies;
                 }
 
                 const leftSection = belongingCompanies.length > 0 ? `
-                    <div class="w-full" style="flex: 1 1 420px; min-width: 300px; max-width: 560px;">
-                        <div class="mb-5 flex flex-col gap-1">
-                            <div class="flex items-center gap-2">
-                                <span class="h-2.5 w-2.5 rounded-full bg-emerald-500 inline-block shadow-sm"></span>
-                                <h2 class="text-xs font-black tracking-widest uppercase text-gray-800 dark:text-gray-200">Mi Empresa</h2>
-                                <span class="text-[9px] font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-950/80 dark:text-emerald-300 px-2 py-0.5 rounded-full">Sede Principal</span>
+                    <div class="flex flex-col gap-6 flex-1 min-w-[280px]">
+                        <div class="flex flex-col gap-1 border-b border-gray-200 dark:border-gray-800 pb-3">
+                            <div class="flex items-center gap-2 text-xs font-black uppercase tracking-wider text-gray-900 dark:text-white">
+                                <span class="w-2 h-2 rounded-full bg-emerald-500"></span>
+                                <span>Mi Empresa</span>
+                                <span class="text-[10px] text-gray-400 font-normal">Sede Principal</span>
                             </div>
                             <p class="text-xs text-gray-500 dark:text-gray-400">Espacio de trabajo corporativo al que perteneces directamente.</p>
                         </div>
@@ -610,12 +509,12 @@
                 ` : '';
 
                 const rightSection = guestCompanies.length > 0 ? `
-                    <div class="w-full" style="flex: 1 1 620px; min-width: 300px; max-width: 980px;">
-                        <div class="mb-5 flex flex-col gap-1">
-                            <div class="flex items-center gap-2">
-                                <span class="h-2.5 w-2.5 rounded-full bg-indigo-500 inline-block shadow-sm"></span>
-                                <h2 class="text-xs font-black tracking-widest uppercase text-gray-800 dark:text-gray-200">Empresas como Invitado</h2>
-                                <span class="text-[9px] font-bold bg-indigo-100 text-indigo-800 dark:bg-indigo-950/80 dark:text-indigo-300 px-2 py-0.5 rounded-full">Colaboraciones Externas</span>
+                    <div class="flex flex-col gap-6 flex-1 min-w-[280px]">
+                        <div class="flex flex-col gap-1 border-b border-gray-200 dark:border-gray-800 pb-3">
+                            <div class="flex items-center gap-2 text-xs font-black uppercase tracking-wider text-gray-900 dark:text-white">
+                                <span class="w-2 h-2 rounded-full bg-indigo-500"></span>
+                                <span>Empresas como Invitado</span>
+                                <span class="text-[10px] text-gray-400 font-normal">Colaboración</span>
                             </div>
                             <p class="text-xs text-gray-500 dark:text-gray-400">Organizaciones y proyectos donde has sido invitado a colaborar.</p>
                         </div>
@@ -625,7 +524,7 @@
                     </div>
                 ` : '';
 
-                const html = `
+                const htmlContent = `
                     <div style="display: flex; flex-direction: row; gap: 2rem; align-items: flex-start; flex-wrap: nowrap; width: 100%; min-width: 0;">
                         ${leftSection || ''}
                         <div style="width: 1px; min-height: 100%; background: rgba(15, 23, 42, 0.12); align-self: stretch; margin: 0 0.5rem; opacity: 0.8;"></div>
@@ -643,10 +542,89 @@
                         }
                     </style>
                 `;
-                list.innerHTML = html;
+                list.innerHTML = htmlContent;
+                return consolidatedCompanies;
+            };
+
+            // PASO 1: Renderizado Ultra-Rápido Inmediato (0ms desde caché)
+            let staticEmpresas = [];
+            try {
+                if (window.NoraDriveStore && typeof window.NoraDriveStore.getJson === 'function') {
+                    staticEmpresas = await window.NoraDriveStore.getJson('empresas.json');
+                } else {
+                    const localCached = localStorage.getItem('nora_drive_cache_empresas.json') || sessionStorage.getItem('nora_drive_cache_empresas.json');
+                    if (localCached) staticEmpresas = JSON.parse(JSON.parse(localCached).raw);
+                }
+            } catch(e) {}
+
+            if (Array.isArray(staticEmpresas) && staticEmpresas.length > 0) {
+                renderCompaniesUI(staticEmpresas, [], []);
+            }
+
+            // PASO 2: Sincronización en Segundo Plano sin bloquear la pantalla
+            try {
+                const url = 'https://script.google.com/macros/s/AKfycbx2RAQx_8K4o22xE0Mw-ETc7K_58vIoi6-PgVi64u80inuiw144ks3cgWSdCtXqIgB02g/exec';
+
+                const [compRes, userRes, freshStaticRes] = await Promise.allSettled([
+                    fetch(url + '?action=getCompanies'),
+                    fetch(url),
+                    window.NoraDriveStore ? window.NoraDriveStore.getJson('empresas.json', { force: true }) : fetch('empresas.json').then(r => r.json())
+                ]);
+
+                let allCompanies = compRes.status === 'fulfilled' && compRes.value.ok ? await compRes.value.json() : [];
+                let users = userRes.status === 'fulfilled' && userRes.value.ok ? await userRes.value.json() : [];
+                if (freshStaticRes.status === 'fulfilled' && freshStaticRes.value) {
+                    staticEmpresas = freshStaticRes.value;
+                }
+
+                // Validación de usuario en segundo plano
+                const userEmail = (userAccount && userAccount.username) ? userAccount.username.toLowerCase().trim() : '';
+                if (userEmail && userAccount.role !== 'SUPER_ADMINISTRADOR' && userEmail !== 'imagina3ddesign@gmail.com' && Array.isArray(users) && users.length > 0) {
+                    const userEntries = users.filter(u => u.email && u.email.toLowerCase().trim() === userEmail);
+                    if (userEntries.length > 0) {
+                        const activeEntry = userEntries.reverse().find(u => {
+                            const dbEstado = u.estado ? u.estado.toUpperCase().trim() : '';
+                            const dbRol = u.rol ? u.rol.toUpperCase().trim() : '';
+                            return dbEstado === 'APROBADO' || dbRol === 'SUPER_ADMINISTRADOR' || dbRol === 'ADMINISTRADOR_EMPRESA' || dbRol === 'MIEMBRO';
+                        });
+                        if (activeEntry) {
+                            userAccount.role = activeEntry.rol;
+                            userAccount.empresa = activeEntry.empresa || '';
+                            if (activeEntry.nombre && activeEntry.nombre.trim() !== '') {
+                                userAccount.name = activeEntry.nombre.trim();
+                            }
+                            const cacheLocation = localStorage.getItem('userAccount') ? 'localStorage' : 'sessionStorage';
+                            window[cacheLocation].setItem('userAccount', JSON.stringify(userAccount));
+                        }
+                    }
+                }
+
+                // Renderizar con datos frescos en segundo plano
+                const consolidated = renderCompaniesUI(staticEmpresas, allCompanies, users);
+
+                // Comprobar invitaciones a proyectos en segundo plano de manera asíncrona
+                if (userEmail && userAccount && userAccount.role !== 'SUPER_ADMINISTRADOR' && Array.isArray(consolidated)) {
+                    const projectAccessCompanyIds = new Set();
+                    Promise.allSettled(
+                        consolidated.filter(c => c.configUrl).map(async c => {
+                            try {
+                                const conf = window.NoraDriveStore ? await window.NoraDriveStore.getJson(c.configUrl) : await (await fetch(c.configUrl)).json();
+                                if (conf && Array.isArray(conf.projects) && conf.projects.some(p =>
+                                    Array.isArray(p.members) && p.members.some(pm => (typeof pm === 'string' ? pm : pm?.email || '').toLowerCase().trim() === userEmail)
+                                )) {
+                                    projectAccessCompanyIds.add(c.id);
+                                }
+                            } catch(err) {}
+                        })
+                    ).then(() => {
+                        if (projectAccessCompanyIds.size > 0) {
+                            renderCompaniesUI(staticEmpresas, allCompanies, users, projectAccessCompanyIds);
+                        }
+                    });
+                }
 
             } catch (e) {
-                console.error("Error loading companies list:", e);
+                console.error("Error en sincronización en segundo plano:", e);
             }
         });
     </script>

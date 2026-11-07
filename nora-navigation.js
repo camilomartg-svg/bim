@@ -354,12 +354,22 @@
     syncDomNavigation();
   }
 
-  // Re-sincronizar periódicamente y con MutationObserver para React/Vue SPAs
-  try {
-    var obs = new MutationObserver(function () {
+  // Re-sincronizar de forma ultra-ligera y con debounce (máximo una vez cada 350ms)
+  var syncDebounceTimer = null;
+  function debouncedSyncDomNavigation() {
+    if (syncDebounceTimer) return;
+    syncDebounceTimer = setTimeout(function () {
+      syncDebounceTimer = null;
       syncDomNavigation();
-    });
-    obs.observe(document.documentElement || document.body, { childList: true, subtree: true });
+    }, 350);
+  }
+
+  try {
+    var navTarget = document.querySelector('header, nav, .top-bar, .header') || document.body;
+    if (navTarget) {
+      var obs = new MutationObserver(debouncedSyncDomNavigation);
+      obs.observe(navTarget, { childList: true, subtree: false });
+    }
   } catch (e) {}
 
   global.NoraNav = {
