@@ -415,7 +415,12 @@
             }
         }
 
-        currentCompany = companies.find(c => c.id === companyId) || { id: companyId || 'nora', name: 'Nora CDE', configUrl: 'portal-config.json' };
+        const cleanCompanyId = decodeURIComponent(companyId).trim();
+        currentCompany = companies.find(c => 
+            c.id === cleanCompanyId || 
+            c.id === companyId || 
+            (c.name && c.name.toLowerCase() === cleanCompanyId.toLowerCase())
+        ) || { id: companyId || 'nora', name: 'Nora CDE', configUrl: 'portal-config.json' };
         if (el.breadcrumbEmpresa) {
             el.breadcrumbEmpresa.textContent = (currentCompany.name || 'EMPRESA').toUpperCase();
             el.breadcrumbEmpresa.parentElement.setAttribute('href', `home.html?empresa=${companyId}`);
@@ -463,7 +468,9 @@
         }
 
         if (!loadedFromDrive || !activeProject) {
-            activeProject = fullConfig.projects.find(p => p.slug === projectSlug);
+            activeProject = fullConfig.projects.find(p => p.slug === projectSlug) ||
+                      fullConfig.projects.find(p => (p.slug && projectSlug && p.slug.toLowerCase() === projectSlug.toLowerCase())) ||
+                      fullConfig.projects.find(p => (p.name && projectSlug && p.name.toLowerCase() === projectSlug.replace(/[-_]/g, ' ').toLowerCase()));
             if (!activeProject) {
                 // Inicializar proyecto nuevo si no existe todavía en el archivo
                 activeProject = {

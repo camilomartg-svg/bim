@@ -1,4 +1,4 @@
-const CACHE_NAME = 'portal-bim-nora-v43';
+const CACHE_NAME = 'portal-bim-nora-v44';
 // Lista de archivos que queremos guardar en caché para que la app funcione offline.
 const urlsToCache = [
   'home.html', // Ruta relativa a la ubicación del Service Worker
@@ -12,6 +12,7 @@ const urlsToCache = [
   'inse.html', 
   'empresas.html',
   'empresas.json',
+  'config-EMPRESA_PRUEBA.json',
   
   'assets/icons/favicon.png',
   'assets/icons/favicon-192.png',

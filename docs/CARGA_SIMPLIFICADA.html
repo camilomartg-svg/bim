@@ -964,7 +964,14 @@
           const reqProject = q.get('proyecto') || q.get('project');
 
           if (reqEmpresa) {
-            const target = allCompanies.find(c => c.id === reqEmpresa || slugify(c.name) === slugify(reqEmpresa));
+            const cleanReqEmp = decodeURIComponent(reqEmpresa).trim();
+            const target = allCompanies.find(c => 
+              c.id === reqEmpresa || 
+              c.id === cleanReqEmp || 
+              (c.name && c.name.toLowerCase() === cleanReqEmp.toLowerCase()) || 
+              slugify(c.name) === slugify(reqEmpresa) || 
+              slugify(c.name) === slugify(cleanReqEmp)
+            );
             if (target) {
               selectEmpresa(target, reqProject);
             }

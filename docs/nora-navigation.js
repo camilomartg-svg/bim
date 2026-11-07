@@ -6,7 +6,7 @@
  * 1. Comportamiento consistente y predecible en todo el sitio.
  * 2. La flecha hacia la izquierda (<--) siempre te lleva a la CAPA SUPERIOR
  *    según el árbol organizacional (NUNCA a un proyecto distinto, NUNCA window.history.back):
- *      - Nivel 3 (Módulos de Proyecto: VSR_IFCA, VSR_PDFA, VSR_DWGA, STATUS, CANTIDADES, INCIDENCIAS, equipo, ajustes, publicaciones, etc.)
+ *      - Nivel 3 (Módulos de Proyecto: VSR_IFCA, VSR_PDFA, VSR_DWGA, STATUS, CANTIDADES, INCIDENCIAS, equipo, ajustes, etc.)
  *          ==> Capa superior: Landing del Proyecto (project-landing.html?project=...&empresa=...)
  *      - Nivel 2 (Landing del Proyecto: project-landing.html)
  *          ==> Capa superior: Home de la Empresa (home.html?empresa=...)
@@ -15,12 +15,15 @@
  *      - Páginas generales (super-admin.html, perfil.html sin empresa)
  *          ==> Capa superior: empresas.html
  * 3. El logo de nora:
- *      - En el Home de la Empresa (home.html, Imagen 4):
+ *      - En el Home de la Empresa (home.html):
  *          ==> Te lleva al Home de Empresas de nora (empresas.html) donde ves todas tus empresas.
  *      - En cualquier otra página (project-landing.html, VSR_IFCA, equipo, etc.):
  *          ==> Te lleva al Home de la empresa en la que estés trabajando (home.html?empresa=...)
  *      - En empresas.html:
  *          ==> Se mantiene en empresas.html.
+ * 4. SEGURIDAD:
+ *      - NUNCA interceptar clics en tarjetas de empresa o de proyectos.
+ *      - NUNCA sobreescribir los enlaces de tarjetas de empresas en empresas.html.
  */
 (function (global) {
   'use strict';
@@ -46,7 +49,11 @@
     for (var i = 0; i < keys.length; i++) {
       var v = params.get(keys[i]);
       if (v && String(v).trim() !== '' && String(v).trim().toLowerCase() !== 'null' && String(v).trim().toLowerCase() !== 'undefined') {
-        return String(v).trim();
+        try {
+          return decodeURIComponent(String(v).trim());
+        } catch (e) {
+          return String(v).trim();
+        }
       }
     }
     return '';
@@ -168,7 +175,7 @@
     var prefix = ctx.prefix;
     var empresa = ctx.empresa;
 
-    // Regla 3: "y el home de la empresa, imagen 4, te lleva al home de empresas de nora donde vez todas las empresas a las que has sido asignado"
+    // Regla 3: En el home de la empresa, te lleva a la selección de empresas (empresas.html)
     if (p.endsWith('/home.html') || p.endsWith('home.html') || p.endsWith('/home') || p.endsWith('home')) {
       return prefix + 'empresas.html';
     }
@@ -178,7 +185,7 @@
       return prefix + 'empresas.html';
     }
 
-    // Regla 3: "El logo de nora te debe llevar al home de la empresa en la que estes trabajando"
+    // Regla 3: En cualquier otra página, te lleva al home de la empresa actual
     return prefix + 'home.html' + (empresa ? '?empresa=' + encodeURIComponent(empresa) : '');
   }
 
@@ -203,6 +210,11 @@
   function isBackButtonElement(target) {
     if (!target || target === document.body || target === document.documentElement) return false;
 
+    // NUNCA interceptar tarjetas de empresas o proyectos
+    if (target.closest('.company-card, .card-hover, #empresas-container, #companies-container, #projects-list, #projects-container, #project-tools-container, #project-quick-links')) {
+      return false;
+    }
+
     var btn = target.closest('button, a, [role="button"]') || target;
     var id = (btn.id || target.id || '').toLowerCase();
     var title = (btn.getAttribute('title') || target.getAttribute('title') || '').toLowerCase();
@@ -211,28 +223,23 @@
     if (id === 'back-btn' || id === 'btn-header-back' || id === 'nav-back-btn') {
       return true;
     }
-    if (title.indexOf('volver') !== -1 || title.indexOf('regresar') !== -1) {
+    if (title === 'volver' || title === 'regresar' || title === 'volver a la capa superior' || title === 'volver al proyecto' || title === 'volver al portal') {
       return true;
     }
-    if (aria.indexOf('volver') !== -1 || aria.indexOf('regresar') !== -1) {
+    if (aria === 'volver' || aria === 'regresar') {
       return true;
     }
 
-    // Chequear icono de flecha atrás en el botón
-    var icon = btn.querySelector('.material-symbols-outlined, .material-icons, i.fa-arrow-left, i.fa-chevron-left, svg');
-    if (icon) {
+    // Chequear icono de flecha atrás en botones de cabecera
+    var icon = btn.querySelector('.material-symbols-outlined, .material-icons, i.fa-arrow-left, i.fa-chevron-left');
+    if (icon && (btn.id.includes('back') || (btn.classList && (btn.classList.contains('back-btn') || btn.classList.contains('sidebar-toggle-btn'))) || btn.closest('header, nav, .top-bar, .header'))) {
       var text = (icon.textContent || '').trim().toLowerCase();
-      if (text === 'arrow_back' || text === 'arrow_left' || text === 'arrow_back_ios' || text === 'arrow_upward') {
+      if (text === 'arrow_back' || text === 'arrow_left' || text === 'arrow_back_ios') {
         return true;
       }
       if (icon.classList && (icon.classList.contains('fa-arrow-left') || icon.classList.contains('fa-chevron-left'))) {
         return true;
       }
-    }
-
-    var targetText = (target.textContent || '').trim().toLowerCase();
-    if (targetText === 'arrow_back' || targetText === 'arrow_left') {
-      return true;
     }
 
     return false;
@@ -241,35 +248,37 @@
   function isNoraLogoElement(target) {
     if (!target || target === document.body || target === document.documentElement) return false;
 
+    // NUNCA interceptar clics dentro de tarjetas de empresas o proyectos
+    var isInsideCard = target.closest('.company-card, .card-hover, #empresas-container, #companies-container, #projects-list, #projects-container, #project-tools-container, #project-quick-links');
+    if (isInsideCard && !target.closest('#logo-img, #logo-link, #portal-logo-light, #portal-logo-dark, #project-portal-logo-link')) {
+      return false;
+    }
+
     var el = target.closest('a, button, [role="button"]') || target;
     var id = (el.id || target.id || '').toLowerCase();
     var src = (target.getAttribute('src') || el.getAttribute('src') || '').toLowerCase();
     var alt = (target.getAttribute('alt') || el.getAttribute('alt') || '').toLowerCase();
     var title = (el.getAttribute('title') || target.getAttribute('title') || '').toLowerCase();
-    var href = (el.getAttribute('href') || '').toLowerCase();
 
+    // IDs explícitos de logo
     if (id === 'logo-img' || id === 'logo-link' || id === 'portal-logo-light' || id === 'portal-logo-dark' || id === 'portal-logo-nora' || id === 'project-portal-logo-light' || id === 'project-portal-logo-dark' || id === 'project-portal-logo-link') {
       return true;
     }
 
-    if (src.indexOf('logo-nora') !== -1 || src.indexOf('logo_nora') !== -1 || src.indexOf('favicon-nora') !== -1 || src.indexOf('logo-texto-nora') !== -1 || src.indexOf('logo-(1).jpg') !== -1 || src.indexOf('logo-solo') !== -1) {
+    // Imágenes cuyo origen sea un logo de Nora
+    if (src.indexOf('logo-nora') !== -1 || src.indexOf('logo_nora') !== -1 || src.indexOf('favicon-nora') !== -1 || src.indexOf('logo-texto-nora') !== -1 || src.indexOf('logo-solo') !== -1) {
       return true;
     }
 
-    if (alt === 'nora cde' || alt === 'logo de amarillo' || alt === 'nora' || (alt === 'nora' && target.tagName === 'IMG')) {
+    if (alt === 'nora cde' || alt === 'nora' || alt === 'logo de amarillo') {
       return true;
     }
 
-    if (title.indexOf('volver al home') !== -1 || title.indexOf('ir al home') !== -1 || title.indexOf('cambiar de empresa') !== -1) {
+    if (title === 'volver al home de la empresa' || title === 'ir al home de la empresa' || title === 'cambiar de empresa') {
       return true;
     }
 
-    // Si es un enlace a home.html en la barra superior/header (y no es empresas.html)
-    if (el.tagName === 'A' && (href.endsWith('home.html') || href.includes('home.html?')) && !href.includes('empresas.html')) {
-      return true;
-    }
-
-    // Si es un enlace que contiene dentro una imagen con logo de nora
+    // Enlaces de cabecera que contienen explícitamente el logo de Nora
     if (el.tagName === 'A' && el.querySelector('#logo-img, #portal-logo-light, #portal-logo-dark, [src*="LOGO-NORA"], [src*="logo-texto-nora"], [src*="LOGO_NORA"], [src*="Logo-NORA"]')) {
       return true;
     }
@@ -278,7 +287,6 @@
   }
 
   // Interceptor global en fase de captura (capture: true):
-  // Se ejecuta ANTES que cualquier listener minificado de React/Vue (evita que se ejecute window.history.back)
   document.addEventListener('click', function (e) {
     var target = e.target;
     if (!target) return;
@@ -305,19 +313,24 @@
     var upperUrl = getUpperLayerUrl();
     var logoUrl = getNoraLogoUrl();
 
-    // Actualizar enlaces de logo en el DOM
-    var logoLinks = document.querySelectorAll('a[title*="Home"], a[title*="home"], #logo-link, #project-portal-logo-link, a[href*="home.html"]');
-    logoLinks.forEach(function (a) {
+    // Actualizar ÚNICAMENTE los enlaces que envuelven logos de Nora
+    var logoSelectors = '#logo-link, #project-portal-logo-link, a.logo-link, a[title="Cambiar de empresa"], a[title="Ir al Home de la Empresa"], a[title="Volver al Home de la Empresa"]';
+    document.querySelectorAll(logoSelectors).forEach(function (a) {
       if (a && a.tagName === 'A') {
-        var href = a.getAttribute('href') || '';
-        if (!href.startsWith('http://') && !href.startsWith('https://') || href.includes('norabim.com')) {
-          a.href = logoUrl;
-        }
+        a.href = logoUrl;
       }
     });
 
-    // Actualizar botones y enlaces de volver
-    var backBtns = document.querySelectorAll('#back-btn, #btn-header-back, [aria-label="Volver"]');
+    // Asegurar enlaces de imágenes de logo específicas (sin tocar tarjetas)
+    document.querySelectorAll('#logo-img, #portal-logo-light, #portal-logo-dark, #portal-logo-nora').forEach(function (img) {
+      var parentLink = img.closest('a');
+      if (parentLink && !parentLink.closest('.company-card, .card-hover, #empresas-container, #companies-container, #projects-list')) {
+        parentLink.href = logoUrl;
+      }
+    });
+
+    // Actualizar botones de volver
+    var backBtns = document.querySelectorAll('#back-btn, #btn-header-back');
     backBtns.forEach(function (btn) {
       if (btn) {
         if (btn.tagName === 'A') {
@@ -327,7 +340,7 @@
       }
     });
 
-    // Si estamos en empresas.html (raíz), ocultar back-btn si existe para no confundir
+    // Si estamos en empresas.html (raíz), ocultar back-btn si existe
     var p = String((global.location && global.location.pathname) || '').toLowerCase();
     if (p.endsWith('/empresas.html') || p.endsWith('empresas.html')) {
       var rootBack = document.getElementById('back-btn');

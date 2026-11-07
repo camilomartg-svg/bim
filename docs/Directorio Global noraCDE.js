@@ -506,6 +506,7 @@ function sanitizeJsonFileName_(raw) {
   if (slashIdx !== -1) {
     s = s.substring(slashIdx + 1);
   }
+  s = s.replace(/\s+/g, '_');
   if (/^(empresas\.json|portal-config\.json|usuarios\.json|config-[a-zA-Z0-9_.-]+\.json)$/i.test(s)) {
     return s;
   }

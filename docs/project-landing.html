@@ -395,15 +395,21 @@
               const empRes = await fetch('empresas.json');
               if (empRes.ok) {
                 const empresas = await empRes.json();
-                const emp = empresas.find(e => e.id === empresaId);
+                const cleanEmpId = decodeURIComponent(empresaId).trim();
+                const emp = empresas.find(e => 
+                  e.id === cleanEmpId || 
+                  e.id === empresaId || 
+                  (e.name && e.name.toLowerCase() === cleanEmpId.toLowerCase())
+                );
                 if (emp && emp.configUrl) {
                   configUrl = `${emp.configUrl}?v=${encodeURIComponent(currentVersion)}`;
+                } else if (cleanEmpId) {
+                  configUrl = `config-${cleanEmpId.replace(/\s+/g, '_')}.json?v=${encodeURIComponent(currentVersion)}`;
                 }
               }
             } catch(e) {
                 console.warn('Error cargando empresas.json', e);
             }
-          }
 
           const response = await fetch(configUrl, { cache: 'no-store' });
           if (!response.ok) throw new Error('No se pudo cargar la configuración del portal');
@@ -433,7 +439,7 @@
       }
 
       const projects = Array.isArray(config.projects) ? config.projects.map(normalizeProject) : [];
-      let activeProject = projects.find((project) => project.slug === requestedProject) || projects.find((project) => project.slug === 'green-i') || projects[0] || DEFAULT_PROJECT;
+      let activeProject = projects.find((project) => project.slug === requestedProject) || projects.find((project) => slugify(project.name || '') === requestedProject) || projects.find((project) => project.slug === 'green-i') || projects[0] || DEFAULT_PROJECT;
 
       // Intentar obtener la versión más reciente del proyecto directamente desde Google Drive
       try {
@@ -458,9 +464,9 @@
       const setEl = (id, text) => { const el = document.getElementById(id); if (el) el.textContent = text; };
       setEl('project-eyebrow-main', project.landing.eyebrow || 'Dashboard');
       
-      const landingTitle = (project.landing?.title && project.landing.title.toUpperCase() !== 'NUEVO PROYECTO') 
+      const landingTitle = (project.landing?.title && project.landing.title.toUpperCase() !== 'NUEVO PROYECTO' && project.landing.title.toUpperCase() !== 'PROYECTO') 
         ? project.landing.title 
-        : project.name.toUpperCase();
+        : (project.name || 'PROYECTO').toUpperCase();
       setEl('project-title', landingTitle);
       
       setEl('project-subtitle', project.landing.subtitle || DEFAULT_PROJECT.landing.subtitle);
@@ -486,7 +492,12 @@
       const empresaIdProject = urlParamsProject.get('empresa');
       if (empresaIdProject) {
         fetch('empresas.json').then(r => r.json()).then(empresas => {
-          const emp = empresas.find(e => e.id === empresaIdProject);
+          const cleanEmpIdProj = decodeURIComponent(empresaIdProject).trim();
+          const emp = empresas.find(e => 
+            e.id === cleanEmpIdProj || 
+            e.id === empresaIdProject || 
+            (e.name && e.name.toLowerCase() === cleanEmpIdProj.toLowerCase())
+          );
           if (emp) {
             const heroImageEl = document.getElementById('project-hero-image');
             if (heroImageEl && emp.image) {

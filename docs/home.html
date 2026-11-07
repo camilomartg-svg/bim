@@ -572,15 +572,19 @@
                     let configUrl = `portal-config.json?v=${encodeURIComponent(currentVersion)}`;
                     
                     if (empresaId) {
-                        configUrl = `config-${empresaId}.json?v=${encodeURIComponent(currentVersion)}`; // Default to company config
+                        const cleanEmpId = decodeURIComponent(empresaId).trim();
+                        configUrl = `config-${cleanEmpId.replace(/\s+/g, '_')}.json?v=${encodeURIComponent(currentVersion)}`;
                         try {
                             const empRes = await fetch('empresas.json');
                             if (empRes.ok) {
                                 const empresas = await empRes.json();
-                                const emp = empresas.find(e => e.id === empresaId);
+                                const emp = empresas.find(e => 
+                                    e.id === cleanEmpId || 
+                                    e.id === empresaId || 
+                                    (e.name && e.name.toLowerCase() === cleanEmpId.toLowerCase())
+                                );
                                 if (emp) {
-                                    // Use explicit configUrl if provided and not portal-config.json
-                                    if (emp.configUrl ) {
+                                    if (emp.configUrl) {
                                         configUrl = `${emp.configUrl}?v=${encodeURIComponent(currentVersion)}`;
                                     }
                                     window.currentEmpresaName = emp.name;

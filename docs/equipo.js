@@ -517,7 +517,12 @@
       }
     }
 
-    currentCompany = companies.find(c => c.id === companyId) || { id: companyId || 'nora', name: 'Nora CDE', configUrl: 'portal-config.json' };
+    const cleanCompanyId = decodeURIComponent(companyId).trim();
+    currentCompany = companies.find(c => 
+      c.id === cleanCompanyId || 
+      c.id === companyId || 
+      (c.name && c.name.toLowerCase() === cleanCompanyId.toLowerCase())
+    ) || { id: companyId || 'nora', name: 'Nora CDE', configUrl: 'portal-config.json' };
     configUrl = currentCompany.configUrl || 'portal-config.json';
 
     // 2. Breadcrumbs
@@ -568,7 +573,9 @@
     if (!Array.isArray(fullConfig.projects)) fullConfig.projects = [];
 
     if (!loadedFromDrive || !activeProject) {
-      activeProject = fullConfig.projects.find(p => p.slug === projectSlug);
+      activeProject = fullConfig.projects.find(p => p.slug === projectSlug) ||
+                      fullConfig.projects.find(p => (p.slug && projectSlug && p.slug.toLowerCase() === projectSlug.toLowerCase())) ||
+                      fullConfig.projects.find(p => (p.name && projectSlug && p.name.toLowerCase() === projectSlug.replace(/[-_]/g, ' ').toLowerCase()));
       if (!activeProject) {
         activeProject = {
           name: (projectSlug ? projectSlug.replace(/[-_]/g, ' ') : 'Proyecto').toUpperCase(),

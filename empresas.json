@@ -223,5 +223,25 @@
       }
     ],
     "driveFolderId": "1ADgixAgAO9j7Z8bVaRUCZr3zd363Ij6l"
+  },
+  {
+    "id": "EMPRESA PRUEBA",
+    "name": "EMPRES PRUEBA",
+    "razonSocial": "Nueva Empresa",
+    "code": "EPR",
+    "admins": [],
+    "members": [
+      {
+        "name": "Nora spk 1",
+        "email": "nora.spk.2@gmail.com",
+        "role": "MIEMBRO",
+        "empresaUsuario": "EMPRES PRUEBA",
+        "cargo": "Arquitecto Senior"
+      }
+    ],
+    "zonaHoraria": "America/Bogota",
+    "configUrl": "config-EMPRESA_PRUEBA.json",
+    "location": "Bogotá, Colombia",
+    "driveFolderId": "19j_kdA_vfgYnBZD26LkHUssvqsjnxO3F"
   }
 ]
