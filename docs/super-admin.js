@@ -133,6 +133,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     window.scrollTo({ top: 0, behavior: 'smooth' });
     setTimeout(() => { banner.classList.add('hidden'); }, 5000);
   }
+  window.showBanner = showBanner;
 
   async function loadData() {
     if (window.NoraDriveStore) {
@@ -353,6 +354,9 @@ document.addEventListener('DOMContentLoaded', async () => {
       const activeCompanies = empresas.filter(e => !e.deleted);
       await Promise.all(activeCompanies.map(emp => loadCompanyConfig(emp)));
 
+      if (selectedIndex >= empresas.length || (selectedIndex > -1 && (!empresas[selectedIndex] || empresas[selectedIndex].deleted))) {
+        selectedIndex = -1;
+      }
       renderList();
       if (selectedIndex === -1 && empresas.length > 0) {
         const firstActiveIdx = empresas.findIndex(e => !e.deleted);
@@ -627,6 +631,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     if(iconAll) iconAll.innerText = 'unfold_less';
     
     if (selectedIndex === -1) return;
+    if (window.refreshGlobalUsersDatalist) window.refreshGlobalUsersDatalist();
     const emp = empresas[selectedIndex];
     if (!emp.members) emp.members = [];
     
@@ -649,7 +654,11 @@ document.addEventListener('DOMContentLoaded', async () => {
         g = m.especialidad && m.especialidad.trim() !== '' ? m.especialidad.trim() : 'Sin Especialidad Asignada';
       }
       if (!grouped[g]) grouped[g] = [];
-      grouped[g].push({ ...m, originalIndex: i });
+      if (!m.email || !m.email.trim()) {
+        grouped[g].unshift({ ...m, originalIndex: i });
+      } else {
+        grouped[g].push({ ...m, originalIndex: i });
+      }
     });
 
     const sortedGroups = Object.keys(grouped).sort((a, b) => {
@@ -767,11 +776,11 @@ document.addEventListener('DOMContentLoaded', async () => {
             registeredNameStr = m.name.trim();
         }
         
-        const nombreHtml = registeredNameStr ? `
+        const nombreHtml = `
           <label class="block">
             <span class="mb-1 block text-xs font-semibold text-slate-600">Nombre registrado</span>
-            <input type="text" class="w-full text-xs rounded border-slate-200 bg-slate-100 text-slate-500 font-medium cursor-not-allowed" value="${registeredNameStr}" disabled readonly>
-          </label>` : '';
+            <input id="member-reg-name-${i}" type="text" class="w-full text-xs rounded border-slate-200 bg-slate-100 text-slate-500 font-medium cursor-not-allowed" value="${registeredNameStr}" placeholder="Se completa automáticamente" disabled readonly>
+          </label>`;
 
         return `
       <div class="border rounded-xl p-4 bg-slate-50 relative group">
@@ -780,7 +789,7 @@ document.addEventListener('DOMContentLoaded', async () => {
           
           <label class="block">
             <span class="mb-1 block text-xs font-semibold text-slate-600">Correo Electrónico</span>
-            <input type="email" class="w-full text-xs rounded border-slate-200" value="${m.email || ''}" onchange="updateUser(${i}, 'email', this.value)" placeholder="usuario@empresa.com">
+            <input type="email" list="global-users-datalist" class="w-full text-xs rounded border-slate-200" value="${m.email || ''}" oninput="updateUserDraft(${i}, this.value)" onchange="updateUser(${i}, 'email', this.value)" placeholder="Selecciona o escribe usuario@empresa.com">
           </label>
 
           ${nombreHtml}
@@ -807,6 +816,23 @@ document.addEventListener('DOMContentLoaded', async () => {
     usersListEl.innerHTML = html;
   }
 
+
+  window.updateUserDraft = (idx, val) => {
+    if (selectedIndex === -1 || !empresas[selectedIndex] || !empresas[selectedIndex].members) return;
+    const emp = empresas[selectedIndex];
+    const m = emp.members[idx];
+    if (!m) return;
+    const emailClean = (val || '').toLowerCase().trim();
+    m.email = emailClean;
+    if (emailClean && window.globalUsersMap) {
+      const gu = window.globalUsersMap.get(emailClean);
+      if (gu && gu.name && gu.name.trim() !== '' && gu.name.trim().toLowerCase() !== 'nuevo usuario') {
+        m.name = gu.name.trim();
+        const regInput = document.getElementById('member-reg-name-' + idx);
+        if (regInput) regInput.value = m.name;
+      }
+    }
+  };
 
   window.updateUser = (idx, field, val) => {
     if (selectedIndex === -1 || !empresas[selectedIndex] || !empresas[selectedIndex].members) return;
@@ -848,6 +874,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   document.getElementById('add-usuario-btn').addEventListener('click', () => {
     if (selectedIndex === -1) return;
+    if (window.refreshGlobalUsersDatalist) window.refreshGlobalUsersDatalist();
     const emp = empresas[selectedIndex];
     if (!emp.members) emp.members = [];
     emp.members.push({ 
@@ -877,6 +904,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   window.renderProjects = renderProjects;
     function renderProjects() {
     if (selectedIndex === -1) return;
+    if (window.refreshGlobalUsersDatalist) window.refreshGlobalUsersDatalist();
     const emp = empresas[selectedIndex];
     const config = companyConfigs[emp.id];
     if (!config || !config.projects) return;
@@ -992,7 +1020,7 @@ let contentBase = '';
                 } else if (m.name && m.name !== 'Nuevo Usuario') {
                     resolvedName = m.name;
                 }
-                return `<option value="${m.email}" ${m.email === memberEmail ? 'selected' : ''}>${resolvedName} (${m.role || 'Sin rol'})</option>`;
+                return `<option value="${m.email}" ${(m.email || '').toLowerCase().trim() === (memberEmail || '').toLowerCase().trim() ? 'selected' : ''}>${resolvedName} (${m.role || 'Sin rol'})</option>`;
             }).join('');
             return `
             <div class="grid grid-cols-12 gap-2 items-center bg-white p-3 rounded-xl border border-slate-200 shadow-sm">
@@ -1022,7 +1050,7 @@ let contentBase = '';
             <section>
               <h3 class="text-sm font-bold uppercase tracking-[0.2em] text-slate-500">Información base</h3>
               <div class="mt-4 grid gap-4 md:grid-cols-3">
-                <label class="block"><span class="mb-2 block text-sm font-semibold text-slate-700">Nombre del proyecto <span class="text-rose-500">*</span></span><input class="w-full text-xs rounded-xl border-slate-200" type="text" value="${p.name || ''}" onchange="updateProject('${p.slug}', 'name', this.value)" required /></label>
+                <label class="block"><span class="mb-2 block text-sm font-semibold text-slate-700">Nombre del proyecto <span class="text-rose-500">*</span></span><input class="w-full text-xs rounded-xl border-slate-200" type="text" value="${p.name || ''}" oninput="updateProject('${p.slug}', 'name', this.value)" onchange="updateProject('${p.slug}', 'name', this.value)" required /></label>
                 <label class="block"><span class="mb-2 block text-sm font-semibold text-slate-700">Código o identificador</span><input class="w-full text-xs rounded-xl border-slate-200" type="text" value="${p.code || ''}" placeholder="Ej. ARB-001" onchange="updateProject('${p.slug}', 'code', this.value)" /></label>
                 <label class="block"><span class="mb-2 block text-sm font-semibold text-slate-700">Estado</span>
                   <select class="w-full text-xs rounded-xl border-slate-200" onchange="updateProject('${p.slug}', 'status', this.value)">
@@ -1189,7 +1217,7 @@ let contentBase = '';
             <div class="grid grid-cols-12 gap-2 p-3 text-sm items-center hover:bg-slate-100 cursor-pointer" onclick="toggleProjectAccordion('${p.slug}')">
               <div class="col-span-3 font-semibold text-slate-800 flex items-center gap-2">
                   <span class="material-symbols-outlined text-slate-400 text-lg transition-transform ${isOpen ? 'rotate-180' : ''}">expand_more</span>
-                  ${p.name || p.title || 'Proyecto'}
+                  <span id="proj-header-name-${p.slug}">${p.name || p.title || 'Proyecto'}</span>
               </div>
               <div class="col-span-2 font-mono text-[10px] text-slate-500 truncate" title="${p.slug}">${p.slug}</div>
               <div class="col-span-2">
@@ -1376,7 +1404,7 @@ let contentBase = '';
               <div class="grid grid-cols-12 gap-2 p-3 text-sm items-center hover:bg-slate-100 cursor-pointer" onclick="toggleConfigAccordion('${p.slug}')">
                 <div class="col-span-4 font-semibold text-slate-800 flex items-center gap-2">
                     <span class="material-symbols-outlined text-slate-400 text-lg transition-transform ${isOpen ? 'rotate-180' : ''}">expand_more</span>
-                    ${p.name || p.title || 'Proyecto'}
+                    <span id="proj-header-name-${p.slug}">${p.name || p.title || 'Proyecto'}</span>
                 </div>
                 <div class="col-span-3 font-mono text-[10px] text-slate-500 truncate" title="${p.slug}">${p.slug}</div>
                 <div class="col-span-2">
@@ -1491,13 +1519,14 @@ let contentBase = '';
 
   window.updateProject = (slug, field, val) => {
     if (selectedIndex === -1) return;
+    if (window.refreshGlobalUsersDatalist) window.refreshGlobalUsersDatalist();
     const emp = empresas[selectedIndex];
     const config = companyConfigs[emp.id];
     if (!config || !config.projects) return;
     const proj = config.projects.find(p => p.slug === slug);
     if(proj) {
       proj[field] = val;
-      if (field === 'name') proj._nameChanged = true;
+      if (field === 'name') { proj._nameChanged = true; proj.title = val; if (proj.landing) proj.landing.title = val; const hdr = document.getElementById('proj-header-name-' + slug); if (hdr) hdr.textContent = val || 'Proyecto'; }
       if (field === 'country' || field === 'city' || field === 'hasLicense') {
         setTimeout(() => {
           renderProjects();
@@ -1508,6 +1537,7 @@ let contentBase = '';
 
   window.updateProjectDeep = (slug, parent, field, val) => {
     if (selectedIndex === -1) return;
+    if (window.refreshGlobalUsersDatalist) window.refreshGlobalUsersDatalist();
     const emp = empresas[selectedIndex];
     const config = companyConfigs[emp.id];
     if (!config || !config.projects) return;
@@ -1520,6 +1550,7 @@ let contentBase = '';
   
   window.updateProjectDeepMap = (slug, field, val) => {
     if (selectedIndex === -1) return;
+    if (window.refreshGlobalUsersDatalist) window.refreshGlobalUsersDatalist();
     const emp = empresas[selectedIndex];
     const config = companyConfigs[emp.id];
     if (!config || !config.projects) return;
@@ -1534,6 +1565,7 @@ let contentBase = '';
   
   window.updateProjectDeepMap = (slug, prop, value) => {
     if (selectedIndex === -1) return;
+    if (window.refreshGlobalUsersDatalist) window.refreshGlobalUsersDatalist();
     const emp = empresas[selectedIndex];
     const config = companyConfigs[emp.id];
     if (config && config.projects) {
@@ -1547,6 +1579,7 @@ let contentBase = '';
   };
   window.updateProjectDeepDS = (slug, field, val) => {
     if (selectedIndex === -1) return;
+    if (window.refreshGlobalUsersDatalist) window.refreshGlobalUsersDatalist();
     const emp = empresas[selectedIndex];
     const config = companyConfigs[emp.id];
     if (!config || !config.projects) return;
@@ -1559,6 +1592,7 @@ let contentBase = '';
 
   window.updateProjectDeepMod = (slug, field, val) => {
     if (selectedIndex === -1) return;
+    if (window.refreshGlobalUsersDatalist) window.refreshGlobalUsersDatalist();
     const emp = empresas[selectedIndex];
     const config = companyConfigs[emp.id];
     if (!config || !config.projects) return;
@@ -1571,6 +1605,7 @@ let contentBase = '';
   
   window.updateProjectDeepAct = (slug, field, val) => {
     if (selectedIndex === -1) return;
+    if (window.refreshGlobalUsersDatalist) window.refreshGlobalUsersDatalist();
     const emp = empresas[selectedIndex];
     const config = companyConfigs[emp.id];
     if (!config || !config.projects) return;
@@ -1585,6 +1620,7 @@ let contentBase = '';
 
   window.addClientContact = (slug) => {
     if (selectedIndex === -1) return;
+    if (window.refreshGlobalUsersDatalist) window.refreshGlobalUsersDatalist();
     const emp = empresas[selectedIndex];
     const config = companyConfigs[emp.id];
     if (!config || !config.projects) return;
@@ -1598,6 +1634,7 @@ let contentBase = '';
 
   window.removeClientContact = (slug, idx) => {
     if (selectedIndex === -1) return;
+    if (window.refreshGlobalUsersDatalist) window.refreshGlobalUsersDatalist();
     const emp = empresas[selectedIndex];
     const config = companyConfigs[emp.id];
     if (!config || !config.projects) return;
@@ -1610,6 +1647,7 @@ let contentBase = '';
   
   window.updateClientContact = (slug, idx, field, val) => {
     if (selectedIndex === -1) return;
+    if (window.refreshGlobalUsersDatalist) window.refreshGlobalUsersDatalist();
     const emp = empresas[selectedIndex];
     const config = companyConfigs[emp.id];
     if (!config || !config.projects) return;
@@ -1621,6 +1659,7 @@ let contentBase = '';
 
   window.addProjectMember = (slug) => {
     if (selectedIndex === -1) return;
+    if (window.refreshGlobalUsersDatalist) window.refreshGlobalUsersDatalist();
     const emp = empresas[selectedIndex];
     const config = companyConfigs[emp.id];
     if (!config || !config.projects) return;
@@ -1634,6 +1673,7 @@ let contentBase = '';
 
   window.updateProjectMember = (slug, idx, email) => {
     if (selectedIndex === -1) return;
+    if (window.refreshGlobalUsersDatalist) window.refreshGlobalUsersDatalist();
     const emp = empresas[selectedIndex];
     const config = companyConfigs[emp.id];
     if (!config || !config.projects) return;
@@ -1646,6 +1686,7 @@ let contentBase = '';
   window.removeProjectMember = (slug, idx) => {
     if(!confirm('¿Remover miembro de este proyecto?')) return;
     if (selectedIndex === -1) return;
+    if (window.refreshGlobalUsersDatalist) window.refreshGlobalUsersDatalist();
     const emp = empresas[selectedIndex];
     const config = companyConfigs[emp.id];
     if (!config || !config.projects) return;
@@ -1695,6 +1736,7 @@ let contentBase = '';
   // ── FUNCIONES DE GESTIÓN WOMPI (FACTURACIÓN Y LICENCIAS POR EMPRESA) ─────────────────────
   window.updateWompiConfig = (field, val) => {
     if (selectedIndex === -1) return;
+    if (window.refreshGlobalUsersDatalist) window.refreshGlobalUsersDatalist();
     const emp = empresas[selectedIndex];
     if (!companyConfigs[emp.id]) companyConfigs[emp.id] = { projects: [] };
     const config = companyConfigs[emp.id];
@@ -1711,6 +1753,7 @@ let contentBase = '';
 
   window.grantCustomTrial = (slug, prefix = '') => {
     if (selectedIndex === -1) return;
+    if (window.refreshGlobalUsersDatalist) window.refreshGlobalUsersDatalist();
     const emp = empresas[selectedIndex];
     const config = companyConfigs[emp.id];
     if (!config || !config.projects) return;
@@ -1751,6 +1794,7 @@ let contentBase = '';
 
   window.grantQuickTester = (slug) => {
     if (selectedIndex === -1) return;
+    if (window.refreshGlobalUsersDatalist) window.refreshGlobalUsersDatalist();
     const emp = empresas[selectedIndex];
     const config = companyConfigs[emp.id];
     if (!config || !config.projects) return;
@@ -1812,6 +1856,7 @@ let contentBase = '';
 
   window.removeCustomTrial = (slug) => {
     if (selectedIndex === -1) return;
+    if (window.refreshGlobalUsersDatalist) window.refreshGlobalUsersDatalist();
     const emp = empresas[selectedIndex];
     const config = companyConfigs[emp.id];
     if (!config || !config.projects) return;
@@ -1829,6 +1874,7 @@ let contentBase = '';
 
   window.cancelProjectLicense = (slug) => {
     if (selectedIndex === -1) return;
+    if (window.refreshGlobalUsersDatalist) window.refreshGlobalUsersDatalist();
     const emp = empresas[selectedIndex];
     const config = companyConfigs[emp.id];
     if (!config || !config.projects) return;
@@ -1855,6 +1901,7 @@ let contentBase = '';
 
   window.payConsolidatedWompi = async () => {
     if (selectedIndex === -1) return;
+    if (window.refreshGlobalUsersDatalist) window.refreshGlobalUsersDatalist();
     const emp = empresas[selectedIndex];
     const config = companyConfigs[emp.id];
     if (!config || !config.projects) return;
@@ -1926,10 +1973,11 @@ let contentBase = '';
 
   document.getElementById('add-proyecto-btn').addEventListener('click', () => {
     if (selectedIndex === -1) return;
+    if (window.refreshGlobalUsersDatalist) window.refreshGlobalUsersDatalist();
     const emp = empresas[selectedIndex];
+    if (!companyConfigs[emp.id]) companyConfigs[emp.id] = { portal: { name: emp.name || 'nora CDE' }, projects: [] };
     const config = companyConfigs[emp.id];
-    if (!config || !config.projects) return;
-    
+    if (!Array.isArray(config.projects)) config.projects = [];
     const slug = 'nuevo-proyecto-' + Date.now();
     const newProj = {
       name: 'Nuevo Proyecto',
@@ -1983,37 +2031,32 @@ let contentBase = '';
       }
     };
     config.projects.push(newProj);
+    window.openProjectAccordions[slug] = true;
     renderProjects();
-
-    // Auto-crear carpeta y proyecto.json en Google Drive
-    try {
-      fetch(ROLES_SCRIPT_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-        body: JSON.stringify({
-          action: 'saveProjectConfig',
-          companyName: emp.name || emp.id,
-          companyId: emp.id,
-          projectName: newProj.name,
-          projectSlug: newProj.slug,
-          projectData: newProj
-        })
-      }).catch(() => {});
-    } catch (e) {}
+    showBanner('Nuevo proyecto agregado. Edita su nombre y detalles y haz clic en "Guardar Cambios" arriba a la derecha.', 'info');
   });
 
   document.getElementById('add-empresa-btn').addEventListener('click', () => {
     const ts = Date.now();
     const tempId = 'empresa-' + ts;
-    empresas.push({ 
-        id: tempId, 
-        name: 'Nueva Empresa', 
-        code: '000',
-        admins: [],
-        zonaHoraria: 'America/Bogota',
-        configUrl: `config-${tempId}.json`
+    companyConfigs[tempId] = {
+      portal: { name: 'Nueva Empresa' },
+      projects: []
+    };
+    empresas.push({
+      id: tempId,
+      name: 'Nueva Empresa',
+      razonSocial: 'Nueva Empresa',
+      code: '000',
+      admins: [],
+      members: [],
+      zonaHoraria: 'America/Bogota',
+      configUrl: `config-${tempId}.json`,
+      _nameChanged: true
     });
     selectEmpresa(empresas.length - 1);
+    if (tabs.btns[0]) tabs.btns[0].click();
+    showBanner('Nueva empresa agregada. Completa su ficha técnica y haz clic en "Guardar Cambios" arriba a la derecha.', 'info');
   });
 
   document.getElementById('delete-empresa-btn').addEventListener('click', async () => {
@@ -2202,6 +2245,12 @@ let contentBase = '';
         } catch (e) {}
       }
 
+      for (const emp of empresas) {
+        if (emp && !emp.deleted && Array.isArray(emp.members)) {
+          emp.members = emp.members.filter(m => m && m.email && String(m.email).trim() !== '');
+        }
+      }
+
       const companyConfigsPayload = {};
       for (const [empId, configData] of Object.entries(companyConfigs)) {
         const emp = empresas.find(e => e.id === empId);
@@ -2216,8 +2265,7 @@ let contentBase = '';
         if (!configData.portal) {
           configData.portal = { name: emp.name || 'nora CDE' };
         }
-        const cfgFile = emp.configUrl || `config-${empId}.json`;
-        companyConfigsPayload[cfgFile] = configData;
+        companyConfigsPayload[empId] = configData;
       }
 
       const saveRes = await window.NoraDriveStore.saveAdminBundle({
@@ -2247,6 +2295,14 @@ let contentBase = '';
                 }
               });
             }
+          }
+        });
+      }
+
+      if (saveRes && saveRes.companyConfigs && typeof saveRes.companyConfigs === 'object') {
+        Object.keys(saveRes.companyConfigs).forEach(empId => {
+          if (saveRes.companyConfigs[empId]) {
+            companyConfigs[empId] = saveRes.companyConfigs[empId];
           }
         });
       }
@@ -2386,6 +2442,7 @@ let contentBase = '';
             });
           }
         }
+        if (window.refreshGlobalUsersDatalist) window.refreshGlobalUsersDatalist();
         renderGlobalUsers();
       }
       // ───────────────────────────────────────────────────────────────────────
@@ -2485,6 +2542,14 @@ let contentBase = '';
         }
       }
       
+      if (saveRes && saveRes.companyConfigs && typeof saveRes.companyConfigs === 'object') {
+        Object.keys(saveRes.companyConfigs).forEach(empId => {
+          if (saveRes.companyConfigs[empId]) {
+            companyConfigs[empId] = saveRes.companyConfigs[empId];
+          }
+        });
+      }
+
       sessionStorage.removeItem('cachedCompanies_v2');
       showBanner('✅ Los datos se han guardado exitosamente, tardará de 1 a 3 minutos en integrar los cambios.', 'success');
     } catch (ignoredErr) {}
@@ -2553,7 +2618,8 @@ window.switchGlobalView = function(viewName) {
         if (window.globalUsersMap.size === 0) {
             fetchGlobalUsers();
         } else {
-            renderGlobalUsers();
+            if (window.refreshGlobalUsersDatalist) window.refreshGlobalUsersDatalist();
+        renderGlobalUsers();
         }
     } else if (viewName === 'proyectos') {
         if (vProyectos) {
@@ -2562,6 +2628,20 @@ window.switchGlobalView = function(viewName) {
         }
         renderGlobalProjects();
     }
+};
+
+window._lastGlobalUsersDatalistSig = '';
+window.refreshGlobalUsersDatalist = function() {
+    const dl = document.getElementById('global-users-datalist');
+    if (!dl || !window.globalUsersMap) return;
+    const sig = window.globalUsersMap.size + ':' + Array.from(window.globalUsersMap.keys()).join(',');
+    if (sig === window._lastGlobalUsersDatalistSig) return;
+    window._lastGlobalUsersDatalistSig = sig;
+    const opts = Array.from(window.globalUsersMap.values())
+        .sort((a, b) => (a.email || '').localeCompare(b.email || ''))
+        .map(u => `<option value="${u.email}">${u.name || u.email} — ${u.companyName || 'Sin empresa'}</option>`)
+        .join('');
+    dl.innerHTML = opts;
 };
 
 window.fetchGlobalUsers = async function() {
@@ -2623,6 +2703,7 @@ window.fetchGlobalUsers = async function() {
             window.globalUsersMap.set(email, userObj);
         });
 
+        if (window.refreshGlobalUsersDatalist) window.refreshGlobalUsersDatalist();
         renderGlobalUsers();
         if (typeof window.renderUsers === 'function') {
             window.renderUsers();
@@ -2721,6 +2802,7 @@ window.openEditUserModal = function(email, companyName = '') {
     const companySelect = document.getElementById('gu-company');
     companySelect.innerHTML = '<option value="">Sin Empresa Asignada</option>';
     window.empresas.forEach(emp => {
+        if (!emp || emp.deleted) return;
         companySelect.innerHTML += `<option value="${emp.name}">${emp.name}</option>`;
     });
 
@@ -2802,7 +2884,13 @@ window.saveGlobalUser = async function() {
         });
         if (window._syncMemberIntoLocalEmpresas) {
           window._syncMemberIntoLocalEmpresas(email, name, role, companyName, specialty);
+          try {
+            await window.NoraDriveStore.saveJson('empresas.json', window.empresas);
+          } catch (empSyncErr) {
+            console.warn('Aviso sincronizando empresas.json tras editar usuario:', empSyncErr);
+          }
         }
+        if (window.refreshGlobalUsersDatalist) window.refreshGlobalUsersDatalist();
         renderGlobalUsers();
         closeEditUserModal();
         showBanner(`✅ Usuario ${name} (${email}) guardado al instante en Google Drive.`, 'success');
@@ -2871,6 +2959,7 @@ window.saveGlobalUser = async function() {
             estado: 'APROBADO'
         });
 
+        if (window.refreshGlobalUsersDatalist) window.refreshGlobalUsersDatalist();
         renderGlobalUsers();
         closeEditUserModal();
         alert('Usuario guardado exitosamente.');
@@ -2908,6 +2997,7 @@ window.deleteGlobalUser = async function(email, companyName) {
         for (const k of window.globalUsersMap.keys()) {
           if (k.split('_')[0] === lowercaseEmail) window.globalUsersMap.delete(k);
         }
+        if (window.refreshGlobalUsersDatalist) window.refreshGlobalUsersDatalist();
         renderGlobalUsers();
         if (window.selectedIndex > -1 && typeof window.renderUsers === 'function') window.renderUsers();
         showBanner('✅ Usuario eliminado instantáneamente de Google Drive y Google Sheets.', 'success');
@@ -2966,6 +3056,7 @@ window.deleteGlobalUser = async function(email, companyName) {
             }
         }
         
+        if (window.refreshGlobalUsersDatalist) window.refreshGlobalUsersDatalist();
         renderGlobalUsers();
         
         if (changed) {
@@ -3124,6 +3215,7 @@ window.quickApproveUser = async function(email, nombre, companyName = '') {
         if (empresa && window._syncMemberIntoLocalEmpresas) {
           window._syncMemberIntoLocalEmpresas(email, u.name, rol, empresa, u.specialty || '');
         }
+        if (window.refreshGlobalUsersDatalist) window.refreshGlobalUsersDatalist();
         renderGlobalUsers();
         showBanner(`✅ ${nombre} aprobado al instante${empresa ? ' en ' + empresa : ''}.`, 'success');
       } catch (e) {
@@ -3171,6 +3263,7 @@ window.quickApproveUser = async function(email, nombre, companyName = '') {
             estado: 'APROBADO'
         });
 
+        if (window.refreshGlobalUsersDatalist) window.refreshGlobalUsersDatalist();
         renderGlobalUsers();
         showBanner(`✅ ${nombre} aprobado correctamente${empresa ? ' en ' + empresa : ''}.`, 'success');
     } catch(e) {

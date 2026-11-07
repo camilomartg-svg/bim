@@ -13,7 +13,7 @@
 
   var API_URL = 'https://script.google.com/macros/s/AKfycbx2RAQx_8K4o22xE0Mw-ETc7K_58vIoi6-PgVi64u80inuiw144ks3cgWSdCtXqIgB02g/exec';
   var DRIVE_FOLDER_ID = '1ZyW39yfyecmD-G8cfb6UrhN9jsoL7rEx';
-  var CACHE_PREFIX = 'nora_ds_v1_';
+  var CACHE_PREFIX = 'nora_ds_v2_';
   var SEEDED_FLAG_KEY = 'nora_drive_json_seeded_v1';
   var SESSION_TTL_MS = 15000; // 15s de lectura instantánea (0ms) entre pestañas/vistas; cualquier escritura invalida al instante
 
@@ -402,10 +402,17 @@
       writeLocalCache('portal-config.json', bundle.portalConfig);
     }
     if (bundle.companyConfigs && typeof bundle.companyConfigs === 'object') {
+      var serverConfigs = (json && json.companyConfigs && typeof json.companyConfigs === 'object') ? json.companyConfigs : {};
       Object.keys(bundle.companyConfigs).forEach(function (cfgKey) {
-        var cleanCfg = extractManagedJsonFileName(cfgKey) || cfgKey;
-        if (cleanCfg && bundle.companyConfigs[cfgKey]) {
-          writeLocalCache(cleanCfg, bundle.companyConfigs[cfgKey]);
+        var matchedEmp = Array.isArray(finalEmpresas)
+          ? finalEmpresas.find(function (e) { return e && (e.id === cfgKey || e.configUrl === cfgKey); })
+          : null;
+        var cleanCfg = matchedEmp
+          ? (matchedEmp.configUrl || ('config-' + matchedEmp.id + '.json'))
+          : (extractManagedJsonFileName(cfgKey) || ('config-' + cfgKey + '.json'));
+        var cfgVal = (matchedEmp && serverConfigs[matchedEmp.id]) || serverConfigs[cfgKey] || bundle.companyConfigs[cfgKey];
+        if (cleanCfg && cfgVal) {
+          writeLocalCache(cleanCfg, cfgVal);
         }
       });
     }
@@ -466,7 +473,7 @@
 
     var res = await postAction({
       action: 'migrateStaticToDrive',
-      onlyIfMissing: Boolean(opts.onlyIfMissing),
+      onlyIfMissing: opts.forceOverwriteFromStatic === true ? false : true,
       empresas: empresas,
       portalConfig: portalConfig,
       companyConfigs: companyConfigs

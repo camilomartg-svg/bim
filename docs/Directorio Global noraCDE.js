@@ -1605,7 +1605,8 @@ function syncDriveFoldersFast_(doc, empresas, companyConfigs) {
     let compFolderId = String(emp.driveFolderId || '').trim();
 
     // Solo consultar/crear carpeta de empresa en Drive de Modelos si no tiene ID aún o si un proyecto nuevo necesita crearse dentro
-    const cfg = (companyConfigs && companyConfigs[emp.id]) || { projects: [] };
+    const cfgKeyByFile = emp.configUrl || ('config-' + emp.id + '.json');
+    const cfg = (companyConfigs && (companyConfigs[emp.id] || companyConfigs[cfgKeyByFile])) || { projects: [] };
     const projects = Array.isArray(cfg.projects) ? cfg.projects : [];
     const anyProjectNeedsFolder = projects.some(function(p) {
       return p && (!(p.dataSources && p.dataSources.driveFolderId) || p._nameChanged);
@@ -1817,9 +1818,12 @@ function saveAdminBundle_(payload) {
 
     // 6. Guardar config-empresa-*.json y sincronizar subcarpetas [Empresa]/[Proyecto]/proyecto.json
     const savedConfigs = {};
-    Object.keys(companyConfigs).forEach(function(empId) {
-      const emp = finalEmpresas.find(function(e) { return e && e.id === empId; });
+    Object.keys(companyConfigs).forEach(function(cfgKey) {
+      const emp = finalEmpresas.find(function(e) {
+        return e && (e.id === cfgKey || e.configUrl === cfgKey || ('config-' + e.id + '.json') === cfgKey);
+      });
       if (!emp) return;
+      const empId = emp.id;
 
       if (userRole !== 'SUPER_ADMINISTRADOR') {
         const hasAccess = (Array.isArray(emp.admins) && emp.admins.some(function(a) { return String(a).toLowerCase().trim() === userEmail; })) ||
@@ -1832,7 +1836,7 @@ function saveAdminBundle_(payload) {
       const cfgFile = sanitizeJsonFileName_(emp.configUrl || ('config-' + empId + '.json'));
       if (!cfgFile) return;
 
-      let cfgData = companyConfigs[empId] || { projects: [] };
+      let cfgData = companyConfigs[cfgKey] || companyConfigs[empId] || { projects: [] };
       if (!cfgData.portal) cfgData.portal = { name: emp.name || 'nora CDE' };
       if (!Array.isArray(cfgData.projects)) cfgData.projects = [];
 
