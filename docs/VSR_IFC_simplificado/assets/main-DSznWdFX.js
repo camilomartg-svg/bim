@@ -6114,15 +6114,15 @@ SIEMPRE responde ÚNICAMENTE en formato JSON:
                 <div class="visibility-toggle" style="cursor: ${f}; padding: 0 10px; opacity: ${p};" title="Toggle Visibility">
                     <i class="fa-regular fa-eye"></i>
                 </div>
-            `;const b=h.querySelector(".model-name"),y=h.querySelector(".visibility-toggle"),v=y?.querySelector("i"),x=h.querySelector(".category-checkbox");let $=!0;const _=async E=>{if(console.log(`[DEBUG] Selecting category: ${l} (Count: ${u})`),ac==="filtrar"){E?Ci.has(String(l))?Ci.delete(String(l)):Ci.add(String(l)):Ci.size===1&&Ci.has(String(l))?Ci.clear():(Ci.clear(),Ci.add(String(l))),a.querySelectorAll("li.model-item").forEach(A=>{const S=A.dataset.group||"",k=Ci.has(S);A.classList.toggle("filter-active",k);const M=A.querySelector(".category-checkbox");M&&(M.checked=k)}),await m4(o);return}console.log(`[DEBUG] FragmentIdMap for ${l}:`,d);const w=Vt.get(Ve);if(d&&Object.keys(d).length>0){const A=Object.keys(d||{});console.log(`[DEBUG] Map keys: ${A.join(", ")}`);try{const S=!E,k={};let M=!1;console.log(`[DEBUG] Filtering selection for ${l}. Checking hidden items...`);for(const P in d){const T=Mt.list.get(P);if(T&&!T.object.visible){console.log(`[DEBUG] Skipping hidden model: ${P}`);continue}const C=d[P],L=new Set,D=be[P];D?console.log(`[DEBUG] Model ${P} has ${D.size} hidden items tracked.`):(console.warn(`[DEBUG] Model ${P} has NO hidden items tracked in hiddenItems map.`),console.log("[DEBUG] hiddenItems keys:",Object.keys(be)));const N=C instanceof Set||Array.isArray(C)?C:[];for(const W of N)(!D||!D.has(W))&&L.add(W);L.size>0&&(k[P]=L,M=!0)}M?(w.highlightByID("select",k,S,!0),K(`Seleccionado ${l} (${u} total, selección filtrada por visibilidad)`)):K(`No hay elementos visibles para seleccionar en ${l}`)}catch(S){K(`Error seleccionando ${l}: ${S}`,!0),console.error(S)}}else K(`Cannot select ${l}: No items found (Map is empty)`,!0),console.warn(`[DEBUG] Map is empty for ${l}. GroupData:`,c)};b?.addEventListener("click",E=>{E.stopPropagation(),_(E.ctrlKey||E.metaKey)}),x?.addEventListener("change",E=>{E.stopPropagation(),_(!0)}),y?.addEventListener("click",E=>{E.stopPropagation(),Ci.clear(),a.querySelectorAll("li.model-item").forEach(w=>w.classList.remove("filter-active")),$=!$,console.log(`[DEBUG] Toggling visibility for ${l}: ${$}`),d&&Object.keys(d).length>0?(ce.set($,d),dC(d,$)):console.warn(`[DEBUG] Skipping visibility toggle for ${l} - map is empty`),$?(h.classList.add("visible"),v?.classList.replace("fa-eye-slash","fa-eye"),h.style.opacity="1"):(h.classList.remove("visible"),v?.classList.replace("fa-eye","fa-eye-slash"),h.style.opacity="0.5")}),a.appendChild(h)}e.appendChild(a)}}function g4(){const e=document.getElementById("back-btn");e&&e.addEventListener("click",()=>{window.history.length>1?window.history.back():window.location.href="../home.html"})}function b4(){const e=document.getElementById("classification-field"),t=document.getElementById("classification-mode"),i=document.getElementById("classification-order"),s=document.getElementById("classification-clear"),n=()=>{e&&e.value&&(rc=e.value),t&&t.value&&(ac=t.value),i&&i.value&&(ig=i.value),i&&(i.style.display=ac==="ordenar"?"block":"none"),s&&(s.style.display=ac==="filtrar"?"block":"none")},o=async()=>{if(!Ts||!Ts.list)return;Ts.list.clear();const r=cC(rc,ig);Ts.list.set(rc,r),await Nn()};e?.addEventListener("change",async()=>{n(),Ci.clear(),await ce.set(!0);for(const r of Object.keys(be))be[r].clear();await o()}),t?.addEventListener("change",async()=>{n(),Ci.clear(),await ce.set(!0);for(const r of Object.keys(be))be[r].clear();await o()}),i?.addEventListener("change",async()=>{n(),await o()}),s?.addEventListener("click",async()=>{Ci.clear(),await ce.set(!0);for(const r of Object.keys(be))be[r].clear();await o()}),n()}function y4(){const e=document.getElementById("sidebar"),t=document.getElementById("sidebar-toggle"),i=document.getElementById("sidebar-resizer");if(t&&e&&t.addEventListener("click",()=>{const n=e.classList.toggle("closed");document.body.classList.toggle("sidebar-closed",n)}),i&&e){let n=!1;i.addEventListener("mousedown",o=>{n=!0,i.classList.add("resizing"),document.body.style.cursor="ew-resize",o.preventDefault()}),document.addEventListener("mousemove",o=>{if(!n)return;const r=o.clientX;r>200&&r<800&&(e.style.width=`${r}px`,document.documentElement.style.setProperty("--sidebar-width",`${r}px`))}),document.addEventListener("mouseup",()=>{n&&(n=!1,i.classList.remove("resizing"),document.body.style.cursor="default")})}e&&window.innerWidth<768&&(e.classList.add("closed"),document.body.classList.add("sidebar-closed"));const s=document.getElementById("file-input");s&&s.addEventListener("change",async n=>{const o=n.target;if(o.files&&o.files.length>0){const r=document.getElementById("loading-overlay");if(r){r.style.display="flex";const u=document.getElementById("loading-progress");u&&(u.textContent="Procesando archivo...")}const a=Array.from(o.files||[]),l=a.find(u=>u.name.toLowerCase().endsWith(".frag"))||a[0],c=a.find(u=>u.name.toLowerCase().endsWith(".json"));let d=null;if(c)try{const u=await c.text();d=JSON.parse(u),K(`Local JSON detected: ${c.name} (${Object.keys(d).length} items)`)}catch(u){console.warn("Error reading local JSON file:",u)}const h=l;try{if(h.name.toLowerCase().endsWith(".frag")){K(`Loading fragments: ${h.name}...`);const u=URL.createObjectURL(h);K(`Saving ${h.name} to local storage...`);try{const f=await h.arrayBuffer();await Fp(h.name,f),K("Saved to local storage.")}catch(f){console.warn("Failed to save to IDB:",f)}await jp(u,h.name,{propertiesJson:d});const p=Mt.groups.get(h.name)||Mt.groups[h.name]||Array.from(Mt.groups.values()).find(f=>f.uuid===h.name);if(p){p.uuid!==h.name&&(p.uuid=h.name),p.userData||(p.userData={}),p.userData.isLocal=!1,p.userData.url=`models/${h.name}`,console.log(`[Viewpoints] Manual load: Assigned URL ${p.userData.url} to ${p.uuid}`),K(`Assigned persistence URL: ${p.userData.url}`),p.useCamera(J.camera.three),J.scene.three.add(p.object),await Mt.core.update(!0);const f=new nn().setFromObject(p.object),m=new vs;f.getBoundingSphere(m),J.camera.controls.fitToSphere(m,!0);const g=p,b=g.properties&&Object.keys(g.properties).length>0;if(K(`Fragment loaded. Properties found: ${b?Object.keys(g.properties).length:0}`),b){K(`Classifying fragments: ${h.name}...`);try{await qh(p),await Nn(),K(`Classification complete for ${h.name}`)}catch(y){K(`Classification failed: ${y}`,!0)}}else{K("WARNING: No properties found in .frag file. Generating dummy properties...",!0);try{const y=await p.getItemsIdsWithGeometry(),v={};for(const x of y)v[x]={expressID:x,type:0,GlobalId:{type:1,value:`generated-${x}`},Name:{type:1,value:`Element ${x}`},Description:{type:1,value:"Generated Property"}};g.properties=v,K(`Generated dummy properties for ${y.length} elements.`),K("Attempting classification on dummy properties..."),await qh(p),await Nn(),K("Classification complete (fallback).")}catch(y){K(`Error generating dummy properties: ${y}`,!0)}}Zt.has(h.name)||Zt.set(h.name,p)}else throw new Error("Model loaded but not found in groups.");K(`Loaded .frag: ${h.name}`),K("Ready for Measurement.")}else{K(`Loading IFC: ${h.name}...`);const u=new Uint8Array(buffer),p=await eC.load(u,!0,h.name);Mt.list.has(p.uuid)||Mt.list.set(p.uuid,p),p.object.parent||J.scene.three.add(p.object),K(`IFC Loaded: ${h.name}. Classifying...`);try{await qh(p),await Nn()}catch(g){K(`Classification warning: ${g}`,!0)}const f=new nn().setFromObject(p.object),m=new vs;f.getBoundingSphere(m),J.camera.controls.fitToSphere(m,!0),K("Ready for Measurement.")}}catch(u){K(`Error loading file: ${u}`,!0),alert(`Error loading file: ${u}`)}finally{r&&(r.style.display="none")}o.value=""}})}function v4(){const e=document.getElementById("theme-toggle"),t=e?.querySelector("i"),i=document.getElementById("logo-img");let s=!1;try{s=(typeof localStorage<"u"?localStorage.getItem("theme"):null)==="dark"}catch{}const n=o=>{o?(document.body.classList.add("dark-mode"),t&&(t.className="fa-solid fa-sun"),i&&(i.src="https://i.postimg.cc/FFfBKzb8/LOGO-TEXTO-NORA-BLANCO.png"),J&&J.scene&&J.scene.three&&(J.scene.three.background=new Ke(1973790))):(document.body.classList.remove("dark-mode"),t&&(t.className="fa-solid fa-moon"),i&&(i.src="https://i.postimg.cc/L4r0gSvV/LOGO-TEXTO-NORA-NEGRO.png"),J&&J.scene&&J.scene.three&&(J.scene.three.background=new Ke(16119285)))};n(s),e?.addEventListener("click",()=>{document.body.classList.toggle("dark-mode");const o=document.body.classList.contains("dark-mode");localStorage.setItem("theme",o?"dark":"light"),n(o)})}function x4(){const e=document.getElementById("projection-toggle");if(!e)return;const t=e.querySelector("span"),i=()=>{const o=J.camera.projection?.current==="Orthographic";e.classList.toggle("active",o),t&&(t.textContent=o?"Orto":"Persp")};i();let s=!1;e.addEventListener("click",async()=>{if(s)return;const n=J.camera.projection;if(!n||typeof n.set!="function")return;s=!0;const r=n.current==="Orthographic"?"Perspective":"Orthographic";try{await n.set(r)}catch(l){console.warn("Projection set warning:",l)}const a=J.renderer;a?.postproduction?.updateCamera&&a.postproduction.updateCamera(),i(),setTimeout(()=>{s=!1},500)})}function w4(){const e=document.getElementById("clipper-toggle"),t=document.getElementById("clipper-controls"),i=document.getElementById("viewer-container");if(!e||!i)return;const s=()=>{const r=ee.enabled;e.classList.toggle("active",r),t&&(t.style.display=r?"flex":"none")};s(),e.addEventListener("click",()=>{ee.enabled=!ee.enabled,s()}),i.addEventListener("dblclick",()=>{ee.enabled&&ee.create(J)}),window.addEventListener("keydown",r=>{(r.code==="Delete"||r.code==="Backspace")&&ee.delete(J)});const n=document.getElementById("clipper-delete-all");n&&n.addEventListener("click",()=>{ee.deleteAll()}),document.querySelectorAll(".clipper-plane-btn").forEach(r=>{r.addEventListener("click",()=>{if(!ee.enabled)return;const a=r.getAttribute("data-axis"),l=Ru(),c=new re;a==="x"?c.set(-1,0,0):a==="y"?c.set(0,-1,0):a==="z"&&c.set(0,0,-1),ee.createFromNormalAndCoplanarPoint(J,c,l)})})}let Qr=!1;
-const noraBoxesCache=new Map();
+            `;const b=h.querySelector(".model-name"),y=h.querySelector(".visibility-toggle"),v=y?.querySelector("i"),x=h.querySelector(".category-checkbox");let $=!0;const _=async E=>{if(console.log(`[DEBUG] Selecting category: ${l} (Count: ${u})`),ac==="filtrar"){E?Ci.has(String(l))?Ci.delete(String(l)):Ci.add(String(l)):Ci.size===1&&Ci.has(String(l))?Ci.clear():(Ci.clear(),Ci.add(String(l))),a.querySelectorAll("li.model-item").forEach(A=>{const S=A.dataset.group||"",k=Ci.has(S);A.classList.toggle("filter-active",k);const M=A.querySelector(".category-checkbox");M&&(M.checked=k)}),await m4(o);return}console.log(`[DEBUG] FragmentIdMap for ${l}:`,d);const w=Vt.get(Ve);if(d&&Object.keys(d).length>0){const A=Object.keys(d||{});console.log(`[DEBUG] Map keys: ${A.join(", ")}`);try{const S=!E,k={};let M=!1;console.log(`[DEBUG] Filtering selection for ${l}. Checking hidden items...`);for(const P in d){const T=Mt.list.get(P);if(T&&!T.object.visible){console.log(`[DEBUG] Skipping hidden model: ${P}`);continue}const C=d[P],L=new Set,D=be[P];D?console.log(`[DEBUG] Model ${P} has ${D.size} hidden items tracked.`):(console.warn(`[DEBUG] Model ${P} has NO hidden items tracked in hiddenItems map.`),console.log("[DEBUG] hiddenItems keys:",Object.keys(be)));const N=C instanceof Set||Array.isArray(C)?C:[];for(const W of N)(!D||!D.has(W))&&L.add(W);L.size>0&&(k[P]=L,M=!0)}M?(w.highlightByID("select",k,S,!0),K(`Seleccionado ${l} (${u} total, selección filtrada por visibilidad)`)):K(`No hay elementos visibles para seleccionar en ${l}`)}catch(S){K(`Error seleccionando ${l}: ${S}`,!0),console.error(S)}}else K(`Cannot select ${l}: No items found (Map is empty)`,!0),console.warn(`[DEBUG] Map is empty for ${l}. GroupData:`,c)};b?.addEventListener("click",E=>{E.stopPropagation(),_(E.ctrlKey||E.metaKey)}),x?.addEventListener("change",E=>{E.stopPropagation(),_(!0)}),y?.addEventListener("click",E=>{E.stopPropagation(),Ci.clear(),a.querySelectorAll("li.model-item").forEach(w=>w.classList.remove("filter-active")),$=!$,console.log(`[DEBUG] Toggling visibility for ${l}: ${$}`),d&&Object.keys(d).length>0?(ce.set($,d),dC(d,$)):console.warn(`[DEBUG] Skipping visibility toggle for ${l} - map is empty`),$?(h.classList.add("visible"),v?.classList.replace("fa-eye-slash","fa-eye"),h.style.opacity="1"):(h.classList.remove("visible"),v?.classList.replace("fa-eye","fa-eye-slash"),h.style.opacity="0.5")}),a.appendChild(h)}e.appendChild(a)}}function g4(){const e=document.getElementById("back-btn");e&&e.addEventListener("click",()=>{window.history.length>1?window.history.back():window.location.href="../home.html"})}function b4(){const e=document.getElementById("classification-field"),t=document.getElementById("classification-mode"),i=document.getElementById("classification-order"),s=document.getElementById("classification-clear"),n=()=>{e&&e.value&&(rc=e.value),t&&t.value&&(ac=t.value),i&&i.value&&(ig=i.value),i&&(i.style.display=ac==="ordenar"?"block":"none"),s&&(s.style.display=ac==="filtrar"?"block":"none")},o=async()=>{if(!Ts||!Ts.list)return;Ts.list.clear();const r=cC(rc,ig);Ts.list.set(rc,r),await Nn()};e?.addEventListener("change",async()=>{n(),Ci.clear(),await ce.set(!0);for(const r of Object.keys(be))be[r].clear();await o()}),t?.addEventListener("change",async()=>{n(),Ci.clear(),await ce.set(!0);for(const r of Object.keys(be))be[r].clear();await o()}),i?.addEventListener("change",async()=>{n(),await o()}),s?.addEventListener("click",async()=>{Ci.clear(),await ce.set(!0);for(const r of Object.keys(be))be[r].clear();await o()}),n()}function y4(){const e=document.getElementById("sidebar"),t=document.getElementById("sidebar-toggle"),i=document.getElementById("sidebar-resizer");if(t&&e&&t.addEventListener("click",()=>{const n=e.classList.toggle("closed");document.body.classList.toggle("sidebar-closed",n)}),i&&e){let n=!1;i.addEventListener("mousedown",o=>{n=!0,i.classList.add("resizing"),document.body.style.cursor="ew-resize",o.preventDefault()}),document.addEventListener("mousemove",o=>{if(!n)return;const r=o.clientX;r>200&&r<800&&(e.style.width=`${r}px`,document.documentElement.style.setProperty("--sidebar-width",`${r}px`))}),document.addEventListener("mouseup",()=>{n&&(n=!1,i.classList.remove("resizing"),document.body.style.cursor="default")})}e&&window.innerWidth<768&&(e.classList.add("closed"),document.body.classList.add("sidebar-closed"));const s=document.getElementById("file-input");s&&s.addEventListener("change",async n=>{const o=n.target;if(o.files&&o.files.length>0){const r=document.getElementById("loading-overlay");if(r){r.style.display="flex";const u=document.getElementById("loading-progress");u&&(u.textContent="Procesando archivo...")}const a=Array.from(o.files||[]),l=a.find(u=>u.name.toLowerCase().endsWith(".frag"))||a[0],c=a.find(u=>u.name.toLowerCase().endsWith(".json"));let d=null;if(c)try{const u=await c.text();d=JSON.parse(u),K(`Local JSON detected: ${c.name} (${Object.keys(d).length} items)`)}catch(u){console.warn("Error reading local JSON file:",u)}const h=l;try{if(h.name.toLowerCase().endsWith(".frag")){K(`Loading fragments: ${h.name}...`);const u=URL.createObjectURL(h);K(`Saving ${h.name} to local storage...`);try{const f=await h.arrayBuffer();await Fp(h.name,f),K("Saved to local storage.")}catch(f){console.warn("Failed to save to IDB:",f)}await jp(u,h.name,{propertiesJson:d});const p=Mt.groups.get(h.name)||Mt.groups[h.name]||Array.from(Mt.groups.values()).find(f=>f.uuid===h.name);if(p){p.uuid!==h.name&&(p.uuid=h.name),p.userData||(p.userData={}),p.userData.isLocal=!1,p.userData.url=`models/${h.name}`,console.log(`[Viewpoints] Manual load: Assigned URL ${p.userData.url} to ${p.uuid}`),K(`Assigned persistence URL: ${p.userData.url}`),p.useCamera(J.camera.three),J.scene.three.add(p.object),await Mt.core.update(!0);const f=new nn().setFromObject(p.object),m=new vs;f.getBoundingSphere(m),J.camera.controls.fitToSphere(m,!0);const g=p,b=g.properties&&Object.keys(g.properties).length>0;if(K(`Fragment loaded. Properties found: ${b?Object.keys(g.properties).length:0}`),b){K(`Classifying fragments: ${h.name}...`);try{await qh(p),await Nn(),K(`Classification complete for ${h.name}`)}catch(y){K(`Classification failed: ${y}`,!0)}}else{K("WARNING: No properties found in .frag file. Generating dummy properties...",!0);try{const y=await p.getItemsIdsWithGeometry(),v={};for(const x of y)v[x]={expressID:x,type:0,GlobalId:{type:1,value:`generated-${x}`},Name:{type:1,value:`Element ${x}`},Description:{type:1,value:"Generated Property"}};g.properties=v,K(`Generated dummy properties for ${y.length} elements.`),K("Attempting classification on dummy properties..."),await qh(p),await Nn(),K("Classification complete (fallback).")}catch(y){K(`Error generating dummy properties: ${y}`,!0)}}Zt.has(h.name)||Zt.set(h.name,p)}else throw new Error("Model loaded but not found in groups.");K(`Loaded .frag: ${h.name}`),K("Ready for Measurement.")}else{K(`Loading IFC: ${h.name}...`);const u=new Uint8Array(buffer),p=await eC.load(u,!0,h.name);Mt.list.has(p.uuid)||Mt.list.set(p.uuid,p),p.object.parent||J.scene.three.add(p.object),K(`IFC Loaded: ${h.name}. Classifying...`);try{await qh(p),await Nn()}catch(g){K(`Classification warning: ${g}`,!0)}const f=new nn().setFromObject(p.object),m=new vs;f.getBoundingSphere(m),J.camera.controls.fitToSphere(m,!0),K("Ready for Measurement.")}}catch(u){K(`Error loading file: ${u}`,!0),alert(`Error loading file: ${u}`)}finally{r&&(r.style.display="none")}o.value=""}})}function v4(){const e=document.getElementById("theme-toggle"),t=e?.querySelector("i"),i=document.getElementById("logo-img");let s=!1;try{s=(typeof localStorage<"u"?localStorage.getItem("theme"):null)==="dark"}catch{}const n=o=>{o?(document.body.classList.add("dark-mode"),t&&(t.className="fa-solid fa-sun"),i&&(i.src="https://i.postimg.cc/FFfBKzb8/LOGO-TEXTO-NORA-BLANCO.png"),J&&J.scene&&J.scene.three&&(J.scene.three.background=new Ke(1973790))):(document.body.classList.remove("dark-mode"),t&&(t.className="fa-solid fa-moon"),i&&(i.src="https://i.postimg.cc/L4r0gSvV/LOGO-TEXTO-NORA-NEGRO.png"),J&&J.scene&&J.scene.three&&(J.scene.three.background=new Ke(16119285)))};n(s),e?.addEventListener("click",()=>{document.body.classList.toggle("dark-mode");const o=document.body.classList.contains("dark-mode");localStorage.setItem("theme",o?"dark":"light"),n(o)})}function x4(){const e=document.getElementById("projection-toggle");if(!e)return;const t=e.querySelector("span"),i=()=>{const o=J.camera.projection?.current==="Orthographic";e.classList.toggle("active",o),t&&(t.textContent=o?"Orto":"Persp")};i();let s=!1;e.addEventListener("click",async()=>{if(s)return;const n=J.camera.projection;if(!n||typeof n.set!="function")return;s=!0;const r=n.current==="Orthographic"?"Perspective":"Orthographic";try{await n.set(r)}catch(l){console.warn("Projection set warning:",l)}const a=J.renderer;a?.postproduction?.updateCamera&&a.postproduction.updateCamera(),i(),setTimeout(()=>{s=!1},500)})}function w4(){const e=document.getElementById("clipper-toggle"),t=document.getElementById("clipper-controls"),i=document.getElementById("viewer-container");if(!e||!i)return;const s=()=>{const r=ee.enabled;e.classList.toggle("active",r),t&&(t.style.display=r?"flex":"none")};s(),e.addEventListener("click",()=>{ee.enabled=!ee.enabled,s()}),i.addEventListener("dblclick",()=>{ee.enabled&&ee.create(J)}),window.addEventListener("keydown",r=>{(r.code==="Delete"||r.code==="Backspace")&&ee.delete(J)});const n=document.getElementById("clipper-delete-all");n&&n.addEventListener("click",()=>{ee.deleteAll()}),document.querySelectorAll(".clipper-plane-btn").forEach(r=>{r.addEventListener("click",()=>{if(!ee.enabled)return;const a=r.getAttribute("data-axis"),l=Ru(),c=new re;a==="x"?c.set(-1,0,0):a==="y"?c.set(0,-1,0):a==="z"&&c.set(0,0,-1),ee.createFromNormalAndCoplanarPoint(J,c,l)})})}
+let Qr=!1;
 
 function _4(){
   const toggleBtn=document.getElementById("multiselect-toggle");
   const container=oc||document.getElementById("viewer-container");
-  
+
   if(toggleBtn){
-    toggleBtn.title="Selección por caja: Arrastre a la Derecha = Cruce (punteado/toca), Izquierda = Ventana (continuo/completo)";
+    toggleBtn.title="Selección múltiple (clic simple en móvil/PC) y selección por caja (arrastrar en 3D: Derecha = Cruce, Izquierda = Ventana)";
     toggleBtn.addEventListener("click",()=>{
       Qr=!Qr;
       toggleBtn.classList.toggle("active",Qr);
@@ -6130,7 +6130,7 @@ function _4(){
         container.style.cursor=Qr?"crosshair":"";
       }
       if(typeof K==="function"){
-        K(Qr?"Selección múltiple / Ventana activa (Arrastra en el 3D)":"Selección múltiple desactivada");
+        K(Qr?"Multi-selección activa: Toca elementos o arrastra una caja en el 3D":"Multi-selección desactivada");
       }
     });
   }
@@ -6143,7 +6143,9 @@ function _4(){
         }catch(e){}
       }
     };
-    window.addEventListener("click",overrideCtrl,{capture:!0});
+    ["pointerdown","pointerup","mousedown","mouseup","click","touchstart","touchend"].forEach(evtName=>{
+      window.addEventListener(evtName,overrideCtrl,{capture:!0});
+    });
   }
 
   if(!container)return;
@@ -6155,175 +6157,100 @@ function _4(){
   let boxOverlay=null;
   let savedCameraControlState=!0;
 
-  const getCamera=()=>J?.camera?.three||null;
-
-  async function ensureBoxesForModel(model,modelKey){
-    if(noraBoxesCache.has(modelKey))return noraBoxesCache.get(modelKey);
-    try{
-      let ids=model._geometryIdsSet?Array.from(model._geometryIdsSet):null;
-      if((!ids||ids.length===0)&&typeof model.getItemsIdsWithGeometry==="function"){
-        ids=await model.getItemsIdsWithGeometry();
-      }else if((!ids||ids.length===0)&&model.items&&Array.isArray(model.items)){
-        ids=model.items.map(it=>it.expressID||it);
-      }
-      if(!ids||ids.length===0)return null;
-
-      const boxesMap=new Map();
-      if(typeof model.getBoxes==="function"){
-        const rawBoxes=await model.getBoxes(ids);
-        if(rawBoxes&&Array.isArray(rawBoxes)&&rawBoxes.length===ids.length){
-          for(let i=0;i<ids.length;i++){
-            const b=rawBoxes[i];
-            if(b&&!b.isEmpty()&&isFinite(b.min.x)&&isFinite(b.max.x)){
-              boxesMap.set(Number(ids[i]),b);
-            }
-          }
-        }
-      }
-      noraBoxesCache.set(modelKey,boxesMap);
-      return boxesMap;
-    }catch(err){
-      console.warn("[MultiSel] Error caching boxes for model "+modelKey,err);
-      return null;
-    }
-  }
-
   async function performBoxSelection(bLeft,bTop,bWidth,bHeight,isCrossing,isCumulative){
     if(bWidth<5&&bHeight<5)return;
     const bRight=bLeft+bWidth;
     const bBottom=bTop+bHeight;
 
-    const camera=getCamera();
+    const camera=J?.camera?.three;
     if(!camera)return;
+    if(camera.updateMatrixWorld)camera.updateMatrixWorld(!0);
 
-    const cRect=container.getBoundingClientRect();
-    const models=typeof gC==="function"?gC():[];
-    if(!models||models.length===0)return;
+    const dom=J?.renderer?.three?.domElement||container;
+    if(!dom)return;
 
-    const camPos=new re();
-    const camDir=new re();
-    camera.getWorldPosition(camPos);
-    camera.getWorldDirection(camDir);
-
-    const selectedModelMap={};
-    const selectedIdsList=[];
-    const cornerVec=new re();
-    const centerVec=new re();
-    let matchCount=0;
-
-    for(let mIdx=0;mIdx<models.length;mIdx++){
-      const model=models[mIdx];
-      if(!model||model.object&&model.object.visible===!1)continue;
-
-      const modelKey=typeof Zb==="function"?Zb(model,mIdx):String(model.uuid||model.modelId||mIdx);
-      const modelUUID=model.uuid||model.modelId||modelKey;
-
-      const boxesMap=await ensureBoxesForModel(model,modelKey);
-      if(!boxesMap||boxesMap.size===0)continue;
-
-      const modelSelectedIds=[];
-
-      for(const [id,box3] of boxesMap.entries()){
-        if(typeof be!=="undefined"&&be&&be[modelKey]){
-          const hiddenSet=be[modelKey];
-          if(hiddenSet.has?hiddenSet.has(id)||hiddenSet.has(Number(id)):Array.isArray(hiddenSet)&&hiddenSet.includes(id)){
-            continue;
-          }
-        }
-        if(window.__noraIsolatedVisibleIds instanceof Set&&window.__noraIsolatedVisibleIds.size>0){
-          if(!window.__noraIsolatedVisibleIds.has(id)&&!window.__noraIsolatedVisibleIds.has(Number(id))){
-            continue;
-          }
-        }
-
-        const min=box3.min;
-        const max=box3.max;
-        const corners=[
-          [min.x,min.y,min.z],
-          [min.x,min.y,max.z],
-          [min.x,max.y,min.z],
-          [min.x,max.y,max.z],
-          [max.x,min.y,min.z],
-          [max.x,min.y,max.z],
-          [max.x,max.y,min.z],
-          [max.x,max.y,max.z]
-        ];
-
-        let inFrontCount=0;
-        let sMinX=Infinity,sMaxX=-Infinity;
-        let sMinY=Infinity,sMaxY=-Infinity;
-
-        for(let c=0;c<8;c++){
-          cornerVec.set(corners[c][0],corners[c][1],corners[c][2]);
-          const toP=cornerVec.clone().sub(camPos);
-          if(toP.dot(camDir)>0){
-            inFrontCount++;
-            cornerVec.project(camera);
-            const sx=cRect.left+(cornerVec.x*0.5+0.5)*cRect.width;
-            const sy=cRect.top+(-cornerVec.y*0.5+0.5)*cRect.height;
-            if(sx<sMinX)sMinX=sx;
-            if(sx>sMaxX)sMaxX=sx;
-            if(sy<sMinY)sMinY=sy;
-            if(sy>sMaxY)sMaxY=sy;
-          }
-        }
-
-        box3.getCenter(centerVec);
-        const toCenter=centerVec.clone().sub(camPos);
-        if(toCenter.dot(camDir)>0){
-          centerVec.project(camera);
-          const csx=cRect.left+(centerVec.x*0.5+0.5)*cRect.width;
-          const csy=cRect.top+(-centerVec.y*0.5+0.5)*cRect.height;
-          if(csx<sMinX)sMinX=csx;
-          if(csx>sMaxX)sMaxX=csx;
-          if(csy<sMinY)sMinY=csy;
-          if(csy>sMaxY)sMaxY=csy;
-        }
-
-        if(inFrontCount===0)continue;
-
-        let isHit=!1;
-        if(isCrossing){
-          // Arrastre a la DERECHA -> Cruce: todo lo que toca o intersecta
-          const separated=(sMaxX<bLeft||sMinX>bRight||sMaxY<bTop||sMinY>bBottom);
-          isHit=!separated;
-        }else{
-          // Arrastre a la IZQUIERDA -> Ventana: objetos que entran por completo
-          isHit=(inFrontCount===8&&sMinX>=bLeft&&sMaxX<=bRight&&sMinY>=bTop&&sMaxY<=bBottom);
-        }
-
-        if(isHit){
-          modelSelectedIds.push(id);
-          selectedIdsList.push(id);
-          matchCount++;
+    const modelsToCast=[];
+    if(typeof Mt!=="undefined"&&Mt?.list){
+      for(const[id,m]of Mt.list){
+        if(m&&m.object&&m.object.visible!==!1){
+          modelsToCast.push({key:id,model:m});
         }
       }
+    }
+    if(modelsToCast.length===0&&typeof Zt!=="undefined"&&Zt.size>0){
+      for(const[id,m]of Zt.entries()){
+        if(m&&m.object&&m.object.visible!==!1){
+          modelsToCast.push({key:id,model:m});
+        }
+      }
+    }
 
-      if(modelSelectedIds.length>0){
-        selectedModelMap[modelUUID]=modelSelectedIds;
+    if(modelsToCast.length===0)return;
+
+    const selectedModelMap={};
+    const allSelectedIds=[];
+    let totalMatches=0;
+
+    const raycastParams={
+      camera,
+      dom,
+      topLeft:{x:bLeft,y:bTop},
+      bottomRight:{x:bRight,y:bBottom},
+      fullyIncluded:!isCrossing
+    };
+
+    for(const{key,model}of modelsToCast){
+      try{
+        let validIds=[];
+        if(typeof model.rectangleRaycast==="function"){
+          const resp=await model.rectangleRaycast(raycastParams);
+          if(resp&&resp.localIds&&resp.localIds.length>0){
+            validIds=Array.from(resp.localIds).map(Number);
+          }
+        }
+
+        // Visibility and isolation filters
+        if(validIds.length>0){
+          if(typeof be!=="undefined"&&be&&be[key]){
+            const hiddenSet=be[key];
+            validIds=validIds.filter(x=>!(hiddenSet.has?hiddenSet.has(x)||hiddenSet.has(Number(x)):Array.isArray(hiddenSet)&&hiddenSet.includes(x)));
+          }
+          if(window.__noraIsolatedVisibleIds instanceof Set&&window.__noraIsolatedVisibleIds.size>0){
+            validIds=validIds.filter(x=>window.__noraIsolatedVisibleIds.has(x)||window.__noraIsolatedVisibleIds.has(Number(x)));
+          }
+        }
+
+        if(validIds.length>0){
+          selectedModelMap[key]=new Set(validIds);
+          validIds.forEach(id=>allSelectedIds.push(id));
+          totalMatches+=validIds.length;
+        }
+      }catch(castErr){
+        console.warn("[MultiSel] rectangleRaycast error on model "+key,castErr);
       }
     }
 
     const highlighter=typeof Vt!=="undefined"?Vt.get(Ve):(typeof zt!=="undefined"?zt:null);
     if(highlighter){
       try{
-        if(matchCount>0){
+        if(totalMatches>0){
           await highlighter.highlightByID("select",selectedModelMap,!isCumulative,!1);
           if(typeof Kb==="function")await Kb(selectedModelMap);
         }else if(!isCumulative){
           try{highlighter.clear("select");}catch(e){}
           if(typeof Kb==="function")await Kb({});
         }
-      }catch(err){
-        console.warn("[MultiSel] Highlight error:",err);
+      }catch(hErr){
+        console.warn("[MultiSel] highlight error:",hErr);
       }
     }
 
     if(isCumulative&&window.__noraCurrentSelectedIds instanceof Set){
-      selectedIdsList.forEach(id=>window.__noraCurrentSelectedIds.add(id));
+      allSelectedIds.forEach(id=>window.__noraCurrentSelectedIds.add(id));
     }else{
-      window.__noraCurrentSelectedIds=new Set(selectedIdsList);
+      window.__noraCurrentSelectedIds=new Set(allSelectedIds);
     }
+
     const allIdsArray=Array.from(window.__noraCurrentSelectedIds);
     if(typeof Qt==="function"){
       try{
@@ -6336,23 +6263,25 @@ function _4(){
       window.__noraCurrentSelectedElements=allIdsArray;
     }
 
-    window.dispatchEvent(new CustomEvent("noraSelectionChanged",{detail:{count:matchCount,ids:selectedIdsList}}));
+    window.dispatchEvent(new CustomEvent("noraSelectionChanged",{detail:{count:totalMatches,ids:allSelectedIds}}));
 
     if(typeof K==="function"){
       const modeLabel=isCrossing?"Cruce (punteado - toca)":"Ventana (continuo - completo)";
-      K(`${matchCount} elemento(s) seleccionado(s) [${modeLabel}]`);
+      K(`${totalMatches} elemento(s) seleccionado(s) [${modeLabel}]`);
     }
   }
 
   container.addEventListener("pointerdown",u=>{
-    if(u.button===0&&(Qr||u.shiftKey)){
-      isPointerDown=!0;
-      isBoxDragging=!1;
-      startX=u.clientX;
-      startY=u.clientY;
-      if(J?.camera?.controls){
-        savedCameraControlState=J.camera.controls.enabled;
-      }
+    if(u.button!==0)return;
+    if(!Qr&&!u.shiftKey)return;
+
+    isPointerDown=!0;
+    isBoxDragging=!1;
+    startX=u.clientX;
+    startY=u.clientY;
+
+    if(J?.camera?.controls){
+      savedCameraControlState=J.camera.controls.enabled;
     }
   },{capture:!0});
 
@@ -6362,7 +6291,7 @@ function _4(){
     const currentY=u.clientY;
     const dist=Math.hypot(currentX-startX,currentY-startY);
 
-    if(!isBoxDragging&&dist>=5){
+    if(!isBoxDragging&&dist>=6){
       isBoxDragging=!0;
       if(J?.camera?.controls){
         J.camera.controls.enabled=!1;
@@ -6427,7 +6356,7 @@ function _4(){
       const bWidth=Math.abs(currentX-startX);
       const bHeight=Math.abs(currentY-startY);
       const isCrossing=currentX>=startX;
-      const isCumulative=u.shiftKey||u.ctrlKey;
+      const isCumulative=u.shiftKey||u.ctrlKey||Qr;
 
       u.preventDefault();
       u.stopPropagation();
@@ -6439,6 +6368,7 @@ function _4(){
   window.addEventListener("pointerup",finishDrag,{capture:!0});
   window.addEventListener("pointercancel",finishDrag,{capture:!0});
 }
+
 function $4(){const e=document.getElementById("grid-toggle");e&&e.addEventListener("click",()=>{const t=ZA.list.get(J.uuid);t&&(t.visible=!t.visible,e.classList.toggle("active",t.visible))})}const E4="https://norabim.com/inse.html";function Hb(){const e=new URLSearchParams(window.location.search);if(e.get("forceLogin")==="true")return null;const t=e.get("embed")==="true"||window!==window.parent;if(e.get("bypassAuth")==="true"||t){const s=sessionStorage.getItem("userAccount")||localStorage.getItem("userAccount");if(s)try{return JSON.parse(s)}catch{}return{name:"PowerBI User",email:"powerbi@nora.cde",role:"Viewer"}}const i=sessionStorage.getItem("userAccount")||localStorage.getItem("userAccount");if(!i)return null;try{const s=JSON.parse(i);return!s||typeof s!="object"?null:s}catch(s){return console.error("[Auth] Error parsing user account:",s),null}}function S4(e){const t=document.getElementById("nora-floating-auth-badge");t&&t.remove()}function Wb(){console.log("[Auth] Setting up user authentication...");const e=Hb();S4();const t=document.getElementById("user-profile-container");if(t)if(t.innerHTML="",e)try{console.log("[Auth] User found:",e.name);const i=document.createElement("span"),s=e.name?e.name.split(" ")[0]:"Usuario";i.textContent=`Hola, ${s}`,i.style.fontSize="14px",i.style.fontWeight="500",i.style.color="var(--text-dark-gray)";const n=document.createElement("div");n.style.width="32px",n.style.height="32px",n.style.borderRadius="50%",n.style.backgroundColor="var(--primary-color)",n.style.color="white",n.style.display="flex",n.style.alignItems="center",n.style.justifyContent="center",n.style.fontSize="14px",n.style.fontWeight="bold";let o="U";if(e.name){const a=e.name.split(" ");a.length>=2?o=(a[0][0]+a[1][0]).toUpperCase():o=a[0][0].toUpperCase()}n.textContent=o,n.title=e.name+(e.role?` (${e.role})`:"");const r=document.createElement("button");r.innerHTML='<i class="fa-solid fa-right-from-bracket"></i>',r.title="Cerrar Sesión",r.style.background="none",r.style.border="none",r.style.cursor="pointer",r.style.fontSize="16px",r.style.color="#666",r.style.marginLeft="5px",r.onmouseover=()=>{r.style.color="var(--primary-color)"},r.onmouseout=()=>{r.style.color="#666"},r.onclick=()=>{confirm("¿Cerrar sesión?")&&(sessionStorage.removeItem("userAccount"),localStorage.removeItem("userAccount"),Ut=null,Wb(),Up(!0))},t.appendChild(i),t.appendChild(n),t.appendChild(r)}catch(i){console.error("[Auth] Error rendering user account:",i),s_(t)}else console.log("[Auth] No user found. Rendering guest mode."),s_(t)}function s_(e){const t=document.createElement("a");t.href=E4,t.innerHTML='<i class="fa-solid fa-user"></i> <span style="margin-left:5px; font-size:14px;">Iniciar Sesión</span>',t.style.textDecoration="none",t.style.color="var(--primary-color)",t.style.display="flex",t.style.alignItems="center",t.style.fontWeight="500",t.removeAttribute("target"),t.onclick=i=>{i.preventDefault(),Up(!0)},e.appendChild(t)}function Up(e=!1){const t=document.getElementById("app");if(!t)return;if(new URLSearchParams(window.location.search).get("embed")==="true"||window!==window.parent){document.getElementById("auth-gate-overlay")?.remove(),t.style.pointerEvents="",t.style.userSelect="",t.style.filter="",document.body.style.overflow="";return}const n=e?null:Hb(),o=document.getElementById("auth-gate-overlay");if(n&&!e){o?.remove(),t.style.pointerEvents="",t.style.userSelect="",t.style.filter="",document.body.style.overflow="";return}if(o)return;t.style.pointerEvents="none",t.style.userSelect="none",t.style.filter="blur(6px)",document.body.style.overflow="hidden";const r=document.createElement("div");r.id="auth-gate-overlay",r.style.cssText="position:fixed; inset:0; z-index:999999999 !important; display:flex; align-items:center; justify-content:center; padding:16px; background:rgba(15, 23, 42, 0.88); backdrop-filter:blur(10px);",r.innerHTML=`
         <div style="width:min(440px, 94vw); background:#1e293b; border:1px solid rgba(148, 163, 184, 0.25); border-radius:20px; padding:32px 28px; box-shadow:0 25px 50px -12px rgba(0, 0, 0, 0.7); text-align:center; font-family:Inter, Segoe UI, sans-serif; color:#f8fafc;">
             <img src="https://i.postimg.cc/SQ6JTZqj/LOGO-NORA-BLANCO.png" alt="nora" style="height:38px; width:auto; margin:0 auto 16px; display:block;" />
