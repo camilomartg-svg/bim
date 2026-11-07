@@ -68,6 +68,7 @@
     <script src="https://alcdn.msauth.net/browser/2.14.2/js/msal-browser.min.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet"/>
     <link rel="manifest" href="portal.webmanifest"/>
+  <script src="nora-drive-store.js"></script>
 </head>
 <body class="bg-white dark:bg-background-dark font-display text-text-light dark:text-text-dark antialiased">
     
@@ -659,6 +660,7 @@
 
                     sessionStorage.removeItem('cachedCompanies_v2');
                     localStorage.removeItem('cachedCompanies_v2');
+                    if (window.NoraDriveStore) window.NoraDriveStore.invalidateCache();
 
                     window.location.href = getPostLoginRedirect();
                 }
@@ -774,6 +776,7 @@
                                 window[cacheLocation].setItem('userAccount', JSON.stringify(userProfile));
                                 sessionStorage.removeItem('cachedCompanies_v2');
                                 localStorage.removeItem('cachedCompanies_v2');
+                    if (window.NoraDriveStore) window.NoraDriveStore.invalidateCache();
                                 window.location.href = getPostLoginRedirect();
                             } else {
                                 window.showRegistrationForm({
@@ -1305,6 +1308,7 @@
                     window[cacheLocation].setItem('userAccount', JSON.stringify(userProfile));
                     sessionStorage.removeItem('cachedCompanies_v2');
                     localStorage.removeItem('cachedCompanies_v2');
+                    if (window.NoraDriveStore) window.NoraDriveStore.invalidateCache();
                     window.location.href = getPostLoginRedirect();
                 } else {
                     document.getElementById('error-message').textContent = "Tu usuario no tiene un rol asignado en el sistema.";

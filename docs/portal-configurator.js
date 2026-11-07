@@ -575,6 +575,19 @@ document.addEventListener('DOMContentLoaded', async () => {
       }
     }
 
+    if (window.NoraDriveStore) {
+      showBanner(`Guardando configuración de ${CURRENT_EMPRESA ? CURRENT_EMPRESA.name : 'la empresa'} en Google Drive...`, 'info');
+      try {
+        await window.NoraDriveStore.saveJson(CONFIG_URL, workingConfig, {
+          companyId: CURRENT_EMPRESA ? CURRENT_EMPRESA.id : '',
+          companyName: CURRENT_EMPRESA ? CURRENT_EMPRESA.name : ''
+        });
+        showBanner('✅ Configuración guardada instantáneamente en Google Drive.', 'success');
+      } catch (err) {
+        showBanner('❌ ' + err.message, 'error');
+      }
+      return;
+    }
     let token = localStorage.getItem('github_pat');
     if (!token) {
       token = prompt('Ingresa tu Personal Access Token (PAT) de GitHub para publicar directamente en el repositorio:');

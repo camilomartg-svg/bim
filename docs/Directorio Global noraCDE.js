@@ -5,7 +5,7 @@
 const DRIVE_ROOT_FOLDER_ID = "1aWUNnLgjWBkA6wdCM99XMY9SU7eSDP-H";
 // Repositorio exclusivo del módulo de incidencias.
 const INCIDENTS_ROOT_FOLDER_ID = "1-9SumRefiih81mc_eASsswy_W_U0-qe5";
-// Repositorio exclusivo para proyectos JSON (Empresa -> Proyecto -> proyecto.json)
+// Repositorio exclusivo para configuración JSON (empresas.json, usuarios.json, config-empresa-*.json y Empresa -> Proyecto -> proyecto.json)
 const PROJECTS_DRIVE_ROOT_FOLDER_ID = "1ZyW39yfyecmD-G8cfb6UrhN9jsoL7rEx";
 const SPREADSHEET_ID = "1OczWRlaefMY5RQon8K3va91H8TInJlp9RuBJeTPLiiA";
 
@@ -271,6 +271,11 @@ function saveProjectConfigToDrive_(payload) {
     try {
       jsonFile.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
     } catch (e) {}
+    try {
+      if (!payload._skipCompanyConfigSync) {
+        syncProjectIntoCompanyConfigInDrive_(rootFolder, payload.companyId || '', companyName, projectData);
+      }
+    } catch (e) {}
 
     return {
       status: 'success',
@@ -407,6 +412,1453 @@ function getCompanyProjectsFromDrive_(params, postData) {
     return { status: 'success', projects: projects };
   } catch (err) {
     return { status: 'error', message: err.toString() };
+  }
+}
+
+// =========================================================================
+// MOTOR CENTRAL DE ALMACENAMIENTO JSON EN GOOGLE DRIVE (1ZyW39yfyecmD-G8cfb6UrhN9jsoL7rEx)
+// Empresas (empresas.json), Usuarios (usuarios.json), Portal (portal-config.json)
+// y Configuraciones por Empresa (config-empresa-*.json + [Empresa]/[Proyecto]/proyecto.json)
+// =========================================================================
+
+const DRIVE_JSON_CACHE_PREFIX_ = 'nora_dj_v1_';
+const DRIVE_JSON_CACHE_CHUNK_SIZE_ = 75000;
+const DRIVE_JSON_CACHE_MAX_CHUNKS_ = 12;
+const DRIVE_JSON_CACHE_TTL_SEC_ = 1800;
+
+function putCacheJson_(fileName, rawJsonStr, ttlSec) {
+  try {
+    if (!fileName || typeof rawJsonStr !== 'string') return;
+    const totalLen = rawJsonStr.length;
+    const numChunks = Math.ceil(totalLen / DRIVE_JSON_CACHE_CHUNK_SIZE_) || 1;
+    if (numChunks > DRIVE_JSON_CACHE_MAX_CHUNKS_) return;
+
+    const cache = CacheService.getScriptCache();
+    const entries = {};
+    for (let i = 0; i < numChunks; i++) {
+      entries[DRIVE_JSON_CACHE_PREFIX_ + fileName + '_' + i] = rawJsonStr.substring(
+        i * DRIVE_JSON_CACHE_CHUNK_SIZE_,
+        (i + 1) * DRIVE_JSON_CACHE_CHUNK_SIZE_
+      );
+    }
+    entries[DRIVE_JSON_CACHE_PREFIX_ + fileName + '_meta'] = JSON.stringify({
+      n: numChunks,
+      updatedAt: new Date().toISOString()
+    });
+    cache.putAll(entries, ttlSec || DRIVE_JSON_CACHE_TTL_SEC_);
+  } catch (err) {
+    Logger.log('putCacheJson_ warning: ' + err);
+  }
+}
+
+function getCacheJson_(fileName) {
+  try {
+    if (!fileName) return null;
+    const cache = CacheService.getScriptCache();
+    const metaKey = DRIVE_JSON_CACHE_PREFIX_ + fileName + '_meta';
+    const metaStr = cache.get(metaKey);
+    if (!metaStr) return null;
+    const meta = JSON.parse(metaStr);
+    if (!meta || !meta.n || meta.n < 1 || meta.n > DRIVE_JSON_CACHE_MAX_CHUNKS_) return null;
+
+    const keys = [];
+    for (let i = 0; i < meta.n; i++) {
+      keys.push(DRIVE_JSON_CACHE_PREFIX_ + fileName + '_' + i);
+    }
+    const partsMap = cache.getAll(keys);
+    let combined = '';
+    for (let i = 0; i < meta.n; i++) {
+      const k = DRIVE_JSON_CACHE_PREFIX_ + fileName + '_' + i;
+      if (partsMap[k] === undefined || partsMap[k] === null) return null;
+      combined += partsMap[k];
+    }
+    return {
+      data: JSON.parse(combined),
+      raw: combined,
+      updatedAt: meta.updatedAt || new Date().toISOString()
+    };
+  } catch (err) {
+    return null;
+  }
+}
+
+function removeCacheJson_(fileName) {
+  try {
+    if (!fileName) return;
+    const cache = CacheService.getScriptCache();
+    const keys = [DRIVE_JSON_CACHE_PREFIX_ + fileName + '_meta'];
+    for (let i = 0; i < DRIVE_JSON_CACHE_MAX_CHUNKS_; i++) {
+      keys.push(DRIVE_JSON_CACHE_PREFIX_ + fileName + '_' + i);
+    }
+    cache.removeAll(keys);
+  } catch (err) {}
+}
+
+function sanitizeJsonFileName_(raw) {
+  let s = String(raw || '').trim();
+  if (!s) return '';
+  s = s.split('?')[0].split('#')[0].trim();
+  s = s.replace(/^(\.\.\/|\.\/|\/)+/g, '');
+  if (s.toLowerCase().indexOf('docs/') === 0) {
+    s = s.substring(5);
+  }
+  const slashIdx = s.lastIndexOf('/');
+  if (slashIdx !== -1) {
+    s = s.substring(slashIdx + 1);
+  }
+  if (/^(empresas\.json|portal-config\.json|usuarios\.json|config-[a-zA-Z0-9_.-]+\.json)$/i.test(s)) {
+    return s;
+  }
+  return '';
+}
+
+function cleanCompareText_(str) {
+  if (!str) return '';
+  return String(str)
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]/g, '')
+    .trim();
+}
+
+function openMasterSpreadsheet_() {
+  try {
+    return SpreadsheetApp.openById(SPREADSHEET_ID);
+  } catch (err) {
+    return SpreadsheetApp.getActiveSpreadsheet();
+  }
+}
+
+function readDriveJsonFileRaw_(rootFolder, fileName, useCache) {
+  const cleanName = sanitizeJsonFileName_(fileName) || fileName;
+  if (useCache !== false) {
+    const cached = getCacheJson_(cleanName);
+    if (cached && cached.data !== undefined) {
+      return {
+        exists: true,
+        data: cached.data,
+        raw: cached.raw,
+        updatedAt: cached.updatedAt,
+        fromCache: true
+      };
+    }
+  }
+
+  const filesIter = rootFolder.getFilesByName(cleanName);
+  const matches = [];
+  while (filesIter.hasNext()) {
+    const f = filesIter.next();
+    if (!f.isTrashed()) {
+      matches.push(f);
+    }
+  }
+  if (matches.length === 0) {
+    return { exists: false };
+  }
+
+  matches.sort(function(a, b) {
+    return b.getLastUpdated().getTime() - a.getLastUpdated().getTime();
+  });
+
+  const primary = matches[0];
+  for (let i = 1; i < matches.length; i++) {
+    try { matches[i].setTrashed(true); } catch (e) {}
+  }
+
+  const raw = primary.getBlob().getDataAsString('UTF-8');
+  const parsed = JSON.parse(raw);
+  const updatedAt = primary.getLastUpdated().toISOString();
+  putCacheJson_(cleanName, raw, DRIVE_JSON_CACHE_TTL_SEC_);
+
+  return {
+    exists: true,
+    file: primary,
+    fileId: primary.getId(),
+    data: parsed,
+    raw: raw,
+    updatedAt: updatedAt,
+    fromCache: false
+  };
+}
+
+function writeDriveJsonFileRaw_(rootFolder, fileName, dataObj) {
+  const cleanName = sanitizeJsonFileName_(fileName) || fileName;
+  const jsonString = JSON.stringify(dataObj, null, 2) + '\n';
+
+  const filesIter = rootFolder.getFilesByName(cleanName);
+  const matches = [];
+  while (filesIter.hasNext()) {
+    const f = filesIter.next();
+    if (!f.isTrashed()) {
+      matches.push(f);
+    }
+  }
+
+  let targetFile = null;
+  if (matches.length > 0) {
+    matches.sort(function(a, b) {
+      return b.getLastUpdated().getTime() - a.getLastUpdated().getTime();
+    });
+    targetFile = matches[0];
+    targetFile.setContent(jsonString);
+    for (let i = 1; i < matches.length; i++) {
+      try { matches[i].setTrashed(true); } catch (e) {}
+    }
+  } else {
+    targetFile = rootFolder.createFile(cleanName, jsonString, MimeType.PLAIN_TEXT);
+  }
+
+  try {
+    targetFile.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+  } catch (e) {}
+
+  putCacheJson_(cleanName, jsonString, DRIVE_JSON_CACHE_TTL_SEC_);
+
+  return {
+    fileId: targetFile.getId(),
+    fileUrl: targetFile.getUrl(),
+    updatedAt: new Date().toISOString()
+  };
+}
+
+function mergeProjectObjects_(baseProj, newerProj) {
+  const base = baseProj || {};
+  const newer = newerProj || {};
+  const merged = Object.assign({}, base, newer);
+
+  if (base.landing || newer.landing) {
+    merged.landing = Object.assign({}, base.landing || {}, newer.landing || {});
+    if ((base.landing && base.landing.map) || (newer.landing && newer.landing.map)) {
+      merged.landing.map = Object.assign({}, (base.landing && base.landing.map) || {}, (newer.landing && newer.landing.map) || {});
+    }
+  }
+  if (base.modules || newer.modules) {
+    merged.modules = Object.assign({}, base.modules || {}, newer.modules || {});
+  }
+  if (base.actions || newer.actions) {
+    merged.actions = Object.assign({}, base.actions || {}, newer.actions || {});
+  }
+
+  const baseDS = base.dataSources || {};
+  const newerDS = newer.dataSources || {};
+  merged.dataSources = Object.assign({}, baseDS, newerDS);
+  if (!merged.dataSources.driveFolderId && baseDS.driveFolderId) {
+    merged.dataSources.driveFolderId = baseDS.driveFolderId;
+  }
+  if (!merged.dataSources.driveFolderName && baseDS.driveFolderName) {
+    merged.dataSources.driveFolderName = baseDS.driveFolderName;
+  }
+  if (!merged.dataSources.driveScriptUrl && baseDS.driveScriptUrl) {
+    merged.dataSources.driveScriptUrl = baseDS.driveScriptUrl;
+  }
+
+  // Conservar equipos ISO 19650, equiposDeTarea y fileVisibilityConfig si el objeto entrante venía sin ellos
+  if (base.iso19650 && (!newer.iso19650 || (
+    Array.isArray(newer.iso19650.deliveryTeams) && newer.iso19650.deliveryTeams.length === 0 &&
+    Array.isArray(base.iso19650.deliveryTeams) && base.iso19650.deliveryTeams.length > 0 &&
+    !newer._explicitIsoUpdate
+  ))) {
+    merged.iso19650 = base.iso19650;
+  }
+  if (Array.isArray(base.equiposDeTarea) && base.equiposDeTarea.length > 0 &&
+      (!Array.isArray(newer.equiposDeTarea) || (newer.equiposDeTarea.length === 0 && !newer._explicitIsoUpdate))) {
+    merged.equiposDeTarea = base.equiposDeTarea;
+  }
+  if (base.fileVisibilityConfig && Object.keys(base.fileVisibilityConfig).length > 0 &&
+      (!newer.fileVisibilityConfig || Object.keys(newer.fileVisibilityConfig).length === 0)) {
+    merged.fileVisibilityConfig = base.fileVisibilityConfig;
+  }
+  if (Array.isArray(base.members) && base.members.length > 0 &&
+      (!Array.isArray(newer.members) || (newer.members.length === 0 && !newer._explicitMembersUpdate))) {
+    merged.members = base.members;
+  }
+
+  delete merged._explicitIsoUpdate;
+  delete merged._explicitMembersUpdate;
+  return merged;
+}
+
+function syncProjectIntoCompanyConfigInDrive_(rootFolder, companyId, companyName, projectData) {
+  if (!projectData || (!projectData.slug && !projectData.name)) return;
+  const empFile = readDriveJsonFileRaw_(rootFolder, 'empresas.json', true);
+  if (!empFile.exists || !Array.isArray(empFile.data)) return;
+
+  const cleanCompName = cleanCompareText_(companyName);
+  const emp = empFile.data.find(function(e) {
+    if (!e || e.deleted) return false;
+    if (companyId && e.id === companyId) return true;
+    if (cleanCompName && (cleanCompareText_(e.name) === cleanCompName || cleanCompareText_(e.razonSocial) === cleanCompName || cleanCompareText_(e.id) === cleanCompName)) {
+      return true;
+    }
+    return false;
+  });
+  if (!emp) return;
+
+  const configFileName = sanitizeJsonFileName_(emp.configUrl || ('config-' + emp.id + '.json'));
+  if (!configFileName) return;
+
+  let configObj = { portal: { name: emp.name || 'nora CDE' }, projects: [] };
+  const existingCfg = readDriveJsonFileRaw_(rootFolder, configFileName, false);
+  if (existingCfg.exists && existingCfg.data && typeof existingCfg.data === 'object') {
+    configObj = existingCfg.data;
+    if (!Array.isArray(configObj.projects)) configObj.projects = [];
+  }
+
+  const pSlug = String(projectData.slug || '').trim().toLowerCase();
+  const pName = cleanCompareText_(projectData.name || projectData.title || '');
+
+  const idx = configObj.projects.findIndex(function(p) {
+    if (!p) return false;
+    if (pSlug && String(p.slug || '').trim().toLowerCase() === pSlug) return true;
+    if (pName && cleanCompareText_(p.name || p.title || '') === pName) return true;
+    return false;
+  });
+
+  const cleanProjCopy = Object.assign({}, projectData, { _explicitIsoUpdate: true, _explicitMembersUpdate: true });
+  if (idx !== -1) {
+    configObj.projects[idx] = mergeProjectObjects_(configObj.projects[idx], cleanProjCopy);
+  } else {
+    delete cleanProjCopy._explicitIsoUpdate;
+    delete cleanProjCopy._explicitMembersUpdate;
+    configObj.projects.push(cleanProjCopy);
+  }
+
+  writeDriveJsonFileRaw_(rootFolder, configFileName, configObj);
+}
+
+function syncCompanySubfolderAndProjects_(rootFolder, emp, configData, mergeFromExistingDriveProjects) {
+  if (!emp || !emp.name) return configData;
+  const companyFolder = getOrCreateSubfolder_(rootFolder, emp.name);
+
+  // Guardar resumen empresa.json dentro de la carpeta de la empresa
+  try {
+    const empresaSummary = {
+      id: emp.id,
+      name: emp.name,
+      razonSocial: emp.razonSocial || emp.name,
+      code: emp.code || '',
+      configUrl: emp.configUrl || ('config-' + emp.id + '.json'),
+      driveFolderId: emp.driveFolderId || '',
+      admins: emp.admins || [],
+      members: emp.members || [],
+      portal: (configData && configData.portal) || {},
+      updatedAt: new Date().toISOString()
+    };
+    const empStr = JSON.stringify(empresaSummary, null, 2) + '\n';
+    const eFiles = companyFolder.getFilesByName('empresa.json');
+    if (eFiles.hasNext()) {
+      eFiles.next().setContent(empStr);
+    } else {
+      companyFolder.createFile('empresa.json', empStr, MimeType.PLAIN_TEXT);
+    }
+  } catch (e) {}
+
+  if (!configData || !Array.isArray(configData.projects)) return configData;
+
+  const seenSlugs = {};
+  for (let i = 0; i < configData.projects.length; i++) {
+    let proj = configData.projects[i];
+    if (!proj) continue;
+    const projName = String(proj.name || proj.title || proj.slug || ('Proyecto-' + (i + 1))).trim();
+    const projSlug = String(proj.slug || '').trim();
+
+    let projectFolder = findProjectFolderInCompany_(companyFolder, projName, projSlug);
+    if (!projectFolder) {
+      projectFolder = companyFolder.createFolder(projName);
+    } else {
+      const curName = projectFolder.getName().trim();
+      if (curName.toLowerCase() !== projName.toLowerCase() && projName.toLowerCase() !== 'nuevo proyecto') {
+        try { projectFolder.setName(projName); } catch (e) {}
+      }
+    }
+
+    const pFiles = projectFolder.getFilesByName('proyecto.json');
+    let existingDriveProj = null;
+    let existingFile = null;
+    if (pFiles.hasNext()) {
+      existingFile = pFiles.next();
+      try {
+        existingDriveProj = JSON.parse(existingFile.getBlob().getDataAsString('UTF-8'));
+      } catch (e) {
+        existingDriveProj = null;
+      }
+    }
+
+    if (existingDriveProj) {
+      if (mergeFromExistingDriveProjects) {
+        // En migración inicial: los datos ya guardados en proyecto.json en Drive tienen prioridad sobre estáticos viejos
+        proj = mergeProjectObjects_(proj, existingDriveProj);
+      } else {
+        // En guardado desde Admin/Configurador: se aplican los cambios nuevos preservando iso19650/visibilidad previos si venían vacíos
+        proj = mergeProjectObjects_(existingDriveProj, proj);
+      }
+      configData.projects[i] = proj;
+    }
+
+    if (projSlug) seenSlugs[projSlug.toLowerCase()] = true;
+
+    const projStr = JSON.stringify(proj, null, 2) + '\n';
+    if (existingFile) {
+      existingFile.setContent(projStr);
+    } else {
+      const created = projectFolder.createFile('proyecto.json', projStr, MimeType.PLAIN_TEXT);
+      try { created.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW); } catch (e) {}
+    }
+  }
+
+  // En migración inicial, rescatar también cualquier subcarpeta de proyecto en Drive que no estuviera aún en config-empresa-*.json
+  if (mergeFromExistingDriveProjects) {
+    try {
+      const subFolders = companyFolder.getFolders();
+      while (subFolders.hasNext()) {
+        const sf = subFolders.next();
+        if (sf.isTrashed()) continue;
+        const pfIter = sf.getFilesByName('proyecto.json');
+        if (pfIter.hasNext()) {
+          try {
+            const extraProj = JSON.parse(pfIter.next().getBlob().getDataAsString('UTF-8'));
+            if (extraProj && typeof extraProj === 'object') {
+              const eSlug = String(extraProj.slug || '').trim().toLowerCase();
+              const eName = cleanCompareText_(extraProj.name || extraProj.title || sf.getName());
+              const alreadyIn = configData.projects.some(function(cp) {
+                if (!cp) return false;
+                if (eSlug && String(cp.slug || '').trim().toLowerCase() === eSlug) return true;
+                if (eName && cleanCompareText_(cp.name || cp.title || '') === eName) return true;
+                return false;
+              });
+              if (!alreadyIn) {
+                if (!extraProj.name) extraProj.name = sf.getName();
+                if (!extraProj.slug) extraProj.slug = sf.getName().toLowerCase().replace(/[^a-z0-9]+/g, '-');
+                configData.projects.push(extraProj);
+              }
+            }
+          } catch (e) {}
+        }
+      }
+    } catch (e) {}
+  }
+
+  return configData;
+}
+
+function readUsersFromSheet_(doc) {
+  const sheet = doc.getSheetByName('Usuarios');
+  if (!sheet || sheet.getLastRow() <= 1) return [];
+  ensureHeaders(sheet, USER_HEADERS);
+  const data = sheet.getDataRange().getValues();
+  const headers = data[0].map(function(h) { return String(h).trim(); });
+  const usuarios = [];
+  for (let i = 1; i < data.length; i++) {
+    const obj = {};
+    for (let j = 0; j < headers.length; j++) {
+      const val = data[i][j];
+      obj[headers[j]] = (val instanceof Date) ? val.toISOString() : val;
+    }
+    if (obj.email && String(obj.email).trim() !== '') {
+      usuarios.push(obj);
+    }
+  }
+  return usuarios;
+}
+
+function readCompaniesFromSheet_(doc) {
+  const sheet = doc.getSheetByName('Empresas');
+  if (!sheet || sheet.getLastRow() <= 1) return [];
+  ensureHeaders(sheet, COMPANY_HEADERS);
+  const data = sheet.getDataRange().getValues();
+  const headers = data[0].map(function(h) { return String(h).trim(); });
+  const empresas = [];
+  for (let i = 1; i < data.length; i++) {
+    const obj = {};
+    for (let j = 0; j < headers.length; j++) {
+      const val = data[i][j];
+      obj[headers[j]] = (val instanceof Date) ? val.toISOString() : val;
+    }
+    if ((obj.id && String(obj.id).trim()) || (obj.name && String(obj.name).trim())) {
+      empresas.push(obj);
+    }
+  }
+  return empresas;
+}
+
+function syncUsuariosJsonFromSheet_(doc, rootFolder) {
+  const folder = rootFolder || DriveApp.getFolderById(PROJECTS_DRIVE_ROOT_FOLDER_ID);
+  const d = doc || openMasterSpreadsheet_();
+  const usuarios = readUsersFromSheet_(d);
+  writeDriveJsonFileRaw_(folder, 'usuarios.json', usuarios);
+  return usuarios;
+}
+
+function upsertUsersBatchInSheet_(doc, usersList) {
+  if (!Array.isArray(usersList) || usersList.length === 0) return;
+  let userSheet = doc.getSheetByName('Usuarios');
+  if (!userSheet) userSheet = doc.insertSheet('Usuarios');
+  ensureHeaders(userSheet, USER_HEADERS);
+
+  const allValues = userSheet.getDataRange().getValues();
+  const headers = allValues[0].map(function(h) { return String(h).trim(); });
+  const lowerHeaders = headers.map(function(h) { return h.toLowerCase(); });
+  const emailIdx = lowerHeaders.indexOf('email');
+  if (emailIdx === -1) return;
+
+  const emailToRowIndex = {};
+  for (let r = 1; r < allValues.length; r++) {
+    const em = String(allValues[r][emailIdx] || '').toLowerCase().trim();
+    if (em) emailToRowIndex[em] = r; // 0-based index in allValues
+  }
+
+  const rowsToAppend = [];
+  let updatedExisting = false;
+  const nowIso = new Date().toISOString();
+
+  usersList.forEach(function(u) {
+    if (!u || !u.email) return;
+    const emailClean = String(u.email).toLowerCase().trim();
+    if (!emailClean) return;
+
+    const existingIdx = emailToRowIndex[emailClean];
+    if (existingIdx !== undefined) {
+      const rowArr = allValues[existingIdx];
+      const setIfPresent = function(colName, val) {
+        const cIdx = lowerHeaders.indexOf(colName.toLowerCase());
+        if (cIdx !== -1 && val !== undefined && val !== null && val !== '') {
+          if (String(rowArr[cIdx] || '') !== String(val)) {
+            rowArr[cIdx] = val;
+            updatedExisting = true;
+          }
+        }
+      };
+      if (u.nombre && String(u.nombre).trim().toLowerCase() !== 'nuevo usuario') {
+        setIfPresent('nombre', u.nombre);
+      }
+      setIfPresent('telefono', u.telefono);
+      setIfPresent('empresa', u.empresa);
+      setIfPresent('especialidad', u.especialidad);
+      setIfPresent('cargo', u.cargo);
+      setIfPresent('rol', u.rol);
+      setIfPresent('estado', u.estado);
+    } else {
+      const newRow = new Array(headers.length).fill('');
+      const setCol = function(colName, val) {
+        const cIdx = lowerHeaders.indexOf(colName.toLowerCase());
+        if (cIdx !== -1 && val !== undefined && val !== null) newRow[cIdx] = val;
+      };
+      setCol('fecha', nowIso);
+      setCol('nombre', u.nombre || emailClean.split('@')[0]);
+      setCol('email', emailClean);
+      setCol('telefono', u.telefono || '');
+      setCol('empresa', u.empresa || '');
+      setCol('especialidad', u.especialidad || '');
+      setCol('cargo', u.cargo || '');
+      setCol('rol', u.rol || 'MIEMBRO');
+      setCol('estado', u.estado || 'APROBADO');
+      rowsToAppend.push(newRow);
+      emailToRowIndex[emailClean] = -1; // Prevent duplicates in same batch
+    }
+  });
+
+  if (updatedExisting && allValues.length > 1) {
+    userSheet.getRange(2, 1, allValues.length - 1, headers.length).setValues(allValues.slice(1));
+  }
+  if (rowsToAppend.length > 0) {
+    userSheet.getRange(userSheet.getLastRow() + 1, 1, rowsToAppend.length, headers.length).setValues(rowsToAppend);
+  }
+}
+
+function syncSingleUserIntoEmpresasDrive_(rootFolder, userObj, mode) {
+  try {
+    const folder = rootFolder || DriveApp.getFolderById(PROJECTS_DRIVE_ROOT_FOLDER_ID);
+    const empRes = readDriveJsonFileRaw_(folder, 'empresas.json', false);
+    if (!empRes.exists || !Array.isArray(empRes.data)) return;
+
+    const empresas = empRes.data;
+    const emailClean = String((userObj && userObj.email) || '').toLowerCase().trim();
+    if (!emailClean) return;
+
+    let changed = false;
+
+    if (mode === 'delete') {
+      empresas.forEach(function(emp) {
+        if (!emp) return;
+        if (Array.isArray(emp.members)) {
+          const prevLen = emp.members.length;
+          emp.members = emp.members.filter(function(m) {
+            return !m || !m.email || String(m.email).toLowerCase().trim() !== emailClean;
+          });
+          if (emp.members.length !== prevLen) changed = true;
+        }
+        if (Array.isArray(emp.admins)) {
+          const prevAdminLen = emp.admins.length;
+          emp.admins = emp.admins.filter(function(a) {
+            return String(a || '').toLowerCase().trim() !== emailClean;
+          });
+          if (emp.admins.length !== prevAdminLen) changed = true;
+        }
+      });
+    } else {
+      const targetEmpClean = cleanCompareText_(userObj.empresa || '');
+      const uRol = String(userObj.rol || 'INVITADO').trim();
+      const uEstado = String(userObj.estado || '').toUpperCase().trim();
+      const isApproved = (uEstado === 'APROBADO' || uRol === 'SUPER_ADMINISTRADOR' || uRol === 'ADMINISTRADOR_EMPRESA' || uRol === 'MIEMBRO');
+
+      // Actualizar metadatos en empresas donde ya sea miembro
+      empresas.forEach(function(emp) {
+        if (!emp || emp.deleted || !Array.isArray(emp.members)) return;
+        emp.members.forEach(function(m) {
+          if (m && m.email && String(m.email).toLowerCase().trim() === emailClean) {
+            if (userObj.nombre && String(userObj.nombre).trim() && String(userObj.nombre).trim().toLowerCase() !== 'nuevo usuario') {
+              m.name = String(userObj.nombre).trim();
+              changed = true;
+            }
+            if (userObj.especialidad !== undefined && userObj.especialidad !== '') {
+              m.especialidad = userObj.especialidad;
+              changed = true;
+            }
+            if (userObj.cargo !== undefined && userObj.cargo !== '') {
+              m.cargo = userObj.cargo;
+              changed = true;
+            }
+          }
+        });
+      });
+
+      // Si tiene empresa asignada y está aprobado, asegurar membresía en esa empresa
+      if (targetEmpClean && isApproved) {
+        let matchedEmp = empresas.find(function(emp) {
+          if (!emp || emp.deleted) return false;
+          return cleanCompareText_(emp.name) === targetEmpClean ||
+                 cleanCompareText_(emp.razonSocial) === targetEmpClean ||
+                 cleanCompareText_(emp.id) === targetEmpClean;
+        });
+
+        if (matchedEmp) {
+          if (!Array.isArray(matchedEmp.members)) matchedEmp.members = [];
+          if (!Array.isArray(matchedEmp.admins)) matchedEmp.admins = [];
+
+          const mIdx = matchedEmp.members.findIndex(function(m) {
+            return m && m.email && String(m.email).toLowerCase().trim() === emailClean;
+          });
+
+          const memberEntry = {
+            name: (userObj.nombre && String(userObj.nombre).trim()) || (mIdx > -1 ? matchedEmp.members[mIdx].name : emailClean.split('@')[0]),
+            email: emailClean,
+            role: uRol === 'SUPER_ADMINISTRADOR' ? 'ADMINISTRADOR_EMPRESA' : (uRol || 'MIEMBRO'),
+            empresaUsuario: matchedEmp.name,
+            especialidad: userObj.especialidad !== undefined && userObj.especialidad !== '' ? userObj.especialidad : (mIdx > -1 ? (matchedEmp.members[mIdx].especialidad || '') : ''),
+            cargo: userObj.cargo !== undefined && userObj.cargo !== '' ? userObj.cargo : (mIdx > -1 ? (matchedEmp.members[mIdx].cargo || '') : '')
+          };
+
+          if (mIdx > -1) {
+            matchedEmp.members[mIdx] = Object.assign({}, matchedEmp.members[mIdx], memberEntry);
+          } else {
+            matchedEmp.members.push(memberEntry);
+          }
+
+          if (memberEntry.role === 'ADMINISTRADOR_EMPRESA') {
+            if (!matchedEmp.admins.some(function(a) { return String(a || '').toLowerCase().trim() === emailClean; })) {
+              matchedEmp.admins.push(emailClean);
+            }
+          } else if (uRol !== 'SUPER_ADMINISTRADOR') {
+            matchedEmp.admins = matchedEmp.admins.filter(function(a) { return String(a || '').toLowerCase().trim() !== emailClean; });
+          }
+          changed = true;
+        }
+      }
+    }
+
+    if (changed) {
+      writeDriveJsonFileRaw_(folder, 'empresas.json', empresas);
+    }
+    return changed;
+  } catch (err) {
+    Logger.log('syncSingleUserIntoEmpresasDrive_ warning: ' + err);
+  }
+}
+
+function syncCompanyChangeIntoEmpresasDrive_(rootFolder, compObj, mode) {
+  try {
+    const folder = rootFolder || DriveApp.getFolderById(PROJECTS_DRIVE_ROOT_FOLDER_ID);
+    const empRes = readDriveJsonFileRaw_(folder, 'empresas.json', false);
+    if (!empRes.exists || !Array.isArray(empRes.data)) return;
+
+    const empresas = empRes.data;
+    const compId = String((compObj && compObj.id) || '').trim();
+    if (!compId) return;
+
+    if (mode === 'delete') {
+      let changed = false;
+      empresas.forEach(function(e) {
+        if (e && e.id === compId) {
+          e.deleted = true;
+          changed = true;
+        }
+      });
+      if (changed) {
+        writeDriveJsonFileRaw_(folder, 'empresas.json', empresas);
+      }
+      return changed;
+    }
+
+    const existingIdx = empresas.findIndex(function(e) {
+      return e && (e.id === compId || (compObj.name && cleanCompareText_(e.name) === cleanCompareText_(compObj.name)));
+    });
+
+    const configUrl = compObj.configUrl || ('config-' + compId + '.json');
+    const adminEmail = compObj.email ? String(compObj.email).toLowerCase().trim() : '';
+    const admins = adminEmail ? [adminEmail] : [];
+    const members = adminEmail ? [{
+      name: compObj.adminName || adminEmail.split('@')[0],
+      email: adminEmail,
+      role: 'ADMINISTRADOR_EMPRESA',
+      empresaUsuario: compObj.name,
+      especialidad: '',
+      cargo: 'Administrador de Empresa'
+    }] : [];
+
+    if (existingIdx === -1) {
+      const newEmp = {
+        id: compId,
+        name: compObj.name || compObj.legalName || 'Nueva Empresa',
+        code: compObj.code || 'EMP',
+        admins: admins,
+        zonaHoraria: 'America/Bogota',
+        members: members,
+        razonSocial: compObj.legalName || compObj.name || '',
+        terminosAceptados: true,
+        tratamientoDatos: true,
+        image: compObj.logoBase64 || 'https://i.postimg.cc/02mTnnQv/21bd5ee9d2351270615280386caad1f3.jpg',
+        location: compObj.city ? (compObj.city + ', ' + (compObj.country || 'Colombia')) : 'Bogotá, Colombia',
+        configUrl: configUrl,
+        driveFolderId: compObj.driveFolderId || ''
+      };
+      empresas.push(newEmp);
+      writeDriveJsonFileRaw_(folder, 'empresas.json', empresas);
+
+      const initialCfg = {
+        portal: { name: newEmp.name },
+        projects: []
+      };
+      writeDriveJsonFileRaw_(folder, configUrl, initialCfg);
+      syncCompanySubfolderAndProjects_(folder, newEmp, initialCfg, false);
+    }
+  } catch (err) {
+    Logger.log('syncCompanyChangeIntoEmpresasDrive_ warning: ' + err);
+  }
+}
+
+function fetchPublicStaticJsonFallback_(fileName) {
+  const clean = sanitizeJsonFileName_(fileName);
+  if (!clean) return null;
+  const urls = [
+    'https://norabim.com/' + clean + '?t=' + Date.now(),
+    'https://raw.githubusercontent.com/camilomartg-svg/bim/main/docs/' + clean + '?t=' + Date.now()
+  ];
+  for (let i = 0; i < urls.length; i++) {
+    try {
+      const res = UrlFetchApp.fetch(urls[i], { method: 'get', muteHttpExceptions: true });
+      if (res.getResponseCode() >= 200 && res.getResponseCode() < 300) {
+        return JSON.parse(res.getContentText('UTF-8'));
+      }
+    } catch (e) {}
+  }
+  return null;
+}
+
+function migrateStaticToDrive_(seedPayload, onlyIfMissing) {
+  const lock = LockService.getScriptLock();
+  lock.tryLock(25000);
+  try {
+    const rootFolder = DriveApp.getFolderById(PROJECTS_DRIVE_ROOT_FOLDER_ID);
+    if (!rootFolder) {
+      return { status: 'error', message: 'No se encontró la carpeta de Drive ' + PROJECTS_DRIVE_ROOT_FOLDER_ID };
+    }
+
+    if (onlyIfMissing) {
+      const checkEmp = readDriveJsonFileRaw_(rootFolder, 'empresas.json', true);
+      if (checkEmp.exists && Array.isArray(checkEmp.data) && checkEmp.data.length > 0) {
+        return { status: 'success', source: 'drive_json', alreadySeeded: true };
+      }
+    }
+
+    const doc = openMasterSpreadsheet_();
+    const sheetCompanies = readCompaniesFromSheet_(doc);
+    const sheetUsers = readUsersFromSheet_(doc);
+
+    // 1. Obtener empresas.json base (seedPayload -> Drive actual -> norabim.com)
+    let empresas = null;
+    if (seedPayload && Array.isArray(seedPayload.empresas) && seedPayload.empresas.length > 0) {
+      empresas = seedPayload.empresas;
+    } else {
+      const existingEmp = readDriveJsonFileRaw_(rootFolder, 'empresas.json', false);
+      if (existingEmp.exists && Array.isArray(existingEmp.data) && existingEmp.data.length > 0) {
+        empresas = existingEmp.data;
+      } else {
+        empresas = fetchPublicStaticJsonFallback_('empresas.json') || [];
+      }
+    }
+    if (!Array.isArray(empresas)) empresas = [];
+
+    // 2. Fusionar empresas registradas en Google Sheets sin perder ninguna empresa ni miembro existente
+    sheetCompanies.forEach(function(sc) {
+      if (!sc || (!sc.id && !sc.name)) return;
+      const scNameClean = cleanCompareText_(sc.name || sc.legalName);
+      let existing = empresas.find(function(e) {
+        return e && (e.id === sc.id || (scNameClean && (cleanCompareText_(e.name) === scNameClean || cleanCompareText_(e.razonSocial) === scNameClean)));
+      });
+
+      if (!existing) {
+        const newId = sc.id || ('empresa-' + Date.now());
+        existing = {
+          id: newId,
+          name: sc.name || sc.legalName || 'Empresa',
+          code: sc.code || (sc.name ? String(sc.name).substring(0, 3).toUpperCase() : 'BIM'),
+          admins: [],
+          zonaHoraria: 'America/Bogota',
+          members: [],
+          razonSocial: sc.legalName || sc.name || '',
+          terminosAceptados: true,
+          tratamientoDatos: true,
+          image: sc.logoBase64 || 'https://i.postimg.cc/02mTnnQv/21bd5ee9d2351270615280386caad1f3.jpg',
+          location: sc.city ? (sc.city + ', ' + (sc.country || 'Colombia')) : 'Bogotá, Colombia',
+          configUrl: 'config-' + newId + '.json',
+          driveFolderId: sc.driveFolderId || ''
+        };
+        empresas.push(existing);
+      } else if (!existing.driveFolderId && sc.driveFolderId) {
+        existing.driveFolderId = sc.driveFolderId;
+      }
+
+      if (sc.email && String(sc.email).trim()) {
+        const adminEmail = String(sc.email).toLowerCase().trim();
+        if (!Array.isArray(existing.admins)) existing.admins = [];
+        if (!existing.admins.some(function(a) { return String(a).toLowerCase().trim() === adminEmail; })) {
+          existing.admins.push(adminEmail);
+        }
+        if (!Array.isArray(existing.members)) existing.members = [];
+        if (!existing.members.some(function(m) { return m && m.email && String(m.email).toLowerCase().trim() === adminEmail; })) {
+          existing.members.push({
+            name: adminEmail.split('@')[0],
+            email: adminEmail,
+            role: 'ADMINISTRADOR_EMPRESA',
+            empresaUsuario: existing.name,
+            especialidad: '',
+            cargo: 'Administrador de Empresa'
+          });
+        }
+      }
+    });
+
+    // 3. Fusionar usuarios aprobados de Google Sheets hacia empresas.json (SIN borrar miembros existentes de empresas.json)
+    sheetUsers.forEach(function(su) {
+      if (!su || !su.email || !su.empresa) return;
+      const emailClean = String(su.email).toLowerCase().trim();
+      const suEmpClean = cleanCompareText_(su.empresa);
+      const suEstado = String(su.estado || '').toUpperCase().trim();
+      const suRol = String(su.rol || 'INVITADO').trim();
+      if (suEstado !== 'APROBADO' && suRol !== 'ADMINISTRADOR_EMPRESA' && suRol !== 'MIEMBRO') return;
+
+      const targetEmp = empresas.find(function(e) {
+        if (!e || e.deleted) return false;
+        return cleanCompareText_(e.name) === suEmpClean || cleanCompareText_(e.razonSocial) === suEmpClean;
+      });
+      if (!targetEmp) return;
+
+      if (!Array.isArray(targetEmp.members)) targetEmp.members = [];
+      if (!Array.isArray(targetEmp.admins)) targetEmp.admins = [];
+
+      const mIdx = targetEmp.members.findIndex(function(m) {
+        return m && m.email && String(m.email).toLowerCase().trim() === emailClean;
+      });
+      if (mIdx > -1) {
+        if (su.nombre && (!targetEmp.members[mIdx].name || targetEmp.members[mIdx].name === 'Nuevo Usuario')) {
+          targetEmp.members[mIdx].name = su.nombre;
+        }
+        if (su.especialidad && !targetEmp.members[mIdx].especialidad) {
+          targetEmp.members[mIdx].especialidad = su.especialidad;
+        }
+        if (su.cargo && !targetEmp.members[mIdx].cargo) {
+          targetEmp.members[mIdx].cargo = su.cargo;
+        }
+      } else {
+        targetEmp.members.push({
+          name: su.nombre || emailClean.split('@')[0],
+          email: emailClean,
+          role: suRol,
+          empresaUsuario: targetEmp.name,
+          especialidad: su.especialidad || '',
+          cargo: su.cargo || ''
+        });
+      }
+      if (suRol === 'ADMINISTRADOR_EMPRESA' && !targetEmp.admins.some(function(a) { return String(a).toLowerCase().trim() === emailClean; })) {
+        targetEmp.admins.push(emailClean);
+      }
+    });
+
+    // 4. Asegurar que todos los miembros de empresas.json también existan en la hoja Usuarios y usuarios.json (cero pérdida)
+    const membersToEnsureInSheet = [];
+    empresas.forEach(function(emp) {
+      if (!emp || emp.deleted) return;
+      (emp.members || []).forEach(function(m) {
+        if (!m || !m.email) return;
+        const em = String(m.email).toLowerCase().trim();
+        if (!em) return;
+        const isInternal = (m.role === 'ADMINISTRADOR_EMPRESA' || m.role === 'MIEMBRO');
+        membersToEnsureInSheet.push({
+          email: em,
+          nombre: (m.name && m.name !== 'Nuevo Usuario') ? m.name : em.split('@')[0],
+          empresa: isInternal ? emp.name : (m.empresaUsuario || ''),
+          especialidad: m.especialidad || '',
+          cargo: m.cargo || '',
+          rol: m.role || 'MIEMBRO',
+          estado: 'APROBADO'
+        });
+      });
+    });
+    upsertUsersBatchInSheet_(doc, membersToEnsureInSheet);
+    const finalUsuarios = syncUsuariosJsonFromSheet_(doc, rootFolder);
+
+    // 5. Guardar portal-config.json
+    let portalConfig = (seedPayload && seedPayload.portalConfig) || null;
+    if (!portalConfig) {
+      const existingPortal = readDriveJsonFileRaw_(rootFolder, 'portal-config.json', false);
+      if (existingPortal.exists && existingPortal.data) {
+        portalConfig = existingPortal.data;
+      } else {
+        portalConfig = fetchPublicStaticJsonFallback_('portal-config.json') || {
+          portal: { name: 'nora CDE', shortName: 'nora' },
+          superAdmins: ['imagina3ddesign@gmail.com', 'mcmartinezg@unal.edu.co'],
+          projects: []
+        };
+      }
+    }
+    writeDriveJsonFileRaw_(rootFolder, 'portal-config.json', portalConfig);
+
+    // 6. Guardar empresas.json
+    writeDriveJsonFileRaw_(rootFolder, 'empresas.json', empresas);
+
+    // 7. Migrar y sincronizar todas las configuraciones de empresas y proyectos (config-empresa-*.json + proyecto.json)
+    const filesWritten = ['empresas.json', 'usuarios.json', 'portal-config.json'];
+    let totalProjectsCount = 0;
+    const providedConfigs = (seedPayload && seedPayload.companyConfigs) || {};
+
+    empresas.forEach(function(emp) {
+      if (!emp || !emp.id) return;
+      const cfgFile = sanitizeJsonFileName_(emp.configUrl || ('config-' + emp.id + '.json'));
+      if (!cfgFile) return;
+      emp.configUrl = cfgFile;
+
+      let cfgData = providedConfigs[emp.id] || providedConfigs[cfgFile] || null;
+      if (!cfgData) {
+        const existingCfg = readDriveJsonFileRaw_(rootFolder, cfgFile, false);
+        if (existingCfg.exists && existingCfg.data) {
+          cfgData = existingCfg.data;
+        } else {
+          cfgData = fetchPublicStaticJsonFallback_(cfgFile);
+        }
+      }
+      if (!cfgData || typeof cfgData !== 'object') {
+        cfgData = { portal: { name: emp.name || 'nora CDE' }, projects: [] };
+      }
+      if (!Array.isArray(cfgData.projects)) cfgData.projects = [];
+      if (!cfgData.portal) cfgData.portal = { name: emp.name || 'nora CDE' };
+
+      // Fusionar con cualquier proyecto.json existente en Drive sin perder datos
+      cfgData = syncCompanySubfolderAndProjects_(rootFolder, emp, cfgData, true);
+      writeDriveJsonFileRaw_(rootFolder, cfgFile, cfgData);
+      filesWritten.push(cfgFile);
+      totalProjectsCount += cfgData.projects.length;
+    });
+
+    // Migrar también configuraciones adicionales pasadas en seedPayload que no estén en empresas activas
+    Object.keys(providedConfigs).forEach(function(key) {
+      const candidateFile = sanitizeJsonFileName_(key.indexOf('.json') !== -1 ? key : ('config-' + key + '.json'));
+      if (candidateFile && filesWritten.indexOf(candidateFile) === -1) {
+        writeDriveJsonFileRaw_(rootFolder, candidateFile, providedConfigs[key]);
+        filesWritten.push(candidateFile);
+      }
+    });
+
+    return {
+      status: 'success',
+      source: 'drive_json',
+      message: 'Migración y sincronización en Google Drive completada sin pérdida de datos.',
+      folderId: PROJECTS_DRIVE_ROOT_FOLDER_ID,
+      companiesCount: empresas.filter(function(e) { return e && !e.deleted; }).length,
+      projectsCount: totalProjectsCount,
+      usersCount: finalUsuarios.length,
+      filesWritten: filesWritten,
+      updatedAt: new Date().toISOString()
+    };
+  } catch (err) {
+    return {
+      status: 'error',
+      message: 'Error migrando datos JSON a Google Drive: ' + err.toString()
+    };
+  } finally {
+    try { lock.releaseLock(); } catch (e) {}
+  }
+}
+
+// Función ejecutable manualmente desde el editor de Google Apps Script si se desea verificar
+function migrarTodoADrive() {
+  const res = migrateStaticToDrive_(null, false);
+  Logger.log(JSON.stringify(res, null, 2));
+  return res;
+}
+
+function getDriveJson_(params, postData) {
+  try {
+    const p = Object.assign({}, params || {}, postData || {});
+    const rawFile = p.file || p.fileName || p.path || '';
+    const cleanFile = sanitizeJsonFileName_(rawFile);
+    if (!cleanFile) {
+      return { status: 'error', source: 'drive_json', message: 'Archivo JSON inválido o no especificado: ' + rawFile };
+    }
+
+    const forceRefresh = String(p.noCache || p.force || '') === '1';
+    if (!forceRefresh) {
+      const cached = getCacheJson_(cleanFile);
+      if (cached && cached.data !== undefined) {
+        return {
+          status: 'success',
+          source: 'drive_json',
+          file: cleanFile,
+          data: cached.data,
+          updatedAt: cached.updatedAt,
+          cached: true
+        };
+      }
+    }
+
+    const rootFolder = DriveApp.getFolderById(PROJECTS_DRIVE_ROOT_FOLDER_ID);
+    let readRes = readDriveJsonFileRaw_(rootFolder, cleanFile, !forceRefresh);
+
+    // Auto-semilla automática en la primera lectura si la carpeta aún no tenía los JSON maestros
+    if (!readRes.exists && (cleanFile === 'empresas.json' || cleanFile === 'portal-config.json' || cleanFile === 'usuarios.json')) {
+      migrateStaticToDrive_(null, true);
+      readRes = readDriveJsonFileRaw_(rootFolder, cleanFile, false);
+    }
+
+    // Si es un config-empresa-*.json que aún no está en la raíz, intentar rescatarlo de subcarpeta o repositorio público
+    if (!readRes.exists && cleanFile.indexOf('config-') === 0) {
+      const fallbackCfg = fetchPublicStaticJsonFallback_(cleanFile);
+      if (fallbackCfg && typeof fallbackCfg === 'object') {
+        writeDriveJsonFileRaw_(rootFolder, cleanFile, fallbackCfg);
+        return {
+          status: 'success',
+          source: 'drive_json',
+          file: cleanFile,
+          data: fallbackCfg,
+          updatedAt: new Date().toISOString(),
+          seededOnRead: true
+        };
+      }
+    }
+
+    if (!readRes.exists) {
+      return {
+        status: 'not_found',
+        source: 'drive_json',
+        file: cleanFile,
+        message: 'El archivo ' + cleanFile + ' aún no existe en Google Drive.'
+      };
+    }
+
+    return {
+      status: 'success',
+      source: 'drive_json',
+      file: cleanFile,
+      data: readRes.data,
+      updatedAt: readRes.updatedAt,
+      cached: false
+    };
+  } catch (err) {
+    return {
+      status: 'error',
+      source: 'drive_json',
+      message: err.toString()
+    };
+  }
+}
+
+function getPlatformBootstrap_(params) {
+  try {
+    const p = params || {};
+    const empresaId = String(p.empresa || p.companyId || '').trim();
+    const force = String(p.force || '') === '1';
+
+    const rootFolder = DriveApp.getFolderById(PROJECTS_DRIVE_ROOT_FOLDER_ID);
+    let empRes = readDriveJsonFileRaw_(rootFolder, 'empresas.json', !force);
+    if (!empRes.exists) {
+      migrateStaticToDrive_(null, true);
+      empRes = readDriveJsonFileRaw_(rootFolder, 'empresas.json', false);
+    }
+
+    const portalRes = readDriveJsonFileRaw_(rootFolder, 'portal-config.json', !force);
+    let userRes = readDriveJsonFileRaw_(rootFolder, 'usuarios.json', !force);
+    if (!userRes.exists) {
+      const syncedUsers = syncUsuariosJsonFromSheet_(null, rootFolder);
+      userRes = { exists: true, data: syncedUsers };
+    }
+
+    let companyConfig = null;
+    if (empresaId && Array.isArray(empRes.data)) {
+      const targetEmp = empRes.data.find(function(e) { return e && e.id === empresaId; });
+      const cfgFile = sanitizeJsonFileName_((targetEmp && targetEmp.configUrl) || ('config-' + empresaId + '.json'));
+      if (cfgFile) {
+        const cfgRes = getDriveJson_({ file: cfgFile, force: force ? '1' : '0' }, null);
+        if (cfgRes && cfgRes.status === 'success') {
+          companyConfig = cfgRes.data;
+        }
+      }
+    }
+
+    return {
+      status: 'success',
+      source: 'drive_json',
+      empresas: empRes.exists ? empRes.data : [],
+      portalConfig: portalRes.exists ? portalRes.data : null,
+      usuarios: userRes.exists ? userRes.data : [],
+      companyConfig: companyConfig,
+      updatedAt: new Date().toISOString()
+    };
+  } catch (err) {
+    return { status: 'error', source: 'drive_json', message: err.toString() };
+  }
+}
+
+function saveDriveJson_(payload) {
+  const lock = LockService.getScriptLock();
+  lock.tryLock(25000);
+  try {
+    const p = payload || {};
+    const cleanFile = sanitizeJsonFileName_(p.file || p.fileName || p.path || '');
+    if (!cleanFile) {
+      return { status: 'error', source: 'drive_json', message: 'Nombre de archivo JSON inválido.' };
+    }
+    if (p.data === undefined) {
+      return { status: 'error', source: 'drive_json', message: 'No se enviaron datos para guardar.' };
+    }
+
+    const rootFolder = DriveApp.getFolderById(PROJECTS_DRIVE_ROOT_FOLDER_ID);
+    let dataToSave = p.data;
+
+    // Si es un archivo de configuración de empresa, sincronizar también subcarpetas [Empresa]/[Proyecto]/proyecto.json
+    if (cleanFile.indexOf('config-') === 0 && cleanFile !== 'config-nora.json') {
+      const empRes = readDriveJsonFileRaw_(rootFolder, 'empresas.json', true);
+      if (empRes.exists && Array.isArray(empRes.data)) {
+        const matchedEmp = empRes.data.find(function(e) {
+          if (!e) return false;
+          if (p.companyId && e.id === p.companyId) return true;
+          return sanitizeJsonFileName_(e.configUrl || ('config-' + e.id + '.json')) === cleanFile;
+        });
+        if (matchedEmp) {
+          dataToSave = syncCompanySubfolderAndProjects_(rootFolder, matchedEmp, dataToSave, false);
+        }
+      }
+    }
+
+    const writeInfo = writeDriveJsonFileRaw_(rootFolder, cleanFile, dataToSave);
+    return {
+      status: 'success',
+      source: 'drive_json',
+      file: cleanFile,
+      fileId: writeInfo.fileId,
+      updatedAt: writeInfo.updatedAt,
+      message: 'Archivo ' + cleanFile + ' guardado exitosamente en Google Drive.'
+    };
+  } catch (err) {
+    return { status: 'error', source: 'drive_json', message: err.toString() };
+  } finally {
+    try { lock.releaseLock(); } catch (e) {}
+  }
+}
+
+function syncDriveFoldersFast_(doc, empresas, companyConfigs) {
+  const modelsRoot = DriveApp.getFolderById(DRIVE_ROOT_FOLDER_ID);
+  let companySheet = doc.getSheetByName('Empresas');
+  if (!companySheet) companySheet = doc.insertSheet('Empresas');
+  ensureHeaders(companySheet, COMPANY_HEADERS);
+
+  const sheetData = companySheet.getDataRange().getValues();
+  const headers = sheetData.length > 0 ? sheetData[0].map(function(h) { return String(h).trim(); }) : COMPANY_HEADERS.slice();
+  const idColIdx = headers.indexOf('id');
+  const codeColIdx = headers.indexOf('code');
+  const folderColIdx = headers.indexOf('driveFolderId');
+  const existingSheetIds = {};
+  for (let r = 1; r < sheetData.length; r++) {
+    const rid = idColIdx !== -1 ? String(sheetData[r][idColIdx] || '').trim() : '';
+    if (rid) existingSheetIds[rid] = r;
+  }
+
+  const foldersResult = {};
+  const rowsToAppend = [];
+  const nowIso = new Date().toISOString();
+
+  (empresas || []).forEach(function(emp) {
+    if (!emp || emp.deleted || !emp.id) return;
+    const code = emp.code || (emp.name ? String(emp.name).replace(/[^a-zA-Z0-9]/g, '').toUpperCase().substring(0, 3) : 'EMP') || '000';
+    const name = emp.name || 'Sin Nombre';
+
+    let companyFolder = null;
+    let compFolderId = String(emp.driveFolderId || '').trim();
+
+    // Solo consultar/crear carpeta de empresa en Drive de Modelos si no tiene ID aún o si un proyecto nuevo necesita crearse dentro
+    const cfg = (companyConfigs && companyConfigs[emp.id]) || { projects: [] };
+    const projects = Array.isArray(cfg.projects) ? cfg.projects : [];
+    const anyProjectNeedsFolder = projects.some(function(p) {
+      return p && (!(p.dataSources && p.dataSources.driveFolderId) || p._nameChanged);
+    });
+
+    if (!compFolderId || anyProjectNeedsFolder || emp._nameChanged) {
+      if (compFolderId) {
+        try { companyFolder = DriveApp.getFolderById(compFolderId); } catch (e) { companyFolder = null; }
+      }
+      if (!companyFolder) {
+        try {
+          companyFolder = getOrCreateFolder(modelsRoot, code + ' - ' + name);
+          compFolderId = companyFolder.getId();
+        } catch (e) {
+          foldersResult[emp.id] = { error: e.toString(), projects: {} };
+          return;
+        }
+      }
+      emp.driveFolderId = compFolderId;
+    }
+
+    foldersResult[emp.id] = {
+      driveFolderId: compFolderId,
+      projects: {}
+    };
+
+    // Sincronizar fila en hoja Empresas si es nueva o le faltaba driveFolderId
+    const sheetRowIdx = existingSheetIds[emp.id];
+    if (sheetRowIdx !== undefined) {
+      if (folderColIdx !== -1 && compFolderId && String(sheetData[sheetRowIdx][folderColIdx] || '') !== compFolderId) {
+        companySheet.getRange(sheetRowIdx + 1, folderColIdx + 1).setValue(compFolderId);
+      }
+      if (codeColIdx !== -1 && code && !sheetData[sheetRowIdx][codeColIdx]) {
+        companySheet.getRange(sheetRowIdx + 1, codeColIdx + 1).setValue(code);
+      }
+    } else {
+      const newCompRow = new Array(headers.length).fill('');
+      const setC = function(col, val) {
+        const idx = headers.indexOf(col);
+        if (idx !== -1 && val !== undefined && val !== null) newCompRow[idx] = val;
+      };
+      setC('fecha', nowIso);
+      setC('id', emp.id);
+      setC('name', name);
+      setC('legalName', emp.razonSocial || name);
+      setC('website', emp.sitioWeb || '');
+      setC('email', (Array.isArray(emp.admins) && emp.admins[0]) || emp.correoGeneral || '');
+      setC('phone', emp.telefonoCorporativo || '');
+      setC('country', 'Colombia');
+      setC('state', emp.departamento || '');
+      setC('city', emp.ciudad || '');
+      setC('address', emp.direccion || '');
+      setC('code', code);
+      setC('driveFolderId', compFolderId);
+      rowsToAppend.push(newCompRow);
+      existingSheetIds[emp.id] = -1;
+    }
+
+    // Sincronizar carpetas de modelos e incidencias SOLO para proyectos nuevos o renombrados
+    projects.forEach(function(proj) {
+      if (!proj || !proj.slug) return;
+      if (!proj.dataSources) proj.dataSources = {};
+      let projFolderId = String(proj.dataSources.driveFolderId || '').trim();
+
+      if (!projFolderId || proj._nameChanged) {
+        let projFolder = null;
+        const expectedName = (proj.name || 'Proyecto') + ' [' + proj.slug + ']';
+        if (projFolderId) {
+          try {
+            projFolder = DriveApp.getFolderById(projFolderId);
+            if (projFolder.getName() !== expectedName) projFolder.setName(expectedName);
+          } catch (e) {
+            projFolder = null;
+          }
+        }
+        if (!projFolder && companyFolder) {
+          try {
+            projFolder = findProjectFolder(companyFolder, proj.slug, proj.name, proj.name);
+            if (projFolder) {
+              if (projFolder.getName() !== expectedName) projFolder.setName(expectedName);
+            } else {
+              projFolder = getOrCreateFolder(companyFolder, expectedName);
+            }
+            projFolderId = projFolder.getId();
+          } catch (e) {}
+        }
+        if (projFolderId) {
+          proj.dataSources.driveFolderId = projFolderId;
+          proj.dataSources.driveFolderName = proj.name || 'Sin Nombre';
+        }
+        // Provisionar hoja de incidencias únicamente cuando el proyecto es nuevo
+        try {
+          provisionIncidentsProject_(emp, proj, {});
+        } catch (incErr) {}
+      } else if (!proj.dataSources.driveFolderName && proj.name) {
+        proj.dataSources.driveFolderName = proj.name;
+      }
+
+      delete proj._nameChanged;
+      foldersResult[emp.id].projects[proj.slug] = projFolderId;
+    });
+
+    delete emp._nameChanged;
+  });
+
+  if (rowsToAppend.length > 0) {
+    companySheet.getRange(companySheet.getLastRow() + 1, 1, rowsToAppend.length, headers.length).setValues(rowsToAppend);
+  }
+
+  return foldersResult;
+}
+
+function saveAdminBundle_(payload) {
+  const lock = LockService.getScriptLock();
+  lock.tryLock(25000);
+  try {
+    const data = payload || {};
+    const empresas = Array.isArray(data.empresas) ? data.empresas : null;
+    if (!empresas) {
+      return { status: 'error', source: 'drive_json', message: 'El listado de empresas es inválido.' };
+    }
+
+    const rootFolder = DriveApp.getFolderById(PROJECTS_DRIVE_ROOT_FOLDER_ID);
+    const doc = openMasterSpreadsheet_();
+    const companyConfigs = (data.companyConfigs && typeof data.companyConfigs === 'object') ? data.companyConfigs : {};
+    const userRole = String(data.userRole || '').trim();
+    const userEmail = String(data.userEmail || '').toLowerCase().trim();
+
+    // Si quien guarda es ADMINISTRADOR_EMPRESA (y no SUPER_ADMINISTRADOR), proteger empresas ajenas en Drive
+    let finalEmpresas = empresas;
+    if (userRole !== 'SUPER_ADMINISTRADOR') {
+      const existingEmpFile = readDriveJsonFileRaw_(rootFolder, 'empresas.json', false);
+      if (existingEmpFile.exists && Array.isArray(existingEmpFile.data)) {
+        const incomingById = {};
+        empresas.forEach(function(e) { if (e && e.id) incomingById[e.id] = e; });
+        finalEmpresas = existingEmpFile.data.map(function(origEmp) {
+          const canAdminOrig = origEmp && (
+            (Array.isArray(origEmp.admins) && origEmp.admins.some(function(a) { return String(a).toLowerCase().trim() === userEmail; })) ||
+            (Array.isArray(origEmp.members) && origEmp.members.some(function(m) {
+              return m && m.email && String(m.email).toLowerCase().trim() === userEmail && (m.role === 'ADMINISTRADOR_EMPRESA' || m.role === 'ADMINISTRADOR');
+            }))
+          );
+          if (canAdminOrig && incomingById[origEmp.id]) {
+            return incomingById[origEmp.id];
+          }
+          return origEmp;
+        });
+      }
+    }
+
+    // 1. Asegurar admins coherentes con members y recolectar usuarios para sincronizar en bloque
+    const usersBatch = [];
+    finalEmpresas.forEach(function(emp) {
+      if (!emp || emp.deleted) return;
+      if (!emp.configUrl) emp.configUrl = 'config-' + emp.id + '.json';
+      if (!Array.isArray(emp.admins)) emp.admins = [];
+      if (!Array.isArray(emp.members)) emp.members = [];
+
+      emp.members.forEach(function(m) {
+        if (!m || !m.email || !String(m.email).trim()) return;
+        const em = String(m.email).toLowerCase().trim();
+        m.email = em;
+        if (m.role === 'ADMINISTRADOR_EMPRESA') {
+          if (!emp.admins.some(function(a) { return String(a).toLowerCase().trim() === em; })) {
+            emp.admins.push(em);
+          }
+        }
+        const isInternal = (m.role === 'ADMINISTRADOR_EMPRESA' || m.role === 'MIEMBRO' || !m.role);
+        if (isInternal) {
+          usersBatch.push({
+            email: em,
+            nombre: (m.name && m.name !== 'Nuevo Usuario') ? m.name : '',
+            empresa: emp.name,
+            especialidad: m.especialidad || '',
+            cargo: m.cargo || '',
+            rol: m.role || 'MIEMBRO',
+            estado: 'APROBADO'
+          });
+        } else if (m.role === 'INVITADO') {
+          usersBatch.push({
+            email: em,
+            nombre: (m.name && m.name !== 'Nuevo Usuario') ? m.name : '',
+            empresa: m.empresaUsuario || '',
+            especialidad: m.especialidad || '',
+            cargo: m.cargo || '',
+            rol: 'INVITADO',
+            estado: 'APROBADO'
+          });
+        }
+      });
+    });
+
+    // 2. Sincronizar carpetas de modelos rápidamente (solo crea/abre cuando falta driveFolderId o cambió nombre)
+    const foldersMap = syncDriveFoldersFast_(doc, finalEmpresas, companyConfigs);
+
+    // 3. Sincronizar hoja Usuarios + usuarios.json en Drive en una sola pasada rápida
+    if (usersBatch.length > 0) {
+      upsertUsersBatchInSheet_(doc, usersBatch);
+    }
+    const usuariosActualizados = syncUsuariosJsonFromSheet_(doc, rootFolder);
+
+    // 4. Guardar empresas.json en Drive
+    writeDriveJsonFileRaw_(rootFolder, 'empresas.json', finalEmpresas);
+
+    // 5. Guardar portal-config.json si aplica
+    if (userRole === 'SUPER_ADMINISTRADOR' && data.portalConfig && typeof data.portalConfig === 'object') {
+      writeDriveJsonFileRaw_(rootFolder, 'portal-config.json', data.portalConfig);
+    }
+
+    // 6. Guardar config-empresa-*.json y sincronizar subcarpetas [Empresa]/[Proyecto]/proyecto.json
+    const savedConfigs = {};
+    Object.keys(companyConfigs).forEach(function(empId) {
+      const emp = finalEmpresas.find(function(e) { return e && e.id === empId; });
+      if (!emp) return;
+
+      if (userRole !== 'SUPER_ADMINISTRADOR') {
+        const hasAccess = (Array.isArray(emp.admins) && emp.admins.some(function(a) { return String(a).toLowerCase().trim() === userEmail; })) ||
+          (Array.isArray(emp.members) && emp.members.some(function(m) {
+            return m && m.email && String(m.email).toLowerCase().trim() === userEmail && (m.role === 'ADMINISTRADOR_EMPRESA' || m.role === 'ADMINISTRADOR');
+          }));
+        if (!hasAccess) return;
+      }
+
+      const cfgFile = sanitizeJsonFileName_(emp.configUrl || ('config-' + empId + '.json'));
+      if (!cfgFile) return;
+
+      let cfgData = companyConfigs[empId] || { projects: [] };
+      if (!cfgData.portal) cfgData.portal = { name: emp.name || 'nora CDE' };
+      if (!Array.isArray(cfgData.projects)) cfgData.projects = [];
+
+      cfgData = syncCompanySubfolderAndProjects_(rootFolder, emp, cfgData, false);
+      writeDriveJsonFileRaw_(rootFolder, cfgFile, cfgData);
+      savedConfigs[empId] = cfgData;
+    });
+
+    return {
+      status: 'success',
+      source: 'drive_json',
+      message: 'Cambios guardados instantáneamente en Google Drive.',
+      folders: foldersMap,
+      empresas: finalEmpresas,
+      companyConfigs: savedConfigs,
+      usersCount: usuariosActualizados.length,
+      updatedAt: new Date().toISOString()
+    };
+  } catch (err) {
+    return {
+      status: 'error',
+      source: 'drive_json',
+      message: 'Error guardando en Google Drive: ' + err.toString()
+    };
+  } finally {
+    try { lock.releaseLock(); } catch (e) {}
   }
 }
 
@@ -556,6 +2008,21 @@ function doPost(e) {
     if (action === 'restoreVersion') {
       return output_(restoreVersion_(e, data), callback);
     }
+    if (action === 'getDriveJson') {
+      return output_(getDriveJson_(e.parameter || {}, data), callback);
+    }
+    if (action === 'getPlatformBootstrap') {
+      return output_(getPlatformBootstrap_(Object.assign({}, e.parameter || {}, data || {})), callback);
+    }
+    if (action === 'saveDriveJson') {
+      return output_(saveDriveJson_(data || {}), callback);
+    }
+    if (action === 'saveAdminBundle') {
+      return output_(saveAdminBundle_(data || {}), callback);
+    }
+    if (action === 'migrateStaticToDrive') {
+      return output_(migrateStaticToDrive_(data || {}, Boolean(data && data.onlyIfMissing)), callback);
+    }
     if (action === 'wompiWebhook' || (data && data.event === 'transaction.updated')) {
       return output_(handleWompiWebhook_(e, data), callback);
     }
@@ -591,10 +2058,22 @@ function doPost(e) {
               }
             }
             if (deletedAny) {
-              return ContentService.createTextOutput(JSON.stringify({ status: "success", message: "Usuario eliminado exitosamente" })).setMimeType(ContentService.MimeType.JSON);
+              try {
+                syncUsuariosJsonFromSheet_(doc, null);
+                syncSingleUserIntoEmpresasDrive_(null, { email: email }, 'delete');
+              } catch (syncErr) {}
+              return ContentService.createTextOutput(JSON.stringify({ status: "success", source: "drive_json", message: "Usuario eliminado exitosamente" })).setMimeType(ContentService.MimeType.JSON);
             }
           }
         }
+      }
+      let removedFromDrive = false;
+      try {
+        syncUsuariosJsonFromSheet_(doc, null);
+        removedFromDrive = Boolean(syncSingleUserIntoEmpresasDrive_(null, { email: email }, 'delete'));
+      } catch (syncErr) {}
+      if (removedFromDrive) {
+        return ContentService.createTextOutput(JSON.stringify({ status: "success", source: "drive_json", message: "Usuario eliminado de Drive exitosamente" })).setMimeType(ContentService.MimeType.JSON);
       }
       return ContentService.createTextOutput(JSON.stringify({ status: "error", message: "Usuario no encontrado" })).setMimeType(ContentService.MimeType.JSON);
     }
@@ -649,10 +2128,22 @@ function doPost(e) {
                   }
                 }
               }
-              return ContentService.createTextOutput(JSON.stringify({ status: "success", message: "Empresa eliminada exitosamente" })).setMimeType(ContentService.MimeType.JSON);
+              try {
+                syncCompanyChangeIntoEmpresasDrive_(null, { id: companyId }, 'delete');
+                syncUsuariosJsonFromSheet_(doc, null);
+              } catch (syncErr) {}
+              return ContentService.createTextOutput(JSON.stringify({ status: "success", source: "drive_json", message: "Empresa eliminada exitosamente" })).setMimeType(ContentService.MimeType.JSON);
             }
           }
         }
+      }
+      let deletedCompanyInDrive = false;
+      try {
+        deletedCompanyInDrive = Boolean(syncCompanyChangeIntoEmpresasDrive_(null, { id: companyId }, 'delete'));
+        syncUsuariosJsonFromSheet_(doc, null);
+      } catch (syncErr) {}
+      if (deletedCompanyInDrive) {
+        return ContentService.createTextOutput(JSON.stringify({ status: "success", source: "drive_json", message: "Empresa eliminada en Drive exitosamente" })).setMimeType(ContentService.MimeType.JSON);
       }
       return ContentService.createTextOutput(JSON.stringify({ status: "error", message: "Empresa no encontrada" })).setMimeType(ContentService.MimeType.JSON);
     }
@@ -776,6 +2267,28 @@ function doPost(e) {
       
       return ContentService.createTextOutput(JSON.stringify({ 
         status: "success", 
+        id: (function() {
+          try {
+            syncCompanyChangeIntoEmpresasDrive_(null, {
+              id: companyId,
+              name: name,
+              legalName: data.companyData.legalName || name,
+              email: data.userData.email || data.companyData.email || '',
+              adminName: data.userData.nombre || '',
+              city: data.companyData.city || '',
+              country: data.companyData.country || '',
+              logoBase64: data.companyData.logoBase64 || '',
+              code: code,
+              driveFolderId: driveFolderId
+            }, 'upsert');
+            const syncedUsers = syncUsuariosJsonFromSheet_(doc, null);
+            const targetEmail = String(data.userData.email || '').toLowerCase().trim();
+            const mergedUser = (Array.isArray(syncedUsers) && syncedUsers.find(function(u) { return String(u.email || '').toLowerCase().trim() === targetEmail; })) || data.userData;
+            syncSingleUserIntoEmpresasDrive_(null, mergedUser, 'upsert');
+          } catch (syncErr) {}
+          return companyId;
+        })(),
+        source: "drive_json",
         message: "Empresa y usuario creados exitosamente",
         driveFolderId: driveFolderId,
         code: code
@@ -813,7 +2326,8 @@ function doPost(e) {
       };
       
       setVal('fecha', fecha);
-      setVal('id', 'empresa-' + Date.now());
+      const newCompanyId = String(data.id || ('empresa-' + Date.now())).trim();
+      setVal('id', newCompanyId);
       setVal('name', name);
       setVal('legalName', data.legalName || name);
       setVal('type', data.type || '');
@@ -835,6 +2349,23 @@ function doPost(e) {
       
       return ContentService.createTextOutput(JSON.stringify({ 
         status: "success", 
+        id: (function() {
+          try {
+            syncCompanyChangeIntoEmpresasDrive_(null, {
+              id: newCompanyId,
+              name: name,
+              legalName: data.legalName || name,
+              email: data.email || '',
+              city: data.city || '',
+              country: data.country || '',
+              logoBase64: data.logoBase64 || '',
+              code: code,
+              driveFolderId: driveFolderId
+            }, 'upsert');
+          } catch (syncErr) {}
+          return newCompanyId;
+        })(),
+        source: "drive_json",
         message: "Empresa creada exitosamente",
         driveFolderId: driveFolderId,
         code: code
@@ -1080,7 +2611,21 @@ function doPost(e) {
         userSheet.appendRow(row);
       }
       
-      return ContentService.createTextOutput(JSON.stringify({ status: "success", message: "Usuario guardado exitosamente" })).setMimeType(ContentService.MimeType.JSON);
+      try {
+        const syncedUsers = syncUsuariosJsonFromSheet_(doc, null);
+        const mergedUser = (Array.isArray(syncedUsers) && syncedUsers.find(function(u) { return String(u.email || '').toLowerCase().trim() === email; })) || {
+          email: email,
+          nombre: getVal('nombre'),
+          telefono: getVal('telefono'),
+          empresa: getVal('empresa'),
+          especialidad: getVal('especialidad'),
+          cargo: getVal('cargo'),
+          rol: getVal('rol') || 'INVITADO',
+          estado: getVal('estado') || 'PENDIENTE'
+        };
+        syncSingleUserIntoEmpresasDrive_(null, mergedUser, 'upsert');
+      } catch (syncErr) {}
+      return ContentService.createTextOutput(JSON.stringify({ status: "success", source: "drive_json", message: "Usuario guardado exitosamente" })).setMimeType(ContentService.MimeType.JSON);
     }
     
   } catch (error) {
@@ -1110,6 +2655,21 @@ function doGet(e) {
     }
     if (action === 'listStatus') {
       return output_(listStatus_(e, null), callback);
+    }
+    if (action === 'getDriveJson') {
+      return output_(getDriveJson_(e.parameter || {}, null), callback);
+    }
+    if (action === 'getPlatformBootstrap') {
+      return output_(getPlatformBootstrap_(e.parameter || {}), callback);
+    }
+    if (action === 'migrateStaticToDrive') {
+      return output_(migrateStaticToDrive_(null, String((e.parameter && e.parameter.onlyIfMissing) || '') === '1'), callback);
+    }
+    if ((action === 'getUsers' || action === '') && String((e && e.parameter && e.parameter.force) || '') !== '1') {
+      const cachedUsers = getCacheJson_('usuarios.json');
+      if (cachedUsers && Array.isArray(cachedUsers.data) && cachedUsers.data.length > 0) {
+        return output_(cachedUsers.data, callback);
+      }
     }
     if (action === 'getIncidentsLocations') {
       return output_(getIncidentsLocations_({ empresa: e.parameter.empresa, proyecto: e.parameter.proyecto }), callback);
@@ -1201,6 +2761,7 @@ function doGet(e) {
         }
         usuarios.push(obj);
       }
+      try { putCacheJson_('usuarios.json', JSON.stringify(usuarios), 180); } catch (cacheErr) {}
       return ContentService.createTextOutput(JSON.stringify(usuarios)).setMimeType(ContentService.MimeType.JSON);
     }
     

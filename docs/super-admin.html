@@ -43,6 +43,7 @@
       }
     })();
   </script>
+  <script src="nora-drive-store.js"></script>
 </head>
 
 <body class="bg-slate-100 text-slate-900">
@@ -81,6 +82,9 @@
         <div class="w-full md:w-1/3 flex justify-end gap-2 items-center">
           <button id="global-wompi-config-btn" onclick="openGlobalWompiModal()" type="button" class="rounded-xl bg-slate-900 hover:bg-slate-800 text-white px-4 py-2.5 text-xs font-bold shadow-md transition-all flex items-center gap-1.5 border border-slate-700">
             <span class="material-symbols-outlined text-amber-400 text-base">key</span> Credenciales Wompi
+          </button>
+          <button id="sync-seed-drive-btn" onclick="syncSeedToGoogleDrive()" type="button" title="Sincronizar y verificar todos los JSON en Google Drive" class="rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white px-3.5 py-2.5 text-xs font-bold shadow-md transition-all flex items-center gap-1.5">
+            <span class="material-symbols-outlined text-emerald-200 text-base">cloud_done</span> Drive JSON
           </button>
           <button id="publish-github-btn"
             class="rounded-xl bg-blue-600 px-6 py-3 text-sm font-bold text-white hover:bg-blue-700 shadow-md">Guardar</button>
@@ -1170,7 +1174,7 @@
   <!-- Wompi Checkout Widget SDK & Integration Module -->
   <script type="text/javascript" src="https://checkout.wompi.co/widget.js"></script>
   <script src="wompi-integration.js"></script>
-  <script src="super-admin.js?v=40"></script>
+  <script src="super-admin.js?v=41"></script>
 </body>
 
 </html>

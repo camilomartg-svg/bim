@@ -1180,6 +1180,7 @@
                     body: JSON.stringify(payload)
                 });
                 const resData = await res.json().catch(() => null);
+                if (window.NoraDriveStore) window.NoraDriveStore.invalidateCache();
                 if (resData && resData.status === 'success') {
                     window.showAlert('¡Configuración del proyecto guardada exitosamente en Google Drive!', 'success');
                 } else {
@@ -1194,7 +1195,7 @@
             syncTeamsToGoogle();
 
             // 3. Sincronización secundaria opcional con GitHub en segundo plano si hay PAT
-            const token = localStorage.getItem('github_pat');
+            const token = null; // Almacenamiento JSON migrado 100% a Google Drive
             if (token) {
                 try {
                     const repo = 'camilomartg-svg/bim';

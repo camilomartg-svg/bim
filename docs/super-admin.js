@@ -27,6 +27,8 @@ document.addEventListener('DOMContentLoaded', async () => {
 
       const wompiBtn = document.getElementById('global-wompi-config-btn');
       if (wompiBtn) wompiBtn.classList.remove('hidden');
+      const syncDriveBtn = document.getElementById('sync-seed-drive-btn');
+      if (syncDriveBtn) syncDriveBtn.classList.remove('hidden');
   } else {
       const title = document.getElementById('page-title');
       const subtitle = document.getElementById('page-subtitle');
@@ -49,6 +51,8 @@ document.addEventListener('DOMContentLoaded', async () => {
 
       const wompiBtn = document.getElementById('global-wompi-config-btn');
       if (wompiBtn) wompiBtn.classList.add('hidden');
+      const syncDriveBtn = document.getElementById('sync-seed-drive-btn');
+      if (syncDriveBtn) syncDriveBtn.classList.add('hidden');
   }
 
   let empresas = [];
@@ -131,6 +135,10 @@ document.addEventListener('DOMContentLoaded', async () => {
   }
 
   async function loadData() {
+    if (window.NoraDriveStore) {
+      await window.NoraDriveStore.ensureSeeded();
+      window.NoraDriveStore.invalidateCache();
+    }
     try {
       const ts = Date.now();
       const res = await fetch(`empresas.json?t=${ts}`);
@@ -254,7 +262,8 @@ document.addEventListener('DOMContentLoaded', async () => {
                     if (!emp.admins) emp.admins = [];
                     gUsers.forEach(gu => {
                          const email = gu.email ? gu.email.toLowerCase().trim() : '';
-                         if (email && userBestCompanyMap.get(email) === emp.id) {
+                         const isGuApproved = String(gu.estado || '').toUpperCase().trim() === 'APROBADO' || gu.rol === 'SUPER_ADMINISTRADOR' || gu.rol === 'ADMINISTRADOR_EMPRESA';
+                         if (email && isGuApproved && userBestCompanyMap.get(email) === emp.id) {
                              const mIdx = emp.members.findIndex(m => m.email && m.email.toLowerCase().trim() === email);
                              const memberData = {
                                  name: gu.nombre || email.split('@')[0],
@@ -297,16 +306,17 @@ document.addEventListener('DOMContentLoaded', async () => {
                             // Si existe, debe coincidir con la mejor empresa asignada (si tiene una asignada)
                             const matchedEmpId = userBestCompanyMap.get(emailClean);
                             if (matchedEmpId && matchedEmpId !== emp.id) {
-                                return false; // Pertenece a otra empresa
+                                return true; // Conservar miembros e invitados multi-empresa almacenados en Drive
                             }
                         } else {
-                            return false; // Eliminado de Google Sheets
+                            return true; // Conservar miembros existentes en empresas.json de Drive
                         }
                         return true;
                     });
 
                     // 2. Eliminar del arreglo de administradores de la empresa si ya no tienen el rol de administrador en Google Sheets
-                    emp.admins = emp.admins.filter(adminEmail => {
+                    emp.admins = emp.admins.filter(adminEmail => Boolean(adminEmail && String(adminEmail).trim()));
+                    const _unusedAdminCheck = (emp.admins || []).filter(adminEmail => {
                         if (!adminEmail) return false;
                         const emailClean = adminEmail.toLowerCase().trim();
                         
@@ -1487,6 +1497,7 @@ let contentBase = '';
     const proj = config.projects.find(p => p.slug === slug);
     if(proj) {
       proj[field] = val;
+      if (field === 'name') proj._nameChanged = true;
       if (field === 'country' || field === 'city' || field === 'hasLicense') {
         setTimeout(() => {
           renderProjects();
@@ -2011,7 +2022,8 @@ let contentBase = '';
       
       showBanner('Eliminando empresa...', 'info');
       try {
-        const url = `${ROLES_SCRIPT_URL}?action=deleteCompany&id=${encodeURIComponent(empId)}`;
+        if (window.NoraDriveStore) { await window.NoraDriveStore.postAction({ action: 'deleteCompany', id: empId }); }
+        const url = `${ROLES_SCRIPT_URL}?action=deleteCompany&id=${encodeURIComponent(empId)}`; if (!window.NoraDriveStore)
         await fetch(url, {
           method: 'POST',
           mode: 'no-cors',
@@ -2023,7 +2035,7 @@ let contentBase = '';
         editorEl.classList.add('hidden');
         renderList();
         
-        showBanner('Empresa eliminada de Google Sheets. Haz clic en "Guardar" para guardar los cambios.', 'success');
+        showBanner('✅ Empresa eliminada instantáneamente en Google Drive y Google Sheets.', 'success');
       } catch (e) {
         console.error(e);
         showBanner('Error al eliminar la empresa de Google Sheets.', 'error');
@@ -2080,6 +2092,7 @@ let contentBase = '';
 
       // Re-render list if important display fields change
       if (['name', 'id', 'code', 'razonSocial'].includes(key)) {
+          if (key === 'name' || key === 'code') emp._nameChanged = true;
           if (key === 'id') {
               emp.configUrl = `config-${emp.id}.json`;
           }
@@ -2088,7 +2101,175 @@ let contentBase = '';
     });
   });
 
+  window._syncMemberIntoLocalEmpresas = function(email, name, role, companyName, specialty) {
+    if (!email || !companyName || companyName === 'Sin Empresa Asignada') return;
+    const cleanEmail = String(email).toLowerCase().trim();
+    const cleanComp = String(companyName).toLowerCase().trim();
+    const matchedEmp = empresas.find(e => !e.deleted && (
+      (e.name && e.name.toLowerCase().trim() === cleanComp) ||
+      (e.razonSocial && e.razonSocial.toLowerCase().trim() === cleanComp) ||
+      (e.id && e.id.toLowerCase().trim() === cleanComp)
+    ));
+    if (!matchedEmp) return;
+    if (!Array.isArray(matchedEmp.members)) matchedEmp.members = [];
+    if (!Array.isArray(matchedEmp.admins)) matchedEmp.admins = [];
+    const mIdx = matchedEmp.members.findIndex(m => m && m.email && m.email.toLowerCase().trim() === cleanEmail);
+    const effectiveRole = role === 'SUPER_ADMINISTRADOR' ? 'ADMINISTRADOR_EMPRESA' : (role || 'MIEMBRO');
+    const memberObj = {
+      name: name || (mIdx > -1 ? matchedEmp.members[mIdx].name : cleanEmail.split('@')[0]),
+      email: cleanEmail,
+      role: effectiveRole,
+      empresaUsuario: matchedEmp.name,
+      especialidad: specialty || (mIdx > -1 ? (matchedEmp.members[mIdx].especialidad || '') : ''),
+      cargo: mIdx > -1 ? (matchedEmp.members[mIdx].cargo || '') : ''
+    };
+    if (mIdx > -1) {
+      matchedEmp.members[mIdx] = { ...matchedEmp.members[mIdx], ...memberObj };
+    } else {
+      matchedEmp.members.push(memberObj);
+    }
+    if (effectiveRole === 'ADMINISTRADOR_EMPRESA') {
+      if (!matchedEmp.admins.some(a => String(a || '').toLowerCase().trim() === cleanEmail)) {
+        matchedEmp.admins.push(cleanEmail);
+      }
+    } else if (role !== 'SUPER_ADMINISTRADOR') {
+      matchedEmp.admins = matchedEmp.admins.filter(a => String(a || '').toLowerCase().trim() !== cleanEmail);
+    }
+    if (selectedIndex > -1 && empresas[selectedIndex] && empresas[selectedIndex].id === matchedEmp.id) {
+      renderUsers();
+    }
+  };
+
+  window.syncSeedToGoogleDrive = async function() {
+    if (userRole !== 'SUPER_ADMINISTRADOR') return;
+    const btn = document.getElementById('sync-seed-drive-btn');
+    const origHtml = btn ? btn.innerHTML : '';
+    try {
+      if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = '<span class="material-symbols-outlined animate-spin text-base">sync</span> Sincronizando...';
+      }
+      showBanner('Sincronizando y verificando todos los JSON de empresas, proyectos y usuarios en Google Drive...', 'info');
+      const res = await window.NoraDriveStore.migrateAllStaticToDrive({
+        onlyIfMissing: false,
+        empresas: empresas,
+        companyConfigs: Object.fromEntries(
+          Object.entries(companyConfigs).map(([empId, cfg]) => {
+            const emp = empresas.find(e => e.id === empId);
+            return [(emp && emp.configUrl) || `config-${empId}.json`, cfg];
+          })
+        )
+      });
+      if (!res || res.source !== 'drive_json' || res.status !== 'success') {
+        throw new Error((res && res.message) || 'Actualiza primero Directorio Global noraCDE.js en Google Apps Script (Nueva versión).');
+      }
+      companyConfigs = {};
+      await loadData();
+      await window.fetchGlobalUsers();
+      showBanner(`✅ Base JSON verificada en Google Drive (${res.companiesCount || 0} empresas, ${res.usersCount || 0} usuarios).`, 'success');
+    } catch (err) {
+      console.error('Error en syncSeedToGoogleDrive:', err);
+      showBanner('❌ ' + err.message, 'error');
+    } finally {
+      if (btn) {
+        btn.disabled = false;
+        btn.innerHTML = origHtml;
+      }
+    }
+  };
+
   document.getElementById('publish-github-btn').addEventListener('click', async () => {
+    const saveBtn = document.getElementById('publish-github-btn');
+    const origBtnText = saveBtn ? saveBtn.innerHTML : 'Guardar';
+    for (const emp of empresas) {
+      if (!emp.deleted && (!emp.id || emp.id.trim() === '')) {
+        showBanner('Error: Una empresa tiene el ID vacío. Por favor asigne un ID (ej: constructora-x).', 'error');
+        return;
+      }
+    }
+
+    if (saveBtn) {
+      saveBtn.disabled = true;
+      saveBtn.innerHTML = 'Guardando...';
+    }
+    showBanner('Guardando cambios en Google Drive...', 'info');
+
+    try {
+      let portalConfigObj = null;
+      if (userRole === 'SUPER_ADMINISTRADOR') {
+        try {
+          portalConfigObj = await window.NoraDriveStore.getJson('portal-config.json');
+        } catch (e) {}
+      }
+
+      const companyConfigsPayload = {};
+      for (const [empId, configData] of Object.entries(companyConfigs)) {
+        const emp = empresas.find(e => e.id === empId);
+        if (!emp || emp.deleted) continue;
+
+        let hasAccess = userRole === 'SUPER_ADMINISTRADOR';
+        if (!hasAccess && userRole === 'ADMINISTRADOR_EMPRESA') {
+          hasAccess = emp.members && emp.members.some(m => m.email && m.email.toLowerCase() === userEmail && (m.role === 'ADMINISTRADOR_EMPRESA' || m.role === 'ADMINISTRADOR'));
+        }
+        if (!hasAccess) continue;
+
+        if (!configData.portal) {
+          configData.portal = { name: emp.name || 'nora CDE' };
+        }
+        const cfgFile = emp.configUrl || `config-${empId}.json`;
+        companyConfigsPayload[cfgFile] = configData;
+      }
+
+      const saveRes = await window.NoraDriveStore.saveAdminBundle({
+        empresas: empresas,
+        companyConfigs: companyConfigsPayload,
+        portalConfig: portalConfigObj,
+        userRole: userRole,
+        userEmail: userEmail
+      });
+
+      if (saveRes && saveRes.folders) {
+        const foldersMap = saveRes.folders;
+        empresas.forEach(emp => {
+          delete emp._nameChanged;
+          const info = foldersMap[emp.id];
+          if (info) {
+            if (info.driveFolderId) emp.driveFolderId = info.driveFolderId;
+            const config = companyConfigs[emp.id];
+            if (config && Array.isArray(config.projects) && info.projects) {
+              config.projects.forEach(p => {
+                delete p._nameChanged;
+                const pFolderId = info.projects[p.slug];
+                if (pFolderId && String(pFolderId).indexOf('error:') !== 0) {
+                  if (!p.dataSources) p.dataSources = {};
+                  p.dataSources.driveFolderId = pFolderId;
+                  p.dataSources.driveFolderName = p.name || 'Sin Nombre';
+                }
+              });
+            }
+          }
+        });
+      }
+
+      sessionStorage.removeItem('cachedCompanies_v2');
+      await window.fetchGlobalUsers();
+      renderList();
+      if (selectedIndex > -1) {
+        renderUsers();
+        renderProjects();
+      }
+      showBanner('✅ Cambios guardados instantáneamente en Google Drive.', 'success');
+    } catch (e) {
+      console.error('Error guardando en Google Drive:', e);
+      showBanner('❌ ' + e.message, 'error');
+    } finally {
+      if (saveBtn) {
+        saveBtn.disabled = false;
+        saveBtn.innerHTML = origBtnText;
+      }
+    }
+    return;
+  if (false) {
     let token = localStorage.getItem('github_pat');
     if (!token) {
       token = prompt('Ingresa tu Personal Access Token (PAT) de GitHub para guardar directamente en el repositorio:');
@@ -2306,6 +2487,9 @@ let contentBase = '';
       
       sessionStorage.removeItem('cachedCompanies_v2');
       showBanner('✅ Los datos se han guardado exitosamente, tardará de 1 a 3 minutos en integrar los cambios.', 'success');
+    } catch (ignoredErr) {}
+  }
+  try {
     } catch(e) {
       showBanner('❌ ' + e.message, 'error');
     }
@@ -2584,6 +2768,57 @@ window.closeEditUserModal = function() {
 }
 
 window.saveGlobalUser = async function() {
+    if (window.NoraDriveStore) {
+      const email = document.getElementById('gu-email').value.trim().toLowerCase();
+      const name = document.getElementById('gu-name').value.trim();
+      const role = document.getElementById('gu-role').value;
+      const companyName = document.getElementById('gu-company').value;
+      const specialty = document.getElementById('gu-specialty').value.trim();
+      const saveBtn = document.getElementById('btn-save-gu');
+      if (!email || !name) {
+        alert('Nombre y Correo son obligatorios.');
+        return;
+      }
+      saveBtn.disabled = true;
+      saveBtn.innerHTML = '<span class="material-symbols-outlined animate-spin text-sm mr-2">autorenew</span> Guardando...';
+      try {
+        const res = await window.NoraDriveStore.postAction({
+          action: 'saveUser',
+          email: email,
+          nombre: name,
+          rol: role,
+          empresa: companyName,
+          especialidad: specialty,
+          estado: 'APROBADO'
+        });
+        if (res && res.status === 'error') throw new Error(res.message || 'Error en servidor');
+        window.globalUsersMap.set(email, {
+          email: email,
+          name: name,
+          role: role,
+          companyName: companyName || 'Sin Empresa Asignada',
+          specialty: specialty,
+          estado: 'APROBADO'
+        });
+        if (window._syncMemberIntoLocalEmpresas) {
+          window._syncMemberIntoLocalEmpresas(email, name, role, companyName, specialty);
+        }
+        renderGlobalUsers();
+        closeEditUserModal();
+        showBanner(`✅ Usuario ${name} (${email}) guardado al instante en Google Drive.`, 'success');
+        if (window.selectedIndex !== -1 && window.empresas[window.selectedIndex]) {
+          const currentEmpName = window.empresas[window.selectedIndex].name;
+          if (window.fetchPendingRequests) window.fetchPendingRequests(currentEmpName);
+        }
+      } catch (e) {
+        console.error(e);
+        alert('Error al guardar el usuario: ' + e.message);
+      } finally {
+        saveBtn.disabled = false;
+        saveBtn.innerHTML = 'Guardar Cambios';
+      }
+      return;
+    }
     const email = document.getElementById('gu-email').value.trim().toLowerCase();
     const name = document.getElementById('gu-name').value.trim();
     const role = document.getElementById('gu-role').value;
@@ -2656,6 +2891,32 @@ window.saveGlobalUser = async function() {
 }
 
 window.deleteGlobalUser = async function(email, companyName) {
+    if (window.NoraDriveStore) {
+      if (!confirm(`¿Estás seguro de que deseas eliminar permanentemente al usuario con correo ${email}?`)) return;
+      const lowercaseEmail = email.toLowerCase().trim();
+      if (lowercaseEmail === 'mcmartinezg@unal.edu.co' || lowercaseEmail === 'imagina3ddesign@gmail.com') {
+        alert('No se puede eliminar a un Super Administrador por motivos de seguridad.');
+        return;
+      }
+      showBanner('Eliminando usuario...', 'info');
+      try {
+        await window.NoraDriveStore.postAction({ action: 'deleteUser', email: email });
+        window.empresas.forEach(emp => {
+          if (emp.members) emp.members = emp.members.filter(m => !m.email || m.email.toLowerCase().trim() !== lowercaseEmail);
+          if (emp.admins) emp.admins = emp.admins.filter(a => a.toLowerCase().trim() !== lowercaseEmail);
+        });
+        for (const k of window.globalUsersMap.keys()) {
+          if (k.split('_')[0] === lowercaseEmail) window.globalUsersMap.delete(k);
+        }
+        renderGlobalUsers();
+        if (window.selectedIndex > -1 && typeof window.renderUsers === 'function') window.renderUsers();
+        showBanner('✅ Usuario eliminado instantáneamente de Google Drive y Google Sheets.', 'success');
+      } catch (e) {
+        console.error('Error al eliminar usuario:', e);
+        showBanner('Error al eliminar usuario del sistema.', 'error');
+      }
+      return;
+    }
     if (!confirm(`¿Estás seguro de que deseas eliminar permanentemente al usuario con correo ${email}?`)) {
         return;
     }
@@ -2779,6 +3040,27 @@ window.fetchPendingRequests = async function(companyName) {
 };
 
 window.approvePendingUser = async function(email, nombre, empresa) {
+    if (window.NoraDriveStore) {
+      try {
+        await window.NoraDriveStore.postAction({
+          action: 'saveUser',
+          email: email,
+          nombre: nombre,
+          estado: 'APROBADO',
+          rol: 'MIEMBRO',
+          empresa: empresa
+        });
+        if (window._syncMemberIntoLocalEmpresas) {
+          window._syncMemberIntoLocalEmpresas(email, nombre, 'MIEMBRO', empresa, '');
+        }
+        showBanner(`✅ ${nombre} aprobado al instante como MIEMBRO de ${empresa}.`, 'success');
+        if (window.fetchPendingRequests) window.fetchPendingRequests(empresa);
+        if (window.globalUsersMap.size > 0) window.fetchGlobalUsers();
+      } catch (e) {
+        alert('Error al aprobar el usuario.');
+      }
+      return;
+    }
     try {
         const payload = {
             action: 'saveUser',
@@ -2813,6 +3095,42 @@ window.approvePendingUser = async function(email, nombre, empresa) {
 // QUICK APPROVE: from the global users list
 // ==========================================
 window.quickApproveUser = async function(email, nombre, companyName = '') {
+    if (window.NoraDriveStore) {
+      const u = window.globalUsersMap.get(email);
+      if (!u) return;
+      let empresa = u.companyName && u.companyName !== 'Sin Empresa Asignada' ? u.companyName : '';
+      if (!empresa) {
+        empresa = prompt(`Asigna una empresa a ${nombre} para aprobar su acceso (deja en blanco para aprobar sin empresa):`, '');
+        if (empresa === null) return;
+        empresa = empresa.trim();
+      }
+      const rol = empresa ? (u.role === 'ADMINISTRADOR_EMPRESA' ? 'ADMINISTRADOR_EMPRESA' : 'MIEMBRO') : (u.role === 'INVITADO' ? 'INVITADO' : (u.role || 'INVITADO'));
+      try {
+        await window.NoraDriveStore.postAction({
+          action: 'saveUser',
+          email: email,
+          nombre: u.name,
+          rol: rol,
+          empresa: empresa,
+          especialidad: u.specialty || '',
+          estado: 'APROBADO'
+        });
+        window.globalUsersMap.set(email, {
+          ...u,
+          role: rol,
+          companyName: empresa || 'Sin Empresa Asignada',
+          estado: 'APROBADO'
+        });
+        if (empresa && window._syncMemberIntoLocalEmpresas) {
+          window._syncMemberIntoLocalEmpresas(email, u.name, rol, empresa, u.specialty || '');
+        }
+        renderGlobalUsers();
+        showBanner(`✅ ${nombre} aprobado al instante${empresa ? ' en ' + empresa : ''}.`, 'success');
+      } catch (e) {
+        showBanner('❌ Error al aprobar el usuario.', 'error');
+      }
+      return;
+    }
     const u = window.globalUsersMap.get(email);
     if (!u) return;
 

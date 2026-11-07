@@ -1,7 +1,8 @@
-const CACHE_NAME = 'portal-bim-nora-v40';
+const CACHE_NAME = 'portal-bim-nora-v41';
 // Lista de archivos que queremos guardar en caché para que la app funcione offline.
 const urlsToCache = [
   'home.html', // Ruta relativa a la ubicación del Service Worker
+  'nora-drive-store.js',
   'portal-config.json',
   'portal-configurator.html',
   'portal-configurator.js',
@@ -56,14 +57,24 @@ self.addEventListener('activate', event => {
           }
         })
       );
-    })
+    }).then(() => self.clients.claim())
   );
 });
 
 // Evento fetch: intercepta las peticiones.
 self.addEventListener('fetch', event => {
-  // Ignorar URLs que no sean http/https (como chrome-extension://)
+  // Ignorar URLs que no sean http/https o peticiones que no sean GET
   if (!event.request.url.startsWith('http')) return;
+  if (event.request.method !== 'GET') return;
+
+  // Nunca interceptar llamadas dinámicas a Google Apps Script / Google Drive
+  if (
+    event.request.url.includes('script.google.com') ||
+    event.request.url.includes('googleusercontent.com') ||
+    event.request.url.includes('googleapis.com')
+  ) {
+    return;
+  }
 
   // Estrategia Network-First, fallback to Cache
   event.respondWith(
@@ -86,9 +97,3 @@ self.addEventListener('fetch', event => {
       })
   );
 });
-
-
-
-
-
-

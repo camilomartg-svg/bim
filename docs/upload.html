@@ -60,6 +60,7 @@
       background-color: rgba(59, 130, 246, 0.1) !important;
     }
   </style>
+  <script src="nora-drive-store.js"></script>
 </head>
 <body class="bg-slate-50 text-text-light dark:bg-slate-950 dark:text-text-dark min-h-screen flex flex-col transition-colors duration-300">
   <div id="page-shell" class="flex-1 flex flex-col">
@@ -1916,9 +1917,19 @@
             btnSave.addEventListener('click', async () => {
               try {
                 localStorage.setItem(getTeamVisibilityStorageKey(), JSON.stringify(activeProject.fileVisibilityConfig));
+                if (window.NoraDriveStore && activeProject) {
+                  await window.NoraDriveStore.postAction({
+                    action: 'saveProjectConfig',
+                    companyId: companyId || '',
+                    companyName: (currentCompany && currentCompany.name) || companyId || 'General',
+                    projectName: activeProject.name || 'Proyecto',
+                    projectSlug: activeProject.slug || '',
+                    projectData: activeProject
+                  });
+                }
 
                 // Sync with GitHub repository if token exists
-                const token = localStorage.getItem('github_pat');
+                const token = null; // Almacenamiento JSON migrado 100% a Google Drive
                 if (token && currentCompany && currentCompany.configUrl) {
                   try {
                     const repo = 'camilomartg-svg/bim';

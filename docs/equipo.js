@@ -4508,6 +4508,7 @@
 
       const resData = await res.json().catch(() => null);
 
+      if (window.NoraDriveStore) window.NoraDriveStore.invalidateCache();
       if (resData && resData.status === 'success') {
         if (!silent) {
           window.showToast('¡Proyecto guardado exitosamente en Google Drive!', 'success');
@@ -4538,6 +4539,7 @@
 
   // Sincronización secundaria opcional en segundo plano con GitHub (no bloquea al usuario)
   async function syncToGitHubSilently() {
+    return; // Almacenamiento JSON migrado 100% a Google Drive (sin límite ni demora de GitHub)
     const token = localStorage.getItem('github_pat');
     if (!token || !activeProject) return;
 
