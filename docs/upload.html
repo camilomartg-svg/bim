@@ -5082,6 +5082,14 @@
           if (data.status === 'error') {
             throw new Error(data.message || 'Error al eliminar');
           }
+          try {
+            await cleanupViewpointsForDeletedModel(f.name, uniqueFileIds);
+            if (isRvt && fragName) {
+              await cleanupViewpointsForDeletedModel(fragName, [f.pairedFragId, f.pairedFragJsonId].filter(Boolean));
+            }
+          } catch(e) {
+            console.warn('[Upload] Error eliminando modelo de vistas:', e);
+          }
 
           // 2. Si era RVT y tenía .frag asociado, limpiar también registro de estado para el .frag
           const fragName = f.pairedFragName || `${f.name.replace(/\.rvt$/i, '')}.frag`;
@@ -5145,6 +5153,79 @@
       refreshListBtn.addEventListener('click', loadProjectFiles);
       filesSearch.addEventListener('input', renderDriveFilesTable);
     });
-  </script>
+  
+    async function cleanupViewpointsForDeletedModel(filename, fileIds) {
+      try {
+        const fnLower = String(filename || '').toLowerCase();
+        const baseLower = fnLower.replace(/\.[^/.]+$/, '');
+        const idSet = new Set((fileIds || []).map(id => String(id).toLowerCase()));
+        const scriptUrl = "https://script.google.com/macros/s/AKfycbyg9Bs9N1HnjHBpfqRaiB0HNDy5uS4QR6LqIPSZELLcoGR5Gvw64MUTBcqJlpsMK0w/exec";
+
+        for (let i = 0; i < localStorage.length; i++) {
+          const key = localStorage.key(i);
+          if (key && key.startsWith('vsr-ifc-viewpoints')) {
+            try {
+              const raw = localStorage.getItem(key);
+              if (!raw) continue;
+              let views = JSON.parse(raw);
+              if (!Array.isArray(views)) continue;
+
+              let modified = false;
+              const filteredViews = [];
+
+              for (const vp of views) {
+                if (Array.isArray(vp.loadedModels) && vp.loadedModels.length > 0) {
+                  const remaining = vp.loadedModels.filter(m => {
+                    const u = String(m.uuid || '').toLowerCase();
+                    const url = String(m.url || '').toLowerCase();
+                    if (u.includes(fnLower) || u.includes(baseLower)) return false;
+                    if (url.includes(fnLower) || url.includes(baseLower)) return false;
+                    for (const fid of idSet) {
+                      if (fid.length > 5 && (url.includes(fid) || u.includes(fid))) return false;
+                    }
+                    return true;
+                  });
+
+                  if (remaining.length === 0) {
+                    modified = true;
+                    console.log(`[Upload] Removing viewpoint associated with deleted model: ${vp.title} (${vp.id})`);
+                    try {
+                      fetch(scriptUrl, {
+                        method: 'POST',
+                        mode: 'cors',
+                        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+                        body: JSON.stringify({ action: 'delete', id: vp.id })
+                      }).catch(() => {});
+                    } catch {}
+                    continue;
+                  } else if (remaining.length < vp.loadedModels.length) {
+                    modified = true;
+                    vp.loadedModels = remaining;
+                    filteredViews.push(vp);
+                    try {
+                      fetch(scriptUrl, {
+                        method: 'POST',
+                        mode: 'cors',
+                        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+                        body: JSON.stringify({ action: 'save', data: vp, requesterUserId: vp.userId })
+                      }).catch(() => {});
+                    } catch {}
+                    continue;
+                  }
+                }
+                filteredViews.push(vp);
+              }
+
+              if (modified) {
+                localStorage.setItem(key, JSON.stringify(filteredViews));
+              }
+            } catch {}
+          }
+        }
+      } catch (err) {
+        console.warn("Error cleaning viewpoints for deleted model:", err);
+      }
+    }
+</script>
 </body>
 </html>
