@@ -3,6 +3,7 @@ export interface SecurityContext {
   currentCompany: any;
   activeProject: any;
   statusMap: Record<string, any>;
+  statusEntries?: any[];
   loaded: boolean;
 }
 
@@ -48,6 +49,183 @@ const jsonpRequest = async <T,>(url: URL, timeoutMs = 30000): Promise<T> => {
   });
 };
 
+export const normalizeTeamName = (name: string): string => {
+  return String(name || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toUpperCase()
+    .trim();
+};
+
+export const getTeamVisibilityRule = (type: string, teamName: string, activeProject: any) => {
+  const norm = normalizeTeamName(teamName);
+  const key = `${type}:${norm}`;
+  const cfg = activeProject?.fileVisibilityConfig?.[key] ||
+              activeProject?.fileVisibilityConfig?.[norm] ||
+              activeProject?.fileVisibilityConfig?.[teamName];
+
+  if (cfg && typeof cfg === 'object') {
+    return {
+      canViewProgreso: typeof cfg.canViewProgreso === 'boolean' ? cfg.canViewProgreso : (type === 'task'),
+      canViewCompartido: typeof cfg.canViewCompartido === 'boolean' ? cfg.canViewCompartido : (type === 'task'),
+      canViewPublicado: typeof cfg.canViewPublicado === 'boolean' ? cfg.canViewPublicado : true
+    };
+  }
+
+  // Defaults ISO 19650
+  if (type === 'task') {
+    return { canViewProgreso: true, canViewCompartido: true, canViewPublicado: true };
+  } else {
+    return { canViewProgreso: false, canViewCompartido: false, canViewPublicado: true };
+  }
+};
+
+export const getUserReceiverTeams = (email: string, activeProject: any): string[] => {
+  if (!email || !activeProject) return [];
+  const cleanEmail = email.toLowerCase().trim();
+  const receiverTeams = activeProject.iso19650?.receiverTeams || [];
+  const teams: string[] = [];
+  receiverTeams.forEach((rt: any) => {
+    const isMember = Array.isArray(rt.members) && rt.members.map((m: string) => m.toLowerCase().trim()).includes(cleanEmail);
+    const isLead = rt.leadEmail && rt.leadEmail.toLowerCase().trim() === cleanEmail;
+    if (isMember || isLead) {
+      teams.push(rt.name);
+    }
+  });
+  return teams;
+};
+
+export const getUserEffectivePermissions = (
+  currentUser: any,
+  activeProject: any,
+  currentCompany: any,
+  companyId: string
+): {
+  canViewProgreso: boolean;
+  canViewCompartido: boolean;
+  canViewPublicado: boolean;
+  isAdmin: boolean;
+} => {
+  if (!activeProject) {
+    return { canViewProgreso: true, canViewCompartido: true, canViewPublicado: true, isAdmin: true };
+  }
+  if (!currentUser) {
+    return { canViewProgreso: false, canViewCompartido: false, canViewPublicado: false, isAdmin: false };
+  }
+  const email = (currentUser.username || currentUser.email || currentUser.userAccount || '').toLowerCase().trim();
+
+  const superAdmins = ['imagina3ddesign@gmail.com', 'mcmartinezg@unal.edu.co'];
+  const isSuperAdmin = superAdmins.includes(email) || currentUser.role === 'SUPER_ADMIN' || currentUser.role === 'SUPER_ADMINISTRADOR';
+
+  const companyAdmins = Array.isArray(currentCompany?.admins) ? currentCompany.admins.map((a: string) => a.toLowerCase().trim()) : [];
+  const memberMatch = Array.isArray(currentCompany?.members) ? currentCompany.members.find((m: any) => m.email && m.email.toLowerCase().trim() === email) : null;
+  const isMemberAdmin = memberMatch && (memberMatch.role === 'ADMINISTRADOR_EMPRESA' || memberMatch.role === 'ADMINISTRADOR');
+
+  const isCompanyAdmin = isSuperAdmin || companyAdmins.includes(email) || isMemberAdmin || (currentUser.adminEmpresaId && currentUser.adminEmpresaId === companyId && (currentUser.role === 'ADMINISTRADOR_EMPRESA' || currentUser.role === 'SUPER_ADMINISTRADOR' || currentUser.role === 'SUPER_ADMIN'));
+
+  const projectAdmins = Array.isArray(activeProject?.iso19650?.projectAdmins)
+    ? activeProject.iso19650.projectAdmins.map((a: string) => a.toLowerCase().trim())
+    : [];
+  const isProjectAdmin = isCompanyAdmin || projectAdmins.includes(email);
+
+  if (isProjectAdmin) {
+    return { canViewProgreso: true, canViewCompartido: true, canViewPublicado: true, isAdmin: true };
+  }
+
+  const userTaskTeams = getUserDeliveryTeams(email, activeProject);
+  const userReceiverTeams = getUserReceiverTeams(email, activeProject);
+
+  // If unassigned project member
+  if (userTaskTeams.length === 0 && userReceiverTeams.length === 0) {
+    const isMember = (activeProject?.members || []).map((m: string) => m.toLowerCase().trim()).includes(email);
+    if (isMember) {
+      return { canViewProgreso: false, canViewCompartido: true, canViewPublicado: true, isAdmin: false };
+    }
+  }
+
+  let canViewProgreso = false;
+  let canViewCompartido = false;
+  let canViewPublicado = false;
+
+  for (const tt of userTaskTeams) {
+    const rule = getTeamVisibilityRule('task', tt, activeProject);
+    if (rule.canViewProgreso) canViewProgreso = true;
+    if (rule.canViewCompartido) canViewCompartido = true;
+    if (rule.canViewPublicado) canViewPublicado = true;
+  }
+
+  for (const rt of userReceiverTeams) {
+    const rule = getTeamVisibilityRule('receiver', rt, activeProject);
+    if (rule.canViewProgreso) canViewProgreso = true;
+    if (rule.canViewCompartido) canViewCompartido = true;
+    if (rule.canViewPublicado) canViewPublicado = true;
+  }
+
+  return { canViewProgreso, canViewCompartido, canViewPublicado, isAdmin: false };
+};
+
+export const getStatusMatchesForFile = (fid: string, fname: string, statusEntries: any[]) => {
+  const matches: {
+    EN_PROGRESO: any | null;
+    COMPARTIDO: any | null;
+    PUBLICADO: any | null;
+  } = {
+    EN_PROGRESO: null,
+    COMPARTIDO: null,
+    PUBLICADO: null
+  };
+
+  const cleanFname = String(fname || '').trim().toLowerCase();
+  const extMatch = cleanFname.match(/\.([^.]+)$/);
+  const ext = extMatch ? extMatch[1] : '';
+  const baseName = cleanFname.replace(/\.[^/.]+$/, '');
+
+  (statusEntries || []).forEach(entry => {
+    if (!entry || !entry.status) return;
+    const status = entry.status;
+    const entryFn = String(entry.filename || '').trim().toLowerCase();
+    const entryExtMatch = entryFn.match(/\.([^.]+)$/);
+    const entryExt = entryExtMatch ? entryExtMatch[1] : '';
+    const entryBase = entryFn.replace(/\.[^/.]+$/, '');
+
+    const matchesId = (fid && entry.originalFileId && entry.originalFileId === fid) ||
+                      (fid && entry.fileId && entry.fileId === fid);
+    const matchesExactName = entryFn && entryFn === cleanFname;
+    const matchesIfcFrag = (ext === 'ifc' || ext === 'frag' || ext === 'rvt') &&
+                           (entryExt === 'ifc' || entryExt === 'frag' || entryExt === 'rvt') &&
+                           (baseName === entryBase);
+
+    let matchWeight = 0;
+    if (matchesId && matchesExactName) matchWeight = 4;
+    else if (matchesExactName) matchWeight = 3;
+    else if (matchesId) matchWeight = 2;
+    else if (matchesIfcFrag) matchWeight = 1;
+
+    if (matchWeight > 0) {
+      if (status === 'COMPARTIDO') {
+        matches.COMPARTIDO = entry;
+      } else if (status === 'DESCOMPARTIDO' || (entry.comments && entry.comments.includes('Descompartido'))) {
+        matches.COMPARTIDO = null;
+      } else if (status === 'PUBLICADO') {
+        matches.PUBLICADO = entry;
+      } else if (status === 'DESPUBLICADO' || (entry.comments && entry.comments.includes('Despublicado'))) {
+        matches.PUBLICADO = null;
+      } else if (status === 'EN_PROGRESO') {
+        const current = matches.EN_PROGRESO;
+        if (!current || matchWeight > (current.weight || 0) || (matchWeight === (current.weight || 0) && new Date(entry.changedAt || 0).getTime() >= new Date(current.entry?.changedAt || current.changedAt || 0).getTime())) {
+          matches.EN_PROGRESO = { entry, weight: matchWeight };
+        }
+      }
+    }
+  });
+
+  return {
+    EN_PROGRESO: matches.EN_PROGRESO ? (matches.EN_PROGRESO.entry || matches.EN_PROGRESO) : null,
+    COMPARTIDO: matches.COMPARTIDO,
+    PUBLICADO: matches.PUBLICADO
+  };
+};
+
 export const loadSecurityContext = async (projectSlug: string, companyIdParam: string): Promise<SecurityContext> => {
   const currentUser = JSON.parse(sessionStorage.getItem('userAccount') || localStorage.getItem('userAccount') || 'null');
   
@@ -56,6 +234,7 @@ export const loadSecurityContext = async (projectSlug: string, companyIdParam: s
     currentCompany: null,
     activeProject: null,
     statusMap: {},
+    statusEntries: [],
     loaded: false
   };
 
@@ -88,6 +267,21 @@ export const loadSecurityContext = async (projectSlug: string, companyIdParam: s
       const projects = Array.isArray(config.projects) ? config.projects : [];
       const activeProject = projects.find((p: any) => p.slug === projectSlug) || projects[0];
       if (activeProject) {
+        // Overlay locally saved file visibility config if present
+        const pSlug = activeProject.slug || projectSlug || 'general';
+        const storageKey = `nora_file_visibility_${companyId || 'default'}_${pSlug}`;
+        try {
+          const raw = localStorage.getItem(storageKey);
+          if (raw) {
+            const parsed = JSON.parse(raw);
+            if (parsed && typeof parsed === 'object') {
+              activeProject.fileVisibilityConfig = {
+                ...(activeProject.fileVisibilityConfig || {}),
+                ...parsed
+              };
+            }
+          }
+        } catch (_) {}
         context.activeProject = activeProject;
       }
     }
@@ -95,14 +289,38 @@ export const loadSecurityContext = async (projectSlug: string, companyIdParam: s
     console.warn('Error loading config', e);
   }
 
+  const dsScript = context.activeProject?.dataSources?.driveScriptUrl || DRIVE_MODELS_API_URL;
+  const targetScriptUrl = String(dsScript || DRIVE_MODELS_API_URL).trim();
+
   try {
-    const url = new URL(DRIVE_MODELS_API_URL);
-    url.searchParams.set('action', 'listStatus');
-    if (projectSlug) url.searchParams.set('project', projectSlug);
-    url.searchParams.set('t', String(Date.now()));
-    const sData = await jsonpRequest<{ entries?: any[] }>(url, 30000);
+    let sData: { entries?: any[] } | null = null;
+    try {
+      const resp = await fetch(targetScriptUrl, {
+        method: 'POST',
+        mode: 'cors',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify({
+          action: 'listStatus',
+          project: projectSlug
+        })
+      });
+      if (resp.ok) {
+        sData = await resp.json();
+      }
+    } catch (_) {}
+
+    if (!sData) {
+      const url = new URL(targetScriptUrl);
+      url.searchParams.set('action', 'listStatus');
+      if (projectSlug) url.searchParams.set('project', projectSlug);
+      url.searchParams.set('t', String(Date.now()));
+      sData = await jsonpRequest<{ entries?: any[] }>(url, 30000);
+    }
+
     const statusEntries = Array.isArray(sData?.entries) ? sData.entries : [];
     statusEntries.sort((a: any, b: any) => new Date(a.changedAt || 0).getTime() - new Date(b.changedAt || 0).getTime());
+    context.statusEntries = statusEntries;
+
     const statusMap: Record<string, any> = {};
     statusEntries.forEach(entry => {
       if (entry.originalFileId) statusMap[entry.originalFileId] = entry;
@@ -276,59 +494,85 @@ export const isUserAuthorizedForFile = (
     return true;
   }
 
-  // 3. Rule: If user is in a receiver team, they can ONLY access files with status === 'PUBLICADO'
-  const receiverTeams = activeProject?.iso19650?.receiverTeams || [];
-  const isInReceiverTeam = receiverTeams.some((rt: any) => {
-    const isMember = Array.isArray(rt.members) && rt.members.map((m: string) => m.toLowerCase().trim()).includes(email);
-    const isLead = rt.leadEmail && rt.leadEmail.toLowerCase().trim() === email;
-    return isMember || isLead;
-  });
+  // 3. Check authorization by lifecycle status and team visibility rules
+  const userTaskTeams = getUserDeliveryTeams(email, activeProject);
+  const userReceiverTeams = getUserReceiverTeams(email, activeProject);
+  const status = file.status || 'EN_PROGRESO';
 
-  if (isInReceiverTeam && file.status !== 'PUBLICADO') {
-    console.log(`[SECURITY] Denegado: Usuario ${email} está en un equipo receptor y el archivo "${file.name || file.filename}" no está PUBLICADO (status: ${file.status})`);
+  // Check A: EN_PROGRESO (WIP)
+  if (status === 'EN_PROGRESO') {
+    const fileTeams = getFileDeliveryTeams(file, activeProject);
+    const normalizeName = (str: string) => str.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase().trim();
+    const normFileTeams = fileTeams.map(normalizeName);
+    const normUserTeams = userTaskTeams.map(normalizeName);
+
+    if (normUserTeams.length > 0) {
+      const hasMatchingTaskTeam = normUserTeams.some(t => {
+        const rule = getTeamVisibilityRule('task', t, activeProject);
+        if (rule.canViewProgreso === false) return false;
+        if (normFileTeams.length > 0) {
+          return normFileTeams.includes(t);
+        }
+        return rule.canViewProgreso === true;
+      });
+      if (hasMatchingTaskTeam) {
+        console.log(`[SECURITY] Permitido: Usuario ${email} en equipo de tarea para archivo EN_PROGRESO`);
+        return true;
+      }
+    }
+
+    for (const rt of userReceiverTeams) {
+      const rule = getTeamVisibilityRule('receiver', rt, activeProject);
+      if (rule.canViewProgreso === true) {
+        console.log(`[SECURITY] Permitido: Equipo receptor de ${email} habilitado para EN_PROGRESO`);
+        return true;
+      }
+    }
+
+    if (userTaskTeams.length === 0 && userReceiverTeams.length === 0 && normFileTeams.length === 0) {
+      const isMember = (activeProject?.members || []).map((m: string) => m.toLowerCase().trim()).includes(email);
+      if (isMember) return true;
+    }
+
+    console.log(`[SECURITY] Denegado: Usuario ${email} sin acceso a archivo EN_PROGRESO "${file.name || file.filename}"`);
     return false;
   }
 
-  // 4. Para visualizar archivos COMPARTIDOS o PUBLICADOS (no EN_PROGRESO), cualquier miembro del proyecto puede verlos
-  if (action === 'view' && file.status !== 'EN_PROGRESO') {
-    const isMember = (activeProject?.members || []).map((m: string) => m.toLowerCase().trim()).includes(email);
-    if (isMember) {
-      console.log(`[SECURITY] Permitido: Usuario ${email} es miembro del proyecto para archivo compartido/publicado`);
-      return true;
+  // Check B: COMPARTIDO (SHARED)
+  if (status === 'COMPARTIDO') {
+    for (const tt of userTaskTeams) {
+      const rule = getTeamVisibilityRule('task', tt, activeProject);
+      if (rule.canViewCompartido !== false) return true;
     }
-    
-    const userTeams = getUserDeliveryTeams(email, activeProject);
-    if (userTeams.length > 0) {
-      console.log(`[SECURITY] Permitido: Usuario ${email} pertenece a algún equipo del proyecto para archivo compartido/publicado`);
-      return true;
+    for (const rt of userReceiverTeams) {
+      const rule = getTeamVisibilityRule('receiver', rt, activeProject);
+      if (rule.canViewCompartido === true) return true;
     }
-
-    if (isInReceiverTeam) {
-      console.log(`[SECURITY] Permitido: Usuario ${email} pertenece a un equipo receptor para archivo publicado`);
-      return true;
+    if (userTaskTeams.length === 0 && userReceiverTeams.length === 0) {
+      const isMember = (activeProject?.members || []).map((m: string) => m.toLowerCase().trim()).includes(email);
+      if (isMember) return true;
     }
-
-    return true;
+    console.log(`[SECURITY] Denegado: Usuario ${email} sin permiso para COMPARTIDO`);
+    return false;
   }
 
-  // 5. Para archivos EN_PROGRESO (WIP):
-  const fileTeams = getFileDeliveryTeams(file, activeProject);
-  const userTeams = getUserDeliveryTeams(email, activeProject);
-
-  const normalizeName = (str: string) => str.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase().trim();
-  const normFileTeams = fileTeams.map(normalizeName);
-  const normUserTeams = userTeams.map(normalizeName);
-
-  console.log(`[SECURITY] Evaluando archivo: "${file.name || file.filename}" (${file.status})`);
-  console.log('[SECURITY] Equipos normalizados del archivo:', normFileTeams);
-  console.log('[SECURITY] Equipos normalizados del usuario:', normUserTeams);
-
-  if (normFileTeams.length === 0) {
-    // Si el archivo no está restringido a un equipo de entrega específico, cualquier miembro del proyecto o usuario con acceso puede visualizarlo
-    return true;
+  // Check C: PUBLICADO (PUBLISHED)
+  if (status === 'PUBLICADO') {
+    for (const tt of userTaskTeams) {
+      const rule = getTeamVisibilityRule('task', tt, activeProject);
+      if (rule.canViewPublicado !== false) return true;
+    }
+    for (const rt of userReceiverTeams) {
+      const rule = getTeamVisibilityRule('receiver', rt, activeProject);
+      if (rule.canViewPublicado !== false) return true;
+    }
+    if (userTaskTeams.length === 0 && userReceiverTeams.length === 0) {
+      const isMember = (activeProject?.members || []).map((m: string) => m.toLowerCase().trim()).includes(email);
+      if (isMember) return true;
+    }
+    console.log(`[SECURITY] Denegado: Usuario ${email} sin permiso para PUBLICADO`);
+    return false;
   }
 
-  const authorized = normFileTeams.some(team => normUserTeams.includes(team));
-  console.log(`[SECURITY] Resultado de autorización por equipos: ${authorized}`);
-  return authorized;
+  return false;
 };

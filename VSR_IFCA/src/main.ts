@@ -12,7 +12,7 @@ import {
     DRIVE_MODELS_FOLDER_ID as DEFAULT_DRIVE_MODELS_FOLDER_ID,
 } from './config';
 import './style.css';
-import { loadSecurityContext, isUserAuthorizedForFile } from './securityUtils';
+import { loadSecurityContext, isUserAuthorizedForFile, getUserEffectivePermissions, getStatusMatchesForFile } from './securityUtils';
 import { NoraAIWidget, NoraAIAction } from './nora-ai-widget';
 import {
     COMMERCIAL_SHEET_PRESETS,
@@ -6298,6 +6298,227 @@ async function ensurePowerBIModelLoaded(rawFragId: any, rawJsonId?: any, rawName
     }
 }
 
+// --- Model Lifecycle Status & Bottom Tabs Management (ISO 19650) ---
+let currentModelStatusTab: 'EN_PROGRESO' | 'COMPARTIDO' | 'PUBLICADO' = 'EN_PROGRESO';
+let allAuthorizedModelsCache: RemoteModelItem[] = [];
+
+function applyModelSearchFilter() {
+    const searchInput = document.getElementById("model-search-input") as HTMLInputElement | null;
+    const clearBtn = document.getElementById("model-search-clear") as HTMLButtonElement | null;
+    if (!searchInput) return;
+
+    const query = searchInput.value.trim().toLowerCase();
+    if (clearBtn) clearBtn.style.display = query ? "block" : "none";
+    const groups = document.querySelectorAll("#model-list .folder-group");
+    groups.forEach(group => {
+        let hasVisible = false;
+        const items = group.querySelectorAll(".model-item");
+        items.forEach(item => {
+            const text = (item.textContent || "").toLowerCase();
+            const match = !query || text.includes(query);
+            (item as HTMLElement).style.display = match ? "" : "none";
+            if (match) hasVisible = true;
+        });
+        (group as HTMLElement).style.display = hasVisible ? "" : "none";
+        if (query && hasVisible) {
+            const itemsList = group.querySelector(".folder-items");
+            if (itemsList) itemsList.classList.remove("collapsed");
+            const icon = group.querySelector(".folder-header i.fa-solid");
+            if (icon) {
+                icon.classList.remove("fa-chevron-right");
+                icon.classList.add("fa-chevron-down");
+            }
+        }
+    });
+}
+
+function updateModelStatusTabsUI(
+    effectivePerms: { canViewProgreso: boolean; canViewCompartido: boolean; canViewPublicado: boolean; isAdmin: boolean },
+    allModels: RemoteModelItem[]
+) {
+    const tabProgreso = document.getElementById('mstatus-tab-progreso') as HTMLButtonElement | null;
+    const tabCompartido = document.getElementById('mstatus-tab-compartido') as HTMLButtonElement | null;
+    const tabPublicado = document.getElementById('mstatus-tab-publicado') as HTMLButtonElement | null;
+    const countProgreso = document.getElementById('mcount-progreso');
+    const countCompartido = document.getElementById('mcount-compartido');
+    const countPublicado = document.getElementById('mcount-publicado');
+
+    const numProgreso = allModels.filter(m => m.status === 'EN_PROGRESO').length;
+    const numCompartido = allModels.filter(m => m.status === 'COMPARTIDO').length;
+    const numPublicado = allModels.filter(m => m.status === 'PUBLICADO').length;
+
+    if (countProgreso) countProgreso.textContent = String(numProgreso);
+    if (countCompartido) countCompartido.textContent = String(numCompartido);
+    if (countPublicado) countPublicado.textContent = String(numPublicado);
+
+    // Show/hide based on effective permissions
+    if (tabProgreso) tabProgreso.style.display = effectivePerms.canViewProgreso ? 'inline-flex' : 'none';
+    if (tabCompartido) tabCompartido.style.display = effectivePerms.canViewCompartido ? 'inline-flex' : 'none';
+    if (tabPublicado) tabPublicado.style.display = effectivePerms.canViewPublicado ? 'inline-flex' : 'none';
+
+    // Verify currentModelStatusTab is permitted for this user
+    const allowedMap: Record<string, boolean> = {
+        'EN_PROGRESO': effectivePerms.canViewProgreso,
+        'COMPARTIDO': effectivePerms.canViewCompartido,
+        'PUBLICADO': effectivePerms.canViewPublicado
+    };
+
+    if (!allowedMap[currentModelStatusTab]) {
+        if (effectivePerms.canViewPublicado && numPublicado > 0) {
+            currentModelStatusTab = 'PUBLICADO';
+        } else if (effectivePerms.canViewCompartido && numCompartido > 0) {
+            currentModelStatusTab = 'COMPARTIDO';
+        } else if (effectivePerms.canViewProgreso) {
+            currentModelStatusTab = 'EN_PROGRESO';
+        } else if (effectivePerms.canViewPublicado) {
+            currentModelStatusTab = 'PUBLICADO';
+        } else if (effectivePerms.canViewCompartido) {
+            currentModelStatusTab = 'COMPARTIDO';
+        }
+    }
+
+    [
+        { el: tabProgreso, status: 'EN_PROGRESO' },
+        { el: tabCompartido, status: 'COMPARTIDO' },
+        { el: tabPublicado, status: 'PUBLICADO' }
+    ].forEach(({ el, status }) => {
+        if (el) {
+            if (status === currentModelStatusTab) el.classList.add('active');
+            else el.classList.remove('active');
+        }
+    });
+}
+
+function renderActiveStatusModelTree(baseUrl: string) {
+    const listContainer = document.getElementById('model-list');
+    if (!listContainer) return;
+
+    const visibleModels = allAuthorizedModelsCache.filter(m => m.status === currentModelStatusTab);
+
+    // Group models by specialty
+    const groups: Record<string, any[]> = {};
+    visibleModels.forEach((m: { name: string; path: string; url?: string; folder?: string; deliveryTeams?: any }) => {
+        const namePath = m.name || m.path || '';
+        let specialty = getSpecialtyFromIfcPath(namePath);
+
+        if (specialty === 'General') {
+            if (m.folder && m.folder !== 'General' && m.folder !== '') {
+                specialty = cleanSpecialty(m.folder);
+            } else if (Array.isArray(m.deliveryTeams) && m.deliveryTeams.length > 0) {
+                specialty = cleanSpecialty(m.deliveryTeams[0]);
+            }
+        }
+        if (!groups[specialty]) groups[specialty] = [];
+        groups[specialty].push(m);
+    });
+
+    listContainer.innerHTML = '';
+
+    if (visibleModels.length === 0) {
+        const stateName = currentModelStatusTab === 'PUBLICADO' ? 'publicados' : currentModelStatusTab === 'COMPARTIDO' ? 'compartidos' : 'en progreso';
+        listContainer.innerHTML = `
+            <div style="padding: 30px 15px; text-align: center; color: #94a3b8; font-size: 11px;">
+                <span class="material-symbols-outlined" style="font-size: 28px; opacity: 0.5; display: block; margin-bottom: 6px;">inventory_2</span>
+                No hay modelos ${stateName} disponibles para este proyecto.
+            </div>
+        `;
+        return;
+    }
+
+    for (const [folder, items] of Object.entries(groups)) {
+        const groupDiv = document.createElement('div');
+        groupDiv.className = 'folder-group';
+
+        const header = document.createElement('div');
+        header.className = 'folder-header';
+        header.innerHTML = `<span><i class="fa-regular fa-folder-open"></i> ${folder}</span> <i class="fa-solid fa-chevron-down"></i>`;
+
+        const itemsList = document.createElement('ul');
+        itemsList.className = 'folder-items'; // Open by default
+
+        // Toggle logic
+        header.addEventListener('click', () => {
+            const isCollapsed = itemsList.classList.contains('collapsed');
+            if (isCollapsed) {
+                itemsList.classList.remove('collapsed');
+                header.querySelector('.fa-chevron-right')?.classList.replace('fa-chevron-right', 'fa-chevron-down');
+                header.querySelector('.fa-folder')?.classList.replace('fa-folder', 'fa-folder-open');
+                folderStates[folder] = false;
+            } else {
+                itemsList.classList.add('collapsed');
+                header.querySelector('.fa-chevron-down')?.classList.replace('fa-chevron-down', 'fa-chevron-right');
+                header.querySelector('.fa-folder-open')?.classList.replace('fa-folder-open', 'fa-folder');
+                folderStates[folder] = true;
+            }
+        });
+
+        // Restore state
+        if (folderStates[folder]) {
+            itemsList.classList.add('collapsed');
+            header.querySelector('.fa-chevron-down')?.classList.replace('fa-chevron-down', 'fa-chevron-right');
+            header.querySelector('.fa-folder-open')?.classList.replace('fa-folder-open', 'fa-folder');
+        }
+
+        items.forEach((m) => {
+            const li = document.createElement('li');
+            li.className = 'model-item';
+            li.dataset.path = m.path;
+
+            if (loadedModels.has(m.path)) {
+                li.classList.add('visible');
+            }
+
+            // Structure: Name + Visibility Toggle
+            li.innerHTML = `
+                <div class="model-name"><i class="fa-solid fa-cube"></i> ${m.name}</div>
+                <div class="visibility-toggle" title="Alternar visibilidad">
+                    <i class="fa-regular ${li.classList.contains('visible') ? 'fa-eye' : 'fa-eye-slash'}"></i>
+                </div>
+            `;
+
+            li.addEventListener('click', async (e) => {
+                e.stopPropagation();
+                const target = e.target as HTMLElement;
+                if (target.closest('.visibility-toggle')) {
+                    await toggleModel(m, baseUrl, li);
+                } else {
+                    await selectModel(m.path);
+                }
+            });
+
+            itemsList.appendChild(li);
+        });
+
+        groupDiv.appendChild(header);
+        groupDiv.appendChild(itemsList);
+        listContainer.appendChild(groupDiv);
+    }
+
+    applyModelSearchFilter();
+}
+
+function initModelStatusTabsListeners(baseUrl: string) {
+    const tabsContainer = document.getElementById('model-status-tabs');
+    if (!tabsContainer || (tabsContainer as any)._hasStatusListeners) return;
+    (tabsContainer as any)._hasStatusListeners = true;
+
+    const btns = tabsContainer.querySelectorAll<HTMLButtonElement>('.model-status-tab-btn');
+    btns.forEach(btn => {
+        btn.addEventListener('click', () => {
+            const status = btn.getAttribute('data-status') as 'EN_PROGRESO' | 'COMPARTIDO' | 'PUBLICADO';
+            if (!status || status === currentModelStatusTab) return;
+            currentModelStatusTab = status;
+
+            btns.forEach(b => {
+                if (b.getAttribute('data-status') === status) b.classList.add('active');
+                else b.classList.remove('active');
+            });
+
+            renderActiveStatusModelTree(baseUrl);
+        });
+    });
+}
+
 async function loadModelList() {
     if (loadModelListInFlight) {
         return await loadModelListInFlight;
@@ -6351,38 +6572,75 @@ async function loadModelList() {
 
             const params = new URLSearchParams(window.location.search);
             const companyId = params.get('empresa') || '';
+            const statusParam = (params.get('status') || '').toUpperCase().trim();
+            const statusEntries = activeSecurityContext?.statusEntries || [];
 
             if (shouldUseDriveModels()) {
                 logToScreen('Loading models from Google Drive (Apps Script)...');
                 try {
                     const driveModels = await listDriveModels(activeSecurityContext);
-                    const processed = driveModels
+                    const processed: RemoteModelItem[] = [];
+
+                    driveModels
                         .filter((m) => String(m.name || '').toLowerCase().endsWith('.frag'))
-                        .map((m) => {
+                        .forEach((m) => {
                             const fname = m.name || '';
                             const fid = m.fragId || '';
-                            const rvtName = fname.toLowerCase().replace(/\.frag$/, '.rvt');
-                            const ifcName = fname.toLowerCase().replace(/\.frag$/, '.ifc');
-                            const match = activeSecurityContext?.statusMap?.[fid] ||
-                                          activeSecurityContext?.statusMap?.[fname.toLowerCase()] ||
-                                          activeSecurityContext?.statusMap?.[rvtName] ||
-                                          activeSecurityContext?.statusMap?.[ifcName] ||
-                                          null;
-                            const ownerEmail = m.ownerEmail || '';
-                            return {
+                            const matches = getStatusMatchesForFile(fid, fname, statusEntries);
+
+                            // 1. EN_PROGRESO (WIP)
+                            const progItem: RemoteModelItem = {
                                 name: m.name,
                                 path: `models/${m.name}`,
                                 driveFragId: m.fragId,
                                 driveJsonId: m.jsonId ?? null,
-                                status: match?.status || 'EN_PROGRESO',
-                                changedBy: match?.changedBy || m.ownerName || 'UNASSIGNED',
-                                changedByEmail: match?.changedByEmail || ownerEmail || 'unassigned@nora.cde',
+                                status: 'EN_PROGRESO',
+                                changedBy: matches.EN_PROGRESO?.changedBy || m.ownerName || 'UNASSIGNED',
+                                changedByEmail: matches.EN_PROGRESO?.changedByEmail || m.ownerEmail || 'unassigned@nora.cde',
                                 fileId: fid,
                                 filename: fname,
                                 folder: m.folder || 'General',
-                                deliveryTeams: match?.deliveryTeams || []
+                                deliveryTeams: matches.EN_PROGRESO?.deliveryTeams || []
                             };
+                            processed.push(progItem);
+
+                            // 2. COMPARTIDO (SHARED)
+                            if (matches.COMPARTIDO) {
+                                const compItem: RemoteModelItem = {
+                                    name: m.name,
+                                    path: `models/${m.name}`,
+                                    driveFragId: matches.COMPARTIDO.fileId || m.fragId,
+                                    driveJsonId: matches.COMPARTIDO.jsonId || m.jsonId || null,
+                                    status: 'COMPARTIDO',
+                                    changedBy: matches.COMPARTIDO.changedBy || 'UNASSIGNED',
+                                    changedByEmail: matches.COMPARTIDO.changedByEmail || 'unassigned@nora.cde',
+                                    fileId: matches.COMPARTIDO.fileId || fid,
+                                    filename: fname,
+                                    folder: m.folder || 'General',
+                                    deliveryTeams: matches.COMPARTIDO.deliveryTeams || []
+                                };
+                                processed.push(compItem);
+                            }
+
+                            // 3. PUBLICADO (PUBLISHED)
+                            if (matches.PUBLICADO) {
+                                const pubItem: RemoteModelItem = {
+                                    name: m.name,
+                                    path: `models/${m.name}`,
+                                    driveFragId: matches.PUBLICADO.fileId || m.fragId,
+                                    driveJsonId: matches.PUBLICADO.jsonId || m.jsonId || null,
+                                    status: 'PUBLICADO',
+                                    changedBy: matches.PUBLICADO.changedBy || 'UNASSIGNED',
+                                    changedByEmail: matches.PUBLICADO.changedByEmail || 'unassigned@nora.cde',
+                                    fileId: matches.PUBLICADO.fileId || fid,
+                                    filename: fname,
+                                    folder: m.folder || 'General',
+                                    deliveryTeams: matches.PUBLICADO.deliveryTeams || []
+                                };
+                                processed.push(pubItem);
+                            }
                         });
+
                     models = processed.filter(f => 
                         isUserAuthorizedForFile(
                             activeSecurityContext?.currentUser,
@@ -6393,29 +6651,24 @@ async function loadModelList() {
                             'view'
                         )
                     );
-                    logToScreen(`Drive Scan: ${models.length} authorized .frag models found`);
+                    logToScreen(`Drive Scan: ${models.length} authorized .frag model states found`);
                 } catch (driveError) {
                     logToScreen(`Drive Scan failed, using published list: ${driveError}`, true);
                     const localModels = await loadPublishedModelList();
-                    const processedLocal = localModels.map((m) => {
+                    const processedLocal: RemoteModelItem[] = [];
+                    localModels.forEach((m) => {
                         const fname = m.name || '';
                         const fid = m.driveFragId || '';
-                        const rvtName = fname.toLowerCase().replace(/\.frag$/, '.rvt');
-                        const ifcName = fname.toLowerCase().replace(/\.frag$/, '.ifc');
-                        const match = activeSecurityContext?.statusMap?.[fid] ||
-                                      activeSecurityContext?.statusMap?.[fname.toLowerCase()] ||
-                                      activeSecurityContext?.statusMap?.[rvtName] ||
-                                      activeSecurityContext?.statusMap?.[ifcName] ||
-                                      null;
-                        return {
+                        const matches = getStatusMatchesForFile(fid, fname, statusEntries);
+                        processedLocal.push({
                             ...m,
-                            status: match?.status || 'EN_PROGRESO',
-                            changedBy: match?.changedBy || 'UNASSIGNED',
-                            changedByEmail: match?.changedByEmail || 'unassigned@nora.cde',
+                            status: matches.PUBLICADO ? 'PUBLICADO' : (matches.COMPARTIDO ? 'COMPARTIDO' : 'EN_PROGRESO'),
+                            changedBy: m.changedBy || 'UNASSIGNED',
+                            changedByEmail: m.changedByEmail || 'unassigned@nora.cde',
                             fileId: fid || undefined,
                             filename: fname,
                             folder: (m as any).folder || 'General'
-                        };
+                        });
                     });
                     models = processedLocal.filter(f => 
                         isUserAuthorizedForFile(
@@ -6500,7 +6753,7 @@ async function loadModelList() {
                         path: `models/${cleanName}`,
                         driveFragId: autoLoadFileId,
                         driveJsonId: autoLoadJsonId ?? null,
-                        status: 'EN_PROGRESO',
+                        status: (statusParam === 'PUBLICADO' || statusParam === 'COMPARTIDO') ? statusParam as any : 'EN_PROGRESO',
                         changedBy: 'Revit Add-in',
                         changedByEmail: '',
                         fileId: autoLoadFileId,
@@ -6511,22 +6764,46 @@ async function loadModelList() {
                 }
             }
 
-            // Group models by specialty
-            const groups: Record<string, any[]> = {};
-            models.forEach((m: { name: string; path: string; url: string; folder?: string; deliveryTeams?: any }) => {
-                const namePath = m.name || m.path || '';
-                let specialty = getSpecialtyFromIfcPath(namePath);
+            // Compute user effective permissions for lifecycle status tabs
+            const effectivePerms = getUserEffectivePermissions(
+                activeSecurityContext?.currentUser,
+                activeSecurityContext?.activeProject,
+                activeSecurityContext?.currentCompany,
+                companyId
+            );
 
-                if (specialty === 'General') {
-                    if (m.folder && m.folder !== 'General' && m.folder !== '') {
-                        specialty = cleanSpecialty(m.folder);
-                    } else if (Array.isArray(m.deliveryTeams) && m.deliveryTeams.length > 0) {
-                        specialty = cleanSpecialty(m.deliveryTeams[0]);
-                    }
-                }
-                if (!groups[specialty]) groups[specialty] = [];
-                groups[specialty].push(m);
-            });
+            // Determine active status tab
+            if (statusParam === 'PUBLICADO' && effectivePerms.canViewPublicado) {
+                currentModelStatusTab = 'PUBLICADO';
+            } else if (statusParam === 'COMPARTIDO' && effectivePerms.canViewCompartido) {
+                currentModelStatusTab = 'COMPARTIDO';
+            } else if (statusParam === 'EN_PROGRESO' && effectivePerms.canViewProgreso) {
+                currentModelStatusTab = 'EN_PROGRESO';
+            }
+
+            allAuthorizedModelsCache = models;
+
+            // Update status tabs UI (counts and visibility)
+            updateModelStatusTabsUI(effectivePerms, models);
+            initModelStatusTabsListeners(baseUrl);
+
+            // Render models for the current active status tab
+            renderActiveStatusModelTree(baseUrl);
+
+            // Refresh button hookup
+            const refreshBtn = document.getElementById('model-list-refresh-btn');
+            if (refreshBtn && !(refreshBtn as any)._hasRefreshListener) {
+                (refreshBtn as any)._hasRefreshListener = true;
+                refreshBtn.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    const icon = refreshBtn.querySelector('.material-symbols-outlined');
+                    if (icon) icon.classList.add('fa-spin');
+                    loadModelList().finally(() => {
+                        if (icon) icon.classList.remove('fa-spin');
+                    });
+                });
+            }
 
             // Auto-update setup
             if (!(window as any)._autoUpdateStarted) {
@@ -6535,83 +6812,6 @@ async function loadModelList() {
                     void loadModelList();
                 }, 60000);
                 logToScreen('Auto-update enabled (60s).');
-            }
-
-            // Clear container
-            listContainer.innerHTML = '';
-
-            for (const [folder, items] of Object.entries(groups)) {
-                const groupDiv = document.createElement('div');
-                groupDiv.className = 'folder-group';
-
-                const header = document.createElement('div');
-                header.className = 'folder-header';
-                header.innerHTML = `<span><i class="fa-regular fa-folder-open"></i> ${folder}</span> <i class="fa-solid fa-chevron-down"></i>`;
-
-                const itemsList = document.createElement('ul');
-                itemsList.className = 'folder-items'; // Open by default
-
-                // Toggle logic
-                header.addEventListener('click', () => {
-                    const isCollapsed = itemsList.classList.contains('collapsed');
-                    if (isCollapsed) {
-                        itemsList.classList.remove('collapsed');
-                        header.querySelector('.fa-chevron-right')?.classList.replace('fa-chevron-right', 'fa-chevron-down');
-                        header.querySelector('.fa-folder')?.classList.replace('fa-folder', 'fa-folder-open');
-                        folderStates[folder] = false;
-                    } else {
-                        itemsList.classList.add('collapsed');
-                        header.querySelector('.fa-chevron-down')?.classList.replace('fa-chevron-down', 'fa-chevron-right');
-                        header.querySelector('.fa-folder-open')?.classList.replace('fa-folder-open', 'fa-folder');
-                        folderStates[folder] = true;
-                    }
-                });
-
-                // Restore state
-                if (folderStates[folder]) {
-                    itemsList.classList.add('collapsed');
-                    header.querySelector('.fa-chevron-down')?.classList.replace('fa-chevron-down', 'fa-chevron-right');
-                    header.querySelector('.fa-folder-open')?.classList.replace('fa-folder-open', 'fa-folder');
-                }
-
-                items.forEach((m) => {
-                    const li = document.createElement('li');
-                    li.className = 'model-item';
-                    li.dataset.path = m.path;
-
-                    if (loadedModels.has(m.path)) {
-                        li.classList.add('visible');
-                    }
-
-                    // Structure: Name + Visibility Toggle
-                    li.innerHTML = `
-                    <div class="model-name"><i class="fa-solid fa-cube"></i> ${m.name}</div>
-                    <div class="visibility-toggle" title="Toggle Visibility">
-                        <i class="fa-regular ${li.classList.contains('visible') ? 'fa-eye' : 'fa-eye-slash'}"></i>
-                    </div>
-                `;
-
-                    // Handle click on the whole item or specific toggle
-                    li.addEventListener('click', async (e) => {
-                        // Prevent propagation if clicking nested elements
-                        e.stopPropagation();
-
-                        const target = e.target as HTMLElement;
-                        // If clicked explicitly on the visibility toggle icon/div
-                        if (target.closest('.visibility-toggle')) {
-                            await toggleModel(m, baseUrl, li);
-                        } else {
-                            // Clicked on the name/body -> Select the model
-                            await selectModel(m.path);
-                        }
-                    });
-
-                    itemsList.appendChild(li);
-                });
-
-                groupDiv.appendChild(header);
-                groupDiv.appendChild(itemsList);
-                listContainer.appendChild(groupDiv);
             }
 
             if ((autoLoadFileId || autoLoadFilename) && !(window as any)._autoLoadedModel) {
@@ -6646,6 +6846,11 @@ async function loadModelList() {
                 }
 
                 if (matchingItem) {
+                    if (matchingItem.status && !statusParam && matchingItem.status !== currentModelStatusTab) {
+                        currentModelStatusTab = matchingItem.status;
+                        updateModelStatusTabsUI(effectivePerms, models);
+                        renderActiveStatusModelTree(baseUrl);
+                    }
                     if (autoLoadJsonId && !matchingItem.driveJsonId) {
                         matchingItem.driveJsonId = autoLoadJsonId;
                     }
@@ -6659,7 +6864,7 @@ async function loadModelList() {
                         }, 250);
                     } catch (err) {
                         console.error('Auto-load failed:', err);
-                    logToScreen(`Auto-load error: ${err}`, true);
+                        logToScreen(`Auto-load error: ${err}`, true);
                     }
                 }
             }

@@ -1,4 +1,4 @@
-﻿:root {
+:root {
   font-family: Inter, system-ui, Avenir, Helvetica, Arial, sans-serif;
   line-height: 1.5;
   font-weight: 400;
@@ -2858,3 +2858,144 @@ bim-label {
     border-radius: 50%;
     display: inline-block;
 }
+
+/* --- Model Lifecycle Status Tabs (Organizador de Modelos BIM) --- */
+.model-status-tabs {
+    display: flex;
+    align-items: stretch;
+    justify-content: space-between;
+    background: var(--bg-white, #ffffff);
+    border-top: 1px solid var(--border-color, #e2e8f0);
+    padding: 6px 4px;
+    gap: 4px;
+    flex-shrink: 0;
+    box-sizing: border-box;
+    width: 100%;
+}
+
+.model-status-tab-btn {
+    flex: 1;
+    display: inline-flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 3px;
+    padding: 6px 3px;
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 10px;
+    font-weight: 600;
+    color: var(--text-med-gray, #64748b);
+    transition: all 0.2s ease;
+    user-select: none;
+    min-width: 0;
+    text-align: center;
+}
+
+.model-status-tab-btn:hover {
+    background: var(--bg-light-gray, #f1f5f9);
+    color: var(--text-black, #0f172a);
+}
+
+.model-status-tab-btn .status-indicator-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    display: inline-block;
+    flex-shrink: 0;
+}
+
+.model-status-tab-btn .dot-progreso {
+    background-color: #f59e0b;
+    box-shadow: 0 0 4px rgba(245, 158, 11, 0.5);
+}
+
+.model-status-tab-btn .dot-compartido {
+    background-color: #3b82f6;
+    box-shadow: 0 0 4px rgba(59, 130, 246, 0.5);
+}
+
+.model-status-tab-btn .dot-publicado {
+    background-color: #10b981;
+    box-shadow: 0 0 4px rgba(16, 185, 129, 0.5);
+}
+
+.model-status-tab-btn .status-tab-text {
+    font-size: 9.5px;
+    line-height: 1.1;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 100%;
+}
+
+.model-status-tab-btn .status-badge {
+    font-size: 9px;
+    font-weight: 700;
+    padding: 1px 5px;
+    border-radius: 10px;
+    background: rgba(148, 163, 184, 0.2);
+    color: inherit;
+    line-height: 1.2;
+}
+
+/* Active states for each lifecycle tab */
+.model-status-tab-btn.active[data-status="EN_PROGRESO"] {
+    background: rgba(245, 158, 11, 0.12);
+    border-color: rgba(245, 158, 11, 0.4);
+    color: #d97706;
+}
+
+.model-status-tab-btn.active[data-status="COMPARTIDO"] {
+    background: rgba(59, 130, 246, 0.12);
+    border-color: rgba(59, 130, 246, 0.4);
+    color: #2563eb;
+}
+
+.model-status-tab-btn.active[data-status="PUBLICADO"] {
+    background: rgba(16, 185, 129, 0.12);
+    border-color: rgba(16, 185, 129, 0.4);
+    color: #059669;
+}
+
+/* Dark mode adjustments */
+.dark-mode .model-status-tabs,
+.dark .model-status-tabs {
+    background: #0f172a;
+    border-top-color: #334155;
+}
+
+.dark-mode .model-status-tab-btn,
+.dark .model-status-tab-btn {
+    color: #94a3b8;
+}
+
+.dark-mode .model-status-tab-btn:hover,
+.dark .model-status-tab-btn:hover {
+    background: #1e293b;
+    color: #f1f5f9;
+}
+
+.dark-mode .model-status-tab-btn.active[data-status="EN_PROGRESO"],
+.dark .model-status-tab-btn.active[data-status="EN_PROGRESO"] {
+    background: rgba(245, 158, 11, 0.18);
+    border-color: rgba(245, 158, 11, 0.5);
+    color: #fbbf24;
+}
+
+.dark-mode .model-status-tab-btn.active[data-status="COMPARTIDO"],
+.dark .model-status-tab-btn.active[data-status="COMPARTIDO"] {
+    background: rgba(59, 130, 246, 0.18);
+    border-color: rgba(59, 130, 246, 0.5);
+    color: #60a5fa;
+}
+
+.dark-mode .model-status-tab-btn.active[data-status="PUBLICADO"],
+.dark .model-status-tab-btn.active[data-status="PUBLICADO"] {
+    background: rgba(16, 185, 129, 0.18);
+    border-color: rgba(16, 185, 129, 0.5);
+    color: #34d399;
+}
+

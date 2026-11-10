@@ -3892,6 +3892,7 @@
           if (viewerFileId) url.searchParams.set('fileId', viewerFileId);
           if (viewerFileName) url.searchParams.set('file', viewerFileName);
           if (viewerJsonId) url.searchParams.set('jsonId', viewerJsonId);
+          if (f.status) url.searchParams.set('status', f.status);
 
           // Tooltip diferente para IFC que apunta a su FRAG
           const tooltip = (ext === 'ifc' || ext === 'rvt') ? 'Abrir en Visor (modelo 3D FRAG vinculado)' : 'Abrir en Visor';

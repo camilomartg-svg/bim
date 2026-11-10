@@ -109,12 +109,40 @@
             </div>
 
             <div id="tab-models" class="tab-content active">
-                <div class="sidebar-header">
-                    <h3><span class="material-symbols-outlined">inventory_2</span> Modelos IFC</h3>
+                <div class="sidebar-header" style="display: flex; flex-direction: column; gap: 8px; padding-bottom: 8px;">
+                    <div style="display: flex; align-items: center; justify-content: space-between; width: 100%;">
+                        <div style="display: flex; align-items: center; justify-content: space-between; width: 100%;"><h3 style="margin: 0;"><span class="material-symbols-outlined">inventory_2</span> Modelos BIM</h3><button id="model-list-refresh-btn" type="button" title="Refrescar lista de modelos" style="background: none; border: none; color: #94a3b8; cursor: pointer; padding: 4px; display: flex; align-items: center; border-radius: 4px;"><span class="material-symbols-outlined" style="font-size: 16px;">refresh</span></button></div>
+                    </div>
+                    <div class="model-search-bar" style="position: relative; width: 100%;">
+                        <span class="material-symbols-outlined" style="position: absolute; left: 8px; top: 50%; transform: translateY(-50%); font-size: 16px; color: #94a3b8; pointer-events: none;">search</span>
+                        <input type="text" id="model-search-input" placeholder="Buscar modelo..." autocomplete="off"
+                            style="width: 100%; box-sizing: border-box; padding: 6px 26px 6px 28px; font-size: 11px; background: rgba(15, 23, 42, 0.5); border: 1px solid rgba(148, 163, 184, 0.25); border-radius: 6px; color: #f1f5f9; outline: none; transition: border-color 0.2s;" />
+                        <button id="model-search-clear" type="button" title="Limpiar búsqueda"
+                            style="display: none; position: absolute; right: 6px; top: 50%; transform: translateY(-50%); background: none; border: none; color: #94a3b8; cursor: pointer; font-size: 13px; line-height: 1; padding: 2px;">✕</button>
+                    </div>
                 </div>
 
                 <div class="sidebar-content" id="model-list">
                     <!-- Populated by JS -->
+                </div>
+
+                <!-- Bottom Lifecycle Status Tabs (ISO 19650) -->
+                <div id="model-status-tabs" class="model-status-tabs">
+                    <button id="mstatus-tab-progreso" class="model-status-tab-btn active" data-status="EN_PROGRESO" type="button" title="Modelos En Progreso (WIP)">
+                        <span class="status-indicator-dot dot-progreso"></span>
+                        <span class="status-tab-text">En Progreso</span>
+                        <span id="mcount-progreso" class="status-badge">0</span>
+                    </button>
+                    <button id="mstatus-tab-compartido" class="model-status-tab-btn" data-status="COMPARTIDO" type="button" title="Modelos Compartidos (SHARED)">
+                        <span class="status-indicator-dot dot-compartido"></span>
+                        <span class="status-tab-text">Compartido</span>
+                        <span id="mcount-compartido" class="status-badge">0</span>
+                    </button>
+                    <button id="mstatus-tab-publicado" class="model-status-tab-btn" data-status="PUBLICADO" type="button" title="Modelos Publicados (PUBLISHED)">
+                        <span class="status-indicator-dot dot-publicado"></span>
+                        <span class="status-tab-text">Publicado</span>
+                        <span id="mcount-publicado" class="status-badge">0</span>
+                    </button>
                 </div>
             </div>
 
@@ -609,6 +637,64 @@
     </script>
     <!-- VIEWER LOGO INJECT END -->
 
+    <script>
+        (function() {
+            function initModelSearch() {
+                const searchInput = document.getElementById("model-search-input");
+                const clearBtn = document.getElementById("model-search-clear");
+                if (!searchInput) return;
+
+                function applyFilter() {
+                    const query = searchInput.value.trim().toLowerCase();
+                    if (clearBtn) clearBtn.style.display = query ? "block" : "none";
+                    const groups = document.querySelectorAll("#model-list .folder-group");
+                    groups.forEach(group => {
+                        let hasVisible = false;
+                        const items = group.querySelectorAll(".model-item");
+                        items.forEach(item => {
+                            const text = (item.textContent || "").toLowerCase();
+                            const match = !query || text.includes(query);
+                            item.style.display = match ? "" : "none";
+                            if (match) hasVisible = true;
+                        });
+                        group.style.display = hasVisible ? "" : "none";
+                        if (query && hasVisible) {
+                            const content = group.querySelector(".folder-content");
+                            if (content) content.style.display = "block";
+                            const icon = group.querySelector(".folder-header i.fa-solid");
+                            if (icon) {
+                                icon.classList.remove("fa-chevron-right");
+                                icon.classList.add("fa-chevron-down");
+                            }
+                        }
+                    });
+                }
+
+                searchInput.addEventListener("input", applyFilter);
+                if (clearBtn) {
+                    clearBtn.addEventListener("click", () => {
+                        searchInput.value = "";
+                        applyFilter();
+                        searchInput.focus();
+                    });
+                }
+
+                const modelList = document.getElementById("model-list");
+                if (modelList) {
+                    const observer = new MutationObserver(() => {
+                        if (searchInput.value.trim()) applyFilter();
+                    });
+                    observer.observe(modelList, { childList: true, subtree: true });
+                }
+            }
+
+            if (document.readyState === "loading") {
+                document.addEventListener("DOMContentLoaded", initModelSearch);
+            } else {
+                initModelSearch();
+            }
+        })();
+    </script>
 </body>
 
 </html>
