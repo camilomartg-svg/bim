@@ -622,6 +622,156 @@ document.addEventListener('DOMContentLoaded', async () => {
     return 'Invitados / Externos';
   }
 
+  function renderUserCard(m, i, isUnsaved = false) {
+    const emp = empresas[selectedIndex];
+    const isInternal = m.role === 'ADMINISTRADOR_EMPRESA' || m.role === 'MIEMBRO' || m.role === 'ADMINISTRADOR' || (!m.role);
+
+    const cargoHtml = isInternal ? `
+      <label class="block">
+        <span class="mb-1 block text-xs font-semibold ${isUnsaved ? 'text-amber-800 dark:text-amber-300' : 'text-slate-600 dark:text-slate-300'}">Cargo (empleado interno)</span>
+        <select class="w-full text-xs rounded ${isUnsaved ? 'border-amber-300 bg-white focus:border-amber-500 focus:ring-amber-500' : 'border-slate-200'}" onchange="updateUser(${i}, 'cargo', this.value)">
+          <option value="">Seleccione cargo...</option>
+          <optgroup label="Dirección y Alta Gerencia">
+            <option value="Gerente General / CEO" ${m.cargo==='Gerente General / CEO'?'selected':''}>Gerente General / CEO</option>
+            <option value="Gerente de Operaciones / COO" ${m.cargo==='Gerente de Operaciones / COO'?'selected':''}>Gerente de Operaciones / COO</option>
+            <option value="Director de Proyectos / Gerente de Proyectos" ${m.cargo==='Director de Proyectos / Gerente de Proyectos'?'selected':''}>Director de Proyectos / Gerente de Proyectos</option>
+            <option value="Director de Obra / Director de Construcción" ${m.cargo==='Director de Obra / Director de Construcción'?'selected':''}>Director de Obra / Director de Construcción</option>
+            <option value="Director de Diseño / Gerencia de Diseño" ${m.cargo==='Director de Diseño / Gerencia de Diseño'?'selected':''}>Director de Diseño / Gerencia de Diseño</option>
+            <option value="Gerente de Contrataciones y Compras" ${m.cargo==='Gerente de Contrataciones y Compras'?'selected':''}>Gerente de Contrataciones y Compras</option>
+          </optgroup>
+          <optgroup label="Arquitectura">
+            <option value="Director de Arquitectura" ${m.cargo==='Director de Arquitectura'?'selected':''}>Director de Arquitectura</option>
+            <option value="Coordinador de Arquitectura" ${m.cargo==='Coordinador de Arquitectura'?'selected':''}>Coordinador de Arquitectura</option>
+            <option value="Arquitecto Senior" ${m.cargo==='Arquitecto Senior'?'selected':''}>Arquitecto Senior</option>
+            <option value="Arquitecto Junior" ${m.cargo==='Arquitecto Junior'?'selected':''}>Arquitecto Junior</option>
+            <option value="Modelador de Arquitectura" ${m.cargo==='Modelador de Arquitectura'?'selected':''}>Modelador de Arquitectura</option>
+          </optgroup>
+          <optgroup label="Estrategia y Desarrollo BIM / VDC">
+            <option value="BIM Manager" ${m.cargo==='BIM Manager'?'selected':''}>BIM Manager</option>
+            <option value="Coordinador BIM" ${m.cargo==='Coordinador BIM'?'selected':''}>Coordinador BIM</option>
+            <option value="Líder de Modelado / Diseñador Líder" ${m.cargo==='Líder de Modelado / Diseñador Líder'?'selected':''}>Líder de Modelado / Diseñador Líder</option>
+            <option value="BIM Developer / Desarrollador BIM" ${m.cargo==='BIM Developer / Desarrollador BIM'?'selected':''}>BIM Developer / Desarrollador BIM</option>
+            <option value="Residente BIM" ${m.cargo==='Residente BIM'?'selected':''}>Residente BIM</option>
+            <option value="Modelador BIM" ${m.cargo==='Modelador BIM'?'selected':''}>Modelador BIM</option>
+          </optgroup>
+          <optgroup label="Gestión y Supervisión de Campo (Obra)">
+            <option value="Director de Obra" ${m.cargo==='Director de Obra'?'selected':''}>Director de Obra</option>
+            <option value="Residente de Obra" ${m.cargo==='Residente de Obra'?'selected':''}>Residente de Obra</option>
+            <option value="Residente de Redes / Instalaciones" ${m.cargo==='Residente de Redes / Instalaciones'?'selected':''}>Residente de Redes / Instalaciones</option>
+            <option value="Residente de Acabados" ${m.cargo==='Residente de Acabados'?'selected':''}>Residente de Acabados</option>
+            <option value="Residente Estructural" ${m.cargo==='Residente Estructural'?'selected':''}>Residente Estructural</option>
+            <option value="Residente Técnico" ${m.cargo==='Residente Técnico'?'selected':''}>Residente Técnico</option>
+          </optgroup>
+          <optgroup label="Ingenierías">
+            <option value="Diseñador Eléctrico" ${m.cargo==='Diseñador Eléctrico'?'selected':''}>Diseñador Eléctrico</option>
+            <option value="Diseñador Estructural" ${m.cargo==='Diseñador Estructural'?'selected':''}>Diseñador Estructural</option>
+            <option value="Diseñador Hidrosánitario" ${m.cargo==='Diseñador Hidrosánitario'?'selected':''}>Diseñador Hidrosánitario</option>
+            <option value="Diseñador Gas" ${m.cargo==='Diseñador Gas'?'selected':''}>Diseñador Gas</option>
+            <option value="Diseñador HVAC" ${m.cargo==='Diseñador HVAC'?'selected':''}>Diseñador HVAC</option>
+          </optgroup>
+          <optgroup label="Supervisión y Control">
+            <option value="Interventor / Supervisor Técnico" ${m.cargo==='Interventor / Supervisor Técnico'?'selected':''}>Interventor / Supervisor Técnico</option>
+            <option value="Inspector de Calidad / Aseguramiento de Calidad (QA/QC)" ${m.cargo==='Inspector de Calidad / Aseguramiento de Calidad (QA/QC)'?'selected':''}>Inspector de Calidad (QA/QC)</option>
+          </optgroup>
+          <optgroup label="Ingeniería, Arquitectura y Diseño">
+            <option value="Ingeniero Calculista / Estructural" ${m.cargo==='Ingeniero Calculista / Estructural'?'selected':''}>Ingeniero Calculista / Estructural</option>
+            <option value="Ingeniero de Redes (MEP)" ${m.cargo==='Ingeniero de Redes (MEP)'?'selected':''}>Ingeniero de Redes (MEP)</option>
+            <option value="Arquitecto Diseñador" ${m.cargo==='Arquitecto Diseñador'?'selected':''}>Arquitecto Diseñador</option>
+            <option value="Modelador BIM / Dibujante" ${m.cargo==='Modelador BIM / Dibujante'?'selected':''}>Modelador BIM / Dibujante</option>
+          </optgroup>
+          <optgroup label="Control de Costos, Tiempos y Suministros">
+            <option value="Ingeniero de Presupuestos / Costos" ${m.cargo==='Ingeniero de Presupuestos / Costos'?'selected':''}>Ingeniero de Presupuestos / Costos</option>
+            <option value="Analista de Programación y Control de Obra" ${m.cargo==='Analista de Programación y Control de Obra'?'selected':''}>Analista de Programación y Control de Obra</option>
+            <option value="Analista de Compras / Suministros" ${m.cargo==='Analista de Compras / Suministros'?'selected':''}>Analista de Compras / Suministros</option>
+          </optgroup>
+          <optgroup label="Topografía y Geomática">
+            <option value="Topógrafo" ${m.cargo==='Topógrafo'?'selected':''}>Topógrafo</option>
+            <option value="Cadenero / Auxiliar de Topografía" ${m.cargo==='Cadenero / Auxiliar de Topografía'?'selected':''}>Cadenero / Auxiliar de Topografía</option>
+          </optgroup>
+          <optgroup label="Seguridad, Medio Ambiente y Apoyo Operativo">
+            <option value="Residente de Seguridad y Salud en el Trabajo (SST)" ${m.cargo==='Residente de Seguridad y Salud en el Trabajo (SST)'?'selected':''}>Residente SST</option>
+            <option value="Residente Ambiental" ${m.cargo==='Residente Ambiental'?'selected':''}>Residente Ambiental</option>
+            <option value="Almacenista de Obra" ${m.cargo==='Almacenista de Obra'?'selected':''}>Almacenista de Obra</option>
+            <option value="Administrador de Obra" ${m.cargo==='Administrador de Obra'?'selected':''}>Administrador de Obra</option>
+            <option value="Administrador de TI / Sistemas" ${m.cargo==='Administrador de TI / Sistemas'?'selected':''}>Administrador de TI / Sistemas</option>
+            <option value="Asesor Jurídico / Gestor de Contratos" ${m.cargo==='Asesor Jurídico / Gestor de Contratos'?'selected':''}>Asesor Jurídico / Gestor de Contratos</option>
+          </optgroup>
+        </select>
+      </label>` : '';
+
+    let registeredNameStr = '';
+    if (m.email && m.email.trim()) {
+        const rawEmail = m.email.trim().toLowerCase();
+        const compositeKey = rawEmail + '_' + (emp.name || '').trim().toLowerCase();
+        const gu = (window.globalUsersMap && window.globalUsersMap.get(compositeKey)) 
+                || (window.globalUsersMap && window.globalUsersMap.get(rawEmail))
+                || (window.globalUsersMap && Array.from(window.globalUsersMap.values()).find(u => u.email === rawEmail));
+        if (gu && gu.name && gu.name.trim() !== '' && gu.name.trim().toLowerCase() !== 'nuevo usuario') {
+            registeredNameStr = gu.name.trim();
+            m.name = gu.name.trim();
+        } else if (m.name && m.name.trim() !== '' && m.name.trim().toLowerCase() !== 'nuevo usuario') {
+            registeredNameStr = m.name.trim();
+        }
+    } else if (m.name && m.name.trim() !== '' && m.name.trim().toLowerCase() !== 'nuevo usuario') {
+        registeredNameStr = m.name.trim();
+    }
+    
+    const nombreHtml = `
+      <label class="block">
+        <span class="mb-1 block text-xs font-semibold ${isUnsaved ? 'text-amber-800 dark:text-amber-300' : 'text-slate-600 dark:text-slate-300'}">Nombre registrado</span>
+        <input id="member-reg-name-${i}" type="text" class="w-full text-xs rounded ${isUnsaved ? 'border-amber-200 bg-amber-50/60 text-amber-900 font-semibold' : 'border-slate-200 bg-slate-100 text-slate-500 font-medium'} cursor-not-allowed" value="${registeredNameStr}" placeholder="Se completa automáticamente" disabled readonly>
+      </label>`;
+
+    const cardClasses = isUnsaved
+      ? 'border-2 border-dashed border-amber-400 bg-white dark:bg-slate-900 rounded-xl p-4 relative group shadow-sm transition-all hover:border-amber-500'
+      : 'border rounded-xl p-4 bg-slate-50 dark:bg-slate-800/40 relative group';
+
+    const headerBadge = isUnsaved ? `
+      <div class="flex items-center justify-between mb-3 pb-2 border-b border-amber-200/80 dark:border-amber-800/50">
+        <div class="flex items-center gap-1.5">
+          <span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded text-[11px] font-bold bg-amber-100 text-amber-800 border border-amber-300 dark:bg-amber-900/60 dark:text-amber-200 dark:border-amber-700">
+            <span class="w-2 h-2 rounded-full bg-amber-500 animate-pulse"></span>
+            🟡 Usuario Nuevo (Sin Guardar)
+          </span>
+          <span class="text-[11px] text-amber-700 dark:text-amber-300 hidden sm:inline">Pendiente de confirmar</span>
+        </div>
+        <button onclick="deleteUser(${i})" class="flex items-center gap-1 text-xs text-rose-600 hover:text-rose-800 bg-rose-50 hover:bg-rose-100 border border-rose-200 px-2.5 py-1 rounded-md transition-colors" title="Descartar este nuevo usuario">
+          <span class="material-symbols-outlined text-sm">delete</span>
+          <span class="text-[11px] font-semibold">Descartar</span>
+        </button>
+      </div>` : '';
+
+    const normalDeleteBtn = !isUnsaved
+      ? `<button onclick="deleteUser(${i})" class="absolute top-4 right-4 text-rose-500 hover:text-rose-700 p-1 opacity-0 group-hover:opacity-100 transition-opacity" title="Eliminar usuario"><span class="material-symbols-outlined text-sm">delete</span></button>`
+      : '';
+
+    return `
+      <div class="${cardClasses}">
+        ${normalDeleteBtn}
+        ${headerBadge}
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <label class="block">
+            <span class="mb-1 block text-xs font-semibold ${isUnsaved ? 'text-amber-800 dark:text-amber-300' : 'text-slate-600 dark:text-slate-300'}">Correo Electrónico</span>
+            <input type="email" list="global-users-datalist" class="w-full text-xs rounded ${isUnsaved ? 'border-amber-300 bg-white focus:border-amber-500 focus:ring-amber-500 font-medium' : 'border-slate-200'}" value="${m.email || ''}" oninput="updateUserDraft(${i}, this.value)" onchange="updateUser(${i}, 'email', this.value)" placeholder="Selecciona o escribe usuario@empresa.com">
+          </label>
+
+          ${nombreHtml}
+
+          <label class="block">
+            <span class="mb-1 block text-xs font-semibold ${isUnsaved ? 'text-amber-800 dark:text-amber-300' : 'text-slate-600 dark:text-slate-300'}">Rol del Sistema</span>
+            <select class="w-full text-xs rounded ${isUnsaved ? 'border-amber-300 bg-white focus:border-amber-500 focus:ring-amber-500' : 'border-slate-200'}" onchange="updateUser(${i}, 'role', this.value)">
+              <option value="MIEMBRO" ${m.role==='MIEMBRO' || (!m.role && isInternal) ? 'selected' : ''}>MIEMBRO</option>
+              <option value="ADMINISTRADOR_EMPRESA" ${m.role==='ADMINISTRADOR_EMPRESA'?'selected':''}>ADMINISTRADOR_EMPRESA</option>
+              <option value="INVITADO" ${m.role==='INVITADO'?'selected':''}>INVITADO</option>
+            </select>
+          </label>
+
+          ${cargoHtml}
+        </div>
+      </div>
+    `;
+  }
+
   function renderUsers() {
     window.renderUsersRef = renderUsers;
     window.renderUsers = renderUsers;
@@ -635,8 +785,20 @@ document.addEventListener('DOMContentLoaded', async () => {
     const emp = empresas[selectedIndex];
     if (!emp.members) emp.members = [];
     
-    const grouped = {};
+    // Separate unsaved (new drafts) from saved members
+    const unsavedMembers = [];
+    const savedMembers = [];
+
     emp.members.forEach((m, i) => {
+      if (m._unsaved) {
+        unsavedMembers.push({ ...m, originalIndex: i });
+      } else {
+        savedMembers.push({ ...m, originalIndex: i });
+      }
+    });
+
+    const grouped = {};
+    savedMembers.forEach((m) => {
       let g = '';
       if(window.currentGroupBy === 'empresa') {
         g = resolveMemberCompany(m, emp);
@@ -654,11 +816,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         g = m.especialidad && m.especialidad.trim() !== '' ? m.especialidad.trim() : 'Sin Especialidad Asignada';
       }
       if (!grouped[g]) grouped[g] = [];
-      if (!m.email || !m.email.trim()) {
-        grouped[g].unshift({ ...m, originalIndex: i });
-      } else {
-        grouped[g].push({ ...m, originalIndex: i });
-      }
+      grouped[g].push(m);
     });
 
     const sortedGroups = Object.keys(grouped).sort((a, b) => {
@@ -670,152 +828,57 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
 
     let html = '';
+
+    // If there are unsaved members, render them in a highlighted top section
+    if (unsavedMembers.length > 0) {
+      html += `
+        <div id="unsaved-users-section" class="mb-6 rounded-2xl border-2 border-amber-300 bg-amber-50/50 p-4 shadow-sm dark:bg-amber-950/20 dark:border-amber-700/60 transition-all">
+          <div class="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-amber-200 dark:border-amber-800/60">
+            <div class="flex items-center gap-2">
+              <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-amber-500 text-white shadow-sm">
+                <span class="w-2 h-2 rounded-full bg-white animate-pulse"></span>
+                Nuevos Usuarios por Guardar (${unsavedMembers.length})
+              </span>
+              <span class="text-xs text-amber-800 dark:text-amber-200 font-medium hidden sm:inline">
+                Completa los datos y haz clic en <strong>"Guardar Cambios"</strong> para agregarlos al listado oficial.
+              </span>
+            </div>
+            <button onclick="document.getElementById('publish-github-btn').click()" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-blue-600 hover:bg-blue-700 text-white shadow-sm transition-all cursor-pointer">
+              <span class="material-symbols-outlined text-sm">cloud_upload</span>
+              Guardar Cambios
+            </button>
+          </div>
+          <div class="flex flex-col gap-4 mt-4">
+            ${unsavedMembers.map(item => renderUserCard(item, item.originalIndex, true)).join('')}
+          </div>
+        </div>
+      `;
+    }
+
+    // Render grouped saved members
     sortedGroups.forEach(g => {
       const safeGroupId = 'group-' + btoa(unescape(encodeURIComponent(g))).replace(/[^a-zA-Z0-9]/g, '');
       html += `
         <div class="mt-4 mb-2 cursor-pointer group-header flex justify-between items-center bg-slate-100 hover:bg-slate-200 px-3 py-2 rounded-lg transition-colors select-none" onclick="toggleGroup('${safeGroupId}')">
-          <h4 class="text-xs font-bold text-slate-600 uppercase tracking-wider">${g}</h4>
+          <h4 class="text-xs font-bold text-slate-600 uppercase tracking-wider">${g} (${grouped[g].length})</h4>
           <span class="material-symbols-outlined text-slate-400 text-lg transition-transform" id="icon-${safeGroupId}">expand_less</span>
         </div>
         <div id="${safeGroupId}" class="flex flex-col gap-4">
-      `;
-      html += grouped[g].map(item => {
-        const i = item.originalIndex;
-        const m = item;
-
-        // ── Cargo: visible ONLY for internal members (ADMINISTRADOR_EMPRESA, MIEMBRO, ADMINISTRADOR). Guests (INVITADO) do NOT have cargo here. ──
-        const isInternal = m.role === 'ADMINISTRADOR_EMPRESA' || m.role === 'MIEMBRO' || m.role === 'ADMINISTRADOR' || (!m.role);
-
-        const cargoHtml = isInternal ? `
-          <label class="block">
-            <span class="mb-1 block text-xs font-semibold text-slate-600">Cargo (empleado interno)</span>
-            <select class="w-full text-xs rounded border-slate-200" onchange="updateUser(${i}, 'cargo', this.value)">
-              <option value="">Seleccione cargo...</option>
-              <optgroup label="Dirección y Alta Gerencia">
-                <option value="Gerente General / CEO" ${m.cargo==='Gerente General / CEO'?'selected':''}>Gerente General / CEO</option>
-                <option value="Gerente de Operaciones / COO" ${m.cargo==='Gerente de Operaciones / COO'?'selected':''}>Gerente de Operaciones / COO</option>
-                <option value="Director de Proyectos / Gerente de Proyectos" ${m.cargo==='Director de Proyectos / Gerente de Proyectos'?'selected':''}>Director de Proyectos / Gerente de Proyectos</option>
-                <option value="Director de Obra / Director de Construcción" ${m.cargo==='Director de Obra / Director de Construcción'?'selected':''}>Director de Obra / Director de Construcción</option>
-                <option value="Director de Diseño / Gerencia de Diseño" ${m.cargo==='Director de Diseño / Gerencia de Diseño'?'selected':''}>Director de Diseño / Gerencia de Diseño</option>
-                <option value="Gerente de Contrataciones y Compras" ${m.cargo==='Gerente de Contrataciones y Compras'?'selected':''}>Gerente de Contrataciones y Compras</option>
-              </optgroup>
-              <optgroup label="Arquitectura">
-                <option value="Director de Arquitectura" ${m.cargo==='Director de Arquitectura'?'selected':''}>Director de Arquitectura</option>
-                <option value="Coordinador de Arquitectura" ${m.cargo==='Coordinador de Arquitectura'?'selected':''}>Coordinador de Arquitectura</option>
-                <option value="Arquitecto Senior" ${m.cargo==='Arquitecto Senior'?'selected':''}>Arquitecto Senior</option>
-                <option value="Arquitecto Junior" ${m.cargo==='Arquitecto Junior'?'selected':''}>Arquitecto Junior</option>
-                <option value="Modelador de Arquitectura" ${m.cargo==='Modelador de Arquitectura'?'selected':''}>Modelador de Arquitectura</option>
-              </optgroup>
-              <optgroup label="Estrategia y Desarrollo BIM / VDC">
-                <option value="BIM Manager" ${m.cargo==='BIM Manager'?'selected':''}>BIM Manager</option>
-                <option value="Coordinador BIM" ${m.cargo==='Coordinador BIM'?'selected':''}>Coordinador BIM</option>
-                <option value="Líder de Modelado / Diseñador Líder" ${m.cargo==='Líder de Modelado / Diseñador Líder'?'selected':''}>Líder de Modelado / Diseñador Líder</option>
-                <option value="BIM Developer / Desarrollador BIM" ${m.cargo==='BIM Developer / Desarrollador BIM'?'selected':''}>BIM Developer / Desarrollador BIM</option>
-                <option value="Residente BIM" ${m.cargo==='Residente BIM'?'selected':''}>Residente BIM</option>
-                <option value="Modelador BIM" ${m.cargo==='Modelador BIM'?'selected':''}>Modelador BIM</option>
-              </optgroup>
-              <optgroup label="Gestión y Supervisión de Campo (Obra)">
-                <option value="Director de Obra" ${m.cargo==='Director de Obra'?'selected':''}>Director de Obra</option>
-                <option value="Residente de Obra" ${m.cargo==='Residente de Obra'?'selected':''}>Residente de Obra</option>
-                <option value="Residente de Redes / Instalaciones" ${m.cargo==='Residente de Redes / Instalaciones'?'selected':''}>Residente de Redes / Instalaciones</option>
-                <option value="Residente de Acabados" ${m.cargo==='Residente de Acabados'?'selected':''}>Residente de Acabados</option>
-                <option value="Residente Estructural" ${m.cargo==='Residente Estructural'?'selected':''}>Residente Estructural</option>
-                <option value="Residente Técnico" ${m.cargo==='Residente Técnico'?'selected':''}>Residente Técnico</option>
-              </optgroup>
-              <optgroup label="Ingenierías">
-                <option value="Diseñador Eléctrico" ${m.cargo==='Diseñador Eléctrico'?'selected':''}>Diseñador Eléctrico</option>
-                <option value="Diseñador Estructural" ${m.cargo==='Diseñador Estructural'?'selected':''}>Diseñador Estructural</option>
-                <option value="Diseñador Hidrosánitario" ${m.cargo==='Diseñador Hidrosánitario'?'selected':''}>Diseñador Hidrosánitario</option>
-                <option value="Diseñador Gas" ${m.cargo==='Diseñador Gas'?'selected':''}>Diseñador Gas</option>
-                <option value="Diseñador HVAC" ${m.cargo==='Diseñador HVAC'?'selected':''}>Diseñador HVAC</option>
-              </optgroup>
-              <optgroup label="Supervisión y Control">
-                <option value="Interventor / Supervisor Técnico" ${m.cargo==='Interventor / Supervisor Técnico'?'selected':''}>Interventor / Supervisor Técnico</option>
-                <option value="Inspector de Calidad / Aseguramiento de Calidad (QA/QC)" ${m.cargo==='Inspector de Calidad / Aseguramiento de Calidad (QA/QC)'?'selected':''}>Inspector de Calidad (QA/QC)</option>
-              </optgroup>
-              <optgroup label="Ingeniería, Arquitectura y Diseño">
-                <option value="Ingeniero Calculista / Estructural" ${m.cargo==='Ingeniero Calculista / Estructural'?'selected':''}>Ingeniero Calculista / Estructural</option>
-                <option value="Ingeniero de Redes (MEP)" ${m.cargo==='Ingeniero de Redes (MEP)'?'selected':''}>Ingeniero de Redes (MEP)</option>
-                <option value="Arquitecto Diseñador" ${m.cargo==='Arquitecto Diseñador'?'selected':''}>Arquitecto Diseñador</option>
-                <option value="Modelador BIM / Dibujante" ${m.cargo==='Modelador BIM / Dibujante'?'selected':''}>Modelador BIM / Dibujante</option>
-              </optgroup>
-              <optgroup label="Control de Costos, Tiempos y Suministros">
-                <option value="Ingeniero de Presupuestos / Costos" ${m.cargo==='Ingeniero de Presupuestos / Costos'?'selected':''}>Ingeniero de Presupuestos / Costos</option>
-                <option value="Analista de Programación y Control de Obra" ${m.cargo==='Analista de Programación y Control de Obra'?'selected':''}>Analista de Programación y Control de Obra</option>
-                <option value="Analista de Compras / Suministros" ${m.cargo==='Analista de Compras / Suministros'?'selected':''}>Analista de Compras / Suministros</option>
-              </optgroup>
-              <optgroup label="Topografía y Geomática">
-                <option value="Topógrafo" ${m.cargo==='Topógrafo'?'selected':''}>Topógrafo</option>
-                <option value="Cadenero / Auxiliar de Topografía" ${m.cargo==='Cadenero / Auxiliar de Topografía'?'selected':''}>Cadenero / Auxiliar de Topografía</option>
-              </optgroup>
-              <optgroup label="Seguridad, Medio Ambiente y Apoyo Operativo">
-                <option value="Residente de Seguridad y Salud en el Trabajo (SST)" ${m.cargo==='Residente de Seguridad y Salud en el Trabajo (SST)'?'selected':''}>Residente SST</option>
-                <option value="Residente Ambiental" ${m.cargo==='Residente Ambiental'?'selected':''}>Residente Ambiental</option>
-                <option value="Almacenista de Obra" ${m.cargo==='Almacenista de Obra'?'selected':''}>Almacenista de Obra</option>
-                <option value="Administrador de Obra" ${m.cargo==='Administrador de Obra'?'selected':''}>Administrador de Obra</option>
-                <option value="Administrador de TI / Sistemas" ${m.cargo==='Administrador de TI / Sistemas'?'selected':''}>Administrador de TI / Sistemas</option>
-                <option value="Asesor Jurídico / Gestor de Contratos" ${m.cargo==='Asesor Jurídico / Gestor de Contratos'?'selected':''}>Asesor Jurídico / Gestor de Contratos</option>
-              </optgroup>
-            </select>
-          </label>` : '';
-
-        let registeredNameStr = '';
-        if (m.email && m.email.trim()) {
-            const rawEmail = m.email.trim().toLowerCase();
-            const compositeKey = rawEmail + '_' + (emp.name || '').trim().toLowerCase();
-            const gu = (window.globalUsersMap && window.globalUsersMap.get(compositeKey)) 
-                    || (window.globalUsersMap && window.globalUsersMap.get(rawEmail))
-                    || (window.globalUsersMap && Array.from(window.globalUsersMap.values()).find(u => u.email === rawEmail));
-            if (gu && gu.name && gu.name.trim() !== '' && gu.name.trim().toLowerCase() !== 'nuevo usuario') {
-                registeredNameStr = gu.name.trim();
-                m.name = gu.name.trim();
-            } else if (m.name && m.name.trim() !== '' && m.name.trim().toLowerCase() !== 'nuevo usuario') {
-                registeredNameStr = m.name.trim();
-            }
-        } else if (m.name && m.name.trim() !== '' && m.name.trim().toLowerCase() !== 'nuevo usuario') {
-            registeredNameStr = m.name.trim();
-        }
-        
-        const nombreHtml = `
-          <label class="block">
-            <span class="mb-1 block text-xs font-semibold text-slate-600">Nombre registrado</span>
-            <input id="member-reg-name-${i}" type="text" class="w-full text-xs rounded border-slate-200 bg-slate-100 text-slate-500 font-medium cursor-not-allowed" value="${registeredNameStr}" placeholder="Se completa automáticamente" disabled readonly>
-          </label>`;
-
-        return `
-      <div class="border rounded-xl p-4 bg-slate-50 relative group">
-        <button onclick="deleteUser(${i})" class="absolute top-4 right-4 text-rose-500 hover:text-rose-700 p-1 opacity-0 group-hover:opacity-100 transition-opacity" title="Eliminar usuario"><span class="material-symbols-outlined text-sm">delete</span></button>
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-          
-          <label class="block">
-            <span class="mb-1 block text-xs font-semibold text-slate-600">Correo Electrónico</span>
-            <input type="email" list="global-users-datalist" class="w-full text-xs rounded border-slate-200" value="${m.email || ''}" oninput="updateUserDraft(${i}, this.value)" onchange="updateUser(${i}, 'email', this.value)" placeholder="Selecciona o escribe usuario@empresa.com">
-          </label>
-
-          ${nombreHtml}
-
-          <label class="block">
-            <span class="mb-1 block text-xs font-semibold text-slate-600">Rol del Sistema</span>
-            <select class="w-full text-xs rounded border-slate-200" onchange="updateUser(${i}, 'role', this.value)">
-              <option value="MIEMBRO" ${m.role==='MIEMBRO' || (!m.role && isInternal) ? 'selected' : ''}>MIEMBRO</option>
-              <option value="ADMINISTRADOR_EMPRESA" ${m.role==='ADMINISTRADOR_EMPRESA'?'selected':''}>ADMINISTRADOR_EMPRESA</option>
-              <option value="INVITADO" ${m.role==='INVITADO'?'selected':''}>INVITADO</option>
-            </select>
-          </label>
-
-          ${cargoHtml}
-
+          ${grouped[g].map(item => renderUserCard(item, item.originalIndex, false)).join('')}
         </div>
-      </div>
-        `;
-      }).join('');
-      
-      html += `</div>`; // Close group div
+      `;
     });
+
+    if (unsavedMembers.length === 0 && sortedGroups.length === 0) {
+      html += `
+        <div class="text-center py-8 text-slate-400 text-sm">
+          No hay usuarios registrados en esta empresa. Haz clic en <strong>+ Agregar Usuario</strong> para crear uno.
+        </div>
+      `;
+    }
     
     usersListEl.innerHTML = html;
   }
-
 
   window.updateUserDraft = (idx, val) => {
     if (selectedIndex === -1 || !empresas[selectedIndex] || !empresas[selectedIndex].members) return;
@@ -866,7 +929,10 @@ document.addEventListener('DOMContentLoaded', async () => {
   };
   
   window.deleteUser = (idx) => {
-    if(confirm('¿Eliminar usuario?')) {
+    if (selectedIndex === -1 || !empresas[selectedIndex] || !empresas[selectedIndex].members) return;
+    const m = empresas[selectedIndex].members[idx];
+    const confirmMsg = m && m._unsaved ? '¿Descartar este nuevo usuario sin guardar?' : '¿Eliminar usuario?';
+    if(confirm(confirmMsg)) {
       empresas[selectedIndex].members.splice(idx, 1);
       renderUsers();
     }
@@ -882,9 +948,16 @@ document.addEventListener('DOMContentLoaded', async () => {
       email: '', 
       role: 'MIEMBRO', 
       empresaUsuario: emp.name,
-      cargo: ''
+      cargo: '',
+      _unsaved: true
     });
     renderUsers();
+    setTimeout(() => {
+      const unsavedSec = document.getElementById('unsaved-users-section');
+      if (unsavedSec) {
+        unsavedSec.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+    }, 60);
   });
 
   // Projects CRUD
@@ -2248,6 +2321,9 @@ let contentBase = '';
       for (const emp of empresas) {
         if (emp && !emp.deleted && Array.isArray(emp.members)) {
           emp.members = emp.members.filter(m => m && m.email && String(m.email).trim() !== '');
+          emp.members.forEach(m => {
+            delete m._unsaved;
+          });
         }
       }
 
@@ -2306,6 +2382,14 @@ let contentBase = '';
           }
         });
       }
+
+      empresas.forEach(emp => {
+        if (Array.isArray(emp.members)) {
+          emp.members.forEach(m => {
+            delete m._unsaved;
+          });
+        }
+      });
 
       sessionStorage.removeItem('cachedCompanies_v2');
       await window.fetchGlobalUsers();

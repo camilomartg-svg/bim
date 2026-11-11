@@ -27,6 +27,8 @@ document.addEventListener('DOMContentLoaded', async () => {
 
       const wompiBtn = document.getElementById('global-wompi-config-btn');
       if (wompiBtn) wompiBtn.classList.remove('hidden');
+      const syncDriveBtn = document.getElementById('sync-seed-drive-btn');
+      if (syncDriveBtn) syncDriveBtn.classList.remove('hidden');
   } else {
       const title = document.getElementById('page-title');
       const subtitle = document.getElementById('page-subtitle');
@@ -49,6 +51,8 @@ document.addEventListener('DOMContentLoaded', async () => {
 
       const wompiBtn = document.getElementById('global-wompi-config-btn');
       if (wompiBtn) wompiBtn.classList.add('hidden');
+      const syncDriveBtn = document.getElementById('sync-seed-drive-btn');
+      if (syncDriveBtn) syncDriveBtn.classList.add('hidden');
   }
 
   let empresas = [];
@@ -129,8 +133,13 @@ document.addEventListener('DOMContentLoaded', async () => {
     window.scrollTo({ top: 0, behavior: 'smooth' });
     setTimeout(() => { banner.classList.add('hidden'); }, 5000);
   }
+  window.showBanner = showBanner;
 
   async function loadData() {
+    if (window.NoraDriveStore) {
+      await window.NoraDriveStore.ensureSeeded();
+      window.NoraDriveStore.invalidateCache();
+    }
     try {
       const ts = Date.now();
       const res = await fetch(`empresas.json?t=${ts}`);
@@ -254,7 +263,8 @@ document.addEventListener('DOMContentLoaded', async () => {
                     if (!emp.admins) emp.admins = [];
                     gUsers.forEach(gu => {
                          const email = gu.email ? gu.email.toLowerCase().trim() : '';
-                         if (email && userBestCompanyMap.get(email) === emp.id) {
+                         const isGuApproved = String(gu.estado || '').toUpperCase().trim() === 'APROBADO' || gu.rol === 'SUPER_ADMINISTRADOR' || gu.rol === 'ADMINISTRADOR_EMPRESA';
+                         if (email && isGuApproved && userBestCompanyMap.get(email) === emp.id) {
                              const mIdx = emp.members.findIndex(m => m.email && m.email.toLowerCase().trim() === email);
                              const memberData = {
                                  name: gu.nombre || email.split('@')[0],
@@ -297,16 +307,17 @@ document.addEventListener('DOMContentLoaded', async () => {
                             // Si existe, debe coincidir con la mejor empresa asignada (si tiene una asignada)
                             const matchedEmpId = userBestCompanyMap.get(emailClean);
                             if (matchedEmpId && matchedEmpId !== emp.id) {
-                                return false; // Pertenece a otra empresa
+                                return true; // Conservar miembros e invitados multi-empresa almacenados en Drive
                             }
                         } else {
-                            return false; // Eliminado de Google Sheets
+                            return true; // Conservar miembros existentes en empresas.json de Drive
                         }
                         return true;
                     });
 
                     // 2. Eliminar del arreglo de administradores de la empresa si ya no tienen el rol de administrador en Google Sheets
-                    emp.admins = emp.admins.filter(adminEmail => {
+                    emp.admins = emp.admins.filter(adminEmail => Boolean(adminEmail && String(adminEmail).trim()));
+                    const _unusedAdminCheck = (emp.admins || []).filter(adminEmail => {
                         if (!adminEmail) return false;
                         const emailClean = adminEmail.toLowerCase().trim();
                         
@@ -343,6 +354,9 @@ document.addEventListener('DOMContentLoaded', async () => {
       const activeCompanies = empresas.filter(e => !e.deleted);
       await Promise.all(activeCompanies.map(emp => loadCompanyConfig(emp)));
 
+      if (selectedIndex >= empresas.length || (selectedIndex > -1 && (!empresas[selectedIndex] || empresas[selectedIndex].deleted))) {
+        selectedIndex = -1;
+      }
       renderList();
       if (selectedIndex === -1 && empresas.length > 0) {
         const firstActiveIdx = empresas.findIndex(e => !e.deleted);
@@ -608,6 +622,156 @@ document.addEventListener('DOMContentLoaded', async () => {
     return 'Invitados / Externos';
   }
 
+  function renderUserCard(m, i, isUnsaved = false) {
+    const emp = empresas[selectedIndex];
+    const isInternal = m.role === 'ADMINISTRADOR_EMPRESA' || m.role === 'MIEMBRO' || m.role === 'ADMINISTRADOR' || (!m.role);
+
+    const cargoHtml = isInternal ? `
+      <label class="block">
+        <span class="mb-1 block text-xs font-semibold ${isUnsaved ? 'text-amber-800 dark:text-amber-300' : 'text-slate-600 dark:text-slate-300'}">Cargo (empleado interno)</span>
+        <select class="w-full text-xs rounded ${isUnsaved ? 'border-amber-300 bg-white focus:border-amber-500 focus:ring-amber-500' : 'border-slate-200'}" onchange="updateUser(${i}, 'cargo', this.value)">
+          <option value="">Seleccione cargo...</option>
+          <optgroup label="Dirección y Alta Gerencia">
+            <option value="Gerente General / CEO" ${m.cargo==='Gerente General / CEO'?'selected':''}>Gerente General / CEO</option>
+            <option value="Gerente de Operaciones / COO" ${m.cargo==='Gerente de Operaciones / COO'?'selected':''}>Gerente de Operaciones / COO</option>
+            <option value="Director de Proyectos / Gerente de Proyectos" ${m.cargo==='Director de Proyectos / Gerente de Proyectos'?'selected':''}>Director de Proyectos / Gerente de Proyectos</option>
+            <option value="Director de Obra / Director de Construcción" ${m.cargo==='Director de Obra / Director de Construcción'?'selected':''}>Director de Obra / Director de Construcción</option>
+            <option value="Director de Diseño / Gerencia de Diseño" ${m.cargo==='Director de Diseño / Gerencia de Diseño'?'selected':''}>Director de Diseño / Gerencia de Diseño</option>
+            <option value="Gerente de Contrataciones y Compras" ${m.cargo==='Gerente de Contrataciones y Compras'?'selected':''}>Gerente de Contrataciones y Compras</option>
+          </optgroup>
+          <optgroup label="Arquitectura">
+            <option value="Director de Arquitectura" ${m.cargo==='Director de Arquitectura'?'selected':''}>Director de Arquitectura</option>
+            <option value="Coordinador de Arquitectura" ${m.cargo==='Coordinador de Arquitectura'?'selected':''}>Coordinador de Arquitectura</option>
+            <option value="Arquitecto Senior" ${m.cargo==='Arquitecto Senior'?'selected':''}>Arquitecto Senior</option>
+            <option value="Arquitecto Junior" ${m.cargo==='Arquitecto Junior'?'selected':''}>Arquitecto Junior</option>
+            <option value="Modelador de Arquitectura" ${m.cargo==='Modelador de Arquitectura'?'selected':''}>Modelador de Arquitectura</option>
+          </optgroup>
+          <optgroup label="Estrategia y Desarrollo BIM / VDC">
+            <option value="BIM Manager" ${m.cargo==='BIM Manager'?'selected':''}>BIM Manager</option>
+            <option value="Coordinador BIM" ${m.cargo==='Coordinador BIM'?'selected':''}>Coordinador BIM</option>
+            <option value="Líder de Modelado / Diseñador Líder" ${m.cargo==='Líder de Modelado / Diseñador Líder'?'selected':''}>Líder de Modelado / Diseñador Líder</option>
+            <option value="BIM Developer / Desarrollador BIM" ${m.cargo==='BIM Developer / Desarrollador BIM'?'selected':''}>BIM Developer / Desarrollador BIM</option>
+            <option value="Residente BIM" ${m.cargo==='Residente BIM'?'selected':''}>Residente BIM</option>
+            <option value="Modelador BIM" ${m.cargo==='Modelador BIM'?'selected':''}>Modelador BIM</option>
+          </optgroup>
+          <optgroup label="Gestión y Supervisión de Campo (Obra)">
+            <option value="Director de Obra" ${m.cargo==='Director de Obra'?'selected':''}>Director de Obra</option>
+            <option value="Residente de Obra" ${m.cargo==='Residente de Obra'?'selected':''}>Residente de Obra</option>
+            <option value="Residente de Redes / Instalaciones" ${m.cargo==='Residente de Redes / Instalaciones'?'selected':''}>Residente de Redes / Instalaciones</option>
+            <option value="Residente de Acabados" ${m.cargo==='Residente de Acabados'?'selected':''}>Residente de Acabados</option>
+            <option value="Residente Estructural" ${m.cargo==='Residente Estructural'?'selected':''}>Residente Estructural</option>
+            <option value="Residente Técnico" ${m.cargo==='Residente Técnico'?'selected':''}>Residente Técnico</option>
+          </optgroup>
+          <optgroup label="Ingenierías">
+            <option value="Diseñador Eléctrico" ${m.cargo==='Diseñador Eléctrico'?'selected':''}>Diseñador Eléctrico</option>
+            <option value="Diseñador Estructural" ${m.cargo==='Diseñador Estructural'?'selected':''}>Diseñador Estructural</option>
+            <option value="Diseñador Hidrosánitario" ${m.cargo==='Diseñador Hidrosánitario'?'selected':''}>Diseñador Hidrosánitario</option>
+            <option value="Diseñador Gas" ${m.cargo==='Diseñador Gas'?'selected':''}>Diseñador Gas</option>
+            <option value="Diseñador HVAC" ${m.cargo==='Diseñador HVAC'?'selected':''}>Diseñador HVAC</option>
+          </optgroup>
+          <optgroup label="Supervisión y Control">
+            <option value="Interventor / Supervisor Técnico" ${m.cargo==='Interventor / Supervisor Técnico'?'selected':''}>Interventor / Supervisor Técnico</option>
+            <option value="Inspector de Calidad / Aseguramiento de Calidad (QA/QC)" ${m.cargo==='Inspector de Calidad / Aseguramiento de Calidad (QA/QC)'?'selected':''}>Inspector de Calidad (QA/QC)</option>
+          </optgroup>
+          <optgroup label="Ingeniería, Arquitectura y Diseño">
+            <option value="Ingeniero Calculista / Estructural" ${m.cargo==='Ingeniero Calculista / Estructural'?'selected':''}>Ingeniero Calculista / Estructural</option>
+            <option value="Ingeniero de Redes (MEP)" ${m.cargo==='Ingeniero de Redes (MEP)'?'selected':''}>Ingeniero de Redes (MEP)</option>
+            <option value="Arquitecto Diseñador" ${m.cargo==='Arquitecto Diseñador'?'selected':''}>Arquitecto Diseñador</option>
+            <option value="Modelador BIM / Dibujante" ${m.cargo==='Modelador BIM / Dibujante'?'selected':''}>Modelador BIM / Dibujante</option>
+          </optgroup>
+          <optgroup label="Control de Costos, Tiempos y Suministros">
+            <option value="Ingeniero de Presupuestos / Costos" ${m.cargo==='Ingeniero de Presupuestos / Costos'?'selected':''}>Ingeniero de Presupuestos / Costos</option>
+            <option value="Analista de Programación y Control de Obra" ${m.cargo==='Analista de Programación y Control de Obra'?'selected':''}>Analista de Programación y Control de Obra</option>
+            <option value="Analista de Compras / Suministros" ${m.cargo==='Analista de Compras / Suministros'?'selected':''}>Analista de Compras / Suministros</option>
+          </optgroup>
+          <optgroup label="Topografía y Geomática">
+            <option value="Topógrafo" ${m.cargo==='Topógrafo'?'selected':''}>Topógrafo</option>
+            <option value="Cadenero / Auxiliar de Topografía" ${m.cargo==='Cadenero / Auxiliar de Topografía'?'selected':''}>Cadenero / Auxiliar de Topografía</option>
+          </optgroup>
+          <optgroup label="Seguridad, Medio Ambiente y Apoyo Operativo">
+            <option value="Residente de Seguridad y Salud en el Trabajo (SST)" ${m.cargo==='Residente de Seguridad y Salud en el Trabajo (SST)'?'selected':''}>Residente SST</option>
+            <option value="Residente Ambiental" ${m.cargo==='Residente Ambiental'?'selected':''}>Residente Ambiental</option>
+            <option value="Almacenista de Obra" ${m.cargo==='Almacenista de Obra'?'selected':''}>Almacenista de Obra</option>
+            <option value="Administrador de Obra" ${m.cargo==='Administrador de Obra'?'selected':''}>Administrador de Obra</option>
+            <option value="Administrador de TI / Sistemas" ${m.cargo==='Administrador de TI / Sistemas'?'selected':''}>Administrador de TI / Sistemas</option>
+            <option value="Asesor Jurídico / Gestor de Contratos" ${m.cargo==='Asesor Jurídico / Gestor de Contratos'?'selected':''}>Asesor Jurídico / Gestor de Contratos</option>
+          </optgroup>
+        </select>
+      </label>` : '';
+
+    let registeredNameStr = '';
+    if (m.email && m.email.trim()) {
+        const rawEmail = m.email.trim().toLowerCase();
+        const compositeKey = rawEmail + '_' + (emp.name || '').trim().toLowerCase();
+        const gu = (window.globalUsersMap && window.globalUsersMap.get(compositeKey)) 
+                || (window.globalUsersMap && window.globalUsersMap.get(rawEmail))
+                || (window.globalUsersMap && Array.from(window.globalUsersMap.values()).find(u => u.email === rawEmail));
+        if (gu && gu.name && gu.name.trim() !== '' && gu.name.trim().toLowerCase() !== 'nuevo usuario') {
+            registeredNameStr = gu.name.trim();
+            m.name = gu.name.trim();
+        } else if (m.name && m.name.trim() !== '' && m.name.trim().toLowerCase() !== 'nuevo usuario') {
+            registeredNameStr = m.name.trim();
+        }
+    } else if (m.name && m.name.trim() !== '' && m.name.trim().toLowerCase() !== 'nuevo usuario') {
+        registeredNameStr = m.name.trim();
+    }
+    
+    const nombreHtml = `
+      <label class="block">
+        <span class="mb-1 block text-xs font-semibold ${isUnsaved ? 'text-amber-800 dark:text-amber-300' : 'text-slate-600 dark:text-slate-300'}">Nombre registrado</span>
+        <input id="member-reg-name-${i}" type="text" class="w-full text-xs rounded ${isUnsaved ? 'border-amber-200 bg-amber-50/60 text-amber-900 font-semibold' : 'border-slate-200 bg-slate-100 text-slate-500 font-medium'} cursor-not-allowed" value="${registeredNameStr}" placeholder="Se completa automáticamente" disabled readonly>
+      </label>`;
+
+    const cardClasses = isUnsaved
+      ? 'border-2 border-dashed border-amber-400 bg-white dark:bg-slate-900 rounded-xl p-4 relative group shadow-sm transition-all hover:border-amber-500'
+      : 'border rounded-xl p-4 bg-slate-50 dark:bg-slate-800/40 relative group';
+
+    const headerBadge = isUnsaved ? `
+      <div class="flex items-center justify-between mb-3 pb-2 border-b border-amber-200/80 dark:border-amber-800/50">
+        <div class="flex items-center gap-1.5">
+          <span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded text-[11px] font-bold bg-amber-100 text-amber-800 border border-amber-300 dark:bg-amber-900/60 dark:text-amber-200 dark:border-amber-700">
+            <span class="w-2 h-2 rounded-full bg-amber-500 animate-pulse"></span>
+            🟡 Usuario Nuevo (Sin Guardar)
+          </span>
+          <span class="text-[11px] text-amber-700 dark:text-amber-300 hidden sm:inline">Pendiente de confirmar</span>
+        </div>
+        <button onclick="deleteUser(${i})" class="flex items-center gap-1 text-xs text-rose-600 hover:text-rose-800 bg-rose-50 hover:bg-rose-100 border border-rose-200 px-2.5 py-1 rounded-md transition-colors" title="Descartar este nuevo usuario">
+          <span class="material-symbols-outlined text-sm">delete</span>
+          <span class="text-[11px] font-semibold">Descartar</span>
+        </button>
+      </div>` : '';
+
+    const normalDeleteBtn = !isUnsaved
+      ? `<button onclick="deleteUser(${i})" class="absolute top-4 right-4 text-rose-500 hover:text-rose-700 p-1 opacity-0 group-hover:opacity-100 transition-opacity" title="Eliminar usuario"><span class="material-symbols-outlined text-sm">delete</span></button>`
+      : '';
+
+    return `
+      <div class="${cardClasses}">
+        ${normalDeleteBtn}
+        ${headerBadge}
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <label class="block">
+            <span class="mb-1 block text-xs font-semibold ${isUnsaved ? 'text-amber-800 dark:text-amber-300' : 'text-slate-600 dark:text-slate-300'}">Correo Electrónico</span>
+            <input type="email" list="global-users-datalist" class="w-full text-xs rounded ${isUnsaved ? 'border-amber-300 bg-white focus:border-amber-500 focus:ring-amber-500 font-medium' : 'border-slate-200'}" value="${m.email || ''}" oninput="updateUserDraft(${i}, this.value)" onchange="updateUser(${i}, 'email', this.value)" placeholder="Selecciona o escribe usuario@empresa.com">
+          </label>
+
+          ${nombreHtml}
+
+          <label class="block">
+            <span class="mb-1 block text-xs font-semibold ${isUnsaved ? 'text-amber-800 dark:text-amber-300' : 'text-slate-600 dark:text-slate-300'}">Rol del Sistema</span>
+            <select class="w-full text-xs rounded ${isUnsaved ? 'border-amber-300 bg-white focus:border-amber-500 focus:ring-amber-500' : 'border-slate-200'}" onchange="updateUser(${i}, 'role', this.value)">
+              <option value="MIEMBRO" ${m.role==='MIEMBRO' || (!m.role && isInternal) ? 'selected' : ''}>MIEMBRO</option>
+              <option value="ADMINISTRADOR_EMPRESA" ${m.role==='ADMINISTRADOR_EMPRESA'?'selected':''}>ADMINISTRADOR_EMPRESA</option>
+              <option value="INVITADO" ${m.role==='INVITADO'?'selected':''}>INVITADO</option>
+            </select>
+          </label>
+
+          ${cargoHtml}
+        </div>
+      </div>
+    `;
+  }
+
   function renderUsers() {
     window.renderUsersRef = renderUsers;
     window.renderUsers = renderUsers;
@@ -617,11 +781,24 @@ document.addEventListener('DOMContentLoaded', async () => {
     if(iconAll) iconAll.innerText = 'unfold_less';
     
     if (selectedIndex === -1) return;
+    if (window.refreshGlobalUsersDatalist) window.refreshGlobalUsersDatalist();
     const emp = empresas[selectedIndex];
     if (!emp.members) emp.members = [];
     
-    const grouped = {};
+    // Separate unsaved (new drafts) from saved members
+    const unsavedMembers = [];
+    const savedMembers = [];
+
     emp.members.forEach((m, i) => {
+      if (m._unsaved) {
+        unsavedMembers.push({ ...m, originalIndex: i });
+      } else {
+        savedMembers.push({ ...m, originalIndex: i });
+      }
+    });
+
+    const grouped = {};
+    savedMembers.forEach((m) => {
       let g = '';
       if(window.currentGroupBy === 'empresa') {
         g = resolveMemberCompany(m, emp);
@@ -639,7 +816,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         g = m.especialidad && m.especialidad.trim() !== '' ? m.especialidad.trim() : 'Sin Especialidad Asignada';
       }
       if (!grouped[g]) grouped[g] = [];
-      grouped[g].push({ ...m, originalIndex: i });
+      grouped[g].push(m);
     });
 
     const sortedGroups = Object.keys(grouped).sort((a, b) => {
@@ -651,152 +828,74 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
 
     let html = '';
+
+    // If there are unsaved members, render them in a highlighted top section
+    if (unsavedMembers.length > 0) {
+      html += `
+        <div id="unsaved-users-section" class="mb-6 rounded-2xl border-2 border-amber-300 bg-amber-50/50 p-4 shadow-sm dark:bg-amber-950/20 dark:border-amber-700/60 transition-all">
+          <div class="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-amber-200 dark:border-amber-800/60">
+            <div class="flex items-center gap-2">
+              <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-amber-500 text-white shadow-sm">
+                <span class="w-2 h-2 rounded-full bg-white animate-pulse"></span>
+                Nuevos Usuarios por Guardar (${unsavedMembers.length})
+              </span>
+              <span class="text-xs text-amber-800 dark:text-amber-200 font-medium hidden sm:inline">
+                Completa los datos y haz clic en <strong>"Guardar Cambios"</strong> para agregarlos al listado oficial.
+              </span>
+            </div>
+            <button onclick="document.getElementById('publish-github-btn').click()" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-blue-600 hover:bg-blue-700 text-white shadow-sm transition-all cursor-pointer">
+              <span class="material-symbols-outlined text-sm">cloud_upload</span>
+              Guardar Cambios
+            </button>
+          </div>
+          <div class="flex flex-col gap-4 mt-4">
+            ${unsavedMembers.map(item => renderUserCard(item, item.originalIndex, true)).join('')}
+          </div>
+        </div>
+      `;
+    }
+
+    // Render grouped saved members
     sortedGroups.forEach(g => {
       const safeGroupId = 'group-' + btoa(unescape(encodeURIComponent(g))).replace(/[^a-zA-Z0-9]/g, '');
       html += `
         <div class="mt-4 mb-2 cursor-pointer group-header flex justify-between items-center bg-slate-100 hover:bg-slate-200 px-3 py-2 rounded-lg transition-colors select-none" onclick="toggleGroup('${safeGroupId}')">
-          <h4 class="text-xs font-bold text-slate-600 uppercase tracking-wider">${g}</h4>
+          <h4 class="text-xs font-bold text-slate-600 uppercase tracking-wider">${g} (${grouped[g].length})</h4>
           <span class="material-symbols-outlined text-slate-400 text-lg transition-transform" id="icon-${safeGroupId}">expand_less</span>
         </div>
         <div id="${safeGroupId}" class="flex flex-col gap-4">
-      `;
-      html += grouped[g].map(item => {
-        const i = item.originalIndex;
-        const m = item;
-
-        // ── Cargo: visible ONLY for internal members (ADMINISTRADOR_EMPRESA, MIEMBRO, ADMINISTRADOR). Guests (INVITADO) do NOT have cargo here. ──
-        const isInternal = m.role === 'ADMINISTRADOR_EMPRESA' || m.role === 'MIEMBRO' || m.role === 'ADMINISTRADOR' || (!m.role);
-
-        const cargoHtml = isInternal ? `
-          <label class="block">
-            <span class="mb-1 block text-xs font-semibold text-slate-600">Cargo (empleado interno)</span>
-            <select class="w-full text-xs rounded border-slate-200" onchange="updateUser(${i}, 'cargo', this.value)">
-              <option value="">Seleccione cargo...</option>
-              <optgroup label="Dirección y Alta Gerencia">
-                <option value="Gerente General / CEO" ${m.cargo==='Gerente General / CEO'?'selected':''}>Gerente General / CEO</option>
-                <option value="Gerente de Operaciones / COO" ${m.cargo==='Gerente de Operaciones / COO'?'selected':''}>Gerente de Operaciones / COO</option>
-                <option value="Director de Proyectos / Gerente de Proyectos" ${m.cargo==='Director de Proyectos / Gerente de Proyectos'?'selected':''}>Director de Proyectos / Gerente de Proyectos</option>
-                <option value="Director de Obra / Director de Construcción" ${m.cargo==='Director de Obra / Director de Construcción'?'selected':''}>Director de Obra / Director de Construcción</option>
-                <option value="Director de Diseño / Gerencia de Diseño" ${m.cargo==='Director de Diseño / Gerencia de Diseño'?'selected':''}>Director de Diseño / Gerencia de Diseño</option>
-                <option value="Gerente de Contrataciones y Compras" ${m.cargo==='Gerente de Contrataciones y Compras'?'selected':''}>Gerente de Contrataciones y Compras</option>
-              </optgroup>
-              <optgroup label="Arquitectura">
-                <option value="Director de Arquitectura" ${m.cargo==='Director de Arquitectura'?'selected':''}>Director de Arquitectura</option>
-                <option value="Coordinador de Arquitectura" ${m.cargo==='Coordinador de Arquitectura'?'selected':''}>Coordinador de Arquitectura</option>
-                <option value="Arquitecto Senior" ${m.cargo==='Arquitecto Senior'?'selected':''}>Arquitecto Senior</option>
-                <option value="Arquitecto Junior" ${m.cargo==='Arquitecto Junior'?'selected':''}>Arquitecto Junior</option>
-                <option value="Modelador de Arquitectura" ${m.cargo==='Modelador de Arquitectura'?'selected':''}>Modelador de Arquitectura</option>
-              </optgroup>
-              <optgroup label="Estrategia y Desarrollo BIM / VDC">
-                <option value="BIM Manager" ${m.cargo==='BIM Manager'?'selected':''}>BIM Manager</option>
-                <option value="Coordinador BIM" ${m.cargo==='Coordinador BIM'?'selected':''}>Coordinador BIM</option>
-                <option value="Líder de Modelado / Diseñador Líder" ${m.cargo==='Líder de Modelado / Diseñador Líder'?'selected':''}>Líder de Modelado / Diseñador Líder</option>
-                <option value="BIM Developer / Desarrollador BIM" ${m.cargo==='BIM Developer / Desarrollador BIM'?'selected':''}>BIM Developer / Desarrollador BIM</option>
-                <option value="Residente BIM" ${m.cargo==='Residente BIM'?'selected':''}>Residente BIM</option>
-                <option value="Modelador BIM" ${m.cargo==='Modelador BIM'?'selected':''}>Modelador BIM</option>
-              </optgroup>
-              <optgroup label="Gestión y Supervisión de Campo (Obra)">
-                <option value="Director de Obra" ${m.cargo==='Director de Obra'?'selected':''}>Director de Obra</option>
-                <option value="Residente de Obra" ${m.cargo==='Residente de Obra'?'selected':''}>Residente de Obra</option>
-                <option value="Residente de Redes / Instalaciones" ${m.cargo==='Residente de Redes / Instalaciones'?'selected':''}>Residente de Redes / Instalaciones</option>
-                <option value="Residente de Acabados" ${m.cargo==='Residente de Acabados'?'selected':''}>Residente de Acabados</option>
-                <option value="Residente Estructural" ${m.cargo==='Residente Estructural'?'selected':''}>Residente Estructural</option>
-                <option value="Residente Técnico" ${m.cargo==='Residente Técnico'?'selected':''}>Residente Técnico</option>
-              </optgroup>
-              <optgroup label="Ingenierías">
-                <option value="Diseñador Eléctrico" ${m.cargo==='Diseñador Eléctrico'?'selected':''}>Diseñador Eléctrico</option>
-                <option value="Diseñador Estructural" ${m.cargo==='Diseñador Estructural'?'selected':''}>Diseñador Estructural</option>
-                <option value="Diseñador Hidrosánitario" ${m.cargo==='Diseñador Hidrosánitario'?'selected':''}>Diseñador Hidrosánitario</option>
-                <option value="Diseñador Gas" ${m.cargo==='Diseñador Gas'?'selected':''}>Diseñador Gas</option>
-                <option value="Diseñador HVAC" ${m.cargo==='Diseñador HVAC'?'selected':''}>Diseñador HVAC</option>
-              </optgroup>
-              <optgroup label="Supervisión y Control">
-                <option value="Interventor / Supervisor Técnico" ${m.cargo==='Interventor / Supervisor Técnico'?'selected':''}>Interventor / Supervisor Técnico</option>
-                <option value="Inspector de Calidad / Aseguramiento de Calidad (QA/QC)" ${m.cargo==='Inspector de Calidad / Aseguramiento de Calidad (QA/QC)'?'selected':''}>Inspector de Calidad (QA/QC)</option>
-              </optgroup>
-              <optgroup label="Ingeniería, Arquitectura y Diseño">
-                <option value="Ingeniero Calculista / Estructural" ${m.cargo==='Ingeniero Calculista / Estructural'?'selected':''}>Ingeniero Calculista / Estructural</option>
-                <option value="Ingeniero de Redes (MEP)" ${m.cargo==='Ingeniero de Redes (MEP)'?'selected':''}>Ingeniero de Redes (MEP)</option>
-                <option value="Arquitecto Diseñador" ${m.cargo==='Arquitecto Diseñador'?'selected':''}>Arquitecto Diseñador</option>
-                <option value="Modelador BIM / Dibujante" ${m.cargo==='Modelador BIM / Dibujante'?'selected':''}>Modelador BIM / Dibujante</option>
-              </optgroup>
-              <optgroup label="Control de Costos, Tiempos y Suministros">
-                <option value="Ingeniero de Presupuestos / Costos" ${m.cargo==='Ingeniero de Presupuestos / Costos'?'selected':''}>Ingeniero de Presupuestos / Costos</option>
-                <option value="Analista de Programación y Control de Obra" ${m.cargo==='Analista de Programación y Control de Obra'?'selected':''}>Analista de Programación y Control de Obra</option>
-                <option value="Analista de Compras / Suministros" ${m.cargo==='Analista de Compras / Suministros'?'selected':''}>Analista de Compras / Suministros</option>
-              </optgroup>
-              <optgroup label="Topografía y Geomática">
-                <option value="Topógrafo" ${m.cargo==='Topógrafo'?'selected':''}>Topógrafo</option>
-                <option value="Cadenero / Auxiliar de Topografía" ${m.cargo==='Cadenero / Auxiliar de Topografía'?'selected':''}>Cadenero / Auxiliar de Topografía</option>
-              </optgroup>
-              <optgroup label="Seguridad, Medio Ambiente y Apoyo Operativo">
-                <option value="Residente de Seguridad y Salud en el Trabajo (SST)" ${m.cargo==='Residente de Seguridad y Salud en el Trabajo (SST)'?'selected':''}>Residente SST</option>
-                <option value="Residente Ambiental" ${m.cargo==='Residente Ambiental'?'selected':''}>Residente Ambiental</option>
-                <option value="Almacenista de Obra" ${m.cargo==='Almacenista de Obra'?'selected':''}>Almacenista de Obra</option>
-                <option value="Administrador de Obra" ${m.cargo==='Administrador de Obra'?'selected':''}>Administrador de Obra</option>
-                <option value="Administrador de TI / Sistemas" ${m.cargo==='Administrador de TI / Sistemas'?'selected':''}>Administrador de TI / Sistemas</option>
-                <option value="Asesor Jurídico / Gestor de Contratos" ${m.cargo==='Asesor Jurídico / Gestor de Contratos'?'selected':''}>Asesor Jurídico / Gestor de Contratos</option>
-              </optgroup>
-            </select>
-          </label>` : '';
-
-        let registeredNameStr = '';
-        if (m.email && m.email.trim()) {
-            const rawEmail = m.email.trim().toLowerCase();
-            const compositeKey = rawEmail + '_' + (emp.name || '').trim().toLowerCase();
-            const gu = (window.globalUsersMap && window.globalUsersMap.get(compositeKey)) 
-                    || (window.globalUsersMap && window.globalUsersMap.get(rawEmail))
-                    || (window.globalUsersMap && Array.from(window.globalUsersMap.values()).find(u => u.email === rawEmail));
-            if (gu && gu.name && gu.name.trim() !== '' && gu.name.trim().toLowerCase() !== 'nuevo usuario') {
-                registeredNameStr = gu.name.trim();
-                m.name = gu.name.trim();
-            } else if (m.name && m.name.trim() !== '' && m.name.trim().toLowerCase() !== 'nuevo usuario') {
-                registeredNameStr = m.name.trim();
-            }
-        } else if (m.name && m.name.trim() !== '' && m.name.trim().toLowerCase() !== 'nuevo usuario') {
-            registeredNameStr = m.name.trim();
-        }
-        
-        const nombreHtml = registeredNameStr ? `
-          <label class="block">
-            <span class="mb-1 block text-xs font-semibold text-slate-600">Nombre registrado</span>
-            <input type="text" class="w-full text-xs rounded border-slate-200 bg-slate-100 text-slate-500 font-medium cursor-not-allowed" value="${registeredNameStr}" disabled readonly>
-          </label>` : '';
-
-        return `
-      <div class="border rounded-xl p-4 bg-slate-50 relative group">
-        <button onclick="deleteUser(${i})" class="absolute top-4 right-4 text-rose-500 hover:text-rose-700 p-1 opacity-0 group-hover:opacity-100 transition-opacity" title="Eliminar usuario"><span class="material-symbols-outlined text-sm">delete</span></button>
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-          
-          <label class="block">
-            <span class="mb-1 block text-xs font-semibold text-slate-600">Correo Electrónico</span>
-            <input type="email" class="w-full text-xs rounded border-slate-200" value="${m.email || ''}" onchange="updateUser(${i}, 'email', this.value)" placeholder="usuario@empresa.com">
-          </label>
-
-          ${nombreHtml}
-
-          <label class="block">
-            <span class="mb-1 block text-xs font-semibold text-slate-600">Rol del Sistema</span>
-            <select class="w-full text-xs rounded border-slate-200" onchange="updateUser(${i}, 'role', this.value)">
-              <option value="MIEMBRO" ${m.role==='MIEMBRO' || (!m.role && isInternal) ? 'selected' : ''}>MIEMBRO</option>
-              <option value="ADMINISTRADOR_EMPRESA" ${m.role==='ADMINISTRADOR_EMPRESA'?'selected':''}>ADMINISTRADOR_EMPRESA</option>
-              <option value="INVITADO" ${m.role==='INVITADO'?'selected':''}>INVITADO</option>
-            </select>
-          </label>
-
-          ${cargoHtml}
-
+          ${grouped[g].map(item => renderUserCard(item, item.originalIndex, false)).join('')}
         </div>
-      </div>
-        `;
-      }).join('');
-      
-      html += `</div>`; // Close group div
+      `;
     });
+
+    if (unsavedMembers.length === 0 && sortedGroups.length === 0) {
+      html += `
+        <div class="text-center py-8 text-slate-400 text-sm">
+          No hay usuarios registrados en esta empresa. Haz clic en <strong>+ Agregar Usuario</strong> para crear uno.
+        </div>
+      `;
+    }
     
     usersListEl.innerHTML = html;
   }
 
+  window.updateUserDraft = (idx, val) => {
+    if (selectedIndex === -1 || !empresas[selectedIndex] || !empresas[selectedIndex].members) return;
+    const emp = empresas[selectedIndex];
+    const m = emp.members[idx];
+    if (!m) return;
+    const emailClean = (val || '').toLowerCase().trim();
+    m.email = emailClean;
+    if (emailClean && window.globalUsersMap) {
+      const gu = window.globalUsersMap.get(emailClean);
+      if (gu && gu.name && gu.name.trim() !== '' && gu.name.trim().toLowerCase() !== 'nuevo usuario') {
+        m.name = gu.name.trim();
+        const regInput = document.getElementById('member-reg-name-' + idx);
+        if (regInput) regInput.value = m.name;
+      }
+    }
+  };
 
   window.updateUser = (idx, field, val) => {
     if (selectedIndex === -1 || !empresas[selectedIndex] || !empresas[selectedIndex].members) return;
@@ -830,7 +929,10 @@ document.addEventListener('DOMContentLoaded', async () => {
   };
   
   window.deleteUser = (idx) => {
-    if(confirm('¿Eliminar usuario?')) {
+    if (selectedIndex === -1 || !empresas[selectedIndex] || !empresas[selectedIndex].members) return;
+    const m = empresas[selectedIndex].members[idx];
+    const confirmMsg = m && m._unsaved ? '¿Descartar este nuevo usuario sin guardar?' : '¿Eliminar usuario?';
+    if(confirm(confirmMsg)) {
       empresas[selectedIndex].members.splice(idx, 1);
       renderUsers();
     }
@@ -838,6 +940,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   document.getElementById('add-usuario-btn').addEventListener('click', () => {
     if (selectedIndex === -1) return;
+    if (window.refreshGlobalUsersDatalist) window.refreshGlobalUsersDatalist();
     const emp = empresas[selectedIndex];
     if (!emp.members) emp.members = [];
     emp.members.push({ 
@@ -845,9 +948,16 @@ document.addEventListener('DOMContentLoaded', async () => {
       email: '', 
       role: 'MIEMBRO', 
       empresaUsuario: emp.name,
-      cargo: ''
+      cargo: '',
+      _unsaved: true
     });
     renderUsers();
+    setTimeout(() => {
+      const unsavedSec = document.getElementById('unsaved-users-section');
+      if (unsavedSec) {
+        unsavedSec.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+    }, 60);
   });
 
   // Projects CRUD
@@ -867,6 +977,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   window.renderProjects = renderProjects;
     function renderProjects() {
     if (selectedIndex === -1) return;
+    if (window.refreshGlobalUsersDatalist) window.refreshGlobalUsersDatalist();
     const emp = empresas[selectedIndex];
     const config = companyConfigs[emp.id];
     if (!config || !config.projects) return;
@@ -982,7 +1093,7 @@ let contentBase = '';
                 } else if (m.name && m.name !== 'Nuevo Usuario') {
                     resolvedName = m.name;
                 }
-                return `<option value="${m.email}" ${m.email === memberEmail ? 'selected' : ''}>${resolvedName} (${m.role || 'Sin rol'})</option>`;
+                return `<option value="${m.email}" ${(m.email || '').toLowerCase().trim() === (memberEmail || '').toLowerCase().trim() ? 'selected' : ''}>${resolvedName} (${m.role || 'Sin rol'})</option>`;
             }).join('');
             return `
             <div class="grid grid-cols-12 gap-2 items-center bg-white p-3 rounded-xl border border-slate-200 shadow-sm">
@@ -1012,7 +1123,7 @@ let contentBase = '';
             <section>
               <h3 class="text-sm font-bold uppercase tracking-[0.2em] text-slate-500">Información base</h3>
               <div class="mt-4 grid gap-4 md:grid-cols-3">
-                <label class="block"><span class="mb-2 block text-sm font-semibold text-slate-700">Nombre del proyecto <span class="text-rose-500">*</span></span><input class="w-full text-xs rounded-xl border-slate-200" type="text" value="${p.name || ''}" onchange="updateProject('${p.slug}', 'name', this.value)" required /></label>
+                <label class="block"><span class="mb-2 block text-sm font-semibold text-slate-700">Nombre del proyecto <span class="text-rose-500">*</span></span><input class="w-full text-xs rounded-xl border-slate-200" type="text" value="${p.name || ''}" oninput="updateProject('${p.slug}', 'name', this.value)" onchange="updateProject('${p.slug}', 'name', this.value)" required /></label>
                 <label class="block"><span class="mb-2 block text-sm font-semibold text-slate-700">Código o identificador</span><input class="w-full text-xs rounded-xl border-slate-200" type="text" value="${p.code || ''}" placeholder="Ej. ARB-001" onchange="updateProject('${p.slug}', 'code', this.value)" /></label>
                 <label class="block"><span class="mb-2 block text-sm font-semibold text-slate-700">Estado</span>
                   <select class="w-full text-xs rounded-xl border-slate-200" onchange="updateProject('${p.slug}', 'status', this.value)">
@@ -1179,7 +1290,7 @@ let contentBase = '';
             <div class="grid grid-cols-12 gap-2 p-3 text-sm items-center hover:bg-slate-100 cursor-pointer" onclick="toggleProjectAccordion('${p.slug}')">
               <div class="col-span-3 font-semibold text-slate-800 flex items-center gap-2">
                   <span class="material-symbols-outlined text-slate-400 text-lg transition-transform ${isOpen ? 'rotate-180' : ''}">expand_more</span>
-                  ${p.name || p.title || 'Proyecto'}
+                  <span id="proj-header-name-${p.slug}">${p.name || p.title || 'Proyecto'}</span>
               </div>
               <div class="col-span-2 font-mono text-[10px] text-slate-500 truncate" title="${p.slug}">${p.slug}</div>
               <div class="col-span-2">
@@ -1366,7 +1477,7 @@ let contentBase = '';
               <div class="grid grid-cols-12 gap-2 p-3 text-sm items-center hover:bg-slate-100 cursor-pointer" onclick="toggleConfigAccordion('${p.slug}')">
                 <div class="col-span-4 font-semibold text-slate-800 flex items-center gap-2">
                     <span class="material-symbols-outlined text-slate-400 text-lg transition-transform ${isOpen ? 'rotate-180' : ''}">expand_more</span>
-                    ${p.name || p.title || 'Proyecto'}
+                    <span id="proj-header-name-${p.slug}">${p.name || p.title || 'Proyecto'}</span>
                 </div>
                 <div class="col-span-3 font-mono text-[10px] text-slate-500 truncate" title="${p.slug}">${p.slug}</div>
                 <div class="col-span-2">
@@ -1481,12 +1592,14 @@ let contentBase = '';
 
   window.updateProject = (slug, field, val) => {
     if (selectedIndex === -1) return;
+    if (window.refreshGlobalUsersDatalist) window.refreshGlobalUsersDatalist();
     const emp = empresas[selectedIndex];
     const config = companyConfigs[emp.id];
     if (!config || !config.projects) return;
     const proj = config.projects.find(p => p.slug === slug);
     if(proj) {
       proj[field] = val;
+      if (field === 'name') { proj._nameChanged = true; proj.title = val; if (proj.landing) proj.landing.title = val; const hdr = document.getElementById('proj-header-name-' + slug); if (hdr) hdr.textContent = val || 'Proyecto'; }
       if (field === 'country' || field === 'city' || field === 'hasLicense') {
         setTimeout(() => {
           renderProjects();
@@ -1497,6 +1610,7 @@ let contentBase = '';
 
   window.updateProjectDeep = (slug, parent, field, val) => {
     if (selectedIndex === -1) return;
+    if (window.refreshGlobalUsersDatalist) window.refreshGlobalUsersDatalist();
     const emp = empresas[selectedIndex];
     const config = companyConfigs[emp.id];
     if (!config || !config.projects) return;
@@ -1509,6 +1623,7 @@ let contentBase = '';
   
   window.updateProjectDeepMap = (slug, field, val) => {
     if (selectedIndex === -1) return;
+    if (window.refreshGlobalUsersDatalist) window.refreshGlobalUsersDatalist();
     const emp = empresas[selectedIndex];
     const config = companyConfigs[emp.id];
     if (!config || !config.projects) return;
@@ -1523,6 +1638,7 @@ let contentBase = '';
   
   window.updateProjectDeepMap = (slug, prop, value) => {
     if (selectedIndex === -1) return;
+    if (window.refreshGlobalUsersDatalist) window.refreshGlobalUsersDatalist();
     const emp = empresas[selectedIndex];
     const config = companyConfigs[emp.id];
     if (config && config.projects) {
@@ -1536,6 +1652,7 @@ let contentBase = '';
   };
   window.updateProjectDeepDS = (slug, field, val) => {
     if (selectedIndex === -1) return;
+    if (window.refreshGlobalUsersDatalist) window.refreshGlobalUsersDatalist();
     const emp = empresas[selectedIndex];
     const config = companyConfigs[emp.id];
     if (!config || !config.projects) return;
@@ -1548,6 +1665,7 @@ let contentBase = '';
 
   window.updateProjectDeepMod = (slug, field, val) => {
     if (selectedIndex === -1) return;
+    if (window.refreshGlobalUsersDatalist) window.refreshGlobalUsersDatalist();
     const emp = empresas[selectedIndex];
     const config = companyConfigs[emp.id];
     if (!config || !config.projects) return;
@@ -1560,6 +1678,7 @@ let contentBase = '';
   
   window.updateProjectDeepAct = (slug, field, val) => {
     if (selectedIndex === -1) return;
+    if (window.refreshGlobalUsersDatalist) window.refreshGlobalUsersDatalist();
     const emp = empresas[selectedIndex];
     const config = companyConfigs[emp.id];
     if (!config || !config.projects) return;
@@ -1574,6 +1693,7 @@ let contentBase = '';
 
   window.addClientContact = (slug) => {
     if (selectedIndex === -1) return;
+    if (window.refreshGlobalUsersDatalist) window.refreshGlobalUsersDatalist();
     const emp = empresas[selectedIndex];
     const config = companyConfigs[emp.id];
     if (!config || !config.projects) return;
@@ -1587,6 +1707,7 @@ let contentBase = '';
 
   window.removeClientContact = (slug, idx) => {
     if (selectedIndex === -1) return;
+    if (window.refreshGlobalUsersDatalist) window.refreshGlobalUsersDatalist();
     const emp = empresas[selectedIndex];
     const config = companyConfigs[emp.id];
     if (!config || !config.projects) return;
@@ -1599,6 +1720,7 @@ let contentBase = '';
   
   window.updateClientContact = (slug, idx, field, val) => {
     if (selectedIndex === -1) return;
+    if (window.refreshGlobalUsersDatalist) window.refreshGlobalUsersDatalist();
     const emp = empresas[selectedIndex];
     const config = companyConfigs[emp.id];
     if (!config || !config.projects) return;
@@ -1610,6 +1732,7 @@ let contentBase = '';
 
   window.addProjectMember = (slug) => {
     if (selectedIndex === -1) return;
+    if (window.refreshGlobalUsersDatalist) window.refreshGlobalUsersDatalist();
     const emp = empresas[selectedIndex];
     const config = companyConfigs[emp.id];
     if (!config || !config.projects) return;
@@ -1623,6 +1746,7 @@ let contentBase = '';
 
   window.updateProjectMember = (slug, idx, email) => {
     if (selectedIndex === -1) return;
+    if (window.refreshGlobalUsersDatalist) window.refreshGlobalUsersDatalist();
     const emp = empresas[selectedIndex];
     const config = companyConfigs[emp.id];
     if (!config || !config.projects) return;
@@ -1635,6 +1759,7 @@ let contentBase = '';
   window.removeProjectMember = (slug, idx) => {
     if(!confirm('¿Remover miembro de este proyecto?')) return;
     if (selectedIndex === -1) return;
+    if (window.refreshGlobalUsersDatalist) window.refreshGlobalUsersDatalist();
     const emp = empresas[selectedIndex];
     const config = companyConfigs[emp.id];
     if (!config || !config.projects) return;
@@ -1684,6 +1809,7 @@ let contentBase = '';
   // ── FUNCIONES DE GESTIÓN WOMPI (FACTURACIÓN Y LICENCIAS POR EMPRESA) ─────────────────────
   window.updateWompiConfig = (field, val) => {
     if (selectedIndex === -1) return;
+    if (window.refreshGlobalUsersDatalist) window.refreshGlobalUsersDatalist();
     const emp = empresas[selectedIndex];
     if (!companyConfigs[emp.id]) companyConfigs[emp.id] = { projects: [] };
     const config = companyConfigs[emp.id];
@@ -1700,6 +1826,7 @@ let contentBase = '';
 
   window.grantCustomTrial = (slug, prefix = '') => {
     if (selectedIndex === -1) return;
+    if (window.refreshGlobalUsersDatalist) window.refreshGlobalUsersDatalist();
     const emp = empresas[selectedIndex];
     const config = companyConfigs[emp.id];
     if (!config || !config.projects) return;
@@ -1740,6 +1867,7 @@ let contentBase = '';
 
   window.grantQuickTester = (slug) => {
     if (selectedIndex === -1) return;
+    if (window.refreshGlobalUsersDatalist) window.refreshGlobalUsersDatalist();
     const emp = empresas[selectedIndex];
     const config = companyConfigs[emp.id];
     if (!config || !config.projects) return;
@@ -1801,6 +1929,7 @@ let contentBase = '';
 
   window.removeCustomTrial = (slug) => {
     if (selectedIndex === -1) return;
+    if (window.refreshGlobalUsersDatalist) window.refreshGlobalUsersDatalist();
     const emp = empresas[selectedIndex];
     const config = companyConfigs[emp.id];
     if (!config || !config.projects) return;
@@ -1818,6 +1947,7 @@ let contentBase = '';
 
   window.cancelProjectLicense = (slug) => {
     if (selectedIndex === -1) return;
+    if (window.refreshGlobalUsersDatalist) window.refreshGlobalUsersDatalist();
     const emp = empresas[selectedIndex];
     const config = companyConfigs[emp.id];
     if (!config || !config.projects) return;
@@ -1844,6 +1974,7 @@ let contentBase = '';
 
   window.payConsolidatedWompi = async () => {
     if (selectedIndex === -1) return;
+    if (window.refreshGlobalUsersDatalist) window.refreshGlobalUsersDatalist();
     const emp = empresas[selectedIndex];
     const config = companyConfigs[emp.id];
     if (!config || !config.projects) return;
@@ -1915,10 +2046,11 @@ let contentBase = '';
 
   document.getElementById('add-proyecto-btn').addEventListener('click', () => {
     if (selectedIndex === -1) return;
+    if (window.refreshGlobalUsersDatalist) window.refreshGlobalUsersDatalist();
     const emp = empresas[selectedIndex];
+    if (!companyConfigs[emp.id]) companyConfigs[emp.id] = { portal: { name: emp.name || 'nora CDE' }, projects: [] };
     const config = companyConfigs[emp.id];
-    if (!config || !config.projects) return;
-    
+    if (!Array.isArray(config.projects)) config.projects = [];
     const slug = 'nuevo-proyecto-' + Date.now();
     const newProj = {
       name: 'Nuevo Proyecto',
@@ -1972,37 +2104,32 @@ let contentBase = '';
       }
     };
     config.projects.push(newProj);
+    window.openProjectAccordions[slug] = true;
     renderProjects();
-
-    // Auto-crear carpeta y proyecto.json en Google Drive
-    try {
-      fetch(ROLES_SCRIPT_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-        body: JSON.stringify({
-          action: 'saveProjectConfig',
-          companyName: emp.name || emp.id,
-          companyId: emp.id,
-          projectName: newProj.name,
-          projectSlug: newProj.slug,
-          projectData: newProj
-        })
-      }).catch(() => {});
-    } catch (e) {}
+    showBanner('Nuevo proyecto agregado. Edita su nombre y detalles y haz clic en "Guardar Cambios" arriba a la derecha.', 'info');
   });
 
   document.getElementById('add-empresa-btn').addEventListener('click', () => {
     const ts = Date.now();
     const tempId = 'empresa-' + ts;
-    empresas.push({ 
-        id: tempId, 
-        name: 'Nueva Empresa', 
-        code: '000',
-        admins: [],
-        zonaHoraria: 'America/Bogota',
-        configUrl: `config-${tempId}.json`
+    companyConfigs[tempId] = {
+      portal: { name: 'Nueva Empresa' },
+      projects: []
+    };
+    empresas.push({
+      id: tempId,
+      name: 'Nueva Empresa',
+      razonSocial: 'Nueva Empresa',
+      code: '000',
+      admins: [],
+      members: [],
+      zonaHoraria: 'America/Bogota',
+      configUrl: `config-${tempId}.json`,
+      _nameChanged: true
     });
     selectEmpresa(empresas.length - 1);
+    if (tabs.btns[0]) tabs.btns[0].click();
+    showBanner('Nueva empresa agregada. Completa su ficha técnica y haz clic en "Guardar Cambios" arriba a la derecha.', 'info');
   });
 
   document.getElementById('delete-empresa-btn').addEventListener('click', async () => {
@@ -2011,7 +2138,8 @@ let contentBase = '';
       
       showBanner('Eliminando empresa...', 'info');
       try {
-        const url = `${ROLES_SCRIPT_URL}?action=deleteCompany&id=${encodeURIComponent(empId)}`;
+        if (window.NoraDriveStore) { await window.NoraDriveStore.postAction({ action: 'deleteCompany', id: empId }); }
+        const url = `${ROLES_SCRIPT_URL}?action=deleteCompany&id=${encodeURIComponent(empId)}`; if (!window.NoraDriveStore)
         await fetch(url, {
           method: 'POST',
           mode: 'no-cors',
@@ -2023,7 +2151,7 @@ let contentBase = '';
         editorEl.classList.add('hidden');
         renderList();
         
-        showBanner('Empresa eliminada de Google Sheets. Haz clic en "Guardar" para guardar los cambios.', 'success');
+        showBanner('✅ Empresa eliminada instantáneamente en Google Drive y Google Sheets.', 'success');
       } catch (e) {
         console.error(e);
         showBanner('Error al eliminar la empresa de Google Sheets.', 'error');
@@ -2080,6 +2208,7 @@ let contentBase = '';
 
       // Re-render list if important display fields change
       if (['name', 'id', 'code', 'razonSocial'].includes(key)) {
+          if (key === 'name' || key === 'code') emp._nameChanged = true;
           if (key === 'id') {
               emp.configUrl = `config-${emp.id}.json`;
           }
@@ -2088,7 +2217,199 @@ let contentBase = '';
     });
   });
 
+  window._syncMemberIntoLocalEmpresas = function(email, name, role, companyName, specialty) {
+    if (!email || !companyName || companyName === 'Sin Empresa Asignada') return;
+    const cleanEmail = String(email).toLowerCase().trim();
+    const cleanComp = String(companyName).toLowerCase().trim();
+    const matchedEmp = empresas.find(e => !e.deleted && (
+      (e.name && e.name.toLowerCase().trim() === cleanComp) ||
+      (e.razonSocial && e.razonSocial.toLowerCase().trim() === cleanComp) ||
+      (e.id && e.id.toLowerCase().trim() === cleanComp)
+    ));
+    if (!matchedEmp) return;
+    if (!Array.isArray(matchedEmp.members)) matchedEmp.members = [];
+    if (!Array.isArray(matchedEmp.admins)) matchedEmp.admins = [];
+    const mIdx = matchedEmp.members.findIndex(m => m && m.email && m.email.toLowerCase().trim() === cleanEmail);
+    const effectiveRole = role === 'SUPER_ADMINISTRADOR' ? 'ADMINISTRADOR_EMPRESA' : (role || 'MIEMBRO');
+    const memberObj = {
+      name: name || (mIdx > -1 ? matchedEmp.members[mIdx].name : cleanEmail.split('@')[0]),
+      email: cleanEmail,
+      role: effectiveRole,
+      empresaUsuario: matchedEmp.name,
+      especialidad: specialty || (mIdx > -1 ? (matchedEmp.members[mIdx].especialidad || '') : ''),
+      cargo: mIdx > -1 ? (matchedEmp.members[mIdx].cargo || '') : ''
+    };
+    if (mIdx > -1) {
+      matchedEmp.members[mIdx] = { ...matchedEmp.members[mIdx], ...memberObj };
+    } else {
+      matchedEmp.members.push(memberObj);
+    }
+    if (effectiveRole === 'ADMINISTRADOR_EMPRESA') {
+      if (!matchedEmp.admins.some(a => String(a || '').toLowerCase().trim() === cleanEmail)) {
+        matchedEmp.admins.push(cleanEmail);
+      }
+    } else if (role !== 'SUPER_ADMINISTRADOR') {
+      matchedEmp.admins = matchedEmp.admins.filter(a => String(a || '').toLowerCase().trim() !== cleanEmail);
+    }
+    if (selectedIndex > -1 && empresas[selectedIndex] && empresas[selectedIndex].id === matchedEmp.id) {
+      renderUsers();
+    }
+  };
+
+  window.syncSeedToGoogleDrive = async function() {
+    if (userRole !== 'SUPER_ADMINISTRADOR') return;
+    const btn = document.getElementById('sync-seed-drive-btn');
+    const origHtml = btn ? btn.innerHTML : '';
+    try {
+      if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = '<span class="material-symbols-outlined animate-spin text-base">sync</span> Sincronizando...';
+      }
+      showBanner('Sincronizando y verificando todos los JSON de empresas, proyectos y usuarios en Google Drive...', 'info');
+      const res = await window.NoraDriveStore.migrateAllStaticToDrive({
+        onlyIfMissing: false,
+        empresas: empresas,
+        companyConfigs: Object.fromEntries(
+          Object.entries(companyConfigs).map(([empId, cfg]) => {
+            const emp = empresas.find(e => e.id === empId);
+            return [(emp && emp.configUrl) || `config-${empId}.json`, cfg];
+          })
+        )
+      });
+      if (!res || res.source !== 'drive_json' || res.status !== 'success') {
+        throw new Error((res && res.message) || 'Actualiza primero Directorio Global noraCDE.js en Google Apps Script (Nueva versión).');
+      }
+      companyConfigs = {};
+      await loadData();
+      await window.fetchGlobalUsers();
+      showBanner(`✅ Base JSON verificada en Google Drive (${res.companiesCount || 0} empresas, ${res.usersCount || 0} usuarios).`, 'success');
+    } catch (err) {
+      console.error('Error en syncSeedToGoogleDrive:', err);
+      showBanner('❌ ' + err.message, 'error');
+    } finally {
+      if (btn) {
+        btn.disabled = false;
+        btn.innerHTML = origHtml;
+      }
+    }
+  };
+
   document.getElementById('publish-github-btn').addEventListener('click', async () => {
+    const saveBtn = document.getElementById('publish-github-btn');
+    const origBtnText = saveBtn ? saveBtn.innerHTML : 'Guardar';
+    for (const emp of empresas) {
+      if (!emp.deleted && (!emp.id || emp.id.trim() === '')) {
+        showBanner('Error: Una empresa tiene el ID vacío. Por favor asigne un ID (ej: constructora-x).', 'error');
+        return;
+      }
+    }
+
+    if (saveBtn) {
+      saveBtn.disabled = true;
+      saveBtn.innerHTML = 'Guardando...';
+    }
+    showBanner('Guardando cambios en Google Drive...', 'info');
+
+    try {
+      let portalConfigObj = null;
+      if (userRole === 'SUPER_ADMINISTRADOR') {
+        try {
+          portalConfigObj = await window.NoraDriveStore.getJson('portal-config.json');
+        } catch (e) {}
+      }
+
+      for (const emp of empresas) {
+        if (emp && !emp.deleted && Array.isArray(emp.members)) {
+          emp.members = emp.members.filter(m => m && m.email && String(m.email).trim() !== '');
+          emp.members.forEach(m => {
+            delete m._unsaved;
+          });
+        }
+      }
+
+      const companyConfigsPayload = {};
+      for (const [empId, configData] of Object.entries(companyConfigs)) {
+        const emp = empresas.find(e => e.id === empId);
+        if (!emp || emp.deleted) continue;
+
+        let hasAccess = userRole === 'SUPER_ADMINISTRADOR';
+        if (!hasAccess && userRole === 'ADMINISTRADOR_EMPRESA') {
+          hasAccess = emp.members && emp.members.some(m => m.email && m.email.toLowerCase() === userEmail && (m.role === 'ADMINISTRADOR_EMPRESA' || m.role === 'ADMINISTRADOR'));
+        }
+        if (!hasAccess) continue;
+
+        if (!configData.portal) {
+          configData.portal = { name: emp.name || 'nora CDE' };
+        }
+        companyConfigsPayload[empId] = configData;
+      }
+
+      const saveRes = await window.NoraDriveStore.saveAdminBundle({
+        empresas: empresas,
+        companyConfigs: companyConfigsPayload,
+        portalConfig: portalConfigObj,
+        userRole: userRole,
+        userEmail: userEmail
+      });
+
+      if (saveRes && saveRes.folders) {
+        const foldersMap = saveRes.folders;
+        empresas.forEach(emp => {
+          delete emp._nameChanged;
+          const info = foldersMap[emp.id];
+          if (info) {
+            if (info.driveFolderId) emp.driveFolderId = info.driveFolderId;
+            const config = companyConfigs[emp.id];
+            if (config && Array.isArray(config.projects) && info.projects) {
+              config.projects.forEach(p => {
+                delete p._nameChanged;
+                const pFolderId = info.projects[p.slug];
+                if (pFolderId && String(pFolderId).indexOf('error:') !== 0) {
+                  if (!p.dataSources) p.dataSources = {};
+                  p.dataSources.driveFolderId = pFolderId;
+                  p.dataSources.driveFolderName = p.name || 'Sin Nombre';
+                }
+              });
+            }
+          }
+        });
+      }
+
+      if (saveRes && saveRes.companyConfigs && typeof saveRes.companyConfigs === 'object') {
+        Object.keys(saveRes.companyConfigs).forEach(empId => {
+          if (saveRes.companyConfigs[empId]) {
+            companyConfigs[empId] = saveRes.companyConfigs[empId];
+          }
+        });
+      }
+
+      empresas.forEach(emp => {
+        if (Array.isArray(emp.members)) {
+          emp.members.forEach(m => {
+            delete m._unsaved;
+          });
+        }
+      });
+
+      sessionStorage.removeItem('cachedCompanies_v2');
+      await window.fetchGlobalUsers();
+      renderList();
+      if (selectedIndex > -1) {
+        renderUsers();
+        renderProjects();
+      }
+      showBanner('✅ Cambios guardados instantáneamente en Google Drive.', 'success');
+    } catch (e) {
+      console.error('Error guardando en Google Drive:', e);
+      showBanner('❌ ' + e.message, 'error');
+    } finally {
+      if (saveBtn) {
+        saveBtn.disabled = false;
+        saveBtn.innerHTML = origBtnText;
+      }
+    }
+    return;
+  if (false) {
     let token = localStorage.getItem('github_pat');
     if (!token) {
       token = prompt('Ingresa tu Personal Access Token (PAT) de GitHub para guardar directamente en el repositorio:');
@@ -2205,6 +2526,7 @@ let contentBase = '';
             });
           }
         }
+        if (window.refreshGlobalUsersDatalist) window.refreshGlobalUsersDatalist();
         renderGlobalUsers();
       }
       // ───────────────────────────────────────────────────────────────────────
@@ -2304,8 +2626,19 @@ let contentBase = '';
         }
       }
       
+      if (saveRes && saveRes.companyConfigs && typeof saveRes.companyConfigs === 'object') {
+        Object.keys(saveRes.companyConfigs).forEach(empId => {
+          if (saveRes.companyConfigs[empId]) {
+            companyConfigs[empId] = saveRes.companyConfigs[empId];
+          }
+        });
+      }
+
       sessionStorage.removeItem('cachedCompanies_v2');
       showBanner('✅ Los datos se han guardado exitosamente, tardará de 1 a 3 minutos en integrar los cambios.', 'success');
+    } catch (ignoredErr) {}
+  }
+  try {
     } catch(e) {
       showBanner('❌ ' + e.message, 'error');
     }
@@ -2369,7 +2702,8 @@ window.switchGlobalView = function(viewName) {
         if (window.globalUsersMap.size === 0) {
             fetchGlobalUsers();
         } else {
-            renderGlobalUsers();
+            if (window.refreshGlobalUsersDatalist) window.refreshGlobalUsersDatalist();
+        renderGlobalUsers();
         }
     } else if (viewName === 'proyectos') {
         if (vProyectos) {
@@ -2378,6 +2712,20 @@ window.switchGlobalView = function(viewName) {
         }
         renderGlobalProjects();
     }
+};
+
+window._lastGlobalUsersDatalistSig = '';
+window.refreshGlobalUsersDatalist = function() {
+    const dl = document.getElementById('global-users-datalist');
+    if (!dl || !window.globalUsersMap) return;
+    const sig = window.globalUsersMap.size + ':' + Array.from(window.globalUsersMap.keys()).join(',');
+    if (sig === window._lastGlobalUsersDatalistSig) return;
+    window._lastGlobalUsersDatalistSig = sig;
+    const opts = Array.from(window.globalUsersMap.values())
+        .sort((a, b) => (a.email || '').localeCompare(b.email || ''))
+        .map(u => `<option value="${u.email}">${u.name || u.email} — ${u.companyName || 'Sin empresa'}</option>`)
+        .join('');
+    dl.innerHTML = opts;
 };
 
 window.fetchGlobalUsers = async function() {
@@ -2439,6 +2787,7 @@ window.fetchGlobalUsers = async function() {
             window.globalUsersMap.set(email, userObj);
         });
 
+        if (window.refreshGlobalUsersDatalist) window.refreshGlobalUsersDatalist();
         renderGlobalUsers();
         if (typeof window.renderUsers === 'function') {
             window.renderUsers();
@@ -2537,6 +2886,7 @@ window.openEditUserModal = function(email, companyName = '') {
     const companySelect = document.getElementById('gu-company');
     companySelect.innerHTML = '<option value="">Sin Empresa Asignada</option>';
     window.empresas.forEach(emp => {
+        if (!emp || emp.deleted) return;
         companySelect.innerHTML += `<option value="${emp.name}">${emp.name}</option>`;
     });
 
@@ -2584,6 +2934,63 @@ window.closeEditUserModal = function() {
 }
 
 window.saveGlobalUser = async function() {
+    if (window.NoraDriveStore) {
+      const email = document.getElementById('gu-email').value.trim().toLowerCase();
+      const name = document.getElementById('gu-name').value.trim();
+      const role = document.getElementById('gu-role').value;
+      const companyName = document.getElementById('gu-company').value;
+      const specialty = document.getElementById('gu-specialty').value.trim();
+      const saveBtn = document.getElementById('btn-save-gu');
+      if (!email || !name) {
+        alert('Nombre y Correo son obligatorios.');
+        return;
+      }
+      saveBtn.disabled = true;
+      saveBtn.innerHTML = '<span class="material-symbols-outlined animate-spin text-sm mr-2">autorenew</span> Guardando...';
+      try {
+        const res = await window.NoraDriveStore.postAction({
+          action: 'saveUser',
+          email: email,
+          nombre: name,
+          rol: role,
+          empresa: companyName,
+          especialidad: specialty,
+          estado: 'APROBADO'
+        });
+        if (res && res.status === 'error') throw new Error(res.message || 'Error en servidor');
+        window.globalUsersMap.set(email, {
+          email: email,
+          name: name,
+          role: role,
+          companyName: companyName || 'Sin Empresa Asignada',
+          specialty: specialty,
+          estado: 'APROBADO'
+        });
+        if (window._syncMemberIntoLocalEmpresas) {
+          window._syncMemberIntoLocalEmpresas(email, name, role, companyName, specialty);
+          try {
+            await window.NoraDriveStore.saveJson('empresas.json', window.empresas);
+          } catch (empSyncErr) {
+            console.warn('Aviso sincronizando empresas.json tras editar usuario:', empSyncErr);
+          }
+        }
+        if (window.refreshGlobalUsersDatalist) window.refreshGlobalUsersDatalist();
+        renderGlobalUsers();
+        closeEditUserModal();
+        showBanner(`✅ Usuario ${name} (${email}) guardado al instante en Google Drive.`, 'success');
+        if (window.selectedIndex !== -1 && window.empresas[window.selectedIndex]) {
+          const currentEmpName = window.empresas[window.selectedIndex].name;
+          if (window.fetchPendingRequests) window.fetchPendingRequests(currentEmpName);
+        }
+      } catch (e) {
+        console.error(e);
+        alert('Error al guardar el usuario: ' + e.message);
+      } finally {
+        saveBtn.disabled = false;
+        saveBtn.innerHTML = 'Guardar Cambios';
+      }
+      return;
+    }
     const email = document.getElementById('gu-email').value.trim().toLowerCase();
     const name = document.getElementById('gu-name').value.trim();
     const role = document.getElementById('gu-role').value;
@@ -2636,6 +3043,7 @@ window.saveGlobalUser = async function() {
             estado: 'APROBADO'
         });
 
+        if (window.refreshGlobalUsersDatalist) window.refreshGlobalUsersDatalist();
         renderGlobalUsers();
         closeEditUserModal();
         alert('Usuario guardado exitosamente.');
@@ -2656,6 +3064,33 @@ window.saveGlobalUser = async function() {
 }
 
 window.deleteGlobalUser = async function(email, companyName) {
+    if (window.NoraDriveStore) {
+      if (!confirm(`¿Estás seguro de que deseas eliminar permanentemente al usuario con correo ${email}?`)) return;
+      const lowercaseEmail = email.toLowerCase().trim();
+      if (lowercaseEmail === 'mcmartinezg@unal.edu.co' || lowercaseEmail === 'imagina3ddesign@gmail.com') {
+        alert('No se puede eliminar a un Super Administrador por motivos de seguridad.');
+        return;
+      }
+      showBanner('Eliminando usuario...', 'info');
+      try {
+        await window.NoraDriveStore.postAction({ action: 'deleteUser', email: email });
+        window.empresas.forEach(emp => {
+          if (emp.members) emp.members = emp.members.filter(m => !m.email || m.email.toLowerCase().trim() !== lowercaseEmail);
+          if (emp.admins) emp.admins = emp.admins.filter(a => a.toLowerCase().trim() !== lowercaseEmail);
+        });
+        for (const k of window.globalUsersMap.keys()) {
+          if (k.split('_')[0] === lowercaseEmail) window.globalUsersMap.delete(k);
+        }
+        if (window.refreshGlobalUsersDatalist) window.refreshGlobalUsersDatalist();
+        renderGlobalUsers();
+        if (window.selectedIndex > -1 && typeof window.renderUsers === 'function') window.renderUsers();
+        showBanner('✅ Usuario eliminado instantáneamente de Google Drive y Google Sheets.', 'success');
+      } catch (e) {
+        console.error('Error al eliminar usuario:', e);
+        showBanner('Error al eliminar usuario del sistema.', 'error');
+      }
+      return;
+    }
     if (!confirm(`¿Estás seguro de que deseas eliminar permanentemente al usuario con correo ${email}?`)) {
         return;
     }
@@ -2705,6 +3140,7 @@ window.deleteGlobalUser = async function(email, companyName) {
             }
         }
         
+        if (window.refreshGlobalUsersDatalist) window.refreshGlobalUsersDatalist();
         renderGlobalUsers();
         
         if (changed) {
@@ -2779,6 +3215,27 @@ window.fetchPendingRequests = async function(companyName) {
 };
 
 window.approvePendingUser = async function(email, nombre, empresa) {
+    if (window.NoraDriveStore) {
+      try {
+        await window.NoraDriveStore.postAction({
+          action: 'saveUser',
+          email: email,
+          nombre: nombre,
+          estado: 'APROBADO',
+          rol: 'MIEMBRO',
+          empresa: empresa
+        });
+        if (window._syncMemberIntoLocalEmpresas) {
+          window._syncMemberIntoLocalEmpresas(email, nombre, 'MIEMBRO', empresa, '');
+        }
+        showBanner(`✅ ${nombre} aprobado al instante como MIEMBRO de ${empresa}.`, 'success');
+        if (window.fetchPendingRequests) window.fetchPendingRequests(empresa);
+        if (window.globalUsersMap.size > 0) window.fetchGlobalUsers();
+      } catch (e) {
+        alert('Error al aprobar el usuario.');
+      }
+      return;
+    }
     try {
         const payload = {
             action: 'saveUser',
@@ -2813,6 +3270,43 @@ window.approvePendingUser = async function(email, nombre, empresa) {
 // QUICK APPROVE: from the global users list
 // ==========================================
 window.quickApproveUser = async function(email, nombre, companyName = '') {
+    if (window.NoraDriveStore) {
+      const u = window.globalUsersMap.get(email);
+      if (!u) return;
+      let empresa = u.companyName && u.companyName !== 'Sin Empresa Asignada' ? u.companyName : '';
+      if (!empresa) {
+        empresa = prompt(`Asigna una empresa a ${nombre} para aprobar su acceso (deja en blanco para aprobar sin empresa):`, '');
+        if (empresa === null) return;
+        empresa = empresa.trim();
+      }
+      const rol = empresa ? (u.role === 'ADMINISTRADOR_EMPRESA' ? 'ADMINISTRADOR_EMPRESA' : 'MIEMBRO') : (u.role === 'INVITADO' ? 'INVITADO' : (u.role || 'INVITADO'));
+      try {
+        await window.NoraDriveStore.postAction({
+          action: 'saveUser',
+          email: email,
+          nombre: u.name,
+          rol: rol,
+          empresa: empresa,
+          especialidad: u.specialty || '',
+          estado: 'APROBADO'
+        });
+        window.globalUsersMap.set(email, {
+          ...u,
+          role: rol,
+          companyName: empresa || 'Sin Empresa Asignada',
+          estado: 'APROBADO'
+        });
+        if (empresa && window._syncMemberIntoLocalEmpresas) {
+          window._syncMemberIntoLocalEmpresas(email, u.name, rol, empresa, u.specialty || '');
+        }
+        if (window.refreshGlobalUsersDatalist) window.refreshGlobalUsersDatalist();
+        renderGlobalUsers();
+        showBanner(`✅ ${nombre} aprobado al instante${empresa ? ' en ' + empresa : ''}.`, 'success');
+      } catch (e) {
+        showBanner('❌ Error al aprobar el usuario.', 'error');
+      }
+      return;
+    }
     const u = window.globalUsersMap.get(email);
     if (!u) return;
 
@@ -2853,6 +3347,7 @@ window.quickApproveUser = async function(email, nombre, companyName = '') {
             estado: 'APROBADO'
         });
 
+        if (window.refreshGlobalUsersDatalist) window.refreshGlobalUsersDatalist();
         renderGlobalUsers();
         showBanner(`✅ ${nombre} aprobado correctamente${empresa ? ' en ' + empresa : ''}.`, 'success');
     } catch(e) {
