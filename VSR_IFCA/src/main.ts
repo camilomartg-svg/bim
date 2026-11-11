@@ -9769,12 +9769,11 @@ function initQuantitiesPanel() {
         }
 
         if (activeTab === 'detalle') {
-            const maxElements = 150;
-            const shownElements = filtered.slice(0, maxElements);
+            const shownElements = filtered;
 
             let html = `
                 <div style="font-size: 11px; margin-bottom: 6px; font-weight: 600; color: var(--text-med-gray); text-transform: uppercase;">
-                    Mostrando ${shownElements.length} de ${filtered.length} elementos filtrados
+                    Mostrando ${shownElements.length} elementos filtrados
                 </div>
                 <table class="q-table">
                     <thead>
@@ -12148,12 +12147,11 @@ function initStatusPanel() {
         }
 
         if (activeTab === 'detalle') {
-            const maxElements = 150;
-            const shownElements = filtered.slice(0, maxElements);
+            const shownElements = filtered;
 
             let html = `
                 <div style="font-size: 11px; margin-bottom: 6px; font-weight: 600; color: var(--text-med-gray); text-transform: uppercase;">
-                    Mostrando ${shownElements.length} de ${filtered.length} elementos filtrados
+                    Mostrando ${shownElements.length} elementos filtrados
                 </div>
                 <table class="q-table">
                     <thead>
