@@ -3329,6 +3329,8 @@ const modelElementData = new Map<string, Map<number, {
     category: string;
     pilote: string;
     isModular?: boolean;
+    tag?: string;
+    guid?: string;
 }>>();
 
 // GLOBAL BOUNDS CACHE FOR 3D ELEMENTS (extracted directly from FragmentsModel)
@@ -3500,6 +3502,8 @@ function rebuildAllElements(): any[] {
             let level: string, material: string, name: string, nombreIntegrado: string, classification: string;
             let volume: number, area: number, length: number, detail: string, category: string, pilote: string;
             let isModular: boolean = false;
+            let tag: string = '';
+            let guid: string = '';
 
             if (cached) {
                 level = cached.level;
@@ -3514,6 +3518,8 @@ function rebuildAllElements(): any[] {
                 category = cached.category;
                 pilote = cached.pilote || '';
                 isModular = Boolean(cached.isModular);
+                tag = cached.tag || '';
+                guid = cached.guid || '';
             } else if (modelAny.properties) {
                 const attrs = modelAny.properties[String(expressID)] || modelAny.properties[expressID] || (modelAny._propertiesByTag?.get(String(expressID))) || (modelAny._propertiesByGuid?.get(String(expressID)));
                 if (!attrs || typeof attrs !== 'object') continue;
@@ -3527,6 +3533,11 @@ function rebuildAllElements(): any[] {
                 area = parseNumGlobal(getValGlobal(attrs, 'AREA INTEGRADO', 'ÁREA INTEGRADO', 'Area Integrado', 'Área Integrado', 'area integrado', 'área integrado', 'AREA_INTEGRADO', 'ÁREA_INTEGRADO', 'NetSideArea', 'GrossSideArea', 'NetArea', 'GrossArea', 'Area', 'Área'));
                 length = parseNumGlobal(getValGlobal(attrs, 'LONGITUD INTEGRADO', 'Longitud Integrado', 'longitud integrado', 'LONGITUD_INTEGRADO', 'longitud_integrado', 'Length', 'Longitud', 'length', 'longitud', 'LONGITUD'));
                 detail = getValGlobal(attrs, 'DETALLE', 'Detalle', 'detalle') || '-';
+                tag = getValGlobal(attrs, 'Tag', 'tag', 'TAG') || '';
+                guid = getValGlobal(attrs, 'GlobalId', 'globalId', '_guid', 'guid', 'GUID') || '';
+                if (!guid) {
+                    guid = String(attrs.GlobalId?.value ?? attrs.GlobalId ?? attrs._guid?.value ?? attrs._guid ?? attrs.guid ?? '').trim();
+                }
 
                 // Soporte e inherencia de Escaleras para tramos (IfcStairFlight) y descansillos
                 const rawCatUpper = String(attrs._category || attrs.category || attrs.type || attrs.ifcType || category || '').toUpperCase();
@@ -3577,6 +3588,11 @@ function rebuildAllElements(): any[] {
                 continue;
             }
 
+            if (!tag && name) {
+                const m = String(name).match(/:(\d+)$/);
+                if (m) tag = m[1];
+            }
+
             const searchStr = (classification + ' ' + name + ' ' + material).toLowerCase();
             const diameter = '';
 
@@ -3588,6 +3604,8 @@ function rebuildAllElements(): any[] {
                 modelName,
                 expressID,
                 id: String(expressID),
+                tag,
+                guid,
                 name,
                 nombreIntegrado,
                 category,
@@ -8128,6 +8146,7 @@ function initQuantitiesPanel() {
                 }
                 writeStorageJson(elementHistoryLsKey, elementHistory);
             }
+            bridgePurchaseStatusesToTags(extractAllElements());
         }
     }
 
@@ -8173,22 +8192,116 @@ function initQuantitiesPanel() {
         }
     }
 
-    // Status change handlers
-    function handleChangeStatus(id: string, newStatus: PurchaseStatus) {
+    function getCandidatePurchaseKeys(idOrEl: any): string[] {
+        let el = typeof idOrEl === 'object' && idOrEl !== null ? idOrEl : null;
+        let id = '';
+        if (el) {
+            id = String(el.id || el.expressID || '');
+        } else {
+            id = String(idOrEl ?? '');
+            const all = extractAllElements();
+            el = all.find(e => String(e.id) === id || String(e.expressID) === id || (e.tag && String(e.tag) === id) || (e.guid && String(e.guid) === id));
+        }
+
+        const tag = el?.tag ? String(el.tag) : '';
+        const guid = el?.guid ? String(el.guid) : '';
+
+        const keys: string[] = [];
+        if (tag) {
+            keys.push(`tag:${tag}`);
+            keys.push(tag);
+        }
+        if (guid) {
+            keys.push(`guid:${guid}`);
+            keys.push(guid);
+        }
+        if (id) {
+            keys.push(id);
+        }
+        return Array.from(new Set(keys));
+    }
+
+    function bridgePurchaseStatusesToTags(elements: any[]) {
+        if (!elements || elements.length === 0) return;
+        let changedStatus = false;
+        let changedHistory = false;
+
+        for (const el of elements) {
+            const id = String(el.id || el.expressID || '');
+            const tag = el.tag ? String(el.tag) : '';
+            const guid = el.guid ? String(el.guid) : '';
+            if (!tag && !guid) continue;
+
+            const candidateKeys: string[] = [];
+            if (tag) {
+                candidateKeys.push(`tag:${tag}`);
+                candidateKeys.push(tag);
+            }
+            if (guid) {
+                candidateKeys.push(`guid:${guid}`);
+                candidateKeys.push(guid);
+            }
+            if (id) {
+                candidateKeys.push(id);
+            }
+
+            // Find current status from candidate keys
+            let curSt: PurchaseStatus | undefined = undefined;
+            for (const k of candidateKeys) {
+                if (elementStatuses[k]) {
+                    curSt = elementStatuses[k];
+                    break;
+                }
+            }
+            if (curSt) {
+                for (const k of candidateKeys) {
+                    if (!elementStatuses[k]) {
+                        elementStatuses[k] = curSt;
+                        changedStatus = true;
+                    }
+                }
+            }
+
+            // Find history from candidate keys
+            let curHist: HistoryEntry[] | undefined = undefined;
+            for (const k of candidateKeys) {
+                if (elementHistory[k] && elementHistory[k].length > 0) {
+                    curHist = elementHistory[k];
+                    break;
+                }
+            }
+            if (curHist) {
+                for (const k of candidateKeys) {
+                    if (!elementHistory[k] || elementHistory[k].length === 0) {
+                        elementHistory[k] = curHist;
+                        changedHistory = true;
+                    }
+                }
+            }
+        }
+
+        if (changedStatus) writeStorageJson(elementStatusesLsKey, elementStatuses);
+        if (changedHistory) writeStorageJson(elementHistoryLsKey, elementHistory);
+    }
+
+    // Status change handlers anchored to Revit Tag / GUID / ID
+    function handleChangeStatus(idOrEl: any, newStatus: PurchaseStatus) {
         const firstModelName = Array.from(loadedModels.keys())[0] || 'local';
         const modelKey = normalizeRemoteModelKey(firstModelName);
         const at = new Date().toISOString();
+        const candidateKeys = getCandidatePurchaseKeys(idOrEl);
 
-        elementStatuses[id] = newStatus;
+        candidateKeys.forEach(k => {
+            elementStatuses[k] = newStatus;
+            if (!elementHistory[k]) elementHistory[k] = [];
+            elementHistory[k].push({ status: newStatus, at });
+
+            remoteQueue = remoteQueue.filter((q) => q.id !== k);
+            remoteQueue.push({ id: k, status: newStatus, modelKey, at });
+        });
+
         writeStorageJson(elementStatusesLsKey, elementStatuses);
-
-        if (!elementHistory[id]) elementHistory[id] = [];
-        elementHistory[id].push({ status: newStatus, at });
         writeStorageJson(elementHistoryLsKey, elementHistory);
-
-        // Queue status upload
-        remoteQueue = remoteQueue.filter((q) => q.id !== id);
-        remoteQueue.push({ id, status: newStatus, modelKey, at });
         writeStorageJson(remoteQueueLsKey, remoteQueue);
 
         // Sync updates
@@ -8198,18 +8311,21 @@ function initQuantitiesPanel() {
         renderQuantitiesContent();
     }
 
-    function handleChangeStatusMany(ids: string[], newStatus: PurchaseStatus) {
+    function handleChangeStatusMany(idsOrEls: any[], newStatus: PurchaseStatus) {
         const firstModelName = Array.from(loadedModels.keys())[0] || 'local';
         const modelKey = normalizeRemoteModelKey(firstModelName);
         const at = new Date().toISOString();
 
-        ids.forEach(id => {
-            elementStatuses[id] = newStatus;
-            if (!elementHistory[id]) elementHistory[id] = [];
-            elementHistory[id].push({ status: newStatus, at });
+        idsOrEls.forEach(idOrEl => {
+            const candidateKeys = getCandidatePurchaseKeys(idOrEl);
+            candidateKeys.forEach(k => {
+                elementStatuses[k] = newStatus;
+                if (!elementHistory[k]) elementHistory[k] = [];
+                elementHistory[k].push({ status: newStatus, at });
 
-            remoteQueue = remoteQueue.filter((q) => q.id !== id);
-            remoteQueue.push({ id, status: newStatus, modelKey, at });
+                remoteQueue = remoteQueue.filter((q) => q.id !== k);
+                remoteQueue.push({ id: k, status: newStatus, modelKey, at });
+            });
         });
 
         writeStorageJson(elementStatusesLsKey, elementStatuses);
@@ -9255,6 +9371,7 @@ function initQuantitiesPanel() {
     async function renderQuantitiesContent() {
         if (!contentArea) return;
         const elements = extractAllElements();
+        bridgePurchaseStatusesToTags(elements);
 
         if (elements.length === 0) {
             contentArea.innerHTML = '<div class="q-empty-msg">No hay datos de cantidades. Asegúrate de cargar un modelo IFC con propiedades.</div>';
@@ -11080,15 +11197,120 @@ function initStatusPanel() {
     let selectedTimelineDate: string | null = null;
     let timelinePlayInterval: any = null;
 
-    function getElementStatusAtDate(id: string, dateStr: string | null): ConstructionStatus {
-        if (!dateStr) return elementStatuses[id] || 'NINGUNO';
+    function getCandidateKeys(idOrEl: any): string[] {
+        let el = typeof idOrEl === 'object' && idOrEl !== null ? idOrEl : null;
+        let id = '';
+        if (el) {
+            id = String(el.id || el.expressID || '');
+        } else {
+            id = String(idOrEl ?? '');
+            const all = extractAllElements();
+            el = all.find(e => String(e.id) === id || String(e.expressID) === id || (e.tag && String(e.tag) === id) || (e.guid && String(e.guid) === id));
+        }
+
+        const tag = el?.tag ? String(el.tag) : '';
+        const guid = el?.guid ? String(el.guid) : '';
+
+        const keys: string[] = [];
+        if (tag) {
+            keys.push(`tag:${tag}`);
+            keys.push(tag);
+        }
+        if (guid) {
+            keys.push(`guid:${guid}`);
+            keys.push(guid);
+        }
+        if (id) {
+            keys.push(id);
+        }
+        return Array.from(new Set(keys));
+    }
+
+    function bridgeStatusesToTags(elements: any[]) {
+        if (!elements || elements.length === 0) return;
+        let changedStatus = false;
+        let changedHistory = false;
+
+        for (const el of elements) {
+            const id = String(el.id || el.expressID || '');
+            const tag = el.tag ? String(el.tag) : '';
+            const guid = el.guid ? String(el.guid) : '';
+            if (!tag && !guid) continue;
+
+            const candidateKeys: string[] = [];
+            if (tag) {
+                candidateKeys.push(`tag:${tag}`);
+                candidateKeys.push(tag);
+            }
+            if (guid) {
+                candidateKeys.push(`guid:${guid}`);
+                candidateKeys.push(guid);
+            }
+            if (id) {
+                candidateKeys.push(id);
+            }
+
+            // Find current status from candidate keys
+            let curSt: ConstructionStatus | undefined = undefined;
+            for (const k of candidateKeys) {
+                if (elementStatuses[k]) {
+                    curSt = elementStatuses[k];
+                    break;
+                }
+            }
+            if (curSt) {
+                for (const k of candidateKeys) {
+                    if (!elementStatuses[k]) {
+                        elementStatuses[k] = curSt;
+                        changedStatus = true;
+                    }
+                }
+            }
+
+            // Find history from candidate keys
+            let curHist: Array<{ status: ConstructionStatus; at: string }> | undefined = undefined;
+            for (const k of candidateKeys) {
+                if (elementHistory[k] && elementHistory[k].length > 0) {
+                    curHist = elementHistory[k];
+                    break;
+                }
+            }
+            if (curHist) {
+                for (const k of candidateKeys) {
+                    if (!elementHistory[k] || elementHistory[k].length === 0) {
+                        elementHistory[k] = curHist;
+                        changedHistory = true;
+                    }
+                }
+            }
+        }
+
+        if (changedStatus) writeStorageJson(elementStatusesLsKey, elementStatuses);
+        if (changedHistory) writeStorageJson(elementHistoryLsKey, elementHistory);
+    }
+
+    function getElementStatusAtDate(idOrEl: any, dateStr: string | null): ConstructionStatus {
+        const candidateKeys = getCandidateKeys(idOrEl);
+
+        if (!dateStr) {
+            for (const k of candidateKeys) {
+                if (elementStatuses[k]) return elementStatuses[k];
+            }
+            return 'NINGUNO';
+        }
 
         const target = new Date(dateStr + 'T23:59:59.999Z').getTime();
-        const hist = elementHistory[id];
-        if (!hist || hist.length === 0) return 'NINGUNO';
+        let chosenHist: Array<{ status: ConstructionStatus; at: string }> | null = null;
+        for (const k of candidateKeys) {
+            if (elementHistory[k] && elementHistory[k].length > 0) {
+                chosenHist = elementHistory[k];
+                break;
+            }
+        }
+        if (!chosenHist || chosenHist.length === 0) return 'NINGUNO';
 
         let chosen: ConstructionStatus = 'NINGUNO';
-        for (const entry of hist) {
+        for (const entry of chosenHist) {
             const t = new Date(entry.at).getTime();
             if (!isNaN(t) && t <= target) {
                 chosen = entry.status;
@@ -11361,6 +11583,7 @@ function initStatusPanel() {
                 }
                 writeStorageJson(elementHistoryLsKey, elementHistory);
             }
+            bridgeStatusesToTags(extractAllElements());
         }
     }
 
@@ -11373,22 +11596,24 @@ function initStatusPanel() {
         }
     }
 
-    // Status change handlers
-    function handleChangeStatus(id: string, newStatus: ConstructionStatus) {
+    // Status change handlers anchored to Revit Tag / GUID / ID
+    function handleChangeStatus(idOrEl: any, newStatus: ConstructionStatus) {
         const firstModelName = Array.from(loadedModels.keys())[0] || 'local';
         const modelKey = normalizeRemoteModelKey(firstModelName);
         const at = new Date().toISOString();
+        const candidateKeys = getCandidateKeys(idOrEl);
 
-        elementStatuses[id] = newStatus;
+        candidateKeys.forEach(k => {
+            elementStatuses[k] = newStatus;
+            if (!elementHistory[k]) elementHistory[k] = [];
+            elementHistory[k].push({ status: newStatus, at });
+
+            remoteQueue = remoteQueue.filter((q) => q.id !== k);
+            remoteQueue.push({ id: k, status: newStatus, modelKey, at });
+        });
+
         writeStorageJson(elementStatusesLsKey, elementStatuses);
-
-        if (!elementHistory[id]) elementHistory[id] = [];
-        elementHistory[id].push({ status: newStatus, at });
         writeStorageJson(elementHistoryLsKey, elementHistory);
-
-        // Queue status upload
-        remoteQueue = remoteQueue.filter((q) => q.id !== id);
-        remoteQueue.push({ id, status: newStatus, modelKey, at });
         writeStorageJson(remoteQueueLsKey, remoteQueue);
 
         // Sync updates
@@ -11398,18 +11623,21 @@ function initStatusPanel() {
         renderStatusContent();
     }
 
-    function handleChangeStatusMany(ids: string[], newStatus: ConstructionStatus) {
+    function handleChangeStatusMany(idsOrEls: any[], newStatus: ConstructionStatus) {
         const firstModelName = Array.from(loadedModels.keys())[0] || 'local';
         const modelKey = normalizeRemoteModelKey(firstModelName);
         const at = new Date().toISOString();
 
-        ids.forEach(id => {
-            elementStatuses[id] = newStatus;
-            if (!elementHistory[id]) elementHistory[id] = [];
-            elementHistory[id].push({ status: newStatus, at });
+        idsOrEls.forEach(idOrEl => {
+            const candidateKeys = getCandidateKeys(idOrEl);
+            candidateKeys.forEach(k => {
+                elementStatuses[k] = newStatus;
+                if (!elementHistory[k]) elementHistory[k] = [];
+                elementHistory[k].push({ status: newStatus, at });
 
-            remoteQueue = remoteQueue.filter((q) => q.id !== id);
-            remoteQueue.push({ id, status: newStatus, modelKey, at });
+                remoteQueue = remoteQueue.filter((q) => q.id !== k);
+                remoteQueue.push({ id: k, status: newStatus, modelKey, at });
+            });
         });
 
         writeStorageJson(elementStatusesLsKey, elementStatuses);
@@ -11742,6 +11970,7 @@ function initStatusPanel() {
     function renderStatusContent() {
         if (!contentArea) return;
         const elements = extractAllElements();
+        bridgeStatusesToTags(elements);
 
         if (elements.length === 0) {
             contentArea.innerHTML = '<div class="q-empty-msg">No hay datos de avance. Asegúrate de cargar un modelo IFC con propiedades.</div>';
@@ -12572,7 +12801,7 @@ async function classifyModel(model: any) {
     );
 
     // --- Populate modelElementData global cache so extractAllElementsGlobal can use it ---
-    const modelCache = new Map<number, { level: string; material: string; name: string; nombreIntegrado: string; classification: string; volume: number; area: number; length: number; detail: string; category: string; }>();
+    const modelCache = new Map<number, { level: string; material: string; name: string; nombreIntegrado: string; classification: string; volume: number; area: number; length: number; detail: string; category: string; pilote: string; isModular?: boolean; tag?: string; guid?: string; }>();
 
     let cachedCount = 0;
     for (const id of allIds) {
@@ -12590,6 +12819,12 @@ async function classifyModel(model: any) {
             (model._propertiesByTag && model._propertiesByTag.get(String(id))) ||
             (model._propertiesByGuid && model._propertiesByGuid.get(String(id)))
         ) : null;
+
+        let propTag = propEntry ? (getVal(propEntry, 'Tag', 'tag', 'TAG') || '') : '';
+        let propGuid = propEntry ? (getVal(propEntry, 'GlobalId', 'globalId', '_guid', 'guid', 'GUID') || '') : '';
+        if (!propGuid && propEntry) {
+            propGuid = String(propEntry.GlobalId?.value ?? propEntry.GlobalId ?? propEntry._guid?.value ?? propEntry._guid ?? propEntry.guid ?? '').trim();
+        }
 
         if (!lvl && propEntry) {
             lvl = getVal(propEntry,
@@ -12659,18 +12894,27 @@ async function classifyModel(model: any) {
             }
         }
 
+        const calculatedInstName = finalInstName ?? nm ?? `${cls || 'Elemento'}-${id}`;
+        if (!propTag && calculatedInstName) {
+            const m = String(calculatedInstName).match(/:(\d+)$/);
+            if (m) propTag = m[1];
+        }
+
         modelCache.set(id, {
             level: lvl ?? 'SIN NIVEL',
             material: mat ?? 'SIN MATERIAL',
             nombreIntegrado: nm ?? 'SIN NOMBRE INTEGRADO',
-            name: finalInstName ?? nm ?? `${cls || 'Elemento'}-${id}`,
+            name: calculatedInstName,
             classification: cls ?? 'SIN CLASIFICAR',
             volume: vol,
             area: ar,
             length: len,
             detail: det ?? '-',
             category: cat ?? (cls || 'Elemento'),
-            isModular: (integratedModularById.get(id) || (propEntry ? checkIsModular(propEntry) : false) || false)
+            pilote: (propEntry ? (getValGlobal(propEntry, 'NÚMERO DE PILOTE', 'NUMERO DE PILOTE', 'PILOTE', 'Pilote', 'pilote') || '') : ''),
+            isModular: (integratedModularById.get(id) || (propEntry ? checkIsModular(propEntry) : false) || false),
+            tag: propTag,
+            guid: propGuid
         });
         if (++cachedCount % 2000 === 0) await yieldToMain();
     }
