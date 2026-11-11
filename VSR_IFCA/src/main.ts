@@ -3588,19 +3588,6 @@ function rebuildAllElements(): any[] {
                 }
                 if (checkIsEjecutado(attrs)) {
                     isEjecutado = true;
-                } else if (guid && guid.length >= 20 && modelAny.properties) {
-                    const prefix = guid.slice(0, 20);
-                    for (const pk in modelAny.properties) {
-                        const pEnt = modelAny.properties[pk];
-                        if (!pEnt || typeof pEnt !== 'object') continue;
-                        const pGuid = String(pEnt.GlobalId?.value || pEnt.GlobalId || pEnt.guid || pEnt._guid || '');
-                        if (pGuid && pGuid !== guid && pGuid.startsWith(prefix)) {
-                            if (checkIsEjecutado(pEnt)) {
-                                isEjecutado = true;
-                                break;
-                            }
-                        }
-                    }
                 }
                 pilote = getValGlobal(attrs, 'NÚMERO DE PILOTE', 'NUMERO DE PILOTE', 'Número de pilote', 'Numero de pilote', 'NÚMERO PILOTE', 'NUMERO PILOTE', 'Número Pilote', 'Numero Pilote', 'N° PILOTE', 'Nº PILOTE', 'N° Pilote', 'Nº Pilote', 'PILOTE', 'Pilote', 'pilote') || '';
             } else {
@@ -11325,20 +11312,6 @@ function initStatusPanel() {
                               (tag ? (m.properties[tag] || m._propertiesByTag?.get(String(tag))) : null) ||
                               (guid ? (m.properties[guid] || m._propertiesByGuid?.get(String(guid))) : null);
             if (propEntry && checkIsEjecutado(propEntry)) return true;
-
-            // Herencia de elemento padre / anfitrión (Revit Shared Nested Families):
-            // Elementos anidados (pilotes de dados, componentes) comparten el prefijo de su IfcGUID (20 caracteres)
-            if (guid && guid.length >= 20) {
-                const prefix = guid.slice(0, 20);
-                for (const pk in m.properties) {
-                    const pEnt = m.properties[pk];
-                    if (!pEnt || typeof pEnt !== 'object') continue;
-                    const pGuid = String(pEnt.GlobalId?.value || pEnt.GlobalId || pEnt.guid || pEnt._guid || '');
-                    if (pGuid && pGuid !== guid && pGuid.startsWith(prefix)) {
-                        if (checkIsEjecutado(pEnt)) return true;
-                    }
-                }
-            }
         }
         return false;
     }
@@ -11349,41 +11322,62 @@ function initStatusPanel() {
         const modelKey = normalizeRemoteModelKey(firstModelName);
         const at = new Date().toISOString();
         let updatedCount = 0;
+        let cleanedCount = 0;
 
         for (const el of elements) {
-            if (!checkElementIsEjecutado(el)) continue;
-
+            const isEj = checkElementIsEjecutado(el);
             const candidateKeys = getCandidateKeys(el);
-            let curSt: ConstructionStatus = 'NINGUNO';
-            for (const k of candidateKeys) {
-                if (elementStatuses[k]) {
-                    curSt = elementStatuses[k];
-                    break;
-                }
-            }
 
-            if (curSt === 'NINGUNO') {
+            if (isEj) {
+                let curSt: ConstructionStatus = 'NINGUNO';
                 for (const k of candidateKeys) {
-                    elementStatuses[k] = 'APROBADO';
-                    if (!elementHistory[k]) elementHistory[k] = [];
-                    elementHistory[k].push({ status: 'APROBADO', at });
-                    remoteQueue = remoteQueue.filter((q) => q.id !== k);
-                    remoteQueue.push({ id: k, status: 'APROBADO', modelKey, at });
+                    if (elementStatuses[k]) {
+                        curSt = elementStatuses[k];
+                        break;
+                    }
                 }
-                updatedCount++;
+
+                if (curSt !== 'APROBADO') {
+                    for (const k of candidateKeys) {
+                        elementStatuses[k] = 'APROBADO';
+                        if (!elementHistory[k]) elementHistory[k] = [];
+                        elementHistory[k].push({ status: 'APROBADO', at });
+                        remoteQueue = remoteQueue.filter((q) => q.id !== k);
+                        remoteQueue.push({ id: k, status: 'APROBADO', modelKey, at });
+                    }
+                    updatedCount++;
+                }
+            } else {
+                // Si el elemento NO tiene el parámetro EJECUTADO, revertir cualquier APROBADO erróneo
+                let curSt: ConstructionStatus = 'NINGUNO';
+                for (const k of candidateKeys) {
+                    if (elementStatuses[k]) {
+                        curSt = elementStatuses[k];
+                        break;
+                    }
+                }
+                if (curSt === 'APROBADO') {
+                    for (const k of candidateKeys) {
+                        delete elementStatuses[k];
+                        delete elementHistory[k];
+                        remoteQueue = remoteQueue.filter((q) => q.id !== k);
+                        remoteQueue.push({ id: k, status: 'NINGUNO', modelKey, at });
+                    }
+                    cleanedCount++;
+                }
             }
         }
 
-        if (updatedCount > 0) {
+        if (updatedCount > 0 || cleanedCount > 0) {
             writeStorageJson(elementStatusesLsKey, elementStatuses);
             writeStorageJson(elementHistoryLsKey, elementHistory);
             writeStorageJson(remoteQueueLsKey, remoteQueue);
             syncWithRemote().catch(console.error);
             if (notify) {
-                alert(`Se actualizaron ${updatedCount} elementos con EJECUTADO=true al estado APROBADO.`);
+                alert(`Actualización completada: ${updatedCount} elementos aprobados, ${cleanedCount} corregidos a NINGUNO.`);
             }
         } else if (notify) {
-            alert('Todos los elementos con EJECUTADO=true ya cuentan con estado asignado.');
+            alert('Los estados están perfectamente sincronizados con el parámetro EJECUTADO.');
         }
         return updatedCount;
     }
