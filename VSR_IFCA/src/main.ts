@@ -25,6 +25,7 @@ import {
     ModularPiece,
     WallFaceProfile2D,
     checkIsModular,
+    checkIsEjecutado,
     PIECE_COLORS,
     roundToModularStepM
 } from './despiece-optimizer';
@@ -3502,6 +3503,7 @@ function rebuildAllElements(): any[] {
             let level: string, material: string, name: string, nombreIntegrado: string, classification: string;
             let volume: number, area: number, length: number, detail: string, category: string, pilote: string;
             let isModular: boolean = false;
+            let isEjecutado: boolean = false;
             let tag: string = '';
             let guid: string = '';
 
@@ -3518,6 +3520,7 @@ function rebuildAllElements(): any[] {
                 category = cached.category;
                 pilote = cached.pilote || '';
                 isModular = Boolean(cached.isModular);
+                isEjecutado = Boolean(cached.isEjecutado);
                 tag = cached.tag || '';
                 guid = cached.guid || '';
             } else if (modelAny.properties) {
@@ -3583,6 +3586,9 @@ function rebuildAllElements(): any[] {
                 if (checkIsModular(attrs)) {
                     isModular = true;
                 }
+                if (checkIsEjecutado(attrs)) {
+                    isEjecutado = true;
+                }
                 pilote = getValGlobal(attrs, 'NÚMERO DE PILOTE', 'NUMERO DE PILOTE', 'Número de pilote', 'Numero de pilote', 'NÚMERO PILOTE', 'NUMERO PILOTE', 'Número Pilote', 'Numero Pilote', 'N° PILOTE', 'Nº PILOTE', 'N° Pilote', 'Nº Pilote', 'PILOTE', 'Pilote', 'pilote') || '';
             } else {
                 continue;
@@ -3620,7 +3626,8 @@ function rebuildAllElements(): any[] {
                 pilote,
                 isPipe,
                 isUnion,
-                isModular
+                isModular,
+                isEjecutado
             });
         }
     }
@@ -11288,6 +11295,72 @@ function initStatusPanel() {
         if (changedHistory) writeStorageJson(elementHistoryLsKey, elementHistory);
     }
 
+    function checkElementIsEjecutado(el: any): boolean {
+        if (!el) return false;
+        if (el.isEjecutado === true) return true;
+        if (checkIsEjecutado(el)) return true;
+        if (checkIsEjecutado(el.elementRef)) return true;
+        if (el.rawAttrs && checkIsEjecutado(el.rawAttrs)) return true;
+
+        for (const model of loadedModels.values()) {
+            const m = model as any;
+            if (!m?.properties) continue;
+            const id = el.id || el.expressID;
+            const tag = el.tag;
+            const guid = el.guid;
+            const propEntry = (id ? (m.properties[id] || m.properties[String(id)]) : null) ||
+                              (tag ? (m.properties[tag] || m._propertiesByTag?.get(String(tag))) : null) ||
+                              (guid ? (m.properties[guid] || m._propertiesByGuid?.get(String(guid))) : null);
+            if (propEntry && checkIsEjecutado(propEntry)) return true;
+        }
+        return false;
+    }
+
+    function applyEjecutadoStatus(elements: any[], notify: boolean = false): number {
+        if (!elements || elements.length === 0) return 0;
+        const firstModelName = Array.from(loadedModels.keys())[0] || 'local';
+        const modelKey = normalizeRemoteModelKey(firstModelName);
+        const at = new Date().toISOString();
+        let updatedCount = 0;
+
+        for (const el of elements) {
+            if (!checkElementIsEjecutado(el)) continue;
+
+            const candidateKeys = getCandidateKeys(el);
+            let curSt: ConstructionStatus = 'NINGUNO';
+            for (const k of candidateKeys) {
+                if (elementStatuses[k]) {
+                    curSt = elementStatuses[k];
+                    break;
+                }
+            }
+
+            if (curSt === 'NINGUNO') {
+                for (const k of candidateKeys) {
+                    elementStatuses[k] = 'APROBADO';
+                    if (!elementHistory[k]) elementHistory[k] = [];
+                    elementHistory[k].push({ status: 'APROBADO', at });
+                    remoteQueue = remoteQueue.filter((q) => q.id !== k);
+                    remoteQueue.push({ id: k, status: 'APROBADO', modelKey, at });
+                }
+                updatedCount++;
+            }
+        }
+
+        if (updatedCount > 0) {
+            writeStorageJson(elementStatusesLsKey, elementStatuses);
+            writeStorageJson(elementHistoryLsKey, elementHistory);
+            writeStorageJson(remoteQueueLsKey, remoteQueue);
+            syncWithRemote().catch(console.error);
+            if (notify) {
+                alert(`Se actualizaron ${updatedCount} elementos con EJECUTADO=true al estado APROBADO.`);
+            }
+        } else if (notify) {
+            alert('Todos los elementos con EJECUTADO=true ya cuentan con estado asignado.');
+        }
+        return updatedCount;
+    }
+
     function getElementStatusAtDate(idOrEl: any, dateStr: string | null): ConstructionStatus {
         const candidateKeys = getCandidateKeys(idOrEl);
 
@@ -11970,6 +12043,7 @@ function initStatusPanel() {
         if (!contentArea) return;
         const elements = extractAllElements();
         bridgeStatusesToTags(elements);
+        applyEjecutadoStatus(elements);
 
         if (elements.length === 0) {
             contentArea.innerHTML = '<div class="q-empty-msg">No hay datos de avance. Asegúrate de cargar un modelo IFC con propiedades.</div>';
@@ -12034,6 +12108,7 @@ function initStatusPanel() {
                 </div>
             </div>
             <div class="q-toolbar-right">
+                <button type="button" id="s-btn-ejecutado" class="q-btn-xs" style="background: rgba(39, 174, 96, 0.15); border: 1px solid #27ae60; color: #27ae60; font-weight: bold; cursor: pointer;" title="Cargar y sincronizar elementos con EJECUTADO=true a estado APROBADO"><i class="fa-solid fa-check-double"></i> EJECUTADO → Aprobado</button>
                 <button type="button" id="s-toggle-colors" class="q-btn-xs ${statusColorsEnabled ? 'active' : ''}">Colores 3D</button>
                 <button type="button" id="s-btn-sync" class="q-btn-xs"><i class="fa-solid fa-rotate"></i> Sync</button>
                 <span class="q-sync-badge ${syncState.status}">${syncState.label}</span>
@@ -12059,6 +12134,13 @@ function initStatusPanel() {
         toolbar.querySelector('#s-filter-status')?.addEventListener('change', (e) => {
             filterStatus = (e.target as HTMLSelectElement).value;
             renderTableData(elements);
+        });
+
+        toolbar.querySelector('#s-btn-ejecutado')?.addEventListener('click', () => {
+            const updated = applyEjecutadoStatus(elements, true);
+            if (updated > 0) {
+                renderStatusContent();
+            }
         });
 
         toolbar.querySelector('#s-toggle-colors')?.addEventListener('click', (e) => {
@@ -12558,6 +12640,7 @@ async function classifyModel(model: any) {
     const integratedAreaById = new Map<number, number>();
     const integratedLengthById = new Map<number, number>();
     const integratedModularById = new Map<number, boolean>();
+    const integratedEjecutadoById = new Map<number, boolean>();
 
     // Helper: unwrap {type, value} objects or return plain string
     const extractRaw = (val: any): string | null => {
@@ -12694,6 +12777,10 @@ async function classifyModel(model: any) {
 
         if (checkIsModular(attrs)) {
             integratedModularById.set(expressID, true);
+        }
+
+        if (checkIsEjecutado(attrs)) {
+            integratedEjecutadoById.set(expressID, true);
         }
 
         if (!clasif) {
@@ -12911,6 +12998,7 @@ async function classifyModel(model: any) {
             category: cat ?? (cls || 'Elemento'),
             pilote: (propEntry ? (getValGlobal(propEntry, 'NÚMERO DE PILOTE', 'NUMERO DE PILOTE', 'PILOTE', 'Pilote', 'pilote') || '') : ''),
             isModular: (integratedModularById.get(id) || (propEntry ? checkIsModular(propEntry) : false) || false),
+            isEjecutado: (integratedEjecutadoById.get(id) || (propEntry ? checkIsEjecutado(propEntry) : false) || false),
             tag: propTag,
             guid: propGuid
         });

@@ -1233,6 +1233,74 @@ export function checkIsModular(attrs: any): boolean {
 }
 
 /**
+ * Determina de forma profunda y tolerante si un objeto de atributos o elemento
+ * contiene el parámetro EJECUTADO (o 4D_EJECUTADO) marcado como true/sí/1.
+ */
+export function checkIsEjecutado(attrs: any): boolean {
+    if (!attrs || typeof attrs !== 'object') return false;
+
+    const isTruthy = (v: any): boolean => {
+        if (v === true || v === 1 || v === '1') return true;
+        if (typeof v === 'string') {
+            const s = v.trim().toLowerCase();
+            return s === 'true' || s === 'si' || s === 'sí' || s === '1' || s === 'yes' || s === 'verdadero' || s === 'ejecutado';
+        }
+        if (typeof v === 'object' && v !== null && 'value' in v) {
+            return isTruthy((v as any).value);
+        }
+        return false;
+    };
+
+    const isEjecutadoKey = (key: string): boolean => {
+        if (!key) return false;
+        const norm = key.trim().toUpperCase()
+            .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+            .replace(/[\s\-_]/g, '');
+        if (norm.includes('NOEJECUTADO')) return false;
+        return norm === 'EJECUTADO' || norm === '4DEJECUTADO' || norm.endsWith('EJECUTADO') || norm.includes('4DEJECUTADO');
+    };
+
+    const directKeys = [
+        'EJECUTADO', 'Ejecutado', 'ejecutado',
+        '4D_EJECUTADO', '4d_ejecutado', '4D EJECUTADO', '4D-EJECUTADO',
+        '4D_Ejecutado', '4DEJECUTADO', '4d_Ejecutado'
+    ];
+
+    for (const k of directKeys) {
+        if (k in attrs && isTruthy(attrs[k])) return true;
+    }
+
+    for (const k of Object.keys(attrs)) {
+        if (isEjecutadoKey(k) && isTruthy(attrs[k])) return true;
+    }
+
+    const subContainers = [attrs.psets, attrs.data, attrs.attributes, attrs.properties];
+    for (const sub of subContainers) {
+        if (sub && typeof sub === 'object') {
+            for (const k of directKeys) {
+                if (k in sub && isTruthy(sub[k])) return true;
+            }
+            for (const k of Object.keys(sub)) {
+                if (isEjecutadoKey(k) && isTruthy(sub[k])) return true;
+            }
+            for (const psetName of Object.keys(sub)) {
+                const pset = sub[psetName];
+                if (pset && typeof pset === 'object') {
+                    for (const k of directKeys) {
+                        if (k in pset && isTruthy(pset[k])) return true;
+                    }
+                    for (const k of Object.keys(pset)) {
+                        if (isEjecutadoKey(k) && isTruthy(pset[k])) return true;
+                    }
+                }
+            }
+        }
+    }
+
+    return false;
+}
+
+/**
  * Extrae las piezas de muros modulares del listado global de elementos, incorporando su perfil 2D exacto.
  */
 export function extractModularWallPieces(
