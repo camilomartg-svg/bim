@@ -9272,18 +9272,19 @@ function initQuantitiesPanel() {
         if (tabUniones) tabUniones.style.display = hasSanitary ? 'inline-block' : 'none';
         if (tabCortes) tabCortes.style.display = hasSanitary ? 'inline-block' : 'none';
 
-        const hasModularWalls = elements.some(el => {
-            const cls = String(el.classification || '').toUpperCase();
-            const cat = String(el.category || '').toUpperCase();
-            const isWall = cls.includes('MURO') || cat.includes('WALL') || cat.includes('MURO');
-            return isWall && (el.isModular || checkIsModular(el));
+        // La pestaña de despiece SOLO debe aparecer si al menos un elemento en el modelo tiene el parámetro MODULAR en true
+        const hasModularElement = elements.some(el => {
+            return Boolean(el.isModular) || checkIsModular(el) || checkIsModular(el.elementRef);
         });
-        const hasAnyWall = elements.some(el => {
-            const cls = String(el.classification || '').toUpperCase();
-            const cat = String(el.category || '').toUpperCase();
-            return cls.includes('MURO') || cat.includes('WALL') || cat.includes('MURO');
-        });
-        if (tabDespiece) tabDespiece.style.display = (hasModularWalls || hasAnyWall) ? 'inline-block' : 'none';
+        if (tabDespiece) {
+            tabDespiece.style.display = hasModularElement ? 'inline-block' : 'none';
+            if (!hasModularElement && activeTab === 'despiece') {
+                activeTab = 'detalle';
+                const tabDetalle = document.getElementById('q-tab-detalle');
+                tabDespiece.classList.remove('active');
+                if (tabDetalle) tabDetalle.classList.add('active');
+            }
+        }
 
         // Apply status highlighting in viewer (only if not on despiece tab)
         if (activeTab !== 'despiece') {
