@@ -3527,6 +3527,48 @@ function rebuildAllElements(): any[] {
                 area = parseNumGlobal(getValGlobal(attrs, 'AREA INTEGRADO', 'ÁREA INTEGRADO', 'Area Integrado', 'Área Integrado', 'area integrado', 'área integrado', 'AREA_INTEGRADO', 'ÁREA_INTEGRADO', 'NetSideArea', 'GrossSideArea', 'NetArea', 'GrossArea', 'Area', 'Área'));
                 length = parseNumGlobal(getValGlobal(attrs, 'LONGITUD INTEGRADO', 'Longitud Integrado', 'longitud integrado', 'LONGITUD_INTEGRADO', 'longitud_integrado', 'Length', 'Longitud', 'length', 'longitud', 'LONGITUD'));
                 detail = getValGlobal(attrs, 'DETALLE', 'Detalle', 'detalle') || '-';
+
+                // Soporte e inherencia de Escaleras para tramos (IfcStairFlight) y descansillos
+                const rawCatUpper = String(attrs._category || attrs.category || attrs.type || attrs.ifcType || category || '').toUpperCase();
+                const rawNameStr = String(name || attrs.Name || attrs.name || '');
+                const isStairComponent = rawCatUpper.includes('STAIR') || rawCatUpper.includes('ESCALERA') ||
+                                         rawNameStr.includes('Run ') || (rawNameStr.includes('Escalera') && rawNameStr.includes('Landing'));
+
+                if (isStairComponent) {
+                    if (classification === 'SIN CLASIFICAR') {
+                        classification = 'ESCALERAS';
+                    }
+                    if (modelAny.properties) {
+                        const mId = rawNameStr.match(/(?:Escalera:?|Stairs?:?)(\d+)/i);
+                        const pTag = mId ? mId[1] : null;
+                        for (const pk in modelAny.properties) {
+                            const pEnt = modelAny.properties[pk];
+                            if (!pEnt) continue;
+                            const isParent = (pTag && (String(pEnt.Tag || pEnt.tag) === pTag || String(pk) === pTag)) ||
+                                             String(pEnt._category || pEnt.type || '').toUpperCase() === 'IFCSTAIR';
+                            if (isParent) {
+                                if (level === 'SIN NIVEL') {
+                                    const parentLvl = getValGlobal(pEnt, 'NIVEL INTEGRADO', 'Nivel Integrado', 'nivel integrado', 'NIVEL', 'Nivel', 'Level', 'Storey');
+                                    if (parentLvl && parentLvl !== 'SIN NIVEL') level = parentLvl;
+                                }
+                                if (volume === 0) {
+                                    const pVol = parseNumGlobal(getValGlobal(pEnt, 'VOLUMEN INTEGRADO', 'Volumen Integrado', 'volumen integrado', 'NetVolume', 'Volume'));
+                                    if (pVol > 0) volume = pVol;
+                                }
+                                if (area === 0) {
+                                    const pAr = parseNumGlobal(getValGlobal(pEnt, 'AREA INTEGRADO', 'ÁREA INTEGRADO', 'Area Integrado', 'NetArea', 'Area'));
+                                    if (pAr > 0) area = pAr;
+                                }
+                                if (nombreIntegrado === 'SIN NOMBRE INTEGRADO') {
+                                    const pNom = getValGlobal(pEnt, 'NOMBRE INTEGRADO', 'Nombre Integrado', 'nombre integrado');
+                                    if (pNom) nombreIntegrado = pNom;
+                                }
+                                break;
+                            }
+                        }
+                    }
+                }
+
                 if (checkIsModular(attrs)) {
                     isModular = true;
                 }
@@ -12343,23 +12385,20 @@ async function classifyModel(model: any) {
 
     // Helper: read integrated fields from an attribute object
     const readFields = (attrs: any, expressID: number) => {
-        const clasif = getVal(attrs, 'CLASIFICACIÓN', 'CLASIFICACION', 'CLASIFICACIÃ"N', 'CLASIFICACIÃ“N', 'CLASIFICACI\u00c3\u0093N', 'Clasificación', 'Clasificacion', 'clasificación', 'clasificacion', 'classification', 'Classification');
-        if (clasif) integratedClassById.set(expressID, clasif);
+        let clasif = getVal(attrs, 'CLASIFICACIÓN', 'CLASIFICACION', 'CLASIFICACIÃ"N', 'CLASIFICACIÃ“N', 'CLASIFICACI\u00c3\u0093N', 'Clasificación', 'Clasificacion', 'clasificación', 'clasificacion', 'classification', 'Classification');
 
-        const nivel = getVal(attrs,
+        let nivel = getVal(attrs,
             'NIVEL INTEGRADO', 'Nivel Integrado', 'nivel integrado',
             'NIVEL', 'Nivel', 'nivel', 'Level', 'level', 'LEVEL',
             'Storey', 'storey', 'Piso', 'piso', 'Planta', 'planta',
             'Building Story', 'IfcBuildingStorey');
-        if (nivel) integratedLevelById.set(expressID, nivel);
 
         const material = getVal(attrs,
             'MATERIAL INTEGRADO', 'Material Integrado', 'material integrado', 'MATERIAL_INTEGRADO', 'material_integrado');
         if (material) integratedMaterialById.set(expressID, material);
 
-        const nombre = getVal(attrs,
+        let nombre = getVal(attrs,
             'NOMBRE INTEGRADO', 'Nombre Integrado', 'nombre integrado', 'NOMBRE_INTEGRADO', 'nombre_integrado');
-        if (nombre) integratedNameById.set(expressID, nombre);
 
         const instName = getVal(attrs, 'Name', 'name', 'tag', 'Tag');
         if (instName) elementNameById.set(expressID, instName);
@@ -12375,10 +12414,51 @@ async function classifyModel(model: any) {
         const detail = getVal(attrs, 'DETALLE', 'Detalle', 'detalle');
         if (detail) integratedDetailById.set(expressID, detail);
 
-        const volume = getVal(attrs, 'VOLUMEN INTEGRADO', 'Volumen Integrado', 'volumen integrado', 'VOLUMEN_INTEGRADO', 'volumen_integrado', 'NetVolume', 'GrossVolume', 'Volumen', 'Volume');
-        if (volume) integratedVolumeById.set(expressID, parseNumGlobal(volume));
+        let volume = getVal(attrs, 'VOLUMEN INTEGRADO', 'Volumen Integrado', 'volumen integrado', 'VOLUMEN_INTEGRADO', 'volumen_integrado', 'NetVolume', 'GrossVolume', 'Volumen', 'Volume');
+        let area = getVal(attrs, 'AREA INTEGRADO', 'ÁREA INTEGRADO', 'Area Integrado', 'Área Integrado', 'area integrado', 'área integrado', 'AREA_INTEGRADO', 'ÁREA_INTEGRADO', 'NetSideArea', 'GrossSideArea', 'NetArea', 'GrossArea', 'Area', 'Área');
 
-        const area = getVal(attrs, 'AREA INTEGRADO', 'ÁREA INTEGRADO', 'Area Integrado', 'Área Integrado', 'area integrado', 'área integrado', 'AREA_INTEGRADO', 'ÁREA_INTEGRADO', 'NetSideArea', 'GrossSideArea', 'NetArea', 'GrossArea', 'Area', 'Área');
+        // Soporte para componentes de escaleras (Tramos y Descansillos)
+        const rawCat = String(attrs._category || attrs.category || attrs.type || attrs.ifcType || category || '').toUpperCase();
+        const rawNom = String(attrs.Name || attrs.name || instName || '');
+        const isStair = rawCat.includes('STAIR') || rawCat.includes('ESCALERA') || rawNom.includes('Run ') || (rawNom.includes('Escalera') && rawNom.includes('Landing'));
+
+        if (isStair) {
+            if (!clasif) clasif = 'ESCALERAS';
+            if ((!nivel || !volume || !area || !nombre) && model.properties) {
+                const mId = rawNom.match(/(?:Escalera:?|Stairs?:?)(\d+)/i);
+                const pTag = mId ? mId[1] : null;
+                for (const pk in model.properties) {
+                    const pEnt = model.properties[pk];
+                    if (!pEnt) continue;
+                    const isParent = (pTag && (String(pEnt.Tag || pEnt.tag) === pTag || String(pk) === pTag)) ||
+                                     String(pEnt._category || pEnt.type || '').toUpperCase() === 'IFCSTAIR';
+                    if (isParent) {
+                        if (!nivel) {
+                            const pLvl = getVal(pEnt, 'NIVEL INTEGRADO', 'Nivel Integrado', 'nivel integrado', 'NIVEL', 'Nivel', 'Level', 'Storey');
+                            if (pLvl) nivel = pLvl;
+                        }
+                        if (!volume) {
+                            const pVol = getVal(pEnt, 'VOLUMEN INTEGRADO', 'Volumen Integrado', 'volumen integrado', 'NetVolume', 'Volume');
+                            if (pVol) volume = pVol;
+                        }
+                        if (!area) {
+                            const pAr = getVal(pEnt, 'AREA INTEGRADO', 'ÁREA INTEGRADO', 'Area Integrado', 'NetArea', 'Area');
+                            if (pAr) area = pAr;
+                        }
+                        if (!nombre) {
+                            const pNom = getVal(pEnt, 'NOMBRE INTEGRADO', 'Nombre Integrado', 'nombre integrado');
+                            if (pNom) nombre = pNom;
+                        }
+                        break;
+                    }
+                }
+            }
+        }
+
+        if (clasif) integratedClassById.set(expressID, clasif);
+        if (nivel) integratedLevelById.set(expressID, nivel);
+        if (nombre) integratedNameById.set(expressID, nombre);
+        if (volume) integratedVolumeById.set(expressID, parseNumGlobal(volume));
         if (area) integratedAreaById.set(expressID, parseNumGlobal(area));
 
         const length = getVal(attrs, 'LONGITUD INTEGRADO', 'Longitud Integrado', 'longitud integrado', 'LONGITUD_INTEGRADO', 'longitud_integrado', 'Length', 'Longitud', 'length', 'longitud', 'LONGITUD');
@@ -12531,11 +12611,52 @@ async function classifyModel(model: any) {
             cat = getVal(propEntry, 'type', 'ifcType', 'Category', 'ObjectType', 'CLASIFICACIÓN', 'Clasificación', 'CATEGORÍA', 'Categoría', 'TIPO', 'Tipo');
         }
 
-        const vol = integratedVolumeById.get(id) ?? (propEntry ? parseNumGlobal(getValGlobal(propEntry, 'VOLUMEN INTEGRADO', 'Volumen Integrado', 'volumen integrado', 'VOLUMEN_INTEGRADO', 'volumen_integrado', 'NetVolume', 'GrossVolume', 'Volumen', 'Volume')) : 0);
-        const ar = integratedAreaById.get(id) ?? (propEntry ? parseNumGlobal(getValGlobal(propEntry, 'AREA INTEGRADO', 'ÁREA INTEGRADO', 'Area Integrado', 'Área Integrado', 'area integrado', 'área integrado', 'AREA_INTEGRADO', 'ÁREA_INTEGRADO', 'NetSideArea', 'GrossSideArea', 'Area', 'Área')) : 0);
+        let vol = integratedVolumeById.get(id) ?? (propEntry ? parseNumGlobal(getValGlobal(propEntry, 'VOLUMEN INTEGRADO', 'Volumen Integrado', 'volumen integrado', 'VOLUMEN_INTEGRADO', 'volumen_integrado', 'NetVolume', 'GrossVolume', 'Volumen', 'Volume')) : 0);
+        let ar = integratedAreaById.get(id) ?? (propEntry ? parseNumGlobal(getValGlobal(propEntry, 'AREA INTEGRADO', 'ÁREA INTEGRADO', 'Area Integrado', 'Área Integrado', 'area integrado', 'área integrado', 'AREA_INTEGRADO', 'ÁREA_INTEGRADO', 'NetSideArea', 'GrossSideArea', 'Area', 'Área')) : 0);
         const len = integratedLengthById.get(id) ?? (propEntry ? parseNumGlobal(getValGlobal(propEntry, 'LONGITUD INTEGRADO', 'Longitud Integrado', 'longitud integrado', 'LONGITUD_INTEGRADO', 'longitud_integrado', 'Length', 'Longitud')) : 0);
 
         const finalInstName = elementNameById.get(id) || (propEntry ? getVal(propEntry, 'Name', 'name', 'tag', 'Tag') : null);
+
+        // Soporte de escaleras para herencia en cache del modelo
+        const rawCatEntry = String(propEntry?._category || propEntry?.category || propEntry?.type || cat || '').toUpperCase();
+        const rawNomEntry = String(finalInstName || propEntry?.Name || propEntry?.name || '');
+        const isStairEntry = rawCatEntry.includes('STAIR') || rawCatEntry.includes('ESCALERA') ||
+                             rawNomEntry.includes('Run ') || (rawNomEntry.includes('Escalera') && rawNomEntry.includes('Landing'));
+
+        if (isStairEntry) {
+            if (!cls || cls === 'SIN CLASIFICAR') {
+                cls = 'ESCALERAS';
+            }
+            if ((!lvl || lvl === 'SIN NIVEL' || vol === 0 || ar === 0 || !nm) && model.properties) {
+                const mId = rawNomEntry.match(/(?:Escalera:?|Stairs?:?)(\d+)/i);
+                const pTag = mId ? mId[1] : null;
+                for (const pk in model.properties) {
+                    const pEnt = model.properties[pk];
+                    if (!pEnt) continue;
+                    const isParent = (pTag && (String(pEnt.Tag || pEnt.tag) === pTag || String(pk) === pTag)) ||
+                                     String(pEnt._category || pEnt.type || '').toUpperCase() === 'IFCSTAIR';
+                    if (isParent) {
+                        if (!lvl || lvl === 'SIN NIVEL') {
+                            const pL = getVal(pEnt, 'NIVEL INTEGRADO', 'Nivel Integrado', 'nivel integrado', 'NIVEL', 'Nivel', 'Level', 'Storey');
+                            if (pL) lvl = pL;
+                        }
+                        if (vol === 0) {
+                            const pV = parseNumGlobal(getValGlobal(pEnt, 'VOLUMEN INTEGRADO', 'Volumen Integrado', 'volumen integrado', 'NetVolume', 'Volume'));
+                            if (pV > 0) vol = pV;
+                        }
+                        if (ar === 0) {
+                            const pA = parseNumGlobal(getValGlobal(pEnt, 'AREA INTEGRADO', 'ÁREA INTEGRADO', 'Area Integrado', 'NetArea', 'Area'));
+                            if (pA > 0) ar = pA;
+                        }
+                        if (!nm) {
+                            const pN = getVal(pEnt, 'NOMBRE INTEGRADO', 'Nombre Integrado', 'nombre integrado');
+                            if (pN) nm = pN;
+                        }
+                        break;
+                    }
+                }
+            }
+        }
 
         modelCache.set(id, {
             level: lvl ?? 'SIN NIVEL',
