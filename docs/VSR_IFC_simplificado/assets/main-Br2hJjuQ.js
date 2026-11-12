@@ -6835,7 +6835,7 @@ function getElementIntegratedName(f) {
   let b = f.nombreIntegrado && f.nombreIntegrado !== "SIN NOMBRE INTEGRADO" && f.nombreIntegrado.trim() !== "" ? f.nombreIntegrado.trim() : "";
   if (!b && f.name) {
     const x = f.name.split(":");
-    x.length >= 3 && /^\\d+$/.test(x[x.length - 1].trim()) ? b = x[x.length - 2].trim() : (x.length === 2 && /^\\d+$/.test(x[1].trim()) ? b = x[0].trim() : b = f.name.trim());
+    x.length >= 3 && /^\d+$/.test(x[x.length - 1].trim()) ? b = x[x.length - 2].trim() : (x.length === 2 && /^\d+$/.test(x[1].trim()) ? b = x[0].trim() : b = f.name.trim());
   }
   return b || f.name || "(Sin Nombre Integrado)";
 }
@@ -6908,7 +6908,7 @@ function getThemePalette() {
 }
 
 if (!window.__noraThemeObserverInit) {
-  window.__noraThemeObserverInit = !0;
+  window.__noraThemeObserverInit = true;
   try {
     const obs = new MutationObserver(() => {
       const gc = document.getElementById("status-charts-container");
@@ -7047,7 +7047,7 @@ function renderStatusCharts(st, metric = currentChartMetric) {
       const lg = (a2 - a1) > Math.PI ? 1 : 0;
 
       return 'M ' + p1.x.toFixed(2) + ' ' + p1.y.toFixed(2) + ' ' +
-             'Q ' + polar(rOut, a1).x.toFixed(2) + ' ' + polar(rOut, a1).y.toFixed(2) + ' ' + p2.x.toFixed(2) + ' ' + p2.y.toFixed(2) + ' ' +
+             'Q ' + polar(rOut, a1).x.toFixed(2) + ' ' + polar(rOut, a1).y.toFixed(2) + ' ' + p2.x.toFixed(2) + ' ' + p2.x.toFixed(2) + ' ' +
              'A ' + rOut + ' ' + rOut + ' 0 ' + lg + ' 1 ' + p3.x.toFixed(2) + ' ' + p3.y.toFixed(2) + ' ' +
              'Q ' + polar(rOut, a2).x.toFixed(2) + ' ' + polar(rOut, a2).y.toFixed(2) + ' ' + p4.x.toFixed(2) + ' ' + p4.y.toFixed(2) + ' ' +
              'L ' + p5.x.toFixed(2) + ' ' + p5.y.toFixed(2) + ' ' +
@@ -7103,26 +7103,303 @@ function renderStatusCharts(st, metric = currentChartMetric) {
 
       const pctApproved = c.total > 0 ? Math.round(((c.APROBADO || 0) + (c.CERRADO || 0)) / c.total * 100) : 0;
 
-      petalsSvg += \`
-        <g class="status-petal-item" data-group="\${encodeURIComponent(c.name)}" data-idx="\${idx}" style="cursor: pointer;">
-          <path d="\${fullPetalPath}" fill="\${th.petalBg}" stroke="\${th.petalStroke}" stroke-width="1.5" class="petal-bg" />
-          <g clip-path="url(#\${clipId})">
-            \${strataSvg}
+      petalsSvg += `
+        <g class="status-petal-item" data-group="${encodeURIComponent(c.name)}" data-idx="${idx}" style="cursor: pointer;">
+          <path d="${fullPetalPath}" fill="${th.petalBg}" stroke="${th.petalStroke}" stroke-width="1.5" class="petal-bg" />
+          <g clip-path="url(#${clipId})">
+            ${strataSvg}
           </g>
-          <path d="\${fullPetalPath}" fill="transparent" stroke="transparent" stroke-width="2" class="petal-hit" />
+          <path d="${fullPetalPath}" fill="transparent" stroke="transparent" stroke-width="2" class="petal-hit" />
         </g>
-      \`;
+      `;
 
       const textR = rInner + deltaR * 0.58;
       const pos = polar(textR, aMid);
       const cleanName = c.name.length > 11 ? c.name.slice(0, 9) + '..' : c.name;
 
-      labelsSvg += \`
-        <g class="petal-label" pointer-events="none" transform="translate(\${pos.x.toFixed(1)}, \${pos.y.toFixed(1)})">
-          <text text-anchor="middle" y="-2" font-size="14" font-weight="900" fill="\${th.labelColor}" style="\${th.isDark ? 'filter: drop-shadow(0 1px 3px rgba(0,0,0,0.9));' : 'filter: drop-shadow(0 1px 2px rgba(255,255,255,0.9));'} font-family: system-ui, sans-serif;">\${pctApproved}%</text>
-          <text text-anchor="middle" y="11" font-size="9" font-weight="700" fill="\${th.subLabelColor}" style="\${th.isDark ? 'filter: drop-shadow(0 1px 3px rgba(0,0,0,0.9));' : 'filter: drop-shadow(0 1px 2px rgba(255,255,255,0.9));'} font-family: system-ui, sans-serif; text-transform: uppercase; letter-spacing: 0.5px;">\${cleanName}</text>
+      labelsSvg += `
+        <g class="petal-label" pointer-events="none" transform="translate(${pos.x.toFixed(1)}, ${pos.y.toFixed(1)})">
+          <text text-anchor="middle" y="-2" font-size="14" font-weight="900" fill="${th.labelColor}" style="${th.isDark ? 'filter: drop-shadow(0 1px 3px rgba(0,0,0,0.9));' : 'filter: drop-shadow(0 1px 2px rgba(255,255,255,0.9));'} font-family: system-ui, sans-serif;">${pctApproved}%</text>
+          <text text-anchor="middle" y="11" font-size="9" font-weight="700" fill="${th.subLabelColor}" style="${th.isDark ? 'filter: drop-shadow(0 1px 3px rgba(0,0,0,0.9));' : 'filter: drop-shadow(0 1px 2px rgba(255,255,255,0.9));'} font-family: system-ui, sans-serif; text-transform: uppercase; letter-spacing: 0.5px;">${cleanName}</text>
         </g>
-      \
+      `;
+    });
+  }
+
+  const chartSvg = `
+    <svg viewBox="0 0 460 460" width="100%" height="100%" style="display: block; max-height: 380px; margin: 0 auto; user-select: none;">
+      <defs>
+        ${defs}
+        <filter id="hub-shadow" x="-20%" y="-20%" width="140%" height="140%">
+          <feDropShadow dx="0" dy="3" stdDeviation="5" flood-color="${th.isDark ? 'rgba(0,0,0,0.6)' : 'rgba(0,0,0,0.12)'}" />
+        </filter>
+      </defs>
+      ${petalsSvg}
+      ${labelsSvg}
+      <circle cx="${cx}" cy="${cy}" r="${rInner - 5}" fill="${th.hubFill}" stroke="${th.hubStroke}" stroke-width="2.5" filter="url(#hub-shadow)" style="cursor: pointer;" id="hub-center-btn" title="Clic para restablecer filtro" />
+      <g id="hub-center-display" pointer-events="none">
+        <text x="${cx}" y="${cy - 8}" text-anchor="middle" font-size="24" font-weight="900" fill="${th.hubPct}" font-family="system-ui, sans-serif" id="hub-pct">${globalPct}%</text>
+        <text x="${cx}" y="${cy + 10}" text-anchor="middle" font-size="10" font-weight="800" fill="${th.hubTitle}" text-transform="uppercase" letter-spacing="1px" font-family="system-ui, sans-serif" id="hub-title">APROBADO</text>
+        <text x="${cx}" y="${cy + 22}" text-anchor="middle" font-size="9" font-weight="600" fill="${th.hubSub}" font-family="system-ui, sans-serif" id="hub-sub">${formatVal(grandTotal)}</text>
+      </g>
+    </svg>
+  `;
+
+  let cardsHtml = '';
+  list.forEach(c => {
+    const pct = c.total > 0 ? Math.round(((c.APROBADO || 0) + (c.CERRADO || 0)) / c.total * 100) : 0;
+    const pProg = c.total > 0 ? ((c['EN PROGRESO'] || 0) / c.total * 100) : 0;
+    const pApp = c.total > 0 ? (((c.APROBADO || 0) + (c.CERRADO || 0)) / c.total * 100) : 0;
+    const pInsp = c.total > 0 ? ((c['PARA INSPECCIÓN'] || 0) / c.total * 100) : 0;
+    const pRech = c.total > 0 ? ((c.RECHAZADO || 0) / c.total * 100) : 0;
+    const pNone = Math.max(0, 100 - (pApp + pProg + pInsp + pRech));
+
+    cardsHtml += `
+      <div class="status-class-card" data-group="${encodeURIComponent(c.name)}" style="background: ${th.itemBg}; border: 1px solid ${th.itemBorder}; border-radius: 8px; padding: 10px 12px; margin-bottom: 8px; cursor: pointer; transition: all 0.15s ease;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+          <div style="font-weight: 700; font-size: 12px; color: ${th.textPrimary}; display: flex; align-items: center; gap: 6px;">
+            <i class="fa-solid ${isSingleCategoryIsolated ? 'fa-tag' : 'fa-shapes'}" style="color: #38bdf8; font-size: 11px;"></i> ${c.name}
+          </div>
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <span style="font-size: 11px; color: ${th.textSecondary}; font-family: monospace;">${formatVal(c.total)}</span>
+            <span style="font-size: 11px; font-weight: 800; color: ${pct >= 70 ? '#10b981' : pct >= 30 ? '#f59e0b' : th.textMuted}; background: rgba(125,125,125,0.12); padding: 2px 6px; border-radius: 4px;">${pct}%</span>
+          </div>
+        </div>
+        <div style="height: 6px; border-radius: 3px; background: ${th.barTrack}; display: flex; overflow: hidden; width: 100%;">
+          ${pApp > 0 ? `<div style="width: ${pApp}%; background: #10b981;" title="Aprobado: ${pApp.toFixed(1)}%"></div>` : ''}
+          ${pProg > 0 ? `<div style="width: ${pProg}%; background: #f59e0b;" title="En Progreso: ${pProg.toFixed(1)}%"></div>` : ''}
+          ${pInsp > 0 ? `<div style="width: ${pInsp}%; background: #3b82f6;" title="Para Inspección: ${pInsp.toFixed(1)}%"></div>` : ''}
+          ${pRech > 0 ? `<div style="width: ${pRech}%; background: #ef4444;" title="Rechazado: ${pRech.toFixed(1)}%"></div>` : ''}
+          ${pNone > 0 ? `<div style="width: ${pNone}%; background: ${th.noneFill};" title="Ninguno: ${pNone.toFixed(1)}%"></div>` : ''}
+        </div>
+      </div>
+    `;
+  });
+
+  const chartTitle = isSingleCategoryIsolated ? `<i class="fa-solid fa-layer-group" style="color: #38bdf8;"></i> ${isolatedCategoryName}` : '<i class="fa-solid fa-chart-pie" style="color: #38bdf8;"></i> AVANCE RADIAL';
+  const chartSub = isSingleCategoryIsolated ? 'Desglose por nombre integrado' : 'Porcentaje y estratos por clasificación';
+
+  container.innerHTML = `
+    <div style="display: flex; flex-direction: column; gap: 12px;">
+      <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; border-bottom: 1px solid ${th.cardBorder}; padding-bottom: 10px;">
+        <div>
+          <div style="display: flex; align-items: center; gap: 8px;">
+            ${isSingleCategoryIsolated ? `<button type="button" id="btn-chart-back-all" style="padding: 3px 8px; font-size: 10px; font-weight: 700; border: 1px solid ${th.cardBorder}; border-radius: 4px; background: ${th.itemBg}; color: ${th.textSecondary}; cursor: pointer;" title="Volver a ver todas las categorías"><i class="fa-solid fa-arrow-left"></i> Todas</button>` : ''}
+            <div style="font-size: 13px; font-weight: 800; color: ${th.textPrimary}; letter-spacing: 0.5px; display: flex; align-items: center; gap: 6px;">
+              ${chartTitle}
+            </div>
+          </div>
+          <div style="font-size: 10px; color: ${th.textSecondary}; margin-top: 2px;">${chartSub}</div>
+        </div>
+        <div class="status-metric-pills" style="display: flex; gap: 4px; background: ${th.pillsBg}; padding: 2px; border-radius: 6px; border: 1px solid ${th.pillsBorder};">
+          <button type="button" class="q-chart-metric-btn ${metric === 'count' ? 'active' : ''}" data-metric="count" style="padding: 3px 8px; font-size: 10px; font-weight: 700; border: none; border-radius: 4px; cursor: pointer; background: ${metric === 'count' ? th.pillActiveBg : 'transparent'}; color: ${metric === 'count' ? '#fff' : th.pillInactiveText};">Cant.</button>
+          <button type="button" class="q-chart-metric-btn ${metric === 'area' ? 'active' : ''}" data-metric="area" style="padding: 3px 8px; font-size: 10px; font-weight: 700; border: none; border-radius: 4px; cursor: pointer; background: ${metric === 'area' ? th.pillActiveBg : 'transparent'}; color: ${metric === 'area' ? '#fff' : th.pillInactiveText};">Área</button>
+          <button type="button" class="q-chart-metric-btn ${metric === 'volume' ? 'active' : ''}" data-metric="volume" style="padding: 3px 8px; font-size: 10px; font-weight: 700; border: none; border-radius: 4px; cursor: pointer; background: ${metric === 'volume' ? th.pillActiveBg : 'transparent'}; color: ${metric === 'volume' ? '#fff' : th.pillInactiveText};">Vol.</button>
+          <button type="button" class="q-chart-metric-btn ${metric === 'length' ? 'active' : ''}" data-metric="length" style="padding: 3px 8px; font-size: 10px; font-weight: 700; border: none; border-radius: 4px; cursor: pointer; background: ${metric === 'length' ? th.pillActiveBg : 'transparent'}; color: ${metric === 'length' ? '#fff' : th.pillInactiveText};">Long.</button>
+        </div>
+      </div>
+
+      <div style="background: ${th.cardBg}; border: 1px solid ${th.cardBorder}; border-radius: 12px; padding: 12px; box-shadow: ${th.cardShadow}; position: relative;">
+        ${chartSvg}
+      </div>
+
+      <div style="display: flex; justify-content: center; flex-wrap: wrap; gap: 10px; background: ${th.legendBg}; border: 1px solid ${th.cardBorder}; border-radius: 8px; padding: 8px 12px; font-size: 10px; font-weight: 700;">
+        <span style="display: flex; align-items: center; gap: 4px; color: #10b981;"><span style="width: 8px; height: 8px; border-radius: 2px; background: #10b981;"></span> Aprobado</span>
+        <span style="display: flex; align-items: center; gap: 4px; color: #f59e0b;"><span style="width: 8px; height: 8px; border-radius: 2px; background: #f59e0b;"></span> En Progreso</span>
+        <span style="display: flex; align-items: center; gap: 4px; color: #3b82f6;"><span style="width: 8px; height: 8px; border-radius: 2px; background: #3b82f6;"></span> Para Insp.</span>
+        <span style="display: flex; align-items: center; gap: 4px; color: #059669;"><span style="width: 8px; height: 8px; border-radius: 2px; background: #059669;"></span> Cerrado</span>
+        <span style="display: flex; align-items: center; gap: 4px; color: #ef4444;"><span style="width: 8px; height: 8px; border-radius: 2px; background: #ef4444;"></span> Rechazado</span>
+        <span style="display: flex; align-items: center; gap: 4px; color: ${th.textSecondary};"><span style="width: 8px; height: 8px; border-radius: 2px; background: ${th.noneFill};"></span> Ninguno</span>
+      </div>
+
+      <div>
+        <div style="font-size: 11px; font-weight: 800; color: ${th.textSecondary}; text-transform: uppercase; margin-bottom: 8px; letter-spacing: 0.5px;">
+          ${isSingleCategoryIsolated ? `Nombres en ${isolatedCategoryName} (${list.length})` : `Desglose por Clasificación (${list.length})`}
+        </div>
+        ${cardsHtml}
+      </div>
+    </div>
+  `;
+
+  container.querySelectorAll(".q-chart-metric-btn").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const m = btn.getAttribute("data-metric");
+      renderStatusCharts(st, m);
+    });
+  });
+
+  const btnBackAll = container.querySelector("#btn-chart-back-all");
+  if (btnBackAll) {
+    btnBackAll.addEventListener("click", () => {
+      const filterSelect = document.getElementById("s-filter-class");
+      if (filterSelect) {
+        filterSelect.value = "Todos";
+        filterSelect.dispatchEvent(new Event("change"));
+      }
+      try {
+        if (typeof Ni !== "undefined" && Ni instanceof Set) Ni.clear();
+        if (typeof ye !== "undefined" && ye instanceof Set) ye.clear();
+        window.dispatchEvent(new CustomEvent("classificationFilterChanged"));
+      } catch(e) {}
+    });
+  }
+
+  const updateCenterDisplay = (name, pct, valStr) => {
+    const hubPct = container.querySelector("#hub-pct");
+    const hubTitle = container.querySelector("#hub-title");
+    const hubSub = container.querySelector("#hub-sub");
+    if (hubPct && hubTitle && hubSub) {
+      hubPct.textContent = pct + '%';
+      hubTitle.textContent = name.length > 10 ? name.slice(0, 9) + '..' : name;
+      hubSub.textContent = valStr;
+    }
+  };
+
+  const resetCenterDisplay = () => {
+    const hubPct = container.querySelector("#hub-pct");
+    const hubTitle = container.querySelector("#hub-title");
+    const hubSub = container.querySelector("#hub-sub");
+    if (hubPct && hubTitle && hubSub) {
+      hubPct.textContent = globalPct + '%';
+      hubTitle.textContent = isSingleCategoryIsolated ? (isolatedCategoryName.length > 10 ? isolatedCategoryName.slice(0, 9) + '..' : isolatedCategoryName) : 'APROBADO';
+      hubSub.textContent = formatVal(grandTotal);
+    }
+  };
+
+  const selectItem = (groupName) => {
+    if (isSingleCategoryIsolated) {
+      const searchInput = document.getElementById("s-search");
+      if (searchInput) {
+        searchInput.value = groupName;
+        searchInput.dispatchEvent(new Event("input"));
+      }
+    } else {
+      const filterSelect = document.getElementById("s-filter-class");
+      if (filterSelect) {
+        filterSelect.value = groupName;
+        filterSelect.dispatchEvent(new Event("change"));
+      }
+    }
+  };
+
+  const hubCenterBtn = container.querySelector("#hub-center-btn");
+  if (hubCenterBtn) {
+    hubCenterBtn.addEventListener("click", () => {
+      if (isSingleCategoryIsolated) {
+        const searchInput = document.getElementById("s-search");
+        if (searchInput && searchInput.value) {
+          searchInput.value = "";
+          searchInput.dispatchEvent(new Event("input"));
+        } else {
+          const filterSelect = document.getElementById("s-filter-class");
+          if (filterSelect) {
+            filterSelect.value = "Todos";
+            filterSelect.dispatchEvent(new Event("change"));
+          }
+          try {
+            if (typeof Ni !== "undefined" && Ni instanceof Set) Ni.clear();
+            if (typeof ye !== "undefined" && ye instanceof Set) ye.clear();
+            window.dispatchEvent(new CustomEvent("classificationFilterChanged"));
+          } catch(e) {}
+        }
+      } else {
+        const filterSelect = document.getElementById("s-filter-class");
+        if (filterSelect) {
+          filterSelect.value = "Todos";
+          filterSelect.dispatchEvent(new Event("change"));
+        }
+      }
+    });
+  }
+
+  container.querySelectorAll(".status-petal-item").forEach(petal => {
+    const groupName = decodeURIComponent(petal.getAttribute("data-group") || "");
+    const gData = list.find(l => l.name === groupName);
+    if (!gData) return;
+    const pct = gData.total > 0 ? Math.round(((gData.APROBADO || 0) + (gData.CERRADO || 0)) / gData.total * 100) : 0;
+    const bgPath = petal.querySelector(".petal-bg");
+
+    petal.addEventListener("mouseenter", () => {
+      if (bgPath) {
+        bgPath.setAttribute("stroke", th.petalHoverStroke);
+        bgPath.setAttribute("stroke-width", "2.5");
+      }
+      updateCenterDisplay(groupName, pct, formatVal(gData.total));
+    });
+
+    petal.addEventListener("mouseleave", () => {
+      if (bgPath) {
+        bgPath.setAttribute("stroke", th.petalStroke);
+        bgPath.setAttribute("stroke-width", "1.5");
+      }
+      resetCenterDisplay();
+    });
+
+    petal.addEventListener("click", () => {
+      selectItem(groupName);
+    });
+  });
+
+  container.querySelectorAll(".status-class-card").forEach(card => {
+    const groupName = decodeURIComponent(card.getAttribute("data-group") || "");
+    card.addEventListener("mouseenter", () => {
+      card.style.borderColor = th.petalHoverStroke;
+      card.style.background = th.itemHoverBg;
+    });
+    card.addEventListener("mouseleave", () => {
+      card.style.borderColor = th.itemBorder;
+      card.style.background = th.itemBg;
+    });
+    card.addEventListener("click", () => {
+      selectItem(groupName);
+    });
+  });
+}
+
+function openStatusCharts(st) {
+  const gTab = document.getElementById("right-tab-graficos");
+  const gCont = document.getElementById("status-charts-container");
+  const pPan = document.getElementById("properties-panel");
+  const pProps = document.getElementById("right-tab-properties");
+  const pNora = document.getElementById("right-tab-nora");
+  const pCont = document.getElementById("properties-content");
+  const nCont = document.getElementById("nora-ai-container");
+  if (gTab) {
+    gTab.style.display = "inline-flex";
+    gTab.classList.add("active");
+    pProps?.classList.remove("active");
+    pNora?.classList.remove("active");
+    pCont && (pCont.style.display = "none");
+    nCont && (nCont.style.display = "none");
+    gCont && (gCont.style.display = "flex");
+    if (pPan) {
+      pPan.classList.remove("closed");
+      const desiredW = Math.min(460, Math.floor(window.innerWidth * 0.5));
+      if (pPan.offsetWidth < desiredW) {
+        pPan.style.width = `${desiredW}px`;
+        document.documentElement.style.setProperty("--properties-width", `${desiredW}px`);
+      }
+    }
+    renderStatusCharts(st || at());
+  }
+}
+
+function closeStatusCharts() {
+  const gTab = document.getElementById("right-tab-graficos");
+  const gCont = document.getElementById("status-charts-container");
+  const pProps = document.getElementById("right-tab-properties");
+  const pCont = document.getElementById("properties-content");
+  if (gTab) {
+    gTab.style.display = "none";
+    if (gTab.classList.contains("active")) {
+      gTab.classList.remove("active");
+      pProps?.classList.add("active");
+      gCont && (gCont.style.display = "none");
+      pCont && (pCont.style.display = "flex");
+    }
+  }
+}
+window.refreshStatusCharts = () => renderStatusCharts(at());
 
 function li(){if(!o)return;const st=at();if(rt(st),st.length===0){o.innerHTML='<div class="q-empty-msg">No hay datos de avance. Asegúrate de cargar un modelo IFC con propiedades.</div>';const N=document.getElementById("s-header-totals");N&&(N.innerHTML="");return}qe(st),Kr(st),H(),ns(st),$i();const _gCont=document.getElementById("status-charts-container");_gCont&&_gCont.style.display!=="none"&&renderStatusCharts(st)}function Kr(st){let N=r.querySelector(".q-toolbar");N||(N=document.createElement("div"),N.className="q-toolbar",r.insertBefore(N,o));const pt=Array.from(new Set(st.map(Et=>Et.classification))).sort(),$t=Array.from(new Set(st.map(Et=>Et.level))).sort();N.innerHTML=`
             <div class="q-toolbar-left">
