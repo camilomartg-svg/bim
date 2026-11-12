@@ -506,6 +506,7 @@ function sanitizeJsonFileName_(raw) {
   if (slashIdx !== -1) {
     s = s.substring(slashIdx + 1);
   }
+  s = s.replace(/\s+/g, '_');
   if (/^(empresas\.json|portal-config\.json|usuarios\.json|config-[a-zA-Z0-9_.-]+\.json)$/i.test(s)) {
     return s;
   }
@@ -1961,6 +1962,12 @@ function doPost(e) {
 
     const callback = String(e && e.parameter && e.parameter.callback || '').trim();
 
+    if (action === 'inscribirEstudiante' || (data && data.action === 'inscribirEstudiante')) {
+      return output_(handleInscribirEstudiante_(data || e.parameter || {}), callback);
+    }
+    if (action === 'actualizarPagoEstudiante' || (data && data.action === 'actualizarPagoEstudiante')) {
+      return output_(handleActualizarPagoEstudiante_(data || e.parameter || {}), callback);
+    }
     if (action === 'list') {
       return output_(listModels_(e, data), callback);
     }
@@ -2642,6 +2649,12 @@ function doGet(e) {
     const action = String(e && e.parameter && e.parameter.action || '').trim();
     const callback = String(e && e.parameter && e.parameter.callback || '').trim();
 
+    if (action === 'inscribirEstudiante' || (data && data.action === 'inscribirEstudiante')) {
+      return output_(handleInscribirEstudiante_(data || e.parameter || {}), callback);
+    }
+    if (action === 'actualizarPagoEstudiante' || (data && data.action === 'actualizarPagoEstudiante')) {
+      return output_(handleActualizarPagoEstudiante_(data || e.parameter || {}), callback);
+    }
     if (action === 'list') {
       return output_(listModels_(e, null), callback);
     }
@@ -4021,5 +4034,139 @@ function handleWompiWebhook_(e, data) {
       status: "error",
       message: err.toString()
     };
+  }
+}
+
+
+function handleInscribirEstudiante_(data) {
+  try {
+    var SPREADSHEET_ID = "1RweFnE2uHa9rqws8BmtEAQsh0hxV934207ivZ-7QMsU";
+    var doc = SpreadsheetApp.openById(data.spreadsheetId || SPREADSHEET_ID);
+    var sheet = doc.getSheetByName('Inscripciones');
+    var COLUMNS_HEADERS = [
+      'Fecha y Hora',
+      'Nombre y Apellidos',
+      'País',
+      'Ciudad',
+      'Edad',
+      'Profesión / Ocupación',
+      'Teléfono de Contacto / WhatsApp',
+      'Correo Electrónico',
+      'Curso al que se Inscribe',
+      'Documento de Identidad',
+      'Empresa o Universidad',
+      'Referencia Wompi',
+      'Monto COP',
+      'Estado de Inscripción'
+    ];
+
+    if (!sheet) {
+      var sheets = doc.getSheets();
+      if (sheets.length > 0 && sheets[0].getLastRow() === 0) {
+        sheet = sheets[0];
+        sheet.setName('Inscripciones');
+      } else {
+        sheet = doc.insertSheet('Inscripciones');
+      }
+    }
+
+    if (sheet.getLastRow() === 0) {
+      sheet.appendRow(COLUMNS_HEADERS);
+      var headerRange = sheet.getRange(1, 1, 1, COLUMNS_HEADERS.length);
+      headerRange.setFontWeight('bold');
+      headerRange.setBackground('#047857');
+      headerRange.setFontColor('#ffffff');
+      headerRange.setHorizontalAlignment('center');
+      sheet.setFrozenRows(1);
+      sheet.setRowHeight(1, 35);
+    }
+
+    var fecha = data.fecha || new Date().toLocaleString('es-CO', { timeZone: 'America/Bogota' });
+    var nombre = String(data.nombre || '').trim();
+    var pais = String(data.pais || '').trim();
+    var ciudad = String(data.ciudad || '').trim();
+    var edad = String(data.edad || '').trim();
+    var profesion = String(data.profesion || '').trim();
+    var telefono = String(data.telefono || '').trim();
+    var correo = String(data.correo || data.email || '').trim();
+    var curso = String(data.curso || 'MÓDULO 1: Automatización BIM I – Lógica Computacional, Dynamo, Python e IA').trim();
+    var documento = String(data.documento || data.doc || '').trim();
+    var empresa = String(data.empresa || '').trim();
+    var referencia = String(data.referencia || data.reference || '').trim();
+    var monto = data.montoCOP || 980000;
+    var estado = data.estado || 'Pendiente Pago Wompi';
+
+    sheet.appendRow([
+      fecha,
+      nombre,
+      pais,
+      ciudad,
+      edad,
+      profesion,
+      telefono,
+      correo,
+      curso,
+      documento,
+      empresa,
+      referencia,
+      monto,
+      estado
+    ]);
+
+    try {
+      for (var c = 1; c <= COLUMNS_HEADERS.length; c++) {
+        sheet.autoResizeColumn(c);
+      }
+    } catch (e) {}
+
+    return {
+      status: 'success',
+      message: 'Estudiante inscrito correctamente en Google Sheets',
+      estudiante: {
+        nombre: nombre,
+        pais: pais,
+        ciudad: ciudad,
+        edad: edad,
+        profesion: profesion,
+        telefono: telefono,
+        correo: correo,
+        curso: curso,
+        referencia: referencia
+      }
+    };
+  } catch (err) {
+    return { status: 'error', message: err.toString() };
+  }
+}
+
+function handleActualizarPagoEstudiante_(data) {
+  try {
+    var SPREADSHEET_ID = "1RweFnE2uHa9rqws8BmtEAQsh0hxV934207ivZ-7QMsU";
+    var doc = SpreadsheetApp.openById(data.spreadsheetId || SPREADSHEET_ID);
+    var sheet = doc.getSheetByName('Inscripciones');
+    var refBuscada = String(data.referencia || data.reference || '').trim();
+    if (!sheet || !refBuscada) return { status: 'ignored', message: 'Sin referencia o sin hoja' };
+
+    var values = sheet.getDataRange().getValues();
+    var headers = values[0].map(function(h) { return String(h).trim(); });
+    var refColIdx = headers.indexOf('Referencia Wompi');
+    var estadoColIdx = headers.indexOf('Estado de Inscripción');
+
+    if (refColIdx === -1 || estadoColIdx === -1) {
+      return { status: 'error', message: 'Columnas no encontradas' };
+    }
+
+    for (var r = 1; r < values.length; r++) {
+      if (String(values[r][refColIdx]).trim() === refBuscada) {
+        sheet.getRange(r + 1, estadoColIdx + 1).setValue('PAGADO - APROBADO WOMPI');
+        sheet.getRange(r + 1, estadoColIdx + 1).setBackground('#d1fae5');
+        sheet.getRange(r + 1, estadoColIdx + 1).setFontColor('#065f46');
+        return { status: 'success', message: 'Estado actualizado a PAGADO' };
+      }
+    }
+
+    return { status: 'not_found', message: 'Referencia no encontrada' };
+  } catch (err) {
+    return { status: 'error', message: err.toString() };
   }
 }

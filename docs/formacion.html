@@ -426,7 +426,30 @@
                         Datos del Estudiante
                     </h4>
 
-                    <form id="enrollment-form" onsubmit="event.preventDefault(); procesarPagoWompi();" class="space-y-5">
+                    <form id="enrollment-form" onsubmit="event.preventDefault(); procesarPagoWompi();" class="space-y-4">
+                        <!-- Selección del Curso -->
+                        <div>
+                            <label class="block text-xs font-bold uppercase text-slate-700 tracking-wider mb-1.5 flex items-center justify-between">
+                                <span>Curso al que se inscribe *</span>
+                                <span class="text-[10px] text-emerald-700 font-bold bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
+                                    Módulo 1 Activo
+                                </span>
+                            </label>
+                            <select id="student-course" required
+                                    class="w-full text-sm rounded-xl border-slate-300 shadow-sm focus:border-emerald-500 focus:ring-emerald-500 p-3 bg-white font-medium text-slate-900">
+                                <option value="MÓDULO 1: Automatización BIM I – Lógica Computacional, Dynamo, Python e IA" selected>
+                                    MÓDULO 1: Automatización BIM I – Lógica Computacional, Dynamo, Python e IA (¡Inscripciones Abiertas!)
+                                </option>
+                                <option value="MÓDULO 2: Automatización BIM II – Desarrollo de Plugins y Add-ins para Revit" disabled class="text-slate-400 bg-slate-100">
+                                    MÓDULO 2: Automatización BIM II – Plugins y Add-ins para Revit (Próximamente)
+                                </option>
+                                <option value="MÓDULO 3: Arquitectura Digital BIM III – Plataformas Web y Ecosistemas de Proyecto" disabled class="text-slate-400 bg-slate-100">
+                                    MÓDULO 3: Arquitectura Digital BIM III – Plataformas Web y Ecosistemas (Próximamente)
+                                </option>
+                            </select>
+                        </div>
+
+                        <!-- Nombre Completo -->
                         <div>
                             <label class="block text-xs font-bold uppercase text-slate-700 tracking-wider mb-1.5">
                                 Nombre y Apellidos Completos *
@@ -435,6 +458,7 @@
                                    class="w-full text-sm rounded-xl border-slate-300 shadow-sm focus:border-emerald-500 focus:ring-emerald-500 p-3 bg-white">
                         </div>
 
+                        <!-- Correo y Teléfono -->
                         <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
                             <div>
                                 <label class="block text-xs font-bold uppercase text-slate-700 tracking-wider mb-1.5">
@@ -446,7 +470,7 @@
                             </div>
                             <div>
                                 <label class="block text-xs font-bold uppercase text-slate-700 tracking-wider mb-1.5">
-                                    Teléfono / WhatsApp *
+                                    Teléfono de Contacto / WhatsApp *
                                 </label>
                                 <input type="tel" id="student-phone" required placeholder="Ej: +57 300 123 4567"
                                        class="w-full text-sm rounded-xl border-slate-300 shadow-sm focus:border-emerald-500 focus:ring-emerald-500 p-3 bg-white">
@@ -454,32 +478,61 @@
                             </div>
                         </div>
 
+                        <!-- País y Ciudad -->
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            <div>
+                                <label class="block text-xs font-bold uppercase text-slate-700 tracking-wider mb-1.5">
+                                    País *
+                                </label>
+                                <input type="text" id="student-country" required placeholder="Ej: Colombia, México, España..."
+                                       class="w-full text-sm rounded-xl border-slate-300 shadow-sm focus:border-emerald-500 focus:ring-emerald-500 p-3 bg-white">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-bold uppercase text-slate-700 tracking-wider mb-1.5">
+                                    Ciudad *
+                                </label>
+                                <input type="text" id="student-city" required placeholder="Ej: Bogotá, Medellín, CDMX..."
+                                       class="w-full text-sm rounded-xl border-slate-300 shadow-sm focus:border-emerald-500 focus:ring-emerald-500 p-3 bg-white">
+                            </div>
+                        </div>
+
+                        <!-- Edad y Profesión -->
+                        <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                            <div>
+                                <label class="block text-xs font-bold uppercase text-slate-700 tracking-wider mb-1.5">
+                                    Edad *
+                                </label>
+                                <input type="number" id="student-age" required min="15" max="99" placeholder="Ej: 28"
+                                       class="w-full text-sm rounded-xl border-slate-300 shadow-sm focus:border-emerald-500 focus:ring-emerald-500 p-3 bg-white">
+                            </div>
+                            <div class="sm:col-span-2">
+                                <label class="block text-xs font-bold uppercase text-slate-700 tracking-wider mb-1.5">
+                                    Profesión / Ocupación *
+                                </label>
+                                <input type="text" id="student-profession" required placeholder="Ej: Arquitecto, Ing. Civil, Modelador BIM"
+                                       class="w-full text-sm rounded-xl border-slate-300 shadow-sm focus:border-emerald-500 focus:ring-emerald-500 p-3 bg-white">
+                            </div>
+                        </div>
+
+                        <!-- Documento de Identidad y Empresa -->
                         <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
                             <div>
                                 <label class="block text-xs font-bold uppercase text-slate-700 tracking-wider mb-1.5">
                                     Documento de Identidad (C.C. / DNI / Pasaporte) *
                                 </label>
-                                <input type="text" id="student-doc" required placeholder="Número de documento"
+                                <input type="text" id="student-doc" required placeholder="Número de documento para certificación"
                                        class="w-full text-sm rounded-xl border-slate-300 shadow-sm focus:border-emerald-500 focus:ring-emerald-500 p-3 bg-white">
                             </div>
                             <div>
                                 <label class="block text-xs font-bold uppercase text-slate-700 tracking-wider mb-1.5">
-                                    Profesión / Ocupación
+                                    Empresa o Universidad (Opcional)
                                 </label>
-                                <input type="text" id="student-profession" placeholder="Ej: Arquitecto, Ing. Civil, Modelador BIM"
+                                <input type="text" id="student-company" placeholder="Nombre de la empresa o institución"
                                        class="w-full text-sm rounded-xl border-slate-300 shadow-sm focus:border-emerald-500 focus:ring-emerald-500 p-3 bg-white">
                             </div>
                         </div>
 
-                        <div>
-                            <label class="block text-xs font-bold uppercase text-slate-700 tracking-wider mb-1.5">
-                                Empresa o Universidad (Opcional)
-                            </label>
-                            <input type="text" id="student-company" placeholder="Nombre de la empresa o institución"
-                                   class="w-full text-sm rounded-xl border-slate-300 shadow-sm focus:border-emerald-500 focus:ring-emerald-500 p-3 bg-white">
-                        </div>
-
-                        <div class="pt-4 border-t border-slate-200">
+                        <div class="pt-3 border-t border-slate-200">
                             <label class="flex items-start gap-2.5 cursor-pointer">
                                 <input type="checkbox" id="terms-accept" required checked
                                        class="rounded text-emerald-600 focus:ring-emerald-500 h-4 w-4 mt-0.5 border-slate-300">
@@ -491,7 +544,7 @@
 
                         <!-- Botón de Envío / Disparador Wompi -->
                         <button type="submit" id="btn-pay-wompi"
-                                class="w-full mt-4 bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-4 px-6 rounded-2xl text-sm tracking-wide uppercase transition shadow-lg shadow-emerald-500/25 flex items-center justify-center gap-2 hover:scale-[1.01]">
+                                class="w-full mt-3 bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-4 px-6 rounded-2xl text-sm tracking-wide uppercase transition shadow-lg shadow-emerald-500/25 flex items-center justify-center gap-2 hover:scale-[1.01]">
                             <span class="material-symbols-outlined text-[20px]">lock</span>
                             <span>Pagar Inscripción con Wompi</span>
                         </button>
@@ -705,22 +758,26 @@
 
         // Función para procesar la inscripción y lanzar Wompi
         async function procesarPagoWompi() {
+            const course = document.getElementById('student-course') ? document.getElementById('student-course').value.trim() : 'MÓDULO 1: Automatización BIM I';
             const name = document.getElementById('student-name').value.trim();
             const email = document.getElementById('student-email').value.trim();
             const phone = document.getElementById('student-phone').value.trim();
-            const doc = document.getElementById('student-doc').value.trim();
+            const country = document.getElementById('student-country').value.trim();
+            const city = document.getElementById('student-city').value.trim();
+            const age = document.getElementById('student-age').value.trim();
             const profession = document.getElementById('student-profession').value.trim();
-            const company = document.getElementById('student-company').value.trim();
+            const doc = document.getElementById('student-doc').value.trim();
+            const company = document.getElementById('student-company') ? document.getElementById('student-company').value.trim() : '';
 
-            if (!name || !email || !phone || !doc) {
-                alert('Por favor completa todos los campos obligatorios del estudiante.');
+            if (!name || !email || !phone || !country || !city || !age || !profession || !doc) {
+                alert('Por favor completa todos los campos obligatorios del estudiante marcados con asterisco (*).');
                 return;
             }
 
             const btn = document.getElementById('btn-pay-wompi');
             const originalText = btn.innerHTML;
             btn.disabled = true;
-            btn.innerHTML = `<span class="material-symbols-outlined text-[18px] animate-spin">progress_activity</span> Conectando con Wompi...`;
+            btn.innerHTML = `<span class="material-symbols-outlined text-[18px] animate-spin">progress_activity</span> Registrando en Google Sheets y conectando con Wompi...`;
 
             try {
                 // Obtener configuración de Wompi de la plataforma
@@ -736,21 +793,82 @@
                 // Referencia única de transacción
                 const reference = `DIP-BIM-M1-${Date.now().toString(36).toUpperCase()}-${Math.floor(Math.random()*1000)}`;
 
-                // Guardar intento de inscripción localmente para respaldo
+                // Hoja de cálculo objetivo de Google Sheets
+                const GOOGLE_SHEET_ID = '1RweFnE2uHa9rqws8BmtEAQsh0hxV934207ivZ-7QMsU';
+                const DIPLOMADO_SCRIPT_URL = localStorage.getItem('nora_diplomado_sheet_script_url') || 
+                                             'https://script.google.com/macros/s/AKfycbx2RAQx_8K4o22xE0Mw-ETc7K_58vIoi6-PgVi64u80inuiw144ks3cgWSdCtXqIgB02g/exec';
+
+                // Datos de la inscripción completa
                 const inscripcion = {
-                    reference,
-                    fecha: new Date().toISOString(),
-                    modulo: "MÓDULO 1: Automatización BIM I",
-                    estudiante: { name, email, phone, doc, profession, company },
-                    montoCOP: MODULE_PRICE_COP
+                    action: 'inscribirEstudiante',
+                    spreadsheetId: GOOGLE_SHEET_ID,
+                    fecha: new Date().toLocaleString('es-CO', { timeZone: 'America/Bogota' }),
+                    nombre: name,
+                    pais: country,
+                    ciudad: city,
+                    edad: age,
+                    profesion: profession,
+                    telefono: phone,
+                    correo: email,
+                    curso: course,
+                    documento: doc,
+                    empresa: company,
+                    referencia: reference,
+                    montoCOP: MODULE_PRICE_COP,
+                    estado: 'Pendiente Pago Wompi'
                 };
+
+                // 1. Guardar intento de inscripción localmente para respaldo
                 try {
                     const list = JSON.parse(localStorage.getItem('inscripciones_diplomado') || '[]');
                     list.push(inscripcion);
                     localStorage.setItem('inscripciones_diplomado', JSON.stringify(list));
+                    localStorage.setItem('ultima_inscripcion_pendiente', JSON.stringify(inscripcion));
                 } catch(e) {}
 
-                // Iniciar pasarela Wompi
+                // 2. Registrar inmediatamente en Google Sheets (POST + GET Fallback)
+                try {
+                    // Intento POST con JSON
+                    fetch(DIPLOMADO_SCRIPT_URL, {
+                        method: 'POST',
+                        mode: 'no-cors',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(inscripcion)
+                    }).catch(err => console.log('POST Sheets async:', err));
+
+                    // Intento GET estructurado para asegurar recepción
+                    const getParams = new URLSearchParams({
+                        action: 'inscribirEstudiante',
+                        spreadsheetId: GOOGLE_SHEET_ID,
+                        fecha: inscripcion.fecha,
+                        nombre: name,
+                        pais: country,
+                        ciudad: city,
+                        edad: String(age),
+                        profesion: profession,
+                        telefono: phone,
+                        correo: email,
+                        curso: course,
+                        documento: doc,
+                        empresa: company,
+                        referencia: reference,
+                        montoCOP: String(MODULE_PRICE_COP),
+                        estado: 'Pendiente Pago Wompi'
+                    });
+                    const beaconUrl = `${DIPLOMADO_SCRIPT_URL}?${getParams.toString()}`;
+                    if (navigator.sendBeacon) {
+                        navigator.sendBeacon(beaconUrl);
+                    } else {
+                        fetch(beaconUrl, { mode: 'no-cors' }).catch(() => {});
+                    }
+                } catch(sheetErr) {
+                    console.warn('Error enviando a Google Sheets:', sheetErr);
+                }
+
+                // Pequeña pausa para permitir que la petición de registro se despache
+                await new Promise(r => setTimeout(r, 600));
+
+                // 3. Iniciar pasarela Wompi
                 if (window.WompiModule && typeof window.WompiModule.launchCheckout === 'function') {
                     await window.WompiModule.launchCheckout({
                         publicKey: pubKey,
