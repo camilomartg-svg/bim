@@ -300,8 +300,12 @@
       </button>
 
       <button data-tab="receiver" class="tab-btn inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold uppercase tracking-wider transition-all text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 whitespace-nowrap">
-        <span class="material-symbols-outlined text-[16px]">groups</span>
-        <span>Equipo Receptor</span>
+        <span class="material-symbols-outlined text-[16px]">handshake</span>
+        <span>4. Equipo Receptor</span>
+      </button>
+      <button data-tab="receiver-tasks" class="tab-btn inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold uppercase tracking-wider transition-all text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 whitespace-nowrap">
+        <span class="material-symbols-outlined text-[16px]">construction</span>
+        <span>5. Equipos de Tarea Receptor</span>
       </button>
       <button data-tab="directory" class="tab-btn inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold uppercase tracking-wider transition-all text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 whitespace-nowrap">
         <span class="material-symbols-outlined text-[16px]">person_search</span>
@@ -674,6 +678,88 @@
 
         <div id="receiver-teams-container" class="mt-6 space-y-6">
           <!-- Populated by JS -->
+        </div>
+      </div>
+    </div>
+
+    
+    <!-- TAB PANEL 4B: 5. EQUIPOS DE TAREA RECEPTOR (OBRA) -->
+    <div id="tab-content-receiver-tasks" class="tab-panel hidden space-y-6">
+      <!-- Notice Banner -->
+      <div class="bg-amber-50 dark:bg-slate-800/40 border border-amber-200 dark:border-slate-800 p-6 rounded-3xl flex items-start gap-4 shadow-sm">
+        <span class="material-symbols-outlined text-amber-600 dark:text-amber-400 mt-0.5">construction</span>
+        <div>
+          <h4 class="text-xs font-bold text-amber-900 dark:text-amber-200 uppercase tracking-wider mb-1">Configuración de Equipos de Tarea Receptor / Obra (ISO 19650)</h4>
+          <p class="text-[11px] text-amber-800 dark:text-gray-300 leading-relaxed font-medium">
+            Los Equipos de Tarea Receptor son las subdivisiones operativas y especialidades en obra que dependen del Equipo Receptor (por ejemplo: Topografía, Armado de Acero, Instalaciones de Obra, Supervisión).
+          </p>
+        </div>
+      </div>
+
+      <!-- Receiver Task Teams List Management -->
+      <div class="glass-card rounded-3xl border border-slate-200/80 dark:border-slate-800 p-6 shadow-sm space-y-6">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-100 dark:border-slate-800 pb-4">
+          <div class="flex items-center gap-3">
+            <span class="material-symbols-outlined text-amber-600 dark:text-amber-400">engineering</span>
+            <div>
+              <h3 class="text-xs font-black uppercase tracking-[0.2em] text-slate-900 dark:text-white">Tareas de Obra por Equipo Receptor</h3>
+              <p class="text-[11px] text-slate-400">Especialidades subdivididas a partir del Equipo Receptor.</p>
+            </div>
+          </div>
+          <button onclick="openCreateReceiverTaskTeamModal()" class="flex items-center gap-1.5 bg-amber-600 hover:bg-amber-700 text-white px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-wider transition-colors shadow-sm cursor-pointer">
+            <span class="material-symbols-outlined text-[16px]">add</span>
+            <span>Crear Tarea de Obra</span>
+          </button>
+        </div>
+        <div id="receiver-tasks-list-container" class="space-y-4">
+          <!-- Populated dynamically by JS -->
+        </div>
+      </div>
+
+      <!-- Project Members Receiver Task Team Assignment Table -->
+      <div class="glass-card rounded-3xl border border-slate-200/80 dark:border-slate-800 p-6 shadow-sm space-y-6">
+        <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-100 dark:border-slate-800 pb-4">
+          <div class="flex items-center gap-3">
+            <span class="material-symbols-outlined text-amber-600 dark:text-amber-400">person</span>
+            <div>
+              <h3 class="text-xs font-black uppercase tracking-[0.2em] text-slate-900 dark:text-white">Personal del Proyecto - Asignación a Tareas de Obra</h3>
+              <p class="text-[11px] text-slate-400">Asigna a cada integrante a su correspondiente Equipo de Tarea Receptor.</p>
+            </div>
+          </div>
+          
+          <!-- Search & Group Controls -->
+          <div class="flex flex-wrap items-center gap-3">
+            <div class="relative min-w-[220px]">
+              <span class="material-symbols-outlined absolute left-3 top-2 text-slate-400 text-[16px]">search</span>
+              <input id="receiver-tasks-members-search" type="text" placeholder="Buscar personal..." class="w-full pl-8 pr-3 py-1.5 text-xs rounded-xl border border-slate-200 dark:border-slate-700 dark:bg-slate-800 bg-slate-50 focus:bg-white text-slate-900 dark:text-white transition-all shadow-sm" />
+            </div>
+            
+            <div class="flex items-center bg-slate-100 dark:bg-slate-800 p-1 rounded-xl text-[11px] font-semibold">
+              <span class="text-slate-400 px-2 uppercase text-[9px] tracking-wider hidden sm:inline">Organizar:</span>
+              <button type="button" id="btn-rtgroup-none" onclick="setReceiverTasksGroupBy('none')" class="px-2.5 py-1 rounded-lg bg-white dark:bg-slate-700 shadow-sm text-slate-900 dark:text-white transition-all font-bold">Todos</button>
+              <button type="button" id="btn-rtgroup-team" onclick="setReceiverTasksGroupBy('team')" class="px-2.5 py-1 rounded-lg text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white transition-all">Tarea</button>
+              <button type="button" id="btn-rtgroup-role" onclick="setReceiverTasksGroupBy('role')" class="px-2.5 py-1 rounded-lg text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white transition-all">Cargo / Rol</button>
+              <button type="button" id="btn-rtgroup-company" onclick="setReceiverTasksGroupBy('company')" class="px-2.5 py-1 rounded-lg text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white transition-all">Empresa</button>
+            </div>
+          </div>
+        </div>
+        <div class="overflow-hidden rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm">
+          <div class="overflow-x-auto">
+            <table class="w-full text-left border-collapse text-sm">
+              <thead class="bg-slate-50 dark:bg-slate-800/50 text-slate-400 uppercase text-[10px] tracking-wider font-bold border-b border-slate-200 dark:border-slate-800">
+                <tr>
+                  <th class="py-3 px-4">Cargo / Rol</th>
+                  <th class="py-3 px-4">Empresa</th>
+                  <th class="py-3 px-4">Nombre</th>
+                  <th class="py-3 px-4">Email de Usuario</th>
+                  <th class="py-3 px-4 w-64">Equipo de Tarea Receptor</th>
+                </tr>
+              </thead>
+              <tbody id="receiver-tasks-members-table-body" class="divide-y divide-slate-100 dark:divide-slate-800/60 bg-white dark:bg-slate-900">
+                <!-- Injected dynamically -->
+              </tbody>
+            </table>
+          </div>
         </div>
       </div>
     </div>
@@ -1086,6 +1172,42 @@
   </div>
 
   <!-- Modal 5: PAT GitHub Token -->
+  
+  <!-- Modal: Integrar Miembro a Equipo (Selector de Personal del Proyecto) -->
+  <div id="modal-team-member-picker" class="fixed inset-0 z-50 hidden bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+    <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-6 max-w-lg w-full shadow-2xl space-y-4">
+      <div class="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
+        <div class="flex items-center gap-2">
+          <span class="flex h-9 w-9 items-center justify-center rounded-xl bg-indigo-50 dark:bg-indigo-950 text-indigo-600 dark:text-indigo-400">
+            <span class="material-symbols-outlined text-[20px]">person_add</span>
+          </span>
+          <div>
+            <h3 id="modal-member-picker-title" class="text-sm font-black text-slate-900 dark:text-white uppercase tracking-wider">Integrar Miembro</h3>
+            <p id="modal-member-picker-subtitle" class="text-[11px] text-slate-400">Selecciona un participante del proyecto</p>
+          </div>
+        </div>
+        <button onclick="closeModal('modal-team-member-picker')" class="text-slate-400 hover:text-slate-600 dark:hover:text-white cursor-pointer">
+          <span class="material-symbols-outlined text-[20px]">close</span>
+        </button>
+      </div>
+
+      <!-- Live Search Box -->
+      <div class="relative">
+        <span class="material-symbols-outlined absolute left-3 top-2.5 text-slate-400 text-[16px]">search</span>
+        <input id="modal-member-picker-search" type="text" placeholder="Buscar participante por nombre, correo, cargo o empresa..." class="w-full pl-9 pr-3 py-2 text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 focus:bg-white dark:focus:bg-slate-900 text-slate-900 dark:text-white transition-all shadow-sm" />
+      </div>
+
+      <!-- List Container -->
+      <div id="modal-member-picker-list" class="space-y-2 max-h-72 overflow-y-auto pr-1">
+        <!-- Injected dynamically -->
+      </div>
+
+      <div class="flex items-center justify-end pt-2 border-t border-slate-100 dark:border-slate-800">
+        <button onclick="closeModal('modal-team-member-picker')" class="px-4 py-2 rounded-xl text-xs font-bold text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer">Cerrar</button>
+      </div>
+    </div>
+  </div>
+
   <div id="modal-token" class="fixed inset-0 z-50 hidden bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
     <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-6 max-w-md w-full shadow-2xl space-y-4">
       <div class="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">

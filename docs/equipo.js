@@ -467,15 +467,33 @@
     });
   }
 
-  // Mantener equiposDeTarea como reflejo estricto de deliveryTeams
+  // Mantener equiposDeTarea como reflejo de los taskTeams de cada deliveryTeam
   function syncBackToEquiposDeTarea() {
     if (!activeProject) return;
     if (!activeProject.iso19650 || !Array.isArray(activeProject.iso19650.deliveryTeams)) return;
 
-    activeProject.equiposDeTarea = activeProject.iso19650.deliveryTeams.map(dt => ({
-      name: (dt.name || '').trim(),
-      members: Array.isArray(dt.members) ? [...dt.members] : []
-    }));
+    const allTasks = [];
+    activeProject.iso19650.deliveryTeams.forEach(dt => {
+      (dt.taskTeams || []).forEach(tt => {
+        allTasks.push({
+          id: tt.id,
+          name: (tt.name || '').trim(),
+          discipline: tt.discipline || 'General',
+          deliveryTeamId: dt.id,
+          deliveryTeamName: dt.name || '',
+          members: Array.isArray(tt.members) ? [...tt.members] : []
+        });
+      });
+    });
+
+    if (allTasks.length > 0) {
+      activeProject.equiposDeTarea = allTasks;
+    } else {
+      activeProject.equiposDeTarea = activeProject.iso19650.deliveryTeams.map(dt => ({
+        name: (dt.name || '').trim(),
+        members: Array.isArray(dt.members) ? [...dt.members] : []
+      }));
+    }
   }
 
   // --- CARGA DE DATOS ---
@@ -657,6 +675,7 @@
     renderDeliveryTeamsTab();
     renderTeamsTab();
     renderReceiverTeamsTab();
+    renderReceiverTasksTab();
     renderDirectoryTab();
   }
 
@@ -3373,30 +3392,237 @@
     window.showToast('Miembro removido del equipo receptor.', 'info');
   };
 
-  window.openAddMemberToReceiverTeamModal = function (receiverId) {
-    const rt = (activeProject.iso19650?.receiverTeams || []).find(d => d.id === receiverId);
-    if (!rt) return;
+  
+  // --- SELECTOR DE MIEMBROS PARA EQUIPOS (MODAL PICKER SIN PROMPT) ---
+  let currentPickerTarget = null;
 
-    const availableMembers = (activeProject.members || []).filter(m => !rt.members.includes(m.toLowerCase().trim()));
-    if (availableMembers.length === 0) {
-      window.showToast('Todos los participantes del proyecto ya están en este equipo receptor.', 'info');
+  window.openTeamMemberPicker = function (options) {
+    currentPickerTarget = options;
+    const titleEl = document.getElementById('modal-member-picker-title');
+    const subEl = document.getElementById('modal-member-picker-subtitle');
+    const searchEl = document.getElementById('modal-member-picker-search');
+
+    if (titleEl) titleEl.textContent = options.title || 'Integrar Miembro al Equipo';
+    if (subEl) subEl.textContent = options.subtitle || (options.teamName ? `Equipo: ${options.teamName}` : 'Selecciona un participante del proyecto');
+    if (searchEl) searchEl.value = '';
+
+    window.renderMemberPickerList();
+    window.openModal('modal-team-member-picker');
+  };
+
+  window.renderMemberPickerList = function () {
+    const listEl = document.getElementById('modal-member-picker-list');
+    if (!listEl || !activeProject) return;
+
+    const query = (document.getElementById('modal-member-picker-search')?.value || '').toLowerCase().trim();
+
+    let existingMembers = [];
+    if (currentPickerTarget) {
+      if (currentPickerTarget.type === 'delivery') {
+        const dt = (activeProject.iso19650?.deliveryTeams || []).find(d => d.id === currentPickerTarget.parentId);
+        existingMembers = (dt?.members || []).map(m => m.toLowerCase().trim());
+      } else if (currentPickerTarget.type === 'receiver') {
+        const rt = (activeProject.iso19650?.receiverTeams || []).find(d => d.id === currentPickerTarget.parentId);
+        existingMembers = (rt?.members || []).map(m => m.toLowerCase().trim());
+      } else if (currentPickerTarget.type === 'deliveryTask') {
+        const dt = (activeProject.iso19650?.deliveryTeams || []).find(d => d.id === currentPickerTarget.parentId);
+        const tt = (dt?.taskTeams || []).find(t => t.id === currentPickerTarget.taskId);
+        existingMembers = (tt?.members || []).map(m => m.toLowerCase().trim());
+      } else if (currentPickerTarget.type === 'receiverTask') {
+        const rt = (activeProject.iso19650?.receiverTeams || []).find(d => d.id === currentPickerTarget.parentId);
+        const tt = (rt?.taskTeams || []).find(t => t.id === currentPickerTarget.taskId);
+        existingMembers = (tt?.members || []).map(m => m.toLowerCase().trim());
+      }
+    }
+
+    const allMembers = Array.from(new Set([
+      ...(activeProject.members || []),
+      ...(activeProject.iso19650?.projectAdmins || []),
+      ...(activeProject.iso19650?.deliveryTeams || []).flatMap(dt => [dt.leadEmail, ...(dt.members || [])]),
+      ...(activeProject.iso19650?.receiverTeams || []).flatMap(rt => [rt.leadEmail, ...(rt.members || [])])
+    ])).filter(Boolean).map(m => m.toLowerCase().trim());
+
+    const available = allMembers.filter(email => !existingMembers.includes(email));
+
+    const listData = available.map(email => {
+      const meta = getUserMetadata(email);
+      return {
+        email,
+        name: meta.name || email.split('@')[0],
+        company: meta.company || 'Sin Empresa',
+        cargo: meta.cargo || 'Colaborador'
+      };
+    });
+
+    const filtered = listData.filter(m => {
+      return (m.name || '').toLowerCase().includes(query) ||
+             (m.email || '').toLowerCase().includes(query) ||
+             (m.company || '').toLowerCase().includes(query) ||
+             (m.cargo || '').toLowerCase().includes(query);
+    });
+
+    if (filtered.length === 0) {
+      listEl.innerHTML = `
+        <div class="py-8 text-center text-xs text-slate-400 italic bg-slate-50 dark:bg-slate-800/40 rounded-2xl border border-dashed border-slate-200 dark:border-slate-700">
+          ${query ? 'No se encontraron participantes que coincidan con la búsqueda.' : 'Todos los participantes del proyecto ya forman parte de este equipo.'}
+        </div>
+      `;
       return;
     }
 
-    const memberPrompt = prompt(`Ingresa el correo del participante a integrar al equipo receptor "${rt.name}":\nOpciones disponibles:\n` + availableMembers.join('\n'));
-    if (!memberPrompt) return;
+    listEl.innerHTML = filtered.map(m => {
+      const initials = (m.name || m.email).slice(0, 2).toUpperCase();
+      return `
+        <div class="flex items-center justify-between p-3 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/60 dark:border-slate-700/60 hover:border-indigo-300 dark:hover:border-indigo-700 transition-all">
+          <div class="flex items-center gap-3 min-w-0 pr-2">
+            <span class="h-9 w-9 rounded-xl bg-indigo-100 text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300 flex items-center justify-center font-black text-xs shrink-0">
+              ${escapeHtml(initials)}
+            </span>
+            <div class="min-w-0">
+              <div class="font-bold text-xs text-slate-900 dark:text-white truncate">${escapeHtml(m.name)}</div>
+              <div class="text-[10px] text-slate-400 font-mono truncate">${escapeHtml(m.email)}</div>
+              <div class="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5 truncate">${escapeHtml(m.company)} • ${escapeHtml(m.cargo)}</div>
+            </div>
+          </div>
+          <button onclick="confirmAddPickedMember('${m.email}')" class="shrink-0 px-3 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-[11px] font-bold uppercase tracking-wider shadow-sm transition-all cursor-pointer flex items-center gap-1">
+            <span class="material-symbols-outlined text-[14px]">add</span>
+            <span>Integrar</span>
+          </button>
+        </div>
+      `;
+    }).join('');
+  };
 
-    const clean = memberPrompt.toLowerCase().trim();
-    if (activeProject.members.includes(clean)) {
-      if (!rt.members.includes(clean)) {
-        rt.members.push(clean);
-        renderAllViews();
-        syncTeams();
-        window.showToast('Miembro añadido al equipo receptor.', 'success');
-      }
-    } else {
-      window.showToast('El usuario no pertenece al proyecto. Intégralo primero en el Directorio.', 'error');
+  window.confirmAddPickedMember = function (email) {
+    if (!currentPickerTarget || !activeProject) return;
+    const clean = email.toLowerCase().trim();
+
+    if (!Array.isArray(activeProject.members)) activeProject.members = [];
+    if (!activeProject.members.map(m => m.toLowerCase().trim()).includes(clean)) {
+      activeProject.members.push(clean);
     }
+
+    if (currentPickerTarget.type === 'delivery') {
+      const dt = (activeProject.iso19650?.deliveryTeams || []).find(d => d.id === currentPickerTarget.parentId);
+      if (dt) {
+        if (!Array.isArray(dt.members)) dt.members = [];
+        if (!dt.members.map(m => m.toLowerCase().trim()).includes(clean)) {
+          dt.members.push(clean);
+        }
+      }
+    } else if (currentPickerTarget.type === 'receiver') {
+      const rt = (activeProject.iso19650?.receiverTeams || []).find(d => d.id === currentPickerTarget.parentId);
+      if (rt) {
+        if (!Array.isArray(rt.members)) rt.members = [];
+        if (!rt.members.map(m => m.toLowerCase().trim()).includes(clean)) {
+          rt.members.push(clean);
+        }
+      }
+    } else if (currentPickerTarget.type === 'deliveryTask') {
+      const dt = (activeProject.iso19650?.deliveryTeams || []).find(d => d.id === currentPickerTarget.parentId);
+      if (dt) {
+        if (!Array.isArray(dt.members)) dt.members = [];
+        if (!dt.members.map(m => m.toLowerCase().trim()).includes(clean)) {
+          dt.members.push(clean);
+        }
+        const tt = (dt.taskTeams || []).find(t => t.id === currentPickerTarget.taskId);
+        if (tt) {
+          if (!Array.isArray(tt.members)) tt.members = [];
+          if (!tt.members.map(m => m.toLowerCase().trim()).includes(clean)) {
+            tt.members.push(clean);
+          }
+        }
+      }
+    } else if (currentPickerTarget.type === 'receiverTask') {
+      const rt = (activeProject.iso19650?.receiverTeams || []).find(d => d.id === currentPickerTarget.parentId);
+      if (rt) {
+        if (!Array.isArray(rt.members)) rt.members = [];
+        if (!rt.members.map(m => m.toLowerCase().trim()).includes(clean)) {
+          rt.members.push(clean);
+        }
+        const tt = (rt.taskTeams || []).find(t => t.id === currentPickerTarget.taskId);
+        if (tt) {
+          if (!Array.isArray(tt.members)) tt.members = [];
+          if (!tt.members.map(m => m.toLowerCase().trim()).includes(clean)) {
+            tt.members.push(clean);
+          }
+        }
+      }
+    }
+
+    renderAllViews();
+    syncTeams();
+    window.showToast(`${getUserRegisteredName(clean)} integrado con éxito.`, 'success');
+    window.renderMemberPickerList();
+  };
+
+  window.openAddMemberToTaskTeamModal = function (deliveryId, taskId) {
+    const dt = (activeProject.iso19650?.deliveryTeams || []).find(d => d.id === deliveryId);
+    if (!dt) return;
+    const tt = (dt.taskTeams || []).find(t => t.id === taskId);
+    if (!tt) return;
+
+    const userEmail = (currentUser?.username || currentUser?.email || currentUser?.userAccount || '').toLowerCase().trim();
+    const isCurrentLeader = (dt.leadEmail || '').toLowerCase().trim() === userEmail;
+
+    if (!canManageDeliveryTeams && !isCurrentLeader) {
+      window.showToast('No tienes permisos para añadir miembros a esta disciplina.', 'error');
+      return;
+    }
+
+    openTeamMemberPicker({
+      type: 'deliveryTask',
+      parentId: deliveryId,
+      taskId: taskId,
+      teamName: tt.name,
+      title: `Integrar a ${tt.name}`,
+      subtitle: `Equipo de Tarea de ${dt.name} (${tt.discipline || 'General'})`
+    });
+  };
+
+  window.openAddMemberToReceiverTaskTeamModal = function (receiverId, taskId) {
+    const rt = (activeProject.iso19650?.receiverTeams || []).find(d => d.id === receiverId);
+    if (!rt) return;
+    const tt = (rt.taskTeams || []).find(t => t.id === taskId);
+    if (!tt) return;
+
+    const userEmail = (currentUser?.username || currentUser?.email || currentUser?.userAccount || '').toLowerCase().trim();
+    const isCurrentLeader = (rt.leadEmail || '').toLowerCase().trim() === userEmail;
+
+    if (!canManageReceiverTeams && !isCurrentLeader) {
+      window.showToast('No tienes permisos para añadir miembros a esta tarea de obra.', 'error');
+      return;
+    }
+
+    openTeamMemberPicker({
+      type: 'receiverTask',
+      parentId: receiverId,
+      taskId: taskId,
+      teamName: tt.name,
+      title: `Integrar a ${tt.name}`,
+      subtitle: `Tarea de Obra de ${rt.name} (${tt.discipline || 'Obra'})`
+    });
+  };
+
+window.openAddMemberToReceiverTeamModal = function (receiverId) {
+    const rt = (activeProject.iso19650?.receiverTeams || []).find(d => d.id === receiverId);
+    if (!rt) return;
+
+    const userEmail = (currentUser?.username || currentUser?.email || currentUser?.userAccount || '').toLowerCase().trim();
+    const isCurrentLeader = (rt.leadEmail || '').toLowerCase().trim() === userEmail;
+
+    if (!canManageReceiverTeams && !isCurrentLeader) {
+      window.showToast('No tienes permisos para añadir miembros a este equipo receptor.', 'error');
+      return;
+    }
+
+    openTeamMemberPicker({
+      type: 'receiver',
+      parentId: receiverId,
+      teamName: rt.name,
+      title: `Integrar a ${rt.name}`,
+      subtitle: 'Equipo Receptor / Obra'
+    });
   };
 
   // --- 5. PESTAÑA: DIRECTORIO DE PARTICIPANTES ---
@@ -3742,30 +3968,17 @@
     const isCurrentLeader = (dt.leadEmail || '').toLowerCase().trim() === userEmail;
 
     if (!canManageProjectStructure && !isCurrentLeader) {
-      window.showToast('No tienes permisos para añadir miembros a este equipo.', 'error');
+      window.showToast('No tienes permisos para añadir miembros a este equipo de entrega.', 'error');
       return;
     }
 
-    const availableMembers = (activeProject.members || []).filter(m => !dt.members.includes(m.toLowerCase().trim()));
-    if (availableMembers.length === 0) {
-      window.showToast('Todos los participantes del proyecto ya están en este equipo.', 'info');
-      return;
-    }
-
-    const memberPrompt = prompt(`Ingresa el correo del participante a integrar al equipo "${dt.name}":\nOpciones disponibles:\n` + availableMembers.join('\n'));
-    if (!memberPrompt) return;
-
-    const clean = memberPrompt.toLowerCase().trim();
-    if (activeProject.members.includes(clean)) {
-      if (!dt.members.includes(clean)) {
-        dt.members.push(clean);
-        renderAllViews();
-        syncTeams();
-        window.showToast('Miembro añadido al equipo de entrega.', 'success');
-      }
-    } else {
-      window.showToast('El usuario no pertenece al proyecto. Intégralo primero en el Directorio.', 'error');
-    }
+    openTeamMemberPicker({
+      type: 'delivery',
+      parentId: deliveryId,
+      teamName: dt.name,
+      title: `Integrar a ${dt.name}`,
+      subtitle: 'Adjudicatario Principal / Equipo de Entrega'
+    });
   };
 
   // --- 5. PESTAÑA: 3. EQUIPOS DE TAREA ---
@@ -3851,7 +4064,7 @@
     window.showToast('Equipo de Tarea eliminado.', 'info');
   };
 
-  // --- 5. PESTAÑA: EQUIPOS DE TAREA (ISO 19650) ---
+  // --- 5. PESTAÑA: 3. EQUIPOS DE TAREA (SUBDIVISIONES DE EQUIPOS DE ENTREGA) ---
   let currentTeamsGroupBy = 'none';
 
   window.setTeamsGroupBy = function (groupType) {
@@ -3876,139 +4089,144 @@
     renderTeamsTab();
   };
 
-  window.addTeam = function () {
+  // Reasignación directa de personal a Equipo de Tarea de Entrega
+  window.changeUserDeliveryTaskTeam = function (email, value) {
     if (!activeProject) return;
-    if (!canManageDeliveryTeams) {
-      window.showToast('No tienes permisos para crear equipos de tarea.', 'error');
-      return;
-    }
-    if (!Array.isArray(activeProject.equiposDeTarea)) {
-      activeProject.equiposDeTarea = [];
-    }
-
-    const input = document.getElementById('new-team-name');
-    const name = (input ? input.value : '').toUpperCase().trim();
-    if (!name) {
-      window.showToast('Por favor escribe un nombre para el Equipo de Tarea.', 'error');
-      return;
-    }
-
-    if (activeProject.equiposDeTarea.some(t => (t.name || '').toUpperCase().trim() === name)) {
-      window.showToast(`El Equipo de Tarea "${name}" ya existe.`, 'error');
-      return;
-    }
-
-    activeProject.equiposDeTarea.push({ name: name, members: [] });
-    if (input) input.value = '';
-
-    syncBackToEquiposDeTarea();
-    renderAllViews();
-    syncTeams();
-    window.showToast(`Equipo de Tarea "${name}" creado exitosamente.`, 'success');
-  };
-
-  window.deleteTeam = function (index) {
-    if (!activeProject || !Array.isArray(activeProject.equiposDeTarea)) return;
-    if (!canManageDeliveryTeams) {
-      window.showToast('No tienes permisos para eliminar equipos de tarea.', 'error');
-      return;
-    }
-    const team = activeProject.equiposDeTarea[index];
-    if (!team) return;
-    if (!confirm(`¿Estás seguro de que deseas eliminar el equipo de tarea "${team.name}"?`)) return;
-
-    const normalizeName = str => (str || '').normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase().trim();
-    const teamNameNorm = normalizeName(team.name);
-    activeProject.equiposDeTarea.splice(index, 1);
-
-    if (activeProject.iso19650 && Array.isArray(activeProject.iso19650.deliveryTeams)) {
-      activeProject.iso19650.deliveryTeams = activeProject.iso19650.deliveryTeams.filter(d => normalizeName(d.name) !== teamNameNorm);
-    }
-
-    syncBackToEquiposDeTarea();
-    renderAllViews();
-    syncTeams();
-    window.showToast(`Equipo de Tarea "${team.name}" eliminado.`, 'info');
-  };
-
-  window.changeUserTeam = function (email, teamName) {
-    if (!activeProject) return;
-    if (!Array.isArray(activeProject.equiposDeTarea)) activeProject.equiposDeTarea = [];
     const cleanEmail = email.toLowerCase().trim();
-    const cleanTeamName = (teamName || '').toUpperCase().trim();
 
     if (!Array.isArray(activeProject.members)) activeProject.members = [];
     if (!activeProject.members.map(m => m.toLowerCase().trim()).includes(cleanEmail)) {
       activeProject.members.push(cleanEmail);
     }
 
-    // Remover al usuario de todos los equipos
-    activeProject.equiposDeTarea.forEach(team => {
-      if (Array.isArray(team.members)) {
-        team.members = team.members.filter(m => m.toLowerCase().trim() !== cleanEmail);
-      }
+    const deliveryTeams = activeProject.iso19650?.deliveryTeams || [];
+
+    // Remover al usuario de todos los equipos de tarea de entrega
+    deliveryTeams.forEach(dt => {
+      (dt.taskTeams || []).forEach(tt => {
+        if (Array.isArray(tt.members)) {
+          tt.members = tt.members.filter(m => m.toLowerCase().trim() !== cleanEmail);
+        }
+      });
     });
 
-    // Agregar al equipo seleccionado
-    if (cleanTeamName) {
-      const target = activeProject.equiposDeTarea.find(t => (t.name || '').toUpperCase().trim() === cleanTeamName);
-      if (target) {
-        if (!Array.isArray(target.members)) target.members = [];
-        if (!target.members.map(m => m.toLowerCase().trim()).includes(cleanEmail)) {
-          target.members.push(cleanEmail);
+    if (value && value.includes(':::')) {
+      const [delivId, taskId] = value.split(':::');
+      const targetDt = deliveryTeams.find(d => d.id === delivId);
+      if (targetDt) {
+        if (!Array.isArray(targetDt.members)) targetDt.members = [];
+        if (!targetDt.members.map(m => m.toLowerCase().trim()).includes(cleanEmail)) {
+          targetDt.members.push(cleanEmail);
+        }
+
+        const targetTt = (targetDt.taskTeams || []).find(t => t.id === taskId);
+        if (targetTt) {
+          if (!Array.isArray(targetTt.members)) targetTt.members = [];
+          if (!targetTt.members.map(m => m.toLowerCase().trim()).includes(cleanEmail)) {
+            targetTt.members.push(cleanEmail);
+          }
+          window.showToast(`${getUserRegisteredName(cleanEmail)} asignado a "${targetTt.name}" (${targetDt.name}).`, 'success');
         }
       }
+    } else {
+      window.showToast(`${getUserRegisteredName(cleanEmail)} desvinculado de equipos de tarea de entrega.`, 'info');
     }
 
     syncBackToEquiposDeTarea();
     renderAllViews();
     syncTeams();
-    window.showToast('Asignación de equipo de tarea actualizada.', 'success');
+  };
+
+  // Compatibilidad con invocaciones legacy
+  window.changeUserTeam = function (email, value) {
+    window.changeUserDeliveryTaskTeam(email, value);
   };
 
   function renderTeamsTab() {
     if (!activeProject) return;
-    if (!Array.isArray(activeProject.equiposDeTarea)) {
-      activeProject.equiposDeTarea = [];
-    }
+    const deliveryTeams = activeProject.iso19650?.deliveryTeams || [];
 
-    // 1. Renderizar chips / pills de equipos de tarea
+    // 1. Renderizar tarjetas de Equipos de Tarea organizados por Equipo de Entrega
     const container = document.getElementById('teams-list-container');
     if (container) {
-      if (activeProject.equiposDeTarea.length === 0) {
-        container.innerHTML = '<div class="text-xs text-slate-400 italic py-2">Sin equipos de tarea creados en este proyecto.</div>';
+      if (deliveryTeams.length === 0) {
+        container.innerHTML = `
+          <div class="w-full py-8 text-center text-xs text-slate-400 italic bg-white/40 dark:bg-slate-800/40 rounded-2xl border border-dashed border-slate-300 dark:border-slate-700">
+            No hay Equipos de Entrega creados aún. Los Equipos de Tarea se subdividen a partir de los Equipos de Entrega.
+            <div class="mt-2">
+              <button onclick="window.switchTab('delivery')" class="px-3 py-1.5 rounded-xl bg-purple-600 hover:bg-purple-700 text-white font-bold text-[11px] uppercase tracking-wider cursor-pointer">
+                Crear Equipo de Entrega
+              </button>
+            </div>
+          </div>
+        `;
       } else {
-        container.innerHTML = activeProject.equiposDeTarea.map((team, tIndex) => {
-          const count = (team.members || []).length;
+        container.innerHTML = deliveryTeams.map(dt => {
+          const taskTeams = dt.taskTeams || [];
           return `
-            <div class="inline-flex items-center gap-2 bg-indigo-50 dark:bg-slate-800 text-indigo-700 dark:text-indigo-200 border border-indigo-200 dark:border-slate-700 px-3 py-1.5 rounded-2xl text-[11px] font-black uppercase tracking-wider shadow-sm">
-              <span>${escapeHtml(team.name)}</span>
-              <span class="px-1.5 py-0.5 rounded-full bg-indigo-100 dark:bg-slate-700 text-[9px] text-indigo-800 dark:text-indigo-300 font-bold">${count}</span>
-              ${canManageDeliveryTeams ? `
-                <button onclick="deleteTeam(${tIndex})" class="text-indigo-400 hover:text-rose-600 transition-colors flex items-center ml-1 cursor-pointer" title="Eliminar equipo">
-                  <span class="material-symbols-outlined text-[14px]">close</span>
-                </button>
-              ` : ''}
+            <div class="w-full rounded-2xl border border-slate-200/80 dark:border-slate-800 p-4 bg-slate-50/60 dark:bg-slate-900/40 space-y-3">
+              <div class="flex items-center justify-between border-b border-slate-200/60 dark:border-slate-800 pb-2.5">
+                <div class="flex items-center gap-2">
+                  <span class="flex h-6 w-6 items-center justify-center rounded-lg bg-purple-100 dark:bg-purple-950 text-purple-700 dark:text-purple-300 text-[11px] font-black">
+                    B
+                  </span>
+                  <div>
+                    <span class="text-xs font-black uppercase text-slate-900 dark:text-white">${escapeHtml(dt.name)}</span>
+                    <span class="text-[10px] text-slate-400 ml-2">(${taskTeams.length} ${taskTeams.length === 1 ? 'subdivisión' : 'subdivisiones'})</span>
+                  </div>
+                </div>
+                ${canManageDeliveryTeams ? `
+                  <button onclick="openCreateTaskTeamModal('${dt.id}')" class="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] font-bold uppercase tracking-wider transition-colors cursor-pointer shadow-sm">
+                    <span class="material-symbols-outlined text-[14px]">add</span>
+                    <span>Subdividir en Tarea</span>
+                  </button>
+                ` : ''}
+              </div>
+
+              ${taskTeams.length === 0 ? `
+                <div class="text-[11px] text-slate-400 italic py-1">Sin subdivisiones / equipos de tarea en este equipo de entrega.</div>
+              ` : `
+                <div class="flex flex-wrap gap-2.5 pt-1">
+                  ${taskTeams.map(tt => {
+                    const memberCount = (tt.members || []).length;
+                    return `
+                      <div class="inline-flex items-center gap-2 bg-white dark:bg-slate-800 border border-emerald-200 dark:border-emerald-800/60 px-3 py-1.5 rounded-xl shadow-xs">
+                        <span class="material-symbols-outlined text-emerald-600 dark:text-emerald-400 text-[16px]">task_alt</span>
+                        <div class="text-left">
+                          <div class="text-xs font-bold text-slate-900 dark:text-white uppercase">${escapeHtml(tt.name)}</div>
+                          <div class="text-[9px] text-slate-400 font-medium">${escapeHtml(tt.discipline || 'General')} • ${memberCount} ${memberCount === 1 ? 'integrante' : 'integrantes'}</div>
+                        </div>
+                        <div class="flex items-center gap-1 ml-1.5 pl-1.5 border-l border-slate-200 dark:border-slate-700">
+                          ${canManageDeliveryTeams ? `
+                            <button onclick="openAddMemberToTaskTeamModal('${dt.id}', '${tt.id}')" class="p-1 rounded text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-950 transition-colors cursor-pointer" title="Integrar participante">
+                              <span class="material-symbols-outlined text-[14px]">person_add</span>
+                            </button>
+                            <button onclick="deleteTaskTeam('${dt.id}', '${tt.id}')" class="p-1 rounded text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950 transition-colors cursor-pointer" title="Eliminar equipo de tarea">
+                              <span class="material-symbols-outlined text-[14px]">close</span>
+                            </button>
+                          ` : ''}
+                        </div>
+                      </div>
+                    `;
+                  }).join('')}
+                </div>
+              `}
             </div>
           `;
         }).join('');
       }
     }
 
-    // 2. Renderizar tabla de asignación de personal
+    // 2. Renderizar tabla de asignación de personal del proyecto
     const tbody = document.getElementById('teams-members-table-body');
     if (!tbody) return;
 
-    // Recopilar todos los miembros del proyecto
     const allMembersSet = new Set();
     (activeProject.members || []).forEach(m => m && allMembersSet.add(m.toLowerCase().trim()));
     (activeProject.iso19650?.projectAdmins || []).forEach(m => m && allMembersSet.add(m.toLowerCase().trim()));
-    (activeProject.iso19650?.deliveryTeams || []).forEach(dt => {
+    deliveryTeams.forEach(dt => {
       if (dt.leadEmail) allMembersSet.add(dt.leadEmail.toLowerCase().trim());
       (dt.members || []).forEach(m => m && allMembersSet.add(m.toLowerCase().trim()));
-    });
-    (activeProject.equiposDeTarea || []).forEach(eq => {
-      (eq.members || []).forEach(m => m && allMembersSet.add(m.toLowerCase().trim()));
     });
 
     const memberEmails = Array.from(allMembersSet);
@@ -4016,7 +4234,7 @@
       tbody.innerHTML = `
         <tr>
           <td colspan="5" class="py-8 px-4 text-center text-xs text-slate-400 italic">
-            No hay personal asignado al proyecto. Puedes agregarlos desde la pestaña "5. Directorio del Proyecto".
+            No hay personal asignado al proyecto. Puedes integrarlos desde la pestaña "Directorio de Participantes".
           </td>
         </tr>
       `;
@@ -4028,14 +4246,18 @@
 
     const memberList = memberEmails.map(email => {
       const meta = getUserMetadata(email);
-      let assignedTeamName = '';
-      if (activeProject.equiposDeTarea) {
-        const userTeam = activeProject.equiposDeTarea.find(team =>
-          Array.isArray(team.members) && team.members.some(m => m.toLowerCase().trim() === email)
-        );
-        if (userTeam) {
-          assignedTeamName = (userTeam.name || '').toUpperCase().trim();
+      let assignedVal = '';
+      let assignedDisplay = '';
+
+      for (const dt of deliveryTeams) {
+        for (const tt of (dt.taskTeams || [])) {
+          if (Array.isArray(tt.members) && tt.members.some(m => m.toLowerCase().trim() === email)) {
+            assignedVal = `${dt.id}:::${tt.id}`;
+            assignedDisplay = `${tt.name} (${dt.name})`;
+            break;
+          }
         }
+        if (assignedVal) break;
       }
 
       return {
@@ -4043,7 +4265,8 @@
         name: meta.name || email.split('@')[0],
         role: meta.cargo || 'Colaborador',
         company: meta.company || 'Sin Empresa',
-        teamName: assignedTeamName
+        assignedVal: assignedVal,
+        teamName: assignedDisplay
       };
     });
 
@@ -4068,11 +4291,19 @@
     }
 
     const renderRow = (m) => {
-      const teamOptions = (activeProject.equiposDeTarea || []).map(team => {
-        const name = (team.name || '').toUpperCase().trim();
-        const isSelected = (name === m.teamName);
-        return `<option value="${escapeHtml(name)}" ${isSelected ? 'selected' : ''}>${escapeHtml(name)}</option>`;
-      }).join('');
+      let optgroupsHtml = '';
+      deliveryTeams.forEach(dt => {
+        const tasks = dt.taskTeams || [];
+        if (tasks.length > 0) {
+          optgroupsHtml += `<optgroup label="EQUIPO DE ENTREGA: ${escapeHtml(dt.name)}">`;
+          tasks.forEach(tt => {
+            const val = `${dt.id}:::${tt.id}`;
+            const isSel = (val === m.assignedVal) ? 'selected' : '';
+            optgroupsHtml += `<option value="${val}" ${isSel}>${escapeHtml(tt.name)} (${escapeHtml(tt.discipline || 'General')})</option>`;
+          });
+          optgroupsHtml += `</optgroup>`;
+        }
+      });
 
       return `
         <tr class="hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors">
@@ -4081,9 +4312,9 @@
           <td class="py-3 px-4 font-bold text-slate-900 dark:text-white">${escapeHtml(m.name)}</td>
           <td class="py-3 px-4 text-xs font-mono text-slate-500 dark:text-slate-400">${escapeHtml(m.email)}</td>
           <td class="py-3 px-4">
-            <select onchange="changeUserTeam('${m.email}', this.value)" ${canManageDeliveryTeams ? '' : 'disabled'} class="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-xs py-1.5 px-2 font-semibold text-slate-900 dark:text-white focus:ring-2 focus:ring-emerald-500 disabled:opacity-60 disabled:cursor-not-allowed">
-              <option value="">-- SIN EQUIPO --</option>
-              ${teamOptions}
+            <select onchange="changeUserDeliveryTaskTeam('${m.email}', this.value)" ${canManageDeliveryTeams ? '' : 'disabled'} class="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-xs py-1.5 px-2 font-semibold text-slate-900 dark:text-white focus:ring-2 focus:ring-emerald-500 disabled:opacity-60 disabled:cursor-not-allowed">
+              <option value="">-- SIN EQUIPO DE TAREA --</option>
+              ${optgroupsHtml}
             </select>
           </td>
         </tr>
@@ -4133,19 +4364,312 @@
     }
   }
 
-  // Bind input listeners for teams tab
+  // --- 6. PESTAÑA: 5. EQUIPOS DE TAREA RECEPTOR / OBRA ---
+  let currentReceiverTasksGroupBy = 'none';
+
+  window.setReceiverTasksGroupBy = function (groupType) {
+    currentReceiverTasksGroupBy = groupType;
+    const btns = {
+      none: document.getElementById('btn-rtgroup-none'),
+      team: document.getElementById('btn-rtgroup-team'),
+      role: document.getElementById('btn-rtgroup-role'),
+      company: document.getElementById('btn-rtgroup-company')
+    };
+
+    Object.keys(btns).forEach(key => {
+      const btn = btns[key];
+      if (!btn) return;
+      if (key === groupType) {
+        btn.className = 'px-2.5 py-1 rounded-lg bg-white dark:bg-slate-700 shadow-sm text-slate-900 dark:text-white transition-all font-bold';
+      } else {
+        btn.className = 'px-2.5 py-1 rounded-lg text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white transition-all';
+      }
+    });
+
+    renderReceiverTasksTab();
+  };
+
+  // Reasignación directa de personal a Equipo de Tarea Receptor
+  window.changeUserReceiverTaskTeam = function (email, value) {
+    if (!activeProject) return;
+    const cleanEmail = email.toLowerCase().trim();
+
+    if (!Array.isArray(activeProject.members)) activeProject.members = [];
+    if (!activeProject.members.map(m => m.toLowerCase().trim()).includes(cleanEmail)) {
+      activeProject.members.push(cleanEmail);
+    }
+
+    const receiverTeams = activeProject.iso19650?.receiverTeams || [];
+
+    // Remover al usuario de todos los equipos de tarea de receptor
+    receiverTeams.forEach(rt => {
+      (rt.taskTeams || []).forEach(tt => {
+        if (Array.isArray(tt.members)) {
+          tt.members = tt.members.filter(m => m.toLowerCase().trim() !== cleanEmail);
+        }
+      });
+    });
+
+    if (value && value.includes(':::')) {
+      const [recvId, taskId] = value.split(':::');
+      const targetRt = receiverTeams.find(r => r.id === recvId);
+      if (targetRt) {
+        if (!Array.isArray(targetRt.members)) targetRt.members = [];
+        if (!targetRt.members.map(m => m.toLowerCase().trim()).includes(cleanEmail)) {
+          targetRt.members.push(cleanEmail);
+        }
+
+        const targetTt = (targetRt.taskTeams || []).find(t => t.id === taskId);
+        if (targetTt) {
+          if (!Array.isArray(targetTt.members)) targetTt.members = [];
+          if (!targetTt.members.map(m => m.toLowerCase().trim()).includes(cleanEmail)) {
+            targetTt.members.push(cleanEmail);
+          }
+          window.showToast(`${getUserRegisteredName(cleanEmail)} asignado a "${targetTt.name}" (${targetRt.name}).`, 'success');
+        }
+      }
+    } else {
+      window.showToast(`${getUserRegisteredName(cleanEmail)} desvinculado de tareas de obra / receptor.`, 'info');
+    }
+
+    renderAllViews();
+    syncTeams();
+  };
+
+  function renderReceiverTasksTab() {
+    if (!activeProject) return;
+    const receiverTeams = activeProject.iso19650?.receiverTeams || [];
+
+    // 1. Renderizar tarjetas de tareas de obra por equipo receptor
+    const container = document.getElementById('receiver-tasks-list-container');
+    if (container) {
+      if (receiverTeams.length === 0) {
+        container.innerHTML = `
+          <div class="w-full py-8 text-center text-xs text-slate-400 italic bg-white/40 dark:bg-slate-800/40 rounded-2xl border border-dashed border-slate-300 dark:border-slate-700">
+            No hay Equipos Receptores creados aún. Las tareas de obra se subdividen a partir del Equipo Receptor.
+            <div class="mt-2">
+              <button onclick="window.switchTab('receiver')" class="px-3 py-1.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-bold text-[11px] uppercase tracking-wider cursor-pointer">
+                Crear Equipo Receptor
+              </button>
+            </div>
+          </div>
+        `;
+      } else {
+        container.innerHTML = receiverTeams.map(rt => {
+          const taskTeams = rt.taskTeams || [];
+          return `
+            <div class="w-full rounded-2xl border border-slate-200/80 dark:border-slate-800 p-4 bg-slate-50/60 dark:bg-slate-900/40 space-y-3">
+              <div class="flex items-center justify-between border-b border-slate-200/60 dark:border-slate-800 pb-2.5">
+                <div class="flex items-center gap-2">
+                  <span class="flex h-6 w-6 items-center justify-center rounded-lg bg-amber-100 dark:bg-amber-950 text-amber-700 dark:text-amber-300 text-[11px] font-black">
+                    OBRA
+                  </span>
+                  <div>
+                    <span class="text-xs font-black uppercase text-slate-900 dark:text-white">${escapeHtml(rt.name)}</span>
+                    <span class="text-[10px] text-slate-400 ml-2">(${taskTeams.length} ${taskTeams.length === 1 ? 'tarea' : 'tareas'})</span>
+                  </div>
+                </div>
+                ${canManageReceiverTeams ? `
+                  <button onclick="openCreateReceiverTaskTeamModal('${rt.id}')" class="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-amber-600 hover:bg-amber-700 text-white text-[10px] font-bold uppercase tracking-wider transition-colors cursor-pointer shadow-sm">
+                    <span class="material-symbols-outlined text-[14px]">add</span>
+                    <span>Subdividir en Tarea de Obra</span>
+                  </button>
+                ` : ''}
+              </div>
+
+              ${taskTeams.length === 0 ? `
+                <div class="text-[11px] text-slate-400 italic py-1">Sin tareas de obra configuradas para este equipo receptor.</div>
+              ` : `
+                <div class="flex flex-wrap gap-2.5 pt-1">
+                  ${taskTeams.map(tt => {
+                    const memberCount = (tt.members || []).length;
+                    return `
+                      <div class="inline-flex items-center gap-2 bg-white dark:bg-slate-800 border border-amber-200 dark:border-amber-800/60 px-3 py-1.5 rounded-xl shadow-xs">
+                        <span class="material-symbols-outlined text-amber-600 dark:text-amber-400 text-[16px]">construction</span>
+                        <div class="text-left">
+                          <div class="text-xs font-bold text-slate-900 dark:text-white uppercase">${escapeHtml(tt.name)}</div>
+                          <div class="text-[9px] text-slate-400 font-medium">${escapeHtml(tt.discipline || 'Obra')} • ${memberCount} ${memberCount === 1 ? 'integrante' : 'integrantes'}</div>
+                        </div>
+                        <div class="flex items-center gap-1 ml-1.5 pl-1.5 border-l border-slate-200 dark:border-slate-700">
+                          ${canManageReceiverTeams ? `
+                            <button onclick="openAddMemberToReceiverTaskTeamModal('${rt.id}', '${tt.id}')" class="p-1 rounded text-slate-400 hover:text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-950 transition-colors cursor-pointer" title="Integrar participante">
+                              <span class="material-symbols-outlined text-[14px]">person_add</span>
+                            </button>
+                            <button onclick="deleteReceiverTaskTeam('${rt.id}', '${tt.id}')" class="p-1 rounded text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950 transition-colors cursor-pointer" title="Eliminar tarea de obra">
+                              <span class="material-symbols-outlined text-[14px]">close</span>
+                            </button>
+                          ` : ''}
+                        </div>
+                      </div>
+                    `;
+                  }).join('')}
+                </div>
+              `}
+            </div>
+          `;
+        }).join('');
+      }
+    }
+
+    // 2. Renderizar tabla de asignación de personal para receptor
+    const tbody = document.getElementById('receiver-tasks-members-table-body');
+    if (!tbody) return;
+
+    const allMembersSet = new Set();
+    (activeProject.members || []).forEach(m => m && allMembersSet.add(m.toLowerCase().trim()));
+    (activeProject.iso19650?.projectAdmins || []).forEach(m => m && allMembersSet.add(m.toLowerCase().trim()));
+    receiverTeams.forEach(rt => {
+      if (rt.leadEmail) allMembersSet.add(rt.leadEmail.toLowerCase().trim());
+      (rt.members || []).forEach(m => m && allMembersSet.add(m.toLowerCase().trim()));
+    });
+
+    const memberEmails = Array.from(allMembersSet);
+    if (memberEmails.length === 0) {
+      tbody.innerHTML = `
+        <tr>
+          <td colspan="5" class="py-8 px-4 text-center text-xs text-slate-400 italic">
+            No hay personal asignado al proyecto. Puedes integrarlos desde la pestaña "Directorio de Participantes".
+          </td>
+        </tr>
+      `;
+      return;
+    }
+
+    const searchInput = document.getElementById('receiver-tasks-members-search');
+    const query = (searchInput ? searchInput.value : '').toLowerCase().trim();
+
+    const memberList = memberEmails.map(email => {
+      const meta = getUserMetadata(email);
+      let assignedVal = '';
+      let assignedDisplay = '';
+
+      for (const rt of receiverTeams) {
+        for (const tt of (rt.taskTeams || [])) {
+          if (Array.isArray(tt.members) && tt.members.some(m => m.toLowerCase().trim() === email)) {
+            assignedVal = `${rt.id}:::${tt.id}`;
+            assignedDisplay = `${tt.name} (${rt.name})`;
+            break;
+          }
+        }
+        if (assignedVal) break;
+      }
+
+      return {
+        email: email,
+        name: meta.name || email.split('@')[0],
+        role: meta.cargo || 'Colaborador',
+        company: meta.company || 'Sin Empresa',
+        assignedVal: assignedVal,
+        teamName: assignedDisplay
+      };
+    });
+
+    const filtered = memberList.filter(m => {
+      const matchName = (m.name || '').toLowerCase().includes(query);
+      const matchEmail = (m.email || '').toLowerCase().includes(query);
+      const matchRole = (m.role || '').toLowerCase().includes(query);
+      const matchCompany = (m.company || '').toLowerCase().includes(query);
+      const matchTeam = (m.teamName || '').toLowerCase().includes(query);
+      return matchName || matchEmail || matchRole || matchCompany || matchTeam;
+    });
+
+    if (filtered.length === 0) {
+      tbody.innerHTML = `
+        <tr>
+          <td colspan="5" class="py-8 px-4 text-center text-xs text-slate-400 italic">
+            No se encontraron miembros que coincidan con la búsqueda.
+          </td>
+        </tr>
+      `;
+      return;
+    }
+
+    const renderRow = (m) => {
+      let optgroupsHtml = '';
+      receiverTeams.forEach(rt => {
+        const tasks = rt.taskTeams || [];
+        if (tasks.length > 0) {
+          optgroupsHtml += `<optgroup label="EQUIPO RECEPTOR: ${escapeHtml(rt.name)}">`;
+          tasks.forEach(tt => {
+            const val = `${rt.id}:::${tt.id}`;
+            const isSel = (val === m.assignedVal) ? 'selected' : '';
+            optgroupsHtml += `<option value="${val}" ${isSel}>${escapeHtml(tt.name)} (${escapeHtml(tt.discipline || 'Obra')})</option>`;
+          });
+          optgroupsHtml += `</optgroup>`;
+        }
+      });
+
+      return `
+        <tr class="hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors">
+          <td class="py-3 px-4 text-xs font-bold text-slate-800 dark:text-slate-200 uppercase tracking-wider">${escapeHtml(m.role)}</td>
+          <td class="py-3 px-4 text-xs font-semibold text-slate-600 dark:text-slate-400">${escapeHtml(m.company)}</td>
+          <td class="py-3 px-4 font-bold text-slate-900 dark:text-white">${escapeHtml(m.name)}</td>
+          <td class="py-3 px-4 text-xs font-mono text-slate-500 dark:text-slate-400">${escapeHtml(m.email)}</td>
+          <td class="py-3 px-4">
+            <select onchange="changeUserReceiverTaskTeam('${m.email}', this.value)" ${canManageReceiverTeams ? '' : 'disabled'} class="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-xs py-1.5 px-2 font-semibold text-slate-900 dark:text-white focus:ring-2 focus:ring-amber-500 disabled:opacity-60 disabled:cursor-not-allowed">
+              <option value="">-- SIN TAREA DE OBRA / RECEPTOR --</option>
+              ${optgroupsHtml}
+            </select>
+          </td>
+        </tr>
+      `;
+    };
+
+    if (currentReceiverTasksGroupBy === 'none') {
+      tbody.innerHTML = filtered.map(renderRow).join('');
+    } else {
+      const groups = {};
+      filtered.forEach(m => {
+        let g = 'Otros';
+        if (currentReceiverTasksGroupBy === 'team') {
+          g = m.teamName ? m.teamName : 'SIN TAREA DE OBRA / RECEPTOR';
+        } else if (currentReceiverTasksGroupBy === 'role') {
+          g = m.role ? m.role.toUpperCase() : 'SIN CARGO / ROL';
+        } else if (currentReceiverTasksGroupBy === 'company') {
+          g = m.company ? m.company.toUpperCase() : 'SIN EMPRESA';
+        }
+        if (!groups[g]) groups[g] = [];
+        groups[g].push(m);
+      });
+
+      const sortedKeys = Object.keys(groups).sort((a, b) => {
+        if (a.startsWith('SIN ')) return 1;
+        if (b.startsWith('SIN ')) return -1;
+        return a.localeCompare(b);
+      });
+
+      let html = '';
+      sortedKeys.forEach(g => {
+        const count = groups[g].length;
+        html += `
+          <tr class="bg-slate-100/90 dark:bg-slate-800/90 border-y border-slate-200 dark:border-slate-700">
+            <td colspan="5" class="py-2 px-4">
+              <div class="flex items-center justify-between text-xs font-black uppercase tracking-wider text-slate-700 dark:text-slate-300">
+                <span>${escapeHtml(g)}</span>
+                <span class="text-[10px] px-2 py-0.5 rounded-full bg-white dark:bg-slate-700 text-slate-600 dark:text-slate-300 font-semibold shadow-sm">${count} ${count === 1 ? 'persona' : 'personas'}</span>
+              </div>
+            </td>
+          </tr>
+        `;
+        html += groups[g].map(renderRow).join('');
+      });
+
+      tbody.innerHTML = html;
+    }
+  }
+
+  // Bind input listeners for teams and receiver tasks
   const searchTeamsInput = document.getElementById('teams-members-search');
   if (searchTeamsInput) {
     searchTeamsInput.addEventListener('input', renderTeamsTab);
   }
-  const newTeamInput = document.getElementById('new-team-name');
-  if (newTeamInput) {
-    newTeamInput.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') {
-        e.preventDefault();
-        window.addTeam();
-      }
-    });
+  const searchReceiverTasksInput = document.getElementById('receiver-tasks-members-search');
+  if (searchReceiverTasksInput) {
+    searchReceiverTasksInput.addEventListener('input', renderReceiverTasksTab);
+  }
+  const pickerSearchInput = document.getElementById('modal-member-picker-search');
+  if (pickerSearchInput) {
+    pickerSearchInput.addEventListener('input', () => window.renderMemberPickerList());
   }
 
   // --- 6. PESTAÑA: DIRECTORIO DE PARTICIPANTES ---
