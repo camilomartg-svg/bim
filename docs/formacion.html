@@ -248,7 +248,11 @@
                                         <span class="text-3xl font-black text-slate-900" id="mod1-price-display">$980.000</span>
                                         <span class="text-xs font-bold text-slate-500">COP</span>
                                     </div>
-                                    <span class="text-[11px] text-emerald-700 font-semibold block mt-1">✓ Pago único • Acceso total</span>
+                                    <div class="mt-1 flex items-center gap-2">
+                                        <span class="text-xs font-bold text-slate-800 bg-slate-200/80 px-2.5 py-0.5 rounded-md border border-slate-300" id="mod1-usd-display">~ $245 USD</span>
+                                        <span class="text-[11px] text-slate-500 font-medium">(Estudiantes en el exterior)</span>
+                                    </div>
+                                    <span class="text-[11px] text-emerald-700 font-semibold block mt-1.5">✓ Pago único • Acceso total</span>
                                 </div>
                                 <ul class="space-y-2 text-xs text-slate-600 my-4 pt-4 border-t border-slate-200">
                                     <li class="flex items-center gap-2"><span class="material-symbols-outlined text-emerald-600 text-[16px]">done</span> Clases online en vivo</li>
@@ -523,10 +527,18 @@
                         </div>
 
                         <div class="mt-6 flex justify-between items-baseline">
-                            <span class="text-sm font-semibold text-slate-300">Total a Pagar:</span>
+                            <div>
+                                <span class="text-sm font-semibold text-slate-300 block">Total a Pagar:</span>
+                                <span class="text-[11px] text-slate-400">Estudiantes en el exterior:</span>
+                            </div>
                             <div class="text-right">
-                                <span class="text-3xl font-black text-white">$980.000</span>
-                                <span class="text-xs font-bold text-slate-400 ml-1">COP</span>
+                                <div>
+                                    <span class="text-3xl font-black text-white">$980.000</span>
+                                    <span class="text-xs font-bold text-slate-400 ml-1">COP</span>
+                                </div>
+                                <div class="text-xs font-bold text-emerald-400 mt-0.5" id="summary-usd-display">
+                                    ~ $245 USD
+                                </div>
                             </div>
                         </div>
 
@@ -587,8 +599,6 @@
                 <details class="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm group">
                     <summary class="font-bold text-slate-900 cursor-pointer list-none flex justify-between items-center text-sm">
                         <span>¿Qué versión de Revit y Dynamo utilizaremos?</span>
-                        <summary class="font-bold text-slate-900 cursor-pointer list-none flex justify-between items-center text-sm">
-                        <span>¿Qué versión de Revit y Dynamo utilizaremos?</span>
                         <span class="material-symbols-outlined text-slate-400 group-open:rotate-180 transition-transform">expand_more</span>
                     </summary>
                     <p class="mt-4 text-xs text-slate-600 leading-relaxed">
@@ -598,11 +608,11 @@
 
                 <details class="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm group">
                     <summary class="font-bold text-slate-900 cursor-pointer list-none flex justify-between items-center text-sm">
-                        <span>¿Puedo pagar desde fuera de Colombia?</span>
+                        <span>¿Puedo pagar desde fuera de Colombia y en dólares?</span>
                         <span class="material-symbols-outlined text-slate-400 group-open:rotate-180 transition-transform">expand_more</span>
                     </summary>
                     <p class="mt-4 text-xs text-slate-600 leading-relaxed">
-                        ¡Sí! A través de Wompi puedes pagar con cualquier tarjeta de crédito o débito internacional (Visa, Mastercard, American Express). Si prefieres PayPal o transferencia bancaria internacional, contáctanos por WhatsApp.
+                        ¡Sí, absolutamente! A través de la pasarela segura Wompi puedes pagar con cualquier tarjeta de crédito o débito internacional (Visa, Mastercard, American Express). El valor de la inversión es de <strong>$980.000 COP</strong> (aproximadamente <strong>~$245 USD</strong> según la TRM del día). Tu banco internacional realiza la conversión automáticamente a tu moneda local. Si prefieres pagar directamente vía PayPal o transferencia bancaria internacional, contáctanos por WhatsApp.
                     </p>
                 </details>
 
@@ -671,6 +681,27 @@
         // Configuración de Precio Módulo 1 en Pesos Colombianos (COP)
         const MODULE_PRICE_COP = 980000;
         const MODULE_PRICE_IN_CENTS = MODULE_PRICE_COP * 100; // 98,000,000 centavos
+
+        // TRM dinámica para estudiantes en el exterior
+        async function actualizarUSD() {
+            try {
+                const res = await fetch('https://open.er-api.com/v6/latest/USD');
+                if (!res.ok) throw new Error('TRM fetch failed');
+                const data = await res.json();
+                const rate = data.rates?.COP;
+                if (rate && rate > 0) {
+                    const usdVal = Math.round(MODULE_PRICE_COP / rate);
+                    const usdText = `~ $${usdVal} USD`;
+                    const el1 = document.getElementById('mod1-usd-display');
+                    const el2 = document.getElementById('summary-usd-display');
+                    if (el1) el1.textContent = usdText;
+                    if (el2) el2.textContent = usdText;
+                }
+            } catch(e) {
+                console.log('TRM info fallback:', e);
+            }
+        }
+        actualizarUSD();
 
         // Función para procesar la inscripción y lanzar Wompi
         async function procesarPagoWompi() {
