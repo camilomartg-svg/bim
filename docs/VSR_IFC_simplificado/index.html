@@ -90,6 +90,14 @@
         #properties-panel {
             max-width: 50vw !important;
         }
+        #status-charts-container {
+            background: #f8fafc;
+            color: #0f172a;
+        }
+        body.dark-mode #status-charts-container {
+            background: #0b0f19 !important;
+            color: #f8fafc !important;
+        }
         .right-tab-btn#right-tab-graficos.active {
             background: var(--card-bg, #ffffff);
             color: #2563eb;
@@ -103,13 +111,15 @@
         .status-petal-item:hover {
             transform: scale(1.035);
         }
-        .status-petal-item:hover .petal-bg {
-            stroke: #38bdf8 !important;
-            stroke-width: 2.5px !important;
+        .status-class-card {
+            transition: all 0.15s ease;
         }
         .status-class-card:hover {
             transform: translateY(-2px);
-            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        }
+        body.dark-mode .status-class-card:hover {
+            box-shadow: 0 4px 12px rgba(0,0,0,0.4);
         }
     </style>
 </head>
@@ -248,7 +258,7 @@
             </div>
             <div class="right-tab-content" id="nora-ai-container" style="display: none; flex: 1; flex-direction: column; overflow: hidden; height: calc(100% - 48px);">
             </div>
-            <div class="right-tab-content" id="status-charts-container" style="display: none; flex: 1; flex-direction: column; overflow-y: auto; height: calc(100% - 48px); background: #0b0f19; color: #f8fafc; padding: 14px;">
+            <div class="right-tab-content" id="status-charts-container" style="display: none; flex: 1; flex-direction: column; overflow-y: auto; height: calc(100% - 48px); padding: 14px;">
             </div>
         </div>
 

@@ -6831,6 +6831,118 @@ Click para enfocar en la tabla de despiece`,re.addEventListener("mouseenter",()=
         `,st.querySelector("#q-btn-clear-table-sel")?.addEventListener("click",()=>{I=[],window.__noraCurrentSelectedIds=new Set,window.__noraCurrentSelectedElements=[],ui.clear("select"),Ei(),$i(),ns(at())}),st.querySelector("#q-btn-clear-selection-filter")?.addEventListener("click",()=>{I=[],window.__noraCurrentSelectedIds=new Set,window.__noraCurrentSelectedElements=[];const N=Yt.get(je);N&&N.clear("select"),Ei(),$i(),ns(at())}),st.querySelectorAll(".q-btn-xs[data-status]").forEach(N=>{N.addEventListener("click",()=>{const pt=N.getAttribute("data-status");if(pt){const $t=I.map(Mt=>String(Mt));Zt($t,pt)}})})}const Qt=document.getElementById("btn-s-maximize");if(Qt&&Qt.addEventListener("click",()=>{const st=r.classList.toggle("maximized"),N=Qt.querySelector(".material-symbols-outlined");N&&(N.textContent=st?"fullscreen_exit":"fullscreen")}),t.addEventListener("click",()=>{const st=r.classList.contains("closed");if(E=st,st){const N=document.getElementById("quantities-panel"),pt=document.getElementById("quantities-toggle");if(N&&!N.classList.contains("closed")){N.classList.add("closed"),N.classList.remove("maximized");const Mt=document.getElementById("btn-q-maximize")?.querySelector(".material-symbols-outlined");Mt&&(Mt.textContent="fullscreen"),pt&&pt.classList.remove("active")}window.__noraCurrentSelectedIds instanceof Set&&window.__noraCurrentSelectedIds.size>0&&(I=Array.from(window.__noraCurrentSelectedIds).map(Number)),r.classList.remove("closed"),t.classList.add("active"),openStatusCharts(at()),li(),M||(M=!0,ct())}else{r.classList.add("closed"),r.classList.remove("maximized");const N=Qt?.querySelector(".material-symbols-outlined");N&&(N.textContent="fullscreen"),t.classList.remove("active"),closeStatusCharts(),Pt(),Q=null,K=null;const pt=k;k=!1,qe(at()),k=pt}}),s&&s.addEventListener("click",()=>{E=!1,r.classList.add("closed"),r.classList.remove("maximized");const st=Qt?.querySelector(".material-symbols-outlined");st&&(st.textContent="fullscreen"),t.classList.remove("active"),closeStatusCharts(),Pt(),Q=null,K=null;const N=k;k=!1,qe(at()),k=N}),i){let st=!1;i.addEventListener("mousedown",N=>{st=!0,i.classList.add("resizing"),document.body.style.cursor="ns-resize",N.preventDefault()}),document.addEventListener("mousemove",N=>{if(!st)return;const pt=window.innerHeight-N.clientY;pt>150&&pt<window.innerHeight-100&&(r.style.height=`${pt}px`)}),document.addEventListener("mouseup",()=>{st&&(st=!1,i.classList.remove("resizing"),document.body.style.cursor="default")})}const Te=r.querySelectorAll(".q-tab-btn");Te.forEach(st=>{st.addEventListener("click",()=>{Te.forEach(N=>N.classList.remove("active")),st.classList.add("active"),S=st.getAttribute("data-tab"),li()})});let ss=null;window.addEventListener("classificationFilterChanged",()=>{r&&!r.classList.contains("closed")&&(ss&&cancelAnimationFrame(ss),ss=requestAnimationFrame(()=>{li()}))});
 let currentChartMetric = 'count';
 
+function getElementIntegratedName(f) {
+  let b = f.nombreIntegrado && f.nombreIntegrado !== "SIN NOMBRE INTEGRADO" && f.nombreIntegrado.trim() !== "" ? f.nombreIntegrado.trim() : "";
+  if (!b && f.name) {
+    const x = f.name.split(":");
+    x.length >= 3 && /^\\d+$/.test(x[x.length - 1].trim()) ? b = x[x.length - 2].trim() : (x.length === 2 && /^\\d+$/.test(x[1].trim()) ? b = x[0].trim() : b = f.name.trim());
+  }
+  return b || f.name || "(Sin Nombre Integrado)";
+}
+
+function getThemePalette() {
+  const isDark = document.body.classList.contains("dark-mode");
+  return isDark ? {
+    isDark: true,
+    containerBg: "#0b0f19",
+    textPrimary: "#f8fafc",
+    textSecondary: "#94a3b8",
+    textMuted: "#64748b",
+    cardBg: "#111827",
+    cardBorder: "#1f2937",
+    cardShadow: "0 8px 24px rgba(0,0,0,0.4)",
+    itemBg: "#131b2e",
+    itemBorder: "#1e293b",
+    itemHoverBg: "#1a243b",
+    petalBg: "#1e293b",
+    petalStroke: "#334155",
+    petalHoverStroke: "#38bdf8",
+    hubFill: "#090d16",
+    hubStroke: "#1e293b",
+    hubPct: "#10b981",
+    hubTitle: "#94a3b8",
+    hubSub: "#64748b",
+    barTrack: "#1e293b",
+    labelColor: "#f8fafc",
+    subLabelColor: "#cbd5e1",
+    pillsBg: "#131b2e",
+    pillsBorder: "#1e293b",
+    pillInactiveText: "#94a3b8",
+    pillActiveBg: "#2563eb",
+    legendBg: "#111827",
+    legendBorder: "#1e293b",
+    noneFill: "#334155",
+    textShadow: "drop-shadow(0 1px 3px rgba(0,0,0,0.9))"
+  } : {
+    isDark: false,
+    containerBg: "#f8fafc",
+    textPrimary: "#0f172a",
+    textSecondary: "#475569",
+    textMuted: "#94a3b8",
+    cardBg: "#ffffff",
+    cardBorder: "#e2e8f0",
+    cardShadow: "0 2px 10px rgba(0,0,0,0.06)",
+    itemBg: "#ffffff",
+    itemBorder: "#e2e8f0",
+    itemHoverBg: "#f8fafc",
+    petalBg: "#f1f5f9",
+    petalStroke: "#cbd5e1",
+    petalHoverStroke: "#0284c7",
+    hubFill: "#ffffff",
+    hubStroke: "#e2e8f0",
+    hubPct: "#10b981",
+    hubTitle: "#475569",
+    hubSub: "#64748b",
+    barTrack: "#e2e8f0",
+    labelColor: "#0f172a",
+    subLabelColor: "#475569",
+    pillsBg: "#f1f5f9",
+    pillsBorder: "#e2e8f0",
+    pillInactiveText: "#64748b",
+    pillActiveBg: "#2563eb",
+    legendBg: "#ffffff",
+    legendBorder: "#e2e8f0",
+    noneFill: "#cbd5e1",
+    textShadow: "none"
+  };
+}
+
+if (!window.__noraThemeObserverInit) {
+  window.__noraThemeObserverInit = !0;
+  try {
+    const obs = new MutationObserver(() => {
+      const gc = document.getElementById("status-charts-container");
+      if (gc && gc.style.display !== "none") {
+        window.refreshStatusCharts && window.refreshStatusCharts();
+      }
+    });
+    obs.observe(document.body, { attributes: true, attributeFilter: ["class"] });
+  } catch(e) {}
+}
+
+function getActiveFilteredElements(allElements) {
+  let N = allElements;
+  if (I.length > 0) {
+    const kt = new Set(I.map(Number));
+    N = N.filter(xt => kt.has(Number(xt.expressID !== void 0 ? xt.expressID : xt.id)));
+  } else if (window.__noraIsolatedVisibleIds instanceof Set) {
+    const kt = window.__noraIsolatedVisibleIds;
+    N = N.filter(xt => kt.has(Number(xt.expressID !== void 0 ? xt.expressID : xt.id)));
+  } else {
+    N = N.filter(xt => !MC(xt));
+    if (Ni.size > 0 || ye.size > 0) {
+      N = N.filter(xt => ye.has(xt.category) || ye.has(xt.name) || Ni.has(xt.classification));
+    }
+    if (fs.size > 0) N = N.filter(xt => fs.has(xt.level));
+    if (ms.size > 0) N = N.filter(xt => ms.has(xt.material));
+    if (gs.size > 0) N = N.filter(xt => gs.has(xt.pilote));
+  }
+  if ($ !== "Todos") {
+    N = N.filter(kt => kt.classification === $);
+  }
+  return N;
+}
+
 function renderStatusCharts(st, metric = currentChartMetric) {
   currentChartMetric = metric;
   const container = document.getElementById("status-charts-container");
@@ -6841,17 +6953,29 @@ function renderStatusCharts(st, metric = currentChartMetric) {
     return;
   }
 
+  const th = getThemePalette();
+
+  const activeElements = getActiveFilteredElements(st);
+  const uniqueClassesInActive = new Set(activeElements.map(item => item.classification || "SIN CLASIFICACIÓN").filter(Boolean));
+  const uniqueClassesInTotal = new Set(st.map(item => item.classification || "SIN CLASIFICACIÓN").filter(Boolean));
+
+  // Single category is isolated if exactly one category is present in activeElements AND an active filter is isolating it
+  const isSingleCategoryIsolated = uniqueClassesInActive.size === 1 && ($ !== "Todos" || Ni.size === 1 || ye.size === 1 || (window.__noraIsolatedVisibleIds instanceof Set && activeElements.length < st.length) || (uniqueClassesInTotal.size > 1 && activeElements.length < st.length));
+  const isolatedCategoryName = isSingleCategoryIsolated ? Array.from(uniqueClassesInActive)[0] : null;
+
+  const itemsToChart = isSingleCategoryIsolated ? activeElements : st;
+
   const groups = new Map();
   let grandTotal = 0;
   let grandApproved = 0;
   let grandProgress = 0;
   let grandNone = 0;
 
-  st.forEach(item => {
-    const cls = item.classification || "SIN CLASIFICACIÓN";
-    if (!groups.has(cls)) {
-      groups.set(cls, {
-        classification: cls,
+  itemsToChart.forEach(item => {
+    const groupKey = isSingleCategoryIsolated ? getElementIntegratedName(item) : (item.classification || "SIN CLASIFICACIÓN");
+    if (!groups.has(groupKey)) {
+      groups.set(groupKey, {
+        name: groupKey,
         total: 0,
         APROBADO: 0,
         CERRADO: 0,
@@ -6862,7 +6986,7 @@ function renderStatusCharts(st, metric = currentChartMetric) {
         count: 0
       });
     }
-    const g = groups.get(cls);
+    const g = groups.get(groupKey);
     const status = Ut(item.id, Q);
     const val = metric === 'area' ? (item.area || 0) :
                 metric === 'volume' ? (item.volume || 0) :
@@ -6979,250 +7103,26 @@ function renderStatusCharts(st, metric = currentChartMetric) {
 
       const pctApproved = c.total > 0 ? Math.round(((c.APROBADO || 0) + (c.CERRADO || 0)) / c.total * 100) : 0;
 
-      petalsSvg += `
-        <g class="status-petal-item" data-class="${encodeURIComponent(c.classification)}" data-idx="${idx}" style="cursor: pointer;">
-          <path d="${fullPetalPath}" fill="#1e293b" stroke="#334155" stroke-width="1.5" class="petal-bg" />
-          <g clip-path="url(#${clipId})">
-            ${strataSvg}
+      petalsSvg += \`
+        <g class="status-petal-item" data-group="\${encodeURIComponent(c.name)}" data-idx="\${idx}" style="cursor: pointer;">
+          <path d="\${fullPetalPath}" fill="\${th.petalBg}" stroke="\${th.petalStroke}" stroke-width="1.5" class="petal-bg" />
+          <g clip-path="url(#\${clipId})">
+            \${strataSvg}
           </g>
-          <path d="${fullPetalPath}" fill="transparent" stroke="transparent" stroke-width="2" class="petal-hit" />
+          <path d="\${fullPetalPath}" fill="transparent" stroke="transparent" stroke-width="2" class="petal-hit" />
         </g>
-      `;
+      \`;
 
       const textR = rInner + deltaR * 0.58;
       const pos = polar(textR, aMid);
-      const cleanName = c.classification.length > 11 ? c.classification.slice(0, 9) + '..' : c.classification;
+      const cleanName = c.name.length > 11 ? c.name.slice(0, 9) + '..' : c.name;
 
-      labelsSvg += `
-        <g class="petal-label" pointer-events="none" transform="translate(${pos.x.toFixed(1)}, ${pos.y.toFixed(1)})">
-          <text text-anchor="middle" y="-2" font-size="14" font-weight="900" fill="#f8fafc" style="filter: drop-shadow(0 1px 3px rgba(0,0,0,0.9)); font-family: system-ui, sans-serif;">${pctApproved}%</text>
-          <text text-anchor="middle" y="11" font-size="9" font-weight="700" fill="#cbd5e1" style="filter: drop-shadow(0 1px 3px rgba(0,0,0,0.9)); font-family: system-ui, sans-serif; text-transform: uppercase; letter-spacing: 0.5px;">${cleanName}</text>
+      labelsSvg += \`
+        <g class="petal-label" pointer-events="none" transform="translate(\${pos.x.toFixed(1)}, \${pos.y.toFixed(1)})">
+          <text text-anchor="middle" y="-2" font-size="14" font-weight="900" fill="\${th.labelColor}" style="\${th.isDark ? 'filter: drop-shadow(0 1px 3px rgba(0,0,0,0.9));' : 'filter: drop-shadow(0 1px 2px rgba(255,255,255,0.9));'} font-family: system-ui, sans-serif;">\${pctApproved}%</text>
+          <text text-anchor="middle" y="11" font-size="9" font-weight="700" fill="\${th.subLabelColor}" style="\${th.isDark ? 'filter: drop-shadow(0 1px 3px rgba(0,0,0,0.9));' : 'filter: drop-shadow(0 1px 2px rgba(255,255,255,0.9));'} font-family: system-ui, sans-serif; text-transform: uppercase; letter-spacing: 0.5px;">\${cleanName}</text>
         </g>
-      `;
-    });
-  }
-
-  const chartSvg = `
-    <svg viewBox="0 0 460 460" width="100%" height="100%" style="display: block; max-height: 380px; margin: 0 auto; user-select: none;">
-      <defs>
-        ${defs}
-        <filter id="hub-shadow" x="-20%" y="-20%" width="140%" height="140%">
-          <feDropShadow dx="0" dy="4" stdDeviation="5" flood-color="rgba(0,0,0,0.5)" />
-        </filter>
-      </defs>
-      ${petalsSvg}
-      ${labelsSvg}
-      <circle cx="${cx}" cy="${cy}" r="${rInner - 5}" fill="#090d16" stroke="#1e293b" stroke-width="3" filter="url(#hub-shadow)" style="cursor: pointer;" id="hub-center-btn" />
-      <g id="hub-center-display" pointer-events="none">
-        <text x="${cx}" y="${cy - 8}" text-anchor="middle" font-size="24" font-weight="900" fill="#10b981" font-family="system-ui, sans-serif" id="hub-pct">${globalPct}%</text>
-        <text x="${cx}" y="${cy + 10}" text-anchor="middle" font-size="10" font-weight="800" fill="#94a3b8" text-transform="uppercase" letter-spacing="1px" font-family="system-ui, sans-serif" id="hub-title">APROBADO</text>
-        <text x="${cx}" y="${cy + 22}" text-anchor="middle" font-size="9" font-weight="600" fill="#64748b" font-family="system-ui, sans-serif" id="hub-sub">${formatVal(grandTotal)}</text>
-      </g>
-    </svg>
-  `;
-
-  let cardsHtml = '';
-  list.forEach(c => {
-    const pct = c.total > 0 ? Math.round(((c.APROBADO || 0) + (c.CERRADO || 0)) / c.total * 100) : 0;
-    const pProg = c.total > 0 ? ((c['EN PROGRESO'] || 0) / c.total * 100) : 0;
-    const pApp = c.total > 0 ? (((c.APROBADO || 0) + (c.CERRADO || 0)) / c.total * 100) : 0;
-    const pInsp = c.total > 0 ? ((c['PARA INSPECCIÓN'] || 0) / c.total * 100) : 0;
-    const pRech = c.total > 0 ? ((c.RECHAZADO || 0) / c.total * 100) : 0;
-    const pNone = Math.max(0, 100 - (pApp + pProg + pInsp + pRech));
-
-    cardsHtml += `
-      <div class="status-class-card" data-class="${encodeURIComponent(c.classification)}" style="background: #131b2e; border: 1px solid #1e293b; border-radius: 8px; padding: 10px 12px; margin-bottom: 8px; cursor: pointer; transition: all 0.15s ease;">
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
-          <div style="font-weight: 700; font-size: 12px; color: #f1f5f9; display: flex; align-items: center; gap: 6px;">
-            <i class="fa-solid fa-shapes" style="color: #38bdf8; font-size: 11px;"></i> ${c.classification}
-          </div>
-          <div style="display: flex; align-items: center; gap: 8px;">
-            <span style="font-size: 11px; color: #94a3b8; font-family: monospace;">${formatVal(c.total)}</span>
-            <span style="font-size: 11px; font-weight: 800; color: ${pct >= 70 ? '#10b981' : pct >= 30 ? '#f59e0b' : '#94a3b8'}; background: rgba(255,255,255,0.06); padding: 2px 6px; border-radius: 4px;">${pct}%</span>
-          </div>
-        </div>
-        <div style="height: 6px; border-radius: 3px; background: #1e293b; display: flex; overflow: hidden; width: 100%;">
-          ${pApp > 0 ? `<div style="width: ${pApp}%; background: #10b981;" title="Aprobado: ${pApp.toFixed(1)}%"></div>` : ''}
-          ${pProg > 0 ? `<div style="width: ${pProg}%; background: #f59e0b;" title="En Progreso: ${pProg.toFixed(1)}%"></div>` : ''}
-          ${pInsp > 0 ? `<div style="width: ${pInsp}%; background: #3b82f6;" title="Para Inspección: ${pInsp.toFixed(1)}%"></div>` : ''}
-          ${pRech > 0 ? `<div style="width: ${pRech}%; background: #ef4444;" title="Rechazado: ${pRech.toFixed(1)}%"></div>` : ''}
-          ${pNone > 0 ? `<div style="width: ${pNone}%; background: #334155;" title="Ninguno: ${pNone.toFixed(1)}%"></div>` : ''}
-        </div>
-      </div>
-    `;
-  });
-
-  container.innerHTML = `
-    <div style="display: flex; flex-direction: column; gap: 12px;">
-      <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; border-bottom: 1px solid #1e293b; padding-bottom: 10px;">
-        <div>
-          <div style="font-size: 13px; font-weight: 800; color: #f8fafc; letter-spacing: 0.5px; display: flex; align-items: center; gap: 6px;">
-            <i class="fa-solid fa-chart-pie" style="color: #38bdf8;"></i> AVANCE RADIAL
-          </div>
-          <div style="font-size: 10px; color: #94a3b8;">Porcentaje y estratos por clasificación</div>
-        </div>
-        <div class="status-metric-pills" style="display: flex; gap: 4px; background: #131b2e; padding: 2px; border-radius: 6px; border: 1px solid #1e293b;">
-          <button type="button" class="q-chart-metric-btn ${metric === 'count' ? 'active' : ''}" data-metric="count" style="padding: 3px 8px; font-size: 10px; font-weight: 700; border: none; border-radius: 4px; cursor: pointer; background: ${metric === 'count' ? '#2563eb' : 'transparent'}; color: ${metric === 'count' ? '#fff' : '#94a3b8'};">Cant.</button>
-          <button type="button" class="q-chart-metric-btn ${metric === 'area' ? 'active' : ''}" data-metric="area" style="padding: 3px 8px; font-size: 10px; font-weight: 700; border: none; border-radius: 4px; cursor: pointer; background: ${metric === 'area' ? '#2563eb' : 'transparent'}; color: ${metric === 'area' ? '#fff' : '#94a3b8'};">Área</button>
-          <button type="button" class="q-chart-metric-btn ${metric === 'volume' ? 'active' : ''}" data-metric="volume" style="padding: 3px 8px; font-size: 10px; font-weight: 700; border: none; border-radius: 4px; cursor: pointer; background: ${metric === 'volume' ? '#2563eb' : 'transparent'}; color: ${metric === 'volume' ? '#fff' : '#94a3b8'};">Vol.</button>
-          <button type="button" class="q-chart-metric-btn ${metric === 'length' ? 'active' : ''}" data-metric="length" style="padding: 3px 8px; font-size: 10px; font-weight: 700; border: none; border-radius: 4px; cursor: pointer; background: ${metric === 'length' ? '#2563eb' : 'transparent'}; color: ${metric === 'length' ? '#fff' : '#94a3b8'};">Long.</button>
-        </div>
-      </div>
-
-      <div style="background: #111827; border: 1px solid #1f2937; border-radius: 12px; padding: 12px; box-shadow: 0 8px 24px rgba(0,0,0,0.4); position: relative;">
-        ${chartSvg}
-      </div>
-
-      <div style="display: flex; justify-content: center; flex-wrap: wrap; gap: 10px; background: #111827; border: 1px solid #1e293b; border-radius: 8px; padding: 8px 12px; font-size: 10px; font-weight: 700;">
-        <span style="display: flex; align-items: center; gap: 4px; color: #10b981;"><span style="width: 8px; height: 8px; border-radius: 2px; background: #10b981;"></span> Aprobado</span>
-        <span style="display: flex; align-items: center; gap: 4px; color: #f59e0b;"><span style="width: 8px; height: 8px; border-radius: 2px; background: #f59e0b;"></span> En Progreso</span>
-        <span style="display: flex; align-items: center; gap: 4px; color: #3b82f6;"><span style="width: 8px; height: 8px; border-radius: 2px; background: #3b82f6;"></span> Para Insp.</span>
-        <span style="display: flex; align-items: center; gap: 4px; color: #059669;"><span style="width: 8px; height: 8px; border-radius: 2px; background: #059669;"></span> Cerrado</span>
-        <span style="display: flex; align-items: center; gap: 4px; color: #ef4444;"><span style="width: 8px; height: 8px; border-radius: 2px; background: #ef4444;"></span> Rechazado</span>
-        <span style="display: flex; align-items: center; gap: 4px; color: #94a3b8;"><span style="width: 8px; height: 8px; border-radius: 2px; background: #334155;"></span> Ninguno</span>
-      </div>
-
-      <div>
-        <div style="font-size: 11px; font-weight: 800; color: #94a3b8; text-transform: uppercase; margin-bottom: 8px; letter-spacing: 0.5px;">
-          Desglose por Clasificación (${list.length})
-        </div>
-        ${cardsHtml}
-      </div>
-    </div>
-  `;
-
-  container.querySelectorAll(".q-chart-metric-btn").forEach(btn => {
-    btn.addEventListener("click", () => {
-      const m = btn.getAttribute("data-metric");
-      renderStatusCharts(st, m);
-    });
-  });
-
-  const updateCenterDisplay = (clsName, pct, valStr) => {
-    const hubPct = container.querySelector("#hub-pct");
-    const hubTitle = container.querySelector("#hub-title");
-    const hubSub = container.querySelector("#hub-sub");
-    if (hubPct && hubTitle && hubSub) {
-      hubPct.textContent = pct + '%';
-      hubTitle.textContent = clsName.length > 10 ? clsName.slice(0, 9) + '..' : clsName;
-      hubSub.textContent = valStr;
-    }
-  };
-
-  const resetCenterDisplay = () => {
-    const hubPct = container.querySelector("#hub-pct");
-    const hubTitle = container.querySelector("#hub-title");
-    const hubSub = container.querySelector("#hub-sub");
-    if (hubPct && hubTitle && hubSub) {
-      hubPct.textContent = globalPct + '%';
-      hubTitle.textContent = 'APROBADO';
-      hubSub.textContent = formatVal(grandTotal);
-    }
-  };
-
-  const selectClassification = (clsName) => {
-    const filterSelect = document.getElementById("s-filter-class");
-    if (filterSelect) {
-      filterSelect.value = clsName;
-      filterSelect.dispatchEvent(new Event("change"));
-    }
-  };
-
-  const hubCenterBtn = container.querySelector("#hub-center-btn");
-  if (hubCenterBtn) {
-    hubCenterBtn.addEventListener("click", () => {
-      selectClassification("Todos");
-    });
-  }
-
-  container.querySelectorAll(".status-petal-item").forEach(petal => {
-    const clsName = decodeURIComponent(petal.getAttribute("data-class") || "");
-    const gData = list.find(l => l.classification === clsName);
-    if (!gData) return;
-    const pct = gData.total > 0 ? Math.round(((gData.APROBADO || 0) + (gData.CERRADO || 0)) / gData.total * 100) : 0;
-    const bgPath = petal.querySelector(".petal-bg");
-
-    petal.addEventListener("mouseenter", () => {
-      if (bgPath) {
-        bgPath.setAttribute("stroke", "#38bdf8");
-        bgPath.setAttribute("stroke-width", "3");
-      }
-      updateCenterDisplay(clsName, pct, formatVal(gData.total));
-    });
-
-    petal.addEventListener("mouseleave", () => {
-      if (bgPath) {
-        bgPath.setAttribute("stroke", "#334155");
-        bgPath.setAttribute("stroke-width", "1.5");
-      }
-      resetCenterDisplay();
-    });
-
-    petal.addEventListener("click", () => {
-      selectClassification(clsName);
-    });
-  });
-
-  container.querySelectorAll(".status-class-card").forEach(card => {
-    const clsName = decodeURIComponent(card.getAttribute("data-class") || "");
-    card.addEventListener("mouseenter", () => {
-      card.style.borderColor = "#38bdf8";
-      card.style.background = "#1a243b";
-    });
-    card.addEventListener("mouseleave", () => {
-      card.style.borderColor = "#1e293b";
-      card.style.background = "#131b2e";
-    });
-    card.addEventListener("click", () => {
-      selectClassification(clsName);
-    });
-  });
-}
-
-function openStatusCharts(st) {
-  const gTab = document.getElementById("right-tab-graficos");
-  const gCont = document.getElementById("status-charts-container");
-  const pPan = document.getElementById("properties-panel");
-  const pProps = document.getElementById("right-tab-properties");
-  const pNora = document.getElementById("right-tab-nora");
-  const pCont = document.getElementById("properties-content");
-  const nCont = document.getElementById("nora-ai-container");
-  if (gTab) {
-    gTab.style.display = "inline-flex";
-    gTab.classList.add("active");
-    pProps?.classList.remove("active");
-    pNora?.classList.remove("active");
-    pCont && (pCont.style.display = "none");
-    nCont && (nCont.style.display = "none");
-    gCont && (gCont.style.display = "flex");
-    if (pPan) {
-      pPan.classList.remove("closed");
-      const desiredW = Math.min(460, Math.floor(window.innerWidth * 0.5));
-      if (pPan.offsetWidth < desiredW) {
-        pPan.style.width = `${desiredW}px`;
-        document.documentElement.style.setProperty("--properties-width", `${desiredW}px`);
-      }
-    }
-    renderStatusCharts(st || at());
-  }
-}
-
-function closeStatusCharts() {
-  const gTab = document.getElementById("right-tab-graficos");
-  const gCont = document.getElementById("status-charts-container");
-  const pProps = document.getElementById("right-tab-properties");
-  const pCont = document.getElementById("properties-content");
-  if (gTab) {
-    gTab.style.display = "none";
-    if (gTab.classList.contains("active")) {
-      gTab.classList.remove("active");
-      pProps?.classList.add("active");
-      gCont && (gCont.style.display = "none");
-      pCont && (pCont.style.display = "flex");
-    }
-  }
-}
-window.refreshStatusCharts = () => renderStatusCharts(at());
+      \
 
 function li(){if(!o)return;const st=at();if(rt(st),st.length===0){o.innerHTML='<div class="q-empty-msg">No hay datos de avance. Asegúrate de cargar un modelo IFC con propiedades.</div>';const N=document.getElementById("s-header-totals");N&&(N.innerHTML="");return}qe(st),Kr(st),H(),ns(st),$i();const _gCont=document.getElementById("status-charts-container");_gCont&&_gCont.style.display!=="none"&&renderStatusCharts(st)}function Kr(st){let N=r.querySelector(".q-toolbar");N||(N=document.createElement("div"),N.className="q-toolbar",r.insertBefore(N,o));const pt=Array.from(new Set(st.map(Et=>Et.classification))).sort(),$t=Array.from(new Set(st.map(Et=>Et.level))).sort();N.innerHTML=`
             <div class="q-toolbar-left">
