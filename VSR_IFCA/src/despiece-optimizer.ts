@@ -1257,7 +1257,7 @@ export function checkIsEjecutado(attrs: any): boolean {
             .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
             .replace(/[\s\-_]/g, '');
         if (norm.includes('NOEJECUTADO')) return false;
-        return norm === 'EJECUTADO' || norm === '4DEJECUTADO' || norm.endsWith('EJECUTADO') || norm.includes('4DEJECUTADO');
+        return norm === 'EJECUTADO' || norm === '4DEJECUTADO';
     };
 
     const directKeys = [

@@ -3588,20 +3588,6 @@ function rebuildAllElements(): any[] {
                 }
                 if (checkIsEjecutado(attrs)) {
                     isEjecutado = true;
-                } else if (guid && String(guid).trim().length === 22 && modelAny.properties) {
-                    const elGuid = String(guid).trim();
-                    const prefix21 = elGuid.slice(0, 21);
-                    for (const pk in modelAny.properties) {
-                        const pEnt = modelAny.properties[pk];
-                        if (!pEnt) continue;
-                        const pGuid = String(pEnt.GlobalId || pEnt.guid || pEnt._guid || '').trim();
-                        if (pGuid.length === 22 && pGuid !== elGuid && pGuid.startsWith(prefix21)) {
-                            if (checkIsEjecutado(pEnt)) {
-                                isEjecutado = true;
-                                break;
-                            }
-                        }
-                    }
                 }
                 pilote = getValGlobal(attrs, 'NÚMERO DE PILOTE', 'NUMERO DE PILOTE', 'Número de pilote', 'Numero de pilote', 'NÚMERO PILOTE', 'NUMERO PILOTE', 'Número Pilote', 'Numero Pilote', 'N° PILOTE', 'Nº PILOTE', 'N° Pilote', 'Nº Pilote', 'PILOTE', 'Pilote', 'pilote') || '';
             } else {
@@ -11311,37 +11297,31 @@ function initStatusPanel() {
 
     function checkElementIsEjecutado(el: any): boolean {
         if (!el) return false;
-        if (el.isEjecutado === true) return true;
-        if (checkIsEjecutado(el)) return true;
-        if (checkIsEjecutado(el.elementRef)) return true;
-        if (el.rawAttrs && checkIsEjecutado(el.rawAttrs)) return true;
 
+        // 1. Buscar directamente en las propiedades del modelo cargado (m.properties)
         for (const model of loadedModels.values()) {
             const m = model as any;
             if (!m?.properties) continue;
-            const id = el.id || el.expressID;
+            const id = el.expressID !== undefined ? el.expressID : el.id;
             const tag = el.tag;
             const guid = el.guid;
-            const propEntry = (id ? (m.properties[id] || m.properties[String(id)]) : null) ||
+            const propEntry = (id !== undefined && id !== null ? (m.properties[id] || m.properties[String(id)]) : null) ||
                               (tag ? (m.properties[tag] || m._propertiesByTag?.get(String(tag))) : null) ||
                               (guid ? (m.properties[guid] || m._propertiesByGuid?.get(String(guid))) : null);
-            if (propEntry && checkIsEjecutado(propEntry)) return true;
-
-            // Herencia de anfitrión (ej. Dado de cimentación con pilote)
-            if (guid && String(guid).trim().length === 22) {
-                const elGuid = String(guid).trim();
-                const prefix21 = elGuid.slice(0, 21);
-                for (const pk in m.properties) {
-                    const pEnt = m.properties[pk];
-                    if (!pEnt) continue;
-                    const pGuid = String(pEnt.GlobalId || pEnt.guid || pEnt._guid || '').trim();
-                    if (pGuid.length === 22 && pGuid !== elGuid && pGuid.startsWith(prefix21)) {
-                        if (checkIsEjecutado(pEnt)) return true;
-                    }
-                }
+            if (propEntry) {
+                return checkIsEjecutado(propEntry);
             }
         }
-        return false;
+
+        if (el.rawAttrs) {
+            return checkIsEjecutado(el.rawAttrs);
+        }
+
+        if (el.elementRef) {
+            return checkIsEjecutado(el.elementRef);
+        }
+
+        return checkIsEjecutado(el);
     }
 
     function applyEjecutadoStatus(elements: any[], notify: boolean = false): number {
@@ -11376,7 +11356,7 @@ function initStatusPanel() {
                     updatedCount++;
                 }
             } else {
-                // Si el elemento NO tiene el parámetro EJECUTADO, revertir cualquier APROBADO erróneo
+                // Si el elemento NO tiene el parámetro EJECUTADO (o es false), poner explícitamente en NINGUNO
                 let curSt: ConstructionStatus = 'NINGUNO';
                 for (const k of candidateKeys) {
                     if (elementStatuses[k]) {
@@ -11384,9 +11364,9 @@ function initStatusPanel() {
                         break;
                     }
                 }
-                if (curSt === 'APROBADO') {
+                if (curSt !== 'NINGUNO') {
                     for (const k of candidateKeys) {
-                        delete elementStatuses[k];
+                        elementStatuses[k] = 'NINGUNO';
                         delete elementHistory[k];
                         remoteQueue = remoteQueue.filter((q) => q.id !== k);
                         remoteQueue.push({ id: k, status: 'NINGUNO', modelKey, at });
@@ -11407,7 +11387,7 @@ function initStatusPanel() {
         } else if (notify) {
             alert('Los estados están perfectamente sincronizados con el parámetro EJECUTADO.');
         }
-        return updatedCount;
+        return updatedCount + cleanedCount;
     }
 
     function getElementStatusAtDate(idOrEl: any, dateStr: string | null): ConstructionStatus {
