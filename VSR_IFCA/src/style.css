@@ -2999,3 +2999,37 @@ bim-label {
     color: #34d399;
 }
 
+
+/* Custom Classifications Styles */
+.custom-classifications-section-wrapper {
+    margin-top: 14px;
+    padding-top: 12px;
+    border-top: 2px dashed rgba(2, 73, 89, 0.2);
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.custom-param-picker-box {
+    background: #ffffff;
+    border: 1px solid var(--border-color, #e2e8f0);
+    border-radius: 6px;
+    padding: 10px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    animation: fadeInCustom 0.15s ease-in-out;
+}
+
+@keyframes fadeInCustom {
+    from { opacity: 0; transform: translateY(-4px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+.dark-mode .custom-param-picker-box,
+.dark .custom-param-picker-box {
+    background: #1e293b;
+    border-color: #334155;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+}

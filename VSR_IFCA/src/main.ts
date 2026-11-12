@@ -3133,6 +3133,214 @@ function clearClassificationColorization() {
     currentClassificationColorsMap.clear();
 }
 
+interface CustomClassification {
+    id: string;
+    paramName: string;
+    selectedValues: Set<string>;
+    isCollapsed: boolean;
+}
+
+const customClassifications: CustomClassification[] = [];
+let showCustomParamPicker = false;
+let customClassificationsLoaded = false;
+
+function loadCustomClassificationsFromStorage() {
+    try {
+        const raw = localStorage.getItem('nora_custom_classifications');
+        if (raw) {
+            const parsed = JSON.parse(raw);
+            if (Array.isArray(parsed)) {
+                customClassifications.length = 0;
+                for (const item of parsed) {
+                    if (item && item.paramName) {
+                        customClassifications.push({
+                            id: item.id || ('custom_' + Math.random().toString(36).slice(2, 8)),
+                            paramName: String(item.paramName),
+                            selectedValues: new Set<string>(),
+                            isCollapsed: Boolean(item.isCollapsed)
+                        });
+                    }
+                }
+            }
+        }
+    } catch (e) {
+        console.warn('Error loading custom classifications from storage:', e);
+    }
+}
+
+function saveCustomClassificationsToStorage() {
+    try {
+        const data = customClassifications.map(c => ({
+            id: c.id,
+            paramName: c.paramName,
+            isCollapsed: c.isCollapsed
+        }));
+        localStorage.setItem('nora_custom_classifications', JSON.stringify(data));
+    } catch (e) {
+        console.warn('Error saving custom classifications to storage:', e);
+    }
+}
+
+function formatParamValue(v: any): string {
+    if (v === null || v === undefined) return '(Vacío)';
+    if (typeof v === 'object') {
+        if ('value' in v && v.value !== undefined && v.value !== null) {
+            return formatParamValue(v.value);
+        }
+        if ('NominalValue' in v && v.NominalValue !== undefined) {
+            return formatParamValue(v.NominalValue);
+        }
+    }
+    if (typeof v === 'boolean') {
+        return v ? 'true' : 'false';
+    }
+    if (typeof v === 'number') {
+        return Number.isInteger(v) ? String(v) : String(Math.round(v * 1000) / 1000);
+    }
+    const str = String(v).trim();
+    if (str === '' || str.toLowerCase() === 'undefined' || str.toLowerCase() === 'null') {
+        return '(Vacío)';
+    }
+    return cleanMojibake(str);
+}
+
+function getParameterValueFromEntity(attrs: any, paramName: string): string | null {
+    if (!attrs || typeof attrs !== 'object') return null;
+
+    if (attrs[paramName] !== undefined && attrs[paramName] !== null) {
+        return formatParamValue(attrs[paramName]);
+    }
+
+    const targetNorm = normalizePropKey(paramName);
+    for (const [k, v] of Object.entries(attrs)) {
+        if (k === 'psets' || k === 'relations' || k === 'Relations') continue;
+        if (normalizePropKey(k) === targetNorm) {
+            return formatParamValue(v);
+        }
+    }
+
+    if (attrs.psets && typeof attrs.psets === 'object') {
+        for (const [, psetProps] of Object.entries(attrs.psets)) {
+            if (psetProps && typeof psetProps === 'object') {
+                if (psetProps[paramName] !== undefined && psetProps[paramName] !== null) {
+                    return formatParamValue(psetProps[paramName]);
+                }
+                for (const [pk, pv] of Object.entries(psetProps as Record<string, any>)) {
+                    if (normalizePropKey(pk) === targetNorm) {
+                        return formatParamValue(pv);
+                    }
+                }
+            }
+        }
+    }
+
+    return null;
+}
+
+function getModelEntity(modelUUID: string, expressID: number | string): any {
+    for (const [, m] of loadedModels) {
+        const modelAny = m as any;
+        if (modelAny.uuid === modelUUID || modelAny.name === modelUUID || m.name === modelUUID || loadedModels.size === 1) {
+            if (modelAny.properties) {
+                const ent = modelAny.properties[String(expressID)] || modelAny.properties[Number(expressID)];
+                if (ent) return ent;
+            }
+        }
+    }
+    return null;
+}
+
+function getCustomParamValueForElement(el: any, paramName: string): string {
+    const raw = el.rawProperties || getModelEntity(el.modelUUID, el.expressID);
+    if (!raw) return '(Sin dato)';
+    const val = getParameterValueFromEntity(raw, paramName);
+    return val !== null && val !== undefined ? val : '(Sin dato)';
+}
+
+function getAvailableModelParameters(): { name: string; count: number; sampleValues: string[] }[] {
+    const paramStats = new Map<string, { count: number; values: Set<string> }>();
+    const allElements = extractAllElementsGlobal(activeModelFilter);
+
+    const ignoredKeys = new Set([
+        'expressid', 'localid', 'type', 'globalid', '_guid', 'guid',
+        'relations', 'psets', 'typeid', 'materialid', 'spatialstructureid',
+        'containedinstructure', 'isdefinedby', 'hasassociations', 'hasassignments',
+        'representation', 'objectplacement', 'tag'
+    ]);
+
+    for (const el of allElements) {
+        const raw = el.rawProperties || getModelEntity(el.modelUUID, el.expressID);
+        if (!raw || typeof raw !== 'object') continue;
+
+        for (const [k, v] of Object.entries(raw)) {
+            const norm = normalizePropKey(k);
+            if (ignoredKeys.has(norm)) continue;
+            if (v === null || v === undefined) continue;
+            if (typeof v === 'object' && !('value' in v) && !('NominalValue' in v)) continue;
+
+            const cleanName = cleanMojibake(k).trim();
+            if (!cleanName) continue;
+
+            let entry = paramStats.get(cleanName);
+            if (!entry) {
+                entry = { count: 0, values: new Set() };
+                paramStats.set(cleanName, entry);
+            }
+            entry.count++;
+            const valStr = formatParamValue(v);
+            if (entry.values.size < 5) entry.values.add(valStr);
+        }
+
+        if (raw.psets && typeof raw.psets === 'object') {
+            for (const [, psetProps] of Object.entries(raw.psets)) {
+                if (psetProps && typeof psetProps === 'object') {
+                    for (const [pk, pv] of Object.entries(psetProps as Record<string, any>)) {
+                        const norm = normalizePropKey(pk);
+                        if (ignoredKeys.has(norm)) continue;
+                        if (pv === null || pv === undefined) continue;
+                        if (typeof pv === 'object' && !('value' in pv) && !('NominalValue' in pv)) continue;
+
+                        const cleanName = cleanMojibake(pk).trim();
+                        if (!cleanName) continue;
+
+                        let entry = paramStats.get(cleanName);
+                        if (!entry) {
+                            entry = { count: 0, values: new Set() };
+                            paramStats.set(cleanName, entry);
+                        }
+                        entry.count++;
+                        const valStr = formatParamValue(pv);
+                        if (entry.values.size < 5) entry.values.add(valStr);
+                    }
+                }
+            }
+        }
+    }
+
+    const results = Array.from(paramStats.entries()).map(([name, stat]) => ({
+        name,
+        count: stat.count,
+        sampleValues: Array.from(stat.values)
+    }));
+
+    results.sort((a, b) => a.name.localeCompare(b.name, 'es', { sensitivity: 'base' }));
+    return results;
+}
+
+function getCustomClassificationDistinctValues(paramName: string): { value: string; count: number }[] {
+    const allElements = extractAllElementsGlobal(activeModelFilter);
+    const map = new Map<string, number>();
+
+    for (const el of allElements) {
+        const val = getCustomParamValueForElement(el, paramName);
+        map.set(val, (map.get(val) || 0) + 1);
+    }
+
+    const res = Array.from(map.entries()).map(([value, count]) => ({ value, count }));
+    res.sort((a, b) => b.count - a.count || a.value.localeCompare(b.value, 'es', { sensitivity: 'base' }));
+    return res;
+}
+
 function applyClassificationColorizationToViewer() {
     clearClassificationColorization();
 
@@ -3157,6 +3365,10 @@ function applyClassificationColorizationToViewer() {
         keys = nombresIntegrados;
     } else if (activeColorMode === 'pilotes') {
         keys = pilotes;
+    } else if (activeColorMode.startsWith('custom:')) {
+        const pName = activeColorMode.slice('custom:'.length);
+        const distinct = getCustomClassificationDistinctValues(pName);
+        keys = distinct.map(d => d.value);
     }
 
     if (keys.length === 0) return;
@@ -3183,6 +3395,9 @@ function applyClassificationColorizationToViewer() {
             elKey = el.nombreIntegrado ? el.nombreIntegrado.trim() : '(Sin Nombre Integrado)';
         } else if (activeColorMode === 'pilotes') {
             elKey = el.pilote ? el.pilote.trim() : '';
+        } else if (activeColorMode.startsWith('custom:')) {
+            const pName = activeColorMode.slice('custom:'.length);
+            elKey = getCustomParamValueForElement(el, pName);
         }
 
         if (keyToElements.has(elKey)) {
@@ -3231,6 +3446,7 @@ function resetFilters() {
     selectedNombresIntegrados.clear();
     selectedPilotes.clear();
     selectedDiameter = 'Todos';
+    customClassifications.forEach(c => c.selectedValues.clear());
 
     activeColorMode = 'none';
     clearClassificationColorization();
@@ -3506,6 +3722,7 @@ function rebuildAllElements(): any[] {
             let isEjecutado: boolean = false;
             let tag: string = '';
             let guid: string = '';
+            let rawAttrs: any = null;
 
             if (cached) {
                 level = cached.level;
@@ -3523,9 +3740,11 @@ function rebuildAllElements(): any[] {
                 isEjecutado = Boolean(cached.isEjecutado);
                 tag = cached.tag || '';
                 guid = cached.guid || '';
+                rawAttrs = (cached as any).rawProperties || (modelAny.properties ? (modelAny.properties[String(expressID)] || modelAny.properties[expressID]) : null);
             } else if (modelAny.properties) {
                 const attrs = modelAny.properties[String(expressID)] || modelAny.properties[expressID] || (modelAny._propertiesByTag?.get(String(expressID))) || (modelAny._propertiesByGuid?.get(String(expressID)));
                 if (!attrs || typeof attrs !== 'object') continue;
+                rawAttrs = attrs;
                 category = getValGlobal(attrs, 'type', 'ifcType', 'Category', 'ObjectType', 'CLASIFICACIÓN', 'CLASIFICACION', 'CLASIFICACIÃ"N', 'CLASIFICACIÃ“N', 'Clasificación', 'Clasificacion', 'clasificación', 'clasificacion', 'CATEGORÍA', 'CATEGORIA', 'Categoría', 'categoria', 'TIPO', 'Tipo', 'tipo', 'DETALLE', 'Detalle', 'detalle') || 'Elemento';
                 nombreIntegrado = getValGlobal(attrs, 'NOMBRE INTEGRADO', 'Nombre Integrado', 'nombre integrado', 'NOMBRE_INTEGRADO', 'nombre_integrado') || 'SIN NOMBRE INTEGRADO';
                 name = getValGlobal(attrs, 'Name', 'name', 'tag', 'Tag') || (nombreIntegrado !== 'SIN NOMBRE INTEGRADO' ? nombreIntegrado : `${category} - ${expressID}`);
@@ -3627,7 +3846,8 @@ function rebuildAllElements(): any[] {
                 isPipe,
                 isUnion,
                 isModular,
-                isEjecutado
+                isEjecutado,
+                rawProperties: rawAttrs
             });
         }
     }
@@ -3854,7 +4074,10 @@ async function applyFiltersToViewerGlobal() {
     const isPiloteFilterActive = selectedPilotes.size > 0;
     const isDiameterFilterActive = isSanitary && selectedDiameter !== 'Todos';
 
-    const hasAnyFilter = isTreeFilterActive || isLevelFilterActive || isMaterialFilterActive || isNombreFilterActive || isPiloteFilterActive || isDiameterFilterActive;
+    const activeCustomFilters = customClassifications.filter(c => c.selectedValues.size > 0);
+    const isCustomFilterActive = activeCustomFilters.length > 0;
+
+    const hasAnyFilter = isTreeFilterActive || isLevelFilterActive || isMaterialFilterActive || isNombreFilterActive || isPiloteFilterActive || isDiameterFilterActive || isCustomFilterActive;
 
     // 1. Control instantáneo de visibilidad a nivel de mesh Three.js (0ms)
     // Si un modelo específico está seleccionado:
@@ -3895,7 +4118,18 @@ async function applyFiltersToViewerGlobal() {
         const piloteMatch = !isPiloteFilterActive || selectedPilotes.has(el.pilote);
         const diameterMatch = !isDiameterFilterActive || el.diameter === selectedDiameter;
 
-        return treeMatch && levelMatch && materialMatch && nombreMatch && piloteMatch && diameterMatch;
+        let customMatch = true;
+        if (isCustomFilterActive) {
+            for (const c of activeCustomFilters) {
+                const elVal = getCustomParamValueForElement(el, c.paramName);
+                if (!c.selectedValues.has(elVal)) {
+                    customMatch = false;
+                    break;
+                }
+            }
+        }
+
+        return treeMatch && levelMatch && materialMatch && nombreMatch && piloteMatch && diameterMatch && customMatch;
     });
 
     const visibleMap: Record<string, Set<number>> = {};
@@ -4854,6 +5088,305 @@ function renderIntegratedClassificationUI(container: HTMLElement) {
         wrapper.appendChild(diameterSection);
     }
 
+    // =========================================================================
+    // SECCIÓN: CLASIFICACIONES PERSONALIZADAS (POR PARÁMETROS DEL MODELO)
+    // =========================================================================
+    const customSectionWrapper = document.createElement('div');
+    customSectionWrapper.className = 'custom-classifications-section-wrapper';
+    customSectionWrapper.style.cssText = 'margin-top: 14px; padding-top: 12px; border-top: 2px dashed rgba(2, 73, 89, 0.2); display: flex; flex-direction: column; gap: 8px;';
+
+    // Header de la sección de clasificaciones personalizadas
+    const customSectionTitleRow = document.createElement('div');
+    customSectionTitleRow.style.cssText = 'display: flex; align-items: center; justify-content: space-between; padding: 0 2px;';
+
+    const customTitleLabel = document.createElement('div');
+    customTitleLabel.style.cssText = 'display: flex; align-items: center; gap: 6px; font-weight: 800; font-size: 11px; color: var(--primary-color, #024959); letter-spacing: 0.5px; text-transform: uppercase;';
+    customTitleLabel.innerHTML = `<i class="fa-solid fa-sliders"></i> <span>Mis Clasificaciones</span> <span style="background: rgba(2, 73, 89, 0.12); color: var(--primary-color, #024959); font-size: 10px; font-weight: 700; padding: 1px 6px; border-radius: 8px;">${customClassifications.length}</span>`;
+
+    const addClassificationBtn = document.createElement('button');
+    addClassificationBtn.className = 'filter-reset-btn';
+    addClassificationBtn.style.cssText = 'padding: 4px 8px; font-size: 10px; font-weight: 700; background: var(--primary-color, #024959); color: #fff; border-color: var(--primary-color, #024959); display: flex; align-items: center; gap: 5px; border-radius: 4px; cursor: pointer;';
+    addClassificationBtn.innerHTML = '<i class="fa-solid fa-plus"></i> Nueva';
+    addClassificationBtn.title = 'Crear nueva clasificación basada en parámetros del modelo';
+    addClassificationBtn.addEventListener('click', () => {
+        showCustomParamPicker = !showCustomParamPicker;
+        renderIntegratedClassificationUI(container);
+    });
+
+    customSectionTitleRow.appendChild(customTitleLabel);
+    customSectionTitleRow.appendChild(addClassificationBtn);
+    customSectionWrapper.appendChild(customSectionTitleRow);
+
+    if (showCustomParamPicker) {
+        const pickerBox = document.createElement('div');
+        pickerBox.className = 'custom-param-picker-box';
+        pickerBox.style.cssText = 'background: #ffffff; border: 1px solid var(--border-color, #e2e8f0); border-radius: 6px; padding: 10px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); display: flex; flex-direction: column; gap: 8px;';
+
+        const pickerHeader = document.createElement('div');
+        pickerHeader.style.cssText = 'display: flex; justify-content: space-between; align-items: center; font-size: 11px; font-weight: 700; color: #1e293b;';
+        pickerHeader.innerHTML = `<span>Parámetros del modelo cargado</span>`;
+        const closePickerBtn = document.createElement('button');
+        closePickerBtn.style.cssText = 'border: none; background: transparent; font-size: 14px; cursor: pointer; color: #64748b; line-height: 1; padding: 0 2px;';
+        closePickerBtn.innerHTML = '&times;';
+        closePickerBtn.addEventListener('click', () => {
+            showCustomParamPicker = false;
+            renderIntegratedClassificationUI(container);
+        });
+        pickerHeader.appendChild(closePickerBtn);
+        pickerBox.appendChild(pickerHeader);
+
+        const searchInput = document.createElement('input');
+        searchInput.type = 'text';
+        searchInput.placeholder = 'Buscar parámetro (ej. EJECUTADO, 5D_COD...)...';
+        searchInput.style.cssText = 'width: 100%; box-sizing: border-box; padding: 6px 8px; font-size: 11px; border: 1px solid #cbd5e1; border-radius: 4px; outline: none;';
+        pickerBox.appendChild(searchInput);
+
+        const paramsListContainer = document.createElement('div');
+        paramsListContainer.style.cssText = 'max-height: 180px; overflow-y: auto; display: flex; flex-direction: column; gap: 4px;';
+        
+        const availableParams = getAvailableModelParameters();
+        const existingParamNames = new Set(customClassifications.map(c => c.paramName.toUpperCase()));
+
+        const renderParamsList = (filterText: string) => {
+            paramsListContainer.innerHTML = '';
+            const filtered = availableParams.filter(p => !filterText || p.name.toLowerCase().includes(filterText.toLowerCase()));
+            if (filtered.length === 0) {
+                const empty = document.createElement('div');
+                empty.style.cssText = 'font-size: 11px; color: #94a3b8; text-align: center; padding: 8px;';
+                empty.textContent = availableParams.length === 0 ? 'No se detectaron parámetros en el modelo cargado' : 'Sin coincidencias';
+                paramsListContainer.appendChild(empty);
+                return;
+            }
+
+            for (const param of filtered) {
+                const isAlreadyAdded = existingParamNames.has(param.name.toUpperCase());
+                const item = document.createElement('div');
+                item.style.cssText = `display: flex; justify-content: space-between; align-items: center; padding: 6px 8px; border-radius: 4px; font-size: 11px; cursor: ${isAlreadyAdded ? 'default' : 'pointer'}; background: ${isAlreadyAdded ? '#f1f5f9' : '#f8fafc'}; border: 1px solid #e2e8f0; transition: background 0.15s;`;
+                if (!isAlreadyAdded) {
+                    item.addEventListener('mouseenter', () => item.style.background = '#e2e8f0');
+                    item.addEventListener('mouseleave', () => item.style.background = '#f8fafc');
+                    item.addEventListener('click', () => {
+                        customClassifications.push({
+                            id: 'custom_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6),
+                            paramName: param.name,
+                            selectedValues: new Set<string>(),
+                            isCollapsed: false
+                        });
+                        saveCustomClassificationsToStorage();
+                        showCustomParamPicker = false;
+                        renderIntegratedClassificationUI(container);
+                    });
+                }
+
+                const nameDiv = document.createElement('div');
+                nameDiv.style.cssText = 'display: flex; flex-direction: column; gap: 1px; overflow: hidden;';
+                nameDiv.innerHTML = `<span style="font-weight: 600; color: ${isAlreadyAdded ? '#94a3b8' : '#0f172a'}; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${param.name}</span><span style="font-size: 9px; color: #94a3b8;">${param.count} elementos</span>`;
+
+                const actionDiv = document.createElement('div');
+                if (isAlreadyAdded) {
+                    actionDiv.innerHTML = '<i class="fa-solid fa-check" style="color: #10b981; font-size: 11px;" title="Ya agregada"></i>';
+                } else {
+                    actionDiv.innerHTML = '<i class="fa-solid fa-plus" style="color: var(--primary-color, #024959); font-size: 11px;"></i>';
+                }
+
+                item.appendChild(nameDiv);
+                item.appendChild(actionDiv);
+                paramsListContainer.appendChild(item);
+            }
+        };
+
+        searchInput.addEventListener('input', () => {
+            renderParamsList(searchInput.value.trim());
+        });
+
+        renderParamsList('');
+        pickerBox.appendChild(paramsListContainer);
+        customSectionWrapper.appendChild(pickerBox);
+
+        setTimeout(() => searchInput.focus(), 50);
+    }
+
+    if (customClassifications.length === 0 && !showCustomParamPicker) {
+        const emptyNotice = document.createElement('div');
+        emptyNotice.style.cssText = 'font-size: 11px; color: #94a3b8; font-style: italic; padding: 8px 4px; text-align: center; background: rgba(0,0,0,0.02); border-radius: 4px; border: 1px dashed #cbd5e1;';
+        emptyNotice.textContent = '+ Agrega clasificaciones personalizadas con cualquier parámetro del modelo (ej. EJECUTADO, 5D_COD_BIM-PPTO...)';
+        customSectionWrapper.appendChild(emptyNotice);
+    }
+
+    for (const custom of customClassifications) {
+        const distinctValues = getCustomClassificationDistinctValues(custom.paramName);
+        const section = document.createElement('div');
+        section.className = 'filter-section';
+        section.style.marginBottom = '8px';
+
+        const header = document.createElement('div');
+        header.className = 'filter-section-header';
+        if (custom.isCollapsed) header.classList.add('collapsed');
+
+        const titleDiv = document.createElement('div');
+        titleDiv.style.cssText = 'display: flex; align-items: center; gap: 6px; overflow: hidden;';
+
+        const nameSpan = document.createElement('span');
+        nameSpan.style.cssText = 'white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 130px;';
+        nameSpan.textContent = custom.paramName;
+        nameSpan.title = custom.paramName;
+        titleDiv.appendChild(nameSpan);
+
+        if (custom.selectedValues.size > 0) {
+            const badge = document.createElement('span');
+            badge.style.cssText = 'background: var(--primary-color, #024959); color: #fff; font-size: 9px; padding: 1px 5px; border-radius: 8px; font-weight: 700;';
+            badge.textContent = `${custom.selectedValues.size}`;
+            badge.title = `${custom.selectedValues.size} valor(es) seleccionado(s)`;
+            titleDiv.appendChild(badge);
+        }
+
+        const actionsDiv = document.createElement('div');
+        actionsDiv.style.cssText = 'display: flex; align-items: center; gap: 6px;';
+
+        const isColorActive = activeColorMode === ('custom:' + custom.paramName);
+        const colorBtn = document.createElement('button');
+        colorBtn.className = `filter-color-toggle-btn ${isColorActive ? 'active' : ''}`;
+        colorBtn.title = `Colorear modelo 3D por ${custom.paramName}`;
+        colorBtn.innerHTML = '<i class="fa-solid fa-palette"></i>';
+        colorBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            if (activeColorMode === ('custom:' + custom.paramName)) {
+                activeColorMode = 'none';
+                clearClassificationColorization();
+            } else {
+                activeColorMode = 'custom:' + custom.paramName;
+                applyClassificationColorizationToViewer();
+            }
+            renderIntegratedClassificationUI(container);
+        });
+        actionsDiv.appendChild(colorBtn);
+
+        const delBtn = document.createElement('button');
+        delBtn.className = 'filter-color-toggle-btn';
+        delBtn.style.cssText = 'padding: 2px 5px; color: #94a3b8; transition: color 0.15s;';
+        delBtn.title = `Eliminar clasificación ${custom.paramName}`;
+        delBtn.innerHTML = '<i class="fa-solid fa-trash-can"></i>';
+        delBtn.addEventListener('mouseenter', () => delBtn.style.color = '#ef4444');
+        delBtn.addEventListener('mouseleave', () => delBtn.style.color = '#94a3b8');
+        delBtn.addEventListener('click', async (e) => {
+            e.stopPropagation();
+            if (activeColorMode === ('custom:' + custom.paramName)) {
+                activeColorMode = 'none';
+                clearClassificationColorization();
+            }
+            custom.selectedValues.clear();
+            const idx = customClassifications.findIndex(c => c.id === custom.id);
+            if (idx !== -1) customClassifications.splice(idx, 1);
+            saveCustomClassificationsToStorage();
+            await applyFiltersToViewerGlobal();
+            renderIntegratedClassificationUI(container);
+        });
+        actionsDiv.appendChild(delBtn);
+
+        const chevron = document.createElement('i');
+        chevron.className = custom.isCollapsed ? 'fa-solid fa-chevron-right' : 'fa-solid fa-chevron-down';
+        chevron.style.fontSize = '10px';
+        chevron.style.color = '#64748b';
+        actionsDiv.appendChild(chevron);
+
+        header.appendChild(titleDiv);
+        header.appendChild(actionsDiv);
+        header.addEventListener('click', () => {
+            custom.isCollapsed = !custom.isCollapsed;
+            saveCustomClassificationsToStorage();
+            renderIntegratedClassificationUI(container);
+        });
+        section.appendChild(header);
+
+        const content = document.createElement('div');
+        content.className = 'filter-section-content';
+        if (custom.isCollapsed) content.classList.add('collapsed');
+
+        if (distinctValues.length > 1) {
+            const quickRow = document.createElement('div');
+            quickRow.style.cssText = 'display: flex; justify-content: flex-end; gap: 8px; font-size: 10px; margin-bottom: 2px;';
+
+            const selAllLink = document.createElement('span');
+            selAllLink.style.cssText = 'color: var(--primary-color, #024959); cursor: pointer; text-decoration: underline;';
+            selAllLink.textContent = 'Seleccionar todos';
+            selAllLink.addEventListener('click', async () => {
+                distinctValues.forEach(v => custom.selectedValues.add(v.value));
+                await applyFiltersToViewerGlobal();
+                renderIntegratedClassificationUI(container);
+            });
+
+            const clearLink = document.createElement('span');
+            clearLink.style.cssText = 'color: #64748b; cursor: pointer; text-decoration: underline;';
+            clearLink.textContent = 'Limpiar';
+            clearLink.addEventListener('click', async () => {
+                custom.selectedValues.clear();
+                await applyFiltersToViewerGlobal();
+                renderIntegratedClassificationUI(container);
+            });
+
+            quickRow.appendChild(selAllLink);
+            quickRow.appendChild(clearLink);
+            content.appendChild(quickRow);
+        }
+
+        const grid = document.createElement('div');
+        grid.className = 'levels-grid';
+
+        if (distinctValues.length === 0) {
+            const noVal = document.createElement('div');
+            noVal.style.cssText = 'font-size: 11px; color: #888; padding: 4px;';
+            noVal.textContent = 'No hay valores para este parámetro en el modelo actual';
+            grid.appendChild(noVal);
+        } else {
+            for (const item of distinctValues) {
+                const valBtn = document.createElement('button');
+                valBtn.className = 'level-filter-btn';
+                valBtn.style.cssText = 'display: flex; align-items: center; justify-content: space-between; gap: 6px; padding: 5px 6px; font-size: 10px;';
+                if (custom.selectedValues.has(item.value)) valBtn.classList.add('active');
+
+                const leftSpan = document.createElement('span');
+                leftSpan.style.cssText = 'display: flex; align-items: center; gap: 5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;';
+
+                if (isColorActive && currentClassificationColorsMap.has(item.value)) {
+                    const dot = document.createElement('span');
+                    dot.className = 'level-color-bar';
+                    dot.style.backgroundColor = currentClassificationColorsMap.get(item.value)!;
+                    leftSpan.appendChild(dot);
+                }
+
+                const textSpan = document.createElement('span');
+                textSpan.textContent = item.value;
+                leftSpan.appendChild(textSpan);
+
+                const countSpan = document.createElement('span');
+                countSpan.style.cssText = 'font-size: 9px; opacity: 0.8; font-weight: normal;';
+                countSpan.textContent = `(${item.count})`;
+
+                valBtn.appendChild(leftSpan);
+                valBtn.appendChild(countSpan);
+                valBtn.title = `${item.value} (${item.count} elementos)`;
+
+                valBtn.addEventListener('click', async () => {
+                    if (custom.selectedValues.has(item.value)) {
+                        custom.selectedValues.delete(item.value);
+                    } else {
+                        custom.selectedValues.add(item.value);
+                    }
+                    await applyFiltersToViewerGlobal();
+                    renderIntegratedClassificationUI(container);
+                });
+
+                grid.appendChild(valBtn);
+            }
+        }
+
+        content.appendChild(grid);
+        section.appendChild(content);
+        customSectionWrapper.appendChild(section);
+    }
+
+    wrapper.appendChild(customSectionWrapper);
+
     container.appendChild(wrapper);
 }
 
@@ -4984,6 +5517,10 @@ function isElementHidden(e: any): boolean {
 }
 
 async function updateClassificationUI() {
+    if (!customClassificationsLoaded) {
+        loadCustomClassificationsFromStorage();
+        customClassificationsLoaded = true;
+    }
     const container = document.getElementById('classification-list');
     if (!container) return;
 
@@ -9731,6 +10268,11 @@ function initQuantitiesPanel() {
             if (selectedPilotes.size > 0) {
                 filtered = filtered.filter(e => selectedPilotes.has(e.pilote));
             }
+            for (const c of customClassifications) {
+                if (c.selectedValues.size > 0) {
+                    filtered = filtered.filter(e => c.selectedValues.has(getCustomParamValueForElement(e, c.paramName)));
+                }
+            }
         }
 
         if (searchQuery.trim() !== '') {
@@ -12215,6 +12757,11 @@ function initStatusPanel() {
             }
             if (selectedPilotes.size > 0) {
                 filtered = filtered.filter(e => selectedPilotes.has(e.pilote));
+            }
+            for (const c of customClassifications) {
+                if (c.selectedValues.size > 0) {
+                    filtered = filtered.filter(e => c.selectedValues.has(getCustomParamValueForElement(e, c.paramName)));
+                }
             }
         }
 
