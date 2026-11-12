@@ -21,7 +21,8 @@ const filesToSync = [
   'portal.webmanifest',
   'sw.js',
   'pwa-helper.js',
-  'wompi-integration.js'
+  'wompi-integration.js',
+  'formacion.html'
 ];
 
 filesToSync.forEach(file => {

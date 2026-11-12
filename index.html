@@ -96,6 +96,7 @@
             box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.05), 0 10px 10px -5px rgba(0, 0, 0, 0.02);
         }
     </style>
+  <script src="nora-drive-store.js"></script>
 </head>
 <body class="antialiased selection:bg-black selection:text-white">
 
@@ -110,6 +111,10 @@
                 </div>
                 <div class="hidden md:flex space-x-12 items-center">
                     <a href="#productos" class="text-xs font-bold text-gray-900 hover:text-gray-500 uppercase tracking-widest transition">Producto</a>
+                    <a href="formacion.html" class="text-xs font-bold text-emerald-600 hover:text-emerald-700 uppercase tracking-widest transition flex items-center gap-1.5">
+                        <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                        Formación
+                    </a>
                     <a href="#precios" class="text-xs font-bold text-gray-900 hover:text-gray-500 uppercase tracking-widest transition">Precios</a>
                     <a href="#recursos" class="text-xs font-bold text-gray-900 hover:text-gray-500 uppercase tracking-widest transition">Recursos</a>
                 </div>
@@ -161,7 +166,7 @@
             <p class="mt-4 text-lg text-gray-500 font-light">Todo lo que necesitas para gestionar tus proyectos BIM.</p>
         </div>
         <div class="max-w-7xl mx-auto px-6 lg:px-8">
-            <div class="grid grid-cols-1 md:grid-cols-3 gap-0 border border-gray-200 bg-gray-200">
+            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-0 border border-gray-200 bg-gray-200">
                 
                 <!-- Feature 1 -->
                 <div class="product-card flex flex-col items-center p-12 text-center">
@@ -187,6 +192,21 @@
                     <p class="text-sm text-gray-500 mb-12">Colaboración y resolución en tiempo real.</p>
                     <div class="w-48 h-48 bg-black rounded-3xl flex items-center justify-center shadow-lg">
                         <img src="https://i.postimg.cc/SQ6JTZqj/LOGO-NORA-BLANCO.png" alt="Icono nora" class="w-24 h-auto opacity-80">
+                    </div>
+                </div>
+
+                <!-- Feature 4: Formación nora -->
+                <a href="formacion.html" class="product-card flex flex-col items-center p-12 text-center group cursor-pointer transition hover:bg-slate-50 relative">
+                    <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider bg-emerald-100 text-emerald-800 mb-2 border border-emerald-300">
+                        <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span> Inscripciones Abiertas
+                    </span>
+                    <h3 class="text-2xl font-bold text-gray-900 mb-2 group-hover:text-emerald-700 transition-colors">Formación nora</h3>
+                    <p class="text-sm text-gray-500 mb-8">Diplomado Desarrollador BIM y automatización aplicada.</p>
+                    <div class="w-48 h-48 bg-gradient-to-br from-slate-900 to-black rounded-3xl flex flex-col items-center justify-center shadow-lg text-white p-4 relative overflow-hidden group-hover:scale-105 transition-transform duration-300">
+                        <span class="material-symbols-outlined text-5xl text-emerald-400 mb-2">school</span>
+                        <span class="text-xs font-bold text-slate-200 text-center leading-tight">Diplomado<br/>Desarrollador BIM</span>
+                        <span class="text-[10px] text-emerald-300 font-semibold mt-2 bg-emerald-950/80 px-2 py-0.5 rounded border border-emerald-500/30">Módulo 1 Abierto</span>
+                    </div>
                     </div>
                 </div>
 
@@ -332,6 +352,7 @@
                         <li><a href="#" class="text-xs text-gray-500 hover:text-black transition">Visor 3D</a></li>
                         <li><a href="#" class="text-xs text-gray-500 hover:text-black transition">Gestor Documental</a></li>
                         <li><a href="#" class="text-xs text-gray-500 hover:text-black transition">Métricas</a></li>
+                        <li><a href="formacion.html" class="text-xs text-emerald-600 font-semibold hover:text-emerald-700 transition flex items-center gap-1">Formación nora <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span></a></li>
                         <li><a href="inse.html" class="text-xs text-gray-500 hover:text-black transition">Iniciar Sesión</a></li>
                     </ul>
                 </div>

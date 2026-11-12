@@ -1,0 +1,820 @@
+<!DOCTYPE html>
+<html lang="es" class="scroll-smooth">
+<head>
+    <meta charset="utf-8"/>
+    <link rel="icon" type="image/png" href="https://i.postimg.cc/W3trgjZX/FAVICON-NORA-NEGRO.png">
+    <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+    <title>Formación nora | Diplomado Desarrollador BIM</title>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com?plugins=forms,typography"></script>
+    <script>
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        primary: "#171717",
+                        "background-light": "#f8fafc",
+                        "text-light": "#0f172a",
+                        emerald: {
+                            500: "#10b981",
+                            600: "#059669",
+                            700: "#047857"
+                        }
+                    },
+                    fontFamily: {
+                        sans: ["Inter", "sans-serif"],
+                    },
+                },
+            },
+        };
+    </script>
+    
+    <!-- Google Fonts & Icons -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet"/>
+    <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet" />
+    
+    <!-- Wompi Pasarela Oficial -->
+    <script type="text/javascript" src="https://checkout.wompi.co/widget.js"></script>
+    <script src="wompi-integration.js"></script>
+
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            color: #0f172a;
+            background-color: #ffffff;
+            overflow-x: hidden;
+        }
+
+        .module-card {
+            transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+        .module-card:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 20px 30px -10px rgba(0, 0, 0, 0.08);
+        }
+
+        .badge-pulsing {
+            position: relative;
+        }
+        .badge-pulsing::before {
+            content: '';
+            position: absolute;
+            inset: -2px;
+            border-radius: 9999px;
+            background: rgba(16, 185, 129, 0.35);
+            animation: pulse-ring 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+        }
+        @keyframes pulse-ring {
+            0%, 100% { transform: scale(1); opacity: 0.8; }
+            50% { transform: scale(1.08); opacity: 0.2; }
+        }
+    </style>
+</head>
+<body class="antialiased selection:bg-slate-900 selection:text-white bg-slate-50">
+
+    <!-- Navegación Superior -->
+    <nav class="fixed top-0 w-full bg-white/90 backdrop-blur-md z-50 border-b border-slate-200">
+        <div class="max-w-7xl mx-auto px-6 lg:px-8">
+            <div class="flex justify-between items-center h-20">
+                <!-- Logo nora -->
+                <a href="index.html" class="flex items-center gap-3 group">
+                    <img src="https://i.postimg.cc/tR3YSryT/LOGO-NORA-NEGRO.png" alt="nora" class="h-6 w-auto transition-transform group-hover:scale-105">
+                    <span class="text-xs font-semibold px-2 py-0.5 rounded bg-slate-100 text-slate-700 tracking-wider uppercase border border-slate-200">Academy</span>
+                </a>
+
+                <!-- Enlaces de navegación -->
+                <div class="hidden md:flex space-x-10 items-center">
+                    <a href="#modulos" class="text-xs font-bold text-slate-700 hover:text-black uppercase tracking-wider transition">Los 3 Módulos</a>
+                    <a href="#modulo1" class="text-xs font-bold text-emerald-600 hover:text-emerald-700 uppercase tracking-wider transition flex items-center gap-1.5">
+                        <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                        Módulo 1 (Abierto)
+                    </a>
+                    <a href="#inscripcion" class="text-xs font-bold text-slate-700 hover:text-black uppercase tracking-wider transition">Inscripción & Pago</a>
+                    <a href="#preguntas" class="text-xs font-bold text-slate-700 hover:text-black uppercase tracking-wider transition">Preguntas Frecuentes</a>
+                </div>
+
+                <!-- Botón CTA directo -->
+                <div class="flex items-center gap-4">
+                    <a href="index.html" class="hidden sm:inline-flex text-xs font-semibold text-slate-600 hover:text-black transition">
+                        ← Ir al Ecosistema
+                    </a>
+                    <a href="#inscripcion" class="inline-flex items-center gap-2 bg-slate-900 hover:bg-black text-white px-5 py-2.5 rounded-full text-xs font-bold tracking-wide transition shadow-sm hover:shadow-md">
+                        <span class="material-symbols-outlined text-[18px] text-emerald-400">how_to_reg</span>
+                        Inscribirme Ahora
+                    </a>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Espacio para el navbar fijo -->
+    <div class="h-20"></div>
+
+    <!-- Hero Section -->
+    <section class="relative pt-16 pb-20 md:pt-24 md:pb-32 overflow-hidden bg-white border-b border-slate-200">
+        <!-- Decoración de fondo sutil -->
+        <div class="absolute inset-0 pointer-events-none opacity-40 bg-[radial-gradient(#e2e8f0_1px,transparent_1px)] [background-size:24px_24px]"></div>
+        
+        <div class="max-w-7xl mx-auto px-6 lg:px-8 relative z-10 text-center">
+            <!-- Badge Superior -->
+            <div class="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full text-xs font-bold tracking-wide uppercase bg-emerald-50 text-emerald-800 border border-emerald-200 shadow-sm mb-8">
+                <span class="w-2 h-2 rounded-full bg-emerald-500 animate-ping"></span>
+                <span>Formación nora • Convocatoria Abierta 2026</span>
+            </div>
+
+            <!-- Título Principal -->
+            <h1 class="text-4xl sm:text-5xl lg:text-6xl font-black tracking-tight text-slate-950 max-w-4xl mx-auto leading-[1.12]">
+                Diplomado <span class="bg-gradient-to-r from-emerald-600 to-teal-700 bg-clip-text text-transparent">Desarrollador BIM</span>
+            </h1>
+
+            <!-- Subtítulo -->
+            <p class="mt-6 text-lg sm:text-xl text-slate-600 max-w-3xl mx-auto font-normal leading-relaxed">
+                De modelador y coordinador a <strong>creador de tecnología</strong>. Aprende a automatizar modelos con Dynamo y Python, desarrollar tus propios plugins y complementos para Revit, y crear plataformas BIM web en la nube con asistencia de Inteligencia Artificial.
+            </p>
+
+            <!-- Acciones Principales -->
+            <div class="mt-10 flex flex-col sm:flex-row gap-4 justify-center items-center">
+                <a href="#inscripcion" class="w-full sm:w-auto inline-flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-8 py-4 rounded-full text-sm tracking-wide transition shadow-lg shadow-emerald-500/20 hover:scale-[1.02]">
+                    <span class="material-symbols-outlined text-[20px]">bolt</span>
+                    Inscribirme al Módulo 1 (Inscripciones Abiertas)
+                </a>
+                <a href="#modulos" class="w-full sm:w-auto inline-flex items-center justify-center gap-2 bg-slate-100 hover:bg-slate-200 text-slate-800 font-semibold px-8 py-4 rounded-full text-sm tracking-wide transition border border-slate-300">
+                    <span class="material-symbols-outlined text-[20px]">layers</span>
+                    Explorar los 3 Módulos
+                </a>
+            </div>
+
+            <!-- Métricas y Garantías -->
+            <div class="mt-16 grid grid-cols-2 md:grid-cols-4 gap-6 max-w-4xl mx-auto pt-10 border-t border-slate-100">
+                <div class="text-center">
+                    <div class="text-2xl font-black text-slate-900">100% Práctico</div>
+                    <div class="text-xs text-slate-500 mt-1 font-medium">Proyectos reales de portafolio</div>
+                </div>
+                <div class="text-center">
+                    <div class="text-2xl font-black text-slate-900">En Vivo + Grabado</div>
+                    <div class="text-xs text-slate-500 mt-1 font-medium">Acceso ilimitado a las clases</div>
+                </div>
+                <div class="text-center">
+                    <div class="text-2xl font-black text-slate-900">Asistencia con IA</div>
+                    <div class="text-xs text-slate-500 mt-1 font-medium">ChatGPT, Claude y Copilot en código</div>
+                </div>
+                <div class="text-center">
+                    <div class="text-2xl font-black text-slate-900">Certificación</div>
+                    <div class="text-xs text-slate-500 mt-1 font-medium">Avalado por nora CDE</div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Sección de los 3 Módulos -->
+    <section id="modulos" class="py-24 bg-slate-50 border-b border-slate-200">
+        <div class="max-w-7xl mx-auto px-6 lg:px-8">
+            <div class="text-center max-w-3xl mx-auto mb-16">
+                <h2 class="text-xs font-bold text-emerald-600 uppercase tracking-widest mb-3">Ruta de Especialización</h2>
+                <h3 class="text-3xl sm:text-4xl font-extrabold text-slate-900 tracking-tight">
+                    Plan de Estudios del Diplomado Desarrollador BIM
+                </h3>
+                <p class="mt-4 text-base text-slate-600">
+                    Tres módulos diseñados progresivamente para adquirir dominio completo en programación, desarrollo de software sobre Revit y arquitectura cloud.
+                </p>
+            </div>
+
+            <div class="space-y-10">
+
+                <!-- MÓDULO 1: ABIERTO -->
+                <div id="modulo1" class="module-card bg-white rounded-3xl p-8 sm:p-12 border-2 border-emerald-500 shadow-xl relative overflow-hidden">
+                    <!-- Cinta superior decorativa -->
+                    <div class="absolute top-0 right-0 bg-emerald-500 text-white text-[11px] font-black uppercase tracking-wider py-1.5 px-6 rounded-bl-2xl shadow-sm flex items-center gap-1.5">
+                        <span class="w-2 h-2 rounded-full bg-white animate-pulse"></span>
+                        ¡Inscripciones Abiertas!
+                    </div>
+
+                    <div class="flex flex-col lg:flex-row lg:items-start justify-between gap-8">
+                        <div class="max-w-3xl">
+                            <div class="flex items-center gap-3 mb-4">
+                                <span class="px-3.5 py-1 rounded-full bg-emerald-100 text-emerald-800 text-xs font-bold tracking-wide">MÓDULO 1</span>
+                                <span class="text-xs font-semibold text-slate-400">Nivel Introductorio a Intermedio</span>
+                            </div>
+
+                            <h4 class="text-2xl sm:text-3xl font-extrabold text-slate-900 mb-4 leading-snug">
+                                Automatización BIM I – Lógica Computacional, Dynamo, Python e IA
+                            </h4>
+
+                            <p class="text-base text-slate-700 leading-relaxed font-normal mb-8">
+                                Aprende las bases de la lógica computacional, automatiza flujos visuales con Dynamo, manipula datos masivos en Excel y escribe tus primeros códigos en Python asistido por Inteligencia Artificial.
+                            </p>
+
+                            <!-- Temario Destacado -->
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 pt-6 border-t border-slate-100">
+                                <div class="flex items-start gap-3">
+                                    <span class="material-symbols-outlined text-emerald-600 text-xl mt-0.5">check_circle</span>
+                                    <div>
+                                        <h5 class="text-sm font-bold text-slate-900">Lógica Computacional & Algoritmia</h5>
+                                        <p class="text-xs text-slate-500">Estructuras de datos, bucles y condicionales enfocados a arquitectura e ingeniería.</p>
+                                    </div>
+                                </div>
+                                <div class="flex items-start gap-3">
+                                    <span class="material-symbols-outlined text-emerald-600 text-xl mt-0.5">check_circle</span>
+                                    <div>
+                                        <h5 class="text-sm font-bold text-slate-900">Automatización Visual con Dynamo</h5>
+                                        <p class="text-xs text-slate-500">Manejo de grafos avanzados, listas, diccionarios y operaciones geométricas complejas.</p>
+                                    </div>
+                                </div>
+                                <div class="flex items-start gap-3">
+                                    <span class="material-symbols-outlined text-emerald-600 text-xl mt-0.5">check_circle</span>
+                                    <div>
+                                        <h5 class="text-sm font-bold text-slate-900">Interoperabilidad Masiva con Excel</h5>
+                                        <p class="text-xs text-slate-500">Extracción, validación y sincronización bidireccional de parámetros y cantidades.</p>
+                                    </div>
+                                </div>
+                                <div class="flex items-start gap-3">
+                                    <span class="material-symbols-outlined text-emerald-600 text-xl mt-0.5">check_circle</span>
+                                    <div>
+                                        <h5 class="text-sm font-bold text-slate-900">Python Asistido con Inteligencia Artificial</h5>
+                                        <p class="text-xs text-slate-500">Aprende a instruir a ChatGPT, Claude y Copilot para generar scripts funcionales sin fricción.</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Card de Precio / Acción -->
+                        <div class="lg:w-80 flex-shrink-0 bg-slate-50 rounded-2xl p-6 border border-slate-200 flex flex-col justify-between">
+                            <div>
+                                <span class="text-xs font-bold uppercase tracking-wider text-slate-500 block">Inversión Módulo 1</span>
+                                <div class="my-3">
+                                    <div class="flex items-baseline gap-2">
+                                        <span class="text-3xl font-black text-slate-900" id="mod1-price-display">$450.000</span>
+                                        <span class="text-xs font-bold text-slate-500">COP</span>
+                                    </div>
+                                    <span class="text-[11px] text-emerald-700 font-semibold block mt-1">✓ Pago único • Acceso total</span>
+                                </div>
+                                <ul class="space-y-2 text-xs text-slate-600 my-4 pt-4 border-t border-slate-200">
+                                    <li class="flex items-center gap-2"><span class="material-symbols-outlined text-emerald-600 text-[16px]">done</span> Clases online en vivo</li>
+                                    <li class="flex items-center gap-2"><span class="material-symbols-outlined text-emerald-600 text-[16px]">done</span> Grabaciones de por vida</li>
+                                    <li class="flex items-center gap-2"><span class="material-symbols-outlined text-emerald-600 text-[16px]">done</span> Código fuente de ejercicios</li>
+                                    <li class="flex items-center gap-2"><span class="material-symbols-outlined text-emerald-600 text-[16px]">done</span> Certificado de aprobación</li>
+                                </ul>
+                            </div>
+                            <a href="#inscripcion" class="w-full mt-4 bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3 px-4 rounded-xl text-center text-xs tracking-wider uppercase transition shadow-md flex items-center justify-center gap-2">
+                                <span class="material-symbols-outlined text-[18px]">credit_card</span>
+                                Inscribirme y Pagar con Wompi
+                            </a>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- MÓDULO 2: PRÓXIMAMENTE -->
+                <div id="modulo2" class="module-card bg-white rounded-3xl p-8 sm:p-12 border border-slate-200 shadow-sm relative overflow-hidden">
+                    <div class="flex items-center gap-3 mb-4">
+                        <span class="px-3.5 py-1 rounded-full bg-slate-100 text-slate-700 text-xs font-bold tracking-wide">MÓDULO 2</span>
+                        <span class="text-xs font-semibold text-amber-600 bg-amber-50 px-2.5 py-0.5 rounded-full border border-amber-200">Próximamente • Convocatoria Siguiente</span>
+                    </div>
+
+                    <div class="flex flex-col lg:flex-row lg:items-start justify-between gap-8">
+                        <div class="max-w-3xl">
+                            <h4 class="text-2xl sm:text-3xl font-extrabold text-slate-900 mb-4 leading-snug">
+                                Automatización BIM II – Desarrollo de Plugins y Add-ins para Revit
+                            </h4>
+                            <p class="text-base text-slate-700 leading-relaxed font-normal mb-8">
+                                Da el salto a la creación de aplicaciones con interfaz propia (estilo DiRoots). Diseña tus propios botones y complementos en Revit utilizando Python, pyRevit y asistencia avanzada con IA.
+                            </p>
+
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 pt-6 border-t border-slate-100">
+                                <div class="flex items-start gap-3">
+                                    <span class="material-symbols-outlined text-slate-400 text-xl mt-0.5">lock</span>
+                                    <div>
+                                        <h5 class="text-sm font-bold text-slate-900">pyRevit y Arquitectura de Plugins</h5>
+                                        <p class="text-xs text-slate-500">Creación de botones individuales, botones desplegables y pestañas personalizadas en la Ribbon.</p>
+                                    </div>
+                                </div>
+                                <div class="flex items-start gap-3">
+                                    <span class="material-symbols-outlined text-slate-400 text-xl mt-0.5">lock</span>
+                                    <div>
+                                        <h5 class="text-sm font-bold text-slate-900">Interfaces Gráficas (UI) con WPF / XAML</h5>
+                                        <p class="text-xs text-slate-500">Diseño de ventanas interactivas, selectores visuales y formularios de configuración.</p>
+                                    </div>
+                                </div>
+                                <div class="flex items-start gap-3">
+                                    <span class="material-symbols-outlined text-slate-400 text-xl mt-0.5">lock</span>
+                                    <div>
+                                        <h5 class="text-sm font-bold text-slate-900">Interacción Profunda con Revit API</h5>
+                                        <p class="text-xs text-slate-500">Transacciones seguras, filtrado avanzado de elementos y manipulación de parámetros internos.</p>
+                                    </div>
+                                </div>
+                                <div class="flex items-start gap-3">
+                                    <span class="material-symbols-outlined text-slate-400 text-xl mt-0.5">lock</span>
+                                    <div>
+                                        <h5 class="text-sm font-bold text-slate-900">Empaquetado y Despliegue Corporativo</h5>
+                                        <p class="text-xs text-slate-500">Cómo distribuir instaladores y extensiones para toda tu oficina o clientes.</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="lg:w-80 flex-shrink-0 bg-slate-50 rounded-2xl p-6 border border-slate-200 flex flex-col justify-between">
+                            <div>
+                                <span class="text-xs font-bold uppercase tracking-wider text-slate-400 block">Estado del Módulo</span>
+                                <div class="my-3">
+                                    <span class="text-xl font-bold text-slate-700">En Preparación</span>
+                                    <p class="text-xs text-slate-500 mt-1">Los estudiantes del Módulo 1 tendrán acceso prioritario y tarifa preferencial.</p>
+                                </div>
+                            </div>
+                            <button onclick="openWaitlistModal('Módulo 2: Desarrollo de Plugins y Add-ins para Revit')" class="w-full mt-4 bg-slate-200 hover:bg-slate-300 text-slate-800 font-bold py-3 px-4 rounded-xl text-center text-xs tracking-wider uppercase transition flex items-center justify-center gap-2">
+                                <span class="material-symbols-outlined text-[18px]">notifications</span>
+                                Notificarme de Apertura
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- MÓDULO 3: PRÓXIMAMENTE -->
+                <div id="modulo3" class="module-card bg-white rounded-3xl p-8 sm:p-12 border border-slate-200 shadow-sm relative overflow-hidden">
+                    <div class="flex items-center gap-3 mb-4">
+                        <span class="px-3.5 py-1 rounded-full bg-slate-100 text-slate-700 text-xs font-bold tracking-wide">MÓDULO 3</span>
+                        <span class="text-xs font-semibold text-purple-700 bg-purple-50 px-2.5 py-0.5 rounded-full border border-purple-200">Nivel Experto • Convocatoria Avanzada</span>
+                    </div>
+
+                    <div class="flex flex-col lg:flex-row lg:items-start justify-between gap-8">
+                        <div class="max-w-3xl">
+                            <h4 class="text-2xl sm:text-3xl font-extrabold text-slate-900 mb-4 leading-snug">
+                                Arquitectura Digital BIM III – Plataformas Web y Ecosistemas de Proyecto
+                            </h4>
+                            <p class="text-base text-slate-700 leading-relaxed font-normal mb-8">
+                                Conviértete en un experto absoluto creando entornos y portales web personalizados en la nube para gestionar BEPs, estándares corporativos y bibliotecas de familias automatizadas.
+                            </p>
+
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 pt-6 border-t border-slate-100">
+                                <div class="flex items-start gap-3">
+                                    <span class="material-symbols-outlined text-slate-400 text-xl mt-0.5">lock</span>
+                                    <div>
+                                        <h5 class="text-sm font-bold text-slate-900">Visores BIM 3D Web (Three.js & ThatOpen)</h5>
+                                        <p class="text-xs text-slate-500">Carga y renderiza modelos IFC y fragmentos 3D de alta velocidad en el navegador.</p>
+                                    </div>
+                                </div>
+                                <div class="flex items-start gap-3">
+                                    <span class="material-symbols-outlined text-slate-400 text-xl mt-0.5">lock</span>
+                                    <div>
+                                        <h5 class="text-sm font-bold text-slate-900">Ecosistemas de Proyecto & CDE</h5>
+                                        <p class="text-xs text-slate-500">Construcción de portales de datos comunes en la nube para empresas e interventorías.</p>
+                                    </div>
+                                </div>
+                                <div class="flex items-start gap-3">
+                                    <span class="material-symbols-outlined text-slate-400 text-xl mt-0.5">lock</span>
+                                    <div>
+                                        <h5 class="text-sm font-bold text-slate-900">Gobernanza de BEP Automatizada</h5>
+                                        <p class="text-xs text-slate-500">Validación de estándares de modelado y chequeo automático de entregables online.</p>
+                                    </div>
+                                </div>
+                                <div class="flex items-start gap-3">
+                                    <span class="material-symbols-outlined text-slate-400 text-xl mt-0.5">lock</span>
+                                    <div>
+                                        <h5 class="text-sm font-bold text-slate-900">Nubes y Almacenamiento Conectado (BYOS)</h5>
+                                        <p class="text-xs text-slate-500">Conexión con Google Drive, OneDrive/SharePoint y bases de datos Supabase / Firebase.</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="lg:w-80 flex-shrink-0 bg-slate-50 rounded-2xl p-6 border border-slate-200 flex flex-col justify-between">
+                            <div>
+                                <span class="text-xs font-bold uppercase tracking-wider text-slate-400 block">Estado del Módulo</span>
+                                <div class="my-3">
+                                    <span class="text-xl font-bold text-slate-700">En Preparación</span>
+                                    <p class="text-xs text-slate-500 mt-1">Diseñado para líderes BIM y arquitectos de soluciones que buscan crear plataformas completas.</p>
+                                </div>
+                            </div>
+                            <button onclick="openWaitlistModal('Módulo 3: Plataformas Web y Ecosistemas de Proyecto')" class="w-full mt-4 bg-slate-200 hover:bg-slate-300 text-slate-800 font-bold py-3 px-4 rounded-xl text-center text-xs tracking-wider uppercase transition flex items-center justify-center gap-2">
+                                <span class="material-symbols-outlined text-[18px]">notifications</span>
+                                Notificarme de Apertura
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+    </section>
+
+    <!-- Sección de Inscripción y Pago con Wompi -->
+    <section id="inscripcion" class="py-24 bg-white border-b border-slate-200">
+        <div class="max-w-5xl mx-auto px-6 lg:px-8">
+            <div class="text-center max-w-3xl mx-auto mb-14">
+                <span class="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider bg-emerald-100 text-emerald-800 mb-3 border border-emerald-300">
+                    <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span> Cupos Limitados
+                </span>
+                <h3 class="text-3xl sm:text-4xl font-extrabold text-slate-900 tracking-tight">
+                    Inscripción y Pago Seguro en Línea
+                </h3>
+                <p class="mt-4 text-base text-slate-600">
+                    Diligencia tus datos para asegurar tu cupo en el <strong>MÓDULO 1: Automatización BIM I</strong> y realiza el pago directo con Wompi (Tarjetas de Crédito, PSE, Nequi o Bancolombia).
+                </p>
+            </div>
+
+            <!-- Contenedor del Formulario y Resumen -->
+            <div class="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+                
+                <!-- Formulario de Estudiante (7 cols) -->
+                <div class="lg:col-span-7 bg-slate-50 rounded-3xl p-8 border border-slate-200 shadow-sm">
+                    <h4 class="text-lg font-bold text-slate-900 mb-6 flex items-center gap-2">
+                        <span class="material-symbols-outlined text-emerald-600">badge</span>
+                        Datos del Estudiante
+                    </h4>
+
+                    <form id="enrollment-form" onsubmit="event.preventDefault(); procesarPagoWompi();" class="space-y-5">
+                        <div>
+                            <label class="block text-xs font-bold uppercase text-slate-700 tracking-wider mb-1.5">
+                                Nombre y Apellidos Completos *
+                            </label>
+                            <input type="text" id="student-name" required placeholder="Ej: Camilo Martínez Gómez"
+                                   class="w-full text-sm rounded-xl border-slate-300 shadow-sm focus:border-emerald-500 focus:ring-emerald-500 p-3 bg-white">
+                        </div>
+
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            <div>
+                                <label class="block text-xs font-bold uppercase text-slate-700 tracking-wider mb-1.5">
+                                    Correo Electrónico *
+                                </label>
+                                <input type="email" id="student-email" required placeholder="tucorreo@ejemplo.com"
+                                       class="w-full text-sm rounded-xl border-slate-300 shadow-sm focus:border-emerald-500 focus:ring-emerald-500 p-3 bg-white">
+                                <span class="text-[11px] text-slate-500 mt-1 block">Aquí recibirás los enlaces y accesos.</span>
+                            </div>
+                            <div>
+                                <label class="block text-xs font-bold uppercase text-slate-700 tracking-wider mb-1.5">
+                                    Teléfono / WhatsApp *
+                                </label>
+                                <input type="tel" id="student-phone" required placeholder="Ej: +57 300 123 4567"
+                                       class="w-full text-sm rounded-xl border-slate-300 shadow-sm focus:border-emerald-500 focus:ring-emerald-500 p-3 bg-white">
+                                <span class="text-[11px] text-slate-500 mt-1 block">Para el grupo exclusivo de soporte.</span>
+                            </div>
+                        </div>
+
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            <div>
+                                <label class="block text-xs font-bold uppercase text-slate-700 tracking-wider mb-1.5">
+                                    Documento de Identidad (C.C. / DNI / Pasaporte) *
+                                </label>
+                                <input type="text" id="student-doc" required placeholder="Número de documento"
+                                       class="w-full text-sm rounded-xl border-slate-300 shadow-sm focus:border-emerald-500 focus:ring-emerald-500 p-3 bg-white">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-bold uppercase text-slate-700 tracking-wider mb-1.5">
+                                    Profesión / Ocupación
+                                </label>
+                                <input type="text" id="student-profession" placeholder="Ej: Arquitecto, Ing. Civil, Modelador BIM"
+                                       class="w-full text-sm rounded-xl border-slate-300 shadow-sm focus:border-emerald-500 focus:ring-emerald-500 p-3 bg-white">
+                            </div>
+                        </div>
+
+                        <div>
+                            <label class="block text-xs font-bold uppercase text-slate-700 tracking-wider mb-1.5">
+                                Empresa o Universidad (Opcional)
+                            </label>
+                            <input type="text" id="student-company" placeholder="Nombre de la empresa o institución"
+                                   class="w-full text-sm rounded-xl border-slate-300 shadow-sm focus:border-emerald-500 focus:ring-emerald-500 p-3 bg-white">
+                        </div>
+
+                        <div class="pt-4 border-t border-slate-200">
+                            <label class="flex items-start gap-2.5 cursor-pointer">
+                                <input type="checkbox" id="terms-accept" required checked
+                                       class="rounded text-emerald-600 focus:ring-emerald-500 h-4 w-4 mt-0.5 border-slate-300">
+                                <span class="text-xs text-slate-600 leading-normal">
+                                    Acepto los términos del diplomado y la política de tratamiento de datos personales de nora CDE.
+                                </span>
+                            </label>
+                        </div>
+
+                        <!-- Botón de Envío / Disparador Wompi -->
+                        <button type="submit" id="btn-pay-wompi"
+                                class="w-full mt-4 bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-4 px-6 rounded-2xl text-sm tracking-wide uppercase transition shadow-lg shadow-emerald-500/25 flex items-center justify-center gap-2 hover:scale-[1.01]">
+                            <span class="material-symbols-outlined text-[20px]">lock</span>
+                            <span>Pagar Inscripción con Wompi</span>
+                        </button>
+                    </form>
+                </div>
+
+                <!-- Resumen de Orden y Pasarela Wompi (5 cols) -->
+                <div class="lg:col-span-5 space-y-6">
+                    <div class="bg-slate-900 text-white rounded-3xl p-8 shadow-xl border border-slate-800">
+                        <span class="text-xs font-bold uppercase tracking-wider text-emerald-400 block mb-1">Resumen de Inscripción</span>
+                        <h4 class="text-xl font-bold text-white mb-4">MÓDULO 1: Automatización BIM I</h4>
+                        <p class="text-xs text-slate-400 leading-relaxed mb-6">
+                            Lógica Computacional, Autodesk Dynamo, Interoperabilidad con Excel y Programación Python asistida por Inteligencia Artificial.
+                        </p>
+
+                        <div class="space-y-3 py-4 border-y border-slate-800 text-xs">
+                            <div class="flex justify-between items-center text-slate-300">
+                                <span>Modalidad:</span>
+                                <span class="font-semibold text-white">Online en Vivo + Grabado</span>
+                            </div>
+                            <div class="flex justify-between items-center text-slate-300">
+                                <span>Certificación:</span>
+                                <span class="font-semibold text-emerald-400">Incluida</span>
+                            </div>
+                            <div class="flex justify-between items-center text-slate-300">
+                                <span>Acceso al Código:</span>
+                                <span class="font-semibold text-white">Scripts y Librerías</span>
+                            </div>
+                            <div class="flex justify-between items-center text-slate-300">
+                                <span>Soporte:</span>
+                                <span class="font-semibold text-white">Canal exclusivo con docentes</span>
+                            </div>
+                        </div>
+
+                        <div class="mt-6 flex justify-between items-baseline">
+                            <span class="text-sm font-semibold text-slate-300">Total a Pagar:</span>
+                            <div class="text-right">
+                                <span class="text-3xl font-black text-white">$450.000</span>
+                                <span class="text-xs font-bold text-slate-400 ml-1">COP</span>
+                            </div>
+                        </div>
+
+                        <!-- Logos Wompi / Métodos de Pago -->
+                        <div class="mt-6 pt-6 border-t border-slate-800">
+                            <span class="text-[10px] uppercase font-bold text-slate-400 tracking-wider block mb-3 text-center">
+                                Métodos de Pago Habilitados con Wompi
+                            </span>
+                            <div class="flex flex-wrap justify-center items-center gap-3 text-slate-300 text-xs">
+                                <span class="bg-slate-800 px-2.5 py-1 rounded border border-slate-700 font-semibold text-[11px]">💳 Tarjetas Crédito/Débito</span>
+                                <span class="bg-slate-800 px-2.5 py-1 rounded border border-slate-700 font-semibold text-[11px]">🏦 PSE (Todos los bancos)</span>
+                                <span class="bg-slate-800 px-2.5 py-1 rounded border border-slate-700 font-semibold text-[11px]">📱 Nequi</span>
+                                <span class="bg-slate-800 px-2.5 py-1 rounded border border-slate-700 font-semibold text-[11px]">🟡 Botón Bancolombia</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Contacto Directo WhatsApp -->
+                    <div class="bg-emerald-50 rounded-2xl p-6 border border-emerald-200 flex items-center justify-between gap-4">
+                        <div class="flex items-center gap-3">
+                            <div class="w-10 h-10 rounded-full bg-emerald-600 text-white flex items-center justify-center flex-shrink-0">
+                                <span class="material-symbols-outlined text-xl">chat</span>
+                            </div>
+                            <div>
+                                <h5 class="text-xs font-bold text-emerald-950 uppercase">¿Dudas o Pago Corporativo?</h5>
+                                <p class="text-xs text-emerald-800">Escríbenos a WhatsApp para cotizaciones o transferencias directas.</p>
+                            </div>
+                        </div>
+                        <a href="https://wa.me/573001234567?text=Hola,%20quisiera%20informaci%C3%B3n%20sobre%20el%20Diplomado%20Desarrollador%20BIM" target="_blank"
+                           class="flex-shrink-0 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs py-2 px-3.5 rounded-xl transition shadow-sm">
+                            Chatear
+                        </a>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+    </section>
+
+    <!-- Preguntas Frecuentes -->
+    <section id="preguntas" class="py-20 bg-slate-50 border-b border-slate-200">
+        <div class="max-w-4xl mx-auto px-6 lg:px-8">
+            <h3 class="text-2xl sm:text-3xl font-extrabold text-slate-900 text-center mb-12">
+                Preguntas Frecuentes
+            </h3>
+
+            <div class="space-y-4">
+                <details class="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm group">
+                    <summary class="font-bold text-slate-900 cursor-pointer list-none flex justify-between items-center text-sm">
+                        <span>¿Necesito saber programar previamente para tomar el Módulo 1?</span>
+                        <span class="material-symbols-outlined text-slate-400 group-open:rotate-180 transition-transform">expand_more</span>
+                    </summary>
+                    <p class="mt-4 text-xs text-slate-600 leading-relaxed">
+                        No. El Módulo 1 parte desde los fundamentos absolutos de lógica computacional y algoritmia. Además, aprenderás a apoyarte en modelos de Inteligencia Artificial para escribir, auditar y entender cada línea de código sin frustración.
+                    </p>
+                </details>
+
+                <details class="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm group">
+                    <summary class="font-bold text-slate-900 cursor-pointer list-none flex justify-between items-center text-sm">
+                        <span>¿Qué versión de Revit y Dynamo utilizaremos?</span>
+                        <summary class="font-bold text-slate-900 cursor-pointer list-none flex justify-between items-center text-sm">
+                        <span>¿Qué versión de Revit y Dynamo utilizaremos?</span>
+                        <span class="material-symbols-outlined text-slate-400 group-open:rotate-180 transition-transform">expand_more</span>
+                    </summary>
+                    <p class="mt-4 text-xs text-slate-600 leading-relaxed">
+                        Trabajamos con Revit 2024, 2025 o 2026 y las versiones nativas de Dynamo correspondientes. Todo el código Python se enseña con compatibilidad multiplataforma (IronPython y CPython3).
+                    </p>
+                </details>
+
+                <details class="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm group">
+                    <summary class="font-bold text-slate-900 cursor-pointer list-none flex justify-between items-center text-sm">
+                        <span>¿Puedo pagar desde fuera de Colombia?</span>
+                        <span class="material-symbols-outlined text-slate-400 group-open:rotate-180 transition-transform">expand_more</span>
+                    </summary>
+                    <p class="mt-4 text-xs text-slate-600 leading-relaxed">
+                        ¡Sí! A través de Wompi puedes pagar con cualquier tarjeta de crédito o débito internacional (Visa, Mastercard, American Express). Si prefieres PayPal o transferencia bancaria internacional, contáctanos por WhatsApp.
+                    </p>
+                </details>
+
+                <details class="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm group">
+                    <summary class="font-bold text-slate-900 cursor-pointer list-none flex justify-between items-center text-sm">
+                        <span>¿Recibiré un certificado al finalizar?</span>
+                        <span class="material-symbols-outlined text-slate-400 group-open:rotate-180 transition-transform">expand_more</span>
+                    </summary>
+                    <p class="mt-4 text-xs text-slate-600 leading-relaxed">
+                        Sí, al completar las entregas prácticas de cada módulo recibirás un certificado digital oficial expedido por <strong>nora CDE</strong> con código de verificación para respaldar tus competencias en LinkedIn y tu hoja de vida.
+                    </p>
+                </details>
+            </div>
+        </div>
+    </section>
+
+    <!-- Footer -->
+    <footer class="bg-white py-12 border-t border-slate-200">
+        <div class="max-w-7xl mx-auto px-6 lg:px-8 flex flex-col sm:flex-row justify-between items-center gap-6">
+            <div class="flex items-center gap-3">
+                <img src="https://i.postimg.cc/tR3YSryT/LOGO-NORA-NEGRO.png" alt="nora" class="h-6">
+                <span class="text-xs text-slate-400 font-medium">| Formación nora</span>
+            </div>
+            <p class="text-xs text-slate-500 font-medium">
+                © 2026 nora CDE Inc. Diplomado Desarrollador BIM. Todos los derechos reservados.
+            </p>
+            <div class="flex items-center gap-6 text-xs text-slate-600">
+                <a href="index.html" class="hover:text-black">Ecosistema</a>
+                <a href="index.html#precios" class="hover:text-black">Precios</a>
+                <button onclick="window.scrollTo({top: 0, behavior: 'smooth'})" class="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center hover:bg-slate-200 transition">
+                    &uarr;
+                </button>
+            </div>
+        </div>
+    </footer>
+
+    <!-- Modal para Lista de Espera de Módulos 2 y 3 -->
+    <div id="waitlist-modal" class="fixed inset-0 bg-slate-950/60 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+        <div class="bg-white rounded-3xl p-8 max-w-md w-full shadow-2xl border border-slate-200 relative">
+            <button onclick="closeWaitlistModal()" class="absolute top-5 right-5 text-slate-400 hover:text-slate-800 transition">
+                <span class="material-symbols-outlined">close</span>
+            </button>
+            <div class="w-12 h-12 rounded-2xl bg-slate-100 flex items-center justify-center text-slate-800 mb-4">
+                <span class="material-symbols-outlined text-2xl text-emerald-600">notifications_active</span>
+            </div>
+            <h4 class="text-xl font-bold text-slate-900 mb-2">Lista de Espera Prioritaria</h4>
+            <p id="waitlist-module-title" class="text-xs font-semibold text-emerald-700 mb-4 bg-emerald-50 p-2.5 rounded-xl border border-emerald-200"></p>
+            <p class="text-xs text-slate-600 mb-6">
+                Ingresa tu correo para recibir una notificación exclusiva y un descuento por pronta reserva en cuanto se abran las inscripciones oficiales de este módulo.
+            </p>
+
+            <form onsubmit="event.preventDefault(); submitWaitlist();" class="space-y-4">
+                <input type="text" id="waitlist-name" required placeholder="Tu nombre"
+                       class="w-full text-sm rounded-xl border-slate-300 shadow-sm p-3">
+                <input type="email" id="waitlist-email" required placeholder="tucorreo@ejemplo.com"
+                       class="w-full text-sm rounded-xl border-slate-300 shadow-sm p-3">
+                <button type="submit" class="w-full bg-slate-900 hover:bg-black text-white font-bold py-3 rounded-xl text-xs uppercase tracking-wider transition">
+                    Reservar mi Lugar en Lista de Espera
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Script de Lógica de Formación & Wompi Checkout -->
+    <script>
+        // Configuración de Precio Módulo 1 en Pesos Colombianos (COP)
+        const MODULE_PRICE_COP = 450000;
+        const MODULE_PRICE_IN_CENTS = MODULE_PRICE_COP * 100; // 45,000,000 centavos
+
+        // Función para procesar la inscripción y lanzar Wompi
+        async function procesarPagoWompi() {
+            const name = document.getElementById('student-name').value.trim();
+            const email = document.getElementById('student-email').value.trim();
+            const phone = document.getElementById('student-phone').value.trim();
+            const doc = document.getElementById('student-doc').value.trim();
+            const profession = document.getElementById('student-profession').value.trim();
+            const company = document.getElementById('student-company').value.trim();
+
+            if (!name || !email || !phone || !doc) {
+                alert('Por favor completa todos los campos obligatorios del estudiante.');
+                return;
+            }
+
+            const btn = document.getElementById('btn-pay-wompi');
+            const originalText = btn.innerHTML;
+            btn.disabled = true;
+            btn.innerHTML = `<span class="material-symbols-outlined text-[18px] animate-spin">progress_activity</span> Conectando con Wompi...`;
+
+            try {
+                // Obtener configuración de Wompi de la plataforma
+                let globalWompi = {};
+                try {
+                    globalWompi = JSON.parse(localStorage.getItem('globalWompiConfig') || '{}');
+                } catch(e) {}
+
+                // Llave pública configurada o sandbox de pruebas por defecto
+                const pubKey = globalWompi.pubKey || 'pub_test_emCXbyxkJncOP6CaWEKk4UIJeTVRzjax';
+                const integritySecret = globalWompi.integritySecret || '';
+
+                // Referencia única de transacción
+                const reference = `DIP-BIM-M1-${Date.now().toString(36).toUpperCase()}-${Math.floor(Math.random()*1000)}`;
+
+                // Guardar intento de inscripción localmente para respaldo
+                const inscripcion = {
+                    reference,
+                    fecha: new Date().toISOString(),
+                    modulo: "MÓDULO 1: Automatización BIM I",
+                    estudiante: { name, email, phone, doc, profession, company },
+                    montoCOP: MODULE_PRICE_COP
+                };
+                try {
+                    const list = JSON.parse(localStorage.getItem('inscripciones_diplomado') || '[]');
+                    list.push(inscripcion);
+                    localStorage.setItem('inscripciones_diplomado', JSON.stringify(list));
+                } catch(e) {}
+
+                // Iniciar pasarela Wompi
+                if (window.WompiModule && typeof window.WompiModule.launchCheckout === 'function') {
+                    await window.WompiModule.launchCheckout({
+                        publicKey: pubKey,
+                        integritySecret: integritySecret,
+                        reference: reference,
+                        amountInCents: MODULE_PRICE_IN_CENTS,
+                        currency: 'COP',
+                        redirectUrl: `${window.location.origin}${window.location.pathname}?status=success&ref=${reference}`,
+                        customerEmail: email,
+                        customerName: name
+                    });
+                } else if (window.WidgetCheckout) {
+                    const checkout = new window.WidgetCheckout({
+                        currency: 'COP',
+                        amountInCents: MODULE_PRICE_IN_CENTS,
+                        reference: reference,
+                        publicKey: pubKey,
+                        redirectUrl: `${window.location.origin}${window.location.pathname}?status=success&ref=${reference}`,
+                        customerData: {
+                            email: email,
+                            fullName: name,
+                            phoneNumber: phone
+                        }
+                    });
+                    checkout.open(function (result) {
+                        console.log('Resultado Wompi Checkout:', result);
+                    });
+                } else {
+                    // Fallback directo a URL de checkout
+                    const params = new URLSearchParams({
+                        'public-key': pubKey,
+                        'currency': 'COP',
+                        'amount-in-cents': MODULE_PRICE_IN_CENTS,
+                        'reference': reference,
+                        'redirect-url': `${window.location.origin}${window.location.pathname}?status=success&ref=${reference}`,
+                        'customer-data:email': email,
+                        'customer-data:full-name': name
+                    });
+                    window.location.href = `https://checkout.wompi.co/p/?${params.toString()}`;
+                }
+            } catch (err) {
+                console.error('Error al iniciar Wompi:', err);
+                alert('No fue posible abrir la pasarela Wompi: ' + (err.message || 'Error desconocido'));
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = originalText;
+            }
+        }
+
+        // Manejo de Modal de Lista de Espera
+        function openWaitlistModal(moduleTitle) {
+            document.getElementById('waitlist-module-title').textContent = moduleTitle;
+            document.getElementById('waitlist-modal').classList.remove('hidden');
+        }
+        function closeWaitlistModal() {
+            document.getElementById('waitlist-modal').classList.add('hidden');
+        }
+        function submitWaitlist() {
+            const name = document.getElementById('waitlist-name').value;
+            const email = document.getElementById('waitlist-email').value;
+            const module = document.getElementById('waitlist-module-title').textContent;
+
+            try {
+                const waitlist = JSON.parse(localStorage.getItem('waitlist_diplomado') || '[]');
+                waitlist.push({ fecha: new Date().toISOString(), name, email, module });
+                localStorage.setItem('waitlist_diplomado', JSON.stringify(waitlist));
+            } catch(e) {}
+
+            alert(`¡Gracias ${name}! Te hemos anotado en la lista de espera para ${module}. Te contactaremos en cuanto abran inscripciones.`);
+            closeWaitlistModal();
+        }
+
+        // Revisar retorno de Wompi Checkout
+        window.addEventListener('DOMContentLoaded', () => {
+            const params = new URLSearchParams(window.location.search);
+            const status = params.get('status') || params.get('transaction_status');
+            const ref = params.get('ref') || params.get('id');
+
+            if (status === 'success' || status === 'APPROVED') {
+                const banner = document.createElement('div');
+                banner.className = 'fixed top-24 left-1/2 -translate-x-1/2 z-50 max-w-xl w-[90%] bg-emerald-600 text-white p-6 rounded-2xl shadow-2xl border-2 border-white flex items-start gap-4';
+                banner.innerHTML = `
+                    <span class="material-symbols-outlined text-4xl text-emerald-200">celebration</span>
+                    <div>
+                        <h4 class="font-bold text-lg mb-1">¡Inscripción Confirmada con Éxito!</h4>
+                        <p class="text-xs text-emerald-100 leading-relaxed mb-3">
+                            Hemos recibido tu pago a través de Wompi. Te enviamos los detalles y accesos al correo electrónico registrado.
+                        </p>
+                        <span class="text-[10px] bg-emerald-800/60 px-2 py-1 rounded font-mono">Ref: ${ref || 'Aprobado'}</span>
+                    </div>
+                    <button onclick="this.parentElement.remove()" class="text-emerald-200 hover:text-white">✕</button>
+                `;
+                document.body.appendChild(banner);
+            }
+        });
+    </script>
+</body>
+</html>
