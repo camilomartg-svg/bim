@@ -3588,6 +3588,20 @@ function rebuildAllElements(): any[] {
                 }
                 if (checkIsEjecutado(attrs)) {
                     isEjecutado = true;
+                } else if (guid && String(guid).trim().length === 22 && modelAny.properties) {
+                    const elGuid = String(guid).trim();
+                    const prefix21 = elGuid.slice(0, 21);
+                    for (const pk in modelAny.properties) {
+                        const pEnt = modelAny.properties[pk];
+                        if (!pEnt) continue;
+                        const pGuid = String(pEnt.GlobalId || pEnt.guid || pEnt._guid || '').trim();
+                        if (pGuid.length === 22 && pGuid !== elGuid && pGuid.startsWith(prefix21)) {
+                            if (checkIsEjecutado(pEnt)) {
+                                isEjecutado = true;
+                                break;
+                            }
+                        }
+                    }
                 }
                 pilote = getValGlobal(attrs, 'NÚMERO DE PILOTE', 'NUMERO DE PILOTE', 'Número de pilote', 'Numero de pilote', 'NÚMERO PILOTE', 'NUMERO PILOTE', 'Número Pilote', 'Numero Pilote', 'N° PILOTE', 'Nº PILOTE', 'N° Pilote', 'Nº Pilote', 'PILOTE', 'Pilote', 'pilote') || '';
             } else {
@@ -11312,6 +11326,20 @@ function initStatusPanel() {
                               (tag ? (m.properties[tag] || m._propertiesByTag?.get(String(tag))) : null) ||
                               (guid ? (m.properties[guid] || m._propertiesByGuid?.get(String(guid))) : null);
             if (propEntry && checkIsEjecutado(propEntry)) return true;
+
+            // Herencia de anfitrión (ej. Dado de cimentación con pilote)
+            if (guid && String(guid).trim().length === 22) {
+                const elGuid = String(guid).trim();
+                const prefix21 = elGuid.slice(0, 21);
+                for (const pk in m.properties) {
+                    const pEnt = m.properties[pk];
+                    if (!pEnt) continue;
+                    const pGuid = String(pEnt.GlobalId || pEnt.guid || pEnt._guid || '').trim();
+                    if (pGuid.length === 22 && pGuid !== elGuid && pGuid.startsWith(prefix21)) {
+                        if (checkIsEjecutado(pEnt)) return true;
+                    }
+                }
+            }
         }
         return false;
     }
