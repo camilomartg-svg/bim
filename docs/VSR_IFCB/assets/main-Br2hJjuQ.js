@@ -6829,123 +6829,118 @@ Click para enfocar en la tabla de despiece`,re.addEventListener("mouseenter",()=
                 <button type="button" class="q-btn-xs" data-status="RECHAZADO" style="background: #fecaca; color: #7f1d1d;">Rechazado</button>
             </div>
         `,st.querySelector("#q-btn-clear-table-sel")?.addEventListener("click",()=>{I=[],window.__noraCurrentSelectedIds=new Set,window.__noraCurrentSelectedElements=[],ui.clear("select"),Ei(),$i(),ns(at())}),st.querySelector("#q-btn-clear-selection-filter")?.addEventListener("click",()=>{I=[],window.__noraCurrentSelectedIds=new Set,window.__noraCurrentSelectedElements=[];const N=Yt.get(je);N&&N.clear("select"),Ei(),$i(),ns(at())}),st.querySelectorAll(".q-btn-xs[data-status]").forEach(N=>{N.addEventListener("click",()=>{const pt=N.getAttribute("data-status");if(pt){const $t=I.map(Mt=>String(Mt));Zt($t,pt)}})})}const Qt=document.getElementById("btn-s-maximize");if(Qt&&Qt.addEventListener("click",()=>{const st=r.classList.toggle("maximized"),N=Qt.querySelector(".material-symbols-outlined");N&&(N.textContent=st?"fullscreen_exit":"fullscreen")}),t.addEventListener("click",()=>{const st=r.classList.contains("closed");if(E=st,st){const N=document.getElementById("quantities-panel"),pt=document.getElementById("quantities-toggle");if(N&&!N.classList.contains("closed")){N.classList.add("closed"),N.classList.remove("maximized");const Mt=document.getElementById("btn-q-maximize")?.querySelector(".material-symbols-outlined");Mt&&(Mt.textContent="fullscreen"),pt&&pt.classList.remove("active")}window.__noraCurrentSelectedIds instanceof Set&&window.__noraCurrentSelectedIds.size>0&&(I=Array.from(window.__noraCurrentSelectedIds).map(Number)),r.classList.remove("closed"),t.classList.add("active"),openStatusCharts(at()),li(),M||(M=!0,ct())}else{r.classList.add("closed"),r.classList.remove("maximized");const N=Qt?.querySelector(".material-symbols-outlined");N&&(N.textContent="fullscreen"),t.classList.remove("active"),closeStatusCharts(),Pt(),Q=null,K=null;const pt=k;k=!1,qe(at()),k=pt}}),s&&s.addEventListener("click",()=>{E=!1,r.classList.add("closed"),r.classList.remove("maximized");const st=Qt?.querySelector(".material-symbols-outlined");st&&(st.textContent="fullscreen"),t.classList.remove("active"),closeStatusCharts(),Pt(),Q=null,K=null;const N=k;k=!1,qe(at()),k=N}),i){let st=!1;i.addEventListener("mousedown",N=>{st=!0,i.classList.add("resizing"),document.body.style.cursor="ns-resize",N.preventDefault()}),document.addEventListener("mousemove",N=>{if(!st)return;const pt=window.innerHeight-N.clientY;pt>150&&pt<window.innerHeight-100&&(r.style.height=`${pt}px`)}),document.addEventListener("mouseup",()=>{st&&(st=!1,i.classList.remove("resizing"),document.body.style.cursor="default")})}const Te=r.querySelectorAll(".q-tab-btn");Te.forEach(st=>{st.addEventListener("click",()=>{Te.forEach(N=>N.classList.remove("active")),st.classList.add("active"),S=st.getAttribute("data-tab"),li()})});let ss=null;window.addEventListener("classificationFilterChanged",()=>{r&&!r.classList.contains("closed")&&(ss&&cancelAnimationFrame(ss),ss=requestAnimationFrame(()=>{li()}))});
+
+// ============================================================================
+// STATUS CHARTS MODULE (AVANCE RADIAL - CASCOS DE NARANJA)
+// ============================================================================
 let currentChartMetric = 'count';
 
 function getElementIntegratedName(f) {
-  let b = f.nombreIntegrado && f.nombreIntegrado !== "SIN NOMBRE INTEGRADO" && f.nombreIntegrado.trim() !== "" ? f.nombreIntegrado.trim() : "";
+  let b = f.nombreIntegrado && f.nombreIntegrado !== 'SIN NOMBRE INTEGRADO' && f.nombreIntegrado.trim() !== '' ? f.nombreIntegrado.trim() : '';
   if (!b && f.name) {
-    const x = f.name.split(":");
-    x.length >= 3 && /^\d+$/.test(x[x.length - 1].trim()) ? b = x[x.length - 2].trim() : (x.length === 2 && /^\d+$/.test(x[1].trim()) ? b = x[0].trim() : b = f.name.trim());
+    const parts = f.name.split(':');
+    if (parts.length >= 3 && /^\d+$/.test(parts[parts.length - 1].trim())) {
+      b = parts[parts.length - 2].trim();
+    } else if (parts.length === 2 && /^\d+$/.test(parts[1].trim())) {
+      b = parts[0].trim();
+    } else {
+      b = f.name.trim();
+    }
   }
-  return b || f.name || "(Sin Nombre Integrado)";
+  return b || f.name || '(Sin Nombre)';
 }
 
 function getThemePalette() {
-  const isDark = document.body.classList.contains("dark-mode");
+  const isDark = document.body.classList.contains('dark-mode');
   return isDark ? {
     isDark: true,
-    containerBg: "#0b0f19",
-    textPrimary: "#f8fafc",
-    textSecondary: "#94a3b8",
-    textMuted: "#64748b",
-    cardBg: "#111827",
-    cardBorder: "#1f2937",
-    cardShadow: "0 8px 24px rgba(0,0,0,0.4)",
-    itemBg: "#131b2e",
-    itemBorder: "#1e293b",
-    itemHoverBg: "#1a243b",
-    petalBg: "#1e293b",
-    petalStroke: "#334155",
-    petalHoverStroke: "#38bdf8",
-    hubFill: "#090d16",
-    hubStroke: "#1e293b",
-    hubPct: "#10b981",
-    hubTitle: "#94a3b8",
-    hubSub: "#64748b",
-    barTrack: "#1e293b",
-    labelColor: "#f8fafc",
-    subLabelColor: "#cbd5e1",
-    pillsBg: "#131b2e",
-    pillsBorder: "#1e293b",
-    pillInactiveText: "#94a3b8",
-    pillActiveBg: "#2563eb",
-    legendBg: "#111827",
-    legendBorder: "#1e293b",
-    noneFill: "#334155",
-    textShadow: "drop-shadow(0 1px 3px rgba(0,0,0,0.9))"
+    bg: '#0b0f19',
+    cardBg: '#111827',
+    border: '#1f2937',
+    petalBg: '#1e293b',
+    petalStroke: '#334155',
+    centerBg: '#111827',
+    centerStroke: '#374151',
+    textColor: '#f8fafc',
+    subTextColor: '#94a3b8',
+    labelColor: '#f8fafc',
+    subLabelColor: '#cbd5e1',
+    metricActiveBg: '#3b82f6',
+    metricActiveText: '#ffffff',
+    metricInactiveBg: '#1e293b',
+    metricInactiveText: '#94a3b8',
+    metricInactiveBorder: '#374151'
   } : {
     isDark: false,
-    containerBg: "#f8fafc",
-    textPrimary: "#0f172a",
-    textSecondary: "#475569",
-    textMuted: "#94a3b8",
-    cardBg: "#ffffff",
-    cardBorder: "#e2e8f0",
-    cardShadow: "0 2px 10px rgba(0,0,0,0.06)",
-    itemBg: "#ffffff",
-    itemBorder: "#e2e8f0",
-    itemHoverBg: "#f8fafc",
-    petalBg: "#f1f5f9",
-    petalStroke: "#cbd5e1",
-    petalHoverStroke: "#0284c7",
-    hubFill: "#ffffff",
-    hubStroke: "#e2e8f0",
-    hubPct: "#10b981",
-    hubTitle: "#475569",
-    hubSub: "#64748b",
-    barTrack: "#e2e8f0",
-    labelColor: "#0f172a",
-    subLabelColor: "#475569",
-    pillsBg: "#f1f5f9",
-    pillsBorder: "#e2e8f0",
-    pillInactiveText: "#64748b",
-    pillActiveBg: "#2563eb",
-    legendBg: "#ffffff",
-    legendBorder: "#e2e8f0",
-    noneFill: "#cbd5e1",
-    textShadow: "none"
+    bg: '#f8fafc',
+    cardBg: '#ffffff',
+    border: '#e2e8f0',
+    petalBg: '#f1f5f9',
+    petalStroke: '#cbd5e1',
+    centerBg: '#ffffff',
+    centerStroke: '#e2e8f0',
+    textColor: '#0f172a',
+    subTextColor: '#64748b',
+    labelColor: '#0f172a',
+    subLabelColor: '#475569',
+    metricActiveBg: '#3b82f6',
+    metricActiveText: '#ffffff',
+    metricInactiveBg: '#ffffff',
+    metricInactiveText: '#475569',
+    metricInactiveBorder: '#cbd5e1'
   };
 }
 
-if (!window.__noraThemeObserverInit) {
-  window.__noraThemeObserverInit = true;
-  try {
-    const obs = new MutationObserver(() => {
-      const gc = document.getElementById("status-charts-container");
-      if (gc && gc.style.display !== "none") {
-        window.refreshStatusCharts && window.refreshStatusCharts();
-      }
-    });
-    obs.observe(document.body, { attributes: true, attributeFilter: ["class"] });
-  } catch(e) {}
+function annularSector(cx, cy, r1, r2, a1, a2) {
+  const polar = (r, a) => ({ x: cx + r * Math.cos(a), y: cy + r * Math.sin(a) });
+  const p1 = polar(r1, a1);
+  const p2 = polar(r2, a1);
+  const p3 = polar(r2, a2);
+  const p4 = polar(r1, a2);
+  const lg = (a2 - a1) > Math.PI ? 1 : 0;
+  return 'M ' + p2.x.toFixed(2) + ' ' + p2.y.toFixed(2) + ' ' +
+         'A ' + r2 + ' ' + r2 + ' 0 ' + lg + ' 1 ' + p3.x.toFixed(2) + ' ' + p3.y.toFixed(2) + ' ' +
+         'L ' + p4.x.toFixed(2) + ' ' + p4.y.toFixed(2) + ' ' +
+         'A ' + r1 + ' ' + r1 + ' 0 ' + lg + ' 0 ' + p1.x.toFixed(2) + ' ' + p1.y.toFixed(2) + ' ' +
+         'Z';
 }
 
-function getActiveFilteredElements(allElements) {
-  let N = allElements;
-  if (I.length > 0) {
-    const kt = new Set(I.map(Number));
-    N = N.filter(xt => kt.has(Number(xt.expressID !== void 0 ? xt.expressID : xt.id)));
-  } else if (window.__noraIsolatedVisibleIds instanceof Set) {
-    const kt = window.__noraIsolatedVisibleIds;
-    N = N.filter(xt => kt.has(Number(xt.expressID !== void 0 ? xt.expressID : xt.id)));
-  } else {
-    N = N.filter(xt => !MC(xt));
-    if (Ni.size > 0 || ye.size > 0) {
-      N = N.filter(xt => ye.has(xt.category) || ye.has(xt.name) || Ni.has(xt.classification));
+function getIsolatedCategoryName() {
+  if (typeof $ === 'string' && $ !== 'Todos' && $.trim() !== '') {
+    return $.trim();
+  }
+  if (typeof Ni !== 'undefined' && Ni instanceof Set && Ni.size === 1) {
+    return Array.from(Ni)[0];
+  }
+  if (typeof ye !== 'undefined' && ye instanceof Set && ye.size === 1) {
+    return Array.from(ye)[0];
+  }
+  return null;
+}
+
+function getItemStatus(item, dateFilter) {
+  if (!item) return 'NINGUNO';
+  try {
+    let s = typeof Ut === 'function' ? Ut(item, dateFilter) : null;
+    if (!s || s === 'NINGUNO') {
+      s = typeof Ut === 'function' ? Ut(item.id, dateFilter) : null;
     }
-    if (fs.size > 0) N = N.filter(xt => fs.has(xt.level));
-    if (ms.size > 0) N = N.filter(xt => ms.has(xt.material));
-    if (gs.size > 0) N = N.filter(xt => gs.has(xt.pilote));
+    if (s && s !== 'PENDIENTE') return s;
+  } catch (e) {}
+  if (typeof x !== 'undefined' && x) {
+    if (x[item.id]) return x[item.id];
+    if (item.expressID && x[item.expressID]) return x[item.expressID];
+    if (item.tag && x[item.tag]) return x[item.tag];
+    if (item.tag && x['tag:' + item.tag]) return x['tag:' + item.tag];
+    if (item.guid && x[item.guid]) return x[item.guid];
+    if (item.guid && x['guid:' + item.guid]) return x['guid:' + item.guid];
   }
-  if ($ !== "Todos") {
-    N = N.filter(kt => kt.classification === $);
-  }
-  return N;
+  return 'NINGUNO';
 }
 
 function renderStatusCharts(st, metric = currentChartMetric) {
   currentChartMetric = metric;
-  const container = document.getElementById("status-charts-container");
+  const container = document.getElementById('status-charts-container');
   if (!container) return;
 
   if (!st || st.length === 0) {
@@ -6954,51 +6949,59 @@ function renderStatusCharts(st, metric = currentChartMetric) {
   }
 
   const th = getThemePalette();
+  const isolatedCat = getIsolatedCategoryName();
+  const isSingleCategoryIsolated = Boolean(isolatedCat);
 
-  const activeElements = getActiveFilteredElements(st);
-  const uniqueClassesInActive = new Set(activeElements.map(item => item.classification || "SIN CLASIFICACIÓN").filter(Boolean));
-  const uniqueClassesInTotal = new Set(st.map(item => item.classification || "SIN CLASIFICACIÓN").filter(Boolean));
-
-  // Single category is isolated if exactly one category is present in activeElements AND an active filter is isolating it
-  const isSingleCategoryIsolated = uniqueClassesInActive.size === 1 && ($ !== "Todos" || Ni.size === 1 || ye.size === 1 || (window.__noraIsolatedVisibleIds instanceof Set && activeElements.length < st.length) || (uniqueClassesInTotal.size > 1 && activeElements.length < st.length));
-  const isolatedCategoryName = isSingleCategoryIsolated ? Array.from(uniqueClassesInActive)[0] : null;
-
-  const itemsToChart = isSingleCategoryIsolated ? activeElements : st;
+  // When isolated, chart ONLY elements of that category; otherwise chart all elements
+  const itemsToChart = isSingleCategoryIsolated
+    ? st.filter(item => {
+        const cat = item.classification || item.category || '';
+        return cat.trim().toLowerCase() === isolatedCat.trim().toLowerCase();
+      })
+    : st;
 
   const groups = new Map();
   let grandTotal = 0;
   let grandApproved = 0;
+  let grandClosed = 0;
   let grandProgress = 0;
+  let grandInspection = 0;
+  let grandRejected = 0;
   let grandNone = 0;
 
+  const activeDate = typeof Q !== 'undefined' ? Q : null;
+
   itemsToChart.forEach(item => {
-    const groupKey = isSingleCategoryIsolated ? getElementIntegratedName(item) : (item.classification || "SIN CLASIFICACIÓN");
+    const groupKey = isSingleCategoryIsolated ? getElementIntegratedName(item) : (item.classification || 'SIN CLASIFICACIÓN');
     if (!groups.has(groupKey)) {
       groups.set(groupKey, {
         name: groupKey,
         total: 0,
         APROBADO: 0,
         CERRADO: 0,
-        "EN PROGRESO": 0,
-        "PARA INSPECCIÓN": 0,
+        'EN PROGRESO': 0,
+        'PARA INSPECCIÓN': 0,
         RECHAZADO: 0,
         NINGUNO: 0,
         count: 0
       });
     }
     const g = groups.get(groupKey);
-    const status = Ut(item.id, Q);
-    const val = metric === 'area' ? (item.area || 0) :
-                metric === 'volume' ? (item.volume || 0) :
-                metric === 'length' ? (item.length || 0) : 1;
+    const status = getItemStatus(item, activeDate);
+    const val = metric === 'area' ? (Number(item.area) || 0) :
+                metric === 'volume' ? (Number(item.volume) || 0) :
+                metric === 'length' ? (Number(item.length) || 0) : 1;
 
     g.total += val;
     g[status] = (g[status] || 0) + val;
     g.count += 1;
 
     grandTotal += val;
-    if (status === 'APROBADO' || status === 'CERRADO') grandApproved += val;
-    else if (status === 'EN PROGRESO' || status === 'PARA INSPECCIÓN') grandProgress += val;
+    if (status === 'APROBADO') grandApproved += val;
+    else if (status === 'CERRADO') grandClosed += val;
+    else if (status === 'EN PROGRESO') grandProgress += val;
+    else if (status === 'PARA INSPECCIÓN') grandInspection += val;
+    else if (status === 'RECHAZADO') grandRejected += val;
     else grandNone += val;
   });
 
@@ -7013,11 +7016,12 @@ function renderStatusCharts(st, metric = currentChartMetric) {
     return v.toLocaleString('es-CO', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + ' ' + unitLabel;
   };
 
-  const globalPct = grandTotal > 0 ? Math.round(grandApproved / grandTotal * 100) : 0;
+  const totalApprovedMetrics = grandApproved + grandClosed;
+  const globalPct = grandTotal > 0 ? Math.round((totalApprovedMetrics / grandTotal) * 100) : 0;
 
   const cx = 230, cy = 230;
-  const rInner = 68;
-  const rOuter = 212;
+  const rInner = 72;
+  const rOuter = 210;
   const deltaR = rOuter - rInner;
   const N = list.length;
 
@@ -7025,50 +7029,12 @@ function renderStatusCharts(st, metric = currentChartMetric) {
   let petalsSvg = '';
   let labelsSvg = '';
 
+  const polar = (r, a) => ({ x: cx + r * Math.cos(a), y: cy + r * Math.sin(a) });
+
   if (N > 0) {
     const step = (2 * Math.PI) / N;
-    const gap = Math.min(0.08, Math.max(0.035, 0.26 / N));
+    const gap = Math.min(0.08, Math.max(0.025, 0.22 / N));
     const span = step - gap;
-    const cornerR = Math.min(13, Math.max(7, 56 / N));
-
-    const polar = (r, a) => ({ x: cx + r * Math.cos(a), y: cy + r * Math.sin(a) });
-
-    const roundedPetal = (rIn, rOut, a1, a2, cr) => {
-      const cAngleOut = Math.min((a2 - a1) * 0.35, cr / rOut);
-      const cAngleIn = Math.min((a2 - a1) * 0.35, cr / rIn);
-      const p1 = polar(rOut - cr, a1);
-      const p2 = polar(rOut, a1 + cAngleOut);
-      const p3 = polar(rOut, a2 - cAngleOut);
-      const p4 = polar(rOut - cr, a2);
-      const p5 = polar(rIn + cr, a2);
-      const p6 = polar(rIn, a2 - cAngleIn);
-      const p7 = polar(rIn, a1 + cAngleIn);
-      const p8 = polar(rIn + cr, a1);
-      const lg = (a2 - a1) > Math.PI ? 1 : 0;
-
-      return 'M ' + p1.x.toFixed(2) + ' ' + p1.y.toFixed(2) + ' ' +
-             'Q ' + polar(rOut, a1).x.toFixed(2) + ' ' + polar(rOut, a1).y.toFixed(2) + ' ' + p2.x.toFixed(2) + ' ' + p2.x.toFixed(2) + ' ' +
-             'A ' + rOut + ' ' + rOut + ' 0 ' + lg + ' 1 ' + p3.x.toFixed(2) + ' ' + p3.y.toFixed(2) + ' ' +
-             'Q ' + polar(rOut, a2).x.toFixed(2) + ' ' + polar(rOut, a2).y.toFixed(2) + ' ' + p4.x.toFixed(2) + ' ' + p4.y.toFixed(2) + ' ' +
-             'L ' + p5.x.toFixed(2) + ' ' + p5.y.toFixed(2) + ' ' +
-             'Q ' + polar(rIn, a2).x.toFixed(2) + ' ' + polar(rIn, a2).y.toFixed(2) + ' ' + p6.x.toFixed(2) + ' ' + p6.y.toFixed(2) + ' ' +
-             'A ' + rIn + ' ' + rIn + ' 0 ' + lg + ' 0 ' + p7.x.toFixed(2) + ' ' + p7.y.toFixed(2) + ' ' +
-             'Q ' + polar(rIn, a1).x.toFixed(2) + ' ' + polar(rIn, a1).y.toFixed(2) + ' ' + p8.x.toFixed(2) + ' ' + p8.y.toFixed(2) + ' ' +
-             'Z';
-    };
-
-    const annularArc = (r1, r2, a1, a2) => {
-      const p1 = polar(r2, a1);
-      const p2 = polar(r2, a2);
-      const p3 = polar(r1, a2);
-      const p4 = polar(r1, a1);
-      const lg = (a2 - a1) > Math.PI ? 1 : 0;
-      return 'M ' + p1.x.toFixed(2) + ' ' + p1.y.toFixed(2) + ' ' +
-             'A ' + r2 + ' ' + r2 + ' 0 ' + lg + ' 1 ' + p2.x.toFixed(2) + ' ' + p2.y.toFixed(2) + ' ' +
-             'L ' + p3.x.toFixed(2) + ' ' + p3.y.toFixed(2) + ' ' +
-             'A ' + r1 + ' ' + r1 + ' 0 ' + lg + ' 0 ' + p4.x.toFixed(2) + ' ' + p4.y.toFixed(2) + ' ' +
-             'Z';
-    };
 
     const statusKeys = [
       { key: 'APROBADO', color: '#10b981' },
@@ -7084,7 +7050,8 @@ function renderStatusCharts(st, metric = currentChartMetric) {
       const aMid = (a1 + a2) / 2;
       const clipId = 'petal-clip-' + idx;
 
-      const fullPetalPath = roundedPetal(rInner, rOuter, a1, a2, cornerR);
+      // Pure annular sector geometry
+      const fullPetalPath = annularSector(cx, cy, rInner, rOuter, a1, a2);
       defs += '<clipPath id="' + clipId + '"><path d="' + fullPetalPath + '" /></clipPath>';
 
       let strataSvg = '';
@@ -7095,17 +7062,18 @@ function renderStatusCharts(st, metric = currentChartMetric) {
         if (val > 0 && c.total > 0) {
           const frac = val / c.total;
           const nextR = currR + frac * deltaR;
-          const stratumPath = annularArc(currR, nextR, a1 - 0.02, a2 + 0.02);
-          strataSvg += '<path d="' + stratumPath + '" fill="' + s.color + '" opacity="0.9" />';
+          const stratumPath = annularSector(cx, cy, currR, nextR, a1 - 0.015, a2 + 0.015);
+          strataSvg += '<path d="' + stratumPath + '" fill="' + s.color + '" />';
           currR = nextR;
         }
       });
 
-      const pctApproved = c.total > 0 ? Math.round(((c.APROBADO || 0) + (c.CERRADO || 0)) / c.total * 100) : 0;
+      const approvedGroupVal = (c.APROBADO || 0) + (c.CERRADO || 0);
+      const pctApproved = c.total > 0 ? Math.round((approvedGroupVal / c.total) * 100) : 0;
 
       petalsSvg += `
         <g class="status-petal-item" data-group="${encodeURIComponent(c.name)}" data-idx="${idx}" style="cursor: pointer;">
-          <path d="${fullPetalPath}" fill="${th.petalBg}" stroke="${th.petalStroke}" stroke-width="1.5" class="petal-bg" />
+          <path d="${fullPetalPath}" fill="${th.petalBg}" stroke="${th.petalStroke}" stroke-width="3" stroke-linejoin="round" class="petal-bg" />
           <g clip-path="url(#${clipId})">
             ${strataSvg}
           </g>
@@ -7119,286 +7087,197 @@ function renderStatusCharts(st, metric = currentChartMetric) {
 
       labelsSvg += `
         <g class="petal-label" pointer-events="none" transform="translate(${pos.x.toFixed(1)}, ${pos.y.toFixed(1)})">
-          <text text-anchor="middle" y="-2" font-size="14" font-weight="900" fill="${th.labelColor}" style="${th.isDark ? 'filter: drop-shadow(0 1px 3px rgba(0,0,0,0.9));' : 'filter: drop-shadow(0 1px 2px rgba(255,255,255,0.9));'} font-family: system-ui, sans-serif;">${pctApproved}%</text>
-          <text text-anchor="middle" y="11" font-size="9" font-weight="700" fill="${th.subLabelColor}" style="${th.isDark ? 'filter: drop-shadow(0 1px 3px rgba(0,0,0,0.9));' : 'filter: drop-shadow(0 1px 2px rgba(255,255,255,0.9));'} font-family: system-ui, sans-serif; text-transform: uppercase; letter-spacing: 0.5px;">${cleanName}</text>
+          <text text-anchor="middle" y="-2" font-size="${N > 12 ? '11' : '13'}" font-weight="900" fill="${th.labelColor}" style="${th.isDark ? 'filter: drop-shadow(0 1px 3px rgba(0,0,0,0.9));' : 'filter: drop-shadow(0 1px 2px rgba(255,255,255,0.9));'} font-family: system-ui, sans-serif;">${pctApproved}%</text>
+          <text text-anchor="middle" y="${N > 12 ? '9' : '11'}" font-size="${N > 12 ? '8' : '9'}" font-weight="700" fill="${th.subLabelColor}" style="${th.isDark ? 'filter: drop-shadow(0 1px 3px rgba(0,0,0,0.9));' : 'filter: drop-shadow(0 1px 2px rgba(255,255,255,0.9));'} font-family: system-ui, sans-serif; text-transform: uppercase; letter-spacing: 0.5px;">${cleanName}</text>
         </g>
       `;
     });
   }
 
   const chartSvg = `
-    <svg viewBox="0 0 460 460" width="100%" height="100%" style="display: block; max-height: 380px; margin: 0 auto; user-select: none;">
+    <svg viewBox="0 0 460 460" preserveAspectRatio="xMidYMid meet" style="width: 100%; max-width: 380px; aspect-ratio: 1 / 1; display: block; margin: 0 auto; overflow: visible;">
       <defs>
         ${defs}
-        <filter id="hub-shadow" x="-20%" y="-20%" width="140%" height="140%">
-          <feDropShadow dx="0" dy="3" stdDeviation="5" flood-color="${th.isDark ? 'rgba(0,0,0,0.6)' : 'rgba(0,0,0,0.12)'}" />
-        </filter>
       </defs>
       ${petalsSvg}
-      ${labelsSvg}
-      <circle cx="${cx}" cy="${cy}" r="${rInner - 5}" fill="${th.hubFill}" stroke="${th.hubStroke}" stroke-width="2.5" filter="url(#hub-shadow)" style="cursor: pointer;" id="hub-center-btn" title="Clic para restablecer filtro" />
-      <g id="hub-center-display" pointer-events="none">
-        <text x="${cx}" y="${cy - 8}" text-anchor="middle" font-size="24" font-weight="900" fill="${th.hubPct}" font-family="system-ui, sans-serif" id="hub-pct">${globalPct}%</text>
-        <text x="${cx}" y="${cy + 10}" text-anchor="middle" font-size="10" font-weight="800" fill="${th.hubTitle}" text-transform="uppercase" letter-spacing="1px" font-family="system-ui, sans-serif" id="hub-title">APROBADO</text>
-        <text x="${cx}" y="${cy + 22}" text-anchor="middle" font-size="9" font-weight="600" fill="${th.hubSub}" font-family="system-ui, sans-serif" id="hub-sub">${formatVal(grandTotal)}</text>
+      <!-- Center Circle Badge -->
+      <circle cx="${cx}" cy="${cy}" r="${rInner - 6}" fill="${th.centerBg}" stroke="${th.centerStroke}" stroke-width="2" style="filter: drop-shadow(0 4px 10px rgba(0,0,0,0.15));" />
+      <g pointer-events="none">
+        <text x="${cx}" y="${cy - 8}" text-anchor="middle" font-size="22" font-weight="900" fill="#10b981" font-family: system-ui, sans-serif;">${globalPct}%</text>
+        <text x="${cx}" y="${cy + 8}" text-anchor="middle" font-size="9" font-weight="800" fill="${th.textColor}" font-family: system-ui, sans-serif; letter-spacing: 0.5px;">APROBADO</text>
+        <text x="${cx}" y="${cy + 22}" text-anchor="middle" font-size="8" font-weight="600" fill="${th.subTextColor}" font-family: system-ui, sans-serif;">${formatVal(totalApprovedMetrics)}</text>
       </g>
+      ${labelsSvg}
     </svg>
   `;
 
-  let cardsHtml = '';
-  list.forEach(c => {
-    const pct = c.total > 0 ? Math.round(((c.APROBADO || 0) + (c.CERRADO || 0)) / c.total * 100) : 0;
-    const pProg = c.total > 0 ? ((c['EN PROGRESO'] || 0) / c.total * 100) : 0;
-    const pApp = c.total > 0 ? (((c.APROBADO || 0) + (c.CERRADO || 0)) / c.total * 100) : 0;
-    const pInsp = c.total > 0 ? ((c['PARA INSPECCIÓN'] || 0) / c.total * 100) : 0;
-    const pRech = c.total > 0 ? ((c.RECHAZADO || 0) / c.total * 100) : 0;
-    const pNone = Math.max(0, 100 - (pApp + pProg + pInsp + pRech));
+  // Drilldown banner if isolated
+  let drilldownBanner = '';
+  if (isSingleCategoryIsolated) {
+    drilldownBanner = `
+      <div style="display: flex; align-items: center; justify-content: space-between; background: ${th.isDark ? 'rgba(59, 130, 246, 0.15)' : 'rgba(59, 130, 246, 0.1)'}; border: 1px solid rgba(59, 130, 246, 0.3); border-radius: 6px; padding: 6px 12px; margin-bottom: 10px;">
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <span style="font-size: 11px; font-weight: 700; color: #3b82f6; text-transform: uppercase;">${isolatedCat}</span>
+          <span style="font-size: 10px; color: ${th.subTextColor};">(${list.length} nombres)</span>
+        </div>
+        <button type="button" id="chart-btn-reset-isolation" style="background: #3b82f6; color: #ffffff; border: none; border-radius: 4px; padding: 3px 8px; font-size: 10px; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 4px;">
+          <i class="fa-solid fa-arrow-left"></i> Todas las Categorías
+        </button>
+      </div>
+    `;
+  }
 
-    cardsHtml += `
-      <div class="status-class-card" data-group="${encodeURIComponent(c.name)}" style="background: ${th.itemBg}; border: 1px solid ${th.itemBorder}; border-radius: 8px; padding: 10px 12px; margin-bottom: 8px; cursor: pointer; transition: all 0.15s ease;">
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
-          <div style="font-weight: 700; font-size: 12px; color: ${th.textPrimary}; display: flex; align-items: center; gap: 6px;">
-            <i class="fa-solid ${isSingleCategoryIsolated ? 'fa-tag' : 'fa-shapes'}" style="color: #38bdf8; font-size: 11px;"></i> ${c.name}
-          </div>
-          <div style="display: flex; align-items: center; gap: 8px;">
-            <span style="font-size: 11px; color: ${th.textSecondary}; font-family: monospace;">${formatVal(c.total)}</span>
-            <span style="font-size: 11px; font-weight: 800; color: ${pct >= 70 ? '#10b981' : pct >= 30 ? '#f59e0b' : th.textMuted}; background: rgba(125,125,125,0.12); padding: 2px 6px; border-radius: 4px;">${pct}%</span>
+  // Breakdown items list
+  let breakdownRows = '';
+  list.forEach(c => {
+    const approvedVal = (c.APROBADO || 0) + (c.CERRADO || 0);
+    const pct = c.total > 0 ? Math.round((approvedVal / c.total) * 100) : 0;
+
+    const fApp = c.total > 0 ? ((c.APROBADO || 0) / c.total * 100) : 0;
+    const fClo = c.total > 0 ? ((c.CERRADO || 0) / c.total * 100) : 0;
+    const fPrg = c.total > 0 ? ((c['EN PROGRESO'] || 0) / c.total * 100) : 0;
+    const fIns = c.total > 0 ? ((c['PARA INSPECCIÓN'] || 0) / c.total * 100) : 0;
+    const fRej = c.total > 0 ? ((c.RECHAZADO || 0) / c.total * 100) : 0;
+
+    breakdownRows += `
+      <div class="status-chart-row" data-group="${encodeURIComponent(c.name)}" style="padding: 6px 0; border-bottom: 1px solid ${th.border}; cursor: pointer;">
+        <div style="display: flex; justify-content: space-between; align-items: center; font-size: 11px; margin-bottom: 4px;">
+          <span style="font-weight: 700; color: ${th.textColor}; display: flex; align-items: center; gap: 6px;">
+            <i class="fa-solid fa-layer-group" style="font-size: 9px; color: #3b82f6;"></i>
+            ${c.name}
+          </span>
+          <div style="display: flex; gap: 8px; align-items: center;">
+            <span style="font-size: 10px; color: ${th.subTextColor}; font-family: monospace;">${formatVal(c.total)}</span>
+            <span style="font-weight: 800; color: ${pct > 0 ? '#10b981' : th.subTextColor}; font-size: 11px; width: 32px; text-align: right;">${pct}%</span>
           </div>
         </div>
-        <div style="height: 6px; border-radius: 3px; background: ${th.barTrack}; display: flex; overflow: hidden; width: 100%;">
-          ${pApp > 0 ? `<div style="width: ${pApp}%; background: #10b981;" title="Aprobado: ${pApp.toFixed(1)}%"></div>` : ''}
-          ${pProg > 0 ? `<div style="width: ${pProg}%; background: #f59e0b;" title="En Progreso: ${pProg.toFixed(1)}%"></div>` : ''}
-          ${pInsp > 0 ? `<div style="width: ${pInsp}%; background: #3b82f6;" title="Para Inspección: ${pInsp.toFixed(1)}%"></div>` : ''}
-          ${pRech > 0 ? `<div style="width: ${pRech}%; background: #ef4444;" title="Rechazado: ${pRech.toFixed(1)}%"></div>` : ''}
-          ${pNone > 0 ? `<div style="width: ${pNone}%; background: ${th.noneFill};" title="Ninguno: ${pNone.toFixed(1)}%"></div>` : ''}
+        <div style="height: 6px; width: 100%; background: ${th.petalBg}; border-radius: 3px; overflow: hidden; display: flex;">
+          ${fApp > 0 ? '<div style="height: 100%; width: ' + fApp + '%; background: #10b981;"></div>' : ''}
+          ${fClo > 0 ? '<div style="height: 100%; width: ' + fClo + '%; background: #059669;"></div>' : ''}
+          ${fPrg > 0 ? '<div style="height: 100%; width: ' + fPrg + '%; background: #f59e0b;"></div>' : ''}
+          ${fIns > 0 ? '<div style="height: 100%; width: ' + fIns + '%; background: #3b82f6;"></div>' : ''}
+          ${fRej > 0 ? '<div style="height: 100%; width: ' + fRej + '%; background: #ef4444;"></div>' : ''}
         </div>
       </div>
     `;
   });
 
-  const chartTitle = isSingleCategoryIsolated ? `<i class="fa-solid fa-layer-group" style="color: #38bdf8;"></i> ${isolatedCategoryName}` : '<i class="fa-solid fa-chart-pie" style="color: #38bdf8;"></i> AVANCE RADIAL';
-  const chartSub = isSingleCategoryIsolated ? 'Desglose por nombre integrado' : 'Porcentaje y estratos por clasificación';
-
-  container.innerHTML = `
-    <div style="display: flex; flex-direction: column; gap: 12px;">
-      <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; border-bottom: 1px solid ${th.cardBorder}; padding-bottom: 10px;">
+  const html = `
+    <div style="padding: 14px; background: ${th.bg}; min-height: 100%; box-sizing: border-box; display: flex; flex-direction: column; gap: 10px;">
+      <!-- Header with Metric Selector -->
+      <div style="display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 1px solid ${th.border}; padding-bottom: 10px;">
         <div>
-          <div style="display: flex; align-items: center; gap: 8px;">
-            ${isSingleCategoryIsolated ? `<button type="button" id="btn-chart-back-all" style="padding: 3px 8px; font-size: 10px; font-weight: 700; border: 1px solid ${th.cardBorder}; border-radius: 4px; background: ${th.itemBg}; color: ${th.textSecondary}; cursor: pointer;" title="Volver a ver todas las categorías"><i class="fa-solid fa-arrow-left"></i> Todas</button>` : ''}
-            <div style="font-size: 13px; font-weight: 800; color: ${th.textPrimary}; letter-spacing: 0.5px; display: flex; align-items: center; gap: 6px;">
-              ${chartTitle}
-            </div>
+          <div style="font-size: 12px; font-weight: 800; color: ${th.textColor}; text-transform: uppercase; letter-spacing: 0.5px; display: flex; align-items: center; gap: 6px;">
+            <i class="fa-solid fa-chart-pie" style="color: #3b82f6;"></i>
+            ${isSingleCategoryIsolated ? 'AVANCE POR NOMBRE INTEGRADO' : 'AVANCE RADIAL POR CLASIFICACIÓN'}
           </div>
-          <div style="font-size: 10px; color: ${th.textSecondary}; margin-top: 2px;">${chartSub}</div>
+          <div style="font-size: 10px; color: ${th.subTextColor}; margin-top: 2px;">
+            ${isSingleCategoryIsolated ? 'Subdivisiones de ' + isolatedCat : 'Porcentaje y estratos de avance por categoría'}
+          </div>
         </div>
-        <div class="status-metric-pills" style="display: flex; gap: 4px; background: ${th.pillsBg}; padding: 2px; border-radius: 6px; border: 1px solid ${th.pillsBorder};">
-          <button type="button" class="q-chart-metric-btn ${metric === 'count' ? 'active' : ''}" data-metric="count" style="padding: 3px 8px; font-size: 10px; font-weight: 700; border: none; border-radius: 4px; cursor: pointer; background: ${metric === 'count' ? th.pillActiveBg : 'transparent'}; color: ${metric === 'count' ? '#fff' : th.pillInactiveText};">Cant.</button>
-          <button type="button" class="q-chart-metric-btn ${metric === 'area' ? 'active' : ''}" data-metric="area" style="padding: 3px 8px; font-size: 10px; font-weight: 700; border: none; border-radius: 4px; cursor: pointer; background: ${metric === 'area' ? th.pillActiveBg : 'transparent'}; color: ${metric === 'area' ? '#fff' : th.pillInactiveText};">Área</button>
-          <button type="button" class="q-chart-metric-btn ${metric === 'volume' ? 'active' : ''}" data-metric="volume" style="padding: 3px 8px; font-size: 10px; font-weight: 700; border: none; border-radius: 4px; cursor: pointer; background: ${metric === 'volume' ? th.pillActiveBg : 'transparent'}; color: ${metric === 'volume' ? '#fff' : th.pillInactiveText};">Vol.</button>
-          <button type="button" class="q-chart-metric-btn ${metric === 'length' ? 'active' : ''}" data-metric="length" style="padding: 3px 8px; font-size: 10px; font-weight: 700; border: none; border-radius: 4px; cursor: pointer; background: ${metric === 'length' ? th.pillActiveBg : 'transparent'}; color: ${metric === 'length' ? '#fff' : th.pillInactiveText};">Long.</button>
+        <!-- Metric Pills -->
+        <div style="display: flex; gap: 4px;">
+          ${['count', 'area', 'volume', 'length'].map(m => {
+            const labels = { count: 'Cant.', area: 'Área', volume: 'Vol.', length: 'Long.' };
+            const isActive = metric === m;
+            return `<button type="button" class="chart-metric-btn ${isActive ? 'active' : ''}" data-metric="${m}" style="padding: 2px 7px; font-size: 10px; font-weight: 600; border-radius: 4px; cursor: pointer; border: 1px solid ${isActive ? '#3b82f6' : th.metricInactiveBorder}; background: ${isActive ? th.metricActiveBg : th.metricInactiveBg}; color: ${isActive ? th.metricActiveText : th.metricInactiveText};">${labels[m]}</button>`;
+          }).join('')}
         </div>
       </div>
 
-      <div style="background: ${th.cardBg}; border: 1px solid ${th.cardBorder}; border-radius: 12px; padding: 12px; box-shadow: ${th.cardShadow}; position: relative;">
+      ${drilldownBanner}
+
+      <!-- Radial SVG Wheel -->
+      <div style="display: flex; justify-content: center; align-items: center; width: 100%; margin: 4px 0;">
         ${chartSvg}
       </div>
 
-      <div style="display: flex; justify-content: center; flex-wrap: wrap; gap: 10px; background: ${th.legendBg}; border: 1px solid ${th.cardBorder}; border-radius: 8px; padding: 8px 12px; font-size: 10px; font-weight: 700;">
-        <span style="display: flex; align-items: center; gap: 4px; color: #10b981;"><span style="width: 8px; height: 8px; border-radius: 2px; background: #10b981;"></span> Aprobado</span>
-        <span style="display: flex; align-items: center; gap: 4px; color: #f59e0b;"><span style="width: 8px; height: 8px; border-radius: 2px; background: #f59e0b;"></span> En Progreso</span>
-        <span style="display: flex; align-items: center; gap: 4px; color: #3b82f6;"><span style="width: 8px; height: 8px; border-radius: 2px; background: #3b82f6;"></span> Para Insp.</span>
-        <span style="display: flex; align-items: center; gap: 4px; color: #059669;"><span style="width: 8px; height: 8px; border-radius: 2px; background: #059669;"></span> Cerrado</span>
-        <span style="display: flex; align-items: center; gap: 4px; color: #ef4444;"><span style="width: 8px; height: 8px; border-radius: 2px; background: #ef4444;"></span> Rechazado</span>
-        <span style="display: flex; align-items: center; gap: 4px; color: ${th.textSecondary};"><span style="width: 8px; height: 8px; border-radius: 2px; background: ${th.noneFill};"></span> Ninguno</span>
+      <!-- Compact Legend -->
+      <div style="display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; padding: 6px 0; font-size: 9px; font-weight: 700; border-top: 1px solid ${th.border}; border-bottom: 1px solid ${th.border};">
+        <span style="display: inline-flex; align-items: center; gap: 4px; color: ${th.subTextColor};"><span style="width: 8px; height: 8px; border-radius: 2px; background: #10b981; display: inline-block;"></span>Aprobado</span>
+        <span style="display: inline-flex; align-items: center; gap: 4px; color: ${th.subTextColor};"><span style="width: 8px; height: 8px; border-radius: 2px; background: #f59e0b; display: inline-block;"></span>En Progreso</span>
+        <span style="display: inline-flex; align-items: center; gap: 4px; color: ${th.subTextColor};"><span style="width: 8px; height: 8px; border-radius: 2px; background: #3b82f6; display: inline-block;"></span>Para Insp.</span>
+        <span style="display: inline-flex; align-items: center; gap: 4px; color: ${th.subTextColor};"><span style="width: 8px; height: 8px; border-radius: 2px; background: #059669; display: inline-block;"></span>Cerrado</span>
+        <span style="display: inline-flex; align-items: center; gap: 4px; color: ${th.subTextColor};"><span style="width: 8px; height: 8px; border-radius: 2px; background: #ef4444; display: inline-block;"></span>Rechazado</span>
+        <span style="display: inline-flex; align-items: center; gap: 4px; color: ${th.subTextColor};"><span style="width: 8px; height: 8px; border-radius: 2px; background: ${th.petalBg}; border: 1px solid ${th.petalStroke}; display: inline-block;"></span>Ninguno</span>
       </div>
 
-      <div>
-        <div style="font-size: 11px; font-weight: 800; color: ${th.textSecondary}; text-transform: uppercase; margin-bottom: 8px; letter-spacing: 0.5px;">
-          ${isSingleCategoryIsolated ? `Nombres en ${isolatedCategoryName} (${list.length})` : `Desglose por Clasificación (${list.length})`}
+      <!-- Breakdown List -->
+      <div style="margin-top: 4px;">
+        <div style="font-size: 10px; font-weight: 800; color: ${th.subTextColor}; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px;">
+          ${isSingleCategoryIsolated ? 'NOMBRES EN ' + isolatedCat + ' (' + list.length + ')' : 'DESGLOSE POR CLASIFICACIÓN (' + list.length + ')'}
         </div>
-        ${cardsHtml}
+        <div style="display: flex; flex-direction: column;">
+          ${breakdownRows}
+        </div>
       </div>
     </div>
   `;
 
-  container.querySelectorAll(".q-chart-metric-btn").forEach(btn => {
-    btn.addEventListener("click", () => {
-      const m = btn.getAttribute("data-metric");
-      renderStatusCharts(st, m);
+  container.innerHTML = html;
+
+  // Event handlers for metric pills
+  container.querySelectorAll('.chart-metric-btn').forEach(btn => {
+    btn.addEventListener('click', e => {
+      const m = e.currentTarget.getAttribute('data-metric');
+      if (m && m !== currentChartMetric) {
+        renderStatusCharts(st, m);
+      }
     });
   });
 
-  const btnBackAll = container.querySelector("#btn-chart-back-all");
-  if (btnBackAll) {
-    btnBackAll.addEventListener("click", () => {
-      const filterSelect = document.getElementById("s-filter-class");
-      if (filterSelect) {
-        filterSelect.value = "Todos";
-        filterSelect.dispatchEvent(new Event("change"));
-      }
-      try {
-        if (typeof Ni !== "undefined" && Ni instanceof Set) Ni.clear();
-        if (typeof ye !== "undefined" && ye instanceof Set) ye.clear();
-        window.dispatchEvent(new CustomEvent("classificationFilterChanged"));
-      } catch(e) {}
-    });
-  }
+  // Reset isolation button
+  container.querySelector('#chart-btn-reset-isolation')?.addEventListener('click', () => {
+    if (typeof $ !== 'undefined') $ = 'Todos';
+    const sel = document.getElementById('s-filter-class');
+    if (sel) sel.value = 'Todos';
+    if (typeof Ni !== 'undefined' && Ni instanceof Set) Ni.clear();
+    if (typeof ye !== 'undefined' && ye instanceof Set) ye.clear();
+    renderStatusCharts(st || (typeof at === 'function' ? at() : []));
+    if (typeof ns === 'function') ns(st || (typeof at === 'function' ? at() : []));
+  });
 
-  const updateCenterDisplay = (name, pct, valStr) => {
-    const hubPct = container.querySelector("#hub-pct");
-    const hubTitle = container.querySelector("#hub-title");
-    const hubSub = container.querySelector("#hub-sub");
-    if (hubPct && hubTitle && hubSub) {
-      hubPct.textContent = pct + '%';
-      hubTitle.textContent = name.length > 10 ? name.slice(0, 9) + '..' : name;
-      hubSub.textContent = valStr;
-    }
-  };
-
-  const resetCenterDisplay = () => {
-    const hubPct = container.querySelector("#hub-pct");
-    const hubTitle = container.querySelector("#hub-title");
-    const hubSub = container.querySelector("#hub-sub");
-    if (hubPct && hubTitle && hubSub) {
-      hubPct.textContent = globalPct + '%';
-      hubTitle.textContent = isSingleCategoryIsolated ? (isolatedCategoryName.length > 10 ? isolatedCategoryName.slice(0, 9) + '..' : isolatedCategoryName) : 'APROBADO';
-      hubSub.textContent = formatVal(grandTotal);
-    }
-  };
-
-  const selectItem = (groupName) => {
-    if (isSingleCategoryIsolated) {
-      const searchInput = document.getElementById("s-search");
-      if (searchInput) {
-        searchInput.value = groupName;
-        searchInput.dispatchEvent(new Event("input"));
-      }
+  // Click on petal or row to isolate or filter
+  const handleGroupClick = groupName => {
+    if (!isSingleCategoryIsolated) {
+      // Isolate this category
+      if (typeof $ !== 'undefined') $ = groupName;
+      const sel = document.getElementById('s-filter-class');
+      if (sel) sel.value = groupName;
+      renderStatusCharts(st);
+      if (typeof ns === 'function') ns(st);
     } else {
-      const filterSelect = document.getElementById("s-filter-class");
-      if (filterSelect) {
-        filterSelect.value = groupName;
-        filterSelect.dispatchEvent(new Event("change"));
+      // Highlight items with this integrated name
+      const matched = itemsToChart.filter(i => getElementIntegratedName(i) === groupName);
+      if (matched.length > 0 && typeof Yt !== 'undefined' && typeof je !== 'undefined') {
+        const viewer = Yt.get(je);
+        if (viewer && typeof viewer.highlightByID === 'function') {
+          const map = {};
+          matched.forEach(i => {
+            if (!map[i.modelUUID]) map[i.modelUUID] = [];
+            map[i.modelUUID].push(i.expressID);
+          });
+          viewer.highlightByID('select', map, true, true);
+        }
       }
     }
   };
 
-  const hubCenterBtn = container.querySelector("#hub-center-btn");
-  if (hubCenterBtn) {
-    hubCenterBtn.addEventListener("click", () => {
-      if (isSingleCategoryIsolated) {
-        const searchInput = document.getElementById("s-search");
-        if (searchInput && searchInput.value) {
-          searchInput.value = "";
-          searchInput.dispatchEvent(new Event("input"));
-        } else {
-          const filterSelect = document.getElementById("s-filter-class");
-          if (filterSelect) {
-            filterSelect.value = "Todos";
-            filterSelect.dispatchEvent(new Event("change"));
-          }
-          try {
-            if (typeof Ni !== "undefined" && Ni instanceof Set) Ni.clear();
-            if (typeof ye !== "undefined" && ye instanceof Set) ye.clear();
-            window.dispatchEvent(new CustomEvent("classificationFilterChanged"));
-          } catch(e) {}
-        }
-      } else {
-        const filterSelect = document.getElementById("s-filter-class");
-        if (filterSelect) {
-          filterSelect.value = "Todos";
-          filterSelect.dispatchEvent(new Event("change"));
-        }
-      }
-    });
-  }
-
-  container.querySelectorAll(".status-petal-item").forEach(petal => {
-    const groupName = decodeURIComponent(petal.getAttribute("data-group") || "");
-    const gData = list.find(l => l.name === groupName);
-    if (!gData) return;
-    const pct = gData.total > 0 ? Math.round(((gData.APROBADO || 0) + (gData.CERRADO || 0)) / gData.total * 100) : 0;
-    const bgPath = petal.querySelector(".petal-bg");
-
-    petal.addEventListener("mouseenter", () => {
-      if (bgPath) {
-        bgPath.setAttribute("stroke", th.petalHoverStroke);
-        bgPath.setAttribute("stroke-width", "2.5");
-      }
-      updateCenterDisplay(groupName, pct, formatVal(gData.total));
-    });
-
-    petal.addEventListener("mouseleave", () => {
-      if (bgPath) {
-        bgPath.setAttribute("stroke", th.petalStroke);
-        bgPath.setAttribute("stroke-width", "1.5");
-      }
-      resetCenterDisplay();
-    });
-
-    petal.addEventListener("click", () => {
-      selectItem(groupName);
+  container.querySelectorAll('.status-petal-item').forEach(el => {
+    el.addEventListener('click', e => {
+      const name = decodeURIComponent(e.currentTarget.getAttribute('data-group') || '');
+      if (name) handleGroupClick(name);
     });
   });
 
-  container.querySelectorAll(".status-class-card").forEach(card => {
-    const groupName = decodeURIComponent(card.getAttribute("data-group") || "");
-    card.addEventListener("mouseenter", () => {
-      card.style.borderColor = th.petalHoverStroke;
-      card.style.background = th.itemHoverBg;
-    });
-    card.addEventListener("mouseleave", () => {
-      card.style.borderColor = th.itemBorder;
-      card.style.background = th.itemBg;
-    });
-    card.addEventListener("click", () => {
-      selectItem(groupName);
+  container.querySelectorAll('.status-chart-row').forEach(el => {
+    el.addEventListener('click', e => {
+      const name = decodeURIComponent(e.currentTarget.getAttribute('data-group') || '');
+      if (name) handleGroupClick(name);
     });
   });
 }
 
-function openStatusCharts(st) {
-  const gTab = document.getElementById("right-tab-graficos");
-  const gCont = document.getElementById("status-charts-container");
-  const pPan = document.getElementById("properties-panel");
-  const pProps = document.getElementById("right-tab-properties");
-  const pNora = document.getElementById("right-tab-nora");
-  const pCont = document.getElementById("properties-content");
-  const nCont = document.getElementById("nora-ai-container");
-  if (gTab) {
-    gTab.style.display = "inline-flex";
-    gTab.classList.add("active");
-    pProps?.classList.remove("active");
-    pNora?.classList.remove("active");
-    pCont && (pCont.style.display = "none");
-    nCont && (nCont.style.display = "none");
-    gCont && (gCont.style.display = "flex");
-    if (pPan) {
-      pPan.classList.remove("closed");
-      const desiredW = Math.min(460, Math.floor(window.innerWidth * 0.5));
-      if (pPan.offsetWidth < desiredW) {
-        pPan.style.width = `${desiredW}px`;
-        document.documentElement.style.setProperty("--properties-width", `${desiredW}px`);
-      }
-    }
-    renderStatusCharts(st || at());
-  }
-}
-
-function closeStatusCharts() {
-  const gTab = document.getElementById("right-tab-graficos");
-  const gCont = document.getElementById("status-charts-container");
-  const pProps = document.getElementById("right-tab-properties");
-  const pCont = document.getElementById("properties-content");
-  if (gTab) {
-    gTab.style.display = "none";
-    if (gTab.classList.contains("active")) {
-      gTab.classList.remove("active");
-      pProps?.classList.add("active");
-      gCont && (gCont.style.display = "none");
-      pCont && (pCont.style.display = "flex");
-    }
-  }
-}
 window.refreshStatusCharts = () => renderStatusCharts(at());
 
 function li(){if(!o)return;const st=at();if(rt(st),st.length===0){o.innerHTML='<div class="q-empty-msg">No hay datos de avance. Asegúrate de cargar un modelo IFC con propiedades.</div>';const N=document.getElementById("s-header-totals");N&&(N.innerHTML="");return}qe(st),Kr(st),H(),ns(st),$i();const _gCont=document.getElementById("status-charts-container");_gCont&&_gCont.style.display!=="none"&&renderStatusCharts(st)}function Kr(st){let N=r.querySelector(".q-toolbar");N||(N=document.createElement("div"),N.className="q-toolbar",r.insertBefore(N,o));const pt=Array.from(new Set(st.map(Et=>Et.classification))).sort(),$t=Array.from(new Set(st.map(Et=>Et.level))).sort();N.innerHTML=`
@@ -7435,7 +7314,7 @@ function li(){if(!o)return;const st=at();if(rt(st),st.length===0){o.innerHTML='<
                 <button type="button" id="s-btn-sync" class="q-btn-xs"><i class="fa-solid fa-rotate"></i> Sync</button>
                 <span class="q-sync-badge ${C.status}">${C.label}</span>
             </div>
-        `,N.querySelector("#s-search")?.addEventListener("input",Et=>{A=Et.target.value,ns(st)}),N.querySelector("#s-filter-class")?.addEventListener("change",Et=>{$=Et.target.value,ns(st)}),N.querySelector("#s-filter-level")?.addEventListener("change",Et=>{P=Et.target.value,ns(st)}),N.querySelector("#s-filter-status")?.addEventListener("change",Et=>{D=Et.target.value,ns(st)}),N.querySelector("#s-btn-ejecutado")?.addEventListener("click",()=>{jt(st,!0)>0&&li()}),N.querySelector("#s-toggle-colors")?.addEventListener("click",Et=>{k=!k;const zt=Et.currentTarget;k?zt.classList.add("active"):zt.classList.remove("active"),qe(st)}),N.querySelector("#s-btn-sync")?.addEventListener("click",()=>{ct().catch(console.error)})}function ns(st){if(!o)return;let N=st;if(I.length>0){const kt=new Set(I.map(Number));N=N.filter(xt=>kt.has(Number(xt.expressID!==void 0?xt.expressID:xt.id)))}else if(window.__noraIsolatedVisibleIds instanceof Set){const kt=window.__noraIsolatedVisibleIds;N=N.filter(xt=>kt.has(Number(xt.expressID!==void 0?xt.expressID:xt.id)))}else{N=N.filter(xt=>!MC(xt)),(Ni.size>0||ye.size>0)&&(N=N.filter(xt=>ye.has(xt.category)||ye.has(xt.name)||Ni.has(xt.classification))),fs.size>0&&(N=N.filter(xt=>fs.has(xt.level))),ms.size>0&&(N=N.filter(xt=>ms.has(xt.material))),gs.size>0&&(N=N.filter(xt=>gs.has(xt.pilote)));for(const xt of Ji)xt.selectedValues.size>0&&(N=N.filter(It=>xt.selectedValues.has(Rd(It,xt.paramName))))}if(I.length===0){if(A.trim()!==""){const kt=A.toLowerCase();N=N.filter(xt=>xt.id.includes(kt)||xt.name.toLowerCase().includes(kt))}$!=="Todos"&&(N=N.filter(kt=>kt.classification===$)),P!=="Todos"&&(N=N.filter(kt=>kt.level===P)),D!=="Todos"&&(N=N.filter(kt=>Ut(kt.id,Q)===D))}let pt=0,$t=0,Mt=0,Et=0;N.forEach(kt=>{pt++,$t+=kt.area||0,Mt+=kt.length||0,Et+=kt.volume||0});const zt=kt=>kt.toLocaleString("es-CO",{minimumFractionDigits:2,maximumFractionDigits:2}),Dt=kt=>kt.toLocaleString("es-CO",{minimumFractionDigits:0,maximumFractionDigits:0}),Vt=document.getElementById("s-header-totals");if(Vt&&(Vt.innerHTML=`
+        `,N.querySelector("#s-search")?.addEventListener("input",Et=>{A=Et.target.value,ns(st)}),N.querySelector("#s-filter-class")?.addEventListener("change",Et=>{$=Et.target.value,ns(st),window.refreshStatusCharts&&window.refreshStatusCharts()}),N.querySelector("#s-filter-level")?.addEventListener("change",Et=>{P=Et.target.value,ns(st)}),N.querySelector("#s-filter-status")?.addEventListener("change",Et=>{D=Et.target.value,ns(st)}),N.querySelector("#s-btn-ejecutado")?.addEventListener("click",()=>{jt(st,!0)>0&&li()}),N.querySelector("#s-toggle-colors")?.addEventListener("click",Et=>{k=!k;const zt=Et.currentTarget;k?zt.classList.add("active"):zt.classList.remove("active"),qe(st)}),N.querySelector("#s-btn-sync")?.addEventListener("click",()=>{ct().catch(console.error)})}function ns(st){if(!o)return;let N=st;if(I.length>0){const kt=new Set(I.map(Number));N=N.filter(xt=>kt.has(Number(xt.expressID!==void 0?xt.expressID:xt.id)))}else if(window.__noraIsolatedVisibleIds instanceof Set){const kt=window.__noraIsolatedVisibleIds;N=N.filter(xt=>kt.has(Number(xt.expressID!==void 0?xt.expressID:xt.id)))}else{N=N.filter(xt=>!MC(xt)),(Ni.size>0||ye.size>0)&&(N=N.filter(xt=>ye.has(xt.category)||ye.has(xt.name)||Ni.has(xt.classification))),fs.size>0&&(N=N.filter(xt=>fs.has(xt.level))),ms.size>0&&(N=N.filter(xt=>ms.has(xt.material))),gs.size>0&&(N=N.filter(xt=>gs.has(xt.pilote)));for(const xt of Ji)xt.selectedValues.size>0&&(N=N.filter(It=>xt.selectedValues.has(Rd(It,xt.paramName))))}if(I.length===0){if(A.trim()!==""){const kt=A.toLowerCase();N=N.filter(xt=>xt.id.includes(kt)||xt.name.toLowerCase().includes(kt))}$!=="Todos"&&(N=N.filter(kt=>kt.classification===$)),P!=="Todos"&&(N=N.filter(kt=>kt.level===P)),D!=="Todos"&&(N=N.filter(kt=>Ut(kt.id,Q)===D))}let pt=0,$t=0,Mt=0,Et=0;N.forEach(kt=>{pt++,$t+=kt.area||0,Mt+=kt.length||0,Et+=kt.volume||0});const zt=kt=>kt.toLocaleString("es-CO",{minimumFractionDigits:2,maximumFractionDigits:2}),Dt=kt=>kt.toLocaleString("es-CO",{minimumFractionDigits:0,maximumFractionDigits:0}),Vt=document.getElementById("s-header-totals");if(Vt&&(Vt.innerHTML=`
                 <span>Elementos: ${Dt(pt)}</span>
                 <span>Área: ${zt($t)} m²</span>
                 <span>Longitud: ${zt(Mt)} m</span>
