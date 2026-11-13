@@ -113,6 +113,21 @@ export class NoraAIWidget {
 
             <div class="nora-ai-body" id="nora-ai-messages">
                 <div class="nora-ai-prompts">
+                    <button class="nora-ai-prompt-pill" data-prompt="¿Cuál es el porcentaje de avance general del proyecto y cuántos elementos van aprobados?" style="border-color: #10b981; color: #047857; background: #ecfdf5; font-weight: 700;">
+                        <i class="fa-solid fa-chart-pie"></i> % Avance General
+                    </button>
+                    <button class="nora-ai-prompt-pill" data-prompt="Aísla en 3D todos los elementos con estado APROBADO" style="border-color: #10b981; color: #047857; background: #ecfdf5;">
+                        <i class="fa-solid fa-circle-check"></i> Aislar Aprobados
+                    </button>
+                    <button class="nora-ai-prompt-pill" data-prompt="Aísla en 3D los elementos EN PROGRESO" style="border-color: #f59e0b; color: #b45309; background: #fffbeb;">
+                        <i class="fa-solid fa-clock"></i> Aislar En Progreso
+                    </button>
+                    <button class="nora-ai-prompt-pill" data-prompt="¿Cuál es el avance de Vigas? Aísla las vigas y muestra su estado" style="border-color: #3b82f6; color: #1d4ed8; background: #eff6ff;">
+                        <i class="fa-solid fa-layer-group"></i> Avance de Vigas
+                    </button>
+                    <button class="nora-ai-prompt-pill" data-prompt="Aísla los elementos RECHAZADOS en el visor 3D" style="border-color: #ef4444; color: #b91c1c; background: #fef2f2;">
+                        <i class="fa-solid fa-triangle-exclamation"></i> Ver Rechazados
+                    </button>
                     <button class="nora-ai-prompt-pill" data-prompt="Aísla los elementos que hacen parte de la fachada">
                         <i class="fa-solid fa-building"></i> Aislar Fachada
                     </button>
@@ -686,6 +701,37 @@ SIEMPRE responde ÚNICAMENTE en formato JSON:
             .replace(/\bventans\b/g, 'ventanas')
             .replace(/\bventna[s]?\b/g, 'ventanas')
             .replace(/\bmuros?\s+cotina\b/g, 'muros cortina');
+
+        // =========================================================================
+        // AVANCE, ESTADOS Y GRÁFICOS (Interacción con Modelo, Filtros y Gráficos)
+        // =========================================================================
+        const isAvanceQuery = /(?:avance|progreso|como\s+va|cuanto\s+va|porcentaje\s+de\s+avance|estado\s+del\s+proyecto|ejecutad[ao]|aprobados?|en\s+progreso|rechazados?|pendientes?)/i.test(qNorm);
+        const stats = typeof (window as any).getLiveStatusStats === 'function' ? (window as any).getLiveStatusStats() : null;
+
+        if (isAvanceQuery && stats) {
+            if (/(?:aisla|muestra|ver|filtrar?)\s+(?:los\s+)?aprobados?/i.test(qNorm)) {
+                return {
+                    answer: `🟢 **Elementos Aprobados**: Hay **${stats.counts.APROBADO + stats.counts.CERRADO} elementos aprobados** (${stats.pctAprobado}% del proyecto, correspondiente a ${Math.round(stats.volumes.APROBADO)} m³ de volumen).\n\nHe aislado los elementos aprobados en el visor 3D, aplicado el filtro de estado y actualizado el gráfico radial inferior.`,
+                    action: { type: 'status_isolate' as any, status: 'APROBADO', message: 'Aislados en 3D los elementos aprobados' }
+                };
+            }
+            if (/(?:aisla|muestra|ver|filtrar?)\s+(?:los\s+)?(?:en\s+progreso|para\s+inspeccion)/i.test(qNorm)) {
+                return {
+                    answer: `🟡 **Elementos En Progreso**: Hay **${stats.counts['EN PROGRESO'] + stats.counts['PARA INSPECCIÓN']} elementos en ejecución** (${stats.pctEnProgreso}% del proyecto).\n\nHe aislado estos elementos en el visor 3D y sincronizado los gráficos.`,
+                    action: { type: 'status_isolate' as any, status: 'EN PROGRESO', message: 'Aislados en 3D los elementos en progreso' }
+                };
+            }
+            if (/(?:aisla|muestra|ver|filtrar?)\s+(?:los\s+)?rechazados?/i.test(qNorm)) {
+                return {
+                    answer: `🔴 **Elementos Rechazados**: Se registran **${stats.counts.RECHAZADO} elementos rechazados** (${stats.pctRechazado}% del total).\n\nHe enfocado los elementos rechazados en color rojo en el visor 3D.`,
+                    action: { type: 'status_isolate' as any, status: 'RECHAZADO', message: 'Aislados en 3D los elementos rechazados' }
+                };
+            }
+            return {
+                answer: `📊 **Estado General de Avance del Proyecto: ${stats.pctAprobado}% Aprobado**\n\n• **Total de Elementos**: ${stats.total}\n• **Aprobados / Cerrados**: ${stats.counts.APROBADO + stats.counts.CERRADO} (${stats.pctAprobado}%)\n• **En Progreso**: ${stats.counts['EN PROGRESO'] + stats.counts['PARA INSPECCIÓN']} (${stats.pctEnProgreso}%)\n• **Pendientes / Ninguno**: ${stats.counts.NINGUNO} (${stats.pctPendiente}%)\n• **Rechazados**: ${stats.counts.RECHAZADO} (${stats.pctRechazado}%)\n\n• **Volumen Total Modelado**: ${stats.totalVol} m³\n• **Área Total**: ${stats.totalArea} m²\n\n¿Deseas aislar los elementos aprobados en 3D o analizar alguna categoría en específico (Vigas, Columnas, Muros, Cimentación)?`,
+                action: { type: 'none' }
+            };
+        }
 
         // =========================================================================
         // 0. Inspección de Selección Activa (DOM o Memoria)

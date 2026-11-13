@@ -79,6 +79,105 @@
             width: 100vw !important;
             height: 100vh !important;
         }
+    
+        /* ========================================================================== */
+        /* NORA AI + GRÁFICOS: MODO PANTALLA DIVIDIDA (SPLIT MODE) */
+        /* ========================================================================== */
+        #properties-panel.split-mode {
+            width: min(540px, 48vw) !important;
+            display: flex !important;
+            flex-direction: column !important;
+            overflow: hidden !important;
+        }
+
+        #properties-panel.split-mode #properties-content,
+        #properties-panel.split-mode #nora-ai-container {
+            height: var(--split-top-ratio, 50%) !important;
+            max-height: var(--split-top-ratio, 50%) !important;
+            flex: 0 0 var(--split-top-ratio, 50%) !important;
+            overflow-y: auto !important;
+            border-bottom: 1px solid var(--border-color, #e2e8f0);
+            box-sizing: border-box !important;
+        }
+
+        #properties-panel.split-mode #panel-split-divider {
+            display: flex !important;
+            flex: 0 0 30px !important;
+            height: 30px !important;
+            min-height: 30px !important;
+            background: #f1f5f9;
+            border-top: 1px solid #e2e8f0;
+            border-bottom: 1px solid #e2e8f0;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 10px;
+            cursor: row-resize;
+            user-select: none;
+            z-index: 20;
+            box-sizing: border-box !important;
+        }
+
+        body.dark-mode #properties-panel.split-mode #panel-split-divider {
+            background: #111827 !important;
+            border-color: #1f2937 !important;
+            color: #f8fafc !important;
+        }
+
+        #properties-panel.split-mode #status-charts-container {
+            height: calc(100% - 48px - 30px - var(--split-top-ratio, 50%)) !important;
+            flex: 1 1 auto !important;
+            overflow-y: auto !important;
+            display: flex !important;
+            box-sizing: border-box !important;
+        }
+
+        .split-divider-btn {
+            border: 1px solid #cbd5e1;
+            background: white;
+            color: #475569;
+            border-radius: 4px;
+            padding: 2px 7px;
+            font-size: 10px;
+            font-weight: 600;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            gap: 3px;
+            transition: all 0.15s ease;
+        }
+        .split-divider-btn:hover {
+            background: #f8fafc;
+            border-color: #94a3b8;
+            color: #1e293b;
+        }
+        .split-divider-btn.primary {
+            border-color: #8b5cf6;
+            background: linear-gradient(135deg, #8b5cf6, #6366f1);
+            color: white;
+            font-weight: 700;
+            box-shadow: 0 1px 3px rgba(139,92,246,0.3);
+        }
+        .split-divider-btn.primary:hover {
+            box-shadow: 0 2px 6px rgba(139,92,246,0.45);
+            transform: translateY(-1px);
+        }
+        body.dark-mode .split-divider-btn {
+            background: #1e293b;
+            border-color: #334155;
+            color: #cbd5e1;
+        }
+        body.dark-mode .split-divider-btn:hover {
+            background: #334155;
+            color: #f8fafc;
+        }
+
+        .right-tab-btn#right-tab-split-ia.active {
+            background: linear-gradient(135deg, rgba(139,92,246,0.25), rgba(99,102,241,0.25)) !important;
+            color: #7c3aed !important;
+            border-color: #7c3aed !important;
+            font-weight: 800 !important;
+        }
+
     </style>
 
     <meta charset="UTF-8" />

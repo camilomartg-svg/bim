@@ -85,43 +85,6 @@
   <script type="module" crossorigin src="./assets/main-Br2hJjuQ.js"></script>
   <link rel="modulepreload" crossorigin href="./assets/viewpoints-manager-DcOIyzzy.js">
   <link rel="stylesheet" crossorigin href="./assets/main-CpqwKxs6.css">
-
-    <style id="nora-status-charts-styles">
-        #properties-panel {
-            max-width: 50vw !important;
-        }
-        #status-charts-container {
-            background: #f8fafc;
-            color: #0f172a;
-        }
-        body.dark-mode #status-charts-container {
-            background: #0b0f19 !important;
-            color: #f8fafc !important;
-        }
-        .right-tab-btn#right-tab-graficos.active {
-            background: var(--card-bg, #ffffff);
-            color: #2563eb;
-            border-bottom: 2px solid #2563eb;
-            font-weight: 700;
-        }
-        .status-petal-item {
-            transition: transform 0.18s cubic-bezier(0.4, 0, 0.2, 1);
-            transform-origin: 230px 230px;
-        }
-        .status-petal-item:hover {
-            transform: scale(1.035);
-        }
-        .status-class-card {
-            transition: all 0.15s ease;
-        }
-        .status-class-card:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
-        }
-        body.dark-mode .status-class-card:hover {
-            box-shadow: 0 4px 12px rgba(0,0,0,0.4);
-        }
-    </style>
 </head>
 
 <body>
@@ -249,16 +212,11 @@
                 <button class="right-tab-btn" id="right-tab-nora" data-tab="nora-ai" title="nora AI Copilot">
                     <i class="fa-solid fa-wand-magic-sparkles" style="font-size: 13px;"></i> <span>nora AI</span>
                 </button>
-                <button class="right-tab-btn" id="right-tab-graficos" data-tab="status-charts" title="Gráficos de Avance y Estado" style="display: none; align-items: center; gap: 5px;">
-                    <i class="fa-solid fa-chart-pie" style="font-size: 13px; color: #3b82f6;"></i> <span>Gráficos</span>
-                </button>
             </div>
             <div class="properties-content right-tab-content active" id="properties-content">
                 <div class="no-selection">Selecciona un elemento para ver sus propiedades</div>
             </div>
             <div class="right-tab-content" id="nora-ai-container" style="display: none; flex: 1; flex-direction: column; overflow: hidden; height: calc(100% - 48px);">
-            </div>
-            <div class="right-tab-content" id="status-charts-container" style="display: none; flex: 1; flex-direction: column; overflow-y: auto; height: calc(100% - 48px); padding: 14px;">
             </div>
         </div>
 
@@ -490,7 +448,6 @@
                     <button class="q-tab-btn" data-tab="estados">Estados</button>
                     <button class="q-tab-btn" data-tab="historial">Historial</button>
                     <button class="q-tab-btn" data-tab="despiece" id="q-tab-despiece">Despiece</button>
-                    <button class="q-tab-btn" data-tab="listones" id="q-tab-listones" style="display: none;">Despiece Listones</button>
                     <button class="q-tab-btn" data-tab="tuberias" id="q-tab-tuberias"
                         style="display: none;">Tuberías</button>
                     <button class="q-tab-btn" data-tab="uniones" id="q-tab-uniones"

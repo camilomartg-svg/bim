@@ -13862,7 +13862,8 @@ function buildBIMContextForAI() {
         },
         matrixByLevelAndClassification,
         matrixByLevelAndMaterial,
-        matrixByLevelAndCategory
+        matrixByLevelAndCategory,
+        statusStats: typeof (window as any).getLiveStatusStats === 'function' ? (window as any).getLiveStatusStats() : null
     };
 }
 
@@ -14020,6 +14021,75 @@ const isFacadeElement = (el: any): boolean => {
 
 async function executeNoraAI3DAction(action: NoraAIAction): Promise<string> {
     if (!action || action.type === 'none') return '';
+
+    // =========================================================================
+    // 0. AISLAMIENTO Y SINCRONIZACIÓN POR ESTADO DE AVANCE (STATUS ISOLATE)
+    // =========================================================================
+    if ((action as any).type === 'status_isolate' || (action as any).status) {
+        const targetStatus = String((action as any).status || 'APROBADO').toUpperCase().trim();
+        const allElements = extractAllElementsGlobal('ALL');
+        const matchedByModel: Record<string, number[]> = {};
+        let matchedCount = 0;
+
+        for (const el of allElements) {
+            const rawStatus = (el.properties?.['4D_EJECUTADO'] ?? el.properties?.['EJECUTADO'] ?? (el as any)['4D_EJECUTADO'] ?? (el as any).EJECUTADO ?? el.status ?? 'NINGUNO');
+            const strVal = String(rawStatus).toLowerCase().trim();
+            let isApp = strVal === 'true' || strVal === '1' || strVal === 'aprobado' || strVal === 'cerrado';
+            let s = isApp ? 'APROBADO' : (strVal === 'en progreso' ? 'EN PROGRESO' : (strVal === 'rechazado' ? 'RECHAZADO' : 'NINGUNO'));
+
+            let isMatch = false;
+            if (targetStatus === 'APROBADO') isMatch = s === 'APROBADO';
+            else if (targetStatus === 'EN PROGRESO') isMatch = s === 'EN PROGRESO';
+            else if (targetStatus === 'RECHAZADO') isMatch = s === 'RECHAZADO';
+            else if (targetStatus === 'NINGUNO') isMatch = s === 'NINGUNO';
+            else isMatch = s === targetStatus;
+
+            if (action.classifications && action.classifications.length > 0) {
+                const matchesCls = action.classifications.some(c => el.classification && el.classification.toLowerCase().includes(c.toLowerCase()));
+                isMatch = isMatch && matchesCls;
+            }
+
+            if (isMatch) {
+                if (!matchedByModel[el.modelUUID]) matchedByModel[el.modelUUID] = [];
+                matchedByModel[el.modelUUID].push(el.expressID);
+                matchedCount++;
+            }
+        }
+
+        if (hider && matchedCount > 0) {
+            try {
+                await hider.isolate(matchedByModel);
+            } catch (e) {
+                console.warn('Error in hider.isolate by status:', e);
+            }
+        }
+
+        // Coloreado analítico
+        ensureAIColorStyles();
+        if (highlighter && matchedCount > 0) {
+            try {
+                const colorStyle = targetStatus === 'APROBADO' ? 'ai_green' : (targetStatus === 'EN PROGRESO' ? 'ai_yellow' : (targetStatus === 'RECHAZADO' ? 'ai_red' : 'ai_blue'));
+                highlighter.highlightByID(colorStyle, matchedByModel as any, true, false);
+            } catch (e) {}
+        }
+
+        // Sincronizar tabla de avance
+        const statusSelect = document.getElementById('s-filter-status') as HTMLSelectElement;
+        if (statusSelect) statusSelect.value = targetStatus;
+
+        if (action.classifications && action.classifications.length > 0) {
+            const classSelect = document.getElementById('s-filter-class') as HTMLSelectElement;
+            if (classSelect) classSelect.value = action.classifications[0];
+            if (typeof (window as any).$ !== 'undefined') (window as any).$ = action.classifications[0];
+        }
+
+        window.dispatchEvent(new CustomEvent('classificationFilterChanged'));
+        if (typeof (window as any).renderStatusCharts === 'function') {
+            (window as any).renderStatusCharts((window as any).at ? (window as any).at() : []);
+        }
+
+        return action.message || `Aislados en 3D ${matchedCount} elementos con estado ${targetStatus}`;
+    }
 
     // =========================================================================
     // 1. SHOW ALL / RESTABLECER
@@ -14419,6 +14489,10 @@ function setupNoraAI() {
                 tabNora.classList.remove('active');
                 contentProp.style.display = 'flex';
                 contentNora.style.display = 'none';
+                if (rightPanel && rightPanel.classList.contains('split-mode')) {
+                    const contentGraf = document.getElementById('status-charts-container');
+                    if (contentGraf) contentGraf.style.display = 'flex';
+                }
             });
             tabNora.addEventListener('click', (e) => {
                 e.preventDefault();
@@ -14427,6 +14501,10 @@ function setupNoraAI() {
                 tabProp.classList.remove('active');
                 contentNora.style.display = 'flex';
                 contentProp.style.display = 'none';
+                if (rightPanel && rightPanel.classList.contains('split-mode')) {
+                    const contentGraf = document.getElementById('status-charts-container');
+                    if (contentGraf) contentGraf.style.display = 'flex';
+                }
                 if (noraAIWidgetInstance) {
                     noraAIWidgetInstance.open();
                 }

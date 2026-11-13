@@ -7024,6 +7024,14 @@ Click para enfocar en la tabla de despiece`,re.addEventListener("mouseenter",()=
 // ============================================================================
 // STATUS CHARTS MODULE (AVANCE RADIAL - CASCOS DE NARANJA)
 // ============================================================================
+
+// ============================================================================
+// STATUS CHARTS MODULE & NORA AI SPLIT-MODE CONTROLLER
+// ============================================================================
+
+// ============================================================================
+// STATUS CHARTS MODULE & NORA AI SPLIT-MODE CONTROLLER
+// ============================================================================
 let currentChartMetric = 'count';
 
 function getElementIntegratedName(f) {
@@ -7118,15 +7126,77 @@ function getItemStatus(item, dateFilter) {
     }
     if (s && s !== 'PENDIENTE') return s;
   } catch (e) {}
-  if (typeof x !== 'undefined' && x) {
-    if (x[item.id]) return x[item.id];
-    if (item.expressID && x[item.expressID]) return x[item.expressID];
-    if (item.tag && x[item.tag]) return x[item.tag];
-    if (item.tag && x['tag:' + item.tag]) return x['tag:' + item.tag];
-    if (item.guid && x[item.guid]) return x[item.guid];
-    if (item.guid && x['guid:' + item.guid]) return x['guid:' + item.guid];
+
+  if (item.properties && typeof item.properties === 'object') {
+    const raw = item.properties['4D_EJECUTADO'] ?? item.properties['EJECUTADO'];
+    if (raw !== undefined) {
+      const v = String(raw).toLowerCase().trim();
+      if (v === 'true' || v === '1' || v === 'aprobado' || v === 'cerrado') return 'APROBADO';
+    }
+  }
+  if (item['4D_EJECUTADO'] !== undefined || item.EJECUTADO !== undefined) {
+    const raw = item['4D_EJECUTADO'] ?? item.EJECUTADO;
+    const v = String(raw).toLowerCase().trim();
+    if (v === 'true' || v === '1' || v === 'aprobado' || v === 'cerrado') return 'APROBADO';
+  }
+  if (item.status && typeof item.status === 'string' && item.status.trim() !== '') {
+    return item.status.trim().toUpperCase();
   }
   return 'NINGUNO';
+}
+
+function getLiveStatusStats() {
+  const elements = typeof at === 'function' ? at() : [];
+  if (!elements || elements.length === 0) return null;
+
+  const total = elements.length;
+  let totalArea = 0, totalVol = 0, totalLen = 0;
+  const counts = { NINGUNO: 0, 'EN PROGRESO': 0, 'PARA INSPECCIÓN': 0, APROBADO: 0, CERRADO: 0, RECHAZADO: 0 };
+  const areas = { NINGUNO: 0, 'EN PROGRESO': 0, 'PARA INSPECCIÓN': 0, APROBADO: 0, CERRADO: 0, RECHAZADO: 0 };
+  const volumes = { NINGUNO: 0, 'EN PROGRESO': 0, 'PARA INSPECCIÓN': 0, APROBADO: 0, CERRADO: 0, RECHAZADO: 0 };
+  const byClass = {};
+
+  for (const el of elements) {
+    const s = getItemStatus(el).toUpperCase();
+    const stKey = counts[s] !== undefined ? s : 'NINGUNO';
+    counts[stKey]++;
+    const a = Number(el.area || 0) || 0;
+    const v = Number(el.volume || 0) || 0;
+    const l = Number(el.length || 0) || 0;
+    totalArea += a; totalVol += v; totalLen += l;
+    areas[stKey] += a; volumes[stKey] += v;
+
+    const cls = el.classification || 'SIN CLASIFICAR';
+    if (!byClass[cls]) byClass[cls] = { total: 0, aprobado: 0, enProgreso: 0, rechazado: 0, ninguno: 0, area: 0, vol: 0 };
+    byClass[cls].total++;
+    byClass[cls].area += a;
+    byClass[cls].vol += v;
+    if (stKey === 'APROBADO' || stKey === 'CERRADO') byClass[cls].aprobado++;
+    else if (stKey === 'EN PROGRESO' || stKey === 'PARA INSPECCIÓN') byClass[cls].enProgreso++;
+    else if (stKey === 'RECHAZADO') byClass[cls].rechazado++;
+    else byClass[cls].ninguno++;
+  }
+
+  const pctAprobado = total > 0 ? Math.round(((counts.APROBADO + counts.CERRADO) / total) * 100) : 0;
+  const pctEnProgreso = total > 0 ? Math.round(((counts['EN PROGRESO'] + counts['PARA INSPECCIÓN']) / total) * 100) : 0;
+  const pctRechazado = total > 0 ? Math.round((counts.RECHAZADO / total) * 100) : 0;
+  const pctPendiente = total > 0 ? Math.round((counts.NINGUNO / total) * 100) : 0;
+
+  return {
+    total,
+    counts,
+    areas,
+    volumes,
+    totalArea: Math.round(totalArea * 100) / 100,
+    totalVol: Math.round(totalVol * 100) / 100,
+    totalLen: Math.round(totalLen * 100) / 100,
+    pctAprobado,
+    pctEnProgreso,
+    pctRechazado,
+    pctPendiente,
+    byClass,
+    isolatedCategory: getIsolatedCategoryName()
+  };
 }
 
 function renderStatusCharts(st, metric = currentChartMetric) {
@@ -7143,78 +7213,69 @@ function renderStatusCharts(st, metric = currentChartMetric) {
   const isolatedCat = getIsolatedCategoryName();
   const isSingleCategoryIsolated = Boolean(isolatedCat);
 
-  // When isolated, chart ONLY elements of that category; otherwise chart all elements
-  const itemsToChart = isSingleCategoryIsolated
-    ? st.filter(item => {
-        const cat = item.classification || item.category || '';
-        return cat.trim().toLowerCase() === isolatedCat.trim().toLowerCase();
-      })
-    : st;
+  const getMetricVal = item => {
+    if (metric === 'area') return Number(item.area || 0) || 0;
+    if (metric === 'volume') return Number(item.volume || 0) || 0;
+    if (metric === 'length') return Number(item.length || 0) || 0;
+    return 1;
+  };
 
-  const groups = new Map();
-  let grandTotal = 0;
-  let grandApproved = 0;
-  let grandClosed = 0;
-  let grandProgress = 0;
-  let grandInspection = 0;
-  let grandRejected = 0;
-  let grandNone = 0;
+  const formatVal = v => {
+    if (metric === 'area') return (Math.round(v * 100) / 100).toLocaleString() + ' m²';
+    if (metric === 'volume') return (Math.round(v * 1000) / 1000).toLocaleString() + ' m³';
+    if (metric === 'length') return (Math.round(v * 100) / 100).toLocaleString() + ' m';
+    return Math.round(v).toLocaleString() + ' elem';
+  };
 
-  const activeDate = typeof Q !== 'undefined' ? Q : null;
+  let itemsToChart = st;
+  if (isSingleCategoryIsolated) {
+    itemsToChart = st.filter(item => (item.classification || '').trim() === isolatedCat);
+  }
 
+  const groups = {};
   itemsToChart.forEach(item => {
-    const groupKey = isSingleCategoryIsolated ? getElementIntegratedName(item) : (item.classification || 'SIN CLASIFICACIÓN');
-    if (!groups.has(groupKey)) {
-      groups.set(groupKey, {
-        name: groupKey,
+    const grpName = isSingleCategoryIsolated ? getElementIntegratedName(item) : (item.classification || 'SIN CLASIFICAR');
+    if (!groups[grpName]) {
+      groups[grpName] = {
+        name: grpName,
         total: 0,
+        count: 0,
         APROBADO: 0,
         CERRADO: 0,
         'EN PROGRESO': 0,
         'PARA INSPECCIÓN': 0,
         RECHAZADO: 0,
-        NINGUNO: 0,
-        count: 0
-      });
+        NINGUNO: 0
+      };
     }
-    const g = groups.get(groupKey);
-    const status = getItemStatus(item, activeDate);
-    const val = metric === 'area' ? (Number(item.area) || 0) :
-                metric === 'volume' ? (Number(item.volume) || 0) :
-                metric === 'length' ? (Number(item.length) || 0) : 1;
-
-    g.total += val;
-    g[status] = (g[status] || 0) + val;
-    g.count += 1;
-
-    grandTotal += val;
-    if (status === 'APROBADO') grandApproved += val;
-    else if (status === 'CERRADO') grandClosed += val;
-    else if (status === 'EN PROGRESO') grandProgress += val;
-    else if (status === 'PARA INSPECCIÓN') grandInspection += val;
-    else if (status === 'RECHAZADO') grandRejected += val;
-    else grandNone += val;
+    const val = getMetricVal(item);
+    const stStatus = getItemStatus(item);
+    groups[grpName].total += val;
+    groups[grpName].count += 1;
+    if (groups[grpName][stStatus] !== undefined) {
+      groups[grpName][stStatus] += val;
+    } else {
+      groups[grpName].NINGUNO += val;
+    }
   });
 
-  const list = Array.from(groups.values()).filter(g => g.total > 0).sort((a, b) => b.total - a.total);
+  const list = Object.values(groups).sort((a, b) => b.total - a.total);
+  const N = list.length;
 
-  const unitLabel = metric === 'area' ? 'm²' :
-                    metric === 'volume' ? 'm³' :
-                    metric === 'length' ? 'm' : 'elem';
-
-  const formatVal = v => {
-    if (metric === 'count') return Math.round(v).toLocaleString('es-CO');
-    return v.toLocaleString('es-CO', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + ' ' + unitLabel;
-  };
-
-  const totalApprovedMetrics = grandApproved + grandClosed;
-  const globalPct = grandTotal > 0 ? Math.round((totalApprovedMetrics / grandTotal) * 100) : 0;
+  let totalGeneralMetric = 0;
+  let totalApprovedMetrics = 0;
+  itemsToChart.forEach(i => {
+    const val = getMetricVal(i);
+    const s = getItemStatus(i);
+    totalGeneralMetric += val;
+    if (s === 'APROBADO' || s === 'CERRADO') totalApprovedMetrics += val;
+  });
+  const globalPct = totalGeneralMetric > 0 ? Math.round((totalApprovedMetrics / totalGeneralMetric) * 100) : 0;
 
   const cx = 230, cy = 230;
-  const rInner = 72;
+  const rInner = 82;
   const rOuter = 210;
   const deltaR = rOuter - rInner;
-  const N = list.length;
 
   let defs = '';
   let petalsSvg = '';
@@ -7241,7 +7302,6 @@ function renderStatusCharts(st, metric = currentChartMetric) {
       const aMid = (a1 + a2) / 2;
       const clipId = 'petal-clip-' + idx;
 
-      // Pure annular sector geometry
       const fullPetalPath = annularSector(cx, cy, rInner, rOuter, a1, a2);
       defs += '<clipPath id="' + clipId + '"><path d="' + fullPetalPath + '" /></clipPath>';
 
@@ -7286,12 +7346,11 @@ function renderStatusCharts(st, metric = currentChartMetric) {
   }
 
   const chartSvg = `
-    <svg viewBox="0 0 460 460" preserveAspectRatio="xMidYMid meet" style="width: 100%; max-width: 380px; aspect-ratio: 1 / 1; display: block; margin: 0 auto; overflow: visible;">
+    <svg viewBox="0 0 460 460" preserveAspectRatio="xMidYMid meet" style="width: 100%; max-width: 360px; aspect-ratio: 1 / 1; display: block; margin: 0 auto; overflow: visible;">
       <defs>
         ${defs}
       </defs>
       ${petalsSvg}
-      <!-- Center Circle Badge -->
       <circle cx="${cx}" cy="${cy}" r="${rInner - 6}" fill="${th.centerBg}" stroke="${th.centerStroke}" stroke-width="2" style="filter: drop-shadow(0 4px 10px rgba(0,0,0,0.15));" />
       <g pointer-events="none">
         <text x="${cx}" y="${cy - 8}" text-anchor="middle" font-size="22" font-weight="900" fill="#10b981" font-family: system-ui, sans-serif;">${globalPct}%</text>
@@ -7302,12 +7361,11 @@ function renderStatusCharts(st, metric = currentChartMetric) {
     </svg>
   `;
 
-  // Drilldown banner if isolated
   let drilldownBanner = '';
   if (isSingleCategoryIsolated) {
     drilldownBanner = `
-      <div style="display: flex; align-items: center; justify-content: space-between; background: ${th.isDark ? 'rgba(59, 130, 246, 0.15)' : 'rgba(59, 130, 246, 0.1)'}; border: 1px solid rgba(59, 130, 246, 0.3); border-radius: 6px; padding: 6px 12px; margin-bottom: 10px;">
-        <div style="display: flex; align-items: center; gap: 8px;">
+      <div style="display: flex; align-items: center; justify-content: space-between; background: ${th.isDark ? 'rgba(59, 130, 246, 0.15)' : 'rgba(59, 130, 246, 0.1)'}; border: 1px solid rgba(59, 130, 246, 0.3); border-radius: 6px; padding: 5px 10px; margin-bottom: 6px;">
+        <div style="display: flex; align-items: center; gap: 6px;">
           <span style="font-size: 11px; font-weight: 700; color: #3b82f6; text-transform: uppercase;">${isolatedCat}</span>
           <span style="font-size: 10px; color: ${th.subTextColor};">(${list.length} nombres)</span>
         </div>
@@ -7318,7 +7376,6 @@ function renderStatusCharts(st, metric = currentChartMetric) {
     `;
   }
 
-  // Breakdown items list
   let breakdownRows = '';
   list.forEach(c => {
     const approvedVal = (c.APROBADO || 0) + (c.CERRADO || 0);
@@ -7331,18 +7388,18 @@ function renderStatusCharts(st, metric = currentChartMetric) {
     const fRej = c.total > 0 ? ((c.RECHAZADO || 0) / c.total * 100) : 0;
 
     breakdownRows += `
-      <div class="status-chart-row" data-group="${encodeURIComponent(c.name)}" style="padding: 6px 0; border-bottom: 1px solid ${th.border}; cursor: pointer;">
-        <div style="display: flex; justify-content: space-between; align-items: center; font-size: 11px; margin-bottom: 4px;">
-          <span style="font-weight: 700; color: ${th.textColor}; display: flex; align-items: center; gap: 6px;">
+      <div class="status-chart-row" data-group="${encodeURIComponent(c.name)}" style="padding: 5px 0; border-bottom: 1px solid ${th.border}; cursor: pointer;">
+        <div style="display: flex; justify-content: space-between; align-items: center; font-size: 11px; margin-bottom: 3px;">
+          <span style="font-weight: 700; color: ${th.textColor}; display: flex; align-items: center; gap: 5px;">
             <i class="fa-solid fa-layer-group" style="font-size: 9px; color: #3b82f6;"></i>
             ${c.name}
           </span>
-          <div style="display: flex; gap: 8px; align-items: center;">
+          <div style="display: flex; gap: 6px; align-items: center;">
             <span style="font-size: 10px; color: ${th.subTextColor}; font-family: monospace;">${formatVal(c.total)}</span>
-            <span style="font-weight: 800; color: ${pct > 0 ? '#10b981' : th.subTextColor}; font-size: 11px; width: 32px; text-align: right;">${pct}%</span>
+            <span style="font-weight: 800; color: ${pct > 0 ? '#10b981' : th.subTextColor}; font-size: 11px; width: 30px; text-align: right;">${pct}%</span>
           </div>
         </div>
-        <div style="height: 6px; width: 100%; background: ${th.petalBg}; border-radius: 3px; overflow: hidden; display: flex;">
+        <div style="height: 5px; width: 100%; background: ${th.petalBg}; border-radius: 3px; overflow: hidden; display: flex;">
           ${fApp > 0 ? '<div style="height: 100%; width: ' + fApp + '%; background: #10b981;"></div>' : ''}
           ${fClo > 0 ? '<div style="height: 100%; width: ' + fClo + '%; background: #059669;"></div>' : ''}
           ${fPrg > 0 ? '<div style="height: 100%; width: ' + fPrg + '%; background: #f59e0b;"></div>' : ''}
@@ -7354,48 +7411,56 @@ function renderStatusCharts(st, metric = currentChartMetric) {
   });
 
   const html = `
-    <div style="padding: 14px; background: ${th.bg}; min-height: 100%; box-sizing: border-box; display: flex; flex-direction: column; gap: 10px;">
-      <!-- Header with Metric Selector -->
-      <div style="display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 1px solid ${th.border}; padding-bottom: 10px;">
+    <div style="padding: 12px; background: ${th.bg}; min-height: 100%; box-sizing: border-box; display: flex; flex-direction: column; gap: 8px;">
+      <!-- Header with Metric Selector & Activar IA Button -->
+      <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid ${th.border}; padding-bottom: 8px;">
         <div>
-          <div style="font-size: 12px; font-weight: 800; color: ${th.textColor}; text-transform: uppercase; letter-spacing: 0.5px; display: flex; align-items: center; gap: 6px;">
+          <div style="font-size: 11px; font-weight: 800; color: ${th.textColor}; text-transform: uppercase; letter-spacing: 0.5px; display: flex; align-items: center; gap: 5px;">
             <i class="fa-solid fa-chart-pie" style="color: #3b82f6;"></i>
             ${isSingleCategoryIsolated ? 'AVANCE POR NOMBRE INTEGRADO' : 'AVANCE RADIAL POR CLASIFICACIÓN'}
           </div>
-          <div style="font-size: 10px; color: ${th.subTextColor}; margin-top: 2px;">
+          <div style="font-size: 9px; color: ${th.subTextColor}; margin-top: 1px;">
             ${isSingleCategoryIsolated ? 'Subdivisiones de ' + isolatedCat : 'Porcentaje y estratos de avance por categoría'}
           </div>
         </div>
-        <!-- Metric Pills -->
-        <div style="display: flex; gap: 4px;">
-          ${['count', 'area', 'volume', 'length'].map(m => {
-            const labels = { count: 'Cant.', area: 'Área', volume: 'Vol.', length: 'Long.' };
-            const isActive = metric === m;
-            return `<button type="button" class="chart-metric-btn ${isActive ? 'active' : ''}" data-metric="${m}" style="padding: 2px 7px; font-size: 10px; font-weight: 600; border-radius: 4px; cursor: pointer; border: 1px solid ${isActive ? '#3b82f6' : th.metricInactiveBorder}; background: ${isActive ? th.metricActiveBg : th.metricInactiveBg}; color: ${isActive ? th.metricActiveText : th.metricInactiveText};">${labels[m]}</button>`;
-          }).join('')}
+
+        <div style="display: flex; align-items: center; gap: 5px;">
+          <!-- BOTÓN CLAVE: ACTIVAR LA IA EN EL MEDIO PLANO SUPERIOR -->
+          <button type="button" id="btn-chart-activate-ai-split" class="split-divider-btn primary" title="Partir panel: Activar nora AI arriba con gráficos abajo" style="padding: 3px 8px; font-size: 10px; font-weight: 700; border-radius: 5px;">
+            <i class="fa-solid fa-wand-magic-sparkles"></i> Activar IA arriba
+          </button>
+
+          <!-- Metric Pills -->
+          <div style="display: flex; gap: 2px;">
+            ${['count', 'area', 'volume', 'length'].map(m => {
+              const labels = { count: 'Cant.', area: 'Área', volume: 'Vol.', length: 'Long.' };
+              const isActive = metric === m;
+              return `<button type="button" class="chart-metric-btn ${isActive ? 'active' : ''}" data-metric="${m}" style="padding: 2px 5px; font-size: 9px; font-weight: 600; border-radius: 3px; cursor: pointer; border: 1px solid ${isActive ? '#3b82f6' : th.metricInactiveBorder}; background: ${isActive ? th.metricActiveBg : th.metricInactiveBg}; color: ${isActive ? th.metricActiveText : th.metricInactiveText};">${labels[m]}</button>`;
+            }).join('')}
+          </div>
         </div>
       </div>
 
       ${drilldownBanner}
 
       <!-- Radial SVG Wheel -->
-      <div style="display: flex; justify-content: center; align-items: center; width: 100%; margin: 4px 0;">
+      <div style="display: flex; justify-content: center; align-items: center; width: 100%; margin: 2px 0;">
         ${chartSvg}
       </div>
 
       <!-- Compact Legend -->
-      <div style="display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; padding: 6px 0; font-size: 9px; font-weight: 700; border-top: 1px solid ${th.border}; border-bottom: 1px solid ${th.border};">
-        <span style="display: inline-flex; align-items: center; gap: 4px; color: ${th.subTextColor};"><span style="width: 8px; height: 8px; border-radius: 2px; background: #10b981; display: inline-block;"></span>Aprobado</span>
-        <span style="display: inline-flex; align-items: center; gap: 4px; color: ${th.subTextColor};"><span style="width: 8px; height: 8px; border-radius: 2px; background: #f59e0b; display: inline-block;"></span>En Progreso</span>
-        <span style="display: inline-flex; align-items: center; gap: 4px; color: ${th.subTextColor};"><span style="width: 8px; height: 8px; border-radius: 2px; background: #3b82f6; display: inline-block;"></span>Para Insp.</span>
-        <span style="display: inline-flex; align-items: center; gap: 4px; color: ${th.subTextColor};"><span style="width: 8px; height: 8px; border-radius: 2px; background: #059669; display: inline-block;"></span>Cerrado</span>
-        <span style="display: inline-flex; align-items: center; gap: 4px; color: ${th.subTextColor};"><span style="width: 8px; height: 8px; border-radius: 2px; background: #ef4444; display: inline-block;"></span>Rechazado</span>
-        <span style="display: inline-flex; align-items: center; gap: 4px; color: ${th.subTextColor};"><span style="width: 8px; height: 8px; border-radius: 2px; background: ${th.petalBg}; border: 1px solid ${th.petalStroke}; display: inline-block;"></span>Ninguno</span>
+      <div style="display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; padding: 4px 0; font-size: 9px; font-weight: 700; border-top: 1px solid ${th.border}; border-bottom: 1px solid ${th.border};">
+        <span style="display: inline-flex; align-items: center; gap: 3px; color: ${th.subTextColor};"><span style="width: 7px; height: 7px; border-radius: 2px; background: #10b981; display: inline-block;"></span>Aprobado</span>
+        <span style="display: inline-flex; align-items: center; gap: 3px; color: ${th.subTextColor};"><span style="width: 7px; height: 7px; border-radius: 2px; background: #f59e0b; display: inline-block;"></span>En Progreso</span>
+        <span style="display: inline-flex; align-items: center; gap: 3px; color: ${th.subTextColor};"><span style="width: 7px; height: 7px; border-radius: 2px; background: #3b82f6; display: inline-block;"></span>Para Insp.</span>
+        <span style="display: inline-flex; align-items: center; gap: 3px; color: ${th.subTextColor};"><span style="width: 7px; height: 7px; border-radius: 2px; background: #059669; display: inline-block;"></span>Cerrado</span>
+        <span style="display: inline-flex; align-items: center; gap: 3px; color: ${th.subTextColor};"><span style="width: 7px; height: 7px; border-radius: 2px; background: #ef4444; display: inline-block;"></span>Rechazado</span>
+        <span style="display: inline-flex; align-items: center; gap: 3px; color: ${th.subTextColor};"><span style="width: 7px; height: 7px; border-radius: 2px; background: ${th.petalBg}; border: 1px solid ${th.petalStroke}; display: inline-block;"></span>Ninguno</span>
       </div>
 
       <!-- Breakdown List -->
-      <div style="margin-top: 4px;">
-        <div style="font-size: 10px; font-weight: 800; color: ${th.subTextColor}; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px;">
+      <div style="margin-top: 2px;">
+        <div style="font-size: 10px; font-weight: 800; color: ${th.subTextColor}; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px;">
           ${isSingleCategoryIsolated ? 'NOMBRES EN ' + isolatedCat + ' (' + list.length + ')' : 'DESGLOSE POR CLASIFICACIÓN (' + list.length + ')'}
         </div>
         <div style="display: flex; flex-direction: column;">
@@ -7407,7 +7472,14 @@ function renderStatusCharts(st, metric = currentChartMetric) {
 
   container.innerHTML = html;
 
-  // Event handlers for metric pills
+  // Botón para activar IA arriba
+  container.querySelector('#btn-chart-activate-ai-split')?.addEventListener('click', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    window.activateSplitAIWithCharts();
+  });
+
+  // Metric buttons
   container.querySelectorAll('.chart-metric-btn').forEach(btn => {
     btn.addEventListener('click', e => {
       const m = e.currentTarget.getAttribute('data-metric');
@@ -7428,17 +7500,18 @@ function renderStatusCharts(st, metric = currentChartMetric) {
     if (typeof ns === 'function') ns(st || (typeof at === 'function' ? at() : []));
   });
 
-  // Click on petal or row to isolate or filter
+  // Click on petal or breakdown row
   const handleGroupClick = groupName => {
     if (!isSingleCategoryIsolated) {
-      // Isolate this category
       if (typeof $ !== 'undefined') $ = groupName;
       const sel = document.getElementById('s-filter-class');
       if (sel) sel.value = groupName;
       renderStatusCharts(st);
       if (typeof ns === 'function') ns(st);
+      
+      // Notify Nora AI of category focus if in split mode
+      window.__noraActiveAIContext = { focusedCategory: groupName };
     } else {
-      // Highlight items with this integrated name
       const matched = itemsToChart.filter(i => getElementIntegratedName(i) === groupName);
       if (matched.length > 0 && typeof Yt !== 'undefined' && typeof je !== 'undefined') {
         const viewer = Yt.get(je);
@@ -7469,54 +7542,323 @@ function renderStatusCharts(st, metric = currentChartMetric) {
   });
 }
 
+// ============================================================================
+// SPLIT MODE CONTROLLERS & EVENT DISPATCHERS
+// ============================================================================
+
+window.activateSplitAIWithCharts = function(initialPrompt) {
+  const panel = document.getElementById("properties-panel");
+  const tabNora = document.getElementById("right-tab-nora");
+  const tabProp = document.getElementById("right-tab-properties");
+  const tabGraf = document.getElementById("right-tab-graficos");
+  const tabSplit = document.getElementById("right-tab-split-ia");
+  const contentProp = document.getElementById("properties-content");
+  const contentNora = document.getElementById("nora-ai-container");
+  const contentGraf = document.getElementById("status-charts-container");
+  const divider = document.getElementById("panel-split-divider");
+
+  if (panel) {
+    panel.classList.remove("closed");
+    panel.classList.add("split-mode");
+    const desiredW = Math.min(540, Math.floor(window.innerWidth * 0.48));
+    panel.style.width = desiredW + 'px';
+    document.documentElement.style.setProperty("--properties-width", desiredW + 'px');
+  }
+
+  if (tabNora) {
+    tabNora.classList.add("active");
+    tabNora.style.display = "inline-flex";
+  }
+  if (tabProp) tabProp.classList.remove("active");
+  if (tabGraf) tabGraf.style.display = "inline-flex";
+  if (tabSplit) {
+    tabSplit.style.display = "inline-flex";
+    tabSplit.classList.add("active");
+  }
+
+  if (contentNora) contentNora.style.display = "flex";
+  if (contentProp) contentProp.style.display = "none";
+  if (contentGraf) contentGraf.style.display = "flex";
+  if (divider) divider.style.display = "flex";
+
+  // Iniciar / abrir nora AI
+  if (window.noraAIWidgetInstance) {
+    if (typeof window.noraAIWidgetInstance.open === 'function') {
+      window.noraAIWidgetInstance.open();
+    }
+  }
+
+  // Inyectar sugerencias de avance en Nora AI si no existen
+  injectAvancePromptsInNoraAI();
+
+  // Renderizar gráficos
+  renderStatusCharts(typeof at === 'function' ? at() : []);
+
+  // Si hay prompt inicial, enviarlo
+  if (initialPrompt && window.noraAIWidgetInstance) {
+    const input = document.getElementById('nora-ai-input');
+    const sendBtn = document.getElementById('nora-ai-send');
+    if (input && sendBtn) {
+      input.value = initialPrompt;
+      sendBtn.click();
+    }
+  }
+};
+
+window.activateSplitPropsWithCharts = function() {
+  const panel = document.getElementById("properties-panel");
+  const tabNora = document.getElementById("right-tab-nora");
+  const tabProp = document.getElementById("right-tab-properties");
+  const tabSplit = document.getElementById("right-tab-split-ia");
+  const contentProp = document.getElementById("properties-content");
+  const contentNora = document.getElementById("nora-ai-container");
+  const contentGraf = document.getElementById("status-charts-container");
+  const divider = document.getElementById("panel-split-divider");
+
+  if (panel) {
+    panel.classList.remove("closed");
+    panel.classList.add("split-mode");
+  }
+
+  if (tabProp) tabProp.classList.add("active");
+  if (tabNora) tabNora.classList.remove("active");
+  if (tabSplit) tabSplit.classList.remove("active");
+
+  if (contentProp) contentProp.style.display = "flex";
+  if (contentNora) contentNora.style.display = "none";
+  if (contentGraf) contentGraf.style.display = "flex";
+  if (divider) divider.style.display = "flex";
+};
+
+window.toggleSplitMode = function() {
+  const panel = document.getElementById("properties-panel");
+  if (!panel) return;
+  const isSplit = panel.classList.contains("split-mode");
+  if (isSplit) {
+    // Cerrar split, mantener panel superior completo
+    panel.classList.remove("split-mode");
+    const contentGraf = document.getElementById("status-charts-container");
+    const divider = document.getElementById("panel-split-divider");
+    const tabSplit = document.getElementById("right-tab-split-ia");
+    if (contentGraf) contentGraf.style.display = "none";
+    if (divider) divider.style.display = "none";
+    if (tabSplit) tabSplit.classList.remove("active");
+  } else {
+    window.activateSplitAIWithCharts();
+  }
+};
+
+function injectAvancePromptsInNoraAI() {
+  const container = document.getElementById('nora-ai-messages');
+  if (!container || container.querySelector('.avance-ai-prompt-group')) return;
+
+  const promptsWrap = container.querySelector('.nora-ai-prompts');
+  if (!promptsWrap) return;
+
+  const avancePills = document.createElement('div');
+  avancePills.className = 'avance-ai-prompt-group';
+  avancePills.style.cssText = 'display: flex; flex-wrap: wrap; gap: 4px; padding: 6px 0; border-bottom: 1px dashed rgba(139,92,246,0.3); margin-bottom: 6px;';
+  avancePills.innerHTML = `
+    <button class="nora-ai-prompt-pill" data-prompt="¿Cuál es el porcentaje de avance general del proyecto y cuántos elementos van aprobados?" style="border-color: #10b981; color: #047857; background: #ecfdf5; font-weight: 700;">
+      <i class="fa-solid fa-chart-pie"></i> % Avance General
+    </button>
+    <button class="nora-ai-prompt-pill" data-prompt="Aísla en 3D todos los elementos con estado APROBADO" style="border-color: #10b981; color: #047857; background: #ecfdf5;">
+      <i class="fa-solid fa-circle-check"></i> Aislar Aprobados
+    </button>
+    <button class="nora-ai-prompt-pill" data-prompt="Aísla en 3D los elementos EN PROGRESO" style="border-color: #f59e0b; color: #b45309; background: #fffbeb;">
+      <i class="fa-solid fa-clock"></i> Aislar En Progreso
+    </button>
+    <button class="nora-ai-prompt-pill" data-prompt="¿Cuál es el avance de Vigas? Aísla las vigas y muestra su estado" style="border-color: #3b82f6; color: #1d4ed8; background: #eff6ff;">
+      <i class="fa-solid fa-layer-group"></i> Avance de Vigas
+    </button>
+    <button class="nora-ai-prompt-pill" data-prompt="Aísla los elementos RECHAZADOS en el visor 3D" style="border-color: #ef4444; color: #b91c1c; background: #fef2f2;">
+      <i class="fa-solid fa-triangle-exclamation"></i> Ver Rechazados
+    </button>
+  `;
+  promptsWrap.insertBefore(avancePills, promptsWrap.firstChild);
+}
+
+function initSplitDividerEvents() {
+  const divider = document.getElementById('panel-split-divider');
+  if (!divider || divider._initialized) return;
+  divider._initialized = true;
+
+  divider.querySelector('#btn-split-toggle-ai')?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    window.activateSplitAIWithCharts();
+  });
+
+  divider.querySelector('#btn-split-toggle-props')?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    window.activateSplitPropsWithCharts();
+  });
+
+  divider.querySelector('#btn-split-close-charts')?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    window.closeStatusCharts();
+  });
+
+  // Arrastre vertical para ajustar ratio
+  let isDragging = false;
+  divider.addEventListener('mousedown', (e) => {
+    if (e.target.closest('button')) return;
+    isDragging = true;
+    document.body.style.cursor = 'row-resize';
+    e.preventDefault();
+  });
+
+  document.addEventListener('mousemove', (e) => {
+    if (!isDragging) return;
+    const panel = document.getElementById('properties-panel');
+    if (!panel) return;
+    const rect = panel.getBoundingClientRect();
+    const relY = e.clientY - rect.top - 48; // Restar tabs
+    const ratio = Math.max(0.2, Math.min(0.8, relY / (rect.height - 48)));
+    const pct = Math.round(ratio * 100);
+    panel.style.setProperty('--split-top-ratio', pct + '%');
+  });
+
+  document.addEventListener('mouseup', () => {
+    if (isDragging) {
+      isDragging = false;
+      document.body.style.cursor = 'default';
+    }
+  });
+}
+
 function openStatusCharts(st) {
   const gTab = document.getElementById("right-tab-graficos");
+  const sTab = document.getElementById("right-tab-split-ia");
   const gCont = document.getElementById("status-charts-container");
   const pPan = document.getElementById("properties-panel");
   const pProps = document.getElementById("right-tab-properties");
   const pNora = document.getElementById("right-tab-nora");
   const pCont = document.getElementById("properties-content");
   const nCont = document.getElementById("nora-ai-container");
-  if (gTab) {
-    gTab.style.display = "inline-flex";
-    gTab.classList.add("active");
-    pProps?.classList.remove("active");
-    pNora?.classList.remove("active");
-    pCont && (pCont.style.display = "none");
-    nCont && (nCont.style.display = "none");
-    gCont && (gCont.style.display = "flex");
-    if (pPan) {
-      pPan.classList.remove("closed");
-      const desiredW = Math.min(460, Math.floor(window.innerWidth * 0.5));
-      if (pPan.offsetWidth < desiredW) {
-        pPan.style.width = `${desiredW}px`;
-        document.documentElement.style.setProperty("--properties-width", `${desiredW}px`);
-      }
-    }
-    renderStatusCharts(st || (typeof at === "function" ? at() : []));
+  const divider = document.getElementById("panel-split-divider");
+
+  initSplitDividerEvents();
+
+  if (gTab) gTab.style.display = "inline-flex";
+  if (sTab) sTab.style.display = "inline-flex";
+
+  if (pPan) {
+    pPan.classList.remove("closed");
+    pPan.classList.add("split-mode");
+    const desiredW = Math.min(540, Math.floor(window.innerWidth * 0.48));
+    pPan.style.width = desiredW + 'px';
+    document.documentElement.style.setProperty("--properties-width", desiredW + 'px');
   }
+
+  // Si nora estaba activo, mantener nora arriba. Si properties estaba activo, mantener properties arriba.
+  if (pNora && pNora.classList.contains("active")) {
+    if (nCont) nCont.style.display = "flex";
+    if (pCont) pCont.style.display = "none";
+    if (sTab) sTab.classList.add("active");
+  } else {
+    if (pProps) pProps.classList.add("active");
+    if (pNora) pNora.classList.remove("active");
+    if (pCont) pCont.style.display = "flex";
+    if (nCont) nCont.style.display = "none";
+  }
+
+  if (gCont) gCont.style.display = "flex";
+  if (divider) divider.style.display = "flex";
+
+  renderStatusCharts(st || (typeof at === "function" ? at() : []));
 }
 
 function closeStatusCharts() {
   const gTab = document.getElementById("right-tab-graficos");
+  const sTab = document.getElementById("right-tab-split-ia");
   const gCont = document.getElementById("status-charts-container");
+  const pPan = document.getElementById("properties-panel");
   const pProps = document.getElementById("right-tab-properties");
+  const pNora = document.getElementById("right-tab-nora");
   const pCont = document.getElementById("properties-content");
+  const nCont = document.getElementById("nora-ai-container");
+  const divider = document.getElementById("panel-split-divider");
+
+  if (pPan) pPan.classList.remove("split-mode");
+  if (gCont) gCont.style.display = "none";
+  if (divider) divider.style.display = "none";
   if (gTab) {
+    gTab.classList.remove("active", "active-lower");
     gTab.style.display = "none";
-    if (gTab.classList.contains("active")) {
-      gTab.classList.remove("active");
-      pProps?.classList.add("active");
-      gCont && (gCont.style.display = "none");
-      pCont && (pCont.style.display = "flex");
-    }
+  }
+  if (sTab) {
+    sTab.classList.remove("active");
+    sTab.style.display = "none";
+  }
+
+  // Restaurar altura completa al panel superior activo
+  if (pNora && pNora.classList.contains("active")) {
+    if (nCont) nCont.style.display = "flex";
+    if (pCont) pCont.style.display = "none";
+  } else {
+    if (pProps) pProps.classList.add("active");
+    if (pCont) pCont.style.display = "flex";
+    if (nCont) nCont.style.display = "none";
   }
 }
+
+// Configurar listeners de tabs para respetar el modo split
+function setupSplitTabListeners() {
+  const tabProp = document.getElementById('right-tab-properties');
+  const tabNora = document.getElementById('right-tab-nora');
+  const tabGraf = document.getElementById('right-tab-graficos');
+  const tabSplit = document.getElementById('right-tab-split-ia');
+  const panel = document.getElementById('properties-panel');
+
+  if (tabSplit) {
+    tabSplit.addEventListener('click', (e) => {
+      e.preventDefault();
+      window.toggleSplitMode();
+    });
+  }
+
+  if (tabProp) {
+    tabProp.addEventListener('click', (e) => {
+      if (panel && panel.classList.contains('split-mode')) {
+        e.preventDefault();
+        window.activateSplitPropsWithCharts();
+      }
+    });
+  }
+
+  if (tabNora) {
+    tabNora.addEventListener('click', (e) => {
+      if (panel && panel.classList.contains('split-mode')) {
+        e.preventDefault();
+        window.activateSplitAIWithCharts();
+      }
+    });
+  }
+
+  if (tabGraf) {
+    tabGraf.addEventListener('click', (e) => {
+      e.preventDefault();
+      openStatusCharts(typeof at === 'function' ? at() : []);
+    });
+  }
+}
+
+// Inicializar de inmediato al cargar el script
+setTimeout(() => {
+  initSplitDividerEvents();
+  setupSplitTabListeners();
+}, 200);
 
 window.openStatusCharts = openStatusCharts;
 window.closeStatusCharts = closeStatusCharts;
 window.renderStatusCharts = renderStatusCharts;
 window.refreshStatusCharts = () => renderStatusCharts(typeof at === "function" ? at() : []);
+window.getLiveStatusStats = getLiveStatusStats;
+
+
+window.getLiveStatusStats = getLiveStatusStats;
+
+
 
 function li(){if(!o)return;const st=at();if(rt(st),st.length===0){o.innerHTML='<div class="q-empty-msg">No hay datos de avance. Asegúrate de cargar un modelo IFC con propiedades.</div>';const N=document.getElementById("s-header-totals");N&&(N.innerHTML="");return}qe(st),Kr(st),H(),ns(st),$i();const _gCont=document.getElementById("status-charts-container");_gCont&&_gCont.style.display!=="none"&&renderStatusCharts(st)}function Kr(st){let N=r.querySelector(".q-toolbar");N||(N=document.createElement("div"),N.className="q-toolbar",r.insertBefore(N,o));const pt=Array.from(new Set(st.map(Et=>Et.classification))).sort(),$t=Array.from(new Set(st.map(Et=>Et.level))).sort();N.innerHTML=`
             <div class="q-toolbar-left">
