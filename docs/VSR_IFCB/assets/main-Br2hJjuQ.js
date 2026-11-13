@@ -7425,9 +7425,9 @@ function renderStatusCharts(st, metric = currentChartMetric) {
         </div>
 
         <div style="display: flex; align-items: center; gap: 5px;">
-          <!-- BOTÓN CLAVE: ACTIVAR LA IA EN EL MEDIO PLANO SUPERIOR -->
-          <button type="button" id="btn-chart-activate-ai-split" class="split-divider-btn primary" title="Partir panel: Activar nora AI arriba con gráficos abajo" style="padding: 3px 8px; font-size: 10px; font-weight: 700; border-radius: 5px;">
-            <i class="fa-solid fa-wand-magic-sparkles"></i> Activar IA arriba
+          <!-- BOTÓN CLAVE: ACTIVAR O ALTERNAR LA IA EN EL MEDIO PLANO SUPERIOR -->
+          <button type="button" id="btn-chart-activate-ai-split" class="split-divider-btn ${document.getElementById('properties-panel')?.classList.contains('split-mode') ? '' : 'primary'}" title="${document.getElementById('properties-panel')?.classList.contains('split-mode') ? 'Cerrar IA y ver sólo gráficos a pantalla completa' : 'Partir panel en 2: Activar nora AI arriba con gráficos abajo'}" style="padding: 3px 8px; font-size: 10px; font-weight: 700; border-radius: 5px; display: inline-flex; align-items: center; gap: 4px; ${document.getElementById('properties-panel')?.classList.contains('split-mode') ? 'color: #ef4444; border-color: #fca5a5;' : ''}">
+            <i class="fa-solid ${document.getElementById('properties-panel')?.classList.contains('split-mode') ? 'fa-expand' : 'fa-wand-magic-sparkles'}"></i> ${document.getElementById('properties-panel')?.classList.contains('split-mode') ? 'Sólo gráficos' : 'Activar IA arriba'}
           </button>
 
           <!-- Metric Pills -->
@@ -7635,14 +7635,7 @@ window.toggleSplitMode = function() {
   if (!panel) return;
   const isSplit = panel.classList.contains("split-mode");
   if (isSplit) {
-    // Cerrar split, mantener panel superior completo
-    panel.classList.remove("split-mode");
-    const contentGraf = document.getElementById("status-charts-container");
-    const divider = document.getElementById("panel-split-divider");
-    const tabSplit = document.getElementById("right-tab-split-ia");
-    if (contentGraf) contentGraf.style.display = "none";
-    if (divider) divider.style.display = "none";
-    if (tabSplit) tabSplit.classList.remove("active");
+    openStatusCharts(typeof at === 'function' ? at() : []);
   } else {
     window.activateSplitAIWithCharts();
   }
@@ -7695,7 +7688,7 @@ function initSplitDividerEvents() {
 
   divider.querySelector('#btn-split-close-charts')?.addEventListener('click', (e) => {
     e.stopPropagation();
-    window.closeStatusCharts();
+    openStatusCharts(typeof at === 'function' ? at() : []);
   });
 
   // Arrastre vertical para ajustar ratio
@@ -7739,31 +7732,33 @@ function openStatusCharts(st) {
 
   initSplitDividerEvents();
 
-  if (gTab) gTab.style.display = "inline-flex";
-  if (sTab) sTab.style.display = "inline-flex";
-
+  // Abrir con SOLO GRÁFICOS (pantalla completa en panel, sin subdividir)
   if (pPan) {
     pPan.classList.remove("closed");
-    pPan.classList.add("split-mode");
+    pPan.classList.remove("split-mode");
     const desiredW = Math.min(540, Math.floor(window.innerWidth * 0.48));
     pPan.style.width = desiredW + 'px';
     document.documentElement.style.setProperty("--properties-width", desiredW + 'px');
   }
 
-  // Si nora estaba activo, mantener nora arriba. Si properties estaba activo, mantener properties arriba.
-  if (pNora && pNora.classList.contains("active")) {
-    if (nCont) nCont.style.display = "flex";
-    if (pCont) pCont.style.display = "none";
-    if (sTab) sTab.classList.add("active");
-  } else {
-    if (pProps) pProps.classList.add("active");
-    if (pNora) pNora.classList.remove("active");
-    if (pCont) pCont.style.display = "flex";
-    if (nCont) nCont.style.display = "none";
+  if (gTab) {
+    gTab.style.display = "inline-flex";
+    gTab.classList.add("active");
   }
+  if (sTab) {
+    sTab.style.display = "inline-flex";
+    sTab.classList.remove("active");
+  }
+  if (pProps) pProps.classList.remove("active");
+  if (pNora) pNora.classList.remove("active");
 
-  if (gCont) gCont.style.display = "flex";
-  if (divider) divider.style.display = "flex";
+  if (pCont) pCont.style.display = "none";
+  if (nCont) nCont.style.display = "none";
+  if (divider) divider.style.display = "none";
+  if (gCont) {
+    gCont.style.display = "flex";
+    gCont.style.height = "calc(100% - 48px)";
+  }
 
   renderStatusCharts(st || (typeof at === "function" ? at() : []));
 }
@@ -7822,6 +7817,15 @@ function setupSplitTabListeners() {
       if (panel && panel.classList.contains('split-mode')) {
         e.preventDefault();
         window.activateSplitPropsWithCharts();
+      } else {
+        const gCont = document.getElementById('status-charts-container');
+        const divider = document.getElementById('panel-split-divider');
+        const sTab = document.getElementById('right-tab-split-ia');
+        const gTab = document.getElementById('right-tab-graficos');
+        if (gCont) gCont.style.display = 'none';
+        if (divider) divider.style.display = 'none';
+        if (sTab) sTab.classList.remove('active');
+        if (gTab) gTab.classList.remove('active');
       }
     });
   }
@@ -7831,6 +7835,15 @@ function setupSplitTabListeners() {
       if (panel && panel.classList.contains('split-mode')) {
         e.preventDefault();
         window.activateSplitAIWithCharts();
+      } else {
+        const gCont = document.getElementById('status-charts-container');
+        const divider = document.getElementById('panel-split-divider');
+        const sTab = document.getElementById('right-tab-split-ia');
+        const gTab = document.getElementById('right-tab-graficos');
+        if (gCont) gCont.style.display = 'none';
+        if (divider) divider.style.display = 'none';
+        if (sTab) sTab.classList.remove('active');
+        if (gTab) gTab.classList.remove('active');
       }
     });
   }
