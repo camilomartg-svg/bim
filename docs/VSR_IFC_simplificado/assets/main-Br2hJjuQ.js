@@ -7470,7 +7470,54 @@ function renderStatusCharts(st, metric = currentChartMetric) {
   });
 }
 
-window.refreshStatusCharts = () => renderStatusCharts(at());
+function openStatusCharts(st) {
+  const gTab = document.getElementById("right-tab-graficos");
+  const gCont = document.getElementById("status-charts-container");
+  const pPan = document.getElementById("properties-panel");
+  const pProps = document.getElementById("right-tab-properties");
+  const pNora = document.getElementById("right-tab-nora");
+  const pCont = document.getElementById("properties-content");
+  const nCont = document.getElementById("nora-ai-container");
+  if (gTab) {
+    gTab.style.display = "inline-flex";
+    gTab.classList.add("active");
+    pProps?.classList.remove("active");
+    pNora?.classList.remove("active");
+    pCont && (pCont.style.display = "none");
+    nCont && (nCont.style.display = "none");
+    gCont && (gCont.style.display = "flex");
+    if (pPan) {
+      pPan.classList.remove("closed");
+      const desiredW = Math.min(460, Math.floor(window.innerWidth * 0.5));
+      if (pPan.offsetWidth < desiredW) {
+        pPan.style.width = `${desiredW}px`;
+        document.documentElement.style.setProperty("--properties-width", `${desiredW}px`);
+      }
+    }
+    renderStatusCharts(st || (typeof at === "function" ? at() : []));
+  }
+}
+
+function closeStatusCharts() {
+  const gTab = document.getElementById("right-tab-graficos");
+  const gCont = document.getElementById("status-charts-container");
+  const pProps = document.getElementById("right-tab-properties");
+  const pCont = document.getElementById("properties-content");
+  if (gTab) {
+    gTab.style.display = "none";
+    if (gTab.classList.contains("active")) {
+      gTab.classList.remove("active");
+      pProps?.classList.add("active");
+      gCont && (gCont.style.display = "none");
+      pCont && (pCont.style.display = "flex");
+    }
+  }
+}
+
+window.openStatusCharts = openStatusCharts;
+window.closeStatusCharts = closeStatusCharts;
+window.renderStatusCharts = renderStatusCharts;
+window.refreshStatusCharts = () => renderStatusCharts(typeof at === "function" ? at() : []);
 
 function li(){if(!o)return;const st=at();if(rt(st),st.length===0){o.innerHTML='<div class="q-empty-msg">No hay datos de avance. Asegúrate de cargar un modelo IFC con propiedades.</div>';const N=document.getElementById("s-header-totals");N&&(N.innerHTML="");return}qe(st),Kr(st),H(),ns(st),$i();const _gCont=document.getElementById("status-charts-container");_gCont&&_gCont.style.display!=="none"&&renderStatusCharts(st)}function Kr(st){let N=r.querySelector(".q-toolbar");N||(N=document.createElement("div"),N.className="q-toolbar",r.insertBefore(N,o));const pt=Array.from(new Set(st.map(Et=>Et.classification))).sort(),$t=Array.from(new Set(st.map(Et=>Et.level))).sort();N.innerHTML=`
             <div class="q-toolbar-left">
