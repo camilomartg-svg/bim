@@ -21,6 +21,7 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="default" />
     <meta name="msapplication-TileColor" content="#2b2b2b" />
     <meta name="msapplication-TileImage" content="assets/icons/portal-bim-192.png" />
+    <script src="wompi-integration.js"></script>
     <script src="https://cdn.tailwindcss.com?plugins=forms,typography"></script>
     <script>
         tailwind.config = {
@@ -354,6 +355,8 @@
             const renderProjects = (projects) => {
                 if (!projectsList) return;
                 const visibleProjects = (Array.isArray(projects) ? projects : []).filter((item) => item && item.enabled !== false);
+                const isSuperAdmin = (userAccount && (userAccount.role === 'SUPER_ADMINISTRADOR' || userAccount.username === 'imagina3ddesign@gmail.com'));
+
                 projectsList.innerHTML = visibleProjects.length
                     ? visibleProjects
                         .map((project, index) => {
@@ -365,17 +368,35 @@
                             } else {
                                 acronym = name.substring(0, 3).toUpperCase();
                             }
+
+                            const licCheck = window.WompiModule ? window.WompiModule.canAccessProject(project, 3) : { canAccess: true, status: 'ACTIVE' };
+                            const isBlocked = !licCheck.canAccess && !isSuperAdmin;
+
                             return `
-                            <a href="${escapeHtml(resolveProjectHref(project))}" class="group flex flex-col bg-[#efefef] dark:bg-[#1a1a1a] p-5 transition-transform duration-300 hover:-translate-y-2 min-h-[380px]">
+                            <a href="${escapeHtml(resolveProjectHref(project))}" class="group flex flex-col bg-[#efefef] dark:bg-[#1a1a1a] p-5 transition-transform duration-300 hover:-translate-y-2 min-h-[380px] ${isBlocked ? 'border-2 border-rose-500/70' : ''}">
                                 <div class="flex justify-between items-start mb-6 text-[7px] font-bold tracking-widest uppercase text-gray-600 dark:text-gray-400 border-b border-gray-300 dark:border-gray-700 pb-2">
                                     <span>NORA CDE™</span>
                                     <span>PROYECTO</span>
                                 </div>
-                                <h3 class="text-5xl font-medium tracking-tighter text-[#111] dark:text-white leading-none mb-8">${acronym}</h3>
+                                <h3 class="text-5xl font-medium tracking-tighter text-[#111] dark:text-white leading-none mb-8 ${isBlocked ? 'opacity-40' : ''}">${acronym}</h3>
                                 
                                 <div class="mt-auto border-t border-gray-300 dark:border-gray-700 pt-4">
                                     <h4 class="text-xl font-medium tracking-tight text-[#111] dark:text-white leading-none mb-2">${escapeHtml(name)}</h4>
-                                    <p class="text-[8px] uppercase tracking-widest text-gray-500 dark:text-gray-400 mb-4">[Activo]</p>
+                                    ${isBlocked ? `
+                                        <p class="text-[9px] uppercase tracking-wider text-rose-600 dark:text-rose-400 font-extrabold mb-2 flex items-center gap-1.5">
+                                            <span class="w-2 h-2 rounded-full bg-rose-600 inline-block animate-pulse"></span>
+                                            🚫 [SUSPENDIDO POR MORA]
+                                        </p>
+                                        <p class="text-[8px] text-rose-700 dark:text-rose-400 font-semibold mb-3 leading-tight">
+                                            Periodo de gracia de 5 días superado. Visualización y herramientas bloqueadas.
+                                        </p>
+                                    ` : (licCheck.status === 'GRACE_PERIOD' ? `
+                                        <p class="text-[8px] uppercase tracking-widest text-amber-600 dark:text-amber-400 font-bold mb-4">
+                                            ⚠️ [Gracia: ${licCheck.graceDaysLeft}d para pagar]
+                                        </p>
+                                    ` : `
+                                        <p class="text-[8px] uppercase tracking-widest text-gray-500 dark:text-gray-400 mb-4">[Activo]</p>
+                                    `)}
                                     
                                     <p class="text-[8px] text-gray-500 dark:text-gray-500 leading-tight text-justify font-mono">
                                         Entorno de datos comunes proporcionado por Nora CDE. / Acceda para interactuar con modelos y documentación. / Se requiere autorización. / Mantenga la confidencialidad de la información de este proyecto. /

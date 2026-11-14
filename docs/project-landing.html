@@ -65,6 +65,7 @@
       filter: grayscale(1) contrast(1.08);
     }
   </style>
+  <script src="wompi-integration.js"></script>
   <script src="nora-drive-store.js"></script>
   <script src="nora-navigation.js"></script>
 </head>
@@ -541,6 +542,31 @@
       const imgFooterSecDark = document.getElementById('footer-logo-secondary-dark');
       if (imgFooterSecDark) imgFooterSecDark.src = footerLogoSecondaryDark;
 
+      const isGlobalSuperAdmin = Boolean(userAccount && (userAccount.role === 'SUPER_ADMINISTRADOR' || userAccount.username === 'imagina3ddesign@gmail.com'));
+      const licCheck = window.WompiModule ? window.WompiModule.canAccessProject(project, 3) : { canAccess: true, status: 'ACTIVE' };
+      const isProjectBlocked = !licCheck.canAccess && !isGlobalSuperAdmin;
+
+      // Banner de Periodo de Gracia
+      if (licCheck.status === 'GRACE_PERIOD' && !isProjectBlocked) {
+        const mainContentEl = document.querySelector('main') || document.getElementById('project-tools-container')?.parentElement;
+        if (mainContentEl) {
+          const graceBanner = document.createElement('div');
+          graceBanner.className = 'w-full mb-6 p-4 rounded-xl bg-amber-50 border border-amber-300 text-amber-900 text-xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-sm';
+          graceBanner.innerHTML = `
+            <div class="flex items-center gap-2.5">
+              <span class="material-symbols-outlined text-amber-600 text-xl shrink-0">warning</span>
+              <div>
+                <strong>Aviso de Pago Pendiente (Periodo de Gracia):</strong> Dispones de <strong>${licCheck.graceDaysLeft} días</strong> para pagar la mensualidad del proyecto antes de la suspensión del servicio.
+              </div>
+            </div>
+            <a href="super-admin.html" class="shrink-0 bg-amber-600 hover:bg-amber-700 text-white font-bold px-4 py-2 rounded-lg text-xs shadow-sm transition-all flex items-center gap-1.5">
+              <span class="material-symbols-outlined text-sm">payments</span> Pagar Licencia
+            </a>
+          `;
+          mainContentEl.prepend(graceBanner);
+        }
+      }
+
       const activeModules = MODULE_META
         .map((item) => ({ ...item, groupName: item.group, href: buildProjectAwareHref(project.modules[item.key] || item.defaultHref, item.key) }));
 
@@ -557,7 +583,33 @@
 
       const toolsContainer = document.getElementById('project-tools-container');
       if (toolsContainer) {
-        if (allTools.length) {
+        if (isProjectBlocked) {
+          toolsContainer.innerHTML = `
+            <div class="col-span-full w-full p-8 rounded-2xl bg-rose-50/90 dark:bg-rose-950/40 border-2 border-rose-500/80 shadow-lg text-center max-w-2xl mx-auto my-4">
+              <div class="w-16 h-16 rounded-full bg-rose-100 dark:bg-rose-900/60 text-rose-600 dark:text-rose-400 flex items-center justify-center mx-auto mb-4 text-3xl font-black">
+                <span class="material-symbols-outlined text-4xl">lock</span>
+              </div>
+              <h3 class="text-xl font-extrabold text-rose-950 dark:text-rose-100 mb-2">Proyecto Bloqueado por Falta de Pago</h3>
+              <p class="text-xs sm:text-sm text-rose-800 dark:text-rose-300 mb-4 leading-relaxed">
+                El periodo de gracia de <strong>5 días</strong> posteriores a la fecha de corte ha finalizado sin registrar el pago de la mensualidad. La visualización de modelos 3D (IFC), planos 2D (PDF y DWG), carga/descarga de archivos y reporte de incidencias se encuentran temporalmente bloqueados.
+              </p>
+              <div class="inline-flex items-center gap-2 bg-white dark:bg-slate-900 px-4 py-2 rounded-xl border border-rose-300 dark:border-rose-800 text-xs font-bold text-rose-700 dark:text-rose-300 mb-6 shadow-sm">
+                <span class="material-symbols-outlined text-base text-rose-500">timer</span>
+                Retención de datos antes de eliminación definitiva: <strong>${licCheck.daysLeftToPurge} días</strong>
+              </div>
+              <div class="flex flex-col sm:flex-row items-center justify-center gap-3">
+                <a href="super-admin.html" class="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-6 py-3 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs uppercase tracking-wider shadow-md transition-all">
+                  <span class="material-symbols-outlined text-base">payments</span>
+                  Pagar Licencia en Pasarela Wompi
+                </a>
+                <a href="home.html" class="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-6 py-3 rounded-xl bg-white hover:bg-slate-100 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 font-bold text-xs uppercase tracking-wider border border-slate-300 dark:border-slate-700 shadow-sm transition-all">
+                  <span class="material-symbols-outlined text-base">arrow_back</span>
+                  Volver al Home
+                </a>
+              </div>
+            </div>
+          `;
+        } else if (allTools.length) {
           const grouped = allTools.reduce((acc, tool) => {
             acc[tool.groupName] = acc[tool.groupName] || [];
             acc[tool.groupName].push(tool);
@@ -590,17 +642,21 @@
         .map((item) => ({ ...item, subtitle: item.group === 'modelos' ? 'Abrir' : 'Revisar' }));
       const quickLinksContainer = document.getElementById('project-quick-links');
       if (quickLinksContainer) {
-        quickLinksContainer.innerHTML = quickLinks.length
-          ? quickLinks.map((item) => `
-            <a href="${escapeHtml(item.href)}" class="rounded-none bg-white px-5 py-5 text-center transition hover:bg-slate-100 dark:bg-white/10 dark:hover:bg-white/15">
-              <div class="mx-auto flex h-11 w-11 items-center justify-center rounded-none bg-white text-[#111827] dark:bg-white/10 dark:text-white">
-                <span class="material-symbols-outlined">${item.icon}</span>
-              </div>
-              <div class="mt-4 text-sm font-semibold text-[#111827] dark:text-white">${escapeHtml(item.label)}</div>
-              <div class="mt-1 text-xs uppercase tracking-[0.22em] text-[#6f6f69] dark:text-white/60">${escapeHtml(item.subtitle)}</div>
-            </a>
-          `).join('')
-          : '<div class="rounded-none border border-dashed border-slate-300 p-4 text-sm text-slate-500 dark:border-white/15 dark:text-white/60">Sin accesos rápidos configurados.</div>';
+        if (isProjectBlocked) {
+          quickLinksContainer.innerHTML = '<div class="col-span-full rounded-none border border-rose-300 bg-rose-50/70 p-4 text-xs font-bold text-rose-700 text-center">🚫 Accesos rápidos deshabilitados por falta de pago.</div>';
+        } else {
+          quickLinksContainer.innerHTML = quickLinks.length
+            ? quickLinks.map((item) => `
+              <a href="${escapeHtml(item.href)}" class="rounded-none bg-white px-5 py-5 text-center transition hover:bg-slate-100 dark:bg-white/10 dark:hover:bg-white/15">
+                <div class="mx-auto flex h-11 w-11 items-center justify-center rounded-none bg-white text-[#111827] dark:bg-white/10 dark:text-white">
+                  <span class="material-symbols-outlined">${item.icon}</span>
+                </div>
+                <div class="mt-4 text-sm font-semibold text-[#111827] dark:text-white">${escapeHtml(item.label)}</div>
+                <div class="mt-1 text-xs uppercase tracking-[0.22em] text-[#6f6f69] dark:text-white/60">${escapeHtml(item.subtitle)}</div>
+              </a>
+            `).join('')
+            : '<div class="rounded-none border border-dashed border-slate-300 p-4 text-sm text-slate-500 dark:border-white/15 dark:text-white/60">Sin accesos rápidos configurados.</div>';
+        }
       }
 
       const mapEl = document.getElementById('project-map');

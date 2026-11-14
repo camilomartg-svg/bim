@@ -77,11 +77,26 @@ window.WompiModule = (function () {
   }
 
   /**
+   * Planes de prepago y descuentos por adelantado:
+   * - mensual: 1 mes (0% descuento)
+   * - trimestre: 3 meses (5% descuento)
+   * - semestre: 6 meses (7% descuento)
+   * - anualidad: 12 meses (10% descuento)
+   */
+  const PREPAY_PLANS = {
+    monthly: { months: 1, discount: 0, label: 'Mes a mes' },
+    trimestre: { months: 3, discount: 0.05, label: 'Trimestre (5% desc.)' },
+    semestre: { months: 6, discount: 0.07, label: 'Semestre (7% desc.)' },
+    anualidad: { months: 12, discount: 0.10, label: 'Anualidad (10% desc.)' }
+  };
+
+  /**
    * Calcula el monto a cobrar para un proyecto.
-   * Si es un proyecto nuevo (o sin pago previo) activado antes de la fecha de corte (día 3),
+   * Soporta planes con descuento adelantado: 'trimestre' (-5%), 'semestre' (-7%), 'anualidad' (-10%).
+   * Si es mensual y es nuevo/sin pago previo activado antes del día de corte (día 3),
    * el cobro es proporcional a los días que faltan para el corte: (Costo Total / 30) * Días Faltantes.
    */
-  function getProjectBillingAmount(project, cutoffDay = 3, fromDate = new Date()) {
+  function getProjectBillingAmount(project, cutoffDay = 3, fromDate = new Date(), planType = 'monthly') {
     const monthlyRate = TOTAL_PRICE_PER_PROJECT_COP;
 
     if (project.customTrialExpiry && new Date() <= new Date(project.customTrialExpiry)) {
@@ -90,27 +105,59 @@ window.WompiModule = (function () {
         isTrial: true,
         daysRemaining: 0,
         amountCOP: 0,
-        monthlyRate: monthlyRate
+        monthlyRate: monthlyRate,
+        planType: planType,
+        discountPercent: 0
       };
     }
 
+    const plan = PREPAY_PLANS[planType] || PREPAY_PLANS.monthly;
+
+    // Si es un plan adelantado (trimestre, semestre, anualidad)
+    if (plan.months > 1) {
+      const baseSubtotal = monthlyRate * plan.months;
+      const discountAmount = Math.round(baseSubtotal * plan.discount);
+      const finalAmount = baseSubtotal - discountAmount;
+      return {
+        isProrated: false,
+        isTrial: false,
+        daysRemaining: plan.months * 30,
+        amountCOP: finalAmount,
+        baseAmountCOP: baseSubtotal,
+        discountAmountCOP: discountAmount,
+        discountPercent: Math.round(plan.discount * 100),
+        monthlyRate: monthlyRate,
+        planType: planType,
+        planMonths: plan.months,
+        planLabel: plan.label
+      };
+    }
+
+    // Plan mensual regular
     if (!project.paidUntil) {
       const daysRemaining = getDaysRemainingUntilCutoff(cutoffDay, fromDate);
       if (daysRemaining < 30) {
         const proratedAmount = Math.round((monthlyRate / 30) * daysRemaining);
         return {
           isProrated: true,
+          isTrial: false,
           daysRemaining: daysRemaining,
           amountCOP: proratedAmount,
-          monthlyRate: monthlyRate
+          monthlyRate: monthlyRate,
+          planType: 'monthly',
+          discountPercent: 0
         };
       }
     }
+
     return {
       isProrated: false,
+      isTrial: false,
       daysRemaining: 30,
       amountCOP: monthlyRate,
-      monthlyRate: monthlyRate
+      monthlyRate: monthlyRate,
+      planType: 'monthly',
+      discountPercent: 0
     };
   }
 
@@ -227,20 +274,53 @@ window.WompiModule = (function () {
         graceDaysLeft: remainingGraceDays,
         badgeText: `Gracia de Pago (${remainingGraceDays} días de 5)`,
         badgeColor: 'bg-amber-100 text-amber-900 border-amber-400 font-bold',
-        message: `El cobro no se ha procesado. Dispones de ${remainingGraceDays} días de gracia para efectuar el pago.`
+        message: `El cobro no se ha procesado. Dispones de ${remainingGraceDays} días de gracia para efectuar el pago antes de que el proyecto sea bloqueado.`
       };
     }
 
+    // Pasados los 5 días de gracia: BLOQUEO TOTAL (SUSPENDED)
+    // Periodo de retención de 6 meses (180 días) antes de eliminación definitiva
     const daysInSuspension = overdueDays - 5;
-    const daysLeftToPurge = Math.max(0, 90 - daysInSuspension);
+    const daysLeftToPurge = Math.max(0, 180 - daysInSuspension);
+
+    if (daysLeftToPurge === 0) {
+      return {
+        status: 'EXPIRED_PURGE',
+        overdueDays: overdueDays,
+        daysLeftToPurge: 0,
+        badgeText: 'Eliminado por Mora (>6 meses)',
+        badgeColor: 'bg-red-200 text-red-950 border-red-500 font-bold',
+        message: '⚠️ El proyecto ha superado 6 meses sin pago y ha sido marcado para eliminación definitiva.'
+      };
+    }
 
     return {
       status: 'SUSPENDED',
       overdueDays: overdueDays,
       daysLeftToPurge: daysLeftToPurge,
-      badgeText: `Inactivo (Sin Pago - ${daysLeftToPurge}d retención)`,
+      badgeText: `Bloqueado por Falta de Pago (${daysLeftToPurge}d retención)`,
       badgeColor: 'bg-rose-100 text-rose-800 border-rose-400 font-bold',
-      message: `⚠️ Servicio inactivo por falta de pago. Tus datos se conservarán por ${daysLeftToPurge} días calendario antes de su eliminación permanente.`
+      message: `🚫 Proyecto BLOQUEADO por falta de pago. Visualización, carga y descarga deshabilitadas. Se eliminará definitivamente en ${daysLeftToPurge} días si no se cancela la mensualidad.`
+    };
+  }
+
+  /**
+   * Determina si los usuarios tienen permiso de ingresar/operar el proyecto.
+   * Regla de negocio:
+   * - Proyectos con licencia activa o periodo de gracia (días 1 a 5) o Tester: ACCESO PERMITIDO (canAccess: true).
+   * - Proyectos con mora > 5 días (SUSPENDED o EXPIRED_PURGE) o DISABLED: BLOQUEADO (canAccess: false).
+   */
+  function canAccessProject(project, cutoffDay = 3) {
+    const lic = getProjectLicenseStatus(project, cutoffDay);
+    const isAllowed = (lic.status === 'ACTIVE' || lic.status === 'CUSTOM_TRIAL' || lic.status === 'GRACE_PERIOD' || lic.status === 'CANCELLED');
+    return {
+      canAccess: isAllowed,
+      status: lic.status,
+      badgeText: lic.badgeText,
+      badgeColor: lic.badgeColor,
+      message: lic.message,
+      daysLeftToPurge: lic.daysLeftToPurge || 0,
+      graceDaysLeft: lic.graceDaysLeft || 0
     };
   }
 
@@ -300,6 +380,7 @@ window.WompiModule = (function () {
 
   return {
     TOTAL_PRICE_PER_PROJECT_COP,
+    PREPAY_PLANS,
     isColombianBusinessDay,
     countBusinessDays,
     getNextCutoffDate,
@@ -308,6 +389,7 @@ window.WompiModule = (function () {
     canCancelBeforeNextCycle,
     generateIntegritySignature,
     getProjectLicenseStatus,
+    canAccessProject,
     launchCheckout
   };
 })();

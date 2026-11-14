@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="es">
 
 <head>
@@ -14,7 +14,7 @@
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
-  <title>Súper Administración | nora CDE</title>
+  <title>SÃºper AdministraciÃ³n | nora CDE</title>
   <script src="https://cdn.tailwindcss.com?plugins=forms,typography"></script>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
   <link
@@ -38,7 +38,7 @@
       const rawAccount = sessionStorage.getItem('userAccount') || localStorage.getItem('userAccount');
       const userAccount = rawAccount ? JSON.parse(rawAccount) : null;
       if (!userAccount || (userAccount.role !== 'SUPER_ADMINISTRADOR' && userAccount.role !== 'ADMINISTRADOR_EMPRESA')) {
-        alert('Acceso denegado. Esta página es solo para Administradores.');
+        alert('Acceso denegado. Esta pÃ¡gina es solo para Administradores.');
         window.location.replace('home.html');
       }
     })();
@@ -56,12 +56,12 @@
             class="flex h-11 w-11 items-center justify-center rounded-xl border border-slate-200 bg-slate-50 text-slate-700 hover:bg-slate-100"><span
               class="material-symbols-outlined">arrow_back</span></a>
           <div>
-            <p id="page-subtitle" class="text-xs font-semibold uppercase tracking-[0.24em] text-slate-500">Súper Administración</p>
+            <p id="page-subtitle" class="text-xs font-semibold uppercase tracking-[0.24em] text-slate-500">SÃºper AdministraciÃ³n</p>
             <h1 id="page-title" class="text-xl font-bold text-slate-900">Panel de Control</h1>
           </div>
         </div>
         
-        <!-- Pestañas Centrales -->
+        <!-- PestaÃ±as Centrales -->
         <div id="global-tabs-container" class="hidden bg-slate-100 p-1 rounded-xl justify-center gap-1">
             <button id="tab-empresas" onclick="switchGlobalView('empresas')" class="px-5 py-2 rounded-lg text-sm font-bold bg-white text-slate-800 shadow-sm transition-all flex items-center gap-2">
                 <span class="material-symbols-outlined text-sm">domain</span> Empresas
@@ -76,7 +76,7 @@
                 <span class="material-symbols-outlined text-sm">psychology</span> Entrenar nora AI
             </button>
             <button id="tab-traffic" onclick="switchGlobalView('traffic')" class="px-5 py-2 rounded-lg text-sm font-bold text-slate-500 hover:text-slate-700 transition-all flex items-center gap-2">
-                <span class="material-symbols-outlined text-sm">monitoring</span> Tráfico & Visitas
+                <span class="material-symbols-outlined text-sm">monitoring</span> TrÃ¡fico & Visitas
             </button>
         </div>
 
@@ -118,26 +118,26 @@
             <!-- Renderizado por JS -->
           </div>
 
-          <!-- Formulario de Edición -->
+          <!-- Formulario de EdiciÃ³n -->
           <div class="w-full lg:w-2/3 border rounded-2xl p-6 bg-slate-50 hidden shadow-inner" id="empresa-editor">
             <div class="flex gap-6 border-b border-slate-300 mb-6">
-              <button id="tab-btn-ficha" class="font-bold text-primary border-b-2 border-primary px-2 pb-2 transition-colors">Ficha Técnica</button>
+              <button id="tab-btn-ficha" class="font-bold text-primary border-b-2 border-primary px-2 pb-2 transition-colors">Ficha TÃ©cnica</button>
               <button id="tab-btn-usuarios" class="font-bold text-slate-500 hover:text-primary px-2 pb-2 transition-colors">Usuarios</button>
               <button id="tab-btn-proyectos" class="font-bold text-slate-500 hover:text-primary px-2 pb-2 transition-colors">Proyectos</button>
-              <button id="tab-btn-configuracion" class="hidden font-bold text-slate-500 hover:text-primary px-2 pb-2 transition-colors">Configuración</button>
+              <button id="tab-btn-configuracion" class="hidden font-bold text-slate-500 hover:text-primary px-2 pb-2 transition-colors">ConfiguraciÃ³n</button>
             </div>
 
-            <!-- FICHA TÉCNICA TAB -->
+            <!-- FICHA TÃ‰CNICA TAB -->
             <div id="tab-content-ficha" class="block">
               <div class="flex justify-between items-center mb-6">
-                <h3 class="text-xl font-bold text-slate-800">Ficha Técnica de Empresa</h3>
+                <h3 class="text-xl font-bold text-slate-800">Ficha TÃ©cnica de Empresa</h3>
                 <button id="delete-empresa-btn" class="hidden rounded-lg bg-rose-100 text-rose-700 px-3 py-1 text-xs font-bold hover:bg-rose-200 transition-colors">Eliminar Empresa</button>
               </div>
 
               <div class="grid gap-6">
-                <!-- BÁSICOS SISTEMA -->
+                <!-- BÃSICOS SISTEMA -->
                 <div class="bg-white p-4 rounded-xl border">
-                  <h4 class="text-sm font-bold uppercase tracking-wider text-slate-500 mb-4 border-b pb-2">Configuración
+                  <h4 class="text-sm font-bold uppercase tracking-wider text-slate-500 mb-4 border-b pb-2">ConfiguraciÃ³n
                     del Sistema</h4>
                   <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <label class="block"><span class="mb-1 block text-xs font-semibold text-slate-600">ID Empresa (Ej:
@@ -146,11 +146,11 @@
                     <label class="block"><span class="mb-1 block text-xs font-semibold text-slate-600">Nombre Visible
                         (Banner)</span><input id="emp-name" class="w-full rounded-lg border-slate-200 text-sm"
                         type="text" /></label>
-                    <label class="block"><span class="mb-1 block text-xs font-semibold text-slate-600">Ubicación Corta
+                    <label class="block"><span class="mb-1 block text-xs font-semibold text-slate-600">UbicaciÃ³n Corta
                         (Banner)</span><input id="emp-location"
                         class="w-full rounded-lg border-slate-200 text-sm placeholder-slate-400"
-                        placeholder="Ej. Bogotá, Colombia" type="text" /></label>
-                    <label class="block"><span class="mb-1 block text-xs font-semibold text-slate-600">Código de Empresa
+                        placeholder="Ej. BogotÃ¡, Colombia" type="text" /></label>
+                    <label class="block"><span class="mb-1 block text-xs font-semibold text-slate-600">CÃ³digo de Empresa
                         (Banner)</span><input id="emp-code" class="w-full rounded-lg border-slate-200 text-sm"
                         type="text" /></label>
                     <label class="block md:col-span-2"><span class="mb-1 block text-xs font-semibold text-slate-600">URL
@@ -162,9 +162,9 @@
                 <!-- FASE 1 -->
                 <div class="bg-white p-4 rounded-xl border">
                   <h4 class="text-sm font-bold uppercase tracking-wider text-slate-500 mb-4 border-b pb-2">Fase 1:
-                    Registro e Identificación Legal</h4>
+                    Registro e IdentificaciÃ³n Legal</h4>
                   <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <label class="block md:col-span-2"><span class="mb-1 block text-xs font-semibold text-slate-600">Razón
+                    <label class="block md:col-span-2"><span class="mb-1 block text-xs font-semibold text-slate-600">RazÃ³n
                         Social</span><input id="emp-razonSocial" class="w-full rounded-lg border-slate-200 text-sm"
                         type="text" /></label>
                     <label class="block"><span class="mb-1 block text-xs font-semibold text-slate-600">NIT</span><input
@@ -173,7 +173,7 @@
                         Legal</span><input id="emp-repLegal" class="w-full rounded-lg border-slate-200 text-sm"
                         type="text" /></label>
                     <label class="block md:col-span-2"><span
-                        class="mb-1 block text-xs font-semibold text-slate-600">Dirección Sede Principal</span><input
+                        class="mb-1 block text-xs font-semibold text-slate-600">DirecciÃ³n Sede Principal</span><input
                         id="emp-direccion" class="w-full rounded-lg border-slate-200 text-sm" type="text" /></label>
                     <label class="block"><span class="mb-1 block text-xs font-semibold text-slate-600">Ciudad /
                         Municipio</span><input id="emp-ciudad" class="w-full rounded-lg border-slate-200 text-sm"
@@ -182,8 +182,8 @@
                         class="mb-1 block text-xs font-semibold text-slate-600">Departamento</span><input
                         id="emp-departamento" class="w-full rounded-lg border-slate-200 text-sm" type="text" /></label>
                     <label class="block md:col-span-2"><span
-                        class="mb-1 block text-xs font-semibold text-slate-600">Correo Electrónico de
-                        Facturación</span><input id="emp-correoFacturacion"
+                        class="mb-1 block text-xs font-semibold text-slate-600">Correo ElectrÃ³nico de
+                        FacturaciÃ³n</span><input id="emp-correoFacturacion"
                         class="w-full rounded-lg border-slate-200 text-sm" type="email" /></label>
                   </div>
                 </div>
@@ -196,11 +196,11 @@
                     <label class="block"><span class="mb-1 block text-xs font-semibold text-slate-600">Sitio Web
                         Oficial</span><input id="emp-sitioWeb" class="w-full rounded-lg border-slate-200 text-sm"
                         type="url" /></label>
-                    <label class="block"><span class="mb-1 block text-xs font-semibold text-slate-600">Correo Electrónico
+                    <label class="block"><span class="mb-1 block text-xs font-semibold text-slate-600">Correo ElectrÃ³nico
                         General</span><input id="emp-correoGeneral" class="w-full rounded-lg border-slate-200 text-sm"
                         type="email" /></label>
                     <label class="block md:col-span-2"><span
-                        class="mb-1 block text-xs font-semibold text-slate-600">Teléfono Fijo o Celular
+                        class="mb-1 block text-xs font-semibold text-slate-600">TelÃ©fono Fijo o Celular
                         Corporativo</span><input id="emp-telefonoCorporativo"
                         class="w-full rounded-lg border-slate-200 text-sm" type="tel" /></label>
 
@@ -242,8 +242,8 @@
                     </label>
                     <label class="block"><span class="mb-1 block text-xs font-semibold text-slate-600">Zona Horaria</span>
                       <select id="emp-zonaHoraria" class="w-full rounded-lg border-slate-200 text-sm">
-                        <option value="America/Bogota">UTC-5 (Bogotá, Lima, Quito)</option>
-                        <option value="America/Mexico_City">UTC-6 (Ciudad de México)</option>
+                        <option value="America/Bogota">UTC-5 (BogotÃ¡, Lima, Quito)</option>
+                        <option value="America/Mexico_City">UTC-6 (Ciudad de MÃ©xico)</option>
                         <option value="America/Santiago">UTC-4 (Santiago)</option>
                         <option value="America/Buenos_Aires">UTC-3 (Buenos Aires)</option>
                         <option value="Europe/Madrid">UTC+1/UTC+2 (Madrid)</option>
@@ -254,21 +254,21 @@
                       <select id="emp-tipoActor" class="w-full rounded-lg border-slate-200 text-sm">
                         <option value="">Seleccione...</option>
                         <option value="Constructora / Promotor Inmobiliario">Constructora / Promotor Inmobiliario</option>
-                        <option value="Gerencia de Proyectos / Interventoría">Gerencia de Proyectos / Interventoría
+                        <option value="Gerencia de Proyectos / InterventorÃ­a">Gerencia de Proyectos / InterventorÃ­a
                         </option>
-                        <option value="Firma de Diseño / Arquitectura">Firma de Diseño / Arquitectura</option>
-                        <option value="Consultoría de Ingeniería">Consultoría de Ingeniería</option>
+                        <option value="Firma de DiseÃ±o / Arquitectura">Firma de DiseÃ±o / Arquitectura</option>
+                        <option value="ConsultorÃ­a de IngenierÃ­a">ConsultorÃ­a de IngenierÃ­a</option>
                         <option value="Contratista Especializado">Contratista Especializado</option>
                       </select>
                     </label>
-                    <label class="block"><span class="mb-1 block text-xs font-semibold text-slate-600">Tamaño de la
+                    <label class="block"><span class="mb-1 block text-xs font-semibold text-slate-600">TamaÃ±o de la
                         Empresa</span>
                       <select id="emp-tamanoEmpresa" class="w-full rounded-lg border-slate-200 text-sm">
                         <option value="">Seleccione...</option>
                         <option value="1-10">1-10 colaboradores</option>
                         <option value="11-50">11-50 colaboradores</option>
                         <option value="51-200">51-200 colaboradores</option>
-                        <option value=">200">Más de 200 colaboradores</option>
+                        <option value=">200">MÃ¡s de 200 colaboradores</option>
                       </select>
                     </label>
                     <label class="block"><span class="mb-1 block text-xs font-semibold text-slate-600">Volumen Proyectos
@@ -277,7 +277,7 @@
                         <option value="">Seleccione...</option>
                         <option value="<3">Menos de 3 proyectos</option>
                         <option value="3-10">De 3 a 10 proyectos</option>
-                        <option value=">10">Más de 10 proyectos</option>
+                        <option value=">10">MÃ¡s de 10 proyectos</option>
                       </select>
                     </label>
                   </div>
@@ -288,8 +288,8 @@
                   <label class="flex items-start gap-3 mb-3 cursor-pointer">
                     <input id="emp-terminosAceptados" type="checkbox"
                       class="mt-1 rounded text-primary focus:ring-primary" />
-                    <span class="text-xs font-medium text-slate-700">He leído y acepto los Términos, Condiciones de Uso y
-                      la Política de Privacidad de nora BIM. (Obligatoria)</span>
+                    <span class="text-xs font-medium text-slate-700">He leÃ­do y acepto los TÃ©rminos, Condiciones de Uso y
+                      la PolÃ­tica de Privacidad de nora BIM. (Obligatoria)</span>
                   </label>
                   <label class="flex items-start gap-3 cursor-pointer">
                     <input id="emp-tratamientoDatos" type="checkbox"
@@ -307,7 +307,7 @@
               <div class="flex flex-col md:flex-row justify-between items-start md:items-center mb-4 gap-4">
                 <h3 class="text-xl font-bold text-slate-800">Miembros de la Empresa</h3>
                 <div class="flex gap-4 items-center">
-                  <button id="btn-toggle-all-groups" onclick="toggleAllGroups()" class="text-slate-500 hover:text-slate-700 bg-slate-100 hover:bg-slate-200 p-1.5 rounded-lg transition-colors flex items-center justify-center gap-1 text-xs font-bold" title="Expandir/Recoger todas las categorías">
+                  <button id="btn-toggle-all-groups" onclick="toggleAllGroups()" class="text-slate-500 hover:text-slate-700 bg-slate-100 hover:bg-slate-200 p-1.5 rounded-lg transition-colors flex items-center justify-center gap-1 text-xs font-bold" title="Expandir/Recoger todas las categorÃ­as">
                     <span class="material-symbols-outlined text-lg" id="icon-toggle-all">unfold_less</span>
                   </button>
                   <div class="bg-slate-200 p-1 rounded-lg flex text-xs font-semibold">
@@ -318,7 +318,7 @@
                 </div>
               </div>
               <div class="mb-4">
-                <p class="text-xs text-slate-500">El primer miembro de la lista con rol de ADMINISTRADOR será considerado el administrador general de la empresa. Puedes arrastrar o reordenar desde aquí creando usuarios nuevos y eliminando los anteriores.</p>
+                <p class="text-xs text-slate-500">El primer miembro de la lista con rol de ADMINISTRADOR serÃ¡ considerado el administrador general de la empresa. Puedes arrastrar o reordenar desde aquÃ­ creando usuarios nuevos y eliminando los anteriores.</p>
               </div>
 
               <!-- SOLICITUDES PENDIENTES -->
@@ -328,7 +328,7 @@
                       <h4 class="text-lg font-bold text-slate-800">Solicitudes de Acceso Pendientes</h4>
                       <span id="pending-count" class="bg-amber-100 text-amber-700 text-xs font-bold px-2 py-0.5 rounded-full ml-2">0</span>
                   </div>
-                  <p class="text-xs text-slate-500 mb-4">Estos usuarios se registraron indicando que pertenecen a esta empresa. Acéptalos para darles acceso a los proyectos.</p>
+                  <p class="text-xs text-slate-500 mb-4">Estos usuarios se registraron indicando que pertenecen a esta empresa. AcÃ©ptalos para darles acceso a los proyectos.</p>
                   
                   <div class="bg-amber-50 rounded-xl border border-amber-200 overflow-hidden">
                       <table class="w-full text-left border-collapse">
@@ -337,7 +337,7 @@
                                   <th class="py-3 px-4 text-xs font-bold text-slate-600 uppercase tracking-wider">Usuario</th>
                                   <th class="py-3 px-4 text-xs font-bold text-slate-600 uppercase tracking-wider">Correo</th>
                                   <th class="py-3 px-4 text-xs font-bold text-slate-600 uppercase tracking-wider">Especialidad</th>
-                                  <th class="py-3 px-4 text-xs font-bold text-slate-600 uppercase tracking-wider text-right">Acción</th>
+                                  <th class="py-3 px-4 text-xs font-bold text-slate-600 uppercase tracking-wider text-right">AcciÃ³n</th>
                               </tr>
                           </thead>
                           <tbody id="pending-requests-list" class="divide-y divide-amber-100">
@@ -358,7 +358,7 @@
                           <div id="tab-content-configuracion" class="hidden">
                 <!-- PORTAL GENERALIDADES -->
                 <div class="bg-white rounded-xl border border-slate-200 p-5 mb-6">
-                  <h4 class="text-sm font-bold uppercase tracking-wider text-slate-500 mb-4 border-b pb-2">Portal — Generalidades</h4>
+                  <h4 class="text-sm font-bold uppercase tracking-wider text-slate-500 mb-4 border-b pb-2">Portal â€” Generalidades</h4>
                   <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <label class="block"><span class="mb-1 block text-xs font-semibold text-slate-600">Nombre del portal</span><input id="portal-name" class="w-full rounded-lg border-slate-200 text-sm" type="text" /></label>
                     <label class="block"><span class="mb-1 block text-xs font-semibold text-slate-600">Nombre corto</span><input id="portal-short-name" class="w-full rounded-lg border-slate-200 text-sm" type="text" /></label>
@@ -369,15 +369,15 @@
                     <label class="block"><span class="mb-1 block text-xs font-semibold text-slate-600">Logo footer (nora) claro</span><input id="portal-logo-footer-secondary-light" class="w-full rounded-lg border-slate-200 text-sm" type="text" placeholder="https://..." /></label>
                     <label class="block"><span class="mb-1 block text-xs font-semibold text-slate-600">Logo footer (nora) oscuro</span><input id="portal-logo-footer-secondary-dark" class="w-full rounded-lg border-slate-200 text-sm" type="text" placeholder="https://..." /></label>
                     <label class="block md:col-span-2"><span class="mb-1 block text-xs font-semibold text-slate-600">Texto del footer</span><input id="portal-footer-text" class="w-full rounded-lg border-slate-200 text-sm" type="text" /></label>
-                    <label class="block md:col-span-2"><span class="mb-1 block text-xs font-semibold text-slate-600">Imágenes del home (una URL por línea)</span><textarea id="portal-hero-images" class="w-full rounded-lg border-slate-200 text-xs font-mono" rows="4" placeholder="Una URL por línea"></textarea></label>
+                    <label class="block md:col-span-2"><span class="mb-1 block text-xs font-semibold text-slate-600">ImÃ¡genes del home (una URL por lÃ­nea)</span><textarea id="portal-hero-images" class="w-full rounded-lg border-slate-200 text-xs font-mono" rows="4" placeholder="Una URL por lÃ­nea"></textarea></label>
                   </div>
                 </div>
 
                 <div class="flex justify-between items-center mb-4">
-                  <h3 class="text-xl font-bold text-slate-800">Configuración de Proyectos</h3>
+                  <h3 class="text-xl font-bold text-slate-800">ConfiguraciÃ³n de Proyectos</h3>
                 </div>
                 <div class="mb-4">
-                  <p class="text-xs text-slate-500">Haz clic sobre un proyecto para desplegar sus configuraciones avanzadas (Branding, IFC, Módulos).</p>
+                  <p class="text-xs text-slate-500">Haz clic sobre un proyecto para desplegar sus configuraciones avanzadas (Branding, IFC, MÃ³dulos).</p>
                 </div>
                 <div class="bg-white rounded-xl border border-slate-200 overflow-hidden">
                   <div class="grid grid-cols-12 gap-2 bg-slate-100 p-3 text-xs font-bold text-slate-600 uppercase tracking-wider border-b">
@@ -417,28 +417,68 @@
               <!-- Resumen de Cobro y Pasarela Wompi de la Empresa -->
               <div id="company-billing-summary" class="mt-6 p-6 rounded-2xl bg-blue-50/80 border border-blue-200 shadow-sm">
                 <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-                  <div class="space-y-1.5">
+                  <div class="space-y-1.5 flex-1">
                     <h4 class="text-base font-extrabold text-blue-950 flex items-center gap-2">
                       <span class="material-symbols-outlined text-xl text-blue-600">credit_card</span> Facturación Unificada y Pasarela Wompi
                     </h4>
                     <p class="text-xs text-blue-800">
-                      Facturación consolidada de todos los proyectos activos (<strong>$137.564 COP / mes por proyecto</strong>).
+                      Facturación consolidada de todos los proyectos activos (<strong>.564 COP / mes por proyecto</strong>).
                     </p>
                     <div class="flex flex-wrap items-center gap-3 text-xs text-blue-700 font-medium pt-1">
                       <span class="inline-flex items-center gap-1.5 bg-blue-100/80 text-blue-900 px-2.5 py-1 rounded-lg border border-blue-200 font-semibold">
                         <span class="material-symbols-outlined text-sm text-blue-600">calendar_month</span>
-                        Día de corte unificado: 3 de cada mes
+                        Día de corte unificado: 3 de cada mes (5 días de gracia para pago)
                       </span>
+                    </div>
+
+                    <!-- Selector de Plan con Descuentos por Adelantado -->
+                    <div class="mt-3 pt-3 border-t border-blue-200/80">
+                      <label class="block text-[11px] font-black uppercase tracking-wider text-blue-900 mb-1.5 flex items-center gap-1.5">
+                        <span class="material-symbols-outlined text-sm text-blue-600">savings</span> Planes con Descuento por Adelantado
+                      </label>
+                      <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 max-w-xl">
+                        <label class="cursor-pointer">
+                          <input type="radio" name="billing-plan-radio" value="monthly" checked onchange="changeBillingPlan(this.value)" class="sr-only peer" />
+                          <div class="p-2.5 rounded-xl border border-blue-200 bg-white peer-checked:border-blue-600 peer-checked:bg-blue-600 peer-checked:text-white text-blue-900 transition-all text-center shadow-sm">
+                            <div class="text-[11px] font-bold leading-tight">Mes a Mes</div>
+                            <div class="text-[9px] opacity-75 font-medium mt-0.5">Estándar</div>
+                          </div>
+                        </label>
+                        <label class="cursor-pointer">
+                          <input type="radio" name="billing-plan-radio" value="trimestre" onchange="changeBillingPlan(this.value)" class="sr-only peer" />
+                          <div class="p-2.5 rounded-xl border border-blue-200 bg-white peer-checked:border-blue-600 peer-checked:bg-blue-600 peer-checked:text-white text-blue-900 transition-all text-center shadow-sm relative overflow-hidden">
+                            <span class="absolute top-0 right-0 bg-emerald-500 text-white text-[8px] font-black px-1.5 py-0.2 rounded-bl-lg">5% OFF</span>
+                            <div class="text-[11px] font-bold leading-tight">Trimestre</div>
+                            <div class="text-[9px] opacity-75 font-medium mt-0.5">3 meses (-5%)</div>
+                          </div>
+                        </label>
+                        <label class="cursor-pointer">
+                          <input type="radio" name="billing-plan-radio" value="semestre" onchange="changeBillingPlan(this.value)" class="sr-only peer" />
+                          <div class="p-2.5 rounded-xl border border-blue-200 bg-white peer-checked:border-blue-600 peer-checked:bg-blue-600 peer-checked:text-white text-blue-900 transition-all text-center shadow-sm relative overflow-hidden">
+                            <span class="absolute top-0 right-0 bg-emerald-500 text-white text-[8px] font-black px-1.5 py-0.2 rounded-bl-lg">7% OFF</span>
+                            <div class="text-[11px] font-bold leading-tight">Semestre</div>
+                            <div class="text-[9px] opacity-75 font-medium mt-0.5">6 meses (-7%)</div>
+                          </div>
+                        </label>
+                        <label class="cursor-pointer">
+                          <input type="radio" name="billing-plan-radio" value="anualidad" onchange="changeBillingPlan(this.value)" class="sr-only peer" />
+                          <div class="p-2.5 rounded-xl border border-blue-200 bg-white peer-checked:border-blue-600 peer-checked:bg-blue-600 peer-checked:text-white text-blue-900 transition-all text-center shadow-sm relative overflow-hidden">
+                            <span class="absolute top-0 right-0 bg-amber-500 text-white text-[8px] font-black px-1.5 py-0.2 rounded-bl-lg">10% OFF</span>
+                            <div class="text-[11px] font-bold leading-tight">Anualidad</div>
+                            <div class="text-[9px] opacity-75 font-medium mt-0.5">12 meses (-10%)</div>
+                          </div>
+                        </label>
+                      </div>
                     </div>
                   </div>
 
-                  <div class="flex flex-col items-start md:items-end gap-2 w-full md:w-auto">
+                  <div class="flex flex-col items-start md:items-end gap-2 w-full md:w-auto shrink-0">
                     <div class="text-left md:text-right">
                       <div class="text-xs font-semibold text-blue-700">
                         Proyectos Licenciados: <span id="company-billing-count" class="font-bold text-blue-950">0</span>
                       </div>
                       <div class="text-xl font-black text-blue-950 mt-0.5" id="company-billing-total">
-                        $0 COP
+                         COP
                       </div>
                     </div>
                     <button id="pay-consolidated-wompi-btn" type="button" onclick="payConsolidatedWompi()" class="w-full md:w-auto bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs py-2.5 px-6 rounded-xl shadow-md transition-all flex items-center justify-center gap-2 mt-1">
@@ -504,7 +544,7 @@
                     <tr>
                         <th class="py-4 px-6 text-xs font-bold text-slate-500 uppercase tracking-wider border-b border-slate-200">Usuario</th>
                         <th class="py-4 px-6 text-xs font-bold text-slate-500 uppercase tracking-wider border-b border-slate-200">Rol del Sistema</th>
-                        <th class="py-4 px-6 text-xs font-bold text-slate-500 uppercase tracking-wider border-b border-slate-200">Empresa / Organización</th>
+                        <th class="py-4 px-6 text-xs font-bold text-slate-500 uppercase tracking-wider border-b border-slate-200">Empresa / OrganizaciÃ³n</th>
                         <th class="py-4 px-6 text-xs font-bold text-slate-500 uppercase tracking-wider border-b border-slate-200">Especialidad</th>
                         <th class="py-4 px-6 text-xs font-bold text-slate-500 uppercase tracking-wider border-b border-slate-200 text-right">Acciones</th>
                     </tr>
@@ -574,7 +614,7 @@
             <!-- Cargando -->
             <div id="global-projects-loading" class="absolute inset-0 bg-white/90 flex flex-col items-center justify-center z-20 hidden">
                 <span class="material-symbols-outlined animate-spin text-4xl text-blue-500 mb-4">autorenew</span>
-                <span class="text-sm font-semibold text-slate-600">Cargando proyectos y facturación...</span>
+                <span class="text-sm font-semibold text-slate-600">Cargando proyectos y facturaciÃ³n...</span>
             </div>
         </div>
     </div>
@@ -597,7 +637,7 @@
                     <span class="material-symbols-outlined text-2xl">translate</span>
                 </div>
                 <div>
-                    <p class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Entidades & Sinónimos</p>
+                    <p class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Entidades & SinÃ³nimos</p>
                     <h3 id="nora-ai-rules-count" class="text-2xl font-extrabold text-slate-900">8 Reglas</h3>
                 </div>
             </div>
@@ -607,7 +647,7 @@
                 </div>
                 <div>
                     <p class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Verbos / Acciones 3D</p>
-                    <h3 id="nora-ai-verbs-count" class="text-2xl font-extrabold text-slate-900">6 Métodos</h3>
+                    <h3 id="nora-ai-verbs-count" class="text-2xl font-extrabold text-slate-900">6 MÃ©todos</h3>
                 </div>
             </div>
             <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-200 flex items-center gap-4">
@@ -615,7 +655,7 @@
                     <span class="material-symbols-outlined text-2xl">code</span>
                 </div>
                 <div>
-                    <p class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Código TypeScript</p>
+                    <p class="text-xs font-semibold text-slate-500 uppercase tracking-wider">CÃ³digo TypeScript</p>
                     <h3 id="nora-ai-ts-status" class="text-sm font-extrabold text-cyan-700">Hook Habilitado</h3>
                 </div>
             </div>
@@ -624,24 +664,24 @@
                     <span class="material-symbols-outlined text-2xl">fact_check</span>
                 </div>
                 <div>
-                    <p class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Precisión Suite</p>
+                    <p class="text-xs font-semibold text-slate-500 uppercase tracking-wider">PrecisiÃ³n Suite</p>
                     <h3 id="nora-ai-accuracy-status" class="text-lg font-extrabold text-emerald-600 flex items-center gap-1">
-                        <span>🟢 100%</span> <span class="text-xs text-slate-400 font-normal">(10/10)</span>
+                        <span>ðŸŸ¢ 100%</span> <span class="text-xs text-slate-400 font-normal">(10/10)</span>
                     </h3>
                 </div>
             </div>
         </div>
 
         <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <!-- Card 1: Diccionario de Sinónimos y Términos Personalizados (Entidades IFC) -->
+            <!-- Card 1: Diccionario de SinÃ³nimos y TÃ©rminos Personalizados (Entidades IFC) -->
             <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 space-y-4 flex flex-col">
                 <div class="flex justify-between items-center border-b border-slate-100 pb-3">
                     <div>
                         <h3 class="text-base font-bold text-slate-900 flex items-center gap-2">
                             <span class="material-symbols-outlined text-indigo-600">manage_search</span>
-                            1. Entidades y Sinónimos IFC
+                            1. Entidades y SinÃ³nimos IFC
                         </h3>
-                        <p class="text-xs text-slate-500">Mapea expresiones del usuario a categorías IFC del modelo 3D.</p>
+                        <p class="text-xs text-slate-500">Mapea expresiones del usuario a categorÃ­as IFC del modelo 3D.</p>
                     </div>
                     <button onclick="addSynonymRow()" class="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold transition-all flex items-center gap-1 shadow-sm">
                         <span class="material-symbols-outlined text-sm">add</span> Mapeo
@@ -652,9 +692,9 @@
                     <table class="w-full text-left text-xs">
                         <thead class="bg-slate-50 text-slate-500 font-bold uppercase tracking-wider sticky top-0 border-b border-slate-200">
                             <tr>
-                                <th class="py-2.5 px-3">Término Usuario (Español/Inglés)</th>
-                                <th class="py-2.5 px-3">Categoría / Entidad IFC</th>
-                                <th class="py-2.5 px-3 text-right">Acción</th>
+                                <th class="py-2.5 px-3">TÃ©rmino Usuario (EspaÃ±ol/InglÃ©s)</th>
+                                <th class="py-2.5 px-3">CategorÃ­a / Entidad IFC</th>
+                                <th class="py-2.5 px-3 text-right">AcciÃ³n</th>
                             </tr>
                         </thead>
                         <tbody id="synonyms-tbody" class="divide-y divide-slate-100 font-medium">
@@ -672,15 +712,15 @@
                 </div>
             </div>
 
-            <!-- Card 2: Mapeo Bidireccional de Verbos a Métodos del Visor (Acciones 3D) -->
+            <!-- Card 2: Mapeo Bidireccional de Verbos a MÃ©todos del Visor (Acciones 3D) -->
             <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 space-y-4 flex flex-col">
                 <div class="flex justify-between items-center border-b border-slate-100 pb-3">
                     <div>
                         <h3 class="text-base font-bold text-slate-900 flex items-center gap-2">
                             <span class="material-symbols-outlined text-blue-600">movie</span>
-                            2. Mapeo de Verbos a Métodos 3D
+                            2. Mapeo de Verbos a MÃ©todos 3D
                         </h3>
-                        <p class="text-xs text-slate-500">Mapea verbos coloquiales a comandos de cámara y visibilidad del visor.</p>
+                        <p class="text-xs text-slate-500">Mapea verbos coloquiales a comandos de cÃ¡mara y visibilidad del visor.</p>
                     </div>
                     <button onclick="addVerbRow()" class="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold transition-all flex items-center gap-1 shadow-sm">
                         <span class="material-symbols-outlined text-sm">add</span> Verbo
@@ -692,8 +732,8 @@
                         <thead class="bg-slate-50 text-slate-500 font-bold uppercase tracking-wider sticky top-0 border-b border-slate-200">
                             <tr>
                                 <th class="py-2.5 px-3">Verbos Coloquiales (Separados por coma)</th>
-                                <th class="py-2.5 px-3">Método / Acción Visor 3D</th>
-                                <th class="py-2.5 px-3 text-right">Acción</th>
+                                <th class="py-2.5 px-3">MÃ©todo / AcciÃ³n Visor 3D</th>
+                                <th class="py-2.5 px-3 text-right">AcciÃ³n</th>
                             </tr>
                         </thead>
                         <tbody id="verbs-tbody" class="divide-y divide-slate-100 font-medium">
@@ -718,9 +758,9 @@
                 <div class="border-b border-slate-100 pb-3">
                     <h3 class="text-base font-bold text-slate-900 flex items-center gap-2">
                         <span class="material-symbols-outlined text-amber-500">schema</span>
-                        3. Inyector de Esquema Dinámico (Dynamic RAG)
+                        3. Inyector de Esquema DinÃ¡mico (Dynamic RAG)
                     </h3>
-                    <p class="text-xs text-slate-500">Inyecta variables dinámicas extraídas del modelo IFC abierto en el CDE.</p>
+                    <p class="text-xs text-slate-500">Inyecta variables dinÃ¡micas extraÃ­das del modelo IFC abierto en el CDE.</p>
                 </div>
 
                 <div class="space-y-3 text-xs flex-1">
@@ -753,13 +793,13 @@
                         <span class="material-symbols-outlined text-purple-600">article</span>
                         4. Directrices Corporativas y API Key Gemini
                     </h3>
-                    <p class="text-xs text-slate-500">Define respuestas estándar, normativas internas y clave API para el motor LLM.</p>
+                    <p class="text-xs text-slate-500">Define respuestas estÃ¡ndar, normativas internas y clave API para el motor LLM.</p>
                 </div>
 
                 <div class="flex-1 space-y-3">
                     <label class="block">
                         <span class="text-xs font-bold text-slate-700 block mb-1">Directrices del Sistema (System Prompt Extension)</span>
-                        <textarea id="nora-custom-prompt-text" rows="4" class="w-full rounded-xl border-slate-200 text-xs p-3 focus:ring-purple-500 focus:border-purple-500 font-mono leading-relaxed" placeholder="Ejemplo:&#10;- El BIM Manager del proyecto es Camilo Martínez (contacto: camilo@norabim.com).&#10;- Las vigas principales tienen resistencia de 4000 PSI."></textarea>
+                        <textarea id="nora-custom-prompt-text" rows="4" class="w-full rounded-xl border-slate-200 text-xs p-3 focus:ring-purple-500 focus:border-purple-500 font-mono leading-relaxed" placeholder="Ejemplo:&#10;- El BIM Manager del proyecto es Camilo MartÃ­nez (contacto: camilo@norabim.com).&#10;- Las vigas principales tienen resistencia de 4000 PSI."></textarea>
                     </label>
                     
                     <div>
@@ -775,31 +815,31 @@
 
                 <div class="pt-2 border-t border-slate-100 flex justify-end">
                     <button onclick="saveNoraAITrainingRules()" class="px-4 py-2 bg-slate-900 hover:bg-black text-white text-xs font-bold rounded-xl shadow-md transition-all">
-                        Guardar Configuración AI
+                        Guardar ConfiguraciÃ³n AI
                     </button>
                 </div>
             </div>
         </div>
 
-        <!-- Card 5: Extensión de Código TypeScript / JavaScript (Motor de Lógica Personalizada) -->
+        <!-- Card 5: ExtensiÃ³n de CÃ³digo TypeScript / JavaScript (Motor de LÃ³gica Personalizada) -->
         <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 space-y-4">
             <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center border-b border-slate-100 pb-3 gap-2">
                 <div>
                     <h3 class="text-base font-bold text-slate-900 flex items-center gap-2">
                         <span class="material-symbols-outlined text-cyan-600">code_blocks</span>
-                        5. Extensión de Código TypeScript / JavaScript (Cerebro del Entrenador)
+                        5. ExtensiÃ³n de CÃ³digo TypeScript / JavaScript (Cerebro del Entrenador)
                     </h3>
                     <p class="text-xs text-slate-500">Agrega funciones o scripts TypeScript/JS para transformar consultas o inyectar reglas de negocio avanzadas al motor nora AI.</p>
                 </div>
                 <div class="flex items-center gap-2">
                     <button onclick="testCustomTSCodeSyntax()" class="px-3 py-1.5 bg-cyan-600 hover:bg-cyan-700 text-white rounded-xl text-xs font-bold transition-all flex items-center gap-1 shadow-sm shrink-0">
-                        <span class="material-symbols-outlined text-sm">bolt</span> Probar Código TS
+                        <span class="material-symbols-outlined text-sm">bolt</span> Probar CÃ³digo TS
                     </button>
-                    <button onclick="copyNoraTSCode()" class="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-all flex items-center gap-1 shrink-0" title="Copiar todo el código al portapapeles">
-                        <span class="material-symbols-outlined text-sm">content_copy</span> Copiar Código
+                    <button onclick="copyNoraTSCode()" class="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-all flex items-center gap-1 shrink-0" title="Copiar todo el cÃ³digo al portapapeles">
+                        <span class="material-symbols-outlined text-sm">content_copy</span> Copiar CÃ³digo
                     </button>
-                    <button onclick="clearNoraTSCode()" class="px-3 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200 rounded-xl text-xs font-bold transition-all flex items-center gap-1 shrink-0" title="Borrar todo el código">
-                        <span class="material-symbols-outlined text-sm">delete</span> Borrar Código
+                    <button onclick="clearNoraTSCode()" class="px-3 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200 rounded-xl text-xs font-bold transition-all flex items-center gap-1 shrink-0" title="Borrar todo el cÃ³digo">
+                        <span class="material-symbols-outlined text-sm">delete</span> Borrar CÃ³digo
                     </button>
                 </div>
             </div>
@@ -811,16 +851,16 @@
                         TypeScript Brain Pipeline Hook (Ejecutado al evaluar consultas)
                     </span>
                     <span id="nora-ts-syntax-status" class="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
-                        🟢 Sintaxis Válida / Transpilador Activo
+                        ðŸŸ¢ Sintaxis VÃ¡lida / Transpilador Activo
                     </span>
                 </div>
-                <textarea id="nora-custom-ts-code" rows="8" class="w-full rounded-xl border-slate-800 bg-slate-950 text-emerald-400 font-mono text-xs p-4 leading-relaxed focus:ring-cyan-500 focus:border-cyan-500 shadow-inner" placeholder="// Código TypeScript / JS personalizado para nora AI"></textarea>
+                <textarea id="nora-custom-ts-code" rows="8" class="w-full rounded-xl border-slate-800 bg-slate-950 text-emerald-400 font-mono text-xs p-4 leading-relaxed focus:ring-cyan-500 focus:border-cyan-500 shadow-inner" placeholder="// CÃ³digo TypeScript / JS personalizado para nora AI"></textarea>
             </div>
 
             <div class="pt-2 border-t border-slate-100 flex justify-between items-center text-xs">
-                <span class="text-slate-400 italic">Entorno seguro (Sandbox Evaluation Pipeline) - Transpilación en tiempo real</span>
+                <span class="text-slate-400 italic">Entorno seguro (Sandbox Evaluation Pipeline) - TranspilaciÃ³n en tiempo real</span>
                 <button onclick="saveNoraAITrainingRules()" class="px-4 py-2 bg-slate-900 hover:bg-black text-white text-xs font-bold rounded-xl shadow-md transition-all">
-                    Guardar Código del Cerebro
+                    Guardar CÃ³digo del Cerebro
                 </button>
             </div>
         </div>
@@ -833,7 +873,7 @@
                         <span class="material-symbols-outlined text-emerald-600">terminal</span>
                         Simulador Interactivo y Suite de Pruebas (Sandbox)
                     </h3>
-                    <p class="text-xs text-slate-500">Prueba comandos individuales o ejecuta la suite completa con semáforo de precisión para validar la producción.</p>
+                    <p class="text-xs text-slate-500">Prueba comandos individuales o ejecuta la suite completa con semÃ¡foro de precisiÃ³n para validar la producciÃ³n.</p>
                 </div>
                 <div class="flex items-center gap-2">
                     <button onclick="runTestSuiteEvaluation()" class="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white font-bold text-xs rounded-xl shadow-md transition-all flex items-center gap-1.5 shrink-0">
@@ -841,7 +881,7 @@
                         Ejecutar Suite de Pruebas (10 Casos)
                     </button>
                     <span id="sandbox-status-badge" class="px-3 py-1 bg-emerald-50 text-emerald-700 text-xs font-bold rounded-full border border-emerald-200 shrink-0">
-                        🟢 Precisión: 100%
+                        ðŸŸ¢ PrecisiÃ³n: 100%
                     </span>
                 </div>
             </div>
@@ -851,7 +891,7 @@
                 <div class="space-y-3">
                     <div id="sandbox-chat-box" class="h-64 border border-slate-200 rounded-xl p-3 bg-slate-50 overflow-y-auto space-y-3 text-xs">
                         <div class="bg-white border border-slate-200 p-3 rounded-xl">
-                            👋 <strong>Simulador nora AI:</strong> Escribe cualquier consulta como <em>"aisla las columnas del piso 2"</em> o <em>"oculta toda la arquitectura"</em> para probar las reglas de entrenamiento.
+                            ðŸ‘‹ <strong>Simulador nora AI:</strong> Escribe cualquier consulta como <em>"aisla las columnas del piso 2"</em> o <em>"oculta toda la arquitectura"</em> para probar las reglas de entrenamiento.
                         </div>
                     </div>
                     <div class="flex gap-2">
@@ -866,7 +906,7 @@
                 <div class="bg-slate-900 text-slate-100 p-4 rounded-xl font-mono text-xs flex flex-col justify-between">
                     <div>
                         <div class="text-slate-400 font-bold uppercase tracking-wider text-[10px] mb-2 flex items-center gap-1">
-                            <span class="material-symbols-outlined text-xs text-amber-400">code</span> Inspector de Acción 3D / JSON
+                            <span class="material-symbols-outlined text-xs text-amber-400">code</span> Inspector de AcciÃ³n 3D / JSON
                         </div>
                         <pre id="sandbox-json-output" class="text-emerald-400 whitespace-pre-wrap overflow-auto max-h-48">Esperando prueba...</pre>
                     </div>
@@ -887,8 +927,8 @@
                 <div class="flex items-center gap-2">
                     <span class="material-symbols-outlined text-purple-400">science</span>
                     <div>
-                        <h3 class="text-sm font-bold">Informe de Precisión - Suite de Pruebas nora AI</h3>
-                        <p class="text-[11px] text-slate-400">Evaluación de 10 casos de prueba típicos para el visor 3D</p>
+                        <h3 class="text-sm font-bold">Informe de PrecisiÃ³n - Suite de Pruebas nora AI</h3>
+                        <p class="text-[11px] text-slate-400">EvaluaciÃ³n de 10 casos de prueba tÃ­picos para el visor 3D</p>
                     </div>
                 </div>
                 <button onclick="closeTestSuiteModal()" class="text-slate-400 hover:text-white transition-colors">
@@ -899,9 +939,9 @@
             <div class="p-6 space-y-4 overflow-y-auto">
                 <div class="flex items-center justify-between bg-slate-50 p-4 rounded-xl border border-slate-200">
                     <div>
-                        <p class="text-xs text-slate-500 font-medium">Semáforo de Producción</p>
+                        <p class="text-xs text-slate-500 font-medium">SemÃ¡foro de ProducciÃ³n</p>
                         <h4 id="suite-score-badge" class="text-2xl font-black text-emerald-600 flex items-center gap-2">
-                            🟢 100% Precisión
+                            ðŸŸ¢ 100% PrecisiÃ³n
                         </h4>
                     </div>
                     <div class="text-right">
@@ -915,8 +955,8 @@
                             <tr>
                                 <th class="py-2.5 px-3">#</th>
                                 <th class="py-2.5 px-3">Prompt de Prueba</th>
-                                <th class="py-2.5 px-3">Acción Esperada</th>
-                                <th class="py-2.5 px-3">Acción Detectada</th>
+                                <th class="py-2.5 px-3">AcciÃ³n Esperada</th>
+                                <th class="py-2.5 px-3">AcciÃ³n Detectada</th>
                                 <th class="py-2.5 px-3 text-center">Estado</th>
                             </tr>
                         </thead>
@@ -935,7 +975,7 @@
         </div>
     </div>
     
-    <!-- VISTA DE TRÁFICO Y GEOLOCALIZACIÓN -->
+    <!-- VISTA DE TRÃFICO Y GEOLOCALIZACIÃ“N -->
     <div id="traffic-view" class="hidden h-[calc(100vh-80px)] w-full overflow-y-auto bg-slate-50 p-4 md:p-8 flex-col space-y-6">
         <!-- KPI Summary Cards -->
         <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 shrink-0">
@@ -964,7 +1004,7 @@
                     <span class="material-symbols-outlined text-2xl">devices</span>
                 </div>
                 <div>
-                    <p class="text-xs font-semibold text-slate-500 uppercase tracking-wider">IPs Únicas</p>
+                    <p class="text-xs font-semibold text-slate-500 uppercase tracking-wider">IPs Ãšnicas</p>
                     <h3 id="stat-unique-ips" class="text-2xl font-extrabold text-slate-900">0</h3>
                 </div>
             </div>
@@ -974,7 +1014,7 @@
                     <span class="material-symbols-outlined text-2xl">public</span>
                 </div>
                 <div>
-                    <p class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Países Conectados</p>
+                    <p class="text-xs font-semibold text-slate-500 uppercase tracking-wider">PaÃ­ses Conectados</p>
                     <h3 id="stat-unique-countries" class="text-2xl font-extrabold text-slate-900">0</h3>
                 </div>
             </div>
@@ -988,7 +1028,7 @@
                     <div>
                         <h3 class="text-base font-bold text-slate-900 flex items-center gap-2">
                             <span class="material-symbols-outlined text-blue-600">map</span>
-                            Mapa de Conexiones y Geolocalización IP
+                            Mapa de Conexiones y GeolocalizaciÃ³n IP
                         </h3>
                         <p class="text-xs text-slate-500">Ubicaciones de donde provienen las conexiones al portal nora BIM.</p>
                     </div>
@@ -1000,14 +1040,14 @@
                 <div id="traffic-map" class="w-full h-80 rounded-xl border border-slate-200 z-0"></div>
             </div>
 
-            <!-- Resumen por Países & Ciudades Top (1 Col) -->
+            <!-- Resumen por PaÃ­ses & Ciudades Top (1 Col) -->
             <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 space-y-4 flex flex-col">
                 <div class="border-b border-slate-100 pb-3">
                     <h3 class="text-base font-bold text-slate-900 flex items-center gap-2">
                         <span class="material-symbols-outlined text-amber-500">flag</span>
-                        Top Ubicación de Accesos
+                        Top UbicaciÃ³n de Accesos
                     </h3>
-                    <p class="text-xs text-slate-500">Distribución de accesos por país y ciudad.</p>
+                    <p class="text-xs text-slate-500">DistribuciÃ³n de accesos por paÃ­s y ciudad.</p>
                 </div>
                 <div id="traffic-top-countries" class="space-y-3 flex-1 overflow-y-auto max-h-72 text-xs">
                     <!-- Injected by JS -->
@@ -1015,7 +1055,7 @@
             </div>
         </div>
 
-        <!-- Tabla Detallada de Registros de Conexión IP -->
+        <!-- Tabla Detallada de Registros de ConexiÃ³n IP -->
         <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 space-y-4">
             <div class="flex flex-col md:flex-row justify-between items-start md:items-center border-b border-slate-100 pb-3 gap-3">
                 <div>
@@ -1026,7 +1066,7 @@
                     <p class="text-xs text-slate-500">Detalle individual de cada visita recibida.</p>
                 </div>
                 <div class="flex gap-2 w-full md:w-auto">
-                    <input type="text" id="traffic-search-input" onkeyup="filterTrafficLogsTable()" placeholder="Buscar por IP, Ciudad, País o Usuario..." class="text-xs px-3 py-2 rounded-xl border border-slate-200 w-full md:w-64 focus:ring-blue-500">
+                    <input type="text" id="traffic-search-input" onkeyup="filterTrafficLogsTable()" placeholder="Buscar por IP, Ciudad, PaÃ­s o Usuario..." class="text-xs px-3 py-2 rounded-xl border border-slate-200 w-full md:w-64 focus:ring-blue-500">
                     <button onclick="clearAllTrafficLogs()" class="text-rose-600 hover:bg-rose-50 px-3 py-2 rounded-xl text-xs font-bold transition-all shrink-0">Limpiar Logs</button>
                 </div>
             </div>
@@ -1036,9 +1076,9 @@
                     <thead class="bg-slate-50 text-slate-500 font-bold uppercase tracking-wider sticky top-0 border-b border-slate-200">
                         <tr>
                             <th class="py-3 px-4">Fecha y Hora</th>
-                            <th class="py-3 px-4">Dirección IP</th>
-                            <th class="py-3 px-4">Ubicación (Ciudad / País)</th>
-                            <th class="py-3 px-4">Página Visitada</th>
+                            <th class="py-3 px-4">DirecciÃ³n IP</th>
+                            <th class="py-3 px-4">UbicaciÃ³n (Ciudad / PaÃ­s)</th>
+                            <th class="py-3 px-4">PÃ¡gina Visitada</th>
                             <th class="py-3 px-4">Usuario / Rol</th>
                             <th class="py-3 px-4">Navegador / Dispositivo</th>
                         </tr>
@@ -1072,7 +1112,7 @@
                             <input type="text" id="gu-name" required class="w-full rounded-lg border-slate-200 text-sm focus:border-blue-500 focus:ring-blue-500">
                         </div>
                         <div class="col-span-2">
-                            <label class="block text-xs font-bold text-slate-500 mb-1">Correo Electrónico <span class="text-red-500">*</span></label>
+                            <label class="block text-xs font-bold text-slate-500 mb-1">Correo ElectrÃ³nico <span class="text-red-500">*</span></label>
                             <input type="email" id="gu-email" required class="w-full rounded-lg border-slate-200 text-sm focus:border-blue-500 focus:ring-blue-500">
                         </div>
                         <div class="col-span-2">
@@ -1089,15 +1129,15 @@
                             <p class="text-[10px] text-slate-500 mt-1">El rol determina los permisos en toda la plataforma nora CDE.</p>
                         </div>
                         <div class="col-span-2">
-                            <label class="block text-xs font-bold text-slate-500 mb-1">Asignar a Empresa / Organización</label>
+                            <label class="block text-xs font-bold text-slate-500 mb-1">Asignar a Empresa / OrganizaciÃ³n</label>
                             <select id="gu-company" class="w-full rounded-lg border-slate-200 text-sm focus:border-blue-500 focus:ring-blue-500">
                                 <option value="">-- Sin Empresa Asignada --</option>
-                                <!-- JS llenará esto -->
+                                <!-- JS llenarÃ¡ esto -->
                             </select>
                         </div>
                         <div class="col-span-2">
                             <label class="block text-xs font-bold text-slate-500 mb-1">Especialidad</label>
-                            <input type="text" id="gu-specialty" placeholder="Ej. Diseño arquitectónico" class="w-full rounded-lg border-slate-200 text-sm focus:border-blue-500 focus:ring-blue-500">
+                            <input type="text" id="gu-specialty" placeholder="Ej. DiseÃ±o arquitectÃ³nico" class="w-full rounded-lg border-slate-200 text-sm focus:border-blue-500 focus:ring-blue-500">
                         </div>
                     </div>
                 </form>
@@ -1111,13 +1151,13 @@
         </div>
     </div>
 
-  <!-- MODAL DE CONFIGURACIÓN GLOBAL WOMPI (EXCLUSIVO SÚPER ADMINISTRADOR) -->
+  <!-- MODAL DE CONFIGURACIÃ“N GLOBAL WOMPI (EXCLUSIVO SÃšPER ADMINISTRADOR) -->
   <div id="global-wompi-modal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
     <div class="bg-white w-full max-w-lg rounded-2xl shadow-2xl border border-slate-200 overflow-hidden">
       <div class="bg-slate-900 px-6 py-4 flex justify-between items-center text-white">
         <div class="flex items-center gap-2">
           <span class="material-symbols-outlined text-amber-400 text-xl">key</span>
-          <h3 class="font-bold text-base">Configuración Global Pasarela Wompi</h3>
+          <h3 class="font-bold text-base">ConfiguraciÃ³n Global Pasarela Wompi</h3>
         </div>
         <button type="button" onclick="closeGlobalWompiModal()" class="text-slate-400 hover:text-white transition-colors">
           <span class="material-symbols-outlined text-xl">close</span>
@@ -1126,28 +1166,28 @@
 
       <div class="p-6 space-y-4">
         <p class="text-xs text-slate-600">
-          Esta configuración es <strong>exclusiva para el Súper Administrador</strong>. Define la cuenta Wompi receptora de los cobros de licencias de la plataforma <strong>nora BIM</strong>.
+          Esta configuraciÃ³n es <strong>exclusiva para el SÃºper Administrador</strong>. Define la cuenta Wompi receptora de los cobros de licencias de la plataforma <strong>nora BIM</strong>.
         </p>
 
         <div>
-          <label class="block text-xs font-bold text-slate-800 mb-1">Entorno de Operación</label>
+          <label class="block text-xs font-bold text-slate-800 mb-1">Entorno de OperaciÃ³n</label>
           <div class="w-full text-xs rounded-xl border border-emerald-300 font-bold text-emerald-900 p-2.5 bg-emerald-50 flex items-center justify-between shadow-sm">
-            <span>Producción (Pagos Reales con Bancolombia / Wompi)</span>
+            <span>ProducciÃ³n (Pagos Reales con Bancolombia / Wompi)</span>
             <span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] bg-emerald-200 text-emerald-950 font-black uppercase">Activo</span>
           </div>
-          <span class="text-[10px] text-slate-500 mt-1 block">Pasarela configurada en modo producción permanente.</span>
+          <span class="text-[10px] text-slate-500 mt-1 block">Pasarela configurada en modo producciÃ³n permanente.</span>
         </div>
 
         <div>
-          <label class="block text-xs font-bold text-slate-800 mb-1">Llave Pública (Public Key)</label>
+          <label class="block text-xs font-bold text-slate-800 mb-1">Llave PÃºblica (Public Key)</label>
           <input type="text" id="global-wompi-pubkey" placeholder="pub_test_... o pub_prod_..." class="w-full text-xs rounded-xl border-slate-300 font-mono p-2.5 bg-slate-50" onchange="updateGlobalWompiConfig('pubKey', this.value)" />
-          <span class="text-[10px] text-slate-500 mt-1 block">Empieza por <code>pub_test_</code> en Sandbox o <code>pub_prod_</code> en Producción.</span>
+          <span class="text-[10px] text-slate-500 mt-1 block">Empieza por <code>pub_test_</code> en Sandbox o <code>pub_prod_</code> en ProducciÃ³n.</span>
         </div>
 
         <div>
           <label class="block text-xs font-bold text-slate-800 mb-1">Secreto de Integridad (Integrity Secret)</label>
           <input type="password" id="global-wompi-secret" placeholder="test_integrity_... o prod_integrity_..." class="w-full text-xs rounded-xl border-slate-300 font-mono p-2.5 bg-slate-50" onchange="updateGlobalWompiConfig('integritySecret', this.value)" />
-          <span class="text-[10px] text-slate-500 mt-1 block">Fila 'Integridad' en Wompi ➔ Clic en 'Mostrar' (empieza por <code>test_integrity_</code> o <code>prod_integrity_</code>).</span>
+          <span class="text-[10px] text-slate-500 mt-1 block">Fila 'Integridad' en Wompi âž” Clic en 'Mostrar' (empieza por <code>test_integrity_</code> o <code>prod_integrity_</code>).</span>
         </div>
 
         <div class="bg-blue-50 border border-blue-200 rounded-xl p-3 text-[11px] text-blue-900 flex gap-2 items-start">
