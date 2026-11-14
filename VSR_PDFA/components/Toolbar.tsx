@@ -35,9 +35,18 @@ const Toolbar: React.FC<ToolbarProps> = ({
   onSidebarToggle,
 }) => {
   return (
-    <header className="h-[60px] bg-[var(--bg-white)] border-b border-[var(--border-color)] px-4 flex items-center justify-between z-30 shadow-[0_2px_4px_rgba(0,0,0,0.05)] transition-colors duration-200 overflow-x-auto no-scrollbar whitespace-nowrap gap-4 w-full touch-pan-x shrink-0">
+    <header 
+      onClick={(e) => {
+        // Prevenir cualquier navegación si se clickea en zonas libres de la barra
+        if (e.target === e.currentTarget || (e.target as HTMLElement).tagName === 'HEADER') {
+          e.stopPropagation();
+        }
+      }}
+      className="h-[60px] bg-[var(--bg-white)] border-b border-[var(--border-color)] px-4 flex items-center justify-between z-30 shadow-[0_2px_4px_rgba(0,0,0,0.05)] transition-colors duration-200 overflow-x-auto no-scrollbar whitespace-nowrap gap-4 w-full touch-pan-x shrink-0"
+    >
       <div className="flex items-center gap-2 shrink-0">
         <button 
+          id="back-btn"
           onClick={() => window.history.back()}
           className="toolbar-btn w-9 h-9 shrink-0"
           title="Volver"

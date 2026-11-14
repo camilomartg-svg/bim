@@ -69,24 +69,32 @@ const DwgRenderer: React.FC<Props> = ({
         box.expandByObject(obj)
       }
     })
+
+    let center = new THREE.Vector3(0, 0, 0)
+    let viewSize = 100
+
     if (!box.isEmpty()) {
-      const center = box.getCenter(new THREE.Vector3())
+      center = box.getCenter(new THREE.Vector3())
       const size = box.getSize(new THREE.Vector3())
       const maxSize = Math.max(size.x, size.y)
-      const viewSize = maxSize * 0.6
-      const w = renderer.domElement.clientWidth
-      const h = renderer.domElement.clientHeight
-      const aspect = w / h
-      camera.left = -viewSize * aspect
-      camera.right = viewSize * aspect
-      camera.top = viewSize
-      camera.bottom = -viewSize
-      camera.position.set(center.x, center.y, 10)
-      camera.zoom = 1
-      camera.updateProjectionMatrix()
-      controls.target.set(center.x, center.y, 0)
-      controls.update()
+      viewSize = Math.max(1, maxSize * 1.15)
     }
+
+    const w = renderer.domElement.clientWidth || 800
+    const h = renderer.domElement.clientHeight || 600
+    const aspect = w / h
+    const halfH = viewSize / 2
+    const halfW = halfH * aspect
+
+    camera.left = -halfW
+    camera.right = halfW
+    camera.top = halfH
+    camera.bottom = -halfH
+    camera.position.set(center.x, center.y, 10)
+    camera.zoom = 1
+    camera.updateProjectionMatrix()
+    controls.target.set(center.x, center.y, 0)
+    controls.update()
   }, [entityRoot, camera, controls, renderer])
 
   const handleLayoutChange = (layoutName: string) => {
@@ -95,27 +103,25 @@ const DwgRenderer: React.FC<Props> = ({
 
     entityRoot.traverse((obj: any) => {
       if (obj.isMesh || obj.isLine || obj.isPoints) {
-        const isPaper = obj.userData?.inPaperSpace
-        const objLayout = obj.userData?.layout || (isPaper ? 'Layout1' : 'Modelo')
-        
-        let shouldShow = true
+        const isPaper = Boolean(obj.userData?.inPaperSpace)
+        const objLayout = obj.userData?.layout || 'Modelo'
+
+        let match = false
         if (layoutName === 'Modelo') {
-          shouldShow = !isPaper
+          match = (objLayout === 'Modelo' && !isPaper)
         } else {
-          shouldShow = isPaper ? (objLayout === layoutName || objLayout === 'Layout1') : true
+          match = (objLayout === layoutName || (isPaper && objLayout === 'Layout1' && layoutName === 'Layout1'))
         }
 
         const layerId = obj.userData?.layerId
-        if (layerId && layerVisibility[layerId] === false) {
-          shouldShow = false
-        }
-        obj.visible = shouldShow
+        const layerOk = !layerId || layerVisibility[layerId] !== false
+        obj.visible = match && layerOk
       }
     })
 
     setTimeout(() => {
       fitToVisible()
-    }, 50)
+    }, 60)
   }
 
   const extractSnapPoints = (root: THREE.Object3D) => {
@@ -840,63 +846,164 @@ const DwgRenderer: React.FC<Props> = ({
       : './fonts/helvetiker_regular.typeface.json'
 
     let parsedDxfData: any = null
+    let rawDxfText = ''
     try {
-      const text = await file.text()
+      rawDxfText = await file.text()
       const DxfParserModule = await import('dxf-parser')
       const DxfParserClass = (DxfParserModule as any).default || DxfParserModule
-      parsedDxfData = new DxfParserClass().parseSync(text)
+      parsedDxfData = new DxfParserClass().parseSync(rawDxfText)
     } catch (pe) {
       console.warn('dxf-parser parseSync notice:', pe)
     }
 
-    const extractAndSetupLayouts = (rootObj: THREE.Object3D, fallbackDxf?: any) => {
+    const parseDxfStructure = (dxfText: string) => {
+      const lines = dxfText.split(/\r?\n/)
+      const layoutsByHandle: Record<string, { name: string, order: number, handle: string }> = {}
+      const blockRecordToLayout: Record<string, string> = {}
+      const layouts: { name: string, order: number, handle: string }[] = []
+
+      let inLayout = false
+      let currentLayout: { name: string, order: number, handle: string } | null = null
+      let inBlockRecord = false
+      let currentBlockRecord: { handle: string, name: string, layoutHandle: string } | null = null
+
+      for (let i = 0; i < lines.length - 1; i += 2) {
+        const code = lines[i].trim()
+        const val = lines[i + 1].trim()
+
+        if (code === '0') {
+          if (inLayout && currentLayout && currentLayout.name) {
+            layoutsByHandle[currentLayout.handle] = currentLayout
+            layouts.push(currentLayout)
+          }
+          if (inBlockRecord && currentBlockRecord && currentBlockRecord.layoutHandle) {
+            blockRecordToLayout[currentBlockRecord.handle] = currentBlockRecord.layoutHandle
+          }
+          inLayout = (val === 'LAYOUT')
+          currentLayout = inLayout ? { name: '', order: 0, handle: '' } : null
+          inBlockRecord = (val === 'BLOCK_RECORD')
+          currentBlockRecord = inBlockRecord ? { handle: '', name: '', layoutHandle: '' } : null
+          continue
+        }
+
+        if (inLayout && currentLayout) {
+          if (code === '1' && !currentLayout.name) currentLayout.name = val
+          else if (code === '71') currentLayout.order = parseInt(val, 10) || 0
+          else if (code === '5' && !currentLayout.handle) currentLayout.handle = val
+        }
+
+        if (inBlockRecord && currentBlockRecord) {
+          if (code === '5' && !currentBlockRecord.handle) currentBlockRecord.handle = val
+          else if (code === '2' && !currentBlockRecord.name) currentBlockRecord.name = val
+          else if (code === '340') currentBlockRecord.layoutHandle = val
+        }
+      }
+
+      if (inLayout && currentLayout && currentLayout.name) {
+        layoutsByHandle[currentLayout.handle] = currentLayout
+        layouts.push(currentLayout)
+      }
+      if (inBlockRecord && currentBlockRecord && currentBlockRecord.layoutHandle) {
+        blockRecordToLayout[currentBlockRecord.handle] = currentBlockRecord.layoutHandle
+      }
+
+      layouts.sort((a, b) => a.order - b.order)
+      return { layouts, layoutsByHandle, blockRecordToLayout }
+    }
+
+    const extractAndSetupLayouts = (rootObj: THREE.Object3D, fallbackDxf?: any, rawText?: string) => {
       const dxfData = parsedDxfData || fallbackDxf
       if (dxfData) {
         rootObj.userData.dxf = dxfData
         rootObj.userData.dxfLayers = dxfData.tables?.layer?.layers || dxfData.tables?.layers
       }
 
-      const layoutsSet = new Set<string>()
-      layoutsSet.add('Modelo')
-
-      if (Array.isArray(dxfData?.layouts)) {
-        dxfData.layouts.forEach((l: any) => {
-          const lName = typeof l === 'string' ? l : l.name
-          if (lName) layoutsSet.add(lName.toLowerCase() === 'model' ? 'Modelo' : lName)
-        })
-      }
-      if (Array.isArray(dxfData?.objects?.layouts)) {
-        dxfData.objects.layouts.forEach((l: any) => {
-          const lName = typeof l === 'string' ? l : l.name
-          if (lName) layoutsSet.add(lName.toLowerCase() === 'model' ? 'Modelo' : lName)
-        })
-      }
-      if (Array.isArray(dxfData?.entities)) {
-        dxfData.entities.forEach((ent: any) => {
-          if (ent.layout && ent.layout.toLowerCase() !== 'model') {
-            layoutsSet.add(ent.layout)
-          } else if (ent.inPaperSpace || ent.paperSpace) {
-            layoutsSet.add('Layout1')
-          }
-        })
+      let struct = {
+        layouts: [] as { name: string, order: number, handle: string }[],
+        layoutsByHandle: {} as Record<string, { name: string, order: number, handle: string }>,
+        blockRecordToLayout: {} as Record<string, string>
       }
 
-      const layoutList = Array.from(layoutsSet).sort((a, b) => {
-        if (a === 'Modelo') return -1
-        if (b === 'Modelo') return 1
-        return a.localeCompare(b)
-      })
+      const textToParse = rawText || rawDxfText
+      if (textToParse) {
+        try {
+          struct = parseDxfStructure(textToParse)
+        } catch (e) {
+          console.warn('Error parsing DXF structure:', e)
+        }
+      }
+
+      let layoutList: string[] = []
+      if (struct.layouts.length > 0) {
+        layoutList = struct.layouts.map(l => l.name.toLowerCase() === 'model' ? 'Modelo' : l.name)
+      } else {
+        const layoutsSet = new Set<string>()
+        layoutsSet.add('Modelo')
+        if (Array.isArray(dxfData?.entities)) {
+          dxfData.entities.forEach((ent: any) => {
+            if (ent.inPaperSpace || ent.paperSpace) layoutsSet.add('Layout1')
+          })
+        }
+        layoutList = Array.from(layoutsSet)
+      }
+
+      // Asegurar nombres únicos manteniendo orden
+      layoutList = Array.from(new Set(layoutList))
 
       setAvailableLayouts(layoutList)
       setActiveLayout('Modelo')
 
+      // Mapear cada entidad 3D con su Layout y estado PaperSpace
+      if (dxfData?.entities && Array.isArray(dxfData.entities)) {
+        const entitiesByLayer: Record<string, any[]> = {}
+        dxfData.entities.forEach((ent: any) => {
+          const l = ent.layer || 'default'
+          entitiesByLayer[l] = entitiesByLayer[l] || []
+          entitiesByLayer[l].push(ent)
+        })
+
+        rootObj.children.forEach((layerGroup: any) => {
+          const lName = layerGroup.name || 'default'
+          const ents = entitiesByLayer[lName] || []
+          if (Array.isArray(layerGroup.children)) {
+            layerGroup.children.forEach((child: any, idx: number) => {
+              const ent = ents[idx] || (ents.length === 1 ? ents[0] : null)
+              const isPaper = Boolean(ent?.inPaperSpace || ent?.paperSpace)
+              let layoutName = 'Modelo'
+
+              if (ent?.ownerHandle && struct.blockRecordToLayout[ent.ownerHandle]) {
+                const lh = struct.blockRecordToLayout[ent.ownerHandle]
+                if (struct.layoutsByHandle[lh]) {
+                  layoutName = struct.layoutsByHandle[lh].name
+                  if (layoutName.toLowerCase() === 'model') layoutName = 'Modelo'
+                }
+              } else if (isPaper) {
+                layoutName = 'Layout1'
+              }
+
+              child.userData.entity = ent
+              child.userData.inPaperSpace = isPaper
+              child.userData.layout = layoutName
+              child.userData.layerId = lName
+
+              child.traverse((descendant: any) => {
+                descendant.userData.entity = descendant.userData.entity || ent
+                descendant.userData.inPaperSpace = isPaper
+                descendant.userData.layout = layoutName
+                descendant.userData.layerId = descendant.userData.layerId || lName
+              })
+            })
+          }
+        })
+      }
+
+      // Inicialmente mostrar sólo Modelo
       rootObj.traverse((obj: any) => {
-        const ent = obj.userData?.entity || obj.userData
-        const isPaper = ent?.inPaperSpace || ent?.paperSpace || obj.userData?.inPaperSpace || false
-        obj.userData.inPaperSpace = isPaper
-        let lName = ent?.layout
-        if (lName && lName.toLowerCase() === 'model') lName = 'Modelo'
-        obj.userData.layout = lName || (isPaper ? 'Layout1' : 'Modelo')
+        if (obj.isMesh || obj.isLine || obj.isPoints) {
+          const isPaper = Boolean(obj.userData?.inPaperSpace)
+          const objLayout = obj.userData?.layout || 'Modelo'
+          obj.visible = (objLayout === 'Modelo' && !isPaper)
+        }
       })
     }
 
@@ -924,30 +1031,16 @@ const DwgRenderer: React.FC<Props> = ({
             if (!root.isObject3D && !root.traverse) {
               console.error('Loaded object is not a valid Object3D', root)
             } else {
-              extractAndSetupLayouts(root, data?.dxf)
+              extractAndSetupLayouts(root, data?.dxf, rawDxfText)
               scene.add(root)
               setEntityRoot(root)
               // Extract snap points
               root.updateMatrixWorld(true)
               extractSnapPoints(root)
 
-              const box = new THREE.Box3().setFromObject(root)
-              const center = box.getCenter(new THREE.Vector3())
-              const size = box.getSize(new THREE.Vector3())
-              const maxSize = Math.max(size.x, size.y)
-              const viewSize = maxSize * 0.6
-              const w = renderer.domElement.clientWidth
-              const h = renderer.domElement.clientHeight
-              const aspect = w / h
-              camera.left = -viewSize * aspect
-              camera.right = viewSize * aspect
-              camera.top = viewSize
-              camera.bottom = -viewSize
-              camera.position.set(center.x, center.y, 10)
-              camera.zoom = 1
-              camera.updateProjectionMatrix()
-              controls?.target.set(center.x, center.y, 0)
-              controls?.update()
+              setTimeout(() => {
+                fitToVisible()
+              }, 60)
             }
           } else {
             console.error('No entity found in DXF data')
@@ -966,26 +1059,12 @@ const DwgRenderer: React.FC<Props> = ({
             const viewer = new (mod as any).DXFViewer()
             const dxfObj = await viewer.getFromFile(file, fontUrl)
             if (dxfObj) {
-              extractAndSetupLayouts(dxfObj, viewer.lastDXF)
+              extractAndSetupLayouts(dxfObj, viewer.lastDXF, rawDxfText)
               scene.add(dxfObj)
               setEntityRoot(dxfObj)
-              const box = new THREE.Box3().setFromObject(dxfObj)
-              const center = box.getCenter(new THREE.Vector3())
-              const size = box.getSize(new THREE.Vector3())
-              const maxSize = Math.max(size.x, size.y)
-              const viewSize = maxSize * 0.6
-              const w = renderer.domElement.clientWidth
-              const h = renderer.domElement.clientHeight
-              const aspect = w / h
-              camera.left = -viewSize * aspect
-              camera.right = viewSize * aspect
-              camera.top = viewSize
-              camera.bottom = -viewSize
-              camera.position.set(center.x, center.y, 10)
-              camera.zoom = 1
-              camera.updateProjectionMatrix()
-              controls?.target.set(center.x, center.y, 0)
-              controls?.update()
+              setTimeout(() => {
+                fitToVisible()
+              }, 60)
               setErrorMsg(null)
             }
           } catch (e) {
@@ -1710,34 +1789,37 @@ const DwgRenderer: React.FC<Props> = ({
       )}
 
       {/* AutoCAD-style Layouts Bottom Bar (Modelo / Layout1 / Layout2) */}
-      {availableLayouts.length > 1 && (
-        <div className={`absolute bottom-3 left-4 z-40 flex items-center rounded-lg border shadow-xl overflow-hidden backdrop-blur ${
+      {availableLayouts.length > 0 && (
+        <div className={`absolute bottom-3 left-4 z-40 flex items-center rounded-lg border shadow-2xl overflow-hidden backdrop-blur ${
           isDarkMode 
-            ? 'bg-black/90 border-slate-800 text-slate-300' 
-            : 'bg-white/95 border-slate-300 text-slate-700'
+            ? 'bg-slate-950/95 border-slate-700 text-slate-300 shadow-black/80' 
+            : 'bg-white/95 border-slate-300 text-slate-700 shadow-slate-300/80'
         }`}>
-          <div className="flex items-center text-[11px] font-semibold">
-            {availableLayouts.map((lName) => (
-              <button
-                key={lName}
-                onClick={() => handleLayoutChange(lName)}
-                className={`px-3 py-1.5 flex items-center gap-1.5 transition-colors border-r last:border-r-0 ${
-                  isDarkMode ? 'border-slate-800' : 'border-slate-200'
-                } ${
-                  activeLayout === lName
-                    ? isDarkMode
-                      ? 'bg-slate-800 text-nora-400 font-bold border-b-2 border-b-nora-500'
-                      : 'bg-slate-100 text-nora-600 font-bold border-b-2 border-b-nora-600'
-                    : isDarkMode
-                      ? 'hover:bg-slate-900/80 hover:text-white'
-                      : 'hover:bg-slate-50 hover:text-slate-900'
-                }`}
-                title={`Ver ${lName === 'Modelo' ? 'Espacio Modelo' : 'Presentación ' + lName}`}
-              >
-                <i className={`fa-regular ${lName === 'Modelo' ? 'fa-square' : 'fa-file-lines'} text-[10px]`}></i>
-                <span>{lName}</span>
-              </button>
-            ))}
+          <div className="flex items-center text-[11px] font-semibold divide-x divide-slate-700/50">
+            {availableLayouts.map((lName) => {
+              const isActive = activeLayout === lName
+              return (
+                <button
+                  key={lName}
+                  onClick={() => handleLayoutChange(lName)}
+                  className={`px-3.5 py-1.5 flex items-center gap-1.5 transition-all cursor-pointer ${
+                    isActive
+                      ? isDarkMode
+                        ? 'bg-slate-800 text-white font-bold border-b-2 border-b-nora-400 shadow-inner'
+                        : 'bg-slate-100 text-slate-900 font-bold border-b-2 border-b-nora-600 shadow-inner'
+                      : isDarkMode
+                        ? 'text-slate-400 hover:bg-slate-900/90 hover:text-white'
+                        : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
+                  }`}
+                  title={`Ver ${lName === 'Modelo' ? 'Espacio Modelo' : 'Presentación ' + lName}`}
+                >
+                  <i className={`fa-regular ${lName === 'Modelo' ? 'fa-square' : 'fa-file-lines'} text-[11px] ${
+                    isActive ? (isDarkMode ? 'text-nora-400' : 'text-nora-600') : 'opacity-60'
+                  }`}></i>
+                  <span>{lName}</span>
+                </button>
+              )
+            })}
           </div>
         </div>
       )}

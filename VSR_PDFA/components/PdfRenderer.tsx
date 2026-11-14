@@ -52,6 +52,7 @@ const PdfRenderer: React.FC<PdfRendererProps> = ({
   const canvasContainerRef = useRef<HTMLDivElement>(null);
   const panXRef = useRef(0);
   const panYRef = useRef(0);
+  const zoomAnchorRef = useRef<{ x: number; y: number } | null>(null);
 
   // Verificar que la librería esté lista
   useEffect(() => {
@@ -401,13 +402,23 @@ const PdfRenderer: React.FC<PdfRendererProps> = ({
 
   const handleWheel = (e: React.WheelEvent) => {
     e.preventDefault();
-    if (!onZoom) return;
+    if (!onZoom || !containerRef.current) return;
+
+    // Obtener la posición del cursor respecto al contenedor del visor
+    const rect = containerRef.current.getBoundingClientRect();
+    const mouseX = e.clientX - rect.left;
+    const mouseY = e.clientY - rect.top;
+    zoomAnchorRef.current = { x: mouseX, y: mouseY };
+
     const delta = -Math.sign(e.deltaY);
-    const zoomStep = 0.1;
+    const zoomStep = 0.12;
     let newScale = scale + delta * zoomStep;
     newScale = Math.max(0.1, Math.min(10.0, parseFloat(newScale.toFixed(2))));
     
-    if (newScale === scale) return;
+    if (newScale === scale) {
+      zoomAnchorRef.current = null;
+      return;
+    }
     onZoom(newScale);
   };
 
@@ -417,23 +428,32 @@ const PdfRenderer: React.FC<PdfRendererProps> = ({
 
     if (oldScale !== scale && oldScale > 0) {
       const scaleRatio = scale / oldScale;
-      const w = canvasRef.current ? canvasRef.current.width : 0;
-      const h = canvasRef.current ? canvasRef.current.height : 0;
+      let pivotX: number;
+      let pivotY: number;
 
-      if (w > 0 && h > 0) {
-        // Zoom siempre centrado hacia el centro del papel:
-        // Se preserva el punto central (panX + w/2, panY + h/2) exactamente en el mismo lugar
-        const newPanX = panXRef.current - (w * (scaleRatio - 1)) / 2;
-        const newPanY = panYRef.current - (h * (scaleRatio - 1)) / 2;
-        panXRef.current = newPanX;
-        panYRef.current = newPanY;
-        if (canvasContainerRef.current) {
-          canvasContainerRef.current.style.transformOrigin = '0 0';
-          canvasContainerRef.current.style.transform = `translate3d(${newPanX}px, ${newPanY}px, 0)`;
-        }
-      } else if (canvasContainerRef.current) {
+      if (zoomAnchorRef.current) {
+        // Zoom anclado a la ubicación exacta del mouse
+        pivotX = zoomAnchorRef.current.x;
+        pivotY = zoomAnchorRef.current.y;
+        zoomAnchorRef.current = null;
+      } else if (containerRef.current) {
+        // Si el zoom proviene de los botones (+ / -), hacer zoom al centro de la ventana
+        pivotX = containerRef.current.clientWidth / 2;
+        pivotY = containerRef.current.clientHeight / 2;
+      } else {
+        pivotX = 0;
+        pivotY = 0;
+      }
+
+      // Preservar exactamente el punto bajo el cursor sin desplazamiento
+      const newPanX = pivotX - (pivotX - panXRef.current) * scaleRatio;
+      const newPanY = pivotY - (pivotY - panYRef.current) * scaleRatio;
+      panXRef.current = newPanX;
+      panYRef.current = newPanY;
+
+      if (canvasContainerRef.current) {
         canvasContainerRef.current.style.transformOrigin = '0 0';
-        canvasContainerRef.current.style.transform = `translate3d(${panXRef.current}px, ${panYRef.current}px, 0)`;
+        canvasContainerRef.current.style.transform = `translate3d(${newPanX}px, ${newPanY}px, 0)`;
       }
     } else if (canvasContainerRef.current) {
       canvasContainerRef.current.style.transformOrigin = '0 0';

@@ -210,6 +210,12 @@
   function isBackButtonElement(target) {
     if (!target || target === document.body || target === document.documentElement) return false;
 
+    // Si el clic fue directamente sobre header, nav o contenedor de barra, NUNCA retroceder
+    if (target.tagName === 'HEADER' || target.tagName === 'NAV') return false;
+    if (target.classList && (target.classList.contains('top-bar') || target.classList.contains('header') || target.classList.contains('toolbar-divider'))) {
+      return false;
+    }
+
     // NUNCA interceptar tarjetas de empresas o proyectos
     if (target.closest('.company-card, .card-hover, #empresas-container, #companies-container, #projects-list, #projects-container, #project-tools-container, #project-quick-links')) {
       return false;
@@ -217,6 +223,11 @@
 
     var btn = target.closest('button, a, [role="button"]');
     if (!btn) return false; // Solo aplica si se hace clic explícitamente dentro de un botón o enlace
+
+    // Si el botón o enlace encontrado es un contenedor general (no botón real), descartar
+    if (btn.tagName !== 'BUTTON' && btn.tagName !== 'A' && btn.getAttribute('role') !== 'button') {
+      return false;
+    }
 
     var id = (btn.id || '').toLowerCase();
     var title = (btn.getAttribute('title') || '').toLowerCase();
@@ -254,6 +265,9 @@
   function isNoraLogoElement(target) {
     if (!target || target === document.body || target === document.documentElement) return false;
 
+    // Si el clic fue directamente sobre header, nav o contenedor de barra, NUNCA es logo
+    if (target.tagName === 'HEADER' || target.tagName === 'NAV') return false;
+
     // NUNCA interceptar clics dentro de tarjetas de empresas o proyectos
     var isInsideCard = target.closest('.company-card, .card-hover, #empresas-container, #companies-container, #projects-list, #projects-container, #project-tools-container, #project-quick-links');
     if (isInsideCard && !target.closest('#logo-img, #logo-link, #portal-logo-light, #portal-logo-dark, #project-portal-logo-link')) {
@@ -261,6 +275,7 @@
     }
 
     var el = target.closest('a, button, [role="button"]') || target;
+    if (el.tagName === 'HEADER' || el.tagName === 'NAV') return false;
     var id = (el.id || target.id || '').toLowerCase();
     var src = (target.getAttribute('src') || el.getAttribute('src') || '').toLowerCase();
     var alt = (target.getAttribute('alt') || el.getAttribute('alt') || '').toLowerCase();
