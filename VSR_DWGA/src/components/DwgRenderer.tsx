@@ -61,11 +61,25 @@ const DwgRenderer: React.FC<Props> = ({
     }
   }, [])
 
+  const isObjectEffectivelyVisible = (obj: THREE.Object3D) => {
+    let curr: THREE.Object3D | null = obj
+    while (curr) {
+      if (!curr.visible) return false
+      curr = curr.parent
+    }
+    return true
+  }
+
   const fitToVisible = useCallback(() => {
     if (!entityRoot || !camera || !controls || !renderer) return
+    entityRoot.updateMatrixWorld(true)
     const box = new THREE.Box3()
     entityRoot.traverse((obj: any) => {
-      if (obj.visible && (obj.isMesh || obj.isLine || obj.isPoints)) {
+      if (
+        (obj.isMesh || obj.isLine || obj.isLineSegments || obj.isLineLoop || obj.isPoints) &&
+        !obj.userData?.isViewportContent &&
+        isObjectEffectivelyVisible(obj)
+      ) {
         box.expandByObject(obj)
       }
     })
@@ -90,8 +104,12 @@ const DwgRenderer: React.FC<Props> = ({
     camera.right = halfW
     camera.top = halfH
     camera.bottom = -halfH
-    camera.position.set(center.x, center.y, 10)
+    camera.position.set(center.x, center.y, 100)
     camera.zoom = 1
+    if (controls.object instanceof THREE.OrthographicCamera) {
+      controls.object.zoom = 1
+    }
+    setZoomLevel(1)
     camera.updateProjectionMatrix()
     controls.target.set(center.x, center.y, 0)
     controls.update()
@@ -101,27 +119,39 @@ const DwgRenderer: React.FC<Props> = ({
     setActiveLayout(layoutName)
     if (!entityRoot) return
 
-    entityRoot.traverse((obj: any) => {
-      if (obj.isMesh || obj.isLine || obj.isPoints) {
-        const isPaper = Boolean(obj.userData?.inPaperSpace)
-        const objLayout = obj.userData?.layout || 'Modelo'
-
-        let match = false
-        if (layoutName === 'Modelo') {
-          match = (objLayout === 'Modelo' && !isPaper)
-        } else {
-          match = (objLayout === layoutName || (isPaper && objLayout === 'Layout1' && layoutName === 'Layout1'))
-        }
-
-        const layerId = obj.userData?.layerId
-        const layerOk = !layerId || layerVisibility[layerId] !== false
-        obj.visible = match && layerOk
+    let hasLayoutGroups = false
+    entityRoot.children.forEach((child: any) => {
+      if (child.userData?.isLayoutGroup) {
+        hasLayoutGroups = true
+        child.visible = (child.userData.layoutName === layoutName)
       }
     })
 
+    if (!hasLayoutGroups) {
+      entityRoot.traverse((obj: any) => {
+        if (obj.isMesh || obj.isLine || obj.isLineSegments || obj.isLineLoop || obj.isPoints) {
+          const isPaper = Boolean(obj.userData?.inPaperSpace)
+          const objLayout = obj.userData?.layout || 'Modelo'
+
+          let match = false
+          if (layoutName === 'Modelo') {
+            match = (objLayout === 'Modelo' && !isPaper)
+          } else {
+            match = (objLayout === layoutName || (isPaper && objLayout === 'Layout1' && layoutName === 'Layout1'))
+          }
+
+          obj.userData.layoutVisible = match
+          const layerId = obj.userData?.layerId
+          const layerOk = !layerId || layerVisibility[layerId] !== false
+          obj.visible = match && layerOk
+        }
+      })
+    }
+
     setTimeout(() => {
+      extractSnapPoints(entityRoot)
       fitToVisible()
-    }, 60)
+    }, 40)
   }
 
   const extractSnapPoints = (root: THREE.Object3D) => {
@@ -131,6 +161,7 @@ const DwgRenderer: React.FC<Props> = ({
      let loggedDebug = false
 
      root.traverse((obj) => {
+      if (obj.userData?.isPaperSheet || !isObjectEffectivelyVisible(obj)) return
       stats[obj.type] = (stats[obj.type] || 0) + 1
       
       const processGeometry = (geometry: THREE.BufferGeometry, matrix: THREE.Matrix4, isLine: boolean) => {
@@ -231,48 +262,8 @@ const DwgRenderer: React.FC<Props> = ({
   }
 
   const fitToView = () => {
-    if (!entityRoot || !camera || !controls || !containerRef.current) return
-
-    const box = new THREE.Box3().setFromObject(entityRoot)
-    if (box.isEmpty()) return
-
-    const center = box.getCenter(new THREE.Vector3())
-    const size = box.getSize(new THREE.Vector3())
-    const maxSize = Math.max(size.x, size.y)
-    
-    // Expand view slightly (1.2x)
-    const viewSize = maxSize * 1.2
-    
-    const w = containerRef.current.clientWidth
-    const h = containerRef.current.clientHeight
-    const aspect = w / h
-    
-    // Update camera frustum centered on 0,0 relative to camera position
-    // We want the total width/height to cover viewSize
-    const halfH = viewSize / 2
-    const halfW = halfH * aspect
-    
-    camera.left = -halfW
-    camera.right = halfW
-    camera.top = halfH
-    camera.bottom = -halfH
-    
-    // Reset Zoom to 1 so base frustum matches drawing size
-    camera.zoom = 1
-    if (controls.object instanceof THREE.OrthographicCamera) {
-      controls.object.zoom = 1
-    }
-    setZoomLevel(1)
-    
-    // Move camera and controls to center of object
-    camera.position.set(center.x, center.y, 100)
-    camera.updateProjectionMatrix()
-    
-    controls.target.set(center.x, center.y, 0)
-    controls.update()
+    fitToVisible()
   }
-
-
 
   useEffect(() => {
     if (entityRoot) {
@@ -282,18 +273,20 @@ const DwgRenderer: React.FC<Props> = ({
       // Auto-Fit on load
       // Use setTimeout to ensure renderer/controls are ready and layout is computed
       setTimeout(() => {
-         fitToView()
+         fitToVisible()
       }, 100)
     }
-  }, [entityRoot])
+  }, [entityRoot, fitToVisible])
 
   useEffect(() => {
     if (renderer) {
-      // Always use dark background (0x181718).
-      // In Light Mode, it gets inverted by CSS to appear white.
-      renderer.setClearColor(0x181718, 1)
+      if (activeLayout !== 'Modelo') {
+        renderer.setClearColor(0x525659, 1)
+      } else {
+        renderer.setClearColor(0x181718, 1)
+      }
     }
-  }, [isDarkMode, renderer])
+  }, [isDarkMode, renderer, activeLayout])
 
   useEffect(() => {
     if (!containerRef.current || !renderer) return
@@ -325,6 +318,7 @@ const DwgRenderer: React.FC<Props> = ({
   useEffect(() => {
     if (!canvasRef.current || renderer) return
     const r = new THREE.WebGLRenderer({ canvas: canvasRef.current, antialias: true })
+    r.localClippingEnabled = true
     r.setPixelRatio(window.devicePixelRatio)
     r.setSize(containerRef.current?.clientWidth || 800, containerRef.current?.clientHeight || 600)
     // Always init with Dark BG (0x181718)
@@ -575,7 +569,12 @@ const DwgRenderer: React.FC<Props> = ({
     if (!renderer || !entityRoot) return
 
     const ensureContrast = (obj: any) => {
-      if (!obj.material) return
+      if (!obj.material || obj.userData?.inPaperLayout || obj.userData?.isPaperSheet) return
+      let p = obj.parent
+      while (p) {
+        if (p.userData?.inPaperLayout || p.userData?.isPaperSheet) return
+        p = p.parent
+      }
 
       const updateMat = (m: any) => {
         if (m.color) {
@@ -607,19 +606,20 @@ const DwgRenderer: React.FC<Props> = ({
       }
     }
 
-    // Apply filter only for Light Mode
-    // Light Mode relies on CSS inversion to turn the dark internal render into a light visual result.
+    if (activeLayout !== 'Modelo') {
+      renderer.domElement.style.filter = ''
+      return
+    }
+
+    // Apply filter only for Light Mode in Model Space
     if (!isDarkMode) {
-      // Invert: Dark BG -> White BG, White Lines -> Black Lines
-      // Hue-rotate: Fixes colors (Red -> Cyan -> Red)
       renderer.domElement.style.filter = 'invert(1) hue-rotate(180deg) brightness(1.1) contrast(1.25)'
       entityRoot.traverse(ensureContrast)
     } else {
-      // Dark Mode: No filter, standard rendering
       renderer.domElement.style.filter = ''
       entityRoot.traverse(ensureContrast)
     }
-  }, [renderer, entityRoot, isDarkMode])
+  }, [renderer, entityRoot, isDarkMode, activeLayout])
 
   useEffect(() => {
     if (!renderer || !showGrid) return
@@ -847,13 +847,62 @@ const DwgRenderer: React.FC<Props> = ({
 
     let parsedDxfData: any = null
     let rawDxfText = ''
+    let normalizedDxfText = ''
     try {
       rawDxfText = await file.text()
+      normalizedDxfText = rawDxfText.replace(/\\U\+([0-9A-Fa-f]{4})/gi, (_, hex) => {
+        const code = parseInt(hex, 16)
+        if (code === 0x202f || code === 0x00a0) return ' '
+        return String.fromCharCode(code)
+      })
       const DxfParserModule = await import('dxf-parser')
       const DxfParserClass = (DxfParserModule as any).default || DxfParserModule
-      parsedDxfData = new DxfParserClass().parseSync(rawDxfText)
+      parsedDxfData = new DxfParserClass().parseSync(normalizedDxfText)
     } catch (pe) {
       console.warn('dxf-parser parseSync notice:', pe)
+    }
+
+    const normalizedFile =
+      normalizedDxfText && normalizedDxfText !== rawDxfText
+        ? new File([normalizedDxfText], file.name, { type: file.type || 'application/dxf' })
+        : file
+
+    interface RawBlockImage {
+      blockName: string
+      x: number
+      y: number
+      uX: number
+      uY: number
+      vX: number
+      vY: number
+      wPx: number
+      hPx: number
+      imageDefHandle: string
+      layer: string
+    }
+
+    interface RawDxfEntity {
+      type: string
+      handle: string
+      owner: string
+      space: number
+      layer: string
+      name: string
+      id: number
+      status: number
+      centerX: number
+      centerY: number
+      width: number
+      height: number
+      viewCenterX: number
+      viewCenterY: number
+      targetX: number
+      targetY: number
+      viewDirX: number
+      viewDirY: number
+      viewDirZ: number
+      viewHeight: number
+      twistAngle: number
     }
 
     const parseDxfStructure = (dxfText: string) => {
@@ -861,54 +910,601 @@ const DwgRenderer: React.FC<Props> = ({
       const layoutsByHandle: Record<string, { name: string, order: number, handle: string }> = {}
       const blockRecordToLayout: Record<string, string> = {}
       const layouts: { name: string, order: number, handle: string }[] = []
+      const imageDefsByHandle: Record<string, string> = {}
+      const blockImagesByBlockName: Record<string, RawBlockImage[]> = {}
+      const entitiesByHandle: Record<string, RawDxfEntity> = {}
+      const viewports: RawDxfEntity[] = []
 
+      let currentSection = ''
       let inLayout = false
-      let currentLayout: { name: string, order: number, handle: string } | null = null
+      let currentLayout: { name: string, order: number, handle: string, inAcDbLayout: boolean } | null = null
       let inBlockRecord = false
       let currentBlockRecord: { handle: string, name: string, layoutHandle: string } | null = null
+      let inImageDef = false
+      let currentImageDef: { handle: string, filePath: string } | null = null
+      let inBlockHeader = false
+      let currentBlockName = ''
+      let currentBlockImage: RawBlockImage | null = null
+      let currentEnt: RawDxfEntity | null = null
+
+      const flushObjects = () => {
+        if (inLayout && currentLayout && currentLayout.name) {
+          layoutsByHandle[currentLayout.handle] = currentLayout
+          layouts.push(currentLayout)
+        }
+        if (inBlockRecord && currentBlockRecord && currentBlockRecord.layoutHandle) {
+          blockRecordToLayout[currentBlockRecord.handle] = currentBlockRecord.layoutHandle
+        }
+        if (inImageDef && currentImageDef && currentImageDef.handle) {
+          imageDefsByHandle[currentImageDef.handle] = currentImageDef.filePath
+        }
+        if (currentBlockImage && currentBlockImage.blockName) {
+          blockImagesByBlockName[currentBlockImage.blockName] = blockImagesByBlockName[currentBlockImage.blockName] || []
+          blockImagesByBlockName[currentBlockImage.blockName].push(currentBlockImage)
+        }
+        if (currentEnt && currentEnt.handle) {
+          entitiesByHandle[currentEnt.handle] = currentEnt
+          if (currentEnt.type === 'VIEWPORT') {
+            viewports.push(currentEnt)
+          }
+        }
+        inLayout = false
+        currentLayout = null
+        inBlockRecord = false
+        currentBlockRecord = null
+        inImageDef = false
+        currentImageDef = null
+        currentBlockImage = null
+        currentEnt = null
+      }
 
       for (let i = 0; i < lines.length - 1; i += 2) {
         const code = lines[i].trim()
         const val = lines[i + 1].trim()
 
         if (code === '0') {
-          if (inLayout && currentLayout && currentLayout.name) {
-            layoutsByHandle[currentLayout.handle] = currentLayout
-            layouts.push(currentLayout)
+          flushObjects()
+          if (val === 'SECTION') {
+            const nextCode = (lines[i + 2] || '').trim()
+            const nextVal = (lines[i + 3] || '').trim()
+            if (nextCode === '2') currentSection = nextVal
+            continue
           }
-          if (inBlockRecord && currentBlockRecord && currentBlockRecord.layoutHandle) {
-            blockRecordToLayout[currentBlockRecord.handle] = currentBlockRecord.layoutHandle
+          if (val === 'ENDSEC') {
+            currentSection = ''
+            continue
           }
-          inLayout = (val === 'LAYOUT')
-          currentLayout = inLayout ? { name: '', order: 0, handle: '' } : null
-          inBlockRecord = (val === 'BLOCK_RECORD')
-          currentBlockRecord = inBlockRecord ? { handle: '', name: '', layoutHandle: '' } : null
+          if (currentSection === 'TABLES' && val === 'BLOCK_RECORD') {
+            inBlockRecord = true
+            currentBlockRecord = { handle: '', name: '', layoutHandle: '' }
+          } else if (currentSection === 'OBJECTS' && val === 'LAYOUT') {
+            inLayout = true
+            currentLayout = { name: '', order: 0, handle: '', inAcDbLayout: false }
+          } else if (currentSection === 'OBJECTS' && val === 'IMAGEDEF') {
+            inImageDef = true
+            currentImageDef = { handle: '', filePath: '' }
+          } else if (currentSection === 'BLOCKS') {
+            if (val === 'BLOCK') {
+              inBlockHeader = true
+              currentBlockName = ''
+            } else {
+              inBlockHeader = false
+              if (val === 'IMAGE' && currentBlockName) {
+                currentBlockImage = {
+                  blockName: currentBlockName,
+                  x: 0,
+                  y: 0,
+                  uX: 1,
+                  uY: 0,
+                  vX: 0,
+                  vY: 1,
+                  wPx: 0,
+                  hPx: 0,
+                  imageDefHandle: '',
+                  layer: '0'
+                }
+              }
+            }
+          } else if (currentSection === 'ENTITIES') {
+            currentEnt = {
+              type: val,
+              handle: '',
+              owner: '',
+              space: 0,
+              layer: '0',
+              name: '',
+              id: 0,
+              status: 0,
+              centerX: 0,
+              centerY: 0,
+              width: 0,
+              height: 0,
+              viewCenterX: 0,
+              viewCenterY: 0,
+              targetX: 0,
+              targetY: 0,
+              viewDirX: 0,
+              viewDirY: 0,
+              viewDirZ: 1,
+              viewHeight: 0,
+              twistAngle: 0
+            }
+          }
           continue
-        }
-
-        if (inLayout && currentLayout) {
-          if (code === '1' && !currentLayout.name) currentLayout.name = val
-          else if (code === '71') currentLayout.order = parseInt(val, 10) || 0
-          else if (code === '5' && !currentLayout.handle) currentLayout.handle = val
         }
 
         if (inBlockRecord && currentBlockRecord) {
           if (code === '5' && !currentBlockRecord.handle) currentBlockRecord.handle = val
           else if (code === '2' && !currentBlockRecord.name) currentBlockRecord.name = val
           else if (code === '340') currentBlockRecord.layoutHandle = val
+        } else if (inLayout && currentLayout) {
+          if (code === '5' && !currentLayout.handle) currentLayout.handle = val
+          else if (code === '100' && val === 'AcDbLayout') currentLayout.inAcDbLayout = true
+          else if (currentLayout.inAcDbLayout && code === '1' && !currentLayout.name) currentLayout.name = val
+          else if (currentLayout.inAcDbLayout && code === '71') currentLayout.order = parseInt(val, 10) || 0
+        } else if (inImageDef && currentImageDef) {
+          if (code === '5' && !currentImageDef.handle) currentImageDef.handle = val
+          else if (code === '1' && !currentImageDef.filePath) currentImageDef.filePath = val
+        } else if (currentSection === 'BLOCKS') {
+          if (inBlockHeader && code === '2' && !currentBlockName) {
+            currentBlockName = val
+          } else if (currentBlockImage) {
+            if (code === '8') currentBlockImage.layer = val
+            else if (code === '10') currentBlockImage.x = parseFloat(val) || 0
+            else if (code === '20') currentBlockImage.y = parseFloat(val) || 0
+            else if (code === '11') currentBlockImage.uX = parseFloat(val) || 0
+            else if (code === '21') currentBlockImage.uY = parseFloat(val) || 0
+            else if (code === '12') currentBlockImage.vX = parseFloat(val) || 0
+            else if (code === '22') currentBlockImage.vY = parseFloat(val) || 0
+            else if (code === '13') currentBlockImage.wPx = parseFloat(val) || 0
+            else if (code === '23') currentBlockImage.hPx = parseFloat(val) || 0
+            else if (code === '340') currentBlockImage.imageDefHandle = val
+          }
+        } else if (currentSection === 'ENTITIES' && currentEnt) {
+          if (code === '5' && !currentEnt.handle) currentEnt.handle = val
+          else if (code === '330' && !currentEnt.owner) currentEnt.owner = val
+          else if (code === '67') currentEnt.space = parseInt(val, 10) || 0
+          else if (code === '8' && currentEnt.layer === '0') currentEnt.layer = val
+          else if (code === '2' && !currentEnt.name) currentEnt.name = val
+          if (currentEnt.type === 'VIEWPORT') {
+            if (code === '10') currentEnt.centerX = parseFloat(val) || 0
+            else if (code === '20') currentEnt.centerY = parseFloat(val) || 0
+            else if (code === '40') currentEnt.width = parseFloat(val) || 0
+            else if (code === '41') currentEnt.height = parseFloat(val) || 0
+            else if (code === '12') currentEnt.viewCenterX = parseFloat(val) || 0
+            else if (code === '22') currentEnt.viewCenterY = parseFloat(val) || 0
+            else if (code === '17') currentEnt.targetX = parseFloat(val) || 0
+            else if (code === '27') currentEnt.targetY = parseFloat(val) || 0
+            else if (code === '16') currentEnt.viewDirX = parseFloat(val) || 0
+            else if (code === '26') currentEnt.viewDirY = parseFloat(val) || 0
+            else if (code === '36') currentEnt.viewDirZ = parseFloat(val) || 0
+            else if (code === '45') currentEnt.viewHeight = parseFloat(val) || 0
+            else if (code === '51') currentEnt.twistAngle = parseFloat(val) || 0
+            else if (code === '68') currentEnt.status = parseInt(val, 10) || 0
+            else if (code === '69') currentEnt.id = parseInt(val, 10) || 0
+          }
         }
       }
 
-      if (inLayout && currentLayout && currentLayout.name) {
-        layoutsByHandle[currentLayout.handle] = currentLayout
-        layouts.push(currentLayout)
+      flushObjects()
+      layouts.sort((a, b) => a.order - b.order)
+      return {
+        layouts,
+        layoutsByHandle,
+        blockRecordToLayout,
+        imageDefsByHandle,
+        blockImagesByBlockName,
+        entitiesByHandle,
+        viewports
       }
-      if (inBlockRecord && currentBlockRecord && currentBlockRecord.layoutHandle) {
-        blockRecordToLayout[currentBlockRecord.handle] = currentBlockRecord.layoutHandle
+    }
+
+    const safeCloneObject3D = (source: THREE.Object3D): THREE.Object3D => {
+      const origList: THREE.Object3D[] = []
+      const savedUserData: any[] = []
+      source.traverse((node) => {
+        origList.push(node)
+        savedUserData.push(node.userData)
+        node.userData = {}
+      })
+      const cloned = source.clone(true)
+      const clonedList: THREE.Object3D[] = []
+      cloned.traverse((node) => {
+        clonedList.push(node)
+      })
+      for (let idx = 0; idx < origList.length; idx++) {
+        const ud = savedUserData[idx] || {}
+        origList[idx].userData = ud
+        if (clonedList[idx]) {
+          clonedList[idx].userData = {
+            layer: ud.layer || ud.entity?.layer,
+            layerId: ud.layerId || ud.layer || ud.entity?.layer,
+            entity: ud.entity
+              ? { layer: ud.entity.layer, type: ud.entity.type, handle: ud.entity.handle }
+              : undefined
+          }
+        }
+      }
+      return cloned
+    }
+
+    const buildViewerLayoutsAndScene = async (viewer: any, modelDrawn: THREE.Object3D): Promise<THREE.Group> => {
+      const textToParse = normalizedDxfText || rawDxfText
+      const struct = textToParse
+        ? parseDxfStructure(textToParse)
+        : {
+            layouts: [],
+            layoutsByHandle: {},
+            blockRecordToLayout: {},
+            imageDefsByHandle: {},
+            blockImagesByBlockName: {},
+            entitiesByHandle: {},
+            viewports: []
+          }
+
+      let layoutList: string[] = []
+      if (struct.layouts.length > 0) {
+        layoutList = struct.layouts.map((l) => (l.name.toLowerCase() === 'model' ? 'Modelo' : l.name))
+      } else {
+        layoutList = ['Modelo']
+        if (Array.isArray(viewer.lastDXF?.entities)) {
+          viewer.lastDXF.entities.forEach((ent: any) => {
+            if (ent.paperSpace || ent.inPaperSpace) {
+              if (!layoutList.includes('Layout1')) layoutList.push('Layout1')
+            }
+          })
+        }
+      }
+      layoutList = Array.from(new Set(layoutList))
+      if (!layoutList.includes('Modelo')) layoutList.unshift('Modelo')
+
+      setAvailableLayouts(layoutList)
+      setActiveLayout('Modelo')
+
+      const rootGroup = new THREE.Group()
+      rootGroup.name = 'DXFRoot'
+      const dxfData = viewer.lastDXF || parsedDxfData
+      if (dxfData) {
+        rootGroup.userData.dxf = dxfData
+        rootGroup.userData.dxfLayers = dxfData.tables?.layers || dxfData.tables?.layer?.layers
       }
 
-      layouts.sort((a, b) => a.order - b.order)
-      return { layouts, layoutsByHandle, blockRecordToLayout }
+      const modelLayoutGroup = new THREE.Group()
+      modelLayoutGroup.name = 'Layout_Modelo'
+      modelLayoutGroup.userData = { isLayoutGroup: true, layoutName: 'Modelo' }
+      modelLayoutGroup.visible = true
+      modelLayoutGroup.add(modelDrawn)
+      rootGroup.add(modelLayoutGroup)
+
+      modelDrawn.updateMatrixWorld(true)
+      const modelBox = new THREE.Box3().setFromObject(modelDrawn)
+
+      const paperLayoutNames = layoutList.filter((l) => l !== 'Modelo')
+      if (paperLayoutNames.length === 0 || !viewer.lastDXF) {
+        return rootGroup
+      }
+
+      // 1. Ensure non-off layers (including plot=false layers like G-____-____-NPLT) are visible
+      if (viewer.lastDXF.tables?.layers) {
+        Object.values(viewer.lastDXF.tables.layers).forEach((layer: any) => {
+          if (layer && !(layer.colorNumber < 0)) {
+            layer.visible = true
+          }
+        })
+      }
+
+      // 2. Strip paperSpace flag from block definitions so Paper Space blocks (title blocks, view titles) render
+      if (Array.isArray(viewer.lastDXF.blocks)) {
+        viewer.lastDXF.blocks.forEach((blk: any) => {
+          delete blk.paperSpace
+          delete blk._cache
+          if (Array.isArray(blk.entities)) {
+            blk.entities.forEach((be: any) => {
+              delete be.paperSpace
+              delete be._cache
+            })
+          }
+        })
+      }
+
+      // 3. Group Paper Space entities by layout
+      const firstPaperLayout = paperLayoutNames[0]
+      const paperEntitiesByLayout: Record<string, any[]> = {}
+      paperLayoutNames.forEach((ln) => {
+        paperEntitiesByLayout[ln] = []
+      })
+
+      if (Array.isArray(viewer.lastDXF.entities)) {
+        viewer.lastDXF.entities.forEach((ent: any) => {
+          const rawEnt = ent.handle ? struct.entitiesByHandle[ent.handle] : undefined
+          const isPaper = Boolean(ent.paperSpace || rawEnt?.space === 1)
+          if (!isPaper) return
+
+          let targetLayout = firstPaperLayout
+          const ownerHandle = ent.ownerHandle || rawEnt?.owner
+          if (ownerHandle && struct.blockRecordToLayout[ownerHandle]) {
+            const lh = struct.blockRecordToLayout[ownerHandle]
+            const mappedName = struct.layoutsByHandle[lh]?.name
+            if (mappedName && mappedName.toLowerCase() !== 'model') {
+              targetLayout = mappedName
+            }
+          }
+
+          const clonedEnt = { ...ent }
+          delete clonedEnt.paperSpace
+          delete clonedEnt._cache
+          if (!paperEntitiesByLayout[targetLayout]) {
+            paperEntitiesByLayout[targetLayout] = []
+          }
+          paperEntitiesByLayout[targetLayout].push(clonedEnt)
+        })
+      }
+
+      // 4. Build each Paper Space Layout Group
+      for (const layoutName of paperLayoutNames) {
+        const paperLayoutGroup = new THREE.Group()
+        paperLayoutGroup.name = 'Layout_' + layoutName
+        paperLayoutGroup.userData = { isLayoutGroup: true, layoutName, inPaperLayout: true }
+        paperLayoutGroup.visible = false
+
+        const entsForLayout = paperEntitiesByLayout[layoutName] || []
+        if (entsForLayout.length > 0) {
+          try {
+            const paperDxfData = {
+              ...viewer.lastDXF,
+              objects: { ...(viewer.lastDXF.objects || {}), layouts: [] },
+              entities: entsForLayout
+            }
+            const paperDrawn = await viewer._drawDXF(paperDxfData)
+            if (paperDrawn) {
+              paperLayoutGroup.add(paperDrawn)
+            }
+          } catch (pe) {
+            console.warn(`Error drawing paper layout ${layoutName}:`, pe)
+          }
+
+          // Render any raster IMAGE placeholders inside inserted title-block definitions (e.g. Autodesk logo)
+          entsForLayout.forEach((ent: any) => {
+            if (ent.type === 'INSERT' && ent.block && struct.blockImagesByBlockName[ent.block]) {
+              const imgs = struct.blockImagesByBlockName[ent.block]
+              imgs.forEach((img) => {
+                const imgW = Math.hypot(img.uX, img.uY) * img.wPx
+                const imgH = Math.hypot(img.vX, img.vY) * img.hPx
+                if (imgW > 0 && imgH > 0 && viewer._font?.generateShapes) {
+                  try {
+                    const filePath = struct.imageDefsByHandle[img.imageDefHandle] || ''
+                    const label = /autodesk/i.test(filePath) ? 'AUTODESK' : ''
+                    if (label) {
+                      const shapes = viewer._font.generateShapes(label, imgH * 0.36)
+                      const textGeo = new THREE.ShapeGeometry(shapes)
+                      textGeo.computeBoundingBox()
+                      const tb = textGeo.boundingBox
+                      const boxX = (ent.x || 0) + img.x
+                      const boxY = (ent.y || 0) + img.y
+                      if (tb) {
+                        const tw = tb.max.x - tb.min.x
+                        const th = tb.max.y - tb.min.y
+                        textGeo.translate(boxX + (imgW - tw) / 2 - tb.min.x, boxY + (imgH - th) / 2 - tb.min.y, 0.05)
+                      }
+                      const textMat = new THREE.MeshBasicMaterial({ color: 0x111111, side: THREE.DoubleSide })
+                      const textMesh = new THREE.Mesh(textGeo, textMat)
+                      textMesh.userData = { layerId: img.layer || ent.layer || '0', inPaperLayout: true }
+                      paperLayoutGroup.add(textMesh)
+                    }
+                  } catch (ie) {
+                    console.warn('Error rendering block image label:', ie)
+                  }
+                }
+              })
+            }
+          })
+        }
+
+        // Find Viewports belonging to this layout
+        const layoutVps = struct.viewports
+          .filter((vp) => {
+            if (vp.id === 1 || vp.width <= 0 || vp.height <= 0) return false
+            let vpLayout = firstPaperLayout
+            if (vp.owner && struct.blockRecordToLayout[vp.owner]) {
+              const lh = struct.blockRecordToLayout[vp.owner]
+              const mappedName = struct.layoutsByHandle[lh]?.name
+              if (mappedName && mappedName.toLowerCase() !== 'model') {
+                vpLayout = mappedName
+              }
+            }
+            return vpLayout === layoutName
+          })
+          .map((vp) => ({ ...vp }))
+
+        // If an uninitialized layout tab (like Layout2 seed) has no entities and no viewports,
+        // synthesize a standard sheet frame + viewport framing Model Space (matching AutoCAD behavior)
+        if (entsForLayout.length === 0 && layoutVps.length === 0 && !modelBox.isEmpty()) {
+          const mCenter = modelBox.getCenter(new THREE.Vector3())
+          const mSize = modelBox.getSize(new THREE.Vector3())
+          const sheetW = 841
+          const sheetH = 594
+          const margin = 20
+          const framePts = [
+            new THREE.Vector3(margin, margin, 0.01),
+            new THREE.Vector3(sheetW - margin, margin, 0.01),
+            new THREE.Vector3(sheetW - margin, sheetH - margin, 0.01),
+            new THREE.Vector3(margin, sheetH - margin, 0.01)
+          ]
+          const frameGeo = new THREE.BufferGeometry().setFromPoints(framePts)
+          const frameMat = new THREE.LineBasicMaterial({ color: 0x222222 })
+          const frameLoop = new THREE.LineLoop(frameGeo, frameMat)
+          frameLoop.userData = { layerId: '0', inPaperLayout: true }
+          paperLayoutGroup.add(frameLoop)
+
+          const vpW = sheetW - margin * 4
+          const vpH = sheetH - margin * 4
+          const fitVh = Math.max(mSize.y * 1.15, mSize.x * 1.15 * (vpH / vpW), 1)
+          layoutVps.push({
+            type: 'VIEWPORT',
+            handle: 'synth_' + layoutName,
+            owner: '',
+            space: 1,
+            layer: '0',
+            name: '',
+            id: 2,
+            status: 1,
+            centerX: sheetW / 2,
+            centerY: sheetH / 2,
+            width: vpW,
+            height: vpH,
+            viewCenterX: mCenter.x,
+            viewCenterY: mCenter.y,
+            targetX: 0,
+            targetY: 0,
+            viewDirX: 0,
+            viewDirY: 0,
+            viewDirZ: 1,
+            viewHeight: fitVh,
+            twistAngle: 0
+          })
+        }
+
+        // Render each Viewport (border + clipped Model Space projection)
+        for (const vp of layoutVps) {
+          const vpLeft = vp.centerX - vp.width / 2
+          const vpRight = vp.centerX + vp.width / 2
+          const vpBottom = vp.centerY - vp.height / 2
+          const vpTop = vp.centerY + vp.height / 2
+
+          let vpBorderColor = 0x444444
+          const dxfLayer = viewer.lastDXF?.tables?.layers?.[vp.layer]
+          if (dxfLayer && typeof dxfLayer.color === 'number' && dxfLayer.color > 0 && dxfLayer.color !== 0xffffff) {
+            vpBorderColor = dxfLayer.color
+          }
+          const borderPts = [
+            new THREE.Vector3(vpLeft, vpBottom, 0.02),
+            new THREE.Vector3(vpRight, vpBottom, 0.02),
+            new THREE.Vector3(vpRight, vpTop, 0.02),
+            new THREE.Vector3(vpLeft, vpTop, 0.02)
+          ]
+          const borderGeo = new THREE.BufferGeometry().setFromPoints(borderPts)
+          const borderMat = new THREE.LineBasicMaterial({ color: vpBorderColor })
+          const borderLine = new THREE.LineLoop(borderGeo, borderMat)
+          borderLine.userData = { layerId: vp.layer || '0', inPaperLayout: true }
+          paperLayoutGroup.add(borderLine)
+
+          if (!modelBox.isEmpty() && vp.viewHeight > 0) {
+            const scale = vp.height / vp.viewHeight
+            const modelCx = (vp.targetX || 0) + (vp.viewCenterX || 0)
+            const modelCy = (vp.targetY || 0) + (vp.viewCenterY || 0)
+
+            const clipPlanes = [
+              new THREE.Plane(new THREE.Vector3(1, 0, 0), -vpLeft),
+              new THREE.Plane(new THREE.Vector3(-1, 0, 0), vpRight),
+              new THREE.Plane(new THREE.Vector3(0, 1, 0), -vpBottom),
+              new THREE.Plane(new THREE.Vector3(0, -1, 0), vpTop)
+            ]
+
+            const vpClone = safeCloneObject3D(modelDrawn)
+            vpClone.scale.set(scale, scale, 1)
+            if (vp.twistAngle) {
+              vpClone.rotation.z = (vp.twistAngle * Math.PI) / 180
+            }
+            vpClone.position.set(vp.centerX - modelCx * scale, vp.centerY - modelCy * scale, 0.05)
+
+            vpClone.traverse((child: any) => {
+              child.userData = {
+                ...child.userData,
+                isViewportContent: true,
+                inPaperLayout: true
+              }
+              if (child.material) {
+                const cloneWithClip = (m: any) => {
+                  const mc = m.clone()
+                  mc.clippingPlanes = clipPlanes
+                  return mc
+                }
+                child.material = Array.isArray(child.material)
+                  ? child.material.map(cloneWithClip)
+                  : cloneWithClip(child.material)
+              }
+            })
+
+            paperLayoutGroup.add(vpClone)
+          }
+        }
+
+        // Adjust materials on Paper Space so white/near-white lines become dark charcoal on the white sheet
+        const adjustMatForWhitePaper = (m: any, alreadyCloned: boolean) => {
+          const mc = alreadyCloned ? m : m.clone()
+          if (mc.color) {
+            const hex = mc.color.getHex()
+            const hsl = { h: 0, s: 0, l: 0 }
+            mc.color.getHSL(hsl)
+            if (hex === 0xffffff || (hsl.s < 0.1 && hsl.l > 0.85)) {
+              mc.color.setHex(0x111111)
+            } else if (hsl.l > 0.72) {
+              mc.color.setHSL(hsl.h, hsl.s, 0.42)
+            }
+            mc.needsUpdate = true
+          }
+          return mc
+        }
+
+        paperLayoutGroup.traverse((obj: any) => {
+          if (obj.userData?.isPaperSheet) return
+          obj.userData.inPaperLayout = true
+          if (obj.material) {
+            const alreadyCloned = Boolean(obj.userData?.isViewportContent)
+            obj.material = Array.isArray(obj.material)
+              ? obj.material.map((m: any) => adjustMatForWhitePaper(m, alreadyCloned))
+              : adjustMatForWhitePaper(obj.material, alreadyCloned)
+          }
+        })
+
+        // Compute 2D sheet bounding box and add white paper background + drop shadow
+        paperLayoutGroup.updateMatrixWorld(true)
+        const sheetBox = new THREE.Box3()
+        paperLayoutGroup.traverse((obj: any) => {
+          if (
+            (obj.isMesh || obj.isLine || obj.isLineSegments || obj.isLineLoop) &&
+            !obj.userData?.isViewportContent &&
+            !obj.userData?.isPaperSheet
+          ) {
+            sheetBox.expandByObject(obj)
+          }
+        })
+
+        if (!sheetBox.isEmpty()) {
+          const minX = sheetBox.min.x
+          const maxX = sheetBox.max.x
+          const minY = sheetBox.min.y
+          const maxY = sheetBox.max.y
+          const w = Math.max(10, maxX - minX)
+          const h = Math.max(10, maxY - minY)
+          const cx = (minX + maxX) / 2
+          const cy = (minY + maxY) / 2
+          const padX = w * 0.015
+          const padY = h * 0.015
+          const sheetW = w + padX * 2
+          const sheetH = h + padY * 2
+
+          const shadowGeo = new THREE.PlaneGeometry(sheetW, sheetH)
+          const shadowMat = new THREE.MeshBasicMaterial({ color: 0x2b2d30, side: THREE.DoubleSide, depthWrite: false })
+          const shadowMesh = new THREE.Mesh(shadowGeo, shadowMat)
+          shadowMesh.position.set(cx + w * 0.008, cy - h * 0.008, -0.6)
+          shadowMesh.renderOrder = -20
+          shadowMesh.userData = { isPaperSheet: true, inPaperLayout: true }
+          paperLayoutGroup.add(shadowMesh)
+
+          const paperGeo = new THREE.PlaneGeometry(sheetW, sheetH)
+          const paperMat = new THREE.MeshBasicMaterial({ color: 0xffffff, side: THREE.DoubleSide, depthWrite: false })
+          const paperMesh = new THREE.Mesh(paperGeo, paperMat)
+          paperMesh.position.set(cx, cy, -0.5)
+          paperMesh.renderOrder = -10
+          paperMesh.userData = { isPaperSheet: true, inPaperLayout: true }
+          paperLayoutGroup.add(paperMesh)
+        }
+
+        rootGroup.add(paperLayoutGroup)
+      }
+
+      return rootGroup
     }
 
     const extractAndSetupLayouts = (rootObj: THREE.Object3D, fallbackDxf?: any, rawText?: string) => {
@@ -1057,11 +1653,14 @@ const DwgRenderer: React.FC<Props> = ({
           try {
             const mod = await import('three-dxf-viewer')
             const viewer = new (mod as any).DXFViewer()
-            const dxfObj = await viewer.getFromFile(file, fontUrl)
+            if (viewer.LayerHelper) {
+              viewer.LayerHelper.isVisible = (layer: any) => !(layer.colorNumber < 0)
+            }
+            const dxfObj = await viewer.getFromFile(normalizedFile, fontUrl)
             if (dxfObj) {
-              extractAndSetupLayouts(dxfObj, viewer.lastDXF, rawDxfText)
-              scene.add(dxfObj)
-              setEntityRoot(dxfObj)
+              const rootGroup = await buildViewerLayoutsAndScene(viewer, dxfObj as any)
+              scene.add(rootGroup)
+              setEntityRoot(rootGroup)
               setTimeout(() => {
                 fitToVisible()
               }, 60)
@@ -1081,17 +1680,20 @@ const DwgRenderer: React.FC<Props> = ({
         try {
           const mod = await import('three-dxf-viewer')
           const viewer = new (mod as any).DXFViewer()
+          if (viewer.LayerHelper) {
+            viewer.LayerHelper.isVisible = (layer: any) => !(layer.colorNumber < 0)
+          }
           const timeout = new Promise((_, reject) =>
             setTimeout(() => reject(new Error('DXF_VIEWER_TIMEOUT')), 12000)
           )
           const dxfObj = await Promise.race([
-            viewer.getFromFile(file, fontUrl),
+            viewer.getFromFile(normalizedFile, fontUrl),
             timeout
           ])
           if (dxfObj && (dxfObj as any).isObject3D) {
-            extractAndSetupLayouts(dxfObj as any, viewer.lastDXF)
-            scene.add(dxfObj as any)
-            setEntityRoot(dxfObj as any)
+            const rootGroup = await buildViewerLayoutsAndScene(viewer, dxfObj as any)
+            scene.add(rootGroup)
+            setEntityRoot(rootGroup)
             const box = new THREE.Box3().setFromObject(dxfObj as any)
             const center = box.getCenter(new THREE.Vector3())
             const size = box.getSize(new THREE.Vector3())
@@ -1104,7 +1706,7 @@ const DwgRenderer: React.FC<Props> = ({
             camera.right = viewSize * aspect
             camera.top = viewSize
             camera.bottom = -viewSize
-            camera.position.set(center.x, center.y, 10)
+            camera.position.set(center.x, center.y, 100)
             camera.zoom = 1
             camera.updateProjectionMatrix()
             controls?.target.set(center.x, center.y, 0)

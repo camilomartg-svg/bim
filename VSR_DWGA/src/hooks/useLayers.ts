@@ -35,6 +35,9 @@ export const useLayers = (entityRoot: THREE.Object3D | null, file: File | null) 
   }, [layerVisibility, file])
 
   const resolveLayerName = (obj: THREE.Object3D, knownLayers?: Set<string>): { name: string, isColorFallback: boolean } | null => {
+    if (obj.userData?.isLayoutGroup || obj.userData?.isPaperSheet) return null
+    if (obj.name && (obj.name.startsWith('Layout_') || obj.name === 'DXFRoot')) return null
+
     let layerName: any = null
 
     // 1. Direct userData.layer
@@ -72,7 +75,15 @@ export const useLayers = (entityRoot: THREE.Object3D | null, file: File | null) 
     }
 
     // 8. If parent directly under root has a non-generic name (as in three-dxf-loader)
-    if (obj.parent && obj.parent.parent === null && obj.parent.name && !obj.parent.name.startsWith('Scene') && !obj.parent.name.startsWith('Group')) {
+    if (
+      obj.parent &&
+      obj.parent.parent === null &&
+      obj.parent.name &&
+      !obj.parent.name.startsWith('Scene') &&
+      !obj.parent.name.startsWith('Group') &&
+      !obj.parent.name.startsWith('Layout_') &&
+      obj.parent.name !== 'DXFRoot'
+    ) {
       return { name: obj.parent.name, isColorFallback: false }
     }
 
@@ -177,12 +188,17 @@ export const useLayers = (entityRoot: THREE.Object3D | null, file: File | null) 
   useEffect(() => {
     if (!entityRoot) return
     entityRoot.traverse((obj) => {
-      if (obj.parent === entityRoot && obj.name && layerVisibility[obj.name] !== undefined) {
+      if (obj === entityRoot || obj.userData?.isLayoutGroup || obj.userData?.isPaperSheet) return
+      if (obj.parent === entityRoot && obj.name && !obj.name.startsWith('Layout_') && layerVisibility[obj.name] !== undefined) {
         obj.visible = layerVisibility[obj.name] !== false
       }
       const layerName = obj.userData?.layerId
       if (layerName && layerVisibility[layerName] !== undefined) {
-        obj.visible = layerVisibility[layerName] !== false
+        if (obj.userData?.layoutVisible !== undefined) {
+          obj.visible = (layerVisibility[layerName] !== false) && Boolean(obj.userData.layoutVisible)
+        } else {
+          obj.visible = layerVisibility[layerName] !== false
+        }
       }
     })
   }, [layerVisibility, entityRoot])
