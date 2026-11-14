@@ -111,10 +111,13 @@
                         } else {
                             // Update role if changed
                             if (ua.role !== dbUser.rol) {
-                                ua.role = dbUser.rol;
-                                const cacheLocation = localStorage.getItem('userAccount') ? 'localStorage' : 'sessionStorage';
-                                window[cacheLocation].setItem('userAccount', JSON.stringify(ua));
-                                window.location.reload();
+                                const isEmpAdmin = ua.role === 'ADMINISTRADOR_EMPRESA' || ua.role === 'SUPER_ADMINISTRADOR';
+                                if (!isEmpAdmin || (dbUser.rol === 'SUPER_ADMINISTRADOR' || dbUser.rol === 'ADMINISTRADOR_EMPRESA')) {
+                                    ua.role = dbUser.rol;
+                                    const cacheLocation = localStorage.getItem('userAccount') ? 'localStorage' : 'sessionStorage';
+                                    window[cacheLocation].setItem('userAccount', JSON.stringify(ua));
+                                    window.location.reload();
+                                }
                             }
                         }
                     }
@@ -524,14 +527,27 @@
                 }
 
                 if (effectiveRole === 'ADMINISTRADOR_EMPRESA' || effectiveRole === 'SUPER_ADMINISTRADOR') {
+                    if (userAccount && userAccount.role !== 'SUPER_ADMINISTRADOR') {
+                        userAccount.role = 'ADMINISTRADOR_EMPRESA';
+                        if (currentEmpresaData && currentEmpresaData.id) {
+                            userAccount.adminEmpresaId = currentEmpresaData.id;
+                        }
+                        const cacheLocation = localStorage.getItem('userAccount') ? 'localStorage' : 'sessionStorage';
+                        window[cacheLocation].setItem('userAccount', JSON.stringify(userAccount));
+                    }
+
                     if (!safeConfig.solicitudes) safeConfig.solicitudes = [];
-                    if (!safeConfig.solicitudes.some(s => s.id === 'link-admin-empresa')) {
+                    const adminHref = currentEmpresaId ? `super-admin.html?empresa=${encodeURIComponent(currentEmpresaId)}` : 'super-admin.html';
+                    const existingAdminLink = safeConfig.solicitudes.find(s => s.id === 'link-admin-empresa');
+                    if (!existingAdminLink) {
                         safeConfig.solicitudes.push({
                             id: 'link-admin-empresa',
                             label: 'Administrar CDE',
-                            href: 'super-admin.html',
-                            allowedRoles: ['ADMINISTRADOR_EMPRESA']
+                            href: adminHref,
+                            allowedRoles: ['ADMINISTRADOR_EMPRESA', 'SUPER_ADMINISTRADOR', 'ADMINISTRADOR']
                         });
+                    } else {
+                        existingAdminLink.href = adminHref;
                     }
                 }
                 

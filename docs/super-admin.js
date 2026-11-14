@@ -5,9 +5,14 @@ document.addEventListener('DOMContentLoaded', async () => {
     const ua = JSON.parse(localStorage.getItem('userAccount') || sessionStorage.getItem('userAccount') || 'null');
     if (ua) {
         userRole = ua.role;
-        userEmail = (ua.username || '').toLowerCase();
+        userEmail = (ua.username || '').toLowerCase().trim();
     }
   } catch(e) {}
+
+  const superAdminEmails = ['imagina3ddesign@gmail.com', 'mcmartinezg@unal.edu.co'];
+  if (superAdminEmails.includes(userEmail)) {
+      userRole = 'SUPER_ADMINISTRADOR';
+  }
 
   // Ajustar la interfaz de forma síncrona e inmediata según el rol del usuario
   if (userRole === 'SUPER_ADMINISTRADOR') {
@@ -359,8 +364,31 @@ document.addEventListener('DOMContentLoaded', async () => {
       }
       renderList();
       if (selectedIndex === -1 && empresas.length > 0) {
-        const firstActiveIdx = empresas.findIndex(e => !e.deleted);
-        if (firstActiveIdx > -1) selectEmpresa(firstActiveIdx);
+        const urlParams = new URLSearchParams(window.location.search);
+        const paramEmpId = urlParams.get('empresa');
+
+        let targetIdx = -1;
+        if (paramEmpId) {
+          targetIdx = empresas.findIndex(e => !e.deleted && (e.id === paramEmpId || e.slug === paramEmpId || (e.name && e.name.toLowerCase() === paramEmpId.toLowerCase())));
+        }
+
+        if (targetIdx === -1) {
+          if (userRole === 'SUPER_ADMINISTRADOR') {
+            targetIdx = empresas.findIndex(e => !e.deleted);
+          } else {
+            targetIdx = empresas.findIndex(e => !e.deleted && (
+              (Array.isArray(e.admins) && e.admins.some(a => String(a || '').toLowerCase().trim() === userEmail)) ||
+              (Array.isArray(e.members) && e.members.some(m => String(m.email || '').toLowerCase().trim() === userEmail && (m.role === 'ADMINISTRADOR_EMPRESA' || m.role === 'ADMINISTRADOR')))
+            ));
+          }
+        }
+
+        if (targetIdx > -1) {
+          selectEmpresa(targetIdx);
+        } else if (userRole === 'SUPER_ADMINISTRADOR') {
+          const firstActiveIdx = empresas.findIndex(e => !e.deleted);
+          if (firstActiveIdx > -1) selectEmpresa(firstActiveIdx);
+        }
       }
     } catch (e) { showBanner('Error cargando datos', 'error'); }
   }
@@ -388,10 +416,10 @@ document.addEventListener('DOMContentLoaded', async () => {
           const globalTabs = document.getElementById('global-tabs-container');
           if(globalTabs) globalTabs.classList.add('hidden');
           if(globalTabs) globalTabs.classList.remove('md:flex');
-      }
-      
-      if (userRole === 'ADMINISTRADOR_EMPRESA') {
-          hasAccess = emp.members && emp.members.some(m => m.email && m.email.toLowerCase() === userEmail && (m.role === 'ADMINISTRADOR_EMPRESA' || m.role === 'ADMINISTRADOR'));
+
+          const inAdmins = Array.isArray(emp.admins) && emp.admins.some(a => String(a || '').toLowerCase().trim() === userEmail);
+          const inMembers = Array.isArray(emp.members) && emp.members.some(m => String(m.email || '').toLowerCase().trim() === userEmail && (m.role === 'ADMINISTRADOR_EMPRESA' || m.role === 'ADMINISTRADOR'));
+          hasAccess = inAdmins || inMembers;
       }
 
       if (!matchesSearch || !hasAccess) return '';
@@ -437,8 +465,10 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     // Security context validation
     let hasAccess = userRole === 'SUPER_ADMINISTRADOR';
-    if (!hasAccess && userRole === 'ADMINISTRADOR_EMPRESA') {
-      hasAccess = emp.members && emp.members.some(m => m.email && m.email.toLowerCase() === userEmail && (m.role === 'ADMINISTRADOR_EMPRESA' || m.role === 'ADMINISTRADOR'));
+    if (!hasAccess) {
+      const inAdmins = Array.isArray(emp.admins) && emp.admins.some(a => String(a || '').toLowerCase().trim() === userEmail);
+      const inMembers = Array.isArray(emp.members) && emp.members.some(m => String(m.email || '').toLowerCase().trim() === userEmail && (m.role === 'ADMINISTRADOR_EMPRESA' || m.role === 'ADMINISTRADOR'));
+      hasAccess = inAdmins || inMembers;
     }
     if (!hasAccess) {
       alert('Acceso denegado. No tienes permisos para gestionar esta empresa.');

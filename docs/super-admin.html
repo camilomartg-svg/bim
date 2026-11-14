@@ -34,13 +34,61 @@
     }
   </style>
   <script>
-    (function () {
+    (async function () {
       const rawAccount = sessionStorage.getItem('userAccount') || localStorage.getItem('userAccount');
       const userAccount = rawAccount ? JSON.parse(rawAccount) : null;
-      if (!userAccount || (userAccount.role !== 'SUPER_ADMINISTRADOR' && userAccount.role !== 'ADMINISTRADOR_EMPRESA')) {
-        alert('Acceso denegado. Esta pÃ¡gina es solo para Administradores.');
-        window.location.replace('home.html');
+      if (!userAccount) {
+        alert('Acceso denegado. Debes iniciar sesión.');
+        window.location.replace('https://norabim.com/inse.html');
+        return;
       }
+
+      const email = (userAccount.username || '').toLowerCase().trim();
+      const superAdminEmails = ['imagina3ddesign@gmail.com', 'mcmartinezg@unal.edu.co'];
+      if (userAccount.role === 'SUPER_ADMINISTRADOR' || superAdminEmails.includes(email)) {
+        userAccount.role = 'SUPER_ADMINISTRADOR';
+        const cacheLocation = localStorage.getItem('userAccount') ? 'localStorage' : 'sessionStorage';
+        window[cacheLocation].setItem('userAccount', JSON.stringify(userAccount));
+        return;
+      }
+
+      if (userAccount.role === 'ADMINISTRADOR_EMPRESA' || userAccount.role === 'ADMINISTRADOR') {
+        userAccount.role = 'ADMINISTRADOR_EMPRESA';
+        return;
+      }
+
+      // Si el rol en sesión dice MIEMBRO o INVITADO, verificar si es administrador de alguna empresa
+      try {
+        let companies = [];
+        const cached = sessionStorage.getItem('cachedCompanies_v2') || localStorage.getItem('cachedCompanies_v2');
+        if (cached) {
+          try { companies = JSON.parse(cached); } catch(e) {}
+        }
+        if (!companies || companies.length === 0) {
+          const res = await fetch(`empresas.json?t=${Date.now()}`);
+          if (res.ok) companies = await res.json();
+        }
+
+        const adminEmp = Array.isArray(companies) && companies.find(emp => {
+          if (emp.deleted) return false;
+          const inAdmins = Array.isArray(emp.admins) && emp.admins.some(a => String(a || '').toLowerCase().trim() === email);
+          const inMembers = Array.isArray(emp.members) && emp.members.some(m => String(m.email || '').toLowerCase().trim() === email && (m.role === 'ADMINISTRADOR_EMPRESA' || m.role === 'ADMINISTRADOR'));
+          return inAdmins || inMembers;
+        });
+
+        if (adminEmp) {
+          userAccount.role = 'ADMINISTRADOR_EMPRESA';
+          userAccount.adminEmpresaId = adminEmp.id;
+          const cacheLocation = localStorage.getItem('userAccount') ? 'localStorage' : 'sessionStorage';
+          window[cacheLocation].setItem('userAccount', JSON.stringify(userAccount));
+          return; // Acceso concedido
+        }
+      } catch (e) {
+        console.warn('Error verificando rol de administrador:', e);
+      }
+
+      alert('Acceso denegado. Esta página es solo para Administradores.');
+      window.location.replace('home.html');
     })();
   </script>
   <script src="nora-drive-store.js?v=42"></script>

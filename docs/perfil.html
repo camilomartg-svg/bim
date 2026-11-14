@@ -315,21 +315,32 @@
                     if (dbUser) {
                         let resolvedEmpresa = dbUser.empresa || '';
                         let resolvedRol = dbUser.rol || 'INVITADO';
-                        if (!resolvedEmpresa) {
-                            try {
-                                const empRes = await fetch(`empresas.json?t=${Date.now()}`);
-                                if (empRes.ok) {
-                                    const empList = await empRes.json();
-                                    const uMail = userSession.username.toLowerCase().trim();
+                        
+                        try {
+                            const empRes = await fetch(`empresas.json?t=${Date.now()}`);
+                            if (empRes.ok) {
+                                const empList = await empRes.json();
+                                const uMail = userSession.username.toLowerCase().trim();
+                                
+                                // Verificar si es administrador en alguna empresa
+                                const adminEmp = (empList || []).find(e => !e.deleted && (
+                                    (Array.isArray(e.admins) && e.admins.some(a => String(a || '').toLowerCase().trim() === uMail)) ||
+                                    (Array.isArray(e.members) && e.members.some(m => String(m.email || '').toLowerCase().trim() === uMail && (m.role === 'ADMINISTRADOR_EMPRESA' || m.role === 'ADMINISTRADOR')))
+                                ));
+                                
+                                if (adminEmp) {
+                                    resolvedRol = 'ADMINISTRADOR_EMPRESA';
+                                    if (!resolvedEmpresa) resolvedEmpresa = adminEmp.name || '';
+                                } else {
                                     const foundEmp = (empList || []).find(e => !e.deleted && Array.isArray(e.members) && e.members.some(m => m && m.email && m.email.toLowerCase().trim() === uMail));
                                     if (foundEmp) {
                                         const foundMem = foundEmp.members.find(m => m && m.email && m.email.toLowerCase().trim() === uMail);
-                                        resolvedEmpresa = foundEmp.name || '';
+                                        if (!resolvedEmpresa) resolvedEmpresa = foundEmp.name || '';
                                         if (foundMem && foundMem.role) resolvedRol = foundMem.role;
                                     }
                                 }
-                            } catch (empErr) {}
-                        }
+                            }
+                        } catch (empErr) {}
                         inputNombre.value = dbUser.nombre || userSession.name || '';
                         inputTelefono.value = dbUser.telefono || '';
                         inputEmpresa.value = resolvedEmpresa;
