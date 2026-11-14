@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react'
+import React, { useEffect, useRef, useState, useCallback } from 'react'
 import type { Calibration, Tool, DimensionItem, AreaItem, SnapSettings } from '../types'
 import * as THREE from 'three'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
@@ -48,6 +48,75 @@ const DwgRenderer: React.FC<Props> = ({
   
   const [showLayers, setShowLayers] = useState(false)
   const [layerSearch, setLayerSearch] = useState('')
+  const [activeLayout, setActiveLayout] = useState<string>('Modelo')
+  const [availableLayouts, setAvailableLayouts] = useState<string[]>(['Modelo'])
+
+  useEffect(() => {
+    const handleToggleLayers = () => {
+      setShowLayers(prev => !prev)
+    }
+    window.addEventListener('toggle-dwg-layers', handleToggleLayers)
+    return () => {
+      window.removeEventListener('toggle-dwg-layers', handleToggleLayers)
+    }
+  }, [])
+
+  const fitToVisible = useCallback(() => {
+    if (!entityRoot || !camera || !controls || !renderer) return
+    const box = new THREE.Box3()
+    entityRoot.traverse((obj: any) => {
+      if (obj.visible && (obj.isMesh || obj.isLine || obj.isPoints)) {
+        box.expandByObject(obj)
+      }
+    })
+    if (!box.isEmpty()) {
+      const center = box.getCenter(new THREE.Vector3())
+      const size = box.getSize(new THREE.Vector3())
+      const maxSize = Math.max(size.x, size.y)
+      const viewSize = maxSize * 0.6
+      const w = renderer.domElement.clientWidth
+      const h = renderer.domElement.clientHeight
+      const aspect = w / h
+      camera.left = -viewSize * aspect
+      camera.right = viewSize * aspect
+      camera.top = viewSize
+      camera.bottom = -viewSize
+      camera.position.set(center.x, center.y, 10)
+      camera.zoom = 1
+      camera.updateProjectionMatrix()
+      controls.target.set(center.x, center.y, 0)
+      controls.update()
+    }
+  }, [entityRoot, camera, controls, renderer])
+
+  const handleLayoutChange = (layoutName: string) => {
+    setActiveLayout(layoutName)
+    if (!entityRoot) return
+
+    entityRoot.traverse((obj: any) => {
+      if (obj.isMesh || obj.isLine || obj.isPoints) {
+        const isPaper = obj.userData?.inPaperSpace
+        const objLayout = obj.userData?.layout || (isPaper ? 'Layout1' : 'Modelo')
+        
+        let shouldShow = true
+        if (layoutName === 'Modelo') {
+          shouldShow = !isPaper
+        } else {
+          shouldShow = isPaper ? (objLayout === layoutName || objLayout === 'Layout1') : true
+        }
+
+        const layerId = obj.userData?.layerId
+        if (layerId && layerVisibility[layerId] === false) {
+          shouldShow = false
+        }
+        obj.visible = shouldShow
+      }
+    })
+
+    setTimeout(() => {
+      fitToVisible()
+    }, 50)
+  }
 
   const extractSnapPoints = (root: THREE.Object3D) => {
     root.updateMatrixWorld(true)
@@ -770,6 +839,67 @@ const DwgRenderer: React.FC<Props> = ({
       ? (import.meta as any).env.BASE_URL + 'fonts/helvetiker_regular.typeface.json'
       : './fonts/helvetiker_regular.typeface.json'
 
+    let parsedDxfData: any = null
+    try {
+      const text = await file.text()
+      const DxfParserModule = await import('dxf-parser')
+      const DxfParserClass = (DxfParserModule as any).default || DxfParserModule
+      parsedDxfData = new DxfParserClass().parseSync(text)
+    } catch (pe) {
+      console.warn('dxf-parser parseSync notice:', pe)
+    }
+
+    const extractAndSetupLayouts = (rootObj: THREE.Object3D, fallbackDxf?: any) => {
+      const dxfData = parsedDxfData || fallbackDxf
+      if (dxfData) {
+        rootObj.userData.dxf = dxfData
+        rootObj.userData.dxfLayers = dxfData.tables?.layer?.layers || dxfData.tables?.layers
+      }
+
+      const layoutsSet = new Set<string>()
+      layoutsSet.add('Modelo')
+
+      if (Array.isArray(dxfData?.layouts)) {
+        dxfData.layouts.forEach((l: any) => {
+          const lName = typeof l === 'string' ? l : l.name
+          if (lName) layoutsSet.add(lName.toLowerCase() === 'model' ? 'Modelo' : lName)
+        })
+      }
+      if (Array.isArray(dxfData?.objects?.layouts)) {
+        dxfData.objects.layouts.forEach((l: any) => {
+          const lName = typeof l === 'string' ? l : l.name
+          if (lName) layoutsSet.add(lName.toLowerCase() === 'model' ? 'Modelo' : lName)
+        })
+      }
+      if (Array.isArray(dxfData?.entities)) {
+        dxfData.entities.forEach((ent: any) => {
+          if (ent.layout && ent.layout.toLowerCase() !== 'model') {
+            layoutsSet.add(ent.layout)
+          } else if (ent.inPaperSpace || ent.paperSpace) {
+            layoutsSet.add('Layout1')
+          }
+        })
+      }
+
+      const layoutList = Array.from(layoutsSet).sort((a, b) => {
+        if (a === 'Modelo') return -1
+        if (b === 'Modelo') return 1
+        return a.localeCompare(b)
+      })
+
+      setAvailableLayouts(layoutList)
+      setActiveLayout('Modelo')
+
+      rootObj.traverse((obj: any) => {
+        const ent = obj.userData?.entity || obj.userData
+        const isPaper = ent?.inPaperSpace || ent?.paperSpace || obj.userData?.inPaperSpace || false
+        obj.userData.inPaperSpace = isPaper
+        let lName = ent?.layout
+        if (lName && lName.toLowerCase() === 'model') lName = 'Modelo'
+        obj.userData.layout = lName || (isPaper ? 'Layout1' : 'Modelo')
+      })
+    }
+
     const fontLoader = new FontLoader()
     fontLoader.load(fontUrl, (font) => {
       const loadWithDXFLoader = () => {
@@ -794,6 +924,7 @@ const DwgRenderer: React.FC<Props> = ({
             if (!root.isObject3D && !root.traverse) {
               console.error('Loaded object is not a valid Object3D', root)
             } else {
+              extractAndSetupLayouts(root, data?.dxf)
               scene.add(root)
               setEntityRoot(root)
               // Extract snap points
@@ -835,6 +966,7 @@ const DwgRenderer: React.FC<Props> = ({
             const viewer = new (mod as any).DXFViewer()
             const dxfObj = await viewer.getFromFile(file, fontUrl)
             if (dxfObj) {
+              extractAndSetupLayouts(dxfObj, viewer.lastDXF)
               scene.add(dxfObj)
               setEntityRoot(dxfObj)
               const box = new THREE.Box3().setFromObject(dxfObj)
@@ -878,6 +1010,7 @@ const DwgRenderer: React.FC<Props> = ({
             timeout
           ])
           if (dxfObj && (dxfObj as any).isObject3D) {
+            extractAndSetupLayouts(dxfObj as any, viewer.lastDXF)
             scene.add(dxfObj as any)
             setEntityRoot(dxfObj as any)
             const box = new THREE.Box3().setFromObject(dxfObj as any)
@@ -1244,7 +1377,8 @@ const DwgRenderer: React.FC<Props> = ({
           <div className={`flex flex-col gap-2 border-b ${isDarkMode ? 'border-slate-800' : 'border-slate-100'} pb-3 mb-2`}>
              <div className="flex justify-between items-center">
                 <span className="text-xs font-semibold uppercase tracking-wider">Capas ({layers.length})</span>
-                <div className="flex gap-1 bg-slate-100/10 rounded-lg p-0.5">
+                <div className="flex items-center gap-1">
+                  <div className="flex gap-1 bg-slate-100/10 rounded-lg p-0.5">
                     <button 
                       onClick={showAll}
                       className={`p-1.5 rounded-md transition-all ${isDarkMode ? 'hover:bg-slate-700 text-slate-400 hover:text-nora-400' : 'hover:bg-slate-100 text-slate-500 hover:text-nora-600'}`}
@@ -1266,7 +1400,15 @@ const DwgRenderer: React.FC<Props> = ({
                     >
                       <i className="fa-solid fa-eye-slash text-xs"></i>
                     </button>
-                 </div>
+                  </div>
+                  <button 
+                    onClick={() => setShowLayers(false)}
+                    className={`p-1 rounded-md transition-all ml-1 ${isDarkMode ? 'hover:bg-slate-700 text-slate-400 hover:text-white' : 'hover:bg-slate-200 text-slate-500 hover:text-slate-900'}`}
+                    title="Cerrar panel de capas"
+                  >
+                    <i className="fa-solid fa-xmark text-xs"></i>
+                  </button>
+                </div>
              </div>
              
              {/* Search Input */}
@@ -1563,6 +1705,39 @@ const DwgRenderer: React.FC<Props> = ({
               <span className="block text-nora-500 font-mono text-xs tracking-widest uppercase mb-1">{loadingText}</span>
               <span className="text-slate-500 text-[10px] uppercase font-bold tracking-widest">Preparando geometría...</span>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* AutoCAD-style Layouts Bottom Bar (Modelo / Layout1 / Layout2) */}
+      {availableLayouts.length > 1 && (
+        <div className={`absolute bottom-3 left-4 z-40 flex items-center rounded-lg border shadow-xl overflow-hidden backdrop-blur ${
+          isDarkMode 
+            ? 'bg-black/90 border-slate-800 text-slate-300' 
+            : 'bg-white/95 border-slate-300 text-slate-700'
+        }`}>
+          <div className="flex items-center text-[11px] font-semibold">
+            {availableLayouts.map((lName) => (
+              <button
+                key={lName}
+                onClick={() => handleLayoutChange(lName)}
+                className={`px-3 py-1.5 flex items-center gap-1.5 transition-colors border-r last:border-r-0 ${
+                  isDarkMode ? 'border-slate-800' : 'border-slate-200'
+                } ${
+                  activeLayout === lName
+                    ? isDarkMode
+                      ? 'bg-slate-800 text-nora-400 font-bold border-b-2 border-b-nora-500'
+                      : 'bg-slate-100 text-nora-600 font-bold border-b-2 border-b-nora-600'
+                    : isDarkMode
+                      ? 'hover:bg-slate-900/80 hover:text-white'
+                      : 'hover:bg-slate-50 hover:text-slate-900'
+                }`}
+                title={`Ver ${lName === 'Modelo' ? 'Espacio Modelo' : 'Presentación ' + lName}`}
+              >
+                <i className={`fa-regular ${lName === 'Modelo' ? 'fa-square' : 'fa-file-lines'} text-[10px]`}></i>
+                <span>{lName}</span>
+              </button>
+            ))}
           </div>
         </div>
       )}

@@ -37,7 +37,7 @@ const PdfRenderer: React.FC<PdfRendererProps> = ({
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const zoomPoint = useRef<{x: number, y: number, oldScale: number, scrollLeft: number, scrollTop: number} | null>(null);
+  const prevScaleRef = useRef<number>(scale);
   const [pdfDoc, setPdfDoc] = useState<any>(null);
   const [loading, setLoading] = useState(false);
   const [libReady, setLibReady] = useState(false);
@@ -162,6 +162,7 @@ const PdfRenderer: React.FC<PdfRendererProps> = ({
   useEffect(() => {
     panXRef.current = 0;
     panYRef.current = 0;
+    prevScaleRef.current = scale;
     if (canvasContainerRef.current) {
       canvasContainerRef.current.style.willChange = 'transform';
       canvasContainerRef.current.style.transition = 'none';
@@ -399,6 +400,7 @@ const PdfRenderer: React.FC<PdfRendererProps> = ({
   };
 
   const handleWheel = (e: React.WheelEvent) => {
+    e.preventDefault();
     if (!onZoom) return;
     const delta = -Math.sign(e.deltaY);
     const zoomStep = 0.1;
@@ -406,36 +408,33 @@ const PdfRenderer: React.FC<PdfRendererProps> = ({
     newScale = Math.max(0.1, Math.min(10.0, parseFloat(newScale.toFixed(2))));
     
     if (newScale === scale) return;
-
-    if (containerRef.current) {
-      const rect = containerRef.current.getBoundingClientRect();
-      zoomPoint.current = {
-        x: e.clientX - rect.left,
-        y: e.clientY - rect.top,
-        oldScale: scale,
-        scrollLeft: panXRef.current,
-        scrollTop: panYRef.current
-      };
-    }
     onZoom(newScale);
   };
 
   useEffect(() => {
-    if (zoomPoint.current && containerRef.current) {
-      const { x, y, oldScale, scrollLeft: oldScrollLeft, scrollTop: oldScrollTop } = zoomPoint.current;
+    const oldScale = prevScaleRef.current;
+    prevScaleRef.current = scale;
+
+    if (oldScale !== scale && oldScale > 0) {
       const scaleRatio = scale / oldScale;
-      
-      const newPanX = (oldScrollLeft + x) * scaleRatio - x;
-      const newPanY = (oldScrollTop + y) * scaleRatio - y;
-      
-      panXRef.current = newPanX;
-      panYRef.current = newPanY;
-      if (canvasContainerRef.current) {
+      const w = canvasRef.current ? canvasRef.current.width : 0;
+      const h = canvasRef.current ? canvasRef.current.height : 0;
+
+      if (w > 0 && h > 0) {
+        // Zoom siempre centrado hacia el centro del papel:
+        // Se preserva el punto central (panX + w/2, panY + h/2) exactamente en el mismo lugar
+        const newPanX = panXRef.current - (w * (scaleRatio - 1)) / 2;
+        const newPanY = panYRef.current - (h * (scaleRatio - 1)) / 2;
+        panXRef.current = newPanX;
+        panYRef.current = newPanY;
+        if (canvasContainerRef.current) {
+          canvasContainerRef.current.style.transformOrigin = '0 0';
+          canvasContainerRef.current.style.transform = `translate3d(${newPanX}px, ${newPanY}px, 0)`;
+        }
+      } else if (canvasContainerRef.current) {
         canvasContainerRef.current.style.transformOrigin = '0 0';
-        canvasContainerRef.current.style.transform = `translate3d(${newPanX}px, ${newPanY}px, 0)`;
+        canvasContainerRef.current.style.transform = `translate3d(${panXRef.current}px, ${panYRef.current}px, 0)`;
       }
-      
-      zoomPoint.current = null;
     } else if (canvasContainerRef.current) {
       canvasContainerRef.current.style.transformOrigin = '0 0';
       canvasContainerRef.current.style.transform = `translate3d(${panXRef.current}px, ${panYRef.current}px, 0)`;

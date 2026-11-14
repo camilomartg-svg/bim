@@ -34,24 +34,34 @@ export const useLayers = (entityRoot: THREE.Object3D | null, file: File | null) 
     }
   }, [layerVisibility, file])
 
-  const resolveLayerName = (obj: THREE.Object3D): { name: string, isColorFallback: boolean } | null => {
+  const resolveLayerName = (obj: THREE.Object3D, knownLayers?: Set<string>): { name: string, isColorFallback: boolean } | null => {
     let layerName: any = null
 
     // 1. Direct userData.layer
     if (obj.userData?.layer) layerName = obj.userData.layer
 
-    // 2. Nested in 'entity' property (dxf-parser structure)
+    // 2. Nested in 'entity' property (dxf-parser / three-dxf-viewer structure)
     if (!layerName && obj.userData?.entity?.layer) layerName = obj.userData.entity.layer
 
-    // 2b. Other common DXF keys
+    // 3. Parent's entity layer (e.g. inside a block or group)
+    if (!layerName && obj.parent?.userData?.entity?.layer) layerName = obj.parent.userData.entity.layer
+    if (!layerName && obj.parent?.userData?.layer) layerName = obj.parent.userData.layer
+
+    // 4. Other common DXF keys
     if (!layerName && (obj as any).userData?.properties?.layer) layerName = (obj as any).userData.properties.layer
     if (!layerName && (obj as any).userData?.attribs?.layer) layerName = (obj as any).userData.attribs.layer
     if (!layerName && (obj as any).userData?.dxf?.layer) layerName = (obj as any).userData.dxf.layer
 
-    // 3. Direct property on object
+    // 5. Direct property on object
     if (!layerName && (obj as any).layer) layerName = (obj as any).layer
 
-    // 4. Resolve object-style layer ( {name: 'Layer1', ...} )
+    // 6. Name of object or parent matching a known layer (three-dxf-loader creates groups named by layer)
+    if (!layerName && knownLayers) {
+      if (obj.name && knownLayers.has(obj.name)) layerName = obj.name
+      else if (obj.parent && obj.parent.name && knownLayers.has(obj.parent.name)) layerName = obj.parent.name
+    }
+
+    // 7. Resolve object-style layer ( {name: 'Layer1', ...} )
     if (typeof layerName === 'object' && layerName !== null) {
        if (layerName.name) layerName = layerName.name
        else if (layerName.toString) layerName = layerName.toString()
@@ -61,8 +71,12 @@ export const useLayers = (entityRoot: THREE.Object3D | null, file: File | null) 
         return { name: layerName, isColorFallback: false }
     }
 
-    // 5. FALLBACK: Use Color if no layer found
-    // This handles cases where layer info is missing but visual grouping is possible
+    // 8. If parent directly under root has a non-generic name (as in three-dxf-loader)
+    if (obj.parent && obj.parent.parent === null && obj.parent.name && !obj.parent.name.startsWith('Scene') && !obj.parent.name.startsWith('Group')) {
+      return { name: obj.parent.name, isColorFallback: false }
+    }
+
+    // 9. FALLBACK: Use Color if no layer found
     let colorHex: string | null = null
     if ((obj as any).material) {
         const mat = (obj as any).material
@@ -91,66 +105,54 @@ export const useLayers = (entityRoot: THREE.Object3D | null, file: File | null) 
     return null
   }
 
-  // Extract layers from entityRoot
+  // Extract layers from entityRoot and DXF tables
   useEffect(() => {
     if (entityRoot) {
       const layerMap = new Map<string, string>()
-      
-      console.log('useLayers: traversing entityRoot', entityRoot)
-      let debugCount = 0
-      
+      const knownLayers = new Set<string>()
+
+      // 1. First add all DXF table layers if available
+      const dxfLayers = entityRoot.userData?.dxfLayers || entityRoot.userData?.dxf?.tables?.layer?.layers || entityRoot.userData?.dxf?.tables?.layers
+      if (dxfLayers && typeof dxfLayers === 'object') {
+        Object.entries(dxfLayers).forEach(([k, val]: [string, any]) => {
+          const lName = val?.name || k
+          knownLayers.add(lName)
+          let color = '#ffffff'
+          if (val?.color !== undefined) {
+            color = typeof val.color === 'number'
+              ? '#' + val.color.toString(16).padStart(6, '0')
+              : String(val.color)
+          }
+          layerMap.set(lName, color)
+        })
+      }
+
+      // 2. Traverse scene objects
       entityRoot.traverse((obj) => {
-        // Resolve the layer name (either explicit or color-based)
-        const result = resolveLayerName(obj)
+        const result = resolveLayerName(obj, knownLayers)
         
-        // Store the resolved ID on the object for stability and performance
-        // This ensures that even if we change material colors later (e.g. contrast),
-        // the layer ID remains constant.
         if (result) {
-            obj.userData.layerId = result.name
+          obj.userData.layerId = result.name
+          const layerName = result.name
+          if (!layerMap.has(layerName)) {
+            let color = '#ffffff'
+            if (result.isColorFallback) {
+              const hex = layerName.replace('Color ', '')
+              if (hex.startsWith('#')) color = hex
+            } else {
+              if ((obj as any).material) {
+                const mat = (obj as any).material
+                if (Array.isArray(mat)) {
+                  if (mat[0]?.color) color = '#' + mat[0].color.getHexString()
+                } else if (mat.color) {
+                  color = '#' + mat.color.getHexString()
+                }
+              }
+            }
+            layerMap.set(layerName, color)
+          }
         } else {
-            obj.userData.layerId = null
-        }
-
-        if (debugCount < 10) {
-           console.log('useLayers: object debug', { 
-             type: obj.type, 
-             userDataKeys: obj.userData ? Object.keys(obj.userData) : [],
-             userDataEntity: obj.userData?.entity,
-             layerProp: (obj as any).layer,
-             resolved: result
-           })
-           debugCount++
-        }
-
-        if (result) {
-             const layerName = result.name
-             if (!layerMap.has(layerName)) {
-               let color = '#ffffff'
-               
-               // If it's a color fallback, use the color itself as the badge color
-               if (result.isColorFallback) {
-                   const hex = layerName.replace('Color ', '')
-                   if (hex.startsWith('#')) color = hex
-               } else {
-                   // Try to find color for standard layers
-                   // 1. From material
-                   if ((obj as any).material) {
-                     const mat = (obj as any).material
-                     if (Array.isArray(mat)) {
-                       if (mat[0]?.color) color = '#' + mat[0].color.getHexString()
-                     } else if (mat.color) {
-                       color = '#' + mat.color.getHexString()
-                     }
-                   }
-                   // 2. From DXF color index (sometimes in userData)
-                   if (color === '#ffffff' && obj.userData?.color) {
-                      // We could convert index to hex, but for now stick to white if not simple
-                   }
-               }
- 
-               layerMap.set(layerName, color)
-           }
+          obj.userData.layerId = null
         }
       })
 
@@ -162,11 +164,11 @@ export const useLayers = (entityRoot: THREE.Object3D | null, file: File | null) 
       
       // Init visibility
       setLayerVisibility(prev => {
-         const next = { ...prev }
-         sortedLayers.forEach(l => {
-            if (next[l.name] === undefined) next[l.name] = true
-         })
-         return next
+        const next = { ...prev }
+        sortedLayers.forEach(l => {
+          if (next[l.name] === undefined) next[l.name] = true
+        })
+        return next
       })
     }
   }, [entityRoot])
@@ -175,11 +177,13 @@ export const useLayers = (entityRoot: THREE.Object3D | null, file: File | null) 
   useEffect(() => {
     if (!entityRoot) return
     entityRoot.traverse((obj) => {
-       const layerName = obj.userData.layerId
-       if (layerName) {
-          const shouldBeVisible = layerVisibility[layerName] !== false
-          obj.visible = shouldBeVisible
-       }
+      if (obj.parent === entityRoot && obj.name && layerVisibility[obj.name] !== undefined) {
+        obj.visible = layerVisibility[obj.name] !== false
+      }
+      const layerName = obj.userData?.layerId
+      if (layerName && layerVisibility[layerName] !== undefined) {
+        obj.visible = layerVisibility[layerName] !== false
+      }
     })
   }, [layerVisibility, entityRoot])
 
@@ -188,11 +192,10 @@ export const useLayers = (entityRoot: THREE.Object3D | null, file: File | null) 
       const current = prev[layerName] !== false
       const nextVal = force !== undefined ? force : !current
       
-      // Validation: If turning off, check if it's the last one
       if (!nextVal) {
         const visibleCount = layers.filter(l => prev[l.name] !== false).length
         if (visibleCount <= 1 && current) {
-           return prev // Do nothing
+          return prev
         }
       }
       
@@ -210,7 +213,7 @@ export const useLayers = (entityRoot: THREE.Object3D | null, file: File | null) 
     const newVis = { ...layerVisibility }
     layers.forEach(l => newVis[l.name] = false)
     if (layers.length > 0) {
-       newVis[layers[0].name] = true
+      newVis[layers[0].name] = true
     }
     setLayerVisibility(newVis)
   }

@@ -215,10 +215,12 @@
       return false;
     }
 
-    var btn = target.closest('button, a, [role="button"]') || target;
-    var id = (btn.id || target.id || '').toLowerCase();
-    var title = (btn.getAttribute('title') || target.getAttribute('title') || '').toLowerCase();
-    var aria = (btn.getAttribute('aria-label') || target.getAttribute('aria-label') || '').toLowerCase();
+    var btn = target.closest('button, a, [role="button"]');
+    if (!btn) return false; // Solo aplica si se hace clic explícitamente dentro de un botón o enlace
+
+    var id = (btn.id || '').toLowerCase();
+    var title = (btn.getAttribute('title') || '').toLowerCase();
+    var aria = (btn.getAttribute('aria-label') || '').toLowerCase();
 
     if (id === 'back-btn' || id === 'btn-header-back' || id === 'nav-back-btn') {
       return true;
@@ -230,9 +232,13 @@
       return true;
     }
 
-    // Chequear icono de flecha atrás en botones de cabecera
+    if (btn.classList && (btn.classList.contains('back-btn') || btn.classList.contains('btn-back'))) {
+      return true;
+    }
+
+    // Chequear icono de flecha atrás estrictamente dentro del botón
     var icon = btn.querySelector('.material-symbols-outlined, .material-icons, i.fa-arrow-left, i.fa-chevron-left');
-    if (icon && (btn.id.includes('back') || (btn.classList && (btn.classList.contains('back-btn') || btn.classList.contains('sidebar-toggle-btn'))) || btn.closest('header, nav, .top-bar, .header'))) {
+    if (icon) {
       var text = (icon.textContent || '').trim().toLowerCase();
       if (text === 'arrow_back' || text === 'arrow_left' || text === 'arrow_back_ios') {
         return true;

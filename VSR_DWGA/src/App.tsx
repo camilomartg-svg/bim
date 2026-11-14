@@ -549,6 +549,15 @@ const App: React.FC = () => {
               </button>
             </div>
 
+            <button 
+              onClick={() => window.dispatchEvent(new CustomEvent('toggle-dwg-layers'))} 
+              className="px-2.5 h-8 rounded shrink-0 transition flex items-center gap-1.5 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-700"
+              title="Panel de Capas / Layers"
+            >
+              <i className="fa-solid fa-layer-group text-xs text-nora-600 dark:text-nora-400"></i>
+              <span className="text-[11px] font-semibold">Capas</span>
+            </button>
+
             <button onClick={() => setShowGrid(!showGrid)} className={`w-8 h-8 rounded shrink-0 transition ${showGrid ? 'text-nora-600 dark:text-nora-400 bg-nora-50 dark:bg-nora-500/10' : 'text-slate-400 dark:text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800'}`} title="Grid"><i className="fa-solid fa-border-none text-xs"></i></button>
 
             <button 
