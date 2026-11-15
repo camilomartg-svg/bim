@@ -377,6 +377,66 @@
     if (el.saveBtn) el.saveBtn.style.display = (canManageProjectStructure || isDeliveryLead || isObraLead) ? 'inline-flex' : 'none';
   }
 
+  // --- OBTENER CONJUNTO DE USUARIOS CON ROLES SUPERIORES (A EXCLUIR DE TAREAS) ---
+  // Excluye: Súper Admin, Admin Empresa, Admin Proyecto (A), Líder Entrega (B), Líder Obra/Receptor (D), y Líderes de Equipo (dt.leadEmail, rt.leadEmail)
+  function getExcludedHigherRoleSet() {
+    const set = new Set();
+
+    // 1. Super Administradores
+    const superAdmins = ['imagina3ddesign@gmail.com', 'mcmartinezg@unal.edu.co'];
+    superAdmins.forEach(e => set.add(e.toLowerCase().trim()));
+    if (currentUser?.role === 'SUPER_ADMIN' || currentUser?.role === 'SUPER_ADMINISTRADOR') {
+      const myEmail = (currentUser?.username || currentUser?.email || currentUser?.userAccount || '').toLowerCase().trim();
+      if (myEmail) set.add(myEmail);
+    }
+    if (Array.isArray(allDirectoryUsers)) {
+      allDirectoryUsers.forEach(u => {
+        if (u.email && (u.rol === 'SUPER_ADMINISTRADOR' || u.rol === 'SUPER_ADMIN')) {
+          set.add(u.email.toLowerCase().trim());
+        }
+      });
+    }
+
+    // 2. Administradores de Empresa
+    if (Array.isArray(currentCompany?.admins)) {
+      currentCompany.admins.forEach(a => a && set.add(a.toLowerCase().trim()));
+    }
+    if (Array.isArray(currentCompany?.members)) {
+      currentCompany.members.forEach(m => {
+        if (m.email && (m.role === 'ADMINISTRADOR_EMPRESA' || m.role === 'ADMINISTRADOR')) {
+          set.add(m.email.toLowerCase().trim());
+        }
+      });
+    }
+
+    // 3. Administradores de Proyecto (Rol A)
+    if (Array.isArray(activeProject?.iso19650?.projectAdmins)) {
+      activeProject.iso19650.projectAdmins.forEach(a => a && set.add(a.toLowerCase().trim()));
+    }
+
+    // 4. Líderes Globales (Rol B Líder Entrega, Rol D Líder Obra/Receptor)
+    if (activeProject?.iso19650?.liderEquipoEntrega) {
+      set.add(activeProject.iso19650.liderEquipoEntrega.toLowerCase().trim());
+    }
+    if (activeProject?.iso19650?.directorDeObra) {
+      set.add(activeProject.iso19650.directorDeObra.toLowerCase().trim());
+    }
+
+    // 5. Líderes de Equipo (Entrega y Receptor)
+    if (Array.isArray(activeProject?.iso19650?.deliveryTeams)) {
+      activeProject.iso19650.deliveryTeams.forEach(dt => {
+        if (dt.leadEmail) set.add(dt.leadEmail.toLowerCase().trim());
+      });
+    }
+    if (Array.isArray(activeProject?.iso19650?.receiverTeams)) {
+      activeProject.iso19650.receiverTeams.forEach(rt => {
+        if (rt.leadEmail) set.add(rt.leadEmail.toLowerCase().trim());
+      });
+    }
+
+    return set;
+  }
+
   // --- INICIALIZACIÓN DE LA ESTRUCTURA ISO 19650 ---
   function normalizeProjectIsoStructure() {
     if (!activeProject) return;
@@ -418,6 +478,26 @@
     activeProject.iso19650.receiverTeams.forEach(rt => {
       if (!Array.isArray(rt.taskTeams)) rt.taskTeams = [];
       if (!Array.isArray(rt.members)) rt.members = [];
+    });
+
+    if (!activeProject.iso19650.memberBranches || typeof activeProject.iso19650.memberBranches !== 'object') {
+      activeProject.iso19650.memberBranches = {};
+    }
+    (activeProject.iso19650.deliveryTeams || []).forEach(dt => {
+      (dt.members || []).forEach(m => {
+        const clean = (m || '').toLowerCase().trim();
+        if (clean && !activeProject.iso19650.memberBranches[clean]) {
+          activeProject.iso19650.memberBranches[clean] = 'delivery';
+        }
+      });
+    });
+    (activeProject.iso19650.receiverTeams || []).forEach(rt => {
+      (rt.members || []).forEach(m => {
+        const clean = (m || '').toLowerCase().trim();
+        if (clean && !activeProject.iso19650.memberBranches[clean]) {
+          activeProject.iso19650.memberBranches[clean] = 'receiver';
+        }
+      });
     });
 
     // Sincronizar/migrar desde activeProject.equiposDeTarea (creados en Configuración del Proyecto)
@@ -2544,7 +2624,7 @@
     if (filtered.length === 0) {
       tbody.innerHTML = `
         <tr>
-          <td colspan="4" class="py-8 px-4 text-center text-xs text-slate-400 italic">
+          <td colspan="5" class="py-8 px-4 text-center text-xs text-slate-400 italic">
             No se encontraron usuarios que coincidan con la búsqueda.
           </td>
         </tr>
@@ -2555,6 +2635,7 @@
     tbody.innerHTML = filtered.map(u => {
       const email = String(u.email).toLowerCase().trim();
       const isAssigned = assignedMembers.some(m => String(m).toLowerCase().trim() === email);
+      const branch = (activeProject.iso19650?.memberBranches?.[email]) || '';
 
       return `
         <tr class="hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors">
@@ -2565,6 +2646,19 @@
           <td class="py-3 px-4 text-xs font-mono">
             <div class="text-slate-700 dark:text-slate-300">${escapeHtml(email)}</div>
             <span class="inline-block mt-1 px-2 py-0.5 rounded-lg bg-slate-100 dark:bg-slate-800 font-sans font-semibold text-slate-600 dark:text-slate-300 text-[10px] uppercase tracking-wider">${escapeHtml(u.cargo || u.especialidad || 'Sin Cargo')}</span>
+          </td>
+          <td class="py-3 px-4">
+            <select onchange="changeMemberBranch('${email}', this.value)" ${canManageProjectStructure ? '' : 'disabled'} class="w-full max-w-[195px] rounded-xl border text-xs py-1.5 px-2.5 font-bold focus:ring-2 focus:ring-indigo-500 transition-all cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed ${
+              branch === 'delivery' 
+                ? 'bg-purple-50 text-purple-700 border-purple-200 dark:bg-purple-950/40 dark:text-purple-300 dark:border-purple-800' 
+                : branch === 'receiver' 
+                ? 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-800' 
+                : 'bg-slate-50 text-slate-500 border-slate-200 dark:bg-slate-800 dark:text-slate-400 dark:border-slate-700'
+            }">
+              <option value="" ${branch === '' ? 'selected' : ''}>-- Sin Selección --</option>
+              <option value="delivery" ${branch === 'delivery' ? 'selected' : ''}>🟣 Equipo de Entrega</option>
+              <option value="receiver" ${branch === 'receiver' ? 'selected' : ''}>🟠 Equipo Receptor</option>
+            </select>
           </td>
           <td class="py-3 px-4 text-xs text-slate-500 font-semibold uppercase tracking-wider">${escapeHtml(u.rol || 'Colaborador')}</td>
           <td class="py-3 px-4 text-center">
@@ -2584,6 +2678,67 @@
     }).join('');
   }
 
+  // Asignar rama delimitadora ISO 19650 (Equipo de Entrega vs Equipo Receptor)
+  window.changeMemberBranch = function (email, newBranch) {
+    if (!canManageProjectStructure) {
+      window.showToast('Solo administradores de proyecto o empresa pueden asignar la rama ISO 19650.', 'error');
+      return;
+    }
+    const cleanEmail = (email || '').toLowerCase().trim();
+    if (!cleanEmail || !activeProject) return;
+
+    if (!activeProject.iso19650) {
+      activeProject.iso19650 = { projectAdmins: [], deliveryTeams: [], receiverTeams: [], directorDeObra: '', liderEquipoEntrega: '', memberBranches: {} };
+    }
+    if (!activeProject.iso19650.memberBranches) {
+      activeProject.iso19650.memberBranches = {};
+    }
+
+    // Auto-agregar a activeProject.members si no está ya
+    if (!Array.isArray(activeProject.members)) activeProject.members = [];
+    if (newBranch && !activeProject.members.map(m => m.toLowerCase().trim()).includes(cleanEmail)) {
+      activeProject.members.push(cleanEmail);
+    }
+
+    activeProject.iso19650.memberBranches[cleanEmail] = newBranch;
+
+    // Si cambia de rama, desvincular de la otra rama para mantener la segregación estricta
+    if (newBranch === 'delivery') {
+      (activeProject.iso19650.receiverTeams || []).forEach(rt => {
+        rt.members = (rt.members || []).filter(m => m.toLowerCase().trim() !== cleanEmail);
+        (rt.taskTeams || []).forEach(tt => {
+          tt.members = (tt.members || []).filter(m => m.toLowerCase().trim() !== cleanEmail);
+        });
+      });
+    } else if (newBranch === 'receiver') {
+      (activeProject.iso19650.deliveryTeams || []).forEach(dt => {
+        dt.members = (dt.members || []).filter(m => m.toLowerCase().trim() !== cleanEmail);
+        (dt.taskTeams || []).forEach(tt => {
+          tt.members = (tt.members || []).filter(m => m.toLowerCase().trim() !== cleanEmail);
+        });
+      });
+    } else {
+      (activeProject.iso19650.deliveryTeams || []).forEach(dt => {
+        dt.members = (dt.members || []).filter(m => m.toLowerCase().trim() !== cleanEmail);
+        (dt.taskTeams || []).forEach(tt => {
+          tt.members = (tt.members || []).filter(m => m.toLowerCase().trim() !== cleanEmail);
+        });
+      });
+      (activeProject.iso19650.receiverTeams || []).forEach(rt => {
+        rt.members = (rt.members || []).filter(m => m.toLowerCase().trim() !== cleanEmail);
+        (rt.taskTeams || []).forEach(tt => {
+          tt.members = (tt.members || []).filter(m => m.toLowerCase().trim() !== cleanEmail);
+        });
+      });
+    }
+
+    syncBackToEquiposDeTarea();
+    renderAllViews();
+    syncTeams();
+    const branchName = newBranch === 'delivery' ? 'Equipo de Entrega (Morado)' : newBranch === 'receiver' ? 'Equipo Receptor (Naranja)' : 'Sin Asignar';
+    window.showToast(`${getUserRegisteredName(cleanEmail)} asignado a: ${branchName}`, 'success');
+  };
+
   window.toggleAuthorizedMember = function (email, assign) {
     if (!activeProject) return;
     const cleanEmail = email.toLowerCase().trim();
@@ -2596,7 +2751,10 @@
     } else {
       activeProject.members = activeProject.members.filter(m => m.toLowerCase().trim() !== cleanEmail);
 
-      // Si removemos del proyecto, también removemos de todos los equipos de tarea y entrega
+      // Si removemos del proyecto, también removemos de todos los equipos y ramas
+      if (activeProject.iso19650?.memberBranches) {
+        delete activeProject.iso19650.memberBranches[cleanEmail];
+      }
       if (Array.isArray(activeProject.equiposDeTarea)) {
         activeProject.equiposDeTarea.forEach(team => {
           if (Array.isArray(team.members)) {
@@ -2608,6 +2766,27 @@
         activeProject.iso19650.deliveryTeams.forEach(dt => {
           if (Array.isArray(dt.members)) {
             dt.members = dt.members.filter(m => m.toLowerCase().trim() !== cleanEmail);
+          }
+          if (Array.isArray(dt.taskTeams)) {
+            dt.taskTeams.forEach(tt => {
+              if (Array.isArray(tt.members)) {
+                tt.members = tt.members.filter(m => m.toLowerCase().trim() !== cleanEmail);
+              }
+            });
+          }
+        });
+      }
+      if (activeProject.iso19650 && Array.isArray(activeProject.iso19650.receiverTeams)) {
+        activeProject.iso19650.receiverTeams.forEach(rt => {
+          if (Array.isArray(rt.members)) {
+            rt.members = rt.members.filter(m => m.toLowerCase().trim() !== cleanEmail);
+          }
+          if (Array.isArray(rt.taskTeams)) {
+            rt.taskTeams.forEach(tt => {
+              if (Array.isArray(tt.members)) {
+                tt.members = tt.members.filter(m => m.toLowerCase().trim() !== cleanEmail);
+              }
+            });
           }
         });
       }
@@ -3460,14 +3639,28 @@
       }
     }
 
+    const higherRoleSet = getExcludedHigherRoleSet();
     const allMembers = Array.from(new Set([
       ...(activeProject.members || []),
-      ...(activeProject.iso19650?.projectAdmins || []),
-      ...(activeProject.iso19650?.deliveryTeams || []).flatMap(dt => [dt.leadEmail, ...(dt.members || [])]),
-      ...(activeProject.iso19650?.receiverTeams || []).flatMap(rt => [rt.leadEmail, ...(rt.members || [])])
+      ...(activeProject.iso19650?.deliveryTeams || []).flatMap(dt => dt.members || []),
+      ...(activeProject.iso19650?.receiverTeams || []).flatMap(rt => rt.members || [])
     ])).filter(Boolean).map(m => m.toLowerCase().trim());
 
-    const available = allMembers.filter(email => !existingMembers.includes(email));
+    const available = allMembers.filter(email => {
+      if (existingMembers.includes(email)) return false;
+      // Restar personas que ya tienen roles superiores asignados
+      if (higherRoleSet.has(email)) return false;
+
+      // Delimitar estrictamente según la rama configurada en Personal Proyecto
+      const branch = activeProject.iso19650?.memberBranches?.[email];
+      if (currentPickerTarget?.type === 'delivery' || currentPickerTarget?.type === 'deliveryTask') {
+        return branch === 'delivery';
+      }
+      if (currentPickerTarget?.type === 'receiver' || currentPickerTarget?.type === 'receiverTask') {
+        return branch === 'receiver';
+      }
+      return true;
+    });
 
     const listData = available.map(email => {
       const meta = getUserMetadata(email);
@@ -3488,8 +3681,8 @@
 
     if (filtered.length === 0) {
       listEl.innerHTML = `
-        <div class="py-8 text-center text-xs text-slate-400 italic bg-slate-50 dark:bg-slate-800/40 rounded-2xl border border-dashed border-slate-200 dark:border-slate-700">
-          ${query ? 'No se encontraron participantes que coincidan con la búsqueda.' : 'Todos los participantes del proyecto ya forman parte de este equipo.'}
+        <div class="py-8 text-center text-xs text-slate-400 italic bg-slate-50 dark:bg-slate-800/40 rounded-2xl border border-dashed border-slate-200 dark:border-slate-700 px-4">
+          ${query ? 'No se encontraron participantes que coincidan con la búsqueda.' : 'No hay participantes disponibles para integrar a este equipo. Asegúrate de que estén asignados a la rama correspondiente en "Personal Proyecto" y no posean roles superiores.'}
         </div>
       `;
       return;
@@ -3521,6 +3714,19 @@
   window.confirmAddPickedMember = function (email) {
     if (!currentPickerTarget || !activeProject) return;
     const clean = email.toLowerCase().trim();
+
+    const branch = activeProject.iso19650?.memberBranches?.[clean];
+    if (currentPickerTarget.type === 'delivery' || currentPickerTarget.type === 'deliveryTask') {
+      if (branch !== 'delivery') {
+        window.showToast('Este usuario no está asignado a la rama de Equipo de Entrega en Personal Proyecto.', 'error');
+        return;
+      }
+    } else if (currentPickerTarget.type === 'receiver' || currentPickerTarget.type === 'receiverTask') {
+      if (branch !== 'receiver') {
+        window.showToast('Este usuario no está asignado a la rama de Equipo Receptor en Personal Proyecto.', 'error');
+        return;
+      }
+    }
 
     if (!Array.isArray(activeProject.members)) activeProject.members = [];
     if (!activeProject.members.map(m => m.toLowerCase().trim()).includes(clean)) {
@@ -4136,6 +4342,12 @@ window.openAddMemberToReceiverTeamModal = function (receiverId) {
     });
 
     if (value && value.includes(':::')) {
+      const branch = activeProject.iso19650?.memberBranches?.[cleanEmail];
+      if (branch !== 'delivery') {
+        window.showToast('Solo personal con rama "Equipo de Entrega" puede ser asignado a esta tarea.', 'error');
+        renderTeamsTab();
+        return;
+      }
       const [delivId, taskId] = value.split(':::');
       const targetDt = deliveryTeams.find(d => d.id === delivId);
       if (targetDt) {
@@ -4272,20 +4484,27 @@ window.openAddMemberToReceiverTeamModal = function (receiverId) {
     const tbody = document.getElementById('teams-members-table-body');
     if (!tbody) return;
 
+    const higherRoleSet = getExcludedHigherRoleSet();
     const allMembersSet = new Set();
     (activeProject.members || []).forEach(m => m && allMembersSet.add(m.toLowerCase().trim()));
-    (activeProject.iso19650?.projectAdmins || []).forEach(m => m && allMembersSet.add(m.toLowerCase().trim()));
     deliveryTeams.forEach(dt => {
-      if (dt.leadEmail) allMembersSet.add(dt.leadEmail.toLowerCase().trim());
       (dt.members || []).forEach(m => m && allMembersSet.add(m.toLowerCase().trim()));
     });
 
-    const memberEmails = Array.from(allMembersSet);
+    const memberEmails = Array.from(allMembersSet).filter(email => {
+      const isHigher = higherRoleSet.has(email);
+      const isDeliveryBranch = activeProject.iso19650?.memberBranches?.[email] === 'delivery';
+      return !isHigher && isDeliveryBranch;
+    });
+
     if (memberEmails.length === 0) {
       tbody.innerHTML = `
         <tr>
           <td colspan="5" class="py-8 px-4 text-center text-xs text-slate-400 italic">
-            No hay personal asignado al proyecto. Puedes integrarlos desde la pestaña "Directorio de Participantes".
+            No hay personal disponible para Equipos de Tarea de Entrega.<br>
+            <span class="text-[11px] text-slate-500 mt-1 inline-block">
+              Para asignar personal a tareas de entrega, ve a <strong>Personal Proyecto</strong> y selecciónalos en la columna <strong>Rama / Ámbito ISO 19650</strong> como <em>Equipo de Entrega</em>. Se excluyen automáticamente los roles de liderazgo (Super Admin, Admin Empresa, Admin Proyecto, Líderes de Entrega/Receptor y Líderes de Equipo).
+            </span>
           </td>
         </tr>
       `;
@@ -4462,6 +4681,12 @@ window.openAddMemberToReceiverTeamModal = function (receiverId) {
     });
 
     if (value && value.includes(':::')) {
+      const branch = activeProject.iso19650?.memberBranches?.[cleanEmail];
+      if (branch !== 'receiver') {
+        window.showToast('Solo personal con rama "Equipo Receptor" puede ser asignado a esta tarea de obra.', 'error');
+        renderReceiverTasksTab();
+        return;
+      }
       const [recvId, taskId] = value.split(':::');
       const targetRt = receiverTeams.find(r => r.id === recvId);
       if (targetRt) {
@@ -4568,20 +4793,27 @@ window.openAddMemberToReceiverTeamModal = function (receiverId) {
     const tbody = document.getElementById('receiver-tasks-members-table-body');
     if (!tbody) return;
 
+    const higherRoleSet = getExcludedHigherRoleSet();
     const allMembersSet = new Set();
     (activeProject.members || []).forEach(m => m && allMembersSet.add(m.toLowerCase().trim()));
-    (activeProject.iso19650?.projectAdmins || []).forEach(m => m && allMembersSet.add(m.toLowerCase().trim()));
     receiverTeams.forEach(rt => {
-      if (rt.leadEmail) allMembersSet.add(rt.leadEmail.toLowerCase().trim());
       (rt.members || []).forEach(m => m && allMembersSet.add(m.toLowerCase().trim()));
     });
 
-    const memberEmails = Array.from(allMembersSet);
+    const memberEmails = Array.from(allMembersSet).filter(email => {
+      const isHigher = higherRoleSet.has(email);
+      const isReceiverBranch = activeProject.iso19650?.memberBranches?.[email] === 'receiver';
+      return !isHigher && isReceiverBranch;
+    });
+
     if (memberEmails.length === 0) {
       tbody.innerHTML = `
         <tr>
           <td colspan="5" class="py-8 px-4 text-center text-xs text-slate-400 italic">
-            No hay personal asignado al proyecto. Puedes integrarlos desde la pestaña "Directorio de Participantes".
+            No hay personal disponible para Equipos de Tarea Receptor.<br>
+            <span class="text-[11px] text-slate-500 mt-1 inline-block">
+              Para asignar personal a tareas de obra, ve a <strong>Personal Proyecto</strong> y selecciónalos en la columna <strong>Rama / Ámbito ISO 19650</strong> como <em>Equipo Receptor</em>. Se excluyen automáticamente los roles de liderazgo (Super Admin, Admin Empresa, Admin Proyecto, Líderes de Entrega/Receptor y Líderes de Equipo).
+            </span>
           </td>
         </tr>
       `;
