@@ -296,13 +296,17 @@
       : [];
     const isProjectAdmin = isCompanyAdmin || projectAdmins.includes(email);
 
-    // Is Lead in Delivery? Either activeProject.iso19650.liderEquipoEntrega OR lead of any delivery team
+    // Is Principal Lead in Delivery vs Specific Delivery Team Leader
     const deliveryLeadEmail = (activeProject?.iso19650?.liderEquipoEntrega || '').toLowerCase().trim();
-    const isDeliveryLead = (email && email === deliveryLeadEmail) || (activeProject?.iso19650?.deliveryTeams || []).some(dt => (dt.leadEmail || '').toLowerCase().trim() === email);
+    const isPrincipalDeliveryLead = (email && email === deliveryLeadEmail);
+    const myDeliveryTeams = (activeProject?.iso19650?.deliveryTeams || []).filter(dt => (dt.leadEmail || '').toLowerCase().trim() === email);
+    const isSpecificDeliveryTeamLead = myDeliveryTeams.length > 0;
 
-    // Is Lead in Obra / Receiver? Either activeProject.iso19650.directorDeObra OR lead of any receiver team
+    // Is Principal Lead in Obra / Receiver vs Specific Receiver Team Leader
     const obraDirectorEmail = (activeProject?.iso19650?.directorDeObra || '').toLowerCase().trim();
-    const isObraLead = (email && email === obraDirectorEmail) || (activeProject?.iso19650?.receiverTeams || []).some(rt => (rt.leadEmail || '').toLowerCase().trim() === email);
+    const isPrincipalObraLead = (email && email === obraDirectorEmail);
+    const myReceiverTeams = (activeProject?.iso19650?.receiverTeams || []).filter(rt => (rt.leadEmail || '').toLowerCase().trim() === email);
+    const isSpecificReceiverTeamLead = myReceiverTeams.length > 0;
 
     // Check project member
     const isMember = (activeProject?.members || []).map(m => m.toLowerCase().trim()).includes(email);
@@ -310,8 +314,10 @@
     if (isSuperAdmin) userRoleType = 'SUPER_ADMIN';
     else if (isCompanyAdmin) userRoleType = 'COMPANY_ADMIN';
     else if (isProjectAdmin) userRoleType = 'PROJECT_ADMIN';
-    else if (isDeliveryLead) userRoleType = 'DELIVERY_LEAD';
-    else if (isObraLead) userRoleType = 'OBRA_LEAD';
+    else if (isPrincipalDeliveryLead) userRoleType = 'DELIVERY_LEAD';
+    else if (isPrincipalObraLead) userRoleType = 'OBRA_LEAD';
+    else if (isSpecificDeliveryTeamLead) userRoleType = 'TEAM_LEAD_DELIVERY';
+    else if (isSpecificReceiverTeamLead) userRoleType = 'TEAM_LEAD_RECEIVER';
     else if (isMember) userRoleType = 'MEMBER';
     else userRoleType = 'VIEWER';
 
@@ -320,10 +326,14 @@
     canManageProjectAdmins = isSuperAdmin || isCompanyAdmin;
     // 2. Líderes de Entrega y Obra: Nombrados por Admin Proyecto, Empresa o Super Admin
     canManageProjectStructure = isSuperAdmin || isCompanyAdmin || isProjectAdmin;
-    // 3. Líder de Entrega: Gestiona sus equipos de entrega y de tarea
-    canManageDeliveryTeams = canManageProjectStructure || isDeliveryLead;
-    // 4. Líder de Obra: Gestiona sus equipos de entrega de obra y de tarea de obra
-    canManageReceiverTeams = canManageProjectStructure || isObraLead;
+    // 3. Crear equipos de entrega: solo Admin Proyecto hacia arriba o Líder Principal de Entrega
+    canCreateDeliveryTeams = canManageProjectStructure || isPrincipalDeliveryLead;
+    // 4. Crear equipos receptores: solo Admin Proyecto hacia arriba o Líder Principal de Obra
+    canCreateReceiverTeams = canManageProjectStructure || isPrincipalObraLead;
+
+    // Compatibility aliases
+    canManageDeliveryTeams = canCreateDeliveryTeams;
+    canManageReceiverTeams = canCreateReceiverTeams;
 
     // Update UI headers & badges
     if (el.userDisplayName) el.userDisplayName.textContent = getUserRegisteredName(email) || email || 'Invitado';
@@ -331,8 +341,10 @@
       if (isSuperAdmin) el.userDisplayRole.textContent = 'Super Administrador';
       else if (isCompanyAdmin) el.userDisplayRole.textContent = 'Admin Empresa';
       else if (isProjectAdmin) el.userDisplayRole.textContent = 'Admin Proyecto (Adjudicador A)';
-      else if (isDeliveryLead) el.userDisplayRole.textContent = 'Líder Entrega (Principal B)';
-      else if (isObraLead) el.userDisplayRole.textContent = 'Líder Obra (Receptor D)';
+      else if (isPrincipalDeliveryLead) el.userDisplayRole.textContent = 'Líder Entrega (Principal B)';
+      else if (isPrincipalObraLead) el.userDisplayRole.textContent = 'Líder Obra (Receptor D)';
+      else if (isSpecificDeliveryTeamLead) el.userDisplayRole.textContent = `Líder de Equipo (${myDeliveryTeams[0]?.name || 'Entrega'})`;
+      else if (isSpecificReceiverTeamLead) el.userDisplayRole.textContent = `Líder de Equipo (${myReceiverTeams[0]?.name || 'Receptor'})`;
       else if (isMember) el.userDisplayRole.textContent = 'Miembro Proyecto';
       else el.userDisplayRole.textContent = 'Visitante / Lector';
     }
@@ -344,11 +356,17 @@
       } else if (canManageProjectStructure) {
         el.userPermissionPill.textContent = 'ADMIN PROYECTO (ADJUDICADOR)';
         el.userPermissionPill.className = 'shrink-0 px-3 py-1 rounded-xl text-[10px] font-black uppercase tracking-widest bg-sky-500/20 text-sky-300 border border-sky-500/30';
-      } else if (isDeliveryLead) {
+      } else if (isPrincipalDeliveryLead) {
         el.userPermissionPill.textContent = 'LÍDER ENTREGA (ADJUDICATARIO)';
         el.userPermissionPill.className = 'shrink-0 px-3 py-1 rounded-xl text-[10px] font-black uppercase tracking-widest bg-indigo-500/20 text-indigo-300 border border-indigo-500/30';
-      } else if (isObraLead) {
+      } else if (isPrincipalObraLead) {
         el.userPermissionPill.textContent = 'LÍDER OBRA (RECEPTOR)';
+        el.userPermissionPill.className = 'shrink-0 px-3 py-1 rounded-xl text-[10px] font-black uppercase tracking-widest bg-amber-500/20 text-amber-300 border border-amber-500/30';
+      } else if (isSpecificDeliveryTeamLead) {
+        el.userPermissionPill.textContent = 'LÍDER EQUIPO ENTREGA';
+        el.userPermissionPill.className = 'shrink-0 px-3 py-1 rounded-xl text-[10px] font-black uppercase tracking-widest bg-purple-500/20 text-purple-300 border border-purple-500/30';
+      } else if (isSpecificReceiverTeamLead) {
+        el.userPermissionPill.textContent = 'LÍDER EQUIPO RECEPTOR';
         el.userPermissionPill.className = 'shrink-0 px-3 py-1 rounded-xl text-[10px] font-black uppercase tracking-widest bg-amber-500/20 text-amber-300 border border-amber-500/30';
       } else {
         el.userPermissionPill.textContent = 'MODO LECTURA';
@@ -364,15 +382,17 @@
     if (btnDesignateObraDirector) btnDesignateObraDirector.style.display = canManageProjectStructure ? 'inline-flex' : 'none';
 
     if (el.adminActionControls) el.adminActionControls.style.display = (canManageProjectAdmins || canManageProjectStructure) ? 'flex' : 'none';
-    if (el.deliveryActionControls) el.deliveryActionControls.style.display = canManageDeliveryTeams ? 'flex' : 'none';
-    if (el.receiverActionControls) el.receiverActionControls.style.display = canManageReceiverTeams ? 'flex' : 'none';
-    if (el.taskActionControls) el.taskActionControls.style.display = canManageDeliveryTeams ? 'flex' : 'none';
+    if (el.deliveryActionControls) el.deliveryActionControls.style.display = canCreateDeliveryTeams ? 'flex' : 'none';
+    if (el.receiverActionControls) el.receiverActionControls.style.display = canCreateReceiverTeams ? 'flex' : 'none';
+    if (el.taskActionControls) el.taskActionControls.style.display = (canCreateDeliveryTeams || isSpecificDeliveryTeamLead) ? 'flex' : 'none';
     const addTeamBtn = document.getElementById('add-team-btn');
-    if (addTeamBtn) addTeamBtn.style.display = canManageDeliveryTeams ? 'flex' : 'none';
+    if (addTeamBtn) addTeamBtn.style.display = (canCreateDeliveryTeams || isSpecificDeliveryTeamLead) ? 'flex' : 'none';
     const newTeamNameInput = document.getElementById('new-team-name');
-    if (newTeamNameInput) newTeamNameInput.style.display = canManageDeliveryTeams ? 'block' : 'none';
+    if (newTeamNameInput) newTeamNameInput.style.display = (canCreateDeliveryTeams || isSpecificDeliveryTeamLead) ? 'block' : 'none';
     const btnCreateReceiverTaskTeam = document.getElementById('btn-create-receiver-task-team');
-    if (btnCreateReceiverTaskTeam) btnCreateReceiverTaskTeam.style.display = canManageReceiverTeams ? 'flex' : 'none';
+    if (btnCreateReceiverTaskTeam) btnCreateReceiverTaskTeam.style.display = (canCreateReceiverTeams || isSpecificReceiverTeamLead) ? 'flex' : 'none';
+    if (el.addMemberBtn) el.addMemberBtn.style.display = canManageProjectStructure ? 'inline-flex' : 'none';
+    if (el.saveBtn) el.saveBtn.style.display = (canManageProjectStructure || isPrincipalDeliveryLead || isPrincipalObraLead || isSpecificDeliveryTeamLead || isSpecificReceiverTeamLead) ? 'inline-flex' : 'none';
     if (el.addMemberBtn) el.addMemberBtn.style.display = canManageProjectStructure ? 'inline-flex' : 'none';
     if (el.saveBtn) el.saveBtn.style.display = (canManageProjectStructure || isDeliveryLead || isObraLead) ? 'inline-flex' : 'none';
   }
@@ -3312,12 +3332,12 @@
               </div>
             </div>
 
-            ${(canManageReceiverTeams || isCurrentLeader) ? `
+            ${(canCreateReceiverTeams || isCurrentLeader) ? `
               <div class="flex items-center gap-2">
                 <button onclick="openEditReceiverTeamModal('${rt.id}')" class="px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors cursor-pointer">
                   Editar
                 </button>
-                ${canManageReceiverTeams ? `
+                ${canCreateReceiverTeams ? `
                   <button onclick="deleteReceiverTeam('${rt.id}')" class="px-3 py-1.5 rounded-xl border border-rose-200 dark:border-rose-800 text-xs font-bold text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950 transition-colors cursor-pointer">
                     Eliminar
                   </button>
@@ -3343,7 +3363,7 @@
               <span class="flex items-center gap-1.5 uppercase tracking-wider text-[11px] text-amber-700 dark:text-amber-300">
                 <span class="material-symbols-outlined text-[16px]">construction</span> Equipos de Tarea de Obra (${taskTeams.length})
               </span>
-              ${canManageReceiverTeams ? `
+              ${(canCreateReceiverTeams || isCurrentLeader) ? `
                 <button onclick="openCreateReceiverTaskTeamModal('${rt.id}')" class="text-[10px] font-bold text-amber-600 hover:underline flex items-center gap-1 cursor-pointer">
                   <span class="material-symbols-outlined text-[14px]">add</span> Añadir Tarea de Obra
                 </button>
@@ -3356,7 +3376,7 @@
                 ${taskTeams.map(tt => `
                   <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-xl bg-amber-100/80 dark:bg-amber-900/50 text-amber-900 dark:text-amber-200 text-xs font-bold border border-amber-200 dark:border-amber-800">
                     <span class="material-symbols-outlined text-[13px]">check_box</span> ${escapeHtml(tt.name)} (${escapeHtml(tt.discipline || 'Obra')})
-                    ${canManageReceiverTeams ? `
+                    ${(canCreateReceiverTeams || isCurrentLeader) ? `
                       <button onclick="deleteReceiverTaskTeam('${rt.id}', '${tt.id}')" class="text-amber-600 dark:text-amber-400 hover:text-rose-600 ml-1 transition-colors flex items-center cursor-pointer" title="Eliminar tarea de obra">
                         <span class="material-symbols-outlined text-[12px] font-bold">close</span>
                       </button>
@@ -3375,7 +3395,7 @@
               <span class="flex items-center gap-1.5 uppercase tracking-wider text-[11px] text-amber-700 dark:text-amber-300">
                 <span class="material-symbols-outlined text-[16px]">groups</span> Miembros del equipo receptor (${nonLeaderMembers.length})
               </span>
-              ${(canManageReceiverTeams || isCurrentLeader) ? `
+              ${(canCreateReceiverTeams || isCurrentLeader) ? `
                 <button onclick="openAddMemberToReceiverTeamModal('${rt.id}')" class="text-[10px] font-bold text-amber-600 hover:underline flex items-center gap-1 cursor-pointer">
                   <span class="material-symbols-outlined text-[14px]">person_add</span> Miembro
                 </button>
@@ -3392,8 +3412,8 @@
   }
 
   window.openCreateReceiverTeamModal = function () {
-    if (!canManageReceiverTeams) {
-      window.showToast('No tienes permisos para crear equipos receptores.', 'error');
+    if (!canCreateReceiverTeams) {
+      window.showToast('No tienes permisos para crear equipos receptores. Solo administradores de proyecto o el Líder Principal de Obra pueden crearlos.', 'error');
       return;
     }
     document.getElementById('modal-receiver-title').textContent = 'Crear Equipo Receptor / Entrega de Obra';
@@ -3416,6 +3436,32 @@
       leadSelect.innerHTML = '<option value="">-- Seleccionar Líder del Equipo Receptor --</option>' + memberOptions.join('');
     }
 
+    const membersContainer = document.getElementById('receiver-team-members-container');
+    if (membersContainer) {
+      const higherRoleSet = getExcludedHigherRoleSet();
+      const allMembers = Array.from(new Set(activeProject.members || [])).map(m => m.toLowerCase().trim());
+      const eligibleMembers = allMembers.filter(m => {
+        return activeProject.iso19650?.memberBranches?.[m] === 'receiver' && !higherRoleSet.has(m);
+      });
+
+      if (eligibleMembers.length === 0) {
+        membersContainer.innerHTML = '<div class="text-[11px] text-slate-400 italic py-2">No hay miembros disponibles con rama "Equipo Receptor". Asígnalos en "Personal Proyecto".</div>';
+      } else {
+        membersContainer.innerHTML = eligibleMembers.map(m => {
+          const name = getUserRegisteredName(m);
+          return `
+            <label class="flex items-center gap-2.5 py-1 px-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700/60 cursor-pointer text-xs">
+              <input type="checkbox" name="receiver-team-member-checkbox" value="${escapeHtml(m)}" class="rounded border-slate-300 text-amber-600 focus:ring-amber-500 h-4 w-4">
+              <div class="min-w-0">
+                <span class="font-bold text-slate-800 dark:text-slate-200">${escapeHtml(name)}</span>
+                <span class="text-slate-400 text-[10px] font-mono ml-1">(${escapeHtml(m)})</span>
+              </div>
+            </label>
+          `;
+        }).join('');
+      }
+    }
+
     window.openModal('modal-receiver-team');
   };
 
@@ -3426,7 +3472,7 @@
     const userEmail = (currentUser?.username || currentUser?.email || currentUser?.userAccount || '').toLowerCase().trim();
     const isCurrentLeader = (rt.leadEmail || '').toLowerCase().trim() === userEmail;
 
-    if (!canManageReceiverTeams && !isCurrentLeader) {
+    if (!canCreateReceiverTeams && !isCurrentLeader) {
       window.showToast('No tienes permisos para editar este equipo receptor.', 'error');
       return;
     }
@@ -3451,6 +3497,34 @@
         return `<option value="${escapeHtml(m)}" ${isSel}>${escapeHtml(name)} (${escapeHtml(m)})</option>`;
       });
       leadSelect.innerHTML = '<option value="">-- Seleccionar Líder del Equipo Receptor --</option>' + memberOptions.join('');
+    }
+
+    const membersContainer = document.getElementById('receiver-team-members-container');
+    if (membersContainer) {
+      const higherRoleSet = getExcludedHigherRoleSet();
+      const existingMembers = Array.isArray(rt.members) ? rt.members.map(m => m.toLowerCase().trim()) : [];
+      const allMembers = Array.from(new Set([...(activeProject.members || []), ...existingMembers])).map(m => m.toLowerCase().trim());
+      const eligibleMembers = allMembers.filter(m => {
+        return (activeProject.iso19650?.memberBranches?.[m] === 'receiver' || existingMembers.includes(m)) && (!higherRoleSet.has(m) || existingMembers.includes(m));
+      });
+
+      if (eligibleMembers.length === 0) {
+        membersContainer.innerHTML = '<div class="text-[11px] text-slate-400 italic py-2">No hay miembros disponibles con rama "Equipo Receptor". Asígnalos en "Personal Proyecto".</div>';
+      } else {
+        membersContainer.innerHTML = eligibleMembers.map(m => {
+          const name = getUserRegisteredName(m);
+          const isChecked = existingMembers.includes(m);
+          return `
+            <label class="flex items-center gap-2.5 py-1 px-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700/60 cursor-pointer text-xs">
+              <input type="checkbox" name="receiver-team-member-checkbox" value="${escapeHtml(m)}" ${isChecked ? 'checked' : ''} class="rounded border-slate-300 text-amber-600 focus:ring-amber-500 h-4 w-4">
+              <div class="min-w-0">
+                <span class="font-bold text-slate-800 dark:text-slate-200">${escapeHtml(name)}</span>
+                <span class="text-slate-400 text-[10px] font-mono ml-1">(${escapeHtml(m)})</span>
+              </div>
+            </label>
+          `;
+        }).join('');
+      }
     }
 
     window.openModal('modal-receiver-team');
@@ -3479,14 +3553,23 @@
     if (!activeProject.iso19650) activeProject.iso19650 = { projectAdmins: [], deliveryTeams: [], receiverTeams: [], directorDeObra: '', liderEquipoEntrega: '' };
     if (!activeProject.iso19650.receiverTeams) activeProject.iso19650.receiverTeams = [];
 
+    const checkedMembers = Array.from(document.querySelectorAll('input[name="receiver-team-member-checkbox"]:checked')).map(cb => cb.value.toLowerCase().trim());
+    const finalMembers = Array.from(new Set([leadEmail, ...checkedMembers])).filter(Boolean);
+
+    if (!Array.isArray(activeProject.members)) activeProject.members = [];
+    finalMembers.forEach(m => {
+      if (!activeProject.members.map(pm => pm.toLowerCase().trim()).includes(m)) {
+        activeProject.members.push(m);
+      }
+    });
+
     if (editId) {
       const rt = activeProject.iso19650.receiverTeams.find(d => d.id === editId);
       if (rt) {
         rt.name = name;
         rt.leadEmail = leadEmail;
         rt.description = desc;
-        if (!Array.isArray(rt.members)) rt.members = [];
-        if (leadEmail && !rt.members.includes(leadEmail)) rt.members.push(leadEmail);
+        rt.members = finalMembers;
       }
     } else {
       activeProject.iso19650.receiverTeams.push({
@@ -3494,7 +3577,7 @@
         name,
         leadEmail,
         description: desc,
-        members: [leadEmail],
+        members: finalMembers,
         taskTeams: []
       });
     }
@@ -3506,7 +3589,7 @@
   };
 
   window.deleteReceiverTeam = function (receiverId) {
-    if (!canManageReceiverTeams) {
+    if (!canCreateReceiverTeams) {
       window.showToast('No tienes permisos para eliminar equipos receptores.', 'error');
       return;
     }
@@ -3519,15 +3602,13 @@
 
   // --- EQUIPOS DE TAREA DE OBRA (RECEPTOR) ---
   window.openCreateReceiverTaskTeamModal = function (preselectedReceiverId = '') {
-    if (!canManageReceiverTeams) {
-      window.showToast('No tienes permisos para crear equipos de tarea de obra.', 'error');
-      return;
-    }
+    const userEmail = (currentUser?.username || currentUser?.email || currentUser?.userAccount || '').toLowerCase().trim();
+    const receiverTeams = (activeProject.iso19650?.receiverTeams || []).filter(r => {
+      return canCreateReceiverTeams || (r.leadEmail || '').toLowerCase().trim() === userEmail;
+    });
 
-    const receiverTeams = activeProject.iso19650?.receiverTeams || [];
     if (receiverTeams.length === 0) {
-      window.showToast('Primero debes crear al menos un Equipo Receptor / Entrega de Obra.', 'error');
-      window.switchTab('receiver');
+      window.showToast('No tienes equipos receptores disponibles para crear tareas de obra.', 'error');
       return;
     }
 
@@ -3549,11 +3630,6 @@
   };
 
   window.confirmSaveReceiverTaskTeam = function () {
-    if (!canManageReceiverTeams) {
-      window.showToast('No tienes permisos para crear equipos de tarea de obra.', 'error');
-      return;
-    }
-
     const nameInput = document.getElementById('receiver-task-name');
     const discInput = document.getElementById('receiver-task-discipline');
     const parentSelect = document.getElementById('receiver-task-parent-select');
@@ -3573,6 +3649,13 @@
       return;
     }
 
+    const userEmail = (currentUser?.username || currentUser?.email || currentUser?.userAccount || '').toLowerCase().trim();
+    const isCurrentLeader = (rt.leadEmail || '').toLowerCase().trim() === userEmail;
+    if (!canCreateReceiverTeams && !isCurrentLeader) {
+      window.showToast('Solo puedes crear tareas para tu propio equipo receptor.', 'error');
+      return;
+    }
+
     if (!Array.isArray(rt.taskTeams)) rt.taskTeams = [];
     rt.taskTeams.push({
       id: 'rtask-' + Date.now(),
@@ -3588,13 +3671,15 @@
   };
 
   window.deleteReceiverTaskTeam = function (receiverId, taskId) {
-    if (!canManageReceiverTeams) {
-      window.showToast('No tienes permisos para eliminar equipos de tarea de obra.', 'error');
-      return;
-    }
-
     const rt = (activeProject.iso19650?.receiverTeams || []).find(r => r.id === receiverId);
     if (!rt || !Array.isArray(rt.taskTeams)) return;
+
+    const userEmail = (currentUser?.username || currentUser?.email || currentUser?.userAccount || '').toLowerCase().trim();
+    const isCurrentLeader = (rt.leadEmail || '').toLowerCase().trim() === userEmail;
+    if (!canCreateReceiverTeams && !isCurrentLeader) {
+      window.showToast('No tienes permisos para eliminar tareas de este equipo.', 'error');
+      return;
+    }
 
     if (!confirm('¿Deseas eliminar este equipo de tarea de obra?')) return;
 
@@ -3608,6 +3693,14 @@
   window.setReceiverTeamLead = function (receiverId, email) {
     const rt = (activeProject.iso19650?.receiverTeams || []).find(d => d.id === receiverId);
     if (!rt) return;
+
+    const userEmail = (currentUser?.username || currentUser?.email || currentUser?.userAccount || '').toLowerCase().trim();
+    const isCurrentLeader = (rt.leadEmail || '').toLowerCase().trim() === userEmail;
+    if (!canCreateReceiverTeams && !isCurrentLeader) {
+      window.showToast('No tienes permisos para cambiar el líder de este equipo receptor.', 'error');
+      return;
+    }
+
     const cleanLead = (email || '').toLowerCase().trim();
     if (cleanLead && activeProject.iso19650?.memberBranches?.[cleanLead] !== 'receiver') {
       window.showToast('Solo miembros designados previamente en "Equipo Receptor" pueden ser líderes del equipo receptor.', 'error');
@@ -3623,6 +3716,14 @@
   window.removeReceiverTeamMember = function (receiverId, email) {
     const rt = (activeProject.iso19650?.receiverTeams || []).find(d => d.id === receiverId);
     if (!rt) return;
+
+    const userEmail = (currentUser?.username || currentUser?.email || currentUser?.userAccount || '').toLowerCase().trim();
+    const isCurrentLeader = (rt.leadEmail || '').toLowerCase().trim() === userEmail;
+    if (!canCreateReceiverTeams && !isCurrentLeader) {
+      window.showToast('No tienes permisos para remover miembros de este equipo receptor.', 'error');
+      return;
+    }
+
     const clean = email.toLowerCase().trim();
     if (rt.leadEmail && rt.leadEmail.toLowerCase().trim() === clean) {
       window.showToast('No es posible remover al líder. Primero asigna un nuevo líder.', 'error');
@@ -3835,7 +3936,7 @@
     const userEmail = (currentUser?.username || currentUser?.email || currentUser?.userAccount || '').toLowerCase().trim();
     const isCurrentLeader = (dt.leadEmail || '').toLowerCase().trim() === userEmail;
 
-    if (!canManageDeliveryTeams && !isCurrentLeader) {
+    if (!canCreateDeliveryTeams && !isCurrentLeader) {
       window.showToast('No tienes permisos para añadir miembros a esta disciplina.', 'error');
       return;
     }
@@ -3859,7 +3960,7 @@
     const userEmail = (currentUser?.username || currentUser?.email || currentUser?.userAccount || '').toLowerCase().trim();
     const isCurrentLeader = (rt.leadEmail || '').toLowerCase().trim() === userEmail;
 
-    if (!canManageReceiverTeams && !isCurrentLeader) {
+    if (!canCreateReceiverTeams && !isCurrentLeader) {
       window.showToast('No tienes permisos para añadir miembros a esta tarea de obra.', 'error');
       return;
     }
@@ -3881,7 +3982,7 @@ window.openAddMemberToReceiverTeamModal = function (receiverId) {
     const userEmail = (currentUser?.username || currentUser?.email || currentUser?.userAccount || '').toLowerCase().trim();
     const isCurrentLeader = (rt.leadEmail || '').toLowerCase().trim() === userEmail;
 
-    if (!canManageReceiverTeams && !isCurrentLeader) {
+    if (!canCreateReceiverTeams && !isCurrentLeader) {
       window.showToast('No tienes permisos para añadir miembros a este equipo receptor.', 'error');
       return;
     }
@@ -3931,7 +4032,7 @@ window.openAddMemberToReceiverTeamModal = function (receiverId) {
                 <div class="text-[10px] text-slate-400 font-mono">${escapeHtml(mEmail)} • ${escapeHtml(mMeta.company)}</div>
               </div>
             </div>
-            ${(canManageProjectStructure || isCurrentLeader) ? `
+            ${(canCreateDeliveryTeams || isCurrentLeader) ? `
               <div class="flex items-center gap-1">
                 <button onclick="setDeliveryTeamLead('${dt.id}', '${mEmail}')" class="px-2 py-1 rounded-lg text-[10px] font-bold text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950 transition-colors" title="Nombrar como Líder de Entrega (B)">
                   Nombrar Líder
@@ -3960,12 +4061,12 @@ window.openAddMemberToReceiverTeamModal = function (receiverId) {
               </div>
             </div>
 
-            ${(canManageProjectStructure || isCurrentLeader) ? `
+            ${(canCreateDeliveryTeams || isCurrentLeader) ? `
               <div class="flex items-center gap-2">
                 <button onclick="openEditDeliveryTeamModal('${dt.id}')" class="px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors">
                   Editar
                 </button>
-                ${canManageProjectStructure ? `
+                ${canCreateDeliveryTeams ? `
                   <button onclick="deleteDeliveryTeam('${dt.id}')" class="px-3 py-1.5 rounded-xl border border-rose-200 dark:border-rose-800 text-xs font-bold text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950 transition-colors">
                     Eliminar
                   </button>
@@ -3993,13 +4094,13 @@ window.openAddMemberToReceiverTeamModal = function (receiverId) {
                 <span class="material-symbols-outlined text-[16px]">task_alt</span> 3. Equipo de Tarea (Miembros C) (${nonLeaderMembers.length})
               </span>
               <div class="flex items-center gap-2">
-                ${canManageDeliveryTeams ? `
+                ${(canCreateDeliveryTeams || isCurrentLeader) ? `
                   <button onclick="openCreateTaskTeamModal('${dt.id}')" class="text-[10px] font-bold text-emerald-600 hover:underline flex items-center gap-1 cursor-pointer">
                     <span class="material-symbols-outlined text-[14px]">add</span> Añadir Disciplina
                   </button>
                   <span class="text-slate-300 dark:text-slate-600">|</span>
                 ` : ''}
-                ${(canManageDeliveryTeams || isCurrentLeader) ? `
+                ${(canCreateDeliveryTeams || isCurrentLeader) ? `
                   <button onclick="openAddMemberToDeliveryTeamModal('${dt.id}')" class="text-[10px] font-bold text-purple-600 hover:underline flex items-center gap-1 cursor-pointer">
                     <span class="material-symbols-outlined text-[14px]">person_add</span> Miembro
                   </button>
@@ -4014,7 +4115,7 @@ window.openAddMemberToReceiverTeamModal = function (receiverId) {
                 ${taskTeams.map(tt => `
                   <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-xl bg-emerald-100/80 dark:bg-emerald-950/80 text-emerald-800 dark:text-emerald-200 text-xs font-bold border border-emerald-200 dark:border-emerald-800">
                     <span class="material-symbols-outlined text-[13px]">check_box</span> ${escapeHtml(tt.name)} (${escapeHtml(tt.discipline || 'General')})
-                    ${canManageDeliveryTeams ? `
+                    ${(canCreateDeliveryTeams || isCurrentLeader) ? `
                       <button onclick="deleteTaskTeam('${dt.id}', '${tt.id}')" class="text-emerald-600 dark:text-emerald-400 hover:text-rose-600 ml-1 transition-colors flex items-center cursor-pointer" title="Eliminar disciplina">
                         <span class="material-symbols-outlined text-[12px] font-bold">close</span>
                       </button>
@@ -4036,8 +4137,8 @@ window.openAddMemberToReceiverTeamModal = function (receiverId) {
   }
 
   window.openCreateDeliveryTeamModal = function () {
-    if (!canManageDeliveryTeams) {
-      window.showToast('No tienes permisos para crear equipos de entrega.', 'error');
+    if (!canCreateDeliveryTeams) {
+      window.showToast('No tienes permisos para crear equipos de entrega. Solo administradores de proyecto o el Líder Principal de Entrega pueden crearlos.', 'error');
       return;
     }
     document.getElementById('modal-delivery-title').textContent = 'Crear Equipo de Entrega';
@@ -4059,6 +4160,32 @@ window.openAddMemberToReceiverTeamModal = function (receiverId) {
       leadSelect.innerHTML = '<option value="">-- Seleccionar Líder de Entrega (B) --</option>' + memberOptions.join('');
     }
 
+    const membersContainer = document.getElementById('delivery-team-members-container');
+    if (membersContainer) {
+      const higherRoleSet = getExcludedHigherRoleSet();
+      const allMembers = Array.from(new Set(activeProject.members || [])).map(m => m.toLowerCase().trim());
+      const eligibleMembers = allMembers.filter(m => {
+        return activeProject.iso19650?.memberBranches?.[m] === 'delivery' && !higherRoleSet.has(m);
+      });
+
+      if (eligibleMembers.length === 0) {
+        membersContainer.innerHTML = '<div class="text-[11px] text-slate-400 italic py-2">No hay miembros disponibles con rama "Equipo de Entrega". Asígnalos en "Personal Proyecto".</div>';
+      } else {
+        membersContainer.innerHTML = eligibleMembers.map(m => {
+          const name = getUserRegisteredName(m);
+          return `
+            <label class="flex items-center gap-2.5 py-1 px-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700/60 cursor-pointer text-xs">
+              <input type="checkbox" name="delivery-team-member-checkbox" value="${escapeHtml(m)}" class="rounded border-slate-300 text-purple-600 focus:ring-purple-500 h-4 w-4">
+              <div class="min-w-0">
+                <span class="font-bold text-slate-800 dark:text-slate-200">${escapeHtml(name)}</span>
+                <span class="text-slate-400 text-[10px] font-mono ml-1">(${escapeHtml(m)})</span>
+              </div>
+            </label>
+          `;
+        }).join('');
+      }
+    }
+
     window.openModal('modal-delivery-team');
   };
 
@@ -4069,7 +4196,7 @@ window.openAddMemberToReceiverTeamModal = function (receiverId) {
     const userEmail = (currentUser?.username || currentUser?.email || currentUser?.userAccount || '').toLowerCase().trim();
     const isCurrentLeader = (dt.leadEmail || '').toLowerCase().trim() === userEmail;
 
-    if (!canManageDeliveryTeams && !isCurrentLeader) {
+    if (!canCreateDeliveryTeams && !isCurrentLeader) {
       window.showToast('No tienes permisos para editar este equipo.', 'error');
       return;
     }
@@ -4095,6 +4222,34 @@ window.openAddMemberToReceiverTeamModal = function (receiverId) {
       leadSelect.innerHTML = '<option value="">-- Seleccionar Líder de Entrega (B) --</option>' + memberOptions.join('');
     }
 
+    const membersContainer = document.getElementById('delivery-team-members-container');
+    if (membersContainer) {
+      const higherRoleSet = getExcludedHigherRoleSet();
+      const existingMembers = Array.isArray(dt.members) ? dt.members.map(m => m.toLowerCase().trim()) : [];
+      const allMembers = Array.from(new Set([...(activeProject.members || []), ...existingMembers])).map(m => m.toLowerCase().trim());
+      const eligibleMembers = allMembers.filter(m => {
+        return (activeProject.iso19650?.memberBranches?.[m] === 'delivery' || existingMembers.includes(m)) && (!higherRoleSet.has(m) || existingMembers.includes(m));
+      });
+
+      if (eligibleMembers.length === 0) {
+        membersContainer.innerHTML = '<div class="text-[11px] text-slate-400 italic py-2">No hay miembros disponibles con rama "Equipo de Entrega". Asígnalos en "Personal Proyecto".</div>';
+      } else {
+        membersContainer.innerHTML = eligibleMembers.map(m => {
+          const name = getUserRegisteredName(m);
+          const isChecked = existingMembers.includes(m);
+          return `
+            <label class="flex items-center gap-2.5 py-1 px-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700/60 cursor-pointer text-xs">
+              <input type="checkbox" name="delivery-team-member-checkbox" value="${escapeHtml(m)}" ${isChecked ? 'checked' : ''} class="rounded border-slate-300 text-purple-600 focus:ring-purple-500 h-4 w-4">
+              <div class="min-w-0">
+                <span class="font-bold text-slate-800 dark:text-slate-200">${escapeHtml(name)}</span>
+                <span class="text-slate-400 text-[10px] font-mono ml-1">(${escapeHtml(m)})</span>
+              </div>
+            </label>
+          `;
+        }).join('');
+      }
+    }
+
     window.openModal('modal-delivery-team');
   };
 
@@ -4114,13 +4269,13 @@ window.openAddMemberToReceiverTeamModal = function (receiverId) {
       if (!dt) return;
       const userEmail = (currentUser?.username || currentUser?.email || currentUser?.userAccount || '').toLowerCase().trim();
       const isCurrentLeader = (dt.leadEmail || '').toLowerCase().trim() === userEmail;
-      if (!canManageDeliveryTeams && !isCurrentLeader) {
+      if (!canCreateDeliveryTeams && !isCurrentLeader) {
         window.showToast('No tienes permisos para guardar cambios en este equipo.', 'error');
         return;
       }
     } else {
-      if (!canManageDeliveryTeams) {
-        window.showToast('No tienes permisos para crear equipos de entrega.', 'error');
+      if (!canCreateDeliveryTeams) {
+        window.showToast('No tienes permisos para crear equipos de entrega. Solo administradores de proyecto o el Líder Principal de Entrega pueden crearlos.', 'error');
         return;
       }
     }
@@ -4137,15 +4292,23 @@ window.openAddMemberToReceiverTeamModal = function (receiverId) {
     if (!activeProject.iso19650) activeProject.iso19650 = { projectAdmins: [], deliveryTeams: [] };
     if (!activeProject.iso19650.deliveryTeams) activeProject.iso19650.deliveryTeams = [];
 
+    const checkedMembers = Array.from(document.querySelectorAll('input[name="delivery-team-member-checkbox"]:checked')).map(cb => cb.value.toLowerCase().trim());
+    const finalMembers = Array.from(new Set([leadEmail, ...checkedMembers])).filter(Boolean);
+
+    if (!Array.isArray(activeProject.members)) activeProject.members = [];
+    finalMembers.forEach(m => {
+      if (!activeProject.members.map(pm => pm.toLowerCase().trim()).includes(m)) {
+        activeProject.members.push(m);
+      }
+    });
+
     if (editId) {
       const dt = activeProject.iso19650.deliveryTeams.find(d => d.id === editId);
       if (dt) {
         dt.name = name;
         dt.leadEmail = leadEmail;
         dt.description = desc;
-        if (leadEmail && !dt.members.includes(leadEmail)) {
-          dt.members.push(leadEmail);
-        }
+        dt.members = finalMembers;
       }
     } else {
       const newDt = {
@@ -4153,7 +4316,7 @@ window.openAddMemberToReceiverTeamModal = function (receiverId) {
         name: name,
         leadEmail: leadEmail,
         description: desc,
-        members: leadEmail ? [leadEmail] : [],
+        members: finalMembers,
         taskTeams: []
       };
       activeProject.iso19650.deliveryTeams.push(newDt);
@@ -4166,8 +4329,8 @@ window.openAddMemberToReceiverTeamModal = function (receiverId) {
   };
 
   window.deleteDeliveryTeam = function (deliveryId) {
-    if (!canManageDeliveryTeams) {
-      window.showToast('No tienes permisos para eliminar equipos de entrega.', 'error');
+    if (!canCreateDeliveryTeams) {
+      window.showToast('No tienes permisos para eliminar equipos de entrega. Solo administradores o el Líder Principal de Entrega pueden eliminarlos.', 'error');
       return;
     }
     if (!confirm('¿Estás seguro de eliminar este Equipo de Entrega y sus configuraciones?')) return;
@@ -4197,7 +4360,7 @@ window.openAddMemberToReceiverTeamModal = function (receiverId) {
     const userEmail = (currentUser?.username || currentUser?.email || currentUser?.userAccount || '').toLowerCase().trim();
     const isCurrentLeader = (dt.leadEmail || '').toLowerCase().trim() === userEmail;
 
-    if (!canManageProjectStructure && !isCurrentLeader) {
+    if (!canCreateDeliveryTeams && !isCurrentLeader) {
       window.showToast('No tienes permisos para cambiar el líder de este equipo.', 'error');
       return;
     }
@@ -4231,7 +4394,7 @@ window.openAddMemberToReceiverTeamModal = function (receiverId) {
     const userEmail = (currentUser?.username || currentUser?.email || currentUser?.userAccount || '').toLowerCase().trim();
     const isCurrentLeader = (dt.leadEmail || '').toLowerCase().trim() === userEmail;
 
-    if (!canManageProjectStructure && !isCurrentLeader) {
+    if (!canCreateDeliveryTeams && !isCurrentLeader) {
       window.showToast('No tienes permisos para remover miembros de este equipo.', 'error');
       return;
     }
@@ -4263,7 +4426,7 @@ window.openAddMemberToReceiverTeamModal = function (receiverId) {
     const userEmail = (currentUser?.username || currentUser?.email || currentUser?.userAccount || '').toLowerCase().trim();
     const isCurrentLeader = (dt.leadEmail || '').toLowerCase().trim() === userEmail;
 
-    if (!canManageProjectStructure && !isCurrentLeader) {
+    if (!canCreateDeliveryTeams && !isCurrentLeader) {
       window.showToast('No tienes permisos para añadir miembros a este equipo de entrega.', 'error');
       return;
     }
@@ -4281,15 +4444,13 @@ window.openAddMemberToReceiverTeamModal = function (receiverId) {
 
 
   window.openCreateTaskTeamModal = function (preselectedDeliveryId = '') {
-    if (!canManageDeliveryTeams) {
-      window.showToast('No tienes permisos para crear equipos de tarea.', 'error');
-      return;
-    }
+    const userEmail = (currentUser?.username || currentUser?.email || currentUser?.userAccount || '').toLowerCase().trim();
+    const deliveryTeams = (activeProject.iso19650?.deliveryTeams || []).filter(d => {
+      return canCreateDeliveryTeams || (d.leadEmail || '').toLowerCase().trim() === userEmail;
+    });
 
-    const deliveryTeams = activeProject.iso19650?.deliveryTeams || [];
     if (deliveryTeams.length === 0) {
-      window.showToast('Primero debes crear al menos un Equipo de Entrega.', 'error');
-      window.switchTab('delivery');
+      window.showToast('No tienes equipos de entrega asignados como líder para subdividir en tareas.', 'error');
       return;
     }
 
@@ -4308,11 +4469,6 @@ window.openAddMemberToReceiverTeamModal = function (receiverId) {
   };
 
   window.confirmSaveTaskTeam = function () {
-    if (!canManageDeliveryTeams) {
-      window.showToast('No tienes permisos para crear equipos de tarea.', 'error');
-      return;
-    }
-
     const name = document.getElementById('task-team-name').value.trim();
     const deliveryId = document.getElementById('task-team-delivery-select').value;
     const discipline = document.getElementById('task-team-discipline').value.trim();
@@ -4325,6 +4481,13 @@ window.openAddMemberToReceiverTeamModal = function (receiverId) {
     const dt = (activeProject.iso19650?.deliveryTeams || []).find(d => d.id === deliveryId);
     if (!dt) {
       window.showToast('Equipo de Entrega no válido.', 'error');
+      return;
+    }
+
+    const userEmail = (currentUser?.username || currentUser?.email || currentUser?.userAccount || '').toLowerCase().trim();
+    const isCurrentLeader = (dt.leadEmail || '').toLowerCase().trim() === userEmail;
+    if (!canCreateDeliveryTeams && !isCurrentLeader) {
+      window.showToast('Solo puedes crear tareas para tu propio equipo de entrega.', 'error');
       return;
     }
 
@@ -4343,13 +4506,15 @@ window.openAddMemberToReceiverTeamModal = function (receiverId) {
   };
 
   window.deleteTaskTeam = function (deliveryId, taskId) {
-    if (!canManageDeliveryTeams) {
-      window.showToast('No tienes permisos para eliminar equipos de tarea.', 'error');
-      return;
-    }
-
     const dt = (activeProject.iso19650?.deliveryTeams || []).find(d => d.id === deliveryId);
     if (!dt) return;
+
+    const userEmail = (currentUser?.username || currentUser?.email || currentUser?.userAccount || '').toLowerCase().trim();
+    const isCurrentLeader = (dt.leadEmail || '').toLowerCase().trim() === userEmail;
+    if (!canCreateDeliveryTeams && !isCurrentLeader) {
+      window.showToast('No tienes permisos para eliminar tareas de este equipo.', 'error');
+      return;
+    }
 
     if (!confirm('¿Deseas eliminar este equipo de tarea?')) return;
 
@@ -4389,13 +4554,41 @@ window.openAddMemberToReceiverTeamModal = function (receiverId) {
   window.changeUserDeliveryTaskTeam = function (email, value) {
     if (!activeProject) return;
     const cleanEmail = email.toLowerCase().trim();
+    const userEmail = (currentUser?.username || currentUser?.email || currentUser?.userAccount || '').toLowerCase().trim();
+    const deliveryTeams = activeProject.iso19650?.deliveryTeams || [];
+
+    // Validar permisos del usuario que realiza la acción
+    if (!canCreateDeliveryTeams) {
+      // Si el usuario objetivo ya estaba en un equipo que no le pertenece a este líder, bloquear
+      for (const dt of deliveryTeams) {
+        const isMyTeam = (dt.leadEmail || '').toLowerCase().trim() === userEmail;
+        for (const tt of (dt.taskTeams || [])) {
+          if (Array.isArray(tt.members) && tt.members.some(m => m.toLowerCase().trim() === cleanEmail)) {
+            if (!isMyTeam) {
+              window.showToast('No puedes reasignar miembros de otro equipo de entrega.', 'error');
+              renderTeamsTab();
+              return;
+            }
+          }
+        }
+      }
+
+      // Si se está asignando a un equipo, verificar que sea el propio
+      if (value && value.includes(':::')) {
+        const [targetDelivId] = value.split(':::');
+        const targetDt = deliveryTeams.find(d => d.id === targetDelivId);
+        if (!targetDt || (targetDt.leadEmail || '').toLowerCase().trim() !== userEmail) {
+          window.showToast('Solo puedes asignar miembros a equipos de tarea de tu propio equipo de entrega.', 'error');
+          renderTeamsTab();
+          return;
+        }
+      }
+    }
 
     if (!Array.isArray(activeProject.members)) activeProject.members = [];
     if (!activeProject.members.map(m => m.toLowerCase().trim()).includes(cleanEmail)) {
       activeProject.members.push(cleanEmail);
     }
-
-    const deliveryTeams = activeProject.iso19650?.deliveryTeams || [];
 
     // Remover al usuario de todos los equipos de tarea de entrega
     deliveryTeams.forEach(dt => {
@@ -4445,7 +4638,11 @@ window.openAddMemberToReceiverTeamModal = function (receiverId) {
   };
 
   window.addTeam = function () {
-    if (!canManageDeliveryTeams) {
+    const userEmail = (currentUser?.username || currentUser?.email || currentUser?.userAccount || '').toLowerCase().trim();
+    const myDeliveryTeams = (activeProject.iso19650?.deliveryTeams || []).filter(d => {
+      return canCreateDeliveryTeams || (d.leadEmail || '').toLowerCase().trim() === userEmail;
+    });
+    if (myDeliveryTeams.length === 0) {
       window.showToast('No tienes permisos para crear equipos de tarea en entrega.', 'error');
       return;
     }
@@ -4455,13 +4652,7 @@ window.openAddMemberToReceiverTeamModal = function (receiverId) {
       window.showToast('Por favor escribe un nombre para el equipo de tarea.', 'error');
       return;
     }
-    const deliveryTeams = activeProject.iso19650?.deliveryTeams || [];
-    if (deliveryTeams.length === 0) {
-      window.showToast('Primero debes crear al menos un Equipo de Entrega.', 'error');
-      window.switchTab('delivery');
-      return;
-    }
-    window.openCreateTaskTeamModal();
+    window.openCreateTaskTeamModal(myDeliveryTeams[0].id);
     setTimeout(() => {
       const taskNameInput = document.getElementById('task-team-name');
       if (taskNameInput) taskNameInput.value = name;
@@ -4491,6 +4682,9 @@ window.openAddMemberToReceiverTeamModal = function (receiverId) {
       } else {
         container.innerHTML = deliveryTeams.map(dt => {
           const taskTeams = dt.taskTeams || [];
+          const userEmail = (currentUser?.username || currentUser?.email || currentUser?.userAccount || '').toLowerCase().trim();
+          const isCurrentLeader = (dt.leadEmail || '').toLowerCase().trim() === userEmail;
+          const canManageThisTeam = canCreateDeliveryTeams || isCurrentLeader;
           return `
             <div class="w-full rounded-2xl border border-slate-200/80 dark:border-slate-800 p-4 bg-slate-50/60 dark:bg-slate-900/40 space-y-3">
               <div class="flex items-center justify-between border-b border-slate-200/60 dark:border-slate-800 pb-2.5">
@@ -4503,7 +4697,7 @@ window.openAddMemberToReceiverTeamModal = function (receiverId) {
                     <span class="text-[10px] text-slate-400 ml-2">(${taskTeams.length} ${taskTeams.length === 1 ? 'subdivisión' : 'subdivisiones'})</span>
                   </div>
                 </div>
-                ${canManageDeliveryTeams ? `
+                ${canManageThisTeam ? `
                   <button onclick="openCreateTaskTeamModal('${dt.id}')" class="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] font-bold uppercase tracking-wider transition-colors cursor-pointer shadow-sm">
                     <span class="material-symbols-outlined text-[14px]">add</span>
                     <span>Subdividir en Tarea</span>
@@ -4525,7 +4719,7 @@ window.openAddMemberToReceiverTeamModal = function (receiverId) {
                           <div class="text-[9px] text-slate-400 font-medium">${escapeHtml(tt.discipline || 'General')} • ${memberCount} ${memberCount === 1 ? 'integrante' : 'integrantes'}</div>
                         </div>
                         <div class="flex items-center gap-1 ml-1.5 pl-1.5 border-l border-slate-200 dark:border-slate-700">
-                          ${canManageDeliveryTeams ? `
+                          ${canManageThisTeam ? `
                             <button onclick="openAddMemberToTaskTeamModal('${dt.id}', '${tt.id}')" class="p-1 rounded text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-950 transition-colors cursor-pointer" title="Integrar participante">
                               <span class="material-symbols-outlined text-[14px]">person_add</span>
                             </button>
@@ -4626,19 +4820,39 @@ window.openAddMemberToReceiverTeamModal = function (receiverId) {
     }
 
     const renderRow = (m) => {
+      const userEmail = (currentUser?.username || currentUser?.email || currentUser?.userAccount || '').toLowerCase().trim();
       let optgroupsHtml = '';
+      let canEditThisMember = canCreateDeliveryTeams;
+
       deliveryTeams.forEach(dt => {
+        const isCurrentLeader = (dt.leadEmail || '').toLowerCase().trim() === userEmail;
         const tasks = dt.taskTeams || [];
         if (tasks.length > 0) {
-          optgroupsHtml += `<optgroup label="EQUIPO DE ENTREGA: ${escapeHtml(dt.name)}">`;
-          tasks.forEach(tt => {
-            const val = `${dt.id}:::${tt.id}`;
-            const isSel = (val === m.assignedVal) ? 'selected' : '';
-            optgroupsHtml += `<option value="${val}" ${isSel}>${escapeHtml(tt.name)} (${escapeHtml(tt.discipline || 'General')})</option>`;
-          });
-          optgroupsHtml += `</optgroup>`;
+          if (canCreateDeliveryTeams || isCurrentLeader) {
+            optgroupsHtml += `<optgroup label="EQUIPO DE ENTREGA: ${escapeHtml(dt.name)}">`;
+            tasks.forEach(tt => {
+              const val = `${dt.id}:::${tt.id}`;
+              const isSel = (val === m.assignedVal) ? 'selected' : '';
+              optgroupsHtml += `<option value="${val}" ${isSel}>${escapeHtml(tt.name)} (${escapeHtml(tt.discipline || 'General')})</option>`;
+            });
+            optgroupsHtml += `</optgroup>`;
+          }
         }
       });
+
+      if (!canCreateDeliveryTeams) {
+        if (!m.assignedVal) {
+          canEditThisMember = true;
+        } else {
+          const [assignedDtId] = m.assignedVal.split(':::');
+          const assignedDt = deliveryTeams.find(d => d.id === assignedDtId);
+          if (assignedDt && (assignedDt.leadEmail || '').toLowerCase().trim() === userEmail) {
+            canEditThisMember = true;
+          } else {
+            canEditThisMember = false;
+          }
+        }
+      }
 
       return `
         <tr class="hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors">
@@ -4647,7 +4861,7 @@ window.openAddMemberToReceiverTeamModal = function (receiverId) {
           <td class="py-3 px-4 font-bold text-slate-900 dark:text-white">${escapeHtml(m.name)}</td>
           <td class="py-3 px-4 text-xs font-mono text-slate-500 dark:text-slate-400">${escapeHtml(m.email)}</td>
           <td class="py-3 px-4">
-            <select onchange="changeUserDeliveryTaskTeam('${m.email}', this.value)" ${canManageDeliveryTeams ? '' : 'disabled'} class="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-xs py-1.5 px-2 font-semibold text-slate-900 dark:text-white focus:ring-2 focus:ring-emerald-500 disabled:opacity-60 disabled:cursor-not-allowed">
+            <select onchange="changeUserDeliveryTaskTeam('${m.email}', this.value)" ${canEditThisMember ? '' : 'disabled'} class="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-xs py-1.5 px-2 font-semibold text-slate-900 dark:text-white focus:ring-2 focus:ring-emerald-500 disabled:opacity-60 disabled:cursor-not-allowed">
               <option value="">-- SIN EQUIPO DE TAREA --</option>
               ${optgroupsHtml}
             </select>
@@ -4728,6 +4942,36 @@ window.openAddMemberToReceiverTeamModal = function (receiverId) {
   window.changeUserReceiverTaskTeam = function (email, value) {
     if (!activeProject) return;
     const cleanEmail = email.toLowerCase().trim();
+    const userEmail = (currentUser?.username || currentUser?.email || currentUser?.userAccount || '').toLowerCase().trim();
+    const receiverTeams = activeProject.iso19650?.receiverTeams || [];
+
+    // Validar permisos del usuario que realiza la acción
+    if (!canCreateReceiverTeams) {
+      // Si el usuario objetivo ya estaba en un equipo que no le pertenece a este líder, bloquear
+      for (const rt of receiverTeams) {
+        const isMyTeam = (rt.leadEmail || '').toLowerCase().trim() === userEmail;
+        for (const tt of (rt.taskTeams || [])) {
+          if (Array.isArray(tt.members) && tt.members.some(m => m.toLowerCase().trim() === cleanEmail)) {
+            if (!isMyTeam) {
+              window.showToast('No puedes reasignar miembros de otro equipo receptor.', 'error');
+              renderReceiverTasksTab();
+              return;
+            }
+          }
+        }
+      }
+
+      // Si se está asignando a un equipo, verificar que sea el propio
+      if (value && value.includes(':::')) {
+        const [targetRecvId] = value.split(':::');
+        const targetRt = receiverTeams.find(r => r.id === targetRecvId);
+        if (!targetRt || (targetRt.leadEmail || '').toLowerCase().trim() !== userEmail) {
+          window.showToast('Solo puedes asignar miembros a tareas de obra de tu propio equipo receptor.', 'error');
+          renderReceiverTasksTab();
+          return;
+        }
+      }
+    }
 
     if (!Array.isArray(activeProject.members)) activeProject.members = [];
     if (!activeProject.members.map(m => m.toLowerCase().trim()).includes(cleanEmail)) {
@@ -4788,7 +5032,7 @@ window.openAddMemberToReceiverTeamModal = function (receiverId) {
         container.innerHTML = `
           <div class="w-full py-8 text-center text-xs text-slate-400 italic bg-white/40 dark:bg-slate-800/40 rounded-2xl border border-dashed border-slate-300 dark:border-slate-700">
             No hay Equipos Receptores creados aún. Las tareas de obra se subdividen a partir del Equipo Receptor.
-            ${canManageReceiverTeams ? `
+            ${canCreateReceiverTeams ? `
             <div class="mt-2">
               <button onclick="window.switchTab('receiver')" class="px-3 py-1.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-bold text-[11px] uppercase tracking-wider cursor-pointer">
                 Crear Equipo Receptor
@@ -4800,6 +5044,9 @@ window.openAddMemberToReceiverTeamModal = function (receiverId) {
       } else {
         container.innerHTML = receiverTeams.map(rt => {
           const taskTeams = rt.taskTeams || [];
+          const userEmail = (currentUser?.username || currentUser?.email || currentUser?.userAccount || '').toLowerCase().trim();
+          const isCurrentLeader = (rt.leadEmail || '').toLowerCase().trim() === userEmail;
+          const canManageThisTeam = canCreateReceiverTeams || isCurrentLeader;
           return `
             <div class="w-full rounded-2xl border border-slate-200/80 dark:border-slate-800 p-4 bg-slate-50/60 dark:bg-slate-900/40 space-y-3">
               <div class="flex items-center justify-between border-b border-slate-200/60 dark:border-slate-800 pb-2.5">
@@ -4812,7 +5059,7 @@ window.openAddMemberToReceiverTeamModal = function (receiverId) {
                     <span class="text-[10px] text-slate-400 ml-2">(${taskTeams.length} ${taskTeams.length === 1 ? 'tarea' : 'tareas'})</span>
                   </div>
                 </div>
-                ${canManageReceiverTeams ? `
+                ${canManageThisTeam ? `
                   <button onclick="openCreateReceiverTaskTeamModal('${rt.id}')" class="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-amber-600 hover:bg-amber-700 text-white text-[10px] font-bold uppercase tracking-wider transition-colors cursor-pointer shadow-sm">
                     <span class="material-symbols-outlined text-[14px]">add</span>
                     <span>Subdividir en Tarea de Obra</span>
@@ -4834,7 +5081,7 @@ window.openAddMemberToReceiverTeamModal = function (receiverId) {
                           <div class="text-[9px] text-slate-400 font-medium">${escapeHtml(tt.discipline || 'Obra')} • ${memberCount} ${memberCount === 1 ? 'integrante' : 'integrantes'}</div>
                         </div>
                         <div class="flex items-center gap-1 ml-1.5 pl-1.5 border-l border-slate-200 dark:border-slate-700">
-                          ${canManageReceiverTeams ? `
+                          ${canManageThisTeam ? `
                             <button onclick="openAddMemberToReceiverTaskTeamModal('${rt.id}', '${tt.id}')" class="p-1 rounded text-slate-400 hover:text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-950 transition-colors cursor-pointer" title="Integrar participante">
                               <span class="material-symbols-outlined text-[14px]">person_add</span>
                             </button>
@@ -4935,19 +5182,39 @@ window.openAddMemberToReceiverTeamModal = function (receiverId) {
     }
 
     const renderRow = (m) => {
+      const userEmail = (currentUser?.username || currentUser?.email || currentUser?.userAccount || '').toLowerCase().trim();
       let optgroupsHtml = '';
+      let canEditThisMember = canCreateReceiverTeams;
+
       receiverTeams.forEach(rt => {
+        const isCurrentLeader = (rt.leadEmail || '').toLowerCase().trim() === userEmail;
         const tasks = rt.taskTeams || [];
         if (tasks.length > 0) {
-          optgroupsHtml += `<optgroup label="EQUIPO RECEPTOR: ${escapeHtml(rt.name)}">`;
-          tasks.forEach(tt => {
-            const val = `${rt.id}:::${tt.id}`;
-            const isSel = (val === m.assignedVal) ? 'selected' : '';
-            optgroupsHtml += `<option value="${val}" ${isSel}>${escapeHtml(tt.name)} (${escapeHtml(tt.discipline || 'Obra')})</option>`;
-          });
-          optgroupsHtml += `</optgroup>`;
+          if (canCreateReceiverTeams || isCurrentLeader) {
+            optgroupsHtml += `<optgroup label="EQUIPO RECEPTOR: ${escapeHtml(rt.name)}">`;
+            tasks.forEach(tt => {
+              const val = `${rt.id}:::${tt.id}`;
+              const isSel = (val === m.assignedVal) ? 'selected' : '';
+              optgroupsHtml += `<option value="${val}" ${isSel}>${escapeHtml(tt.name)} (${escapeHtml(tt.discipline || 'Obra')})</option>`;
+            });
+            optgroupsHtml += `</optgroup>`;
+          }
         }
       });
+
+      if (!canCreateReceiverTeams) {
+        if (!m.assignedVal) {
+          canEditThisMember = true;
+        } else {
+          const [assignedRtId] = m.assignedVal.split(':::');
+          const assignedRt = receiverTeams.find(r => r.id === assignedRtId);
+          if (assignedRt && (assignedRt.leadEmail || '').toLowerCase().trim() === userEmail) {
+            canEditThisMember = true;
+          } else {
+            canEditThisMember = false;
+          }
+        }
+      }
 
       return `
         <tr class="hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors">
@@ -4956,7 +5223,7 @@ window.openAddMemberToReceiverTeamModal = function (receiverId) {
           <td class="py-3 px-4 font-bold text-slate-900 dark:text-white">${escapeHtml(m.name)}</td>
           <td class="py-3 px-4 text-xs font-mono text-slate-500 dark:text-slate-400">${escapeHtml(m.email)}</td>
           <td class="py-3 px-4">
-            <select onchange="changeUserReceiverTaskTeam('${m.email}', this.value)" ${canManageReceiverTeams ? '' : 'disabled'} class="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-xs py-1.5 px-2 font-semibold text-slate-900 dark:text-white focus:ring-2 focus:ring-amber-500 disabled:opacity-60 disabled:cursor-not-allowed">
+            <select onchange="changeUserReceiverTaskTeam('${m.email}', this.value)" ${canEditThisMember ? '' : 'disabled'} class="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-xs py-1.5 px-2 font-semibold text-slate-900 dark:text-white focus:ring-2 focus:ring-amber-500 disabled:opacity-60 disabled:cursor-not-allowed">
               <option value="">-- SIN TAREA DE OBRA / RECEPTOR --</option>
               ${optgroupsHtml}
             </select>
