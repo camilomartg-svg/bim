@@ -3103,16 +3103,18 @@
     if (!select) return;
 
     const currentLeader = (activeProject?.iso19650?.liderEquipoEntrega || '').toLowerCase().trim();
-    const eligible = getEligibleProjectLeadershipUsers();
+    const eligible = getEligibleProjectLeadershipUsers().filter(em => {
+      return activeProject.iso19650?.memberBranches?.[em] === 'delivery';
+    });
 
     if (eligible.length === 0) {
-      select.innerHTML = '<option value="">No hay usuarios disponibles en el proyecto</option>';
+      select.innerHTML = '<option value="">No hay miembros designados previamente como Equipo de Entrega</option>';
     } else {
       select.innerHTML = eligible.map(em => {
         const name = getUserRegisteredName(em);
         const isSel = em === currentLeader ? 'selected' : '';
         return `<option value="${escapeHtml(em)}" ${isSel}>${escapeHtml(name)} (${escapeHtml(em)})</option>`;
-      }).join('');
+      });
     }
 
     window.openModal('modal-delivery-leader');
@@ -3128,6 +3130,11 @@
     const email = (select?.value || '').toLowerCase().trim();
     if (!email) {
       window.showToast('Por favor selecciona un usuario.', 'error');
+      return;
+    }
+
+    if (activeProject.iso19650?.memberBranches?.[email] !== 'delivery') {
+      window.showToast('Solo miembros designados previamente en "Equipo de Entrega" pueden ser líderes de entrega.', 'error');
       return;
     }
 
@@ -3175,16 +3182,18 @@
     if (!select) return;
 
     const existing = (activeProject.iso19650?.directorDeObra || '').toLowerCase().trim();
-    const eligible = getEligibleProjectLeadershipUsers();
+    const eligible = getEligibleProjectLeadershipUsers().filter(em => {
+      return activeProject.iso19650?.memberBranches?.[em] === 'receiver';
+    });
 
     if (eligible.length === 0) {
-      select.innerHTML = '<option value="">No hay usuarios disponibles en el proyecto</option>';
+      select.innerHTML = '<option value="">No hay miembros designados previamente como Equipo Receptor</option>';
     } else {
       select.innerHTML = eligible.map(em => {
         const name = getUserRegisteredName(em);
         const isSel = em === existing ? 'selected' : '';
         return `<option value="${escapeHtml(em)}" ${isSel}>${escapeHtml(name)} (${escapeHtml(em)})</option>`;
-      }).join('');
+      });
     }
 
     window.openModal('modal-director-obra');
@@ -3200,6 +3209,11 @@
     const email = (select?.value || '').toLowerCase().trim();
     if (!email) {
       window.showToast('Por favor selecciona un usuario.', 'error');
+      return;
+    }
+
+    if (activeProject.iso19650?.memberBranches?.[email] !== 'receiver') {
+      window.showToast('Solo miembros designados previamente en "Equipo Receptor" pueden ser líderes de obra.', 'error');
       return;
     }
 
@@ -3389,11 +3403,18 @@
 
     const leadSelect = document.getElementById('receiver-team-lead-select');
     if (!leadSelect) return;
-    const memberOptions = getEligibleProjectLeadershipUsers().map(m => {
-      const name = getUserRegisteredName(m);
-      return `<option value="${escapeHtml(m)}">${escapeHtml(name)} (${escapeHtml(m)})</option>`;
+    const eligibleReceiverUsers = getEligibleProjectLeadershipUsers().filter(m => {
+      return activeProject.iso19650?.memberBranches?.[m] === 'receiver';
     });
-    leadSelect.innerHTML = '<option value="">-- Seleccionar Líder del Equipo Receptor --</option>' + memberOptions.join('');
+    if (eligibleReceiverUsers.length === 0) {
+      leadSelect.innerHTML = '<option value="">-- No hay miembros designados previamente como Equipo Receptor --</option>';
+    } else {
+      const memberOptions = eligibleReceiverUsers.map(m => {
+        const name = getUserRegisteredName(m);
+        return `<option value="${escapeHtml(m)}">${escapeHtml(name)} (${escapeHtml(m)})</option>`;
+      });
+      leadSelect.innerHTML = '<option value="">-- Seleccionar Líder del Equipo Receptor --</option>' + memberOptions.join('');
+    }
 
     window.openModal('modal-receiver-team');
   };
@@ -3417,12 +3438,20 @@
 
     const leadSelect = document.getElementById('receiver-team-lead-select');
     if (!leadSelect) return;
-    const memberOptions = getEligibleProjectLeadershipUsers().map(m => {
-      const name = getUserRegisteredName(m);
-      const isSel = (m.toLowerCase().trim() === (rt.leadEmail || '').toLowerCase().trim()) ? 'selected' : '';
-      return `<option value="${escapeHtml(m)}" ${isSel}>${escapeHtml(name)} (${escapeHtml(m)})</option>`;
+    const currentLead = (rt.leadEmail || '').toLowerCase().trim();
+    const eligibleReceiverUsers = getEligibleProjectLeadershipUsers().filter(m => {
+      return activeProject.iso19650?.memberBranches?.[m] === 'receiver' || (currentLead && m === currentLead);
     });
-    leadSelect.innerHTML = '<option value="">-- Seleccionar Líder del Equipo Receptor --</option>' + memberOptions.join('');
+    if (eligibleReceiverUsers.length === 0) {
+      leadSelect.innerHTML = '<option value="">-- No hay miembros designados previamente como Equipo Receptor --</option>';
+    } else {
+      const memberOptions = eligibleReceiverUsers.map(m => {
+        const name = getUserRegisteredName(m);
+        const isSel = (m.toLowerCase().trim() === currentLead) ? 'selected' : '';
+        return `<option value="${escapeHtml(m)}" ${isSel}>${escapeHtml(name)} (${escapeHtml(m)})</option>`;
+      });
+      leadSelect.innerHTML = '<option value="">-- Seleccionar Líder del Equipo Receptor --</option>' + memberOptions.join('');
+    }
 
     window.openModal('modal-receiver-team');
   };
@@ -3432,6 +3461,11 @@
     const name = document.getElementById('receiver-team-name').value.trim();
     const leadEmail = document.getElementById('receiver-team-lead-select').value.toLowerCase().trim();
     const desc = document.getElementById('receiver-team-desc').value.trim();
+
+    if (leadEmail && activeProject.iso19650?.memberBranches?.[leadEmail] !== 'receiver') {
+      window.showToast('Solo miembros designados previamente en "Equipo Receptor" pueden ser líderes del equipo receptor.', 'error');
+      return;
+    }
 
     if (!name) {
       window.showToast('Por favor escribe un nombre para el equipo receptor.', 'error');
@@ -3574,7 +3608,12 @@
   window.setReceiverTeamLead = function (receiverId, email) {
     const rt = (activeProject.iso19650?.receiverTeams || []).find(d => d.id === receiverId);
     if (!rt) return;
-    rt.leadEmail = email.toLowerCase().trim();
+    const cleanLead = (email || '').toLowerCase().trim();
+    if (cleanLead && activeProject.iso19650?.memberBranches?.[cleanLead] !== 'receiver') {
+      window.showToast('Solo miembros designados previamente en "Equipo Receptor" pueden ser líderes del equipo receptor.', 'error');
+      return;
+    }
+    rt.leadEmail = cleanLead;
     if (!rt.members.includes(rt.leadEmail)) rt.members.push(rt.leadEmail);
     renderAllViews();
     syncTeams();
@@ -4007,11 +4046,18 @@ window.openAddMemberToReceiverTeamModal = function (receiverId) {
     document.getElementById('delivery-team-desc').value = '';
 
     const leadSelect = document.getElementById('delivery-team-lead-select');
-    const memberOptions = getEligibleProjectLeadershipUsers().map(m => {
-      const name = getUserRegisteredName(m);
-      return `<option value="${escapeHtml(m)}">${escapeHtml(name)} (${escapeHtml(m)})</option>`;
+    const eligibleDeliveryUsers = getEligibleProjectLeadershipUsers().filter(m => {
+      return activeProject.iso19650?.memberBranches?.[m] === 'delivery';
     });
-    leadSelect.innerHTML = '<option value="">-- Seleccionar Líder de Entrega (B) --</option>' + memberOptions.join('');
+    if (eligibleDeliveryUsers.length === 0) {
+      leadSelect.innerHTML = '<option value="">-- No hay miembros designados previamente como Equipo de Entrega --</option>';
+    } else {
+      const memberOptions = eligibleDeliveryUsers.map(m => {
+        const name = getUserRegisteredName(m);
+        return `<option value="${escapeHtml(m)}">${escapeHtml(name)} (${escapeHtml(m)})</option>`;
+      });
+      leadSelect.innerHTML = '<option value="">-- Seleccionar Líder de Entrega (B) --</option>' + memberOptions.join('');
+    }
 
     window.openModal('modal-delivery-team');
   };
@@ -4034,12 +4080,20 @@ window.openAddMemberToReceiverTeamModal = function (receiverId) {
     document.getElementById('delivery-team-desc').value = dt.description || '';
 
     const leadSelect = document.getElementById('delivery-team-lead-select');
-    const memberOptions = getEligibleProjectLeadershipUsers().map(m => {
-      const name = getUserRegisteredName(m);
-      const isSel = (m.toLowerCase().trim() === (dt.leadEmail || '').toLowerCase().trim()) ? 'selected' : '';
-      return `<option value="${escapeHtml(m)}" ${isSel}>${escapeHtml(name)} (${escapeHtml(m)})</option>`;
+    const currentLead = (dt.leadEmail || '').toLowerCase().trim();
+    const eligibleDeliveryUsers = getEligibleProjectLeadershipUsers().filter(m => {
+      return activeProject.iso19650?.memberBranches?.[m] === 'delivery' || (currentLead && m === currentLead);
     });
-    leadSelect.innerHTML = '<option value="">-- Seleccionar Líder de Entrega (B) --</option>' + memberOptions.join('');
+    if (eligibleDeliveryUsers.length === 0) {
+      leadSelect.innerHTML = '<option value="">-- No hay miembros designados previamente como Equipo de Entrega --</option>';
+    } else {
+      const memberOptions = eligibleDeliveryUsers.map(m => {
+        const name = getUserRegisteredName(m);
+        const isSel = (m.toLowerCase().trim() === currentLead) ? 'selected' : '';
+        return `<option value="${escapeHtml(m)}" ${isSel}>${escapeHtml(name)} (${escapeHtml(m)})</option>`;
+      });
+      leadSelect.innerHTML = '<option value="">-- Seleccionar Líder de Entrega (B) --</option>' + memberOptions.join('');
+    }
 
     window.openModal('modal-delivery-team');
   };
@@ -4049,6 +4103,11 @@ window.openAddMemberToReceiverTeamModal = function (receiverId) {
     const name = document.getElementById('delivery-team-name').value.trim();
     const leadEmail = document.getElementById('delivery-team-lead-select').value.toLowerCase().trim();
     const desc = document.getElementById('delivery-team-desc').value.trim();
+
+    if (leadEmail && activeProject.iso19650?.memberBranches?.[leadEmail] !== 'delivery') {
+      window.showToast('Solo miembros designados previamente en "Equipo de Entrega" pueden ser líderes de entrega.', 'error');
+      return;
+    }
 
     if (editId) {
       const dt = activeProject.iso19650.deliveryTeams.find(d => d.id === editId);
@@ -4145,6 +4204,12 @@ window.openAddMemberToReceiverTeamModal = function (receiverId) {
 
     if (!email) {
       window.showToast('Debe asignarse un Líder de Entrega (B).', 'error');
+      return;
+    }
+
+    const cleanLead = email.toLowerCase().trim();
+    if (activeProject.iso19650?.memberBranches?.[cleanLead] !== 'delivery') {
+      window.showToast('Solo miembros designados previamente en "Equipo de Entrega" pueden ser líderes de entrega.', 'error');
       return;
     }
 
