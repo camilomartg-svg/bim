@@ -4978,8 +4978,6 @@ window.openAddMemberToReceiverTeamModal = function (receiverId) {
       activeProject.members.push(cleanEmail);
     }
 
-    const receiverTeams = activeProject.iso19650?.receiverTeams || [];
-
     // Remover al usuario de todos los equipos de tarea de receptor
     receiverTeams.forEach(rt => {
       (rt.taskTeams || []).forEach(tt => {
