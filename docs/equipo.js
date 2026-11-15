@@ -224,12 +224,33 @@
   // --- NAVEGACIÓN ENTRE TABS ---
   window.switchTab = function (targetTab) {
     document.querySelectorAll('.tab-btn').forEach(btn => {
-      if (btn.getAttribute('data-tab') === targetTab) {
-        btn.classList.add('active', 'bg-slate-900', 'text-white', 'dark:bg-white', 'dark:text-slate-900', 'shadow-sm');
-        btn.classList.remove('text-slate-600', 'dark:text-slate-400', 'hover:bg-slate-100', 'dark:hover:bg-slate-800');
+      const tabId = btn.getAttribute('data-tab');
+      const isDelivery = (tabId === 'delivery' || tabId === 'tasks');
+      const isReceiver = (tabId === 'receiver' || tabId === 'receiver-tasks');
+
+      btn.classList.remove(
+        'active', 'bg-slate-900', 'text-white', 'dark:bg-white', 'dark:text-slate-900', 'shadow-sm',
+        'bg-purple-600', 'hover:bg-purple-700', 'ring-1', 'ring-purple-500',
+        'bg-amber-600', 'hover:bg-amber-700', 'ring-1', 'ring-amber-500'
+      );
+
+      if (tabId === targetTab) {
+        btn.classList.add('active', 'text-white', 'shadow-sm');
+        if (isDelivery) {
+          btn.classList.add('bg-purple-600', 'hover:bg-purple-700', 'ring-1', 'ring-purple-500');
+        } else if (isReceiver) {
+          btn.classList.add('bg-amber-600', 'hover:bg-amber-700', 'ring-1', 'ring-amber-500');
+        } else {
+          btn.classList.add('bg-slate-900', 'dark:bg-white', 'dark:text-slate-900');
+        }
       } else {
-        btn.classList.remove('active', 'bg-slate-900', 'text-white', 'dark:bg-white', 'dark:text-slate-900', 'shadow-sm');
-        btn.classList.add('text-slate-600', 'dark:text-slate-400', 'hover:bg-slate-100', 'dark:hover:bg-slate-800');
+        if (isDelivery) {
+          btn.className = 'tab-btn inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold uppercase tracking-wider transition-all text-purple-700 dark:text-purple-300 bg-purple-50/60 dark:bg-purple-950/30 hover:bg-purple-100 dark:hover:bg-purple-900/50 border border-purple-200 dark:border-purple-800 whitespace-nowrap';
+        } else if (isReceiver) {
+          btn.className = 'tab-btn inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold uppercase tracking-wider transition-all text-amber-700 dark:text-amber-300 bg-amber-50/60 dark:bg-amber-950/30 hover:bg-amber-100 dark:hover:bg-amber-900/50 border border-amber-200 dark:border-amber-800 whitespace-nowrap';
+        } else {
+          btn.className = 'tab-btn inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold uppercase tracking-wider transition-all text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 whitespace-nowrap';
+        }
       }
     });
 
@@ -348,6 +369,10 @@
     if (el.taskActionControls) el.taskActionControls.style.display = canManageDeliveryTeams ? 'flex' : 'none';
     const addTeamBtn = document.getElementById('add-team-btn');
     if (addTeamBtn) addTeamBtn.style.display = canManageDeliveryTeams ? 'flex' : 'none';
+    const newTeamNameInput = document.getElementById('new-team-name');
+    if (newTeamNameInput) newTeamNameInput.style.display = canManageDeliveryTeams ? 'block' : 'none';
+    const btnCreateReceiverTaskTeam = document.getElementById('btn-create-receiver-task-team');
+    if (btnCreateReceiverTaskTeam) btnCreateReceiverTaskTeam.style.display = canManageReceiverTeams ? 'flex' : 'none';
     if (el.addMemberBtn) el.addMemberBtn.style.display = canManageProjectStructure ? 'inline-flex' : 'none';
     if (el.saveBtn) el.saveBtn.style.display = (canManageProjectStructure || isDeliveryLead || isObraLead) ? 'inline-flex' : 'none';
   }
@@ -4142,6 +4167,30 @@ window.openAddMemberToReceiverTeamModal = function (receiverId) {
     window.changeUserDeliveryTaskTeam(email, value);
   };
 
+  window.addTeam = function () {
+    if (!canManageDeliveryTeams) {
+      window.showToast('No tienes permisos para crear equipos de tarea en entrega.', 'error');
+      return;
+    }
+    const input = document.getElementById('new-team-name');
+    const name = (input?.value || '').trim();
+    if (!name) {
+      window.showToast('Por favor escribe un nombre para el equipo de tarea.', 'error');
+      return;
+    }
+    const deliveryTeams = activeProject.iso19650?.deliveryTeams || [];
+    if (deliveryTeams.length === 0) {
+      window.showToast('Primero debes crear al menos un Equipo de Entrega.', 'error');
+      window.switchTab('delivery');
+      return;
+    }
+    window.openCreateTaskTeamModal();
+    setTimeout(() => {
+      const taskNameInput = document.getElementById('task-team-name');
+      if (taskNameInput) taskNameInput.value = name;
+    }, 100);
+  };
+
   function renderTeamsTab() {
     if (!activeProject) return;
     const deliveryTeams = activeProject.iso19650?.deliveryTeams || [];
@@ -4153,11 +4202,13 @@ window.openAddMemberToReceiverTeamModal = function (receiverId) {
         container.innerHTML = `
           <div class="w-full py-8 text-center text-xs text-slate-400 italic bg-white/40 dark:bg-slate-800/40 rounded-2xl border border-dashed border-slate-300 dark:border-slate-700">
             No hay Equipos de Entrega creados aún. Los Equipos de Tarea se subdividen a partir de los Equipos de Entrega.
+            ${canManageDeliveryTeams ? `
             <div class="mt-2">
               <button onclick="window.switchTab('delivery')" class="px-3 py-1.5 rounded-xl bg-purple-600 hover:bg-purple-700 text-white font-bold text-[11px] uppercase tracking-wider cursor-pointer">
                 Crear Equipo de Entrega
               </button>
             </div>
+            ` : ''}
           </div>
         `;
       } else {
@@ -4447,11 +4498,13 @@ window.openAddMemberToReceiverTeamModal = function (receiverId) {
         container.innerHTML = `
           <div class="w-full py-8 text-center text-xs text-slate-400 italic bg-white/40 dark:bg-slate-800/40 rounded-2xl border border-dashed border-slate-300 dark:border-slate-700">
             No hay Equipos Receptores creados aún. Las tareas de obra se subdividen a partir del Equipo Receptor.
+            ${canManageReceiverTeams ? `
             <div class="mt-2">
               <button onclick="window.switchTab('receiver')" class="px-3 py-1.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-bold text-[11px] uppercase tracking-wider cursor-pointer">
                 Crear Equipo Receptor
               </button>
             </div>
+            ` : ''}
           </div>
         `;
       } else {
