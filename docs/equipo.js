@@ -17,6 +17,8 @@
   let userRoleType = 'VIEWER'; // 'SUPER_ADMIN' | 'COMPANY_ADMIN' | 'PROJECT_ADMIN' | 'DELIVERY_LEAD' | 'MEMBER' | 'VIEWER'
   let canManageProjectAdmins = false;
   let canManageProjectStructure = false;
+  let canCreateDeliveryTeams = false;
+  let canCreateReceiverTeams = false;
   let canManageDeliveryTeams = false;
   let canManageReceiverTeams = false;
 
@@ -393,8 +395,6 @@
     if (btnCreateReceiverTaskTeam) btnCreateReceiverTaskTeam.style.display = (canCreateReceiverTeams || isSpecificReceiverTeamLead) ? 'flex' : 'none';
     if (el.addMemberBtn) el.addMemberBtn.style.display = canManageProjectStructure ? 'inline-flex' : 'none';
     if (el.saveBtn) el.saveBtn.style.display = (canManageProjectStructure || isPrincipalDeliveryLead || isPrincipalObraLead || isSpecificDeliveryTeamLead || isSpecificReceiverTeamLead) ? 'inline-flex' : 'none';
-    if (el.addMemberBtn) el.addMemberBtn.style.display = canManageProjectStructure ? 'inline-flex' : 'none';
-    if (el.saveBtn) el.saveBtn.style.display = (canManageProjectStructure || isDeliveryLead || isObraLead) ? 'inline-flex' : 'none';
   }
 
   // --- OBTENER CONJUNTO DE USUARIOS CON ROLES SUPERIORES (A EXCLUIR DE TAREAS) ---
