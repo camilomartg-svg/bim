@@ -3421,13 +3421,20 @@
     document.getElementById('receiver-team-name').value = '';
     document.getElementById('receiver-team-desc').value = '';
 
+    const allReceiverTeams = activeProject.iso19650?.receiverTeams || [];
+    const membersInAnyReceiverTeam = new Set();
+    allReceiverTeams.forEach(r => {
+      if (r.leadEmail) membersInAnyReceiverTeam.add(r.leadEmail.toLowerCase().trim());
+      (r.members || []).forEach(m => membersInAnyReceiverTeam.add(m.toLowerCase().trim()));
+    });
+
     const leadSelect = document.getElementById('receiver-team-lead-select');
     if (!leadSelect) return;
     const eligibleReceiverUsers = getEligibleProjectLeadershipUsers().filter(m => {
-      return activeProject.iso19650?.memberBranches?.[m] === 'receiver';
+      return activeProject.iso19650?.memberBranches?.[m] === 'receiver' && !membersInAnyReceiverTeam.has(m);
     });
     if (eligibleReceiverUsers.length === 0) {
-      leadSelect.innerHTML = '<option value="">-- No hay miembros designados previamente como Equipo Receptor --</option>';
+      leadSelect.innerHTML = '<option value="">-- No hay miembros disponibles para liderar este equipo --</option>';
     } else {
       const memberOptions = eligibleReceiverUsers.map(m => {
         const name = getUserRegisteredName(m);
@@ -3441,7 +3448,7 @@
       const higherRoleSet = getExcludedHigherRoleSet();
       const allMembers = Array.from(new Set(activeProject.members || [])).map(m => m.toLowerCase().trim());
       const eligibleMembers = allMembers.filter(m => {
-        return activeProject.iso19650?.memberBranches?.[m] === 'receiver' && !higherRoleSet.has(m);
+        return activeProject.iso19650?.memberBranches?.[m] === 'receiver' && !higherRoleSet.has(m) && !membersInAnyReceiverTeam.has(m);
       });
 
       if (eligibleMembers.length === 0) {
@@ -3482,14 +3489,23 @@
     document.getElementById('receiver-team-name').value = rt.name || '';
     document.getElementById('receiver-team-desc').value = rt.description || '';
 
+    // Miembros en otros equipos receptores (excluir del equipo actual)
+    const otherReceiverTeams = (activeProject.iso19650?.receiverTeams || []).filter(r => r.id !== receiverId);
+    const membersInOtherReceiverTeams = new Set();
+    otherReceiverTeams.forEach(r => {
+      if (r.leadEmail) membersInOtherReceiverTeams.add(r.leadEmail.toLowerCase().trim());
+      (r.members || []).forEach(m => membersInOtherReceiverTeams.add(m.toLowerCase().trim()));
+    });
+
     const leadSelect = document.getElementById('receiver-team-lead-select');
     if (!leadSelect) return;
     const currentLead = (rt.leadEmail || '').toLowerCase().trim();
     const eligibleReceiverUsers = getEligibleProjectLeadershipUsers().filter(m => {
+      if (membersInOtherReceiverTeams.has(m)) return false;
       return activeProject.iso19650?.memberBranches?.[m] === 'receiver' || (currentLead && m === currentLead);
     });
     if (eligibleReceiverUsers.length === 0) {
-      leadSelect.innerHTML = '<option value="">-- No hay miembros designados previamente como Equipo Receptor --</option>';
+      leadSelect.innerHTML = '<option value="">-- No hay miembros disponibles para liderar este equipo --</option>';
     } else {
       const memberOptions = eligibleReceiverUsers.map(m => {
         const name = getUserRegisteredName(m);
@@ -3505,6 +3521,7 @@
       const existingMembers = Array.isArray(rt.members) ? rt.members.map(m => m.toLowerCase().trim()) : [];
       const allMembers = Array.from(new Set([...(activeProject.members || []), ...existingMembers])).map(m => m.toLowerCase().trim());
       const eligibleMembers = allMembers.filter(m => {
+        if (membersInOtherReceiverTeams.has(m)) return false;
         return (activeProject.iso19650?.memberBranches?.[m] === 'receiver' || existingMembers.includes(m)) && (!higherRoleSet.has(m) || existingMembers.includes(m));
       });
 
@@ -3794,10 +3811,40 @@
       // Delimitar estrictamente según la rama configurada en Personal Proyecto
       const branch = activeProject.iso19650?.memberBranches?.[email];
       if (currentPickerTarget?.type === 'delivery' || currentPickerTarget?.type === 'deliveryTask') {
-        return branch === 'delivery';
+        if (branch !== 'delivery') return false;
+        if (currentPickerTarget?.type === 'delivery') {
+          // No permitir agregar a un miembro que ya está en otro equipo de entrega
+          const otherDeliveryTeams = (activeProject.iso19650?.deliveryTeams || []).filter(d => d.id !== currentPickerTarget.parentId);
+          const inOtherDeliveryTeam = otherDeliveryTeams.some(d => {
+            const isLead = (d.leadEmail || '').toLowerCase().trim() === email;
+            const isMem = (d.members || []).some(m => m.toLowerCase().trim() === email);
+            return isLead || isMem;
+          });
+          if (inOtherDeliveryTeam) return false;
+        } else if (currentPickerTarget?.type === 'deliveryTask') {
+          // Para equipos de tarea, el miembro debe pertenecer al equipo de entrega padre
+          const parentDt = (activeProject.iso19650?.deliveryTeams || []).find(d => d.id === currentPickerTarget.parentId);
+          const isParentMember = (parentDt?.members || []).map(m => m.toLowerCase().trim()).includes(email);
+          if (!isParentMember) return false;
+        }
       }
       if (currentPickerTarget?.type === 'receiver' || currentPickerTarget?.type === 'receiverTask') {
-        return branch === 'receiver';
+        if (branch !== 'receiver') return false;
+        if (currentPickerTarget?.type === 'receiver') {
+          // No permitir agregar a un miembro que ya está en otro equipo receptor
+          const otherReceiverTeams = (activeProject.iso19650?.receiverTeams || []).filter(r => r.id !== currentPickerTarget.parentId);
+          const inOtherReceiverTeam = otherReceiverTeams.some(r => {
+            const isLead = (r.leadEmail || '').toLowerCase().trim() === email;
+            const isMem = (r.members || []).some(m => m.toLowerCase().trim() === email);
+            return isLead || isMem;
+          });
+          if (inOtherReceiverTeam) return false;
+        } else if (currentPickerTarget?.type === 'receiverTask') {
+          // Para equipos de tarea de obra, el miembro debe pertenecer al equipo receptor padre
+          const parentRt = (activeProject.iso19650?.receiverTeams || []).find(r => r.id === currentPickerTarget.parentId);
+          const isParentMember = (parentRt?.members || []).map(m => m.toLowerCase().trim()).includes(email);
+          if (!isParentMember) return false;
+        }
       }
       return true;
     });
@@ -4146,12 +4193,19 @@ window.openAddMemberToReceiverTeamModal = function (receiverId) {
     document.getElementById('delivery-team-name').value = '';
     document.getElementById('delivery-team-desc').value = '';
 
+    const allDeliveryTeams = activeProject.iso19650?.deliveryTeams || [];
+    const membersInAnyDeliveryTeam = new Set();
+    allDeliveryTeams.forEach(d => {
+      if (d.leadEmail) membersInAnyDeliveryTeam.add(d.leadEmail.toLowerCase().trim());
+      (d.members || []).forEach(m => membersInAnyDeliveryTeam.add(m.toLowerCase().trim()));
+    });
+
     const leadSelect = document.getElementById('delivery-team-lead-select');
     const eligibleDeliveryUsers = getEligibleProjectLeadershipUsers().filter(m => {
-      return activeProject.iso19650?.memberBranches?.[m] === 'delivery';
+      return activeProject.iso19650?.memberBranches?.[m] === 'delivery' && !membersInAnyDeliveryTeam.has(m);
     });
     if (eligibleDeliveryUsers.length === 0) {
-      leadSelect.innerHTML = '<option value="">-- No hay miembros designados previamente como Equipo de Entrega --</option>';
+      leadSelect.innerHTML = '<option value="">-- No hay miembros disponibles para liderar este equipo --</option>';
     } else {
       const memberOptions = eligibleDeliveryUsers.map(m => {
         const name = getUserRegisteredName(m);
@@ -4165,7 +4219,7 @@ window.openAddMemberToReceiverTeamModal = function (receiverId) {
       const higherRoleSet = getExcludedHigherRoleSet();
       const allMembers = Array.from(new Set(activeProject.members || [])).map(m => m.toLowerCase().trim());
       const eligibleMembers = allMembers.filter(m => {
-        return activeProject.iso19650?.memberBranches?.[m] === 'delivery' && !higherRoleSet.has(m);
+        return activeProject.iso19650?.memberBranches?.[m] === 'delivery' && !higherRoleSet.has(m) && !membersInAnyDeliveryTeam.has(m);
       });
 
       if (eligibleMembers.length === 0) {
@@ -4206,13 +4260,22 @@ window.openAddMemberToReceiverTeamModal = function (receiverId) {
     document.getElementById('delivery-team-name').value = dt.name || '';
     document.getElementById('delivery-team-desc').value = dt.description || '';
 
+    // Miembros en otros equipos de entrega (excluir del equipo actual)
+    const otherDeliveryTeams = (activeProject.iso19650?.deliveryTeams || []).filter(d => d.id !== deliveryId);
+    const membersInOtherDeliveryTeams = new Set();
+    otherDeliveryTeams.forEach(d => {
+      if (d.leadEmail) membersInOtherDeliveryTeams.add(d.leadEmail.toLowerCase().trim());
+      (d.members || []).forEach(m => membersInOtherDeliveryTeams.add(m.toLowerCase().trim()));
+    });
+
     const leadSelect = document.getElementById('delivery-team-lead-select');
     const currentLead = (dt.leadEmail || '').toLowerCase().trim();
     const eligibleDeliveryUsers = getEligibleProjectLeadershipUsers().filter(m => {
+      if (membersInOtherDeliveryTeams.has(m)) return false;
       return activeProject.iso19650?.memberBranches?.[m] === 'delivery' || (currentLead && m === currentLead);
     });
     if (eligibleDeliveryUsers.length === 0) {
-      leadSelect.innerHTML = '<option value="">-- No hay miembros designados previamente como Equipo de Entrega --</option>';
+      leadSelect.innerHTML = '<option value="">-- No hay miembros disponibles para liderar este equipo --</option>';
     } else {
       const memberOptions = eligibleDeliveryUsers.map(m => {
         const name = getUserRegisteredName(m);
@@ -4228,6 +4291,7 @@ window.openAddMemberToReceiverTeamModal = function (receiverId) {
       const existingMembers = Array.isArray(dt.members) ? dt.members.map(m => m.toLowerCase().trim()) : [];
       const allMembers = Array.from(new Set([...(activeProject.members || []), ...existingMembers])).map(m => m.toLowerCase().trim());
       const eligibleMembers = allMembers.filter(m => {
+        if (membersInOtherDeliveryTeams.has(m)) return false;
         return (activeProject.iso19650?.memberBranches?.[m] === 'delivery' || existingMembers.includes(m)) && (!higherRoleSet.has(m) || existingMembers.includes(m));
       });
 
