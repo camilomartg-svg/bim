@@ -60,6 +60,7 @@
       background-color: rgba(59, 130, 246, 0.1) !important;
     }
   </style>
+  <script src="nora-drive-store.js"></script>
 </head>
 <body class="bg-slate-50 text-text-light dark:bg-slate-950 dark:text-text-dark min-h-screen flex flex-col transition-colors duration-300">
   <div id="page-shell" class="flex-1 flex flex-col">
@@ -205,7 +206,7 @@
                 </span>
               </div>
               <p class="text-xs text-slate-500 dark:text-slate-400 mt-1">
-                Define qué estados del ciclo de vida (<b>En Progreso</b>, <b>Compartido</b> y <b>Publicado</b>) puede visualizar cada <b>Equipo de Tarea</b> y <b>Equipo Receptor</b>.
+                Configura los niveles de acceso por estado: <b>🚫 Bloqueado</b> (sin acceso), <b>👁️ Ver</b> (solo lectura), <b>📥 Ver y Descargar</b> (descarga de archivos) y <b>✏️ Editar</b> (ve, descarga y carga información).
               </p>
             </div>
           </div>
@@ -385,7 +386,7 @@
 
     
     <!-- MODAL: Conector Power BI -->
-    <div id="modal-powerbi-connector" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-md hidden transition-opacity duration-200">
+    <div id="modal-powerbi-connector" style="z-index: 999999;" class="fixed inset-0 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-md hidden transition-opacity duration-200">
       <div class="w-full max-w-3xl glass rounded-2xl p-6 sm:p-7 shadow-2xl border border-slate-200 dark:border-slate-800 bg-white/95 dark:bg-slate-900/95 max-h-[90vh] flex flex-col overflow-hidden transform transition-all">
         <!-- Header -->
         <div class="flex items-center justify-between pb-4 mb-4 border-b border-slate-200 dark:border-slate-800 shrink-0">
@@ -452,7 +453,7 @@
             </div>
 
             <p class="text-[10.5px] text-slate-500 dark:text-slate-400">
-              💡 <em>En Power BI Desktop:</em> Ve a <strong>Inicio > Transformar Datos > Editor Avanzado</strong>, pega este código y haz clic en <strong>Listo</strong>.
+              💡 <em>En Power BI Desktop:</em> Ve a <strong>Inicio > Transformar Datos > Editor Avanzado</strong>, pega este código y haz clic en <strong>Listo</strong>. (Si Power BI solicita credenciales web, selecciona <strong>Anónima</strong> y haz clic en <strong>Conectar</strong>).
             </p>
           </div>
 
@@ -1674,20 +1675,84 @@
                       activeProject?.fileVisibilityConfig?.[norm] ||
                       activeProject?.fileVisibilityConfig?.[teamName];
 
+          // Defaults ISO 19650
+          const defaultProgreso = type === 'task' ? 'edit' : 'none';
+          const defaultCompartido = type === 'task' ? 'download' : 'view';
+          const defaultPublicado = 'download';
+
           if (cfg && typeof cfg === 'object') {
+            let prog = cfg.progresoLevel;
+            if (!prog) {
+              if (cfg.canViewProgreso === false) prog = 'none';
+              else if (cfg.canViewProgreso === true) prog = (type === 'task' ? 'edit' : 'view');
+              else prog = defaultProgreso;
+            }
+
+            let comp = cfg.compartidoLevel;
+            if (!comp) {
+              if (cfg.canViewCompartido === false) comp = 'none';
+              else if (cfg.canViewCompartido === true) comp = (type === 'task' ? 'download' : 'view');
+              else comp = defaultCompartido;
+            }
+
+            let pub = cfg.publicadoLevel;
+            if (!pub) {
+              if (cfg.canViewPublicado === false) pub = 'none';
+              else if (cfg.canViewPublicado === true) pub = 'download';
+              else pub = defaultPublicado;
+            }
+
             return {
-              canViewProgreso: typeof cfg.canViewProgreso === 'boolean' ? cfg.canViewProgreso : (type === 'task'),
-              canViewCompartido: typeof cfg.canViewCompartido === 'boolean' ? cfg.canViewCompartido : (type === 'task'),
-              canViewPublicado: typeof cfg.canViewPublicado === 'boolean' ? cfg.canViewPublicado : true
+              progresoLevel: prog,
+              compartidoLevel: comp,
+              publicadoLevel: pub,
+              canViewProgreso: prog !== 'none',
+              canViewCompartido: comp !== 'none',
+              canViewPublicado: pub !== 'none',
+              canDownloadProgreso: prog === 'download' || prog === 'edit',
+              canDownloadCompartido: comp === 'download' || comp === 'edit',
+              canDownloadPublicado: pub === 'download' || pub === 'edit',
+              canEditProgreso: prog === 'edit',
+              canEditCompartido: comp === 'edit',
+              canEditPublicado: pub === 'edit'
             };
           }
 
           // Defaults ISO 19650
-          if (type === 'task') {
-            return { canViewProgreso: true, canViewCompartido: true, canViewPublicado: true };
-          } else {
-            return { canViewProgreso: false, canViewCompartido: false, canViewPublicado: true };
-          }
+          return {
+            progresoLevel: defaultProgreso,
+            compartidoLevel: defaultCompartido,
+            publicadoLevel: defaultPublicado,
+            canViewProgreso: defaultProgreso !== 'none',
+            canViewCompartido: defaultCompartido !== 'none',
+            canViewPublicado: defaultPublicado !== 'none',
+            canDownloadProgreso: defaultProgreso === 'download' || defaultProgreso === 'edit',
+            canDownloadCompartido: defaultCompartido === 'download' || defaultCompartido === 'edit',
+            canDownloadPublicado: defaultPublicado === 'download' || defaultPublicado === 'edit',
+            canEditProgreso: defaultProgreso === 'edit',
+            canEditCompartido: defaultCompartido === 'edit',
+            canEditPublicado: defaultPublicado === 'edit'
+          };
+        }
+
+        function getPermSelectClass(level) {
+          if (level === 'edit') return 'bg-emerald-50 text-emerald-800 border-emerald-300 dark:bg-emerald-950/70 dark:text-emerald-300 dark:border-emerald-800';
+          if (level === 'download') return 'bg-indigo-50 text-indigo-800 border-indigo-300 dark:bg-indigo-950/70 dark:text-indigo-300 dark:border-indigo-800';
+          if (level === 'view') return 'bg-cyan-50 text-cyan-800 border-cyan-300 dark:bg-cyan-950/70 dark:text-cyan-300 dark:border-cyan-800';
+          return 'bg-slate-50 text-slate-500 border-slate-300 dark:bg-slate-900 dark:text-slate-400 dark:border-slate-700';
+        }
+
+        function renderPermSelect(teamType, teamName, stateKey, currentLevel) {
+          return `
+            <select data-team-type="${teamType}" data-team-name="${escapeHtml(teamName)}" data-state="${stateKey}"
+                    class="perm-level-select text-[11px] font-bold rounded-lg px-2.5 py-1.5 border transition-all cursor-pointer focus:ring-1 outline-none ${getPermSelectClass(currentLevel)}"
+                    title="Nivel de permiso para este estado">
+              <option value="none" ${currentLevel === 'none' ? 'selected' : ''}>🚫 Bloqueado</option>
+              <option value="view" ${currentLevel === 'view' ? 'selected' : ''}>👁️ Ver</option>
+              <option value="download" ${currentLevel === 'download' ? 'selected' : ''}>📥 Ver y Descargar</option>
+              <option value="edit" ${currentLevel === 'edit' ? 'selected' : ''}>✏️ Editar (Ver, descargar y cargar)</option>
+            </select>
+          `;
         }
 
         function setTeamVisibilityRule(type, teamName, partialRule) {
@@ -1807,44 +1872,41 @@
 
                     <!-- En Progreso -->
                     <td class="py-3 px-4 text-center">
-                      <label class="inline-flex items-center justify-center cursor-pointer select-none">
-                        <input type="checkbox" data-team-type="${team.type}" data-team-name="${escapeHtml(team.name)}" data-perm="canViewProgreso"
-                               class="w-4 h-4 rounded text-amber-600 focus:ring-amber-500 border-slate-300 dark:border-slate-700 dark:bg-slate-800 cursor-pointer transition-all"
-                               ${rule.canViewProgreso ? 'checked' : ''} />
-                      </label>
+                      ${renderPermSelect(team.type, team.name, 'progreso', rule.progresoLevel)}
                     </td>
 
                     <!-- Compartido -->
                     <td class="py-3 px-4 text-center">
-                      <label class="inline-flex items-center justify-center cursor-pointer select-none">
-                        <input type="checkbox" data-team-type="${team.type}" data-team-name="${escapeHtml(team.name)}" data-perm="canViewCompartido"
-                               class="w-4 h-4 rounded text-blue-600 focus:ring-blue-500 border-slate-300 dark:border-slate-700 dark:bg-slate-800 cursor-pointer transition-all"
-                               ${rule.canViewCompartido ? 'checked' : ''} />
-                      </label>
+                      ${renderPermSelect(team.type, team.name, 'compartido', rule.compartidoLevel)}
                     </td>
 
                     <!-- Publicado -->
                     <td class="py-3 px-4 text-center">
-                      <label class="inline-flex items-center justify-center cursor-pointer select-none">
-                        <input type="checkbox" data-team-type="${team.type}" data-team-name="${escapeHtml(team.name)}" data-perm="canViewPublicado"
-                               class="w-4 h-4 rounded text-emerald-600 focus:ring-emerald-500 border-slate-300 dark:border-slate-700 dark:bg-slate-800 cursor-pointer transition-all"
-                               ${rule.canViewPublicado ? 'checked' : ''} />
-                      </label>
+                      ${renderPermSelect(team.type, team.name, 'publicado', rule.publicadoLevel)}
                     </td>
                   </tr>
                 `;
               }).join('');
 
-              // Listen to checkbox changes
-              tbody.querySelectorAll('input[type="checkbox"]').forEach(input => {
-                input.addEventListener('change', (e) => {
+              // Listen to permission level select changes
+              tbody.querySelectorAll('.perm-level-select').forEach(sel => {
+                sel.addEventListener('change', (e) => {
                   const type = e.target.getAttribute('data-team-type');
                   const name = e.target.getAttribute('data-team-name');
-                  const perm = e.target.getAttribute('data-perm');
-                  const isChecked = e.target.checked;
+                  const stateKey = e.target.getAttribute('data-state');
+                  const newLevel = e.target.value;
 
-                  setTeamVisibilityRule(type, name, { [perm]: isChecked });
+                  const capState = stateKey.charAt(0).toUpperCase() + stateKey.slice(1);
+                  const partial = {
+                    [stateKey + 'Level']: newLevel,
+                    ['canView' + capState]: newLevel !== 'none',
+                    ['canDownload' + capState]: newLevel === 'download' || newLevel === 'edit',
+                    ['canEdit' + capState]: newLevel === 'edit'
+                  };
+                  setTeamVisibilityRule(type, name, partial);
+                  e.target.className = `perm-level-select text-[11px] font-bold rounded-lg px-2.5 py-1.5 border transition-all cursor-pointer focus:ring-1 outline-none ${getPermSelectClass(newLevel)}`;
                   refreshAuthorizedProjectFiles();
+                  showVisibilityAlert(`Permiso de "${name}" en ${capState} actualizado a "${newLevel}".`, 'success');
                 });
               });
             }
@@ -1894,10 +1956,24 @@
               const { taskTeams, receiverTeams } = getAllProjectTeams();
               const newConfig = {};
               taskTeams.forEach(t => {
-                newConfig[`task:${normalizeTeamName(t.name)}`] = { canViewProgreso: true, canViewCompartido: true, canViewPublicado: true };
+                newConfig[`task:${normalizeTeamName(t.name)}`] = {
+                  progresoLevel: 'edit',
+                  compartidoLevel: 'download',
+                  publicadoLevel: 'download',
+                  canViewProgreso: true,
+                  canViewCompartido: true,
+                  canViewPublicado: true
+                };
               });
               receiverTeams.forEach(r => {
-                newConfig[`receiver:${normalizeTeamName(r.name)}`] = { canViewProgreso: false, canViewCompartido: false, canViewPublicado: true };
+                newConfig[`receiver:${normalizeTeamName(r.name)}`] = {
+                  progresoLevel: 'none',
+                  compartidoLevel: 'view',
+                  publicadoLevel: 'download',
+                  canViewProgreso: false,
+                  canViewCompartido: true,
+                  canViewPublicado: true
+                };
               });
               activeProject.fileVisibilityConfig = newConfig;
               try {
@@ -1916,9 +1992,19 @@
             btnSave.addEventListener('click', async () => {
               try {
                 localStorage.setItem(getTeamVisibilityStorageKey(), JSON.stringify(activeProject.fileVisibilityConfig));
+                if (window.NoraDriveStore && activeProject) {
+                  await window.NoraDriveStore.postAction({
+                    action: 'saveProjectConfig',
+                    companyId: companyId || '',
+                    companyName: (currentCompany && currentCompany.name) || companyId || 'General',
+                    projectName: activeProject.name || 'Proyecto',
+                    projectSlug: activeProject.slug || '',
+                    projectData: activeProject
+                  });
+                }
 
                 // Sync with GitHub repository if token exists
-                const token = localStorage.getItem('github_pat');
+                const token = null; // Almacenamiento JSON migrado 100% a Google Drive
                 if (token && currentCompany && currentCompany.configUrl) {
                   try {
                     const repo = 'camilomartg-svg/bim';
@@ -2012,6 +2098,66 @@
             const normUserTeams = userTeams.map(normalizeName);
             if (normFileTeams.length === 0) return false;
             return normFileTeams.some(team => normUserTeams.includes(team));
+          }
+
+          // 3. DOWNLOAD ACTION
+          if (action === 'download') {
+            if (privileges.canConfigureVisibility && !previewTeam) return true;
+            if (!previewTeam) {
+              const fileUploader = (file.changedByEmail || '').toLowerCase().trim();
+              if (fileUploader && fileUploader === email) return true;
+            }
+            let userTaskTeams = [];
+            let userReceiverTeams = [];
+            if (previewTeam) {
+              if (previewTeam.type === 'task') userTaskTeams = [previewTeam.name];
+              else if (previewTeam.type === 'receiver') userReceiverTeams = [{ name: previewTeam.name }];
+            } else {
+              userTaskTeams = getUserDeliveryTeams(email);
+              userReceiverTeams = getUserReceiverTeams(email);
+            }
+            const status = file.status;
+            if (status === 'EN_PROGRESO') {
+              return userTaskTeams.some(t => getTeamVisibilityRule('task', t).canDownloadProgreso === true) ||
+                     userReceiverTeams.some(r => getTeamVisibilityRule('receiver', r.name).canDownloadProgreso === true);
+            }
+            if (status === 'COMPARTIDO') {
+              return userTaskTeams.some(t => getTeamVisibilityRule('task', t).canDownloadCompartido === true) ||
+                     userReceiverTeams.some(r => getTeamVisibilityRule('receiver', r.name).canDownloadCompartido === true);
+            }
+            if (status === 'PUBLICADO') {
+              return userTaskTeams.some(t => getTeamVisibilityRule('task', t).canDownloadPublicado === true) ||
+                     userReceiverTeams.some(r => getTeamVisibilityRule('receiver', r.name).canDownloadPublicado === true);
+            }
+            return false;
+          }
+
+          // 4. EDIT ACTION (Upload / update within this status)
+          if (action === 'edit') {
+            if (privileges.canConfigureVisibility && !previewTeam) return true;
+            let userTaskTeams = [];
+            let userReceiverTeams = [];
+            if (previewTeam) {
+              if (previewTeam.type === 'task') userTaskTeams = [previewTeam.name];
+              else if (previewTeam.type === 'receiver') userReceiverTeams = [{ name: previewTeam.name }];
+            } else {
+              userTaskTeams = getUserDeliveryTeams(email);
+              userReceiverTeams = getUserReceiverTeams(email);
+            }
+            const status = file.status;
+            if (status === 'EN_PROGRESO') {
+              return userTaskTeams.some(t => getTeamVisibilityRule('task', t).canEditProgreso === true) ||
+                     userReceiverTeams.some(r => getTeamVisibilityRule('receiver', r.name).canEditProgreso === true);
+            }
+            if (status === 'COMPARTIDO') {
+              return userTaskTeams.some(t => getTeamVisibilityRule('task', t).canEditCompartido === true) ||
+                     userReceiverTeams.some(r => getTeamVisibilityRule('receiver', r.name).canEditCompartido === true);
+            }
+            if (status === 'PUBLICADO') {
+              return userTaskTeams.some(t => getTeamVisibilityRule('task', t).canEditPublicado === true) ||
+                     userReceiverTeams.some(r => getTeamVisibilityRule('receiver', r.name).canEditPublicado === true);
+            }
+            return false;
           }
 
           // 2. VIEW ACTION
@@ -2130,6 +2276,12 @@
               canViewProgreso: true,
               canViewCompartido: true,
               canViewPublicado: true,
+              canDownloadProgreso: true,
+              canDownloadCompartido: true,
+              canDownloadPublicado: true,
+              canEditProgreso: true,
+              canEditCompartido: true,
+              canEditPublicado: true,
               isSimulation: false,
               teamLabel: 'Administrador (Acceso Completo)'
             };
@@ -2141,6 +2293,12 @@
               canViewProgreso: rule.canViewProgreso === true,
               canViewCompartido: rule.canViewCompartido === true,
               canViewPublicado: rule.canViewPublicado !== false,
+              canDownloadProgreso: rule.canDownloadProgreso === true,
+              canDownloadCompartido: rule.canDownloadCompartido === true,
+              canDownloadPublicado: rule.canDownloadPublicado === true,
+              canEditProgreso: rule.canEditProgreso === true,
+              canEditCompartido: rule.canEditCompartido === true,
+              canEditPublicado: rule.canEditPublicado === true,
               isSimulation: true,
               team: previewTeam,
               teamLabel: `${previewTeam.name} (${previewTeam.type === 'task' ? 'Equipo de Tarea' : 'Equipo Receptor'})`
@@ -2157,6 +2315,12 @@
               canViewProgreso: false,
               canViewCompartido: true,
               canViewPublicado: true,
+              canDownloadProgreso: false,
+              canDownloadCompartido: true,
+              canDownloadPublicado: true,
+              canEditProgreso: false,
+              canEditCompartido: false,
+              canEditPublicado: false,
               isSimulation: false,
               teamLabel: 'Miembro General'
             };
@@ -2169,10 +2333,30 @@
           const canPub = userTaskTeams.some(t => getTeamVisibilityRule('task', t).canViewPublicado !== false) ||
                          userReceiverTeams.some(r => getTeamVisibilityRule('receiver', r.name).canViewPublicado !== false);
 
+          const canDownProg = userTaskTeams.some(t => getTeamVisibilityRule('task', t).canDownloadProgreso === true) ||
+                              userReceiverTeams.some(r => getTeamVisibilityRule('receiver', r.name).canDownloadProgreso === true);
+          const canDownComp = userTaskTeams.some(t => getTeamVisibilityRule('task', t).canDownloadCompartido === true) ||
+                              userReceiverTeams.some(r => getTeamVisibilityRule('receiver', r.name).canDownloadCompartido === true);
+          const canDownPub = userTaskTeams.some(t => getTeamVisibilityRule('task', t).canDownloadPublicado === true) ||
+                             userReceiverTeams.some(r => getTeamVisibilityRule('receiver', r.name).canDownloadPublicado === true);
+
+          const canEditProg = userTaskTeams.some(t => getTeamVisibilityRule('task', t).canEditProgreso === true) ||
+                              userReceiverTeams.some(r => getTeamVisibilityRule('receiver', r.name).canEditProgreso === true);
+          const canEditComp = userTaskTeams.some(t => getTeamVisibilityRule('task', t).canEditCompartido === true) ||
+                              userReceiverTeams.some(r => getTeamVisibilityRule('receiver', r.name).canEditCompartido === true);
+          const canEditPub = userTaskTeams.some(t => getTeamVisibilityRule('task', t).canEditPublicado === true) ||
+                             userReceiverTeams.some(r => getTeamVisibilityRule('receiver', r.name).canEditPublicado === true);
+
           return {
             canViewProgreso: canProg,
             canViewCompartido: canComp,
             canViewPublicado: canPub,
+            canDownloadProgreso: canDownProg,
+            canDownloadCompartido: canDownComp,
+            canDownloadPublicado: canDownPub,
+            canEditProgreso: canEditProg,
+            canEditCompartido: canEditComp,
+            canEditPublicado: canEditPub,
             isSimulation: false,
             teamLabel: [...userTaskTeams, ...userReceiverTeams.map(r => r.name)].join(', ')
           };
@@ -2629,6 +2813,17 @@
 
       function handleFilesSelection(filesList) {
         if (isUploading) return;
+
+        const effectivePerms = getCurrentEffectivePermissions();
+        let canEditCurrent = false;
+        if (currentStatusTab === 'EN_PROGRESO') canEditCurrent = effectivePerms.canEditProgreso;
+        else if (currentStatusTab === 'COMPARTIDO') canEditCurrent = effectivePerms.canEditCompartido;
+        else if (currentStatusTab === 'PUBLICADO') canEditCurrent = effectivePerms.canEditPublicado;
+
+        if (!canEditCurrent) {
+          alert(`No tienes permisos de edición para cargar archivos en el estado "${currentStatusTab}". Tu equipo cuenta únicamente con permisos de lectura/descarga.`);
+          return;
+        }
         
         const allowed = ['frag', 'json', 'ifc', 'bcf', 'bcfzip', 'rvt', 'rfa', 'rte', 'pln', 'pla', 'mod', 'nwc', 'nwf', 'nwd', 'smc', 'dgn', 'imodel', 'vwx', 'ndw', 'cyp', 'dwg', 'dxf', 'pdf', 'e57', 'pts', 'xyz', 'las', 'laz', 'rcp', 'rcs', 'landxml', 'citygml', 'xml', 'cobie', 'xlsx', 'bc3'];
         let addedCount = 0;
@@ -2723,6 +2918,14 @@
 
         selectedFilesList.innerHTML = selectedFiles.map(fileObj => {
           const ext = fileObj.file.name.split('.').pop().toLowerCase();
+          const freshExistingMatch = fileObj.existingFile || findExistingProjectFile(fileObj.file.name);
+          if (freshExistingMatch) {
+            fileObj.isReplacement = true;
+            fileObj.existingFile = freshExistingMatch;
+            if (!fileObj.targetVersion || fileObj.targetVersion === 'v1.0') {
+              fileObj.targetVersion = calculateNextMinorVersion(freshExistingMatch.version || 'v1.0');
+            }
+          }
           let icon = 'description';
           let iconClass = 'text-blue-500';
           if (ext === 'pdf') {
@@ -2912,7 +3115,7 @@
 
         const initPayload = {
           action: 'initResumableUpload',
-          folderId: ds.driveFolderId || '',
+          folderId: (ds.driveFolderId && String(ds.driveFolderId).trim().length > 15) ? ds.driveFolderId.trim() : '',
           driveFolderName: driveFolderName,
           project: activeProject.slug || slugify(activeProject.name),
           filename: filename,
@@ -2920,25 +3123,41 @@
           totalBytes: fileOrBlob.size
         };
 
-        const initRes = await fetch(scriptUrl, {
-          method: 'POST',
-          mode: 'cors',
-          headers: {
-            'Content-Type': 'text/plain;charset=utf-8'
-          },
-          body: JSON.stringify(initPayload)
-        });
+        // 1. Init Session with retry (up to 4 attempts)
+        let sessionUrl = '';
+        let initAttempts = 0;
+        const maxInitAttempts = 4;
+        while (!sessionUrl) {
+          initAttempts++;
+          try {
+            const initRes = await fetch(scriptUrl, {
+              method: 'POST',
+              mode: 'cors',
+              headers: {
+                'Content-Type': 'text/plain;charset=utf-8'
+              },
+              body: JSON.stringify(initPayload)
+            });
 
-        if (!initRes.ok) {
-          throw new Error(`Error iniciando carga resumida: ${initRes.statusText}`);
+            if (!initRes.ok) {
+              throw new Error(`HTTP ${initRes.status}: ${initRes.statusText}`);
+            }
+
+            const initData = await initRes.json();
+            if (initData.status === 'error') {
+              throw new Error(initData.message || 'Error en inicio de carga resumida');
+            }
+            sessionUrl = initData.sessionUrl;
+          } catch (err) {
+            console.warn(`[Init Resumable] Intento ${initAttempts}/${maxInitAttempts} falló para ${filename}:`, err);
+            if (initAttempts >= maxInitAttempts) {
+              throw new Error(`Google Script Error (init): ${err.message}`);
+            }
+            const delay = 1500 * Math.pow(1.8, initAttempts - 1) + Math.random() * 400;
+            await new Promise(r => setTimeout(r, delay));
+          }
         }
 
-        const initData = await initRes.json();
-        if (initData.status === 'error') {
-          throw new Error(`Google Script Error (init): ${initData.message}`);
-        }
-
-        const sessionUrl = initData.sessionUrl;
         const chunkSize = 2 * 1024 * 1024; // 2MB chunk size
         let offset = 0;
         let fileId = '';
@@ -2975,7 +3194,7 @@
             changedBy: userAccount ? (userAccount.name || '') : '',
             changedByEmail: userAccount ? (userAccount.email || userAccount.username || '') : '',
             deliveryTeams: resolveCurrentUserDeliveryTeams(),
-            folderId: ds.driveFolderId || '',
+            folderId: (ds.driveFolderId && String(ds.driveFolderId).trim().length > 15) ? ds.driveFolderId.trim() : '',
             driveFolderName: driveFolderName,
             skipStatusRegister: (fileObj && fileObj.isReplacement) ? true : false,
             isVersionUpload: (fileObj && fileObj.isReplacement) ? true : false,
@@ -2983,34 +3202,52 @@
             originalFileId: (fileObj && fileObj.existingFile && (fileObj.existingFile.originalFileId || fileObj.existingFile.fileId)) || ''
           };
 
-          const chunkRes = await fetch(scriptUrl, {
-            method: 'POST',
-            mode: 'cors',
-            headers: {
-              'Content-Type': 'text/plain;charset=utf-8'
-            },
-            body: JSON.stringify(chunkPayload)
-          });
+          // Upload chunk with exponential backoff retry (up to 5 attempts)
+          let chunkSuccess = false;
+          let chunkAttempts = 0;
+          const maxChunkAttempts = 5;
 
-          if (!chunkRes.ok) {
-            throw new Error(`Error cargando fragmento: ${chunkRes.statusText}`);
-          }
+          while (!chunkSuccess) {
+            chunkAttempts++;
+            try {
+              const chunkRes = await fetch(scriptUrl, {
+                method: 'POST',
+                mode: 'cors',
+                headers: {
+                  'Content-Type': 'text/plain;charset=utf-8'
+                },
+                body: JSON.stringify(chunkPayload)
+              });
 
-          const chunkData = await chunkRes.json();
-          if (chunkData.status === 'error') {
-            throw new Error(`Google Script Error (chunk): ${chunkData.message}`);
-          }
+              if (!chunkRes.ok) {
+                throw new Error(`HTTP ${chunkRes.status}: ${chunkRes.statusText}`);
+              }
 
-          offset = chunkData.nextOffset;
-          fileId = chunkData.fileId;
+              const chunkData = await chunkRes.json();
+              if (chunkData.status === 'error') {
+                throw new Error(chunkData.message || 'Error cargando fragmento');
+              }
 
-          if (progressCallback) {
-            const pct = Math.round((offset / fileOrBlob.size) * 100);
-            progressCallback(pct);
-          }
+              offset = chunkData.nextOffset;
+              fileId = chunkData.fileId;
+              chunkSuccess = true;
 
-          if (chunkData.complete) {
-            break;
+              if (progressCallback) {
+                const pct = Math.round((offset / fileOrBlob.size) * 100);
+                progressCallback(pct);
+              }
+
+              if (chunkData.complete) {
+                break;
+              }
+            } catch (err) {
+              console.warn(`[Chunk Retry] Intento ${chunkAttempts}/${maxChunkAttempts} falló en offset ${offset}/${fileOrBlob.size}:`, err);
+              if (chunkAttempts >= maxChunkAttempts) {
+                throw new Error(`Error cargando fragmento (${Math.round(offset / 1024 / 1024)}MB/${Math.round(fileOrBlob.size / 1024 / 1024)}MB): ${err.message}`);
+              }
+              const delay = 1500 * Math.pow(1.8, chunkAttempts - 1) + Math.random() * 400;
+              await new Promise(r => setTimeout(r, delay));
+            }
           }
         }
 
@@ -3026,7 +3263,7 @@
 
         const payload = {
           action: 'uploadFile',
-          folderId: ds.driveFolderId || '',
+          folderId: (ds.driveFolderId && String(ds.driveFolderId).trim().length > 15) ? ds.driveFolderId.trim() : '',
           driveFolderName: driveFolderName,
           project: activeProject.slug || slugify(activeProject.name),
           filename: filename,
@@ -3106,7 +3343,7 @@
           deliveryTeams: params.deliveryTeams || resolveCurrentUserDeliveryTeams(),
           originalFileId: params.originalFileId || params.fileId,
           type: params.type || '',
-          folderId: ds.driveFolderId || '',
+          folderId: (ds.driveFolderId && String(ds.driveFolderId).trim().length > 15) ? ds.driveFolderId.trim() : '',
           driveFolderName: ds.driveFolderName || activeProject.name,
           uploadedFileId: params.uploadedFileId || '',
           content: '',
@@ -3143,6 +3380,7 @@
           return;
         }
 
+        recheckSelectedFilesReplacements();
         isUploading = true;
         uploadBtn.disabled = true;
         clearQueueBtn.classList.add('hidden');
@@ -3164,6 +3402,14 @@
           globalProgressBar.style.width = `${globalProgressStart}%`;
 
           const ext = fileObj.file.name.split('.').pop().toLowerCase();
+          const freshExistingMatch = fileObj.existingFile || findExistingProjectFile(fileObj.file.name);
+          if (freshExistingMatch) {
+            fileObj.isReplacement = true;
+            fileObj.existingFile = freshExistingMatch;
+            if (!fileObj.targetVersion || fileObj.targetVersion === 'v1.0') {
+              fileObj.targetVersion = calculateNextMinorVersion(freshExistingMatch.version || 'v1.0');
+            }
+          }
           
           try {
             if (ext === 'ifc') {
@@ -3302,7 +3548,7 @@
                   addLog(`[VERSIÓN] ¡${fileObj.file.name} reemplazado y actualizado exitosamente a la versión ${nextVer}!`);
                 } catch (vErr) {
                   console.error('Error al versionar archivo:', vErr);
-                  updateFileUI(fileObj, 100, 'Completado');
+                  updateFileUI(fileObj, 100, `Advertencia versión: ${vErr.message}`);
                   addLog(`[VERSIÓN] Advertencia al registrar versión automática: ${vErr.message}`);
                 }
               } else {
@@ -3427,7 +3673,11 @@
 
           statusEntries.sort((a, b) => new Date(a.changedAt || 0) - new Date(b.changedAt || 0));
 
-          // Helper to get status matches for a file chronologically
+          const getCleanBase = (name) => {
+            if (!name) return '';
+            return name.replace(/\.(ifc|frag|rvt|dwg|pdf|json)$/i, '').trim().toLowerCase();
+          };
+
           // Helper to get status matches for a file chronologically with extension and ID priority
           const getStatusMatchesForFile = (fid, fname) => {
             const matches = {
@@ -3498,6 +3748,7 @@
               const fid = type === 'model' ? (item.fragId || item.fileId || item.path) : item.fileId;
               const matches = getStatusMatchesForFile(fid, fname);
 
+                            // 1. Always keep the EN_PROGRESO (WIP) version of the file
               // Resuelve el historial unificado y la versión activa actual
               const fileHistory = buildFileHistory(fname, statusEntries, versionEntries);
               const latestVerObj = fileHistory && fileHistory.length > 0 ? fileHistory[0] : null;
@@ -3524,6 +3775,9 @@
                 folder: fld,
                 lastUpdated: fileChangedAt,
                 status: 'EN_PROGRESO',
+                hasProgreso: true,
+                hasCompartido: hasComp,
+                hasPublicado: hasPub,
                 version: fileVersion,
                 history: fileHistory,
                 comments: fileComments,
@@ -3541,6 +3795,10 @@
               // 2. If promoted to COMPARTIDO, add that entry
               if (matches.COMPARTIDO) {
                 const compMatch = matches.COMPARTIDO;
+                const compVer = compMatch.version || 'v1.0';
+                const isCompSameAsPub = !!(matches.PUBLICADO && (matches.PUBLICADO.version || 'v1.0') === compVer);
+                const isCompSameAsProg = (fileVersion === compVer);
+
                 const compFileObj = {
                   fileId: compMatch.fileId || fid, // Use copied file's ID
                   originalFileId: fid,
@@ -3551,7 +3809,10 @@
                   folder: fld,
                   lastUpdated: compMatch.changedAt || item.lastUpdated,
                   status: 'COMPARTIDO',
-                  version: compMatch.version || 'v1.0',
+                  hasProgreso: true,
+                  hasCompartido: true,
+                  hasPublicado: !!matches.PUBLICADO,
+                  version: compVer,
                   comments: compMatch.comments || '',
                   changedBy: (compMatch.changedBy && compMatch.changedBy.trim()) || 'UNASSIGNED',
                   changedByEmail: (compMatch.changedByEmail && compMatch.changedByEmail.trim()) || 'unassigned@nora.cde',
@@ -3568,8 +3829,12 @@
               // 3. If promoted to PUBLICADO, add that entry
               if (matches.PUBLICADO) {
                 const pubMatch = matches.PUBLICADO;
+                const pubVer = pubMatch.version || 'v1.0';
+                const isPubSameAsComp = !!(matches.COMPARTIDO && (matches.COMPARTIDO.version || 'v1.0') === pubVer);
+                const isPubSameAsProg = (fileVersion === pubVer);
+
                 const pubFileObj = {
-                  fileId: pubMatch.fileId || fid, // Use copied file's ID
+                  fileId: pubMatch.fileId || fid,
                   originalFileId: fid,
                   jsonId: type === 'model' ? (pubMatch.jsonId || '') : '',
                   name: fname,
@@ -3578,7 +3843,10 @@
                   folder: fld,
                   lastUpdated: pubMatch.changedAt || item.lastUpdated,
                   status: 'PUBLICADO',
-                  version: pubMatch.version || 'v1.0',
+                  hasProgreso: true,
+                  hasCompartido: !!matches.COMPARTIDO,
+                  hasPublicado: true,
+                  version: pubVer,
                   comments: pubMatch.comments || '',
                   changedBy: (pubMatch.changedBy && pubMatch.changedBy.trim()) || 'UNASSIGNED',
                   changedByEmail: (pubMatch.changedByEmail && pubMatch.changedByEmail.trim()) || 'unassigned@nora.cde',
@@ -3660,7 +3928,30 @@
             }
           });
 
-          // Guardar copia maestra de archivos del Drive y aplicar filtros de permisos/simulación
+          // Sincronizar flags hasProgreso, hasCompartido y hasPublicado entre extensiones gemelas (IFC, RVT, FRAG) del mismo estado y versión
+          const flagsByBaseAndState = new Map();
+          rawProjectFiles.forEach(f => {
+            const base = (f.name || '').replace(/\.[^/.]+$/, '').trim().toLowerCase();
+            if (!base) return;
+            const key = `${base}|${f.status}|${f.version || 'v1.0'}`;
+            const cur = flagsByBaseAndState.get(key) || { hasProgreso: false, hasCompartido: false, hasPublicado: false };
+            if (f.hasProgreso) cur.hasProgreso = true;
+            if (f.hasCompartido) cur.hasCompartido = true;
+            if (f.hasPublicado) cur.hasPublicado = true;
+            flagsByBaseAndState.set(key, cur);
+          });
+          rawProjectFiles.forEach(f => {
+            const base = (f.name || '').replace(/\.[^/.]+$/, '').trim().toLowerCase();
+            if (!base) return;
+            const key = `${base}|${f.status}|${f.version || 'v1.0'}`;
+            const cur = flagsByBaseAndState.get(key);
+            if (cur) {
+              if (cur.hasProgreso) f.hasProgreso = true;
+              if (cur.hasCompartido) f.hasCompartido = true;
+              if (cur.hasPublicado) f.hasPublicado = true;
+            }
+          });
+
           rawProjectFilesCache = rawProjectFiles;
           refreshAuthorizedProjectFiles();
           if (typeof recheckSelectedFilesReplacements === 'function') {
@@ -3815,6 +4106,74 @@
 
           // Status Badge Pill
           let statusBadge = '';
+          const buildLifecycleStatusBadge = (fileObj) => {
+            if (fileObj.status === 'EN_PROGRESO') {
+              return `
+                <div class="flex flex-col gap-1 items-start">
+                  <span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-amber-50 dark:bg-amber-950/50 text-amber-700 dark:text-amber-300 font-semibold text-[11px] border border-amber-200 dark:border-amber-800/40">
+                    <span class="w-1.5 h-1.5 rounded-full bg-amber-500"></span> En Progreso
+                  </span>
+                  ${fileObj.hasCompartido ? `
+                    <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 font-semibold text-[10px] border border-blue-200 dark:border-blue-800/40" title="Modelo disponible en Compartido">
+                      <span class="material-symbols-outlined text-[12px] text-blue-600 dark:text-blue-400">share</span> Compartido ✓
+                    </span>` : ''}
+                  ${fileObj.hasPublicado ? `
+                    <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 font-semibold text-[10px] border border-emerald-200 dark:border-emerald-800/40" title="Modelo disponible en Publicado">
+                      <span class="material-symbols-outlined text-[12px] text-emerald-600 dark:text-emerald-400">verified</span> Publicado ✓
+                    </span>` : ''}
+                </div>`;
+            } else if (fileObj.status === 'COMPARTIDO') {
+              return `
+                <div class="flex flex-col gap-1 items-start">
+                  <span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-blue-50 dark:bg-blue-950/50 text-blue-700 dark:text-blue-300 font-semibold text-[11px] border border-blue-200 dark:border-blue-800/40">
+                    <span class="w-1.5 h-1.5 rounded-full bg-blue-500"></span> Compartido
+                  </span>
+                  ${fileObj.hasPublicado ? `
+                    <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 font-semibold text-[10px] border border-emerald-200 dark:border-emerald-800/40" title="Modelo disponible en Publicado">
+                      <span class="material-symbols-outlined text-[12px] text-emerald-600 dark:text-emerald-400">verified</span> Publicado ✓
+                    </span>` : ''}
+                </div>`;
+            } else {
+              return `
+                <span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-green-50 dark:bg-green-950/50 text-green-700 dark:text-green-300 font-semibold text-[11px] border border-green-200 dark:border-green-800/40">
+                  <span class="w-1.5 h-1.5 rounded-full bg-green-500"></span> Publicado
+                </span>`;
+            }
+          };
+          // statusBadge_declared
+          if (f.status === 'EN_PROGRESO') {
+            statusBadge = `
+              <div class="flex flex-col gap-1 items-start">
+                <span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-amber-50 dark:bg-amber-950/50 text-amber-700 dark:text-amber-300 font-semibold text-[11px] border border-amber-200 dark:border-amber-800/40">
+                  <span class="w-1.5 h-1.5 rounded-full bg-amber-500"></span> En Progreso
+                </span>
+                ${f.hasCompartido ? `
+                  <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 font-semibold text-[10px] border border-blue-200 dark:border-blue-800/40" title="Modelo disponible en Compartido">
+                    <span class="material-symbols-outlined text-[12px] text-blue-600 dark:text-blue-400">share</span> Compartido ✓
+                  </span>` : ''}
+                ${f.hasPublicado ? `
+                  <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 font-semibold text-[10px] border border-emerald-200 dark:border-emerald-800/40" title="Modelo disponible en Publicado">
+                    <span class="material-symbols-outlined text-[12px] text-emerald-600 dark:text-emerald-400">verified</span> Publicado ✓
+                  </span>` : ''}
+              </div>`;
+          } else if (f.status === 'COMPARTIDO') {
+            statusBadge = `
+              <div class="flex flex-col gap-1 items-start">
+                <span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-blue-50 dark:bg-blue-950/50 text-blue-700 dark:text-blue-300 font-semibold text-[11px] border border-blue-200 dark:border-blue-800/40">
+                  <span class="w-1.5 h-1.5 rounded-full bg-blue-500"></span> Compartido
+                </span>
+                ${f.hasPublicado ? `
+                  <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 font-semibold text-[10px] border border-emerald-200 dark:border-emerald-800/40" title="Modelo disponible en Publicado">
+                    <span class="material-symbols-outlined text-[12px] text-emerald-600 dark:text-emerald-400">verified</span> Publicado ✓
+                  </span>` : ''}
+              </div>`;
+          } else {
+            statusBadge = `
+              <span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-green-50 dark:bg-green-950/50 text-green-700 dark:text-green-300 font-semibold text-[11px] border border-green-200 dark:border-green-800/40">
+                <span class="w-1.5 h-1.5 rounded-full bg-green-500"></span> Publicado
+              </span>`;
+          }
+          // statusBadge_declared
           if (f.status === 'EN_PROGRESO') {
             statusBadge = `
               <span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-amber-50 dark:bg-amber-950/50 text-amber-700 dark:text-amber-300 font-semibold text-[11px] border border-amber-200 dark:border-amber-800/40">
@@ -3832,18 +4191,27 @@
               </span>`;
           }
 
+
           const canManage = isUserAuthorizedForFile(f, 'manage');
           const openButton = getOpenViewerButtonHtml(f);
 
           // Botón de descarga del archivo original desde Google Drive
           const downloadFileId = f.fileId || '';
-          const downloadButton = downloadFileId ? `
-            <a href="https://drive.google.com/uc?export=download&id=${encodeURIComponent(downloadFileId)}" target="_blank" rel="noopener noreferrer"
-               class="inline-flex items-center justify-center p-1.5 rounded-lg text-slate-500 hover:text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-950/30 transition-colors"
-               title="Descargar ${f.name}">
-              <span class="material-symbols-outlined text-[16px]">download</span>
-            </a>
-          ` : '';
+          const canDownloadFile = isUserAuthorizedForFile(f, 'download');
+          const downloadButton = downloadFileId ? (
+            canDownloadFile ? `
+              <a href="https://drive.google.com/uc?export=download&id=${encodeURIComponent(downloadFileId)}" target="_blank" rel="noopener noreferrer"
+                 class="inline-flex items-center justify-center p-1.5 rounded-lg text-slate-500 hover:text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-950/30 transition-colors"
+                 title="Descargar ${f.name}">
+                <span class="material-symbols-outlined text-[16px]">download</span>
+              </a>
+            ` : `
+              <span class="inline-flex items-center justify-center p-1.5 rounded-lg text-slate-300 dark:text-slate-600 cursor-not-allowed"
+                    title="Solo lectura (descarga no autorizada para tu equipo)">
+                <span class="material-symbols-outlined text-[16px]">lock</span>
+              </span>
+            `
+          ) : '';
 
           // Action buttons depending on state
           let actionButtons = '';
@@ -3944,7 +4312,10 @@
               <td class="py-3 px-4 font-medium text-slate-800 dark:text-slate-200">
                 <div class="flex items-center gap-2">
                   <span class="material-symbols-outlined text-base ${iconClass} shrink-0">${icon}</span>
-                  <span class="truncate max-w-xs sm:max-w-md md:max-w-lg lg:max-w-xl xl:max-w-3xl" title="${f.name}">${f.name}</span>
+                  <span class="truncate max-w-xs sm:max-w-md md:max-w-lg lg:max-w-xl xl:max-w-3xl font-semibold" title="${f.name}">${f.name}</span>
+                  ${f.hasProgreso && f.status !== 'EN_PROGRESO' ? '<span class="inline-flex items-center gap-0.5 text-[9px] px-2 py-0.5 rounded-full font-bold bg-amber-100 dark:bg-amber-950 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800 shrink-0" title="Misma versión en Progreso"><span class="material-symbols-outlined text-[11px]">pending</span>PROGRESO</span>' : ''}
+                  ${f.hasCompartido ? '<span class="inline-flex items-center gap-0.5 text-[9px] px-2 py-0.5 rounded-full font-bold bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800 shrink-0" title="Modelo promovido a Compartido"><span class="material-symbols-outlined text-[11px]">share</span>COMPARTIDO</span>' : ''}
+                  ${f.hasPublicado ? '<span class="inline-flex items-center gap-0.5 text-[9px] px-2 py-0.5 rounded-full font-bold bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 shrink-0" title="Modelo promovido a Publicado"><span class="material-symbols-outlined text-[11px]">verified</span>PUBLICADO</span>' : ''}
                   ${isModel && f.jsonId ? '<span class="text-[9px] px-1.5 py-0.5 rounded bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 font-mono font-medium shrink-0">+json</span>' : ''}
                   ${ext === 'ifc' && f.pairedFragId ? '<span class="text-[9px] px-1.5 py-0.5 rounded bg-indigo-100 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 font-mono font-medium shrink-0" title="Convertido a .frag">→FRAG</span>' : ''}
                   ${ext === 'ifc' && !f.pairedFragId ? '<span class="text-[9px] px-1.5 py-0.5 rounded bg-amber-100 dark:bg-amber-950 text-amber-700 dark:text-amber-300 font-mono font-medium shrink-0" title="Sin conversión FRAG disponible">sin FRAG</span>' : ''}
@@ -3957,7 +4328,7 @@
                 </button>
               </td>
               <td class="py-3 px-4 text-slate-600 dark:text-slate-300 font-medium whitespace-nowrap">${specialty}</td>
-              <td class="py-3 px-4 whitespace-nowrap">${statusBadge}</td>
+              <td class="py-3 px-4 whitespace-nowrap">${buildLifecycleStatusBadge(f)}</td>
               <td class="py-3 px-4 text-slate-500 dark:text-slate-400 whitespace-nowrap">${formatDate(f.lastUpdated)}</td>
               <td class="py-3 px-4 whitespace-nowrap">
                 <div class="flex flex-col">
@@ -4069,142 +4440,248 @@
       // ==========================================
       // POWER BI CONNECTOR HUB
       // ==========================================
-      const modalPowerBi = document.getElementById('modal-powerbi-connector');
-      const pbiModelSelect = document.getElementById('pbi-model-select');
-      const pbiModelInfo = document.getElementById('pbi-model-info');
-      const pbiMCode = document.getElementById('pbi-m-code');
-      const pbiDirectUrl = document.getElementById('pbi-direct-url');
-      const pbiFragIdVal = document.getElementById('pbi-frag-id-val');
-      const pbiJsonIdVal = document.getElementById('pbi-json-id-val');
-
       function getAvailableModelsForPowerBi() {
-        if (!Array.isArray(allDriveFiles)) return [];
-        return allDriveFiles.filter(f => {
-          const name = String(f.name || '').toLowerCase();
+        const pool = (Array.isArray(allProjectFiles) && allProjectFiles.length > 0)
+          ? allProjectFiles
+          : ((typeof rawProjectFilesCache !== 'undefined' && Array.isArray(rawProjectFilesCache)) ? rawProjectFilesCache : []);
+        return pool.filter(f => {
+          if (!f || !f.name) return false;
           const ext = getFileExtension(f.name);
-          return f.type === 'model' || ext === 'frag' || ext === 'ifc' || f.fragId || f.pairedFragId || f.jsonId;
+          return f.type === 'model' || isModel3DExtension(ext) || ext === 'frag' || ext === 'ifc' || ext === 'rvt' || f.fragId || f.pairedFragId || f.jsonId;
         });
       }
 
       function updatePowerBiModalDetails(selectedFile) {
+        const pbiModelSelect = document.getElementById('pbi-model-select');
+        const pbiModelInfo = document.getElementById('pbi-model-info');
+        const pbiMCode = document.getElementById('pbi-m-code');
+        const pbiDirectUrl = document.getElementById('pbi-direct-url');
+        const pbiFragIdVal = document.getElementById('pbi-frag-id-val');
+        const pbiJsonIdVal = document.getElementById('pbi-json-id-val');
+
         if (!selectedFile) {
-          pbiMCode.textContent = '// No hay modelos disponibles con metadata JSON en este proyecto.';
-          pbiDirectUrl.value = '';
-          pbiFragIdVal.textContent = '—';
-          pbiJsonIdVal.textContent = '—';
-          pbiModelInfo.innerHTML = '<span class="text-slate-400">Sin modelo</span>';
+          if (pbiMCode) pbiMCode.textContent = '// No hay modelos 3D disponibles en este proyecto.';
+          if (pbiDirectUrl) pbiDirectUrl.value = '';
+          if (pbiFragIdVal) pbiFragIdVal.textContent = '—';
+          if (pbiJsonIdVal) pbiJsonIdVal.textContent = '—';
+          if (pbiModelInfo) pbiModelInfo.innerHTML = '<span class="text-slate-400">Sin modelo</span>';
           return;
         }
 
-        const fragId = selectedFile.pairedFragId || selectedFile.fragId || selectedFile.driveFragId || (selectedFile.name.endsWith('.frag') ? selectedFile.fileId : '') || '';
-        const jsonId = selectedFile.jsonId || selectedFile.driveJsonId || '';
-        const name = selectedFile.name || 'Modelo';
+        const pool = (Array.isArray(allProjectFiles) && allProjectFiles.length > 0)
+          ? allProjectFiles
+          : ((typeof rawProjectFilesCache !== 'undefined' && Array.isArray(rawProjectFilesCache)) ? rawProjectFilesCache : []);
+
+        const name = String(selectedFile.name || 'Modelo').trim();
+        const baseName = name.replace(/\.[^/.]+$/, '').trim().toLowerCase();
+
+        // 1. Resolver FRAG ID
+        let fragId = selectedFile.pairedFragId || selectedFile.fragId || selectedFile.driveFragId || '';
+        if (!fragId && name.toLowerCase().endsWith('.frag')) {
+          fragId = selectedFile.fileId || '';
+        }
+        if (!fragId) {
+          const matchedFrag = pool.find(x => {
+            const xBase = String(x.name || '').replace(/\.frag$/i, '').trim().toLowerCase();
+            return xBase === baseName && String(x.name || '').toLowerCase().endsWith('.frag');
+          });
+          if (matchedFrag) fragId = matchedFrag.fileId || '';
+        }
+
+        // 2. Resolver JSON ID
+        let jsonId = selectedFile.jsonId || selectedFile.pairedFragJsonId || selectedFile.driveJsonId || '';
+        if (!jsonId) {
+          const matchedJson = pool.find(x => {
+            const xBase = String(x.name || '').replace(/\.json$/i, '').trim().toLowerCase();
+            return xBase === baseName && String(x.name || '').toLowerCase().endsWith('.json');
+          });
+          if (matchedJson) jsonId = matchedJson.fileId || '';
+        }
+
         const status = selectedFile.status || 'EN_PROGRESO';
 
-        pbiFragIdVal.textContent = fragId || 'No asignado';
-        pbiJsonIdVal.textContent = jsonId || 'No asignado';
+        if (pbiFragIdVal) pbiFragIdVal.textContent = fragId || 'No asignado';
+        if (pbiJsonIdVal) pbiJsonIdVal.textContent = jsonId || 'No asignado';
 
-        pbiModelInfo.innerHTML = '<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700">' + status + '</span> ' +
-          (jsonId ? '<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800/40">JSON listo</span>' : '<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 dark:bg-amber-950/60 text-amber-600 dark:text-amber-400 border border-amber-200 dark:border-amber-800/40">Sin JSON</span>');
+        if (pbiModelInfo) {
+          pbiModelInfo.innerHTML = '<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700">' + status + '</span> ' +
+            (fragId ? '<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-800/40">FRAG 3D</span> ' : '<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-400">Sin FRAG</span> ') +
+            (jsonId ? '<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800/40">JSON listo</span>' : '<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 dark:bg-amber-950/60 text-amber-600 dark:text-amber-400 border border-amber-200 dark:border-amber-800/40">Sin JSON</span>');
+        }
 
-        const apiUrl = jsonId ? 'https://script.google.com/macros/s/AKfycbx2RAQx_8K4o22xE0Mw-ETc7K_58vIoi6-PgVi64u80inuiw144ks3cgWSdCtXqIgB02g/exec?action=text&id=' + encodeURIComponent(jsonId) : '';
-        pbiDirectUrl.value = apiUrl;
+        const directDriveUrl = jsonId ? `https://drive.usercontent.google.com/download?id=${encodeURIComponent(jsonId)}&export=download` : '';
+        const apiUrl = directDriveUrl || (jsonId ? `${scriptUrl}?action=text&id=${encodeURIComponent(jsonId)}` : '');
+        if (pbiDirectUrl) pbiDirectUrl.value = apiUrl;
 
-        const mQuery = 'let\n' +
-          '    // 1. Conexión directa a nora BIM Cloud - Modelo: ' + name + '\n' +
-          '    Origen = Json.Document(Web.Contents("' + (apiUrl || 'https://norabim.com/...') + '")),\n' +
-          '    TextoContenido = Origen[text],\n' +
-          '    PropiedadesJSON = Json.Document(TextoContenido),\n' +
-          '    // 2. Transformar elementos a filas y columnas relacionales\n' +
-          '    Registros = Record.ToTable(PropiedadesJSON),\n' +
-          '    NombresColumnas = Record.FieldNames(Record.FieldValues(PropiedadesJSON){0}),\n' +
-          '    TablaExpandida = Table.ExpandRecordColumn(Registros, "Value", NombresColumnas),\n' +
-          '    TablaFinal = Table.RenameColumns(TablaExpandida, {{"Name", "expressID"}})\n' +
-          'in\n' +
-          '    TablaFinal';
+        const mQuery = [
+          'let',
+          '    // 1. Conexión directa a nora BIM Cloud (Google Drive CDN) - Modelo: ' + name,
+          '    UrlDirecta = "' + apiUrl + '",',
+          '    DocBruto = Json.Document(Web.Contents(UrlDirecta)),',
+          '    Origen = if Value.Is(DocBruto, type record) and Record.HasFields(DocBruto, "text") then Json.Document(DocBruto[text]) else DocBruto,',
+          '    ',
+          '    // 2. Desempaquetar valores IFC anidados ({value: "..."})',
+          '    Desempaquetar = (val) =>',
+          '        if Value.Is(val, type record) and Record.HasFields(val, "value") then val[value]',
+          '        else val,',
+          '    ',
+          '    // 3. Aplanar elemento BIM integrando parámetros y conjuntos de propiedades (psets)',
+          '    AplanarElemento = (elem as record) as record =>',
+          '        let',
+          '            BaseProps = [',
+          '                expressID = Record.FieldOrDefault(elem, "expressID", null),',
+          '                ifcType = Record.FieldOrDefault(elem, "ifcType", null),',
+          '                Name = Desempaquetar(Record.FieldOrDefault(elem, "Name", null)),',
+          '                ObjectType = Desempaquetar(Record.FieldOrDefault(elem, "ObjectType", null)),',
+          '                GlobalId = Desempaquetar(Record.FieldOrDefault(elem, "GlobalId", null)),',
+          '                Tag = Desempaquetar(Record.FieldOrDefault(elem, "Tag", null)),',
+          '                typeCode = Record.FieldOrDefault(elem, "typeCode", null)',
+          '            ],',
+          '            TienePsets = Record.HasFields(elem, "psets") and Value.Is(elem[psets], type record),',
+          '            ListaPsets = if TienePsets then List.Select(Record.FieldValues(elem[psets]), each Value.Is(_, type record)) else {},',
+          '            PsetsCombinados = if List.IsEmpty(ListaPsets) then [] else Record.Combine(ListaPsets),',
+          '            PsetsSinColision = Record.RemoveFields(PsetsCombinados, Record.FieldNames(BaseProps), MissingField.Ignore),',
+          '            Fusion = Record.Combine({BaseProps, PsetsSinColision})',
+          '        in',
+          '            Fusion,',
+          '    ',
+          '    // 4. Transformar todos los elementos y expandir propiedades dinámicamente',
+          '    ListaValores = Record.FieldValues(Origen),',
+          '    RegistrosFiltrados = List.Select(ListaValores, each Value.Is(_, type record)),',
+          '    RegistrosPlanos = List.Transform(RegistrosFiltrados, each AplanarElemento(_)),',
+          '    ',
+          '    // 5. Construir tabla relacional con todos los parámetros de Revit / IFC',
+          '    NombresColumnas = List.Distinct(List.Combine(List.Transform(RegistrosPlanos, each Record.FieldNames(_)))),',
+          '    Tabla = Table.FromRecords(RegistrosPlanos, NombresColumnas, MissingField.UseNull),',
+          '    ',
+          '    // 6. Vincular ID del modelo 3D (.frag) para sincronización con el visor 3D',
+          '    TablaFinal = Table.AddColumn(Tabla, "ID Modelo FRAG", each "' + (fragId || '') + '", type text)',
+          'in',
+          '    TablaFinal'
+        ].join('\n');
 
-        pbiMCode.textContent = mQuery;
+        if (pbiMCode) pbiMCode.textContent = mQuery;
       }
 
-      window.openPowerBIHubModal = () => {
-        const models = getAvailableModelsForPowerBi();
-        pbiModelSelect.innerHTML = '';
-        if (models.length === 0) {
-          const opt = document.createElement('option');
-          opt.textContent = 'No hay modelos 3D en este proyecto';
-          pbiModelSelect.appendChild(opt);
-          updatePowerBiModalDetails(null);
+      function pbiCopyToClipboard(text, btnElement, successMsg = '¡Copiado!') {
+        if (!text) return;
+        const doSuccess = () => {
+          if (!btnElement) return;
+          const prev = btnElement.innerHTML;
+          btnElement.innerHTML = `<span class="material-symbols-outlined text-[14px]">check</span> ${successMsg}`;
+          btnElement.classList.add('bg-emerald-600');
+          setTimeout(() => {
+            btnElement.innerHTML = prev;
+            btnElement.classList.remove('bg-emerald-600');
+          }, 2000);
+        };
+
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(text).then(doSuccess).catch(() => pbiFallbackCopy(text, doSuccess));
         } else {
-          models.forEach((m, idx) => {
-            const opt = document.createElement('option');
-            opt.value = m.fileId || String(idx);
-            opt.textContent = m.name + ' (' + (m.status || 'EN_PROGRESO') + ')';
-            pbiModelSelect.appendChild(opt);
-          });
-          updatePowerBiModalDetails(models[0]);
+          pbiFallbackCopy(text, doSuccess);
         }
-        modalPowerBi?.classList.remove('hidden');
-      };
+      }
+
+      function pbiFallbackCopy(text, cb) {
+        const ta = document.createElement('textarea');
+        ta.value = text;
+        ta.style.position = 'fixed';
+        ta.style.opacity = '0';
+        document.body.appendChild(ta);
+        ta.select();
+        try { document.execCommand('copy'); if (cb) cb(); } catch(e){}
+        document.body.removeChild(ta);
+      }
 
       window.openPowerBIConnectorModal = (encodedData) => {
-        let f;
-        try { f = JSON.parse(decodeURIComponent(encodedData)); } catch(e) { return; }
-        if (!f) return;
+        let f = null;
+        if (encodedData) {
+          try {
+            f = typeof encodedData === 'object' ? encodedData : JSON.parse(decodeURIComponent(encodedData));
+          } catch(e) {
+            console.warn('[PowerBI Modal] Error parseando datos:', e);
+          }
+        }
+
+        const modal = document.getElementById('modal-powerbi-connector');
+        const pbiModelSelect = document.getElementById('pbi-model-select');
+        if (!modal) {
+          alert('Modal Power BI no encontrado');
+          return;
+        }
 
         const models = getAvailableModelsForPowerBi();
-        pbiModelSelect.innerHTML = '';
-        let foundIndex = 0;
-        models.forEach((m, idx) => {
-          const opt = document.createElement('option');
-          opt.value = m.fileId || String(idx);
-          opt.textContent = m.name + ' (' + (m.status || 'EN_PROGRESO') + ')';
-          if (m.name === f.name || m.fileId === f.fileId) {
-            opt.selected = true;
-            foundIndex = idx;
+        if (pbiModelSelect) {
+          pbiModelSelect.innerHTML = '';
+          if (models.length === 0) {
+            const opt = document.createElement('option');
+            opt.textContent = 'No hay modelos 3D en este proyecto';
+            pbiModelSelect.appendChild(opt);
+            updatePowerBiModalDetails(f || null);
+          } else {
+            let foundIndex = 0;
+            models.forEach((m, idx) => {
+              const opt = document.createElement('option');
+              opt.value = m.fileId || m.name || String(idx);
+              opt.dataset.modelIdx = String(idx);
+              opt.textContent = m.name + ' (' + (m.status || 'EN_PROGRESO') + ')';
+              if (f && (m.name === f.name || m.fileId === f.fileId)) {
+                opt.selected = true;
+                foundIndex = idx;
+              }
+              pbiModelSelect.appendChild(opt);
+            });
+            updatePowerBiModalDetails(models[foundIndex] || f || models[0]);
           }
-          pbiModelSelect.appendChild(opt);
-        });
+        }
 
-        updatePowerBiModalDetails(models[foundIndex] || f);
-        modalPowerBi?.classList.remove('hidden');
+        modal.classList.remove('hidden');
+        modal.style.display = 'flex';
       };
 
-      pbiModelSelect?.addEventListener('change', () => {
+      window.openPowerBIHubModal = () => {
+        window.openPowerBIConnectorModal(null);
+      };
+
+      const pbiModelSelectEl = document.getElementById('pbi-model-select');
+      pbiModelSelectEl?.addEventListener('change', () => {
         const models = getAvailableModelsForPowerBi();
-        const selVal = pbiModelSelect.value;
-        const matched = models.find(m => m.fileId === selVal) || models[0];
+        const selOpt = pbiModelSelectEl.options[pbiModelSelectEl.selectedIndex];
+        const idx = selOpt ? Number(selOpt.dataset.modelIdx) : -1;
+        const matched = (idx >= 0 && models[idx]) ? models[idx] : (models.find(m => m.fileId === pbiModelSelectEl.value || m.name === pbiModelSelectEl.value) || models[0]);
         updatePowerBiModalDetails(matched);
       });
 
-      document.getElementById('btn-close-pbi-modal')?.addEventListener('click', () => modalPowerBi?.classList.add('hidden'));
-      document.getElementById('btn-close-pbi-modal-bottom')?.addEventListener('click', () => modalPowerBi?.classList.add('hidden'));
+      const closePowerBIModal = () => {
+        const modal = document.getElementById('modal-powerbi-connector');
+        if (modal) {
+          modal.classList.add('hidden');
+          modal.style.display = 'none';
+        }
+      };
 
-      document.getElementById('btn-copy-m-code')?.addEventListener('click', () => {
-        navigator.clipboard.writeText(pbiMCode.textContent);
-        const btn = document.getElementById('btn-copy-m-code');
-        const prev = btn.innerHTML;
-        btn.innerHTML = '<span class="material-symbols-outlined text-[14px]">check</span> ¡Copiado!';
-        btn.classList.replace('bg-blue-600', 'bg-emerald-600');
-        setTimeout(() => {
-          btn.innerHTML = prev;
-          btn.classList.replace('bg-emerald-600', 'bg-blue-600');
-        }, 2000);
+      document.getElementById('btn-close-pbi-modal')?.addEventListener('click', closePowerBIModal);
+      document.getElementById('btn-close-pbi-modal-bottom')?.addEventListener('click', closePowerBIModal);
+
+      document.getElementById('btn-copy-m-code')?.addEventListener('click', function() {
+        const pbiMCode = document.getElementById('pbi-m-code');
+        pbiCopyToClipboard(pbiMCode?.textContent || '', this, '¡Consulta Copiada!');
       });
 
-      document.getElementById('btn-copy-direct-url')?.addEventListener('click', () => {
-        navigator.clipboard.writeText(pbiDirectUrl.value);
-        const btn = document.getElementById('btn-copy-direct-url');
-        const prev = btn.textContent;
-        btn.textContent = '¡Copiado!';
-        setTimeout(() => { btn.textContent = prev; }, 2000);
+      document.getElementById('btn-copy-direct-url')?.addEventListener('click', function() {
+        const pbiDirectUrl = document.getElementById('pbi-direct-url');
+        pbiCopyToClipboard(pbiDirectUrl?.value || '', this, '¡URL Copiada!');
       });
 
-      document.getElementById('btn-copy-frag-id')?.addEventListener('click', () => {
-        navigator.clipboard.writeText(pbiFragIdVal.textContent.trim());
+      document.getElementById('btn-copy-frag-id')?.addEventListener('click', function() {
+        const pbiFragIdVal = document.getElementById('pbi-frag-id-val');
+        pbiCopyToClipboard(pbiFragIdVal?.textContent?.trim() || '', this, '¡ID Copiado!');
       });
 
-      document.getElementById('btn-copy-json-id')?.addEventListener('click', () => {
-        navigator.clipboard.writeText(pbiJsonIdVal.textContent.trim());
+      document.getElementById('btn-copy-json-id')?.addEventListener('click', function() {
+        const pbiJsonIdVal = document.getElementById('pbi-json-id-val');
+        pbiCopyToClipboard(pbiJsonIdVal?.textContent?.trim() || '', this, '¡ID Copiado!');
       });
 
       window.openNewVersionModal = (encodedData) => {
@@ -4481,7 +4958,7 @@
             status: v.status || 'EN_PROGRESO',
             originalFileId: v.originalFileId,
             type: v.type || '',
-            folderId: ds.driveFolderId || '',
+            folderId: (ds.driveFolderId && String(ds.driveFolderId).trim().length > 15) ? ds.driveFolderId.trim() : '',
             driveFolderName: ds.driveFolderName || activeProject.name,
             changedBy: userAccount ? (userAccount.name || '') : '',
             changedByEmail: userAccount ? (userAccount.email || userAccount.username || '') : '',
@@ -4655,7 +5132,7 @@
             filename: f.name,
             newStatus: newStatus,
             project: activeProject.slug || slugify(activeProject.name),
-            folderId: ds.driveFolderId || '',
+            folderId: (ds.driveFolderId && String(ds.driveFolderId).trim().length > 15) ? ds.driveFolderId.trim() : '',
             driveFolderName: ds.driveFolderName || activeProject.name,
             originalFileId: f.originalFileId || f.fileId,
             type: f.type || '',
@@ -4687,7 +5164,7 @@
                   filename: f.pairedFragName,
                   newStatus: newStatus,
                   project: activeProject.slug || slugify(activeProject.name),
-                  folderId: ds.driveFolderId || '',
+                  folderId: (ds.driveFolderId && String(ds.driveFolderId).trim().length > 15) ? ds.driveFolderId.trim() : '',
                   driveFolderName: ds.driveFolderName || activeProject.name,
                   originalFileId: f.pairedFragId,
                   type: 'model',
@@ -4775,7 +5252,7 @@
           const payload = {
             action: 'deleteFiles',
             fileIds: uniqueFileIds,
-            folderId: ds.driveFolderId || '',
+            folderId: (ds.driveFolderId && String(ds.driveFolderId).trim().length > 15) ? ds.driveFolderId.trim() : '',
             driveFolderName: ds.driveFolderName || activeProject.name,
             project: activeProject.slug || slugify(activeProject.name),
             filename: f.name
@@ -4798,6 +5275,14 @@
           if (data.status === 'error') {
             throw new Error(data.message || 'Error al eliminar');
           }
+          try {
+            await cleanupViewpointsForDeletedModel(f.name, uniqueFileIds);
+            if (isRvt && fragName) {
+              await cleanupViewpointsForDeletedModel(fragName, [f.pairedFragId, f.pairedFragJsonId].filter(Boolean));
+            }
+          } catch(e) {
+            console.warn('[Upload] Error eliminando modelo de vistas:', e);
+          }
 
           // 2. Si era RVT y tenía .frag asociado, limpiar también registro de estado para el .frag
           const fragName = f.pairedFragName || `${f.name.replace(/\.rvt$/i, '')}.frag`;
@@ -4810,7 +5295,7 @@
                 body: JSON.stringify({
                   action: 'deleteFiles',
                   fileIds: [f.pairedFragId, f.pairedFragJsonId].filter(Boolean),
-                  folderId: ds.driveFolderId || '',
+                  folderId: (ds.driveFolderId && String(ds.driveFolderId).trim().length > 15) ? ds.driveFolderId.trim() : '',
                   driveFolderName: ds.driveFolderName || activeProject.name,
                   project: activeProject.slug || slugify(activeProject.name),
                   filename: fragName
@@ -4861,6 +5346,79 @@
       refreshListBtn.addEventListener('click', loadProjectFiles);
       filesSearch.addEventListener('input', renderDriveFilesTable);
     });
-  </script>
+  
+    async function cleanupViewpointsForDeletedModel(filename, fileIds) {
+      try {
+        const fnLower = String(filename || '').toLowerCase();
+        const baseLower = fnLower.replace(/\.[^/.]+$/, '');
+        const idSet = new Set((fileIds || []).map(id => String(id).toLowerCase()));
+        const scriptUrl = "https://script.google.com/macros/s/AKfycbyg9Bs9N1HnjHBpfqRaiB0HNDy5uS4QR6LqIPSZELLcoGR5Gvw64MUTBcqJlpsMK0w/exec";
+
+        for (let i = 0; i < localStorage.length; i++) {
+          const key = localStorage.key(i);
+          if (key && key.startsWith('vsr-ifc-viewpoints')) {
+            try {
+              const raw = localStorage.getItem(key);
+              if (!raw) continue;
+              let views = JSON.parse(raw);
+              if (!Array.isArray(views)) continue;
+
+              let modified = false;
+              const filteredViews = [];
+
+              for (const vp of views) {
+                if (Array.isArray(vp.loadedModels) && vp.loadedModels.length > 0) {
+                  const remaining = vp.loadedModels.filter(m => {
+                    const u = String(m.uuid || '').toLowerCase();
+                    const url = String(m.url || '').toLowerCase();
+                    if (u.includes(fnLower) || u.includes(baseLower)) return false;
+                    if (url.includes(fnLower) || url.includes(baseLower)) return false;
+                    for (const fid of idSet) {
+                      if (fid.length > 5 && (url.includes(fid) || u.includes(fid))) return false;
+                    }
+                    return true;
+                  });
+
+                  if (remaining.length === 0) {
+                    modified = true;
+                    console.log(`[Upload] Removing viewpoint associated with deleted model: ${vp.title} (${vp.id})`);
+                    try {
+                      fetch(scriptUrl, {
+                        method: 'POST',
+                        mode: 'cors',
+                        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+                        body: JSON.stringify({ action: 'delete', id: vp.id })
+                      }).catch(() => {});
+                    } catch {}
+                    continue;
+                  } else if (remaining.length < vp.loadedModels.length) {
+                    modified = true;
+                    vp.loadedModels = remaining;
+                    filteredViews.push(vp);
+                    try {
+                      fetch(scriptUrl, {
+                        method: 'POST',
+                        mode: 'cors',
+                        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+                        body: JSON.stringify({ action: 'save', data: vp, requesterUserId: vp.userId })
+                      }).catch(() => {});
+                    } catch {}
+                    continue;
+                  }
+                }
+                filteredViews.push(vp);
+              }
+
+              if (modified) {
+                localStorage.setItem(key, JSON.stringify(filteredViews));
+              }
+            } catch {}
+          }
+        }
+      } catch (err) {
+        console.warn("Error cleaning viewpoints for deleted model:", err);
+      }
+    }
+</script>
 </body>
 </html>

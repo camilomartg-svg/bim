@@ -827,17 +827,26 @@
   function isBackButtonElement(target) {
     if (!target || target === document.body || target === document.documentElement) return false;
 
+    // Si el clic fue directamente sobre un contenedor general (header, nav, toolbar, banner), NUNCA es botón
+    if (target.tagName === 'HEADER' || target.tagName === 'NAV') return false;
+
     // NUNCA interceptar tarjetas de empresas o proyectos
     if (target.closest('.company-card, .card-hover, #empresas-container, #companies-container, #projects-list, #projects-container, #project-tools-container, #project-quick-links')) {
       return false;
     }
 
-    var btn = target.closest('button, a, [role="button"]') || target;
-    var id = (btn.id || target.id || '').toLowerCase();
-    var title = (btn.getAttribute('title') || target.getAttribute('title') || '').toLowerCase();
-    var aria = (btn.getAttribute('aria-label') || target.getAttribute('aria-label') || '').toLowerCase();
+    // Debe ser estrictamente un botón o enlace real, jamás un div/contenedor
+    var btn = target.closest('button, a, [role="button"]');
+    if (!btn) return false;
+
+    var id = (btn.id || '').toLowerCase();
+    var title = (btn.getAttribute('title') || '').toLowerCase();
+    var aria = (btn.getAttribute('aria-label') || '').toLowerCase();
 
     if (id === 'back-btn' || id === 'btn-header-back' || id === 'nav-back-btn') {
+      return true;
+    }
+    if (btn.classList && (btn.classList.contains('back-btn') || btn.classList.contains('btn-back'))) {
       return true;
     }
     if (title === 'volver' || title === 'regresar' || title === 'volver a la capa superior' || title === 'volver al proyecto' || title === 'volver al portal') {
@@ -847,15 +856,17 @@
       return true;
     }
 
-    // Chequear icono de flecha atrás en botones de cabecera
-    var icon = btn.querySelector('.material-symbols-outlined, .material-icons, i.fa-arrow-left, i.fa-chevron-left');
-    if (icon && (btn.id.includes('back') || (btn.classList && (btn.classList.contains('back-btn') || btn.classList.contains('sidebar-toggle-btn'))) || btn.closest('header, nav, .top-bar, .header'))) {
-      var text = (icon.textContent || '').trim().toLowerCase();
-      if (text === 'arrow_back' || text === 'arrow_left' || text === 'arrow_back_ios') {
-        return true;
-      }
-      if (icon.classList && (icon.classList.contains('fa-arrow-left') || icon.classList.contains('fa-chevron-left'))) {
-        return true;
+    // Chequear icono de flecha atrás ÚNICAMENTE si el botón tiene identificación explícita de retroceso
+    if (id.includes('back') || (btn.classList && (btn.classList.contains('back-btn') || btn.classList.contains('sidebar-toggle-btn')))) {
+      var icon = btn.querySelector('.material-symbols-outlined, .material-icons, i.fa-arrow-left, i.fa-chevron-left');
+      if (icon) {
+        var text = (icon.textContent || '').trim().toLowerCase();
+        if (text === 'arrow_back' || text === 'arrow_left' || text === 'arrow_back_ios') {
+          return true;
+        }
+        if (icon.classList && (icon.classList.contains('fa-arrow-left') || icon.classList.contains('fa-chevron-left'))) {
+          return true;
+        }
       }
     }
 

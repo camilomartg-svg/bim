@@ -7,7 +7,8 @@ import { Plus, Search, Filter, MoreVertical, Paperclip, MessageSquare, Clock, Al
 import { motion, AnimatePresence } from 'motion/react';
 import { cn } from '../lib/utils';
 import { format } from 'date-fns';
-import { subscribeToIssues } from '../services/firebaseService';
+import { subscribeToIssues, getProjectConfig } from '../services/firebaseService';
+import { getUserProjectBranch, isTypeAllowedForBranch, IssueTypeScope } from '../utils/userScope';
 
 interface IssueListProps {
   onSelectIssue: (issue: Issue) => void;
@@ -20,7 +21,32 @@ export default function IssueList({ onSelectIssue, view = 'active', onOpenReport
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState<IssueStatus | 'all'>('all');
+  const [typeScopes, setTypeScopes] = useState<Record<string, IssueTypeScope>>({});
   const { user } = useAuth();
+
+  useEffect(() => {
+    let active = true;
+    const fetchScopes = async () => {
+      try {
+        const cfg = await getProjectConfig();
+        if (active && cfg?.issueTypeScopes) {
+          setTypeScopes(cfg.issueTypeScopes);
+        }
+      } catch (e) {
+        console.warn('Could not load issueTypeScopes in IssueList:', e);
+      }
+    };
+    fetchScopes();
+
+    const handleStorageUpdate = () => {
+      fetchScopes();
+    };
+    window.addEventListener('storage_settings_updated', handleStorageUpdate);
+    return () => {
+      active = false;
+      window.removeEventListener('storage_settings_updated', handleStorageUpdate);
+    };
+  }, []);
 
   useEffect(() => {
     const unsubscribe = subscribeToIssues((issuesData) => {
@@ -31,6 +57,13 @@ export default function IssueList({ onSelectIssue, view = 'active', onOpenReport
   }, []);
 
   const filteredIssues = issues.filter(issue => {
+    // Filter by ISO 19650 Branch Scope (Global vs Entrega vs Receptor)
+    const userBranch = getUserProjectBranch(user?.email);
+    const scope = (issue.type && typeScopes[issue.type]) || 'GLOBAL';
+    if (!isTypeAllowedForBranch(scope, userBranch)) {
+      return false;
+    }
+
     const matchesSearch = 
       issue.title.toLowerCase().includes(searchTerm.toLowerCase()) || 
       issue.description.toLowerCase().includes(searchTerm.toLowerCase()) ||

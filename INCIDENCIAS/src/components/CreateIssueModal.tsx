@@ -25,6 +25,7 @@ import {
   saveIssue,
   saveReport
 } from '../services/firebaseService';
+import { getUserProjectBranch, isTypeAllowedForBranch } from '../utils/userScope';
 import { X, Paperclip, Send, AlertCircle, Box, Map as MapIcon, Image as ImageIcon, FileText, Link, Plus, Trash2, Camera, User as UserIcon, MapPin, Package, ShieldCheck, Building2, ClipboardList, ChevronRight, CheckCircle2, Calendar, Zap, ArrowRight, Mic, MicOff, Video } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { cn } from '../lib/utils';
@@ -207,8 +208,17 @@ export default function CreateIssueModal({ onClose, onSuccess }: CreateIssueModa
       setFieldSettings(fieldArray);
       setCustomImpacts(impactOptions);
 
-      // Filter types based on user permissions
+      // Filter types based on user ISO 19650 branch permissions (Global vs Entrega vs Receptor) and overrides
+      const userBranch = getUserProjectBranch(user?.email);
+      const scopesMap = fbConfig.issueTypeScopes || {};
+
       const filteredTypes = issueTypes.filter(t => {
+        // 1. Check ISO 19650 branch scope restriction
+        const scope = scopesMap[t] || 'GLOBAL';
+        if (!isTypeAllowedForBranch(scope, userBranch)) {
+          return false;
+        }
+
         const override = fbConfig.typeOverrides?.[t];
         if (!override) return true;
         

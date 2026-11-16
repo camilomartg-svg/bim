@@ -134,29 +134,54 @@
     if (!email) return '';
     const clean = email.toLowerCase().trim();
 
+    // 1. Si es el usuario actual en sesión, usar directamente currentUser.name
+    const currentEmail = (currentUser?.username || currentUser?.email || currentUser?.userAccount || '').toLowerCase().trim();
+    if (clean === currentEmail && currentUser?.name && currentUser.name.trim() && currentUser.name.trim().toLowerCase() !== 'nuevo usuario' && currentUser.name.trim().toLowerCase() !== clean) {
+      return currentUser.name.trim();
+    }
+
+    // 2. Revisar si en localStorage / sessionStorage userAccount tiene name para este correo
+    try {
+      const sessionAcc = JSON.parse(sessionStorage.getItem('userAccount') || localStorage.getItem('userAccount') || 'null');
+      if (sessionAcc && (sessionAcc.username || sessionAcc.email || '').toLowerCase().trim() === clean && sessionAcc.name && sessionAcc.name.trim() && sessionAcc.name.trim().toLowerCase() !== 'nuevo usuario' && sessionAcc.name.trim().toLowerCase() !== clean) {
+        return sessionAcc.name.trim();
+      }
+    } catch (e) {}
+
+    // 3. Revisar en allDirectoryUsers
     if (Array.isArray(allDirectoryUsers)) {
       const dirUser = allDirectoryUsers.find(du => du.email && du.email.toLowerCase().trim() === clean);
-      if (dirUser && dirUser.nombre && dirUser.nombre.trim() && dirUser.nombre.trim().toLowerCase() !== 'nuevo usuario') {
-        return dirUser.nombre.trim();
+      const dName = dirUser?.nombre || dirUser?.name || dirUser?.Nombre;
+      if (dName && dName.trim() && dName.trim().toLowerCase() !== 'nuevo usuario' && dName.trim().toLowerCase() !== clean) {
+        return dName.trim();
       }
     }
 
+    // 4. Revisar en miembros de la empresa actual
     const companyMembers = Array.isArray(currentCompany?.members) ? currentCompany.members : [];
     const curCompMember = companyMembers.find(cm => cm.email && cm.email.toLowerCase().trim() === clean);
-    if (curCompMember && curCompMember.name && curCompMember.name.trim() && curCompMember.name.trim().toLowerCase() !== 'nuevo usuario') {
-      return curCompMember.name.trim();
+    const cmName = curCompMember?.name || curCompMember?.nombre;
+    if (cmName && cmName.trim() && cmName.trim().toLowerCase() !== 'nuevo usuario' && cmName.trim().toLowerCase() !== clean) {
+      return cmName.trim();
     }
 
+    // 5. Revisar en todas las empresas
     if (Array.isArray(allCompaniesList)) {
       for (const comp of allCompaniesList) {
         if (comp.deleted) continue;
         if (Array.isArray(comp.members)) {
           const found = comp.members.find(m => m.email && m.email.toLowerCase().trim() === clean);
-          if (found && found.name && found.name.trim() && found.name.trim().toLowerCase() !== 'nuevo usuario') {
-            return found.name.trim();
+          const fName = found?.name || found?.nombre;
+          if (fName && fName.trim() && fName.trim().toLowerCase() !== 'nuevo usuario' && fName.trim().toLowerCase() !== clean) {
+            return fName.trim();
           }
         }
       }
+    }
+
+    // 6. Super Administrador principal conocido
+    if (clean === 'imagina3ddesign@gmail.com') {
+      return 'Camilo Martinez';
     }
 
     return clean.split('@')[0];
@@ -338,7 +363,11 @@
     canManageReceiverTeams = canCreateReceiverTeams;
 
     // Update UI headers & badges
-    if (el.userDisplayName) el.userDisplayName.textContent = getUserRegisteredName(email) || email || 'Invitado';
+    const registeredName = getUserRegisteredName(email);
+    const displayName = (currentUser?.name && currentUser.name.trim() && currentUser.name.trim().toLowerCase() !== 'nuevo usuario' && currentUser.name.trim().toLowerCase() !== email.toLowerCase())
+      ? currentUser.name.trim()
+      : (registeredName || email || 'Invitado');
+    if (el.userDisplayName) el.userDisplayName.textContent = displayName;
     if (el.userDisplayRole) {
       if (isSuperAdmin) el.userDisplayRole.textContent = 'Super Administrador';
       else if (isCompanyAdmin) el.userDisplayRole.textContent = 'Admin Empresa';
@@ -666,6 +695,8 @@
 
   // --- CARGA DE DATOS ---
   async function init() {
+    evaluatePermissions();
+
     const params = new URLSearchParams(window.location.search);
     companyId = params.get('empresa') || '';
     projectSlug = params.get('project') || '';
@@ -796,6 +827,19 @@
       const dirRes = await fetch(GOOGLE_SCRIPT_URL);
       if (dirRes.ok) {
         allDirectoryUsers = await dirRes.json();
+        const myEmail = (currentUser?.username || currentUser?.email || '').toLowerCase().trim();
+        if (myEmail && Array.isArray(allDirectoryUsers)) {
+          const myDir = allDirectoryUsers.find(du => du.email && du.email.toLowerCase().trim() === myEmail);
+          const dirName = myDir?.nombre || myDir?.name || myDir?.Nombre;
+          if (dirName && dirName.trim() && (!currentUser.name || currentUser.name === myEmail || currentUser.name.toLowerCase() === 'nuevo usuario')) {
+            currentUser.name = dirName.trim();
+            try {
+              const storageLoc = localStorage.getItem('userAccount') ? localStorage : sessionStorage;
+              storageLoc.setItem('userAccount', JSON.stringify(currentUser));
+            } catch (e) {}
+          }
+        }
+        evaluatePermissions();
       }
     } catch (e) {
       console.warn('Directorio Nora no disponible:', e);
@@ -5877,25 +5921,9 @@ window.openAddMemberToReceiverTeamModal = function (receiverId) {
   }
 
   
-  // Navegación jerárquica ISO 19650
+  // Navegación jerárquica ISO 19650: Únicamente el botón de volver explícito
   if (el.backBtn) {
     el.backBtn.addEventListener('click', () => {
-      const empParam = companyId ? ('&empresa=' + encodeURIComponent(companyId)) : '';
-      window.location.href = 'project-landing.html?project=' + encodeURIComponent(projectSlug || '') + empParam;
-    });
-  }
-  if (el.breadcrumbEmpresa) {
-    el.breadcrumbEmpresa.classList.add('cursor-pointer', 'hover:underline');
-    el.breadcrumbEmpresa.title = 'Ir al Home de la Empresa';
-    el.breadcrumbEmpresa.addEventListener('click', () => {
-      const empParam = companyId ? ('?empresa=' + encodeURIComponent(companyId)) : '';
-      window.location.href = 'home.html' + empParam;
-    });
-  }
-  if (el.breadcrumbProyecto) {
-    el.breadcrumbProyecto.classList.add('cursor-pointer', 'hover:underline');
-    el.breadcrumbProyecto.title = 'Ir a la Landing del Proyecto';
-    el.breadcrumbProyecto.addEventListener('click', () => {
       const empParam = companyId ? ('&empresa=' + encodeURIComponent(companyId)) : '';
       window.location.href = 'project-landing.html?project=' + encodeURIComponent(projectSlug || '') + empParam;
     });

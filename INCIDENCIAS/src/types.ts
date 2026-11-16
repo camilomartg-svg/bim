@@ -348,6 +348,7 @@ export interface ProjectConfig {
   fieldVisibility?: Record<string, boolean>; // Global fallback
   impactOptions: string[];
   issueTypes?: string[];
+  issueTypeScopes?: Record<string, 'GLOBAL' | 'DELIVERY' | 'RECEIVER'>;
   economicActivities?: string[];
   dangers?: string[];
   responsibleCompanies?: string[];

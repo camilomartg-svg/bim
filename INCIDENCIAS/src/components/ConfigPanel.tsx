@@ -33,7 +33,10 @@ import {
   ClipboardList,
   Check,
   Leaf,
-  Info
+  Info,
+  Globe,
+  Layers,
+  HardHat
 } from 'lucide-react';
 import { motion, AnimatePresence, Reorder } from 'motion/react';
 import { cn } from '../lib/utils';
@@ -524,7 +527,8 @@ export default function ConfigPanel() {
   
   // Buffer state for currently edited scope
   const [impacts, setImpacts] = useState<{id: string, name: string}[]>([]);
-  const [types, setTypes] = useState<{id: string, name: string}[]>([]);
+  const [types, setTypes] = useState<{id: string, name: string, scope?: 'GLOBAL' | 'DELIVERY' | 'RECEIVER'}[]>([]);
+  const [globalTypeScopes, setGlobalTypeScopes] = useState<Record<string, 'GLOBAL' | 'DELIVERY' | 'RECEIVER'>>({});
   const [activities, setActivities] = useState<{id: string, name: string}[]>([]);
   const [dangers, setDangers] = useState<{id: string, name: string}[]>([]);
   const [companies, setCompanies] = useState<{id: string, name: string}[]>([]);
@@ -673,10 +677,13 @@ export default function ConfigPanel() {
           setQualityReportsAllowedTeams(fbConfig.qualityReportsAllowedTeams || fbConfig.qualityReportsAllowedProfiles || []);
           setEnvironmentalReportsAllowedTeams(fbConfig.environmentalReportsAllowedTeams || fbConfig.environmentalReportsAllowedProfiles || []);
 
+          const gTypeScopes = fbConfig.issueTypeScopes || {};
+          setGlobalTypeScopes(gTypeScopes);
+
           // Fallback for types and impacts if explicitly set on root (legacy/shared)
           if (selectedConfigKey === 'GLOBAL') {
             setImpacts(gImpacts.map(v => ({ id: Math.random().toString(36).substr(2, 9), name: v })));
-            setTypes(gTypes.map(v => ({ id: Math.random().toString(36).substr(2, 9), name: v })));
+            setTypes(gTypes.map(v => ({ id: Math.random().toString(36).substr(2, 9), name: v, scope: (gTypeScopes[v] || 'GLOBAL') })));
             setActivities(gActivities.map(v => ({ id: Math.random().toString(36).substr(2, 9), name: v })));
             setDangers(gDangers.map(v => ({ id: Math.random().toString(36).substr(2, 9), name: v })));
             setCompanies(gCompanies.map(v => ({ id: Math.random().toString(36).substr(2, 9), name: v })));
@@ -737,7 +744,7 @@ export default function ConfigPanel() {
 
     if (selectedConfigKey === 'GLOBAL') {
       setImpacts(globalImpacts.map(v => ({ id: Math.random().toString(36).substr(2, 9), name: v })));
-      setTypes(globalTypes.map(v => ({ id: Math.random().toString(36).substr(2, 9), name: v })));
+      setTypes(globalTypes.map(v => ({ id: Math.random().toString(36).substr(2, 9), name: v, scope: (globalTypeScopes[v] || 'GLOBAL') })));
       setActivities(globalActivities.map(v => ({ id: Math.random().toString(36).substr(2, 9), name: v })));
       setDangers(globalDangers.map(v => ({ id: Math.random().toString(36).substr(2, 9), name: v })));
       setCompanies(globalCompanies.map(v => ({ id: Math.random().toString(36).substr(2, 9), name: v })));
@@ -749,7 +756,7 @@ export default function ConfigPanel() {
       const override = typeOverrides[selectedConfigKey] || {};
       
       const roleImpacts = (override.impactOptions || globalImpacts).map(v => ({ id: Math.random().toString(36).substr(2, 9), name: v }));
-      const roleTypes = (override.issueTypes || globalTypes).map(v => ({ id: Math.random().toString(36).substr(2, 9), name: v }));
+      const roleTypes = (override.issueTypes || globalTypes).map(v => ({ id: Math.random().toString(36).substr(2, 9), name: v, scope: (globalTypeScopes[v] || 'GLOBAL') }));
       const roleFields = DEFAULT_CONFIG.map(def => ({
         ...def,
         visible: override.fieldVisibility?.[def.id] ?? (globalFields.find(gf => gf.id === def.id)?.visible ?? def.visible)
@@ -865,12 +872,22 @@ export default function ConfigPanel() {
     
     // Get existing config to preserve roleOverrides if any exist in DB
     const fbConfig = await getProjectConfig();
+
+    const scopesToSave: Record<string, 'GLOBAL' | 'DELIVERY' | 'RECEIVER'> = { ...(fbConfig?.issueTypeScopes || {}), ...globalTypeScopes };
+    types.forEach(t => {
+      const clean = t.name.trim();
+      if (clean) {
+        scopesToSave[clean] = (t.scope || 'GLOBAL') as 'GLOBAL' | 'DELIVERY' | 'RECEIVER';
+      }
+    });
+    setGlobalTypeScopes(scopesToSave);
     
     const configToSave = {
       ...fbConfig,
       fieldVisibility: newGlobalFields.reduce((acc, f) => ({ ...acc, [f.id]: f.visible }), {}),
       impactOptions: newGlobalImpacts,
       issueTypes: newGlobalTypes,
+      issueTypeScopes: scopesToSave,
       economicActivities: newGlobalActivities,
       dangers: newGlobalDangers,
       responsibleCompanies: newGlobalCompanies,
@@ -960,7 +977,7 @@ export default function ConfigPanel() {
 
 const addItem = (type: 'impact' | 'type' | 'team' | 'activity' | 'danger' | 'company' | 'team_name' | 'quality_source' | 'quality_hito' | 'quality_type') => {
   if (type === 'impact') setImpacts(prev => [...prev, { id: Date.now().toString(), name: 'Nueva Afectación' }]);
-  if (type === 'type') setTypes(prev => [...prev, { id: Date.now().toString(), name: 'Nuevo Tipo' }]);
+  if (type === 'type') setTypes(prev => [...prev, { id: Date.now().toString(), name: 'NUEVO TIPO GLOBAL', scope: 'GLOBAL' }]);
   if (type === 'team') setTeam(prev => [...prev, { id: 'temp-' + Math.random().toString(36).substr(2, 9), position: 'Nuevo Cargo', name: 'Nombre', email: '', team: '' }]);
   if (type === 'activity') setActivities(prev => [...prev, { id: Date.now().toString(), name: 'Nueva Actividad' }]);
   if (type === 'danger') setDangers(prev => [...prev, { id: Date.now().toString(), name: 'Nuevo Peligro' }]);
@@ -969,6 +986,19 @@ const addItem = (type: 'impact' | 'type' | 'team' | 'activity' | 'danger' | 'com
   if (type === 'quality_source') setQualitySources(prev => [...prev, { id: Date.now().toString(), name: 'Nueva Fuente de Calidad' }]);
   if (type === 'quality_hito') setQualityHitos(prev => [...prev, { id: Date.now().toString(), name: 'Nuevo Hito de Calidad' }]);
   if (type === 'quality_type') setQualityTypes(prev => [...prev, { id: Date.now().toString(), name: 'Nuevo Tipo de Calidad' }]);
+};
+
+const addScopedType = (scope: 'GLOBAL' | 'DELIVERY' | 'RECEIVER') => {
+  const defaultNames: Record<'GLOBAL' | 'DELIVERY' | 'RECEIVER', string> = {
+    GLOBAL: 'NUEVO TIPO GLOBAL',
+    DELIVERY: 'NUEVO TIPO ENTREGA',
+    RECEIVER: 'NUEVO TIPO RECEPTOR'
+  };
+  setTypes(prev => [...prev, { id: Date.now().toString(), name: defaultNames[scope], scope }]);
+};
+
+const changeTypeScope = (id: string, scope: 'GLOBAL' | 'DELIVERY' | 'RECEIVER') => {
+  setTypes(prev => prev.map(t => t.id === id ? { ...t, scope } : t));
 };
 
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
@@ -1040,8 +1070,52 @@ const addItem = (type: 'impact' | 'type' | 'team' | 'activity' | 'danger' | 'com
 
   const resetTypes = () => {
     if (window.confirm('¿Desea restaurar los tipos de incidencia por defecto? Se perderán las personalizaciones actuales.')) {
-      setTypes(ISSUE_TYPES.map(v => ({ id: Math.random().toString(36).substr(2, 9), name: v })));
+      setTypes(ISSUE_TYPES.map(v => ({ id: Math.random().toString(36).substr(2, 9), name: v, scope: 'GLOBAL' })));
     }
+  };
+
+  const renderTypeCard = (t: { id: string; name: string; scope?: 'GLOBAL' | 'DELIVERY' | 'RECEIVER' }) => {
+    const scope = t.scope || 'GLOBAL';
+    const scopeBadgeClass = 
+      scope === 'GLOBAL' 
+        ? 'border-blue-200 text-blue-700 bg-blue-50 dark:bg-blue-950/80 dark:text-blue-300 dark:border-blue-800'
+        : scope === 'DELIVERY'
+        ? 'border-purple-200 text-purple-700 bg-purple-50 dark:bg-purple-950/80 dark:text-purple-300 dark:border-purple-800'
+        : 'border-amber-200 text-amber-700 bg-amber-50 dark:bg-amber-950/80 dark:text-amber-300 dark:border-amber-800';
+
+    return (
+      <div key={t.id} className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 p-4 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-2xl group hover:border-slate-400 dark:hover:border-slate-700 transition-all shadow-sm">
+        <input 
+          type="text" 
+          value={t.name} 
+          onChange={(e) => updateItem('type', t.id, e.target.value)}
+          placeholder="Nombre del tipo..."
+          className="flex-1 bg-transparent border-none text-slate-900 dark:text-white text-xs sm:text-sm font-bold focus:ring-0 outline-none uppercase tracking-tight"
+        />
+        <div className="flex items-center gap-2 self-end sm:self-center">
+          <select
+            value={scope}
+            onChange={(e) => changeTypeScope(t.id, e.target.value as any)}
+            className={cn(
+              "text-[10px] font-black uppercase tracking-wider px-2 py-1 rounded-lg border focus:ring-0 outline-none cursor-pointer transition-colors",
+              scopeBadgeClass
+            )}
+            title="Cambiar categoría de ámbito"
+          >
+            <option value="GLOBAL">🌐 Global</option>
+            <option value="DELIVERY">📦 Entrega</option>
+            <option value="RECEIVER">🏗️ Receptor</option>
+          </select>
+          <button 
+            onClick={() => removeItem('type', t.id)} 
+            className="p-1.5 text-slate-400 hover:text-red-500 rounded-lg hover:bg-red-50 dark:hover:bg-red-950/40 transition-all"
+            title="Eliminar tipo"
+          >
+            <Trash2 className="w-4 h-4" />
+          </button>
+        </div>
+      </div>
+    );
   };
 
   if (isLoading) {
@@ -1193,43 +1267,130 @@ const addItem = (type: 'impact' | 'type' | 'team' | 'activity' | 'danger' | 'com
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -10 }}
-                className="bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800/50 p-10 rounded-[2.5rem] shadow-xl shadow-slate-200/50 dark:shadow-black/20"
+                className="space-y-8"
               >
-                <div className="flex items-center justify-between mb-10">
+                {/* Header card with Actions */}
+                <div className="bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800/50 p-6 md:p-8 rounded-[2.5rem] shadow-xl shadow-slate-200/50 dark:shadow-black/20 flex flex-col md:flex-row md:items-center justify-between gap-4">
                   <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-2xl bg-blue-500 flex items-center justify-center text-white shadow-lg shadow-blue-500/10">
+                    <div className="w-10 h-10 rounded-2xl bg-blue-600 flex items-center justify-center text-white shadow-lg shadow-blue-500/20">
                       <FileText className="w-5 h-5" />
                     </div>
-                    <h3 className="text-[10px] font-black text-slate-400 dark:text-slate-600 uppercase tracking-[0.3em]">Lista de Tipos de Incidencia</h3>
+                    <div>
+                      <h3 className="text-xs font-black text-slate-900 dark:text-white uppercase tracking-[0.2em]">Configuración de Tipos de Incidencia</h3>
+                      <p className="text-[11px] text-slate-500 font-medium">Clasificación por alcance ISO 19650: Globales, Equipos de Entrega y Equipos Receptores</p>
+                    </div>
                   </div>
-                  <div className="flex gap-4">
+                  <div className="flex items-center gap-3">
                     <button 
                       onClick={resetTypes}
-                      className="px-4 py-2 text-[9px] font-black uppercase tracking-widest text-slate-400 hover:text-slate-900 transition-all border border-slate-100 rounded-xl hover:border-slate-200"
+                      className="px-4 py-2 text-[10px] font-black uppercase tracking-widest text-slate-500 hover:text-slate-900 dark:hover:text-white transition-all border border-slate-200 dark:border-slate-800 rounded-xl hover:border-slate-400"
                     >
                       Restaurar Defectos
                     </button>
-                    <button onClick={() => addItem('type')} className="p-2.5 bg-slate-900 dark:bg-white text-white dark:text-slate-900 rounded-xl hover:scale-110 active:scale-95 transition-all shadow-lg shadow-slate-900/10 dark:shadow-white/5">
-                      <Plus className="w-5 h-5" />
-                    </button>
                   </div>
                 </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {types.slice().sort((a, b) => a.name.localeCompare(b.name)).map((t) => (
-                    <div key={t.id} className="flex items-center gap-4 p-5 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-2xl group hover:border-slate-400 dark:hover:border-slate-700 transition-all shadow-sm">
-                      <input 
-                        type="text" 
-                        value={t.name} 
-                        onChange={(e) => updateItem('type', t.id, e.target.value)}
-                        className="flex-1 bg-transparent border-none text-slate-900 dark:text-white text-sm font-bold focus:ring-0 outline-none uppercase tracking-tight"
-                      />
-                      <button onClick={() => removeItem('type', t.id)} className="opacity-0 group-hover:opacity-100 p-2 text-slate-300 dark:text-slate-800 hover:text-red-500 transition-all">
-                        <Trash2 className="w-4 h-4" />
-                      </button>
+
+                {/* 1. SECCIÓN: TIPOS GLOBALES */}
+                <div className="bg-white dark:bg-slate-900 border-2 border-blue-100 dark:border-blue-900/40 p-6 md:p-8 rounded-[2.5rem] shadow-xl shadow-blue-500/5">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6 border-b border-blue-50 dark:border-blue-900/30 pb-4">
+                    <div className="flex items-center gap-3">
+                      <div className="w-9 h-9 rounded-xl bg-blue-500/10 text-blue-600 dark:text-blue-400 flex items-center justify-center shrink-0">
+                        <Globe className="w-5 h-5" />
+                      </div>
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <h4 className="text-sm font-black text-slate-900 dark:text-white uppercase tracking-tight">1. Tipos de Incidencias Globales</h4>
+                          <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-300">
+                            {types.filter(t => (t.scope || 'GLOBAL') === 'GLOBAL').length}
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-slate-500">Cualquier participante del proyecto (Administradores, Entrega y Receptor) puede registrarlas y consultarlas.</p>
+                      </div>
                     </div>
-                  ))}
+                    <button 
+                      onClick={() => addScopedType('GLOBAL')}
+                      className="self-start sm:self-center flex items-center gap-1.5 px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold transition-all shadow-md shadow-blue-500/20 active:scale-95 whitespace-nowrap"
+                    >
+                      <Plus className="w-4 h-4" />
+                      <span>Añadir Tipo Global</span>
+                    </button>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {types.filter(t => (t.scope || 'GLOBAL') === 'GLOBAL').map((t) => renderTypeCard(t))}
+                  </div>
+                  {types.filter(t => (t.scope || 'GLOBAL') === 'GLOBAL').length === 0 && (
+                    <p className="text-center py-6 text-slate-400 font-bold uppercase tracking-widest text-[10px]">Sin tipos globales definidos</p>
+                  )}
                 </div>
-                {types.length === 0 && <p className="text-center py-10 text-slate-400 font-bold uppercase tracking-widest text-[10px]">Sin tipos de incidencia definidos</p>}
+
+                {/* 2. SECCIÓN: TIPOS EQUIPO DE ENTREGA */}
+                <div className="bg-white dark:bg-slate-900 border-2 border-purple-100 dark:border-purple-900/40 p-6 md:p-8 rounded-[2.5rem] shadow-xl shadow-purple-500/5">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6 border-b border-purple-50 dark:border-purple-900/30 pb-4">
+                    <div className="flex items-center gap-3">
+                      <div className="w-9 h-9 rounded-xl bg-purple-500/10 text-purple-600 dark:text-purple-400 flex items-center justify-center shrink-0">
+                        <Layers className="w-5 h-5" />
+                      </div>
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <h4 className="text-sm font-black text-slate-900 dark:text-white uppercase tracking-tight">2. Tipos de Equipo de Entrega</h4>
+                          <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-purple-100 dark:bg-purple-950 text-purple-700 dark:text-purple-300">
+                            {types.filter(t => t.scope === 'DELIVERY').length}
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-slate-500">Exclusivos para Equipos de Entrega / Tarea. Solo ellos y administradores pueden crearlas y verlas.</p>
+                      </div>
+                    </div>
+                    <button 
+                      onClick={() => addScopedType('DELIVERY')}
+                      className="self-start sm:self-center flex items-center gap-1.5 px-3 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-xl text-xs font-bold transition-all shadow-md shadow-purple-500/20 active:scale-95 whitespace-nowrap"
+                    >
+                      <Plus className="w-4 h-4" />
+                      <span>Añadir Tipo Entrega</span>
+                    </button>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {types.filter(t => t.scope === 'DELIVERY').map((t) => renderTypeCard(t))}
+                  </div>
+                  {types.filter(t => t.scope === 'DELIVERY').length === 0 && (
+                    <p className="text-center py-6 text-slate-400 font-bold uppercase tracking-widest text-[10px]">Sin tipos de equipo de entrega definidos</p>
+                  )}
+                </div>
+
+                {/* 3. SECCIÓN: TIPOS EQUIPO RECEPTOR */}
+                <div className="bg-white dark:bg-slate-900 border-2 border-amber-100 dark:border-amber-900/40 p-6 md:p-8 rounded-[2.5rem] shadow-xl shadow-amber-500/5">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6 border-b border-amber-50 dark:border-amber-900/30 pb-4">
+                    <div className="flex items-center gap-3">
+                      <div className="w-9 h-9 rounded-xl bg-amber-500/10 text-amber-600 dark:text-amber-400 flex items-center justify-center shrink-0">
+                        <HardHat className="w-5 h-5" />
+                      </div>
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <h4 className="text-sm font-black text-slate-900 dark:text-white uppercase tracking-tight">3. Tipos de Equipo Receptor (Obra)</h4>
+                          <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 dark:bg-amber-950 text-amber-700 dark:text-amber-300">
+                            {types.filter(t => t.scope === 'RECEIVER').length}
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-slate-500">Exclusivos para Equipos de Obra / Receptores. Solo ellos y administradores pueden crearlas y verlas.</p>
+                      </div>
+                    </div>
+                    <button 
+                      onClick={() => addScopedType('RECEIVER')}
+                      className="self-start sm:self-center flex items-center gap-1.5 px-3 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-xs font-bold transition-all shadow-md shadow-amber-500/20 active:scale-95 whitespace-nowrap"
+                    >
+                      <Plus className="w-4 h-4" />
+                      <span>Añadir Tipo Receptor</span>
+                    </button>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {types.filter(t => t.scope === 'RECEIVER').map((t) => renderTypeCard(t))}
+                  </div>
+                  {types.filter(t => t.scope === 'RECEIVER').length === 0 && (
+                    <p className="text-center py-6 text-slate-400 font-bold uppercase tracking-widest text-[10px]">Sin tipos de equipo receptor definidos</p>
+                  )}
+                </div>
               </motion.section>
             )}
 

@@ -1,7 +1,8 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="es">
 
 <head>
+  <meta charset="utf-8" />
   <script>
     if (!sessionStorage.getItem('userAccount') && !localStorage.getItem('userAccount')) {
       window.location.replace('https://norabim.com/inse.html');
@@ -34,15 +35,65 @@
     }
   </style>
   <script>
-    (function () {
+    (async function () {
       const rawAccount = sessionStorage.getItem('userAccount') || localStorage.getItem('userAccount');
       const userAccount = rawAccount ? JSON.parse(rawAccount) : null;
-      if (!userAccount || (userAccount.role !== 'SUPER_ADMINISTRADOR' && userAccount.role !== 'ADMINISTRADOR_EMPRESA')) {
-        alert('Acceso denegado. Esta página es solo para Administradores.');
-        window.location.replace('home.html');
+      if (!userAccount) {
+        alert('Acceso denegado. Debes iniciar sesión.');
+        window.location.replace('https://norabim.com/inse.html');
+        return;
       }
+
+      const email = (userAccount.username || '').toLowerCase().trim();
+      const superAdminEmails = ['imagina3ddesign@gmail.com', 'mcmartinezg@unal.edu.co'];
+      if (userAccount.role === 'SUPER_ADMINISTRADOR' || superAdminEmails.includes(email)) {
+        userAccount.role = 'SUPER_ADMINISTRADOR';
+        const cacheLocation = localStorage.getItem('userAccount') ? 'localStorage' : 'sessionStorage';
+        window[cacheLocation].setItem('userAccount', JSON.stringify(userAccount));
+        return;
+      }
+
+      if (userAccount.role === 'ADMINISTRADOR_EMPRESA' || userAccount.role === 'ADMINISTRADOR') {
+        userAccount.role = 'ADMINISTRADOR_EMPRESA';
+        return;
+      }
+
+      // Si el rol en sesión dice MIEMBRO o INVITADO, verificar si es administrador de alguna empresa
+      try {
+        let companies = [];
+        const cached = sessionStorage.getItem('cachedCompanies_v2') || localStorage.getItem('cachedCompanies_v2');
+        if (cached) {
+          try { companies = JSON.parse(cached); } catch(e) {}
+        }
+        if (!companies || companies.length === 0) {
+          const res = await fetch(`empresas.json?t=${Date.now()}`);
+          if (res.ok) companies = await res.json();
+        }
+
+        const adminEmp = Array.isArray(companies) && companies.find(emp => {
+          if (emp.deleted) return false;
+          const inAdmins = Array.isArray(emp.admins) && emp.admins.some(a => String(a || '').toLowerCase().trim() === email);
+          const inMembers = Array.isArray(emp.members) && emp.members.some(m => String(m.email || '').toLowerCase().trim() === email && (m.role === 'ADMINISTRADOR_EMPRESA' || m.role === 'ADMINISTRADOR'));
+          return inAdmins || inMembers;
+        });
+
+        if (adminEmp) {
+          userAccount.role = 'ADMINISTRADOR_EMPRESA';
+          userAccount.adminEmpresaId = adminEmp.id;
+          const cacheLocation = localStorage.getItem('userAccount') ? 'localStorage' : 'sessionStorage';
+          window[cacheLocation].setItem('userAccount', JSON.stringify(userAccount));
+          return; // Acceso concedido
+        }
+      } catch (e) {
+        console.warn('Error verificando rol de administrador:', e);
+      }
+
+      alert('Acceso denegado. Esta página es solo para Administradores.');
+      window.location.replace('home.html');
     })();
   </script>
+  <script src="nora-drive-store.js?v=42"></script>
+  <script src="nora-navigation.js"></script>
 </head>
 
 <body class="bg-slate-100 text-slate-900">
@@ -83,7 +134,7 @@
             <span class="material-symbols-outlined text-amber-400 text-base">key</span> Credenciales Wompi
           </button>
           <button id="publish-github-btn"
-            class="rounded-xl bg-blue-600 px-6 py-3 text-sm font-bold text-white hover:bg-blue-700 shadow-md">Guardar</button>
+            class="rounded-xl bg-blue-600 px-6 py-2.5 text-sm font-bold text-white hover:bg-blue-700 shadow-md flex items-center gap-2 transition-all"><span class="material-symbols-outlined text-base">cloud_upload</span> Guardar Cambios</button>
         </div>
       </div>
     </header>
@@ -133,7 +184,7 @@
               </div>
 
               <div class="grid gap-6">
-                <!-- BÁSICOS SISTEMA -->
+                <!-- BÃSICOS SISTEMA -->
                 <div class="bg-white p-4 rounded-xl border">
                   <h4 class="text-sm font-bold uppercase tracking-wider text-slate-500 mb-4 border-b pb-2">Configuración
                     del Sistema</h4>
@@ -415,7 +466,7 @@
               <!-- Resumen de Cobro y Pasarela Wompi de la Empresa -->
               <div id="company-billing-summary" class="mt-6 p-6 rounded-2xl bg-blue-50/80 border border-blue-200 shadow-sm">
                 <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-                  <div class="space-y-1.5">
+                  <div class="space-y-1.5 flex-1">
                     <h4 class="text-base font-extrabold text-blue-950 flex items-center gap-2">
                       <span class="material-symbols-outlined text-xl text-blue-600">credit_card</span> Facturación Unificada y Pasarela Wompi
                     </h4>
@@ -425,18 +476,58 @@
                     <div class="flex flex-wrap items-center gap-3 text-xs text-blue-700 font-medium pt-1">
                       <span class="inline-flex items-center gap-1.5 bg-blue-100/80 text-blue-900 px-2.5 py-1 rounded-lg border border-blue-200 font-semibold">
                         <span class="material-symbols-outlined text-sm text-blue-600">calendar_month</span>
-                        Día de corte unificado: 3 de cada mes
+                        Día de corte unificado: 3 de cada mes (5 días de gracia para pago)
                       </span>
+                    </div>
+
+                    <!-- Selector de Plan con Descuentos por Adelantado -->
+                    <div class="mt-3 pt-3 border-t border-blue-200/80">
+                      <label class="block text-[11px] font-black uppercase tracking-wider text-blue-900 mb-1.5 flex items-center gap-1.5">
+                        <span class="material-symbols-outlined text-sm text-blue-600">savings</span> Planes con Descuento por Adelantado
+                      </label>
+                      <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 max-w-xl">
+                        <label class="cursor-pointer">
+                          <input type="radio" name="billing-plan-radio" value="monthly" checked onchange="changeBillingPlan(this.value)" class="sr-only peer" />
+                          <div class="p-2.5 rounded-xl border border-blue-200 bg-white peer-checked:border-blue-600 peer-checked:bg-blue-600 peer-checked:text-white text-blue-900 transition-all text-center shadow-sm">
+                            <div class="text-[11px] font-bold leading-tight">Mes a Mes</div>
+                            <div class="text-[9px] opacity-75 font-medium mt-0.5">Estándar</div>
+                          </div>
+                        </label>
+                        <label class="cursor-pointer">
+                          <input type="radio" name="billing-plan-radio" value="trimestre" onchange="changeBillingPlan(this.value)" class="sr-only peer" />
+                          <div class="p-2.5 rounded-xl border border-blue-200 bg-white peer-checked:border-blue-600 peer-checked:bg-blue-600 peer-checked:text-white text-blue-900 transition-all text-center shadow-sm relative overflow-hidden">
+                            <span class="absolute top-0 right-0 bg-emerald-500 text-white text-[8px] font-black px-1.5 py-0.2 rounded-bl-lg">5% OFF</span>
+                            <div class="text-[11px] font-bold leading-tight">Trimestre</div>
+                            <div class="text-[9px] opacity-75 font-medium mt-0.5">3 meses (-5%)</div>
+                          </div>
+                        </label>
+                        <label class="cursor-pointer">
+                          <input type="radio" name="billing-plan-radio" value="semestre" onchange="changeBillingPlan(this.value)" class="sr-only peer" />
+                          <div class="p-2.5 rounded-xl border border-blue-200 bg-white peer-checked:border-blue-600 peer-checked:bg-blue-600 peer-checked:text-white text-blue-900 transition-all text-center shadow-sm relative overflow-hidden">
+                            <span class="absolute top-0 right-0 bg-emerald-500 text-white text-[8px] font-black px-1.5 py-0.2 rounded-bl-lg">7% OFF</span>
+                            <div class="text-[11px] font-bold leading-tight">Semestre</div>
+                            <div class="text-[9px] opacity-75 font-medium mt-0.5">6 meses (-7%)</div>
+                          </div>
+                        </label>
+                        <label class="cursor-pointer">
+                          <input type="radio" name="billing-plan-radio" value="anualidad" onchange="changeBillingPlan(this.value)" class="sr-only peer" />
+                          <div class="p-2.5 rounded-xl border border-blue-200 bg-white peer-checked:border-blue-600 peer-checked:bg-blue-600 peer-checked:text-white text-blue-900 transition-all text-center shadow-sm relative overflow-hidden">
+                            <span class="absolute top-0 right-0 bg-amber-500 text-white text-[8px] font-black px-1.5 py-0.2 rounded-bl-lg">10% OFF</span>
+                            <div class="text-[11px] font-bold leading-tight">Anualidad</div>
+                            <div class="text-[9px] opacity-75 font-medium mt-0.5">12 meses (-10%)</div>
+                          </div>
+                        </label>
+                      </div>
                     </div>
                   </div>
 
-                  <div class="flex flex-col items-start md:items-end gap-2 w-full md:w-auto">
+                  <div class="flex flex-col items-start md:items-end gap-2 w-full md:w-auto shrink-0">
                     <div class="text-left md:text-right">
                       <div class="text-xs font-semibold text-blue-700">
                         Proyectos Licenciados: <span id="company-billing-count" class="font-bold text-blue-950">0</span>
                       </div>
                       <div class="text-xl font-black text-blue-950 mt-0.5" id="company-billing-total">
-                        $0 COP
+                         COP
                       </div>
                     </div>
                     <button id="pay-consolidated-wompi-btn" type="button" onclick="payConsolidatedWompi()" class="w-full md:w-auto bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs py-2.5 px-6 rounded-xl shadow-md transition-all flex items-center justify-center gap-2 mt-1">
@@ -793,10 +884,10 @@
                     <button onclick="testCustomTSCodeSyntax()" class="px-3 py-1.5 bg-cyan-600 hover:bg-cyan-700 text-white rounded-xl text-xs font-bold transition-all flex items-center gap-1 shadow-sm shrink-0">
                         <span class="material-symbols-outlined text-sm">bolt</span> Probar Código TS
                     </button>
-                    <button onclick="copyNoraTSCode()" class="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-all flex items-center gap-1 shrink-0" title="Copiar todo el código al portapapeles">
+                    <button onclick="copyNoraTSCode()" class="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-all flex items-center gap-1 shrink-0" title="Copiar todo el cÃ³digo al portapapeles">
                         <span class="material-symbols-outlined text-sm">content_copy</span> Copiar Código
                     </button>
-                    <button onclick="clearNoraTSCode()" class="px-3 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200 rounded-xl text-xs font-bold transition-all flex items-center gap-1 shrink-0" title="Borrar todo el código">
+                    <button onclick="clearNoraTSCode()" class="px-3 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200 rounded-xl text-xs font-bold transition-all flex items-center gap-1 shrink-0" title="Borrar todo el cÃ³digo">
                         <span class="material-symbols-outlined text-sm">delete</span> Borrar Código
                     </button>
                 </div>
@@ -831,7 +922,7 @@
                         <span class="material-symbols-outlined text-emerald-600">terminal</span>
                         Simulador Interactivo y Suite de Pruebas (Sandbox)
                     </h3>
-                    <p class="text-xs text-slate-500">Prueba comandos individuales o ejecuta la suite completa con semáforo de precisión para validar la producción.</p>
+                    <p class="text-xs text-slate-500">Prueba comandos individuales o ejecuta la suite completa con semáforo de precisiÃ³n para validar la producción.</p>
                 </div>
                 <div class="flex items-center gap-2">
                     <button onclick="runTestSuiteEvaluation()" class="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white font-bold text-xs rounded-xl shadow-md transition-all flex items-center gap-1.5 shrink-0">
@@ -933,7 +1024,7 @@
         </div>
     </div>
     
-    <!-- VISTA DE TRÁFICO Y GEOLOCALIZACIÓN -->
+    <!-- VISTA DE TRÃFICO Y GEOLOCALIZACIÃ“N -->
     <div id="traffic-view" class="hidden h-[calc(100vh-80px)] w-full overflow-y-auto bg-slate-50 p-4 md:p-8 flex-col space-y-6">
         <!-- KPI Summary Cards -->
         <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 shrink-0">
@@ -1170,7 +1261,8 @@
   <!-- Wompi Checkout Widget SDK & Integration Module -->
   <script type="text/javascript" src="https://checkout.wompi.co/widget.js"></script>
   <script src="wompi-integration.js"></script>
-  <script src="super-admin.js?v=40"></script>
+  <datalist id="global-users-datalist"></datalist>
+  <script src="super-admin.js?v=51"></script>
 </body>
 
 </html>

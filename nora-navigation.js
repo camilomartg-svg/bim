@@ -247,15 +247,17 @@
       return true;
     }
 
-    // Chequear icono de flecha atrás estrictamente dentro del botón
-    var icon = btn.querySelector('.material-symbols-outlined, .material-icons, i.fa-arrow-left, i.fa-chevron-left');
-    if (icon) {
-      var text = (icon.textContent || '').trim().toLowerCase();
-      if (text === 'arrow_back' || text === 'arrow_left' || text === 'arrow_back_ios') {
-        return true;
-      }
-      if (icon.classList && (icon.classList.contains('fa-arrow-left') || icon.classList.contains('fa-chevron-left'))) {
-        return true;
+    // Chequear icono de flecha atrás estrictamente dentro de un botón de retroceso
+    if (id.includes('back') || (btn.classList && (btn.classList.contains('back-btn') || btn.classList.contains('btn-back')))) {
+      var icon = btn.querySelector('.material-symbols-outlined, .material-icons, i.fa-arrow-left, i.fa-chevron-left');
+      if (icon) {
+        var text = (icon.textContent || '').trim().toLowerCase();
+        if (text === 'arrow_back' || text === 'arrow_left' || text === 'arrow_back_ios') {
+          return true;
+        }
+        if (icon.classList && (icon.classList.contains('fa-arrow-left') || icon.classList.contains('fa-chevron-left'))) {
+          return true;
+        }
       }
     }
 
