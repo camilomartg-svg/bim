@@ -495,10 +495,57 @@
       activeProject.iso19650.receiverTeams = [];
     }
 
+    activeProject.iso19650.deliveryTeams.forEach(dt => {
+      if (!Array.isArray(dt.taskTeams)) dt.taskTeams = [];
+      if (!Array.isArray(dt.members)) dt.members = [];
+    });
+
     activeProject.iso19650.receiverTeams.forEach(rt => {
       if (!Array.isArray(rt.taskTeams)) rt.taskTeams = [];
       if (!Array.isArray(rt.members)) rt.members = [];
     });
+
+    const normalizeName = str => (str || '').normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase().trim();
+
+    // 1. Recopilar nombres de equipos de tarea (subdivisiones) existentes en equipos de entrega y receptores
+    const allTaskTeamNames = new Set();
+    activeProject.iso19650.deliveryTeams.forEach(dt => {
+      (dt.taskTeams || []).forEach(tt => {
+        if (tt && tt.name) allTaskTeamNames.add(normalizeName(tt.name));
+      });
+    });
+    activeProject.iso19650.receiverTeams.forEach(rt => {
+      (rt.taskTeams || []).forEach(tt => {
+        if (tt && tt.name) allTaskTeamNames.add(normalizeName(tt.name));
+      });
+    });
+
+    // 2. Podar equipos de entrega y recepción espurios creados por error a partir de subdivisiones/tareas
+    let prunedSpuriousTeams = false;
+    if (allTaskTeamNames.size > 0) {
+      const origDelivLen = activeProject.iso19650.deliveryTeams.length;
+      activeProject.iso19650.deliveryTeams = activeProject.iso19650.deliveryTeams.filter(dt => {
+        const norm = normalizeName(dt.name || '');
+        // Si el nombre coincide con un equipo de tarea existente y NO tiene subdivisiones propias, es un clon erróneo
+        if (allTaskTeamNames.has(norm) && (!Array.isArray(dt.taskTeams) || dt.taskTeams.length === 0)) {
+          console.warn(`[ISO19650] Podando equipo de entrega erróneo "${dt.name}" (es en realidad una subdivisión / equipo de tarea)`);
+          return false;
+        }
+        return true;
+      });
+      if (activeProject.iso19650.deliveryTeams.length !== origDelivLen) prunedSpuriousTeams = true;
+
+      const origRecLen = activeProject.iso19650.receiverTeams.length;
+      activeProject.iso19650.receiverTeams = activeProject.iso19650.receiverTeams.filter(rt => {
+        const norm = normalizeName(rt.name || '');
+        if (allTaskTeamNames.has(norm) && (!Array.isArray(rt.taskTeams) || rt.taskTeams.length === 0)) {
+          console.warn(`[ISO19650] Podando equipo receptor erróneo "${rt.name}" (es en realidad una subdivisión / equipo de tarea)`);
+          return false;
+        }
+        return true;
+      });
+      if (activeProject.iso19650.receiverTeams.length !== origRecLen) prunedSpuriousTeams = true;
+    }
 
     if (!activeProject.iso19650.memberBranches || typeof activeProject.iso19650.memberBranches !== 'object') {
       activeProject.iso19650.memberBranches = {};
@@ -520,17 +567,15 @@
       });
     });
 
-    // Sincronizar/migrar desde activeProject.equiposDeTarea (creados en Configuración del Proyecto)
-    if (Array.isArray(activeProject.equiposDeTarea) && activeProject.equiposDeTarea.length > 0) {
+    // Sincronizar/migrar desde activeProject.equiposDeTarea (ÚNICAMENTE si NO existen equipos de entrega en el proyecto)
+    const hasDeliveryTeams = Array.isArray(activeProject.iso19650.deliveryTeams) && activeProject.iso19650.deliveryTeams.length > 0;
+    if (!hasDeliveryTeams && Array.isArray(activeProject.equiposDeTarea) && activeProject.equiposDeTarea.length > 0) {
       activeProject.equiposDeTarea.forEach((t, idx) => {
         if (!t.name) return;
         const nameUpper = t.name.toUpperCase().trim();
         const tMembers = Array.isArray(t.members) ? t.members.map(m => m.toLowerCase().trim()) : [];
 
-        // Buscar si ya existe un Equipo de Entrega con este nombre
-        const normalizeName = str => str.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase().trim();
         const normTarget = normalizeName(nameUpper);
-
         let dt = activeProject.iso19650.deliveryTeams.find(d => normalizeName(d.name || '') === normTarget);
         if (!dt) {
           dt = {
@@ -543,7 +588,6 @@
           };
           activeProject.iso19650.deliveryTeams.push(dt);
         } else {
-          // Si ya existe, aseguramos que contenga todos los miembros asignados en la configuración
           tMembers.forEach(m => {
             if (!dt.members.map(dm => dm.toLowerCase().trim()).includes(m)) {
               dt.members.push(m);
@@ -554,7 +598,6 @@
           }
         }
 
-        // Asegurar que los miembros estén agregados a activeProject.members para evitar inconsistencias
         tMembers.forEach(m => {
           if (!activeProject.members.map(pm => pm.toLowerCase().trim()).includes(m)) {
             activeProject.members.push(m);
@@ -563,62 +606,62 @@
       });
     }
 
-    // Automate Task Team members (all delivery team members except the leader, project/company/super admins)
-    const superAdmins = ['imagina3ddesign@gmail.com', 'mcmartinezg@unal.edu.co'];
-    const companyAdmins = Array.isArray(currentCompany?.admins) ? currentCompany.admins.map(a => a.toLowerCase().trim()) : [];
-    const projectAdmins = Array.isArray(activeProject?.iso19650?.projectAdmins)
-      ? activeProject.iso19650.projectAdmins.map(a => a.toLowerCase().trim())
-      : [];
-
+    // Normalizar miembros de equipos de tarea (asegurando que solo permanezcan miembros válidos de su equipo padre sin sobrescribir asignaciones)
     (activeProject.iso19650.deliveryTeams || []).forEach(dt => {
-      const lead = (dt.leadEmail || '').toLowerCase().trim();
-      const ttMembers = (dt.members || []).filter(m => {
-        const clean = m.toLowerCase().trim();
-        const isLead = clean === lead;
-        const isSuper = superAdmins.includes(clean);
-        const isCompAdmin = companyAdmins.includes(clean);
-        const isProjAdmin = projectAdmins.includes(clean);
-        
-        const memberMatch = Array.isArray(currentCompany?.members) 
-          ? currentCompany.members.find(cm => cm.email && cm.email.toLowerCase().trim() === clean) 
-          : null;
-        const isMemberAdmin = memberMatch && (memberMatch.role === 'ADMINISTRADOR_EMPRESA' || memberMatch.role === 'ADMINISTRADOR');
-
-        return !isLead && !isSuper && !isCompAdmin && !isProjAdmin && !isMemberAdmin;
-      });
+      const dtMembersSet = new Set((dt.members || []).map(m => m.toLowerCase().trim()));
       (dt.taskTeams || []).forEach(tt => {
-        tt.members = [...ttMembers];
+        if (!Array.isArray(tt.members)) tt.members = [];
+        tt.members = tt.members.filter(m => dtMembersSet.has((m || '').toLowerCase().trim()));
       });
     });
+
+    (activeProject.iso19650.receiverTeams || []).forEach(rt => {
+      const rtMembersSet = new Set((rt.members || []).map(m => m.toLowerCase().trim()));
+      (rt.taskTeams || []).forEach(tt => {
+        if (!Array.isArray(tt.members)) tt.members = [];
+        tt.members = tt.members.filter(m => rtMembersSet.has((m || '').toLowerCase().trim()));
+      });
+    });
+
+    if (prunedSpuriousTeams) {
+      setTimeout(() => {
+        saveProjectToDrive(true);
+        syncTeams();
+      }, 500);
+    }
   }
 
-  // Mantener equiposDeTarea como reflejo de los taskTeams de cada deliveryTeam
+  // Mantener equiposDeTarea como reflejo ordenado de las subdivisiones y equipos de entrega
   function syncBackToEquiposDeTarea() {
     if (!activeProject) return;
     if (!activeProject.iso19650 || !Array.isArray(activeProject.iso19650.deliveryTeams)) return;
 
     const allTasks = [];
     activeProject.iso19650.deliveryTeams.forEach(dt => {
-      (dt.taskTeams || []).forEach(tt => {
+      if (Array.isArray(dt.taskTeams) && dt.taskTeams.length > 0) {
+        dt.taskTeams.forEach(tt => {
+          allTasks.push({
+            id: tt.id,
+            name: (tt.name || '').trim(),
+            discipline: tt.discipline || 'General',
+            deliveryTeamId: dt.id,
+            deliveryTeamName: dt.name || '',
+            members: Array.isArray(tt.members) ? [...tt.members] : []
+          });
+        });
+      } else {
         allTasks.push({
-          id: tt.id,
-          name: (tt.name || '').trim(),
-          discipline: tt.discipline || 'General',
+          id: dt.id,
+          name: (dt.name || '').trim(),
+          discipline: 'General',
           deliveryTeamId: dt.id,
           deliveryTeamName: dt.name || '',
-          members: Array.isArray(tt.members) ? [...tt.members] : []
+          members: Array.isArray(dt.members) ? [...dt.members] : []
         });
-      });
+      }
     });
 
-    if (allTasks.length > 0) {
-      activeProject.equiposDeTarea = allTasks;
-    } else {
-      activeProject.equiposDeTarea = activeProject.iso19650.deliveryTeams.map(dt => ({
-        name: (dt.name || '').trim(),
-        members: Array.isArray(dt.members) ? [...dt.members] : []
-      }));
-    }
+    activeProject.equiposDeTarea = allTasks;
   }
 
   // --- CARGA DE DATOS ---
