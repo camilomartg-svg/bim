@@ -4,6 +4,7 @@
  */
 
 import './nora-ai-widget.css';
+import { isStatusIntent, isAnalyticStatusQuery, resolveStatusQuery, getStatusContextForLLM } from './nora-status-analyst';
 
 export interface NoraAIOptions {
     getBIMContext: () => any;
@@ -12,7 +13,11 @@ export interface NoraAIOptions {
 }
 
 export interface NoraAIAction {
-    type: 'isolate' | 'hide' | 'show_all' | 'filter' | 'color' | 'camera' | 'section' | 'none';
+    type: 'isolate' | 'hide' | 'show_all' | 'filter' | 'color' | 'camera' | 'section' | 'status_isolate' | 'none';
+    /** Estados de avance: NINGUNO | EN PROGRESO | PARA INSPECCIÓN | APROBADO | CERRADO | RECHAZADO | CRITICO */
+    status?: string;
+    statuses?: string[];
+    criticalOnly?: boolean;
     models?: string[];
     modelName?: string;
     classifications?: string[];
@@ -127,6 +132,27 @@ export class NoraAIWidget {
                     </button>
                     <button class="nora-ai-prompt-pill" data-prompt="Aísla los elementos RECHAZADOS en el visor 3D" style="border-color: #ef4444; color: #b91c1c; background: #fef2f2;">
                         <i class="fa-solid fa-triangle-exclamation"></i> Ver Rechazados
+                    </button>
+                    <button class="nora-ai-prompt-pill" data-prompt="Muéstrame los elementos en estado crítico" style="border-color: #dc2626; color: #991b1b; background: #fef2f2; font-weight: 700;">
+                        <i class="fa-solid fa-circle-exclamation"></i> Elementos Críticos
+                    </button>
+                    <button class="nora-ai-prompt-pill" data-prompt="Avance por piso" style="border-color: #6366f1; color: #4338ca; background: #eef2ff;">
+                        <i class="fa-solid fa-building"></i> Avance por Piso
+                    </button>
+                    <button class="nora-ai-prompt-pill" data-prompt="Avance por clasificación" style="border-color: #6366f1; color: #4338ca; background: #eef2ff;">
+                        <i class="fa-solid fa-list-check"></i> Avance por Clasificación
+                    </button>
+                    <button class="nora-ai-prompt-pill" data-prompt="¿Qué piso va más atrasado?" style="border-color: #f97316; color: #c2410c; background: #fff7ed;">
+                        <i class="fa-solid fa-hourglass-half"></i> Piso más Atrasado
+                    </button>
+                    <button class="nora-ai-prompt-pill" data-prompt="Aísla los elementos para inspección" style="border-color: #3b82f6; color: #1d4ed8; background: #eff6ff;">
+                        <i class="fa-solid fa-clipboard-check"></i> Para Inspección
+                    </button>
+                    <button class="nora-ai-prompt-pill" data-prompt="Pinta el modelo por estado de avance" style="border-color: #8b5cf6; color: #6d28d9; background: #f5f3ff;">
+                        <i class="fa-solid fa-palette"></i> Colorear por Estado
+                    </button>
+                    <button class="nora-ai-prompt-pill" data-prompt="Haz un informe de avance con recomendaciones" style="border-color: #0f766e; color: #0f766e; background: #f0fdfa; font-weight: 700;">
+                        <i class="fa-solid fa-file-lines"></i> Informe de Avance
                     </button>
                     <button class="nora-ai-prompt-pill" data-prompt="Aísla los elementos que hacen parte de la fachada">
                         <i class="fa-solid fa-building"></i> Aislar Fachada
@@ -494,6 +520,24 @@ export class NoraAIWidget {
             .replace(/\bmuros?\s+cotina\b/g, 'muros cortina');
 
         const isReset = /(?:re*st[aá]blec|reset|limpi|mostra?r?\s*todo|ver\s*todo|todo\s*el\s*modelo|despejar|mostrar\s*modelo|quitar\s*filtros|restaurar|todo\s*visible|ver\s*todos?|^todos?$|^todo$)/i.test(qNorm);
+
+        // =====================================================================
+        // ESTADOS DE AVANCE: se resuelven con datos reales del módulo STATUS.
+        // Va ANTES de los atajos de selección (cuyo regex captura "progr-eso").
+        // Las consultas analíticas (informe, recomendaciones, por qué...) se
+        // envían a Gemini con el contexto de estados si hay API key válida.
+        // =====================================================================
+        const hasValidKey = !!apiKey && apiKey.startsWith('AIza');
+        const isColorReset = /\bcolor/.test(qNorm);
+        if (isStatusIntent(qNorm) && (!isReset || isColorReset) && !(hasValidKey && isAnalyticStatusQuery(qNorm))) {
+            const statusResult = resolveStatusQuery(userQuery, bimContext);
+            if (statusResult) {
+                this.chatHistory.push({ role: 'user', parts: [{ text: userQuery }] });
+                this.chatHistory.push({ role: 'model', parts: [{ text: JSON.stringify({ answer: statusResult.answer.replace(/<[^>]+>/g, ''), action: statusResult.action }) }] });
+                if (this.chatHistory.length > 20) this.chatHistory = this.chatHistory.slice(-20);
+                return statusResult;
+            }
+        }
         const isSameType = /(?:mismo\s+tipo|mismo\s+nombre|misma\s+categor[ií]a|iguales|similares|de\s+(?:este|ese|aquel)\s*tipo|del\s+mismo|de\s+esa\s+categor[ií]a|de\s+esta\s+categor[ií]a|como\s+(?:este|ese))/i.test(qNorm);
         const isSelectionInfo = /(?:seleccionad[ao]s?|est[eoa]s?|es[eoa]s?|aquel(?:los|las)?|tocad[ao]s?|marcad[ao]s?|que\s*toqu[eé]|actual(?:es)?|que\s*seleccion[eé]|que\s*elemento\s*es|cual\s*es\s*est[eoa]|que\s*es\s*esto|de\s*los\s*elementos\s*(?:visibles|activos)|volumen\s+de\s+(?:est[eoa]s?|la\s*selecci[oó]n)|cuanto\s+(?:miden|pesan|tienen)\s+est[eoa]s?)/i.test(qNorm) && !qNorm.includes('aisla');
         const isOnlyThisSelected = /(?:aisla\s*(?:solo|solamente)?\s*(?:este|el\s*seleccionado|esta\s*pieza)|ver\s*solo\s*este)/i.test(qNorm) && !isSameType;
@@ -511,6 +555,7 @@ export class NoraAIWidget {
 
         // Si hay API key, consultamos Gemini en la nube con el nuevo schema avanzado
         if (apiKey) {
+            const liveStatusCtx = getStatusContextForLLM() || bimContext.statusStats || null;
             const systemPrompt = `
 Eres "nora AI Copilot", la asistente experta de Inteligencia Artificial para el visor BIM y CDE de Nora.
 
@@ -546,8 +591,11 @@ ${JSON.stringify(bimContext.sampleOtherTypes || [], null, 2)}
 ESTADO DE FILTROS Y CONTEXTO ACTIVO:
 ${JSON.stringify(this.activeContext, null, 2)}
 
+ESTADOS DE AVANCE DE OBRA (CONTROL DE AVANCE / STATUS - datos reales por elemento):
+${JSON.stringify(liveStatusCtx || {}, null, 2)}
+
 REGLAS CRÍTICAS DE RESPUESTA:
-1. SENCILLEZ Y CONCISIÓN TOTAL: Tu respuesta en el campo "answer" debe ser MUY BREVE, DIRECTA Y NATURAL (máximo 1 o 2 oraciones, sin texto de relleno).
+1. SENCILLEZ Y CONCISIÓN TOTAL: Tu respuesta en el campo "answer" debe ser MUY BREVE, DIRECTA Y NATURAL (máximo 1 o 2 oraciones, sin texto de relleno; o un resumen estructurado con viñetas si el usuario solicita análisis, diagnóstico, críticos o informe de avance).
 2. PROHIBIDO DAR RESPUESTAS GENÉRICAS o soltar menús de ayuda largos a menos que el usuario diga explícitamente "ayuda".
 3. Si el usuario pide aislar o cuantificar (ej: "aisla los muros"), di directamente lo que hiciste y el dato esencial (ej: "🧱 He aislado **3,908 muros** (Vol: 1,809.5 m³ | Área: 13,583 m²).").
 4. RECONOCIMIENTO INTELIGENTE DE FACHADA Y ELEMENTOS EXTERIORES:
@@ -561,6 +609,7 @@ REGLAS CRÍTICAS DE RESPUESTA:
 7. MODELOS FEDERADOS: Si el usuario especifica o menciona un modelo en particular (ej: "aisla arquitectura", "muestra solo estructura", "oculta arquitectura", "columnas de estructura"), incluye models: ["NOMBRE_MODELO"] en la acción (ej: ["ARQUITECTURA"] o ["ESTRUCTURA"]).
 8. NO incluyas advertencias de auditoría a menos que el usuario pregunte específicamente por anomalías o auditoría.
 9. NO agregues tips o consejos no solicitados.
+10. DATOS REALES DE ESTADOS: Cuando analices avance, estados, cuellos de botella o elementos críticos, basa TODAS tus cifras exclusivamente en ESTADOS DE AVANCE DE OBRA. Nunca inventes porcentajes ni conteos.
 
 CAPACIDADES Y ACCIONES:
 1. CONTROL DE VISIBILIDAD Y FILTRADO MULTICRITERIO:
@@ -571,18 +620,24 @@ CAPACIDADES Y ACCIONES:
    - Cortes o cajas de sección: action.type = "section", sectionBox: { axis: "x"|"y"|"z", fitToElements: true, clear: false }.
    - Vistas estándar: cameraView = "top" | "front" | "iso" | "focus".
 3. MODOS GRÁFICOS ANALÍTICOS Y MAPAS DE CALOR:
+   - Por estado de avance: action.type = "color", colorOverrides: { mode: "status" }.
    - Heatmap: action.type = "color", colorOverrides: { mode: "heatmap" }.
    - Anomalías: action.type = "color", colorOverrides: { mode: "anomalies" }.
    - Presencia de metadatos: action.type = "color", colorOverrides: { mode: "presence" }.
    - Limpiar colores: colorOverrides: { clear: true }.
 4. TAKEOFF AL VUELO:
    - Conteo total, volumen (m³), área (m²), longitud (m).
+5. CONTROL DE AVANCE Y ANÁLISIS DE ESTADOS (STATUS):
+   - Estados válidos: "NINGUNO", "EN PROGRESO", "PARA INSPECCIÓN", "APROBADO", "CERRADO", "RECHAZADO", y estado analítico "CRITICO" (rechazados, en inspección > 7 días, en progreso > 15 días).
+   - Avance ponderado = APROBADO/CERRADO 100%, PARA INSPECCIÓN 80%, EN PROGRESO 40%, NINGUNO/RECHAZADO 0%.
+   - Para aislar en 3D elementos según su estado (ej: "aisla los rechazados", "muestra los críticos", "en progreso del piso 3"): usa action.type = "status_isolate", action.statuses = ["EN PROGRESO"] (o ["CRITICO"], etc.), y opcionalmente classifications / levels.
 
 SIEMPRE responde ÚNICAMENTE en formato JSON:
 {
-  "answer": "Respuesta muy concisa y directa de 1-2 oraciones...",
+  "answer": "Respuesta muy concisa y directa (o análisis estructurado de avance con cifras reales)...",
   "action": {
-    "type": "isolate" | "hide" | "show_all" | "filter" | "color" | "camera" | "section" | "none",
+    "type": "isolate" | "hide" | "show_all" | "filter" | "color" | "camera" | "section" | "status_isolate" | "none",
+    "statuses": ["NINGUNO" | "EN PROGRESO" | "PARA INSPECCIÓN" | "APROBADO" | "CERRADO" | "RECHAZADO" | "CRITICO"],
     "models": ["ARQUITECTURA" | "ESTRUCTURA"],
     "semanticTarget": "facade" | "interior" | "doors_windows" | "alfajias" | "balconies" | "windows" | "facade_walls",
     "classifications": ["NOMBRE_EXACTO_DEL_CONTEXTO"],
@@ -603,7 +658,7 @@ SIEMPRE responde ÚNICAMENTE en formato JSON:
       "clear": false
     },
     "colorOverrides": {
-      "mode": "heatmap" | "anomalies" | "presence",
+      "mode": "heatmap" | "anomalies" | "presence" | "status",
       "clear": false
     },
     "message": "Mensaje descriptivo"
@@ -703,34 +758,11 @@ SIEMPRE responde ÚNICAMENTE en formato JSON:
             .replace(/\bmuros?\s+cotina\b/g, 'muros cortina');
 
         // =========================================================================
-        // AVANCE, ESTADOS Y GRÁFICOS (Interacción con Modelo, Filtros y Gráficos)
+        // AVANCE, ESTADOS Y GRÁFICOS (Motor Analista de Estados)
         // =========================================================================
-        const isAvanceQuery = /(?:avance|progreso|como\s+va|cuanto\s+va|porcentaje\s+de\s+avance|estado\s+del\s+proyecto|ejecutad[ao]|aprobados?|en\s+progreso|rechazados?|pendientes?)/i.test(qNorm);
-        const stats = typeof (window as any).getLiveStatusStats === 'function' ? (window as any).getLiveStatusStats() : null;
-
-        if (isAvanceQuery && stats) {
-            if (/(?:aisla|muestra|ver|filtrar?)\s+(?:los\s+)?aprobados?/i.test(qNorm)) {
-                return {
-                    answer: `🟢 **Elementos Aprobados**: Hay **${stats.counts.APROBADO + stats.counts.CERRADO} elementos aprobados** (${stats.pctAprobado}% del proyecto, correspondiente a ${Math.round(stats.volumes.APROBADO)} m³ de volumen).\n\nHe aislado los elementos aprobados en el visor 3D, aplicado el filtro de estado y actualizado el gráfico radial inferior.`,
-                    action: { type: 'status_isolate' as any, status: 'APROBADO', message: 'Aislados en 3D los elementos aprobados' }
-                };
-            }
-            if (/(?:aisla|muestra|ver|filtrar?)\s+(?:los\s+)?(?:en\s+progreso|para\s+inspeccion)/i.test(qNorm)) {
-                return {
-                    answer: `🟡 **Elementos En Progreso**: Hay **${stats.counts['EN PROGRESO'] + stats.counts['PARA INSPECCIÓN']} elementos en ejecución** (${stats.pctEnProgreso}% del proyecto).\n\nHe aislado estos elementos en el visor 3D y sincronizado los gráficos.`,
-                    action: { type: 'status_isolate' as any, status: 'EN PROGRESO', message: 'Aislados en 3D los elementos en progreso' }
-                };
-            }
-            if (/(?:aisla|muestra|ver|filtrar?)\s+(?:los\s+)?rechazados?/i.test(qNorm)) {
-                return {
-                    answer: `🔴 **Elementos Rechazados**: Se registran **${stats.counts.RECHAZADO} elementos rechazados** (${stats.pctRechazado}% del total).\n\nHe enfocado los elementos rechazados en color rojo en el visor 3D.`,
-                    action: { type: 'status_isolate' as any, status: 'RECHAZADO', message: 'Aislados en 3D los elementos rechazados' }
-                };
-            }
-            return {
-                answer: `📊 **Estado General de Avance del Proyecto: ${stats.pctAprobado}% Aprobado**\n\n• **Total de Elementos**: ${stats.total}\n• **Aprobados / Cerrados**: ${stats.counts.APROBADO + stats.counts.CERRADO} (${stats.pctAprobado}%)\n• **En Progreso**: ${stats.counts['EN PROGRESO'] + stats.counts['PARA INSPECCIÓN']} (${stats.pctEnProgreso}%)\n• **Pendientes / Ninguno**: ${stats.counts.NINGUNO} (${stats.pctPendiente}%)\n• **Rechazados**: ${stats.counts.RECHAZADO} (${stats.pctRechazado}%)\n\n• **Volumen Total Modelado**: ${stats.totalVol} m³\n• **Área Total**: ${stats.totalArea} m²\n\n¿Deseas aislar los elementos aprobados en 3D o analizar alguna categoría en específico (Vigas, Columnas, Muros, Cimentación)?`,
-                action: { type: 'none' }
-            };
+        if (isStatusIntent(qNorm)) {
+            const statusRes = resolveStatusQuery(query, bimContext);
+            if (statusRes) return statusRes;
         }
 
         // =========================================================================
@@ -961,6 +993,7 @@ SIEMPRE responde ÚNICAMENTE en formato JSON:
         // 2. RESTABLECER / MOSTRAR TODO (Tolerante a fallas ortográficas y variantes)
         // =========================================================================
         const isReset = /(?:re*st[aá]blec|reset|limpi|mostra?r?\s*todo|ver\s*todo|todo\s*el\s*modelo|despejar|mostrar\s*modelo|quitar\s*filtros|restaurar|todo\s*visible|ver\s*todos?|^todos?$|^todo$)/i.test(qNorm);
+
         if (isReset) {
             this.activeContext = { activeClassifications: [], activeLevels: [], activeCategories: [], activeMaterials: [], activePilotes: [], lastActionType: 'show_all' };
             const total = bimContext?.totalElements || 0;

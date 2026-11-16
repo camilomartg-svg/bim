@@ -13195,6 +13195,250 @@ function initStatusPanel() {
     }
 
     (window as any).refreshStatusUI = renderStatusContent;
+
+    // =========================================================================
+    // nora AI — API DE ANÁLISIS DE ESTADOS (lectura de los estados reales del
+    // módulo Control de Avance para que el Copilot pueda consultarlos/aislarlos)
+    // =========================================================================
+    const AI_STATUS_WEIGHTS: Record<ConstructionStatus, number> = {
+        'NINGUNO': 0,
+        'EN PROGRESO': 0.4,
+        'PARA INSPECCIÓN': 0.8,
+        'APROBADO': 1,
+        'CERRADO': 1,
+        'RECHAZADO': 0
+    };
+    const aiNorm = (s: any) => String(s ?? '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
+    const aiRound = (n: number, d = 2) => Math.round((n || 0) * Math.pow(10, d)) / Math.pow(10, d);
+    const aiPct = (part: number, total: number) => total > 0 ? aiRound((part / total) * 100, 1) : 0;
+    const getCriticalDays = () => {
+        const cfg = (window as any).NORA_STATUS_CRITICAL_DAYS || {};
+        return {
+            inspeccion: Number(cfg.inspeccion) > 0 ? Number(cfg.inspeccion) : 7,
+            progreso: Number(cfg.progreso) > 0 ? Number(cfg.progreso) : 15
+        };
+    };
+
+    function aiGetStatus(el: any, dateStr: string | null = null): ConstructionStatus {
+        let st = getElementStatusAtDate(el, dateStr);
+        if (st === 'NINGUNO' && !dateStr && el?.isEjecutado) st = 'APROBADO';
+        return st;
+    }
+
+    function aiGetLastChange(el: any): string | null {
+        for (const k of getCandidateKeys(el)) {
+            const h = elementHistory[k];
+            if (h && h.length > 0) return h[h.length - 1].at || null;
+        }
+        return null;
+    }
+
+    type AIStatusFilters = {
+        statuses?: string[];
+        classifications?: string[];
+        levels?: string[];
+        models?: string[];
+        criticalOnly?: boolean;
+        date?: string | null;
+    };
+
+    const matchesLoose = (value: string, targets: string[]) => {
+        const v = aiNorm(value);
+        return targets.some(t => {
+            const n = aiNorm(t);
+            return !!n && !!v && (v === n || v.includes(n) || n.includes(v));
+        });
+    };
+
+    function aiDescribeElement(el: any, dateStr: string | null) {
+        const status = aiGetStatus(el, dateStr);
+        const lastChange = aiGetLastChange(el);
+        const days = lastChange ? Math.floor((Date.now() - new Date(lastChange).getTime()) / 86400000) : null;
+        const lim = getCriticalDays();
+        let critical = false;
+        let reason = '';
+        if (status === 'RECHAZADO') { critical = true; reason = 'Rechazado — requiere reproceso'; }
+        else if (status === 'PARA INSPECCIÓN' && days !== null && days > lim.inspeccion) { critical = true; reason = `Inspección pendiente hace ${days} días`; }
+        else if (status === 'EN PROGRESO' && days !== null && days > lim.progreso) { critical = true; reason = `En progreso sin cambios hace ${days} días`; }
+        return {
+            modelUUID: el.modelUUID,
+            modelName: el.modelName,
+            expressID: el.expressID,
+            id: el.id,
+            name: el.nombreIntegrado || el.name || '',
+            classification: el.classification || 'SIN CLASIFICACIÓN',
+            level: el.level || 'SIN NIVEL',
+            volume: el.volume || 0,
+            area: el.area || 0,
+            length: el.length || 0,
+            status,
+            lastChange,
+            daysInStatus: days,
+            critical,
+            reason
+        };
+    }
+
+    function aiGetElements(filters: AIStatusFilters = {}) {
+        const dateStr = filters.date === undefined ? null : filters.date;
+        const wanted = (filters.statuses || []).map(s => s === 'CRITICO' ? s : normalizeConstructionStatus(s));
+        const wantsCritical = !!filters.criticalOnly || wanted.includes('CRITICO' as any);
+        const realStatuses = wanted.filter(s => s !== ('CRITICO' as any));
+        const out: ReturnType<typeof aiDescribeElement>[] = [];
+        const all = extractAllElements();
+        const resolveTargets = (field: 'classification' | 'level' | 'modelName', targets?: string[]) => {
+            if (!targets || targets.length === 0) return null;
+            const values = Array.from(new Set(all.map(e => String(e[field] || ''))));
+            const accepted = new Set<string>();
+            for (const t of targets) {
+                const exact = values.filter(v => aiNorm(v) === aiNorm(t));
+                (exact.length > 0 ? exact : values.filter(v => matchesLoose(v, [t]))).forEach(v => accepted.add(v));
+            }
+            return accepted;
+        };
+        const clsSet = resolveTargets('classification', filters.classifications);
+        const lvlSet = resolveTargets('level', filters.levels);
+        const mdlSet = resolveTargets('modelName', filters.models);
+        for (const el of all) {
+            if (mdlSet && !mdlSet.has(String(el.modelName || ''))) continue;
+            if (clsSet && !clsSet.has(String(el.classification || ''))) continue;
+            if (lvlSet && !lvlSet.has(String(el.level || ''))) continue;
+            const d = aiDescribeElement(el, dateStr);
+            const statusOk = realStatuses.length === 0 || realStatuses.includes(d.status);
+            const criticalOk = d.critical;
+            if (wantsCritical && realStatuses.length > 0) { if (!(statusOk || criticalOk)) continue; }
+            else if (wantsCritical) { if (!criticalOk) continue; }
+            else if (!statusOk) continue;
+            out.push(d);
+        }
+        return out;
+    }
+
+    function aiSummarize(rows: ReturnType<typeof aiDescribeElement>[]) {
+        const counts: Record<string, number> = {};
+        const volumes: Record<string, number> = {};
+        const areas: Record<string, number> = {};
+        STATUS_ORDER.forEach(s => { counts[s] = 0; volumes[s] = 0; areas[s] = 0; });
+        let totalVol = 0, totalArea = 0, weighted = 0, weightedVol = 0, critical = 0;
+        for (const r of rows) {
+            counts[r.status] = (counts[r.status] || 0) + 1;
+            volumes[r.status] = (volumes[r.status] || 0) + r.volume;
+            areas[r.status] = (areas[r.status] || 0) + r.area;
+            totalVol += r.volume;
+            totalArea += r.area;
+            weighted += AI_STATUS_WEIGHTS[r.status] || 0;
+            weightedVol += (AI_STATUS_WEIGHTS[r.status] || 0) * r.volume;
+            if (r.critical) critical++;
+        }
+        const total = rows.length;
+        const aprob = counts['APROBADO'] + counts['CERRADO'];
+        const prog = counts['EN PROGRESO'] + counts['PARA INSPECCIÓN'];
+        return {
+            total,
+            counts,
+            volumes: Object.fromEntries(Object.entries(volumes).map(([k, v]) => [k, aiRound(v)])),
+            areas: Object.fromEntries(Object.entries(areas).map(([k, v]) => [k, aiRound(v)])),
+            totalVol: aiRound(totalVol),
+            totalArea: aiRound(totalArea),
+            pct: Object.fromEntries(STATUS_ORDER.map(s => [s, aiPct(counts[s], total)])),
+            pctAprobado: aiPct(aprob, total),
+            pctEnProgreso: aiPct(prog, total),
+            pctPendiente: aiPct(counts['NINGUNO'], total),
+            pctRechazado: aiPct(counts['RECHAZADO'], total),
+            pctAprobadoVolumen: aiPct(volumes['APROBADO'] + volumes['CERRADO'], totalVol),
+            avancePonderado: total > 0 ? aiRound((weighted / total) * 100, 1) : 0,
+            avancePonderadoVolumen: totalVol > 0 ? aiRound((weightedVol / totalVol) * 100, 1) : 0,
+            criticos: critical
+        };
+    }
+
+    function aiGroupBy(rows: ReturnType<typeof aiDescribeElement>[], key: 'classification' | 'level') {
+        const groups = new Map<string, ReturnType<typeof aiDescribeElement>[]>();
+        for (const r of rows) {
+            const k = r[key] || 'SIN DATO';
+            if (!groups.has(k)) groups.set(k, []);
+            groups.get(k)!.push(r);
+        }
+        return Array.from(groups.entries()).map(([name, list]) => {
+            const s = aiSummarize(list);
+            return {
+                name,
+                total: s.total,
+                counts: s.counts,
+                totalVol: s.totalVol,
+                pctAprobado: s.pctAprobado,
+                pctEnProgreso: s.pctEnProgreso,
+                pctPendiente: s.pctPendiente,
+                pctRechazado: s.pctRechazado,
+                avancePonderado: s.avancePonderado,
+                criticos: s.criticos
+            };
+        }).sort((a, b) => b.total - a.total);
+    }
+
+    function aiGetStats(filters: AIStatusFilters = {}) {
+        const rows = aiGetElements({ ...filters, statuses: undefined, criticalOnly: false });
+        const summary = aiSummarize(rows);
+        const criticalRows = rows.filter(r => r.critical)
+            .sort((a, b) => (a.status === 'RECHAZADO' ? -1 : 0) - (b.status === 'RECHAZADO' ? -1 : 0) || (b.daysInStatus || 0) - (a.daysInStatus || 0));
+        const lim = getCriticalDays();
+        const weekAgo = Date.now() - 7 * 86400000;
+        const recentChanges = rows.filter(r => r.lastChange && new Date(r.lastChange).getTime() >= weekAgo).length;
+        const byClassification = aiGroupBy(rows, 'classification');
+        const byLevel = aiGroupBy(rows, 'level');
+        return {
+            ...summary,
+            filters: { classifications: filters.classifications || [], levels: filters.levels || [], models: filters.models || [] },
+            timelineDate: filters.date ?? selectedTimelineDate ?? null,
+            pesosAvance: AI_STATUS_WEIGHTS,
+            umbralesCriticos: { inspeccionDias: lim.inspeccion, progresoDias: lim.progreso },
+            critical: {
+                total: criticalRows.length,
+                rechazados: criticalRows.filter(r => r.status === 'RECHAZADO').length,
+                inspeccionVencida: criticalRows.filter(r => r.status === 'PARA INSPECCIÓN').length,
+                estancados: criticalRows.filter(r => r.status === 'EN PROGRESO').length,
+                top: criticalRows.slice(0, 15).map(r => ({
+                    expressID: r.expressID, name: r.name, classification: r.classification,
+                    level: r.level, status: r.status, days: r.daysInStatus, reason: r.reason
+                }))
+            },
+            cambiosUltimos7Dias: recentChanges,
+            byClassification,
+            byLevel,
+            classificationNames: byClassification.map(c => c.name),
+            levelNames: byLevel.map(l => l.name)
+        };
+    }
+
+    function aiSyncTable(opts: { status?: string; classification?: string; level?: string; colors?: boolean }) {
+        filterStatus = opts.status && opts.status !== 'CRITICO' ? normalizeConstructionStatus(opts.status) : 'Todos';
+        if (opts.classification !== undefined) {
+            const match = Array.from(new Set(extractAllElements().map(e => e.classification))).find(c => matchesLoose(c, [opts.classification!]));
+            filterClassification = match || 'Todos';
+        }
+        if (opts.level !== undefined) {
+            const match = Array.from(new Set(extractAllElements().map(e => e.level))).find(l => matchesLoose(l, [opts.level!]));
+            filterLevel = match || 'Todos';
+        }
+        if (typeof opts.colors === 'boolean') statusColorsEnabled = opts.colors;
+        renderStatusContent();
+    }
+
+    function aiSetStatusColors(enabled: boolean) {
+        statusColorsEnabled = enabled;
+        applyStatusColorizationToViewer(extractAllElements());
+        renderStatusContent();
+    }
+
+    (window as any).noraStatusAPI = {
+        STATUS_ORDER,
+        getStatus: (el: any) => aiGetStatus(el),
+        getElements: aiGetElements,
+        getStats: aiGetStats,
+        syncTable: aiSyncTable,
+        setStatusColors: aiSetStatusColors
+    };
+    (window as any).getLiveStatusStats = () => aiGetStats();
 }
 
 async function classifyModel(model: any) {
@@ -13875,7 +14119,8 @@ function ensureAIColorStyles() {
         'ai_blue': 0x3b82f6,
         'ai_yellow': 0xf59e0b,
         'ai_orange': 0xf97316,
-        'ai_purple': 0x8b5cf6
+        'ai_purple': 0x8b5cf6,
+        'ai_gray': 0x94a3b8
     };
     for (const [name, hex] of Object.entries(palette)) {
         if (!aiColorStylesRegistered.has(name)) {
@@ -14025,76 +14270,99 @@ async function executeNoraAI3DAction(action: NoraAIAction): Promise<string> {
     // =========================================================================
     // 0. AISLAMIENTO Y SINCRONIZACIÓN POR ESTADO DE AVANCE (STATUS ISOLATE)
     // =========================================================================
-    if ((action as any).type === 'status_isolate' || (action as any).status) {
-        const targetStatus = String((action as any).status || 'APROBADO').toUpperCase().trim();
-        const allElements = extractAllElementsGlobal('ALL');
-        const matchedByModel: Record<string, number[]> = {};
-        let matchedCount = 0;
+    if ((action as any).type === 'status_isolate' || (action as any).status || (action as any).statuses) {
+        const api = (window as any).noraStatusAPI;
+        const rawStatuses: string[] = [
+            ...(((action as any).statuses as string[]) || []),
+            ...((action as any).status ? [String((action as any).status)] : [])
+        ].map(s => String(s).toUpperCase().trim());
+        if ((action as any).criticalOnly) rawStatuses.push('CRITICO');
+        const statuses = rawStatuses.length > 0 ? Array.from(new Set(rawStatuses)) : ['APROBADO'];
 
-        for (const el of allElements) {
-            const rawStatus = (el.properties?.['4D_EJECUTADO'] ?? el.properties?.['EJECUTADO'] ?? (el as any)['4D_EJECUTADO'] ?? (el as any).EJECUTADO ?? el.status ?? 'NINGUNO');
-            const strVal = String(rawStatus).toLowerCase().trim();
-            let isApp = strVal === 'true' || strVal === '1' || strVal === 'aprobado' || strVal === 'cerrado';
-            let s = isApp ? 'APROBADO' : (strVal === 'en progreso' ? 'EN PROGRESO' : (strVal === 'rechazado' ? 'RECHAZADO' : 'NINGUNO'));
+        if (!api) return 'El módulo de Control de Avance (STATUS) aún no está inicializado';
 
-            let isMatch = false;
-            if (targetStatus === 'APROBADO') isMatch = s === 'APROBADO';
-            else if (targetStatus === 'EN PROGRESO') isMatch = s === 'EN PROGRESO';
-            else if (targetStatus === 'RECHAZADO') isMatch = s === 'RECHAZADO';
-            else if (targetStatus === 'NINGUNO') isMatch = s === 'NINGUNO';
-            else isMatch = s === targetStatus;
+        const rows: any[] = api.getElements({
+            statuses,
+            classifications: action.classifications,
+            levels: action.levels,
+            models: action.models || (action.modelName ? [action.modelName] : undefined)
+        });
 
-            if (action.classifications && action.classifications.length > 0) {
-                const matchesCls = action.classifications.some(c => el.classification && el.classification.toLowerCase().includes(c.toLowerCase()));
-                isMatch = isMatch && matchesCls;
-            }
-
-            if (isMatch) {
-                if (!matchedByModel[el.modelUUID]) matchedByModel[el.modelUUID] = [];
-                matchedByModel[el.modelUUID].push(el.expressID);
-                matchedCount++;
-            }
+        const STATUS_STYLE: Record<string, string> = {
+            'APROBADO': 'ai_green',
+            'CERRADO': 'ai_green',
+            'EN PROGRESO': 'ai_yellow',
+            'PARA INSPECCIÓN': 'ai_blue',
+            'RECHAZADO': 'ai_red',
+            'NINGUNO': 'ai_gray'
+        };
+        const isolateMap: Record<string, number[]> = {};
+        const styleMaps: Record<string, Record<string, number[]>> = {};
+        for (const r of rows) {
+            (isolateMap[r.modelUUID] ||= []).push(r.expressID);
+            const style = r.critical && statuses.includes('CRITICO') && r.status !== 'RECHAZADO'
+                ? 'ai_orange'
+                : (STATUS_STYLE[r.status] || 'ai_purple');
+            ((styleMaps[style] ||= {})[r.modelUUID] ||= []).push(r.expressID);
         }
 
-        if (hider && matchedCount > 0) {
-            try {
-                await hider.isolate(matchedByModel);
-            } catch (e) {
-                console.warn('Error in hider.isolate by status:', e);
-            }
-        }
-
-        // Coloreado analítico
         ensureAIColorStyles();
-        if (highlighter && matchedCount > 0) {
+        clearAIColorStyles();
+        (window as any).__noraIsolatedVisibleIds = rows.length > 0 ? new Set(rows.map((r: any) => Number(r.expressID))) : null;
+        if (rows.length > 0) {
+            if (hider) {
+                try { await hider.isolate(isolateMap); } catch (e) { console.warn('Error in hider.isolate by status:', e); }
+            }
+            let first = true;
+            for (const [style, map] of Object.entries(styleMaps)) {
+                try { highlighter.highlightByID(style, map as any, first, false); } catch (e) {}
+                first = false;
+            }
             try {
-                const colorStyle = targetStatus === 'APROBADO' ? 'ai_green' : (targetStatus === 'EN PROGRESO' ? 'ai_yellow' : (targetStatus === 'RECHAZADO' ? 'ai_red' : 'ai_blue'));
-                highlighter.highlightByID(colorStyle, matchedByModel as any, true, false);
+                const box = getModelBox();
+                const sphere = new THREE.Sphere();
+                box.getBoundingSphere(sphere);
+                if (sphere.radius > 0.1) world.camera.controls.fitToSphere(sphere, true);
             } catch (e) {}
         }
 
-        // Sincronizar tabla de avance
-        const statusSelect = document.getElementById('s-filter-status') as HTMLSelectElement;
-        if (statusSelect) statusSelect.value = targetStatus;
-
-        if (action.classifications && action.classifications.length > 0) {
-            const classSelect = document.getElementById('s-filter-class') as HTMLSelectElement;
-            if (classSelect) classSelect.value = action.classifications[0];
-            if (typeof (window as any).$ !== 'undefined') (window as any).$ = action.classifications[0];
-        }
-
+        // Sincronizar la tabla de Control de Avance y gráficos radiales con el mismo filtro
+        try {
+            const singleStatus = statuses.length === 1 ? statuses[0] : undefined;
+            api.syncTable({
+                status: singleStatus,
+                classification: action.classifications?.[0] ?? 'Todos',
+                level: action.levels?.[0] ?? 'Todos'
+            });
+        } catch (e) {}
         window.dispatchEvent(new CustomEvent('classificationFilterChanged'));
-        if (typeof (window as any).renderStatusCharts === 'function') {
-            (window as any).renderStatusCharts((window as any).at ? (window as any).at() : []);
-        }
+        try {
+            if (typeof (window as any).renderStatusCharts === 'function') {
+                (window as any).renderStatusCharts(extractAllElementsGlobal());
+            }
+        } catch (e) {}
 
-        return action.message || `Aislados en 3D ${matchedCount} elementos con estado ${targetStatus}`;
+        const label = statuses.map(s => s === 'CRITICO' ? 'CRÍTICO' : s).join(' + ');
+        if (rows.length === 0) return `No hay elementos con estado ${label} para ese filtro`;
+        return action.message || `Aislados en 3D ${rows.length} elementos con estado ${label}`;
+    }
+
+    // Colorear todo el modelo por estado de avance
+    if ((action.type === 'color' || action.colorOverrides) && action.colorOverrides?.mode === 'status') {
+        const api = (window as any).noraStatusAPI;
+        clearAIColorStyles();
+        if (api) {
+            api.setStatusColors(!action.colorOverrides?.clear);
+            return action.message || (action.colorOverrides?.clear ? 'Colores de estado desactivados' : 'Modelo coloreado por estado de avance');
+        }
+        return 'El módulo de Control de Avance (STATUS) aún no está inicializado';
     }
 
     // =========================================================================
     // 1. SHOW ALL / RESTABLECER
     // =========================================================================
     if (action.type === 'show_all') {
+        (window as any).__noraIsolatedVisibleIds = null;
         resetFilters();
         if (hider) {
             await hider.set(true);
@@ -14102,6 +14370,9 @@ async function executeNoraAI3DAction(action: NoraAIAction): Promise<string> {
         clipper.deleteAll();
         clearAIColorStyles();
         clearClassificationColorization();
+        try {
+            (window as any).noraStatusAPI?.syncTable({ status: 'Todos', classification: 'Todos', level: 'Todos', colors: false });
+        } catch (e) {}
         await updateClassificationUI();
         await applyFiltersToViewerGlobal();
         window.dispatchEvent(new CustomEvent('classificationFilterChanged'));

@@ -5813,6 +5813,42 @@ import{S as UC,a as Lh,U as E_,V as Ag,b as Th,c as de,M as Po,W as Ju,d as Cg,q
 
             <div class="nora-ai-body" id="nora-ai-messages">
                 <div class="nora-ai-prompts">
+                    <button class="nora-ai-prompt-pill" data-prompt="¿Cuál es el porcentaje de avance general del proyecto y cuántos elementos van aprobados?" style="border-color: #10b981; color: #047857; background: #ecfdf5; font-weight: 700;">
+                        <i class="fa-solid fa-chart-pie"></i> % Avance General
+                    </button>
+                    <button class="nora-ai-prompt-pill" data-prompt="Aísla en 3D todos los elementos con estado APROBADO" style="border-color: #10b981; color: #047857; background: #ecfdf5;">
+                        <i class="fa-solid fa-circle-check"></i> Aislar Aprobados
+                    </button>
+                    <button class="nora-ai-prompt-pill" data-prompt="Aísla en 3D los elementos EN PROGRESO" style="border-color: #f59e0b; color: #b45309; background: #fffbeb;">
+                        <i class="fa-solid fa-clock"></i> Aislar En Progreso
+                    </button>
+                    <button class="nora-ai-prompt-pill" data-prompt="Aísla los elementos para inspección" style="border-color: #3b82f6; color: #1d4ed8; background: #eff6ff;">
+                        <i class="fa-solid fa-clipboard-check"></i> Para Inspección
+                    </button>
+                    <button class="nora-ai-prompt-pill" data-prompt="Aísla los elementos RECHAZADOS en el visor 3D" style="border-color: #ef4444; color: #b91c1c; background: #fef2f2;">
+                        <i class="fa-solid fa-triangle-exclamation"></i> Ver Rechazados
+                    </button>
+                    <button class="nora-ai-prompt-pill" data-prompt="Muéstrame los elementos en estado crítico" style="border-color: #dc2626; color: #991b1b; background: #fef2f2; font-weight: 700;">
+                        <i class="fa-solid fa-circle-exclamation"></i> Elementos Críticos
+                    </button>
+                    <button class="nora-ai-prompt-pill" data-prompt="Avance por piso" style="border-color: #6366f1; color: #4338ca; background: #eef2ff;">
+                        <i class="fa-solid fa-building"></i> Avance por Piso
+                    </button>
+                    <button class="nora-ai-prompt-pill" data-prompt="Avance por clasificación" style="border-color: #6366f1; color: #4338ca; background: #eef2ff;">
+                        <i class="fa-solid fa-list-check"></i> Avance por Clasificación
+                    </button>
+                    <button class="nora-ai-prompt-pill" data-prompt="¿Qué piso va más atrasado?" style="border-color: #f97316; color: #c2410c; background: #fff7ed;">
+                        <i class="fa-solid fa-hourglass-half"></i> Piso más Atrasado
+                    </button>
+                    <button class="nora-ai-prompt-pill" data-prompt="¿Cuál es el avance de Vigas? Aísla las vigas y muestra su estado" style="border-color: #3b82f6; color: #1d4ed8; background: #eff6ff;">
+                        <i class="fa-solid fa-layer-group"></i> Avance de Vigas
+                    </button>
+                    <button class="nora-ai-prompt-pill" data-prompt="Pinta el modelo por estado de avance" style="border-color: #8b5cf6; color: #6d28d9; background: #f5f3ff;">
+                        <i class="fa-solid fa-palette"></i> Colorear por Estado
+                    </button>
+                    <button class="nora-ai-prompt-pill" data-prompt="Haz un informe de avance con recomendaciones" style="border-color: #0f766e; color: #0f766e; background: #f0fdfa; font-weight: 700;">
+                        <i class="fa-solid fa-file-lines"></i> Informe de Avance
+                    </button>
                     <button class="nora-ai-prompt-pill" data-prompt="Aísla los elementos que hacen parte de la fachada">
                         <i class="fa-solid fa-building"></i> Aislar Fachada
                     </button>
@@ -5882,7 +5918,7 @@ Puedes generar tu API Key gratuita en https://aistudio.google.com/app/apikey`),t
                 <div class="nora-ai-typing-dot"></div>
                 <div class="nora-ai-typing-dot"></div>
             </div>
-        `,this.bodyEl.appendChild(t),this.scrollToBottom(),t}removeTypingIndicator(){const t=this.bodyEl.querySelector("#nora-ai-typing-msg");t&&t.remove()}scrollToBottom(){this.bodyEl.scrollTop=this.bodyEl.scrollHeight}escapeHTML(t){return t.replace(/[&<>'"]/g,i=>({"&":"&amp;","<":"&lt;",">":"&gt;","'":"&#39;",'"':"&quot;"})[i]||i)}async handleSend(){const t=this.inputEl.value.trim();if(t){this.inputEl.value="",this.appendUserMessage(t),this.showTypingIndicator();try{const i=this.options.getBIMContext(),s=await this.queryLLM(t,i);this.removeTypingIndicator();let n;if(s.action&&s.action.type!=="none"){s.action.type==="show_all"?this.activeContext={activeClassifications:[],activeLevels:[],activeCategories:[],activeMaterials:[],activePilotes:[],lastActionType:"show_all"}:(s.action.classifications&&s.action.classifications.length>0&&(this.activeContext.activeClassifications=s.action.classifications),s.action.levels&&s.action.levels.length>0&&(this.activeContext.activeLevels=s.action.levels),s.action.categories&&s.action.categories.length>0&&(this.activeContext.activeCategories=s.action.categories),s.action.materials&&s.action.materials.length>0&&(this.activeContext.activeMaterials=s.action.materials),s.action.pilotes&&s.action.pilotes.length>0&&(this.activeContext.activePilotes=s.action.pilotes),this.activeContext.lastActionType=s.action.type);const o=await this.options.execute3DAction(s.action);n=s.action.message||(typeof o=="string"?o:`Acción 3D ejecutada: ${s.action.type}`)}this.appendBotMessage(this.formatMarkdown(s.answer),n)}catch(i){console.error("[nora AI] Query error:",i),this.removeTypingIndicator(),this.appendBotMessage(`⚠️ Ocurrió un inconveniente al procesar la consulta: ${i.message||i}`)}}}async queryLLM(t,i){const s=this.userApiKey||this.options.apiKey||window.NORA_GEMINI_API_KEY||"";i?.selectedElements&&i.selectedElements.length>0&&(this.lastInspectedElement=i.selectedElements[0]);let o=t.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"").trim().replace(/\btpda[s]?\b/g,"todas").replace(/\btpd[os]\b/g,"todos").replace(/\btodso\b/g,"todos").replace(/\btodsa\b/g,"todas").replace(/\btodo[s]?\s+el\s+modelo\b/g,"todo").replace(/\bre+st[aá]blec[ea]?\b/g,"restablecer").replace(/\bre+st[aá]bl[ea]c?e?r?\b/g,"restablecer").replace(/\bresteblece\b/g,"restablecer").replace(/\breinici[ae]r?\b/g,"restablecer").replace(/\baisl[ae]m[eo]\b/g,"aislar").replace(/\basil[ae]r?\b/g,"aislar").replace(/\baislam\b/g,"aislar").replace(/\bventans\b/g,"ventanas").replace(/\bventna[s]?\b/g,"ventanas").replace(/\bmuros?\s+cotina\b/g,"muros cortina");const r=/(?:re*st[aá]blec|reset|limpi|mostra?r?\s*todo|ver\s*todo|todo\s*el\s*modelo|despejar|mostrar\s*modelo|quitar\s*filtros|restaurar|todo\s*visible|ver\s*todos?|^todos?$|^todo$)/i.test(o),a=/(?:mismo\s+tipo|mismo\s+nombre|misma\s+categor[ií]a|iguales|similares|de\s+(?:este|ese|aquel)\s*tipo|del\s+mismo|de\s+esa\s+categor[ií]a|de\s+esta\s+categor[ií]a|como\s+(?:este|ese))/i.test(o),l=/(?:seleccionad[ao]s?|est[eoa]s?|es[eoa]s?|aquel(?:los|las)?|tocad[ao]s?|marcad[ao]s?|que\s*toqu[eé]|actual(?:es)?|que\s*seleccion[eé]|que\s*elemento\s*es|cual\s*es\s*est[eoa]|que\s*es\s*esto|de\s*los\s*elementos\s*(?:visibles|activos)|volumen\s+de\s+(?:est[eoa]s?|la\s*selecci[oó]n)|cuanto\s+(?:miden|pesan|tienen)\s+est[eoa]s?)/i.test(o)&&!o.includes("aisla"),c=/(?:aisla\s*(?:solo|solamente)?\s*(?:este|el\s*seleccionado|esta\s*pieza)|ver\s*solo\s*este)/i.test(o)&&!a;if(r||a||l||c){const h=this.localHeuristicFallback(t,i);return this.chatHistory.push({role:"user",parts:[{text:t}]}),this.chatHistory.push({role:"model",parts:[{text:h.answer}]}),h}if(this.chatHistory.push({role:"user",parts:[{text:t}]}),this.chatHistory.length>20&&(this.chatHistory=this.chatHistory.slice(-20)),s){const u=[{role:"user",parts:[{text:`
+        `,this.bodyEl.appendChild(t),this.scrollToBottom(),t}removeTypingIndicator(){const t=this.bodyEl.querySelector("#nora-ai-typing-msg");t&&t.remove()}scrollToBottom(){this.bodyEl.scrollTop=this.bodyEl.scrollHeight}escapeHTML(t){return t.replace(/[&<>'"]/g,i=>({"&":"&amp;","<":"&lt;",">":"&gt;","'":"&#39;",'"':"&quot;"})[i]||i)}async handleSend(){const t=this.inputEl.value.trim();if(t){this.inputEl.value="",this.appendUserMessage(t),this.showTypingIndicator();try{const i=this.options.getBIMContext(),s=await this.queryLLM(t,i);this.removeTypingIndicator();let n;if(s.action&&s.action.type!=="none"){s.action.type==="show_all"?this.activeContext={activeClassifications:[],activeLevels:[],activeCategories:[],activeMaterials:[],activePilotes:[],lastActionType:"show_all"}:(s.action.classifications&&s.action.classifications.length>0&&(this.activeContext.activeClassifications=s.action.classifications),s.action.levels&&s.action.levels.length>0&&(this.activeContext.activeLevels=s.action.levels),s.action.categories&&s.action.categories.length>0&&(this.activeContext.activeCategories=s.action.categories),s.action.materials&&s.action.materials.length>0&&(this.activeContext.activeMaterials=s.action.materials),s.action.pilotes&&s.action.pilotes.length>0&&(this.activeContext.activePilotes=s.action.pilotes),this.activeContext.lastActionType=s.action.type);const o=await this.options.execute3DAction(s.action);n=s.action.message||(typeof o=="string"?o:`Acción 3D ejecutada: ${s.action.type}`)}this.appendBotMessage(this.formatMarkdown(s.answer),n)}catch(i){console.error("[nora AI] Query error:",i),this.removeTypingIndicator(),this.appendBotMessage(`⚠️ Ocurrió un inconveniente al procesar la consulta: ${i.message||i}`)}}}async queryLLM(t,i){const s=this.userApiKey||this.options.apiKey||window.NORA_GEMINI_API_KEY||"";i?.selectedElements&&i.selectedElements.length>0&&(this.lastInspectedElement=i.selectedElements[0]);let o=t.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"").trim().replace(/\btpda[s]?\b/g,"todas").replace(/\btpd[os]\b/g,"todos").replace(/\btodso\b/g,"todos").replace(/\btodsa\b/g,"todas").replace(/\btodo[s]?\s+el\s+modelo\b/g,"todo").replace(/\bre+st[aá]blec[ea]?\b/g,"restablecer").replace(/\bre+st[aá]bl[ea]c?e?r?\b/g,"restablecer").replace(/\bresteblece\b/g,"restablecer").replace(/\breinici[ae]r?\b/g,"restablecer").replace(/\baisl[ae]m[eo]\b/g,"aislar").replace(/\basil[ae]r?\b/g,"aislar").replace(/\baislam\b/g,"aislar").replace(/\bventans\b/g,"ventanas").replace(/\bventna[s]?\b/g,"ventanas").replace(/\bmuros?\s+cotina\b/g,"muros cortina");const r=/(?:re*st[aá]blec|reset|limpi|mostra?r?\s*todo|ver\s*todo|todo\s*el\s*modelo|despejar|mostrar\s*modelo|quitar\s*filtros|restaurar|todo\s*visible|ver\s*todos?|^todos?$|^todo$)/i.test(o);const hasValidKey=!!s&&s.startsWith("AIza");const isColorReset=/\bcolor/.test(o);if(window.noraStatusAnalyst?.isStatusIntent(o)&&(!r||isColorReset)&&!(hasValidKey&&window.noraStatusAnalyst?.isAnalyticStatusQuery(o))){const stRes=window.noraStatusAnalyst.resolveStatusQuery(t,i);if(stRes){this.chatHistory.push({role:"user",parts:[{text:t}]});this.chatHistory.push({role:"model",parts:[{text:JSON.stringify({answer:stRes.answer,action:stRes.action})}]});if(this.chatHistory.length>20)this.chatHistory=this.chatHistory.slice(-20);return stRes;}}const a=/(?:mismo\s+tipo|mismo\s+nombre|misma\s+categor[ií]a|iguales|similares|de\s+(?:este|ese|aquel)\s*tipo|del\s+mismo|de\s+esa\s+categor[ií]a|de\s+esta\s+categor[ií]a|como\s+(?:este|ese))/i.test(o),l=/(?:seleccionad[ao]s?|est[eoa]s?|es[eoa]s?|aquel(?:los|las)?|tocad[ao]s?|marcad[ao]s?|que\s*toqu[eé]|actual(?:es)?|que\s*seleccion[eé]|que\s*elemento\s*es|cual\s*es\s*est[eoa]|que\s*es\s*esto|de\s*los\s*elementos\s*(?:visibles|activos)|volumen\s+de\s+(?:est[eoa]s?|la\s*selecci[oó]n)|cuanto\s+(?:miden|pesan|tienen)\s+est[eoa]s?)/i.test(o)&&!o.includes("aisla"),c=/(?:aisla\s*(?:solo|solamente)?\s*(?:este|el\s*seleccionado|esta\s*pieza)|ver\s*solo\s*este)/i.test(o)&&!a;if(r||a||l||c){const h=this.localHeuristicFallback(t,i);return this.chatHistory.push({role:"user",parts:[{text:t}]}),this.chatHistory.push({role:"model",parts:[{text:h.answer}]}),h}if(this.chatHistory.push({role:"user",parts:[{text:t}]}),this.chatHistory.length>20&&(this.chatHistory=this.chatHistory.slice(-20)),s){const liveSt=window.noraStatusAnalyst?.getStatusContextForLLM?.()||i.statusStats||null;const u=[{role:"user",parts:[{text:`
 Eres "nora AI Copilot", la asistente experta de Inteligencia Artificial para el visor BIM y CDE de Nora.
 
 MODELOS FEDERADOS CARGADOS EN EL VISOR:
@@ -5917,8 +5953,11 @@ ${JSON.stringify(i.sampleOtherTypes||[],null,2)}
 ESTADO DE FILTROS Y CONTEXTO ACTIVO:
 ${JSON.stringify(this.activeContext,null,2)}
 
+ESTADOS DE AVANCE DE OBRA (CONTROL DE AVANCE / STATUS - datos reales por elemento):
+${JSON.stringify(liveSt||{},null,2)}
+
 REGLAS CRÍTICAS DE RESPUESTA:
-1. SENCILLEZ Y CONCISIÓN TOTAL: Tu respuesta en el campo "answer" debe ser MUY BREVE, DIRECTA Y NATURAL (máximo 1 o 2 oraciones, sin texto de relleno).
+1. SENCILLEZ Y CONCISIÓN TOTAL: Tu respuesta en el campo "answer" debe ser MUY BREVE, DIRECTA Y NATURAL (máximo 1 o 2 oraciones, sin texto de relleno; o un resumen estructurado con viñetas si el usuario solicita análisis, diagnóstico, críticos o informe de avance).
 2. PROHIBIDO DAR RESPUESTAS GENÉRICAS o soltar menús de ayuda largos a menos que el usuario diga explícitamente "ayuda".
 3. Si el usuario pide aislar o cuantificar (ej: "aisla los muros"), di directamente lo que hiciste y el dato esencial (ej: "🧱 He aislado **3,908 muros** (Vol: 1,809.5 m³ | Área: 13,583 m²).").
 4. RECONOCIMIENTO INTELIGENTE DE FACHADA Y ELEMENTOS EXTERIORES:
@@ -5932,6 +5971,7 @@ REGLAS CRÍTICAS DE RESPUESTA:
 7. MODELOS FEDERADOS: Si el usuario especifica o menciona un modelo en particular (ej: "aisla arquitectura", "muestra solo estructura", "oculta arquitectura", "columnas de estructura"), incluye models: ["NOMBRE_MODELO"] en la acción (ej: ["ARQUITECTURA"] o ["ESTRUCTURA"]).
 8. NO incluyas advertencias de auditoría a menos que el usuario pregunte específicamente por anomalías o auditoría.
 9. NO agregues tips o consejos no solicitados.
+10. DATOS REALES DE ESTADOS: Cuando analices avance, estados, cuellos de botella o elementos críticos, basa TODAS tus cifras exclusivamente en ESTADOS DE AVANCE DE OBRA. Nunca inventes porcentajes ni conteos.
 
 CAPACIDADES Y ACCIONES:
 1. CONTROL DE VISIBILIDAD Y FILTRADO MULTICRITERIO:
@@ -5948,12 +5988,18 @@ CAPACIDADES Y ACCIONES:
    - Limpiar colores: colorOverrides: { clear: true }.
 4. TAKEOFF AL VUELO:
    - Conteo total, volumen (m³), área (m²), longitud (m).
+5. CONTROL DE AVANCE Y ANÁLISIS DE ESTADOS (STATUS):
+   - Estados válidos: "NINGUNO", "EN PROGRESO", "PARA INSPECCIÓN", "APROBADO", "CERRADO", "RECHAZADO", y estado analítico "CRITICO" (rechazados, en inspección > 7 días, en progreso > 15 días).
+   - Avance ponderado = APROBADO/CERRADO 100%, PARA INSPECCIÓN 80%, EN PROGRESO 40%, NINGUNO/RECHAZADO 0%.
+   - Para aislar en 3D elementos según su estado (ej: "aisla los rechazados", "muestra los críticos", "en progreso del piso 3"): usa action.type = "status_isolate", action.statuses = ["EN PROGRESO"] (o ["CRITICO"], etc.), y opcionalmente classifications / levels.
+   - Para colorear todo el modelo por estado de avance: action.type = "color", colorOverrides: { mode: "status" }.
 
 SIEMPRE responde ÚNICAMENTE en formato JSON:
 {
   "answer": "Respuesta muy concisa y directa de 1-2 oraciones...",
   "action": {
-    "type": "isolate" | "hide" | "show_all" | "filter" | "color" | "camera" | "section" | "none",
+    "type": "isolate" | "hide" | "show_all" | "filter" | "color" | "camera" | "section" | "status_isolate" | "none",
+    "statuses": ["NINGUNO" | "EN PROGRESO" | "PARA INSPECCIÓN" | "APROBADO" | "CERRADO" | "RECHAZADO" | "CRITICO"],
     "models": ["ARQUITECTURA" | "ESTRUCTURA"],
     "semanticTarget": "facade" | "interior" | "doors_windows" | "alfajias" | "balconies" | "windows" | "facade_walls",
     "classifications": ["NOMBRE_EXACTO_DEL_CONTEXTO"],
@@ -5974,13 +6020,13 @@ SIEMPRE responde ÚNICAMENTE en formato JSON:
       "clear": false
     },
     "colorOverrides": {
-      "mode": "heatmap" | "anomalies" | "presence",
+      "mode": "heatmap" | "anomalies" | "presence" | "status",
       "clear": false
     },
     "message": "Mensaje descriptivo"
   }
 }
-            `}]},{role:"model",parts:[{text:'{"answer": "Entendido.", "action": {"type": "none"}}'}]},...this.chatHistory];if(!s.startsWith("AIza"))console.warn("[nora AI] Gemini API key does not start with AIza, falling back to local engine"),this.updateStatusText({text:"Key Inválida (Motor Local)",color:"#ef4444"});else for(const p of["gemini-2.0-flash","gemini-1.5-flash","gemini-1.5-pro"]){const m=`https://generativelanguage.googleapis.com/v1beta/models/${p}:generateContent?key=${s}`,f={contents:u,generationConfig:{temperature:.1,responseMimeType:"application/json"}};try{const g=await fetch(m,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(f)});if(g.ok){this.updateStatusText({text:"Gemini Copilot (Online)",color:"#34d399"});const y=(await g.json()).candidates?.[0]?.content?.parts?.[0]?.text||"";if(y){this.chatHistory.push({role:"model",parts:[{text:y}]});try{return JSON.parse(y)}catch{return{answer:y,action:{type:"none"}}}}}else console.warn(`[nora AI] Model ${p} returned status ${g.status}`),(g.status===400||g.status===403)&&this.updateStatusText({text:`Key Rechazada por Google (${g.status})`,color:"#ef4444"})}catch(g){console.warn(`[nora AI] Model ${p} fetch error:`,g)}}}const d=this.localHeuristicFallback(t,i);return this.chatHistory.push({role:"model",parts:[{text:JSON.stringify(d)}]}),d}stripTypeScriptTypes(t){if(!t)return"";let i=t;return i=i.replace(/export\s+(interface|type|enum)\s+[\s\S]*?}/g,""),i=i.replace(/(interface|type)\s+[A-Za-z0-9_]+\s*=?\s*[\s\S]*?(};|;|\n(?=[a-zA-Z]))/g,""),i=i.replace(/\)\s*:\s*([A-Za-z0-9_<>\[\]\{\}\s|&]+|\{[\s\S]*?\})\s*\{/g,") {"),i=i.replace(/(\b[A-Za-z0-9_]+)\s*:\s*(string|any|boolean|number|void|never|object|unknown|string\[\]|any\[\]|number\[\]|keyof\s+typeof\s+[A-Za-z0-9_]+|[A-Za-z0-9_<>\[\]|&\s]+)(?=[,\)\s=])/g,"$1"),i=i.replace(/(\b(?:const|let|var)\s+[A-Za-z0-9_]+)\s*:\s*(string|any|boolean|number|object|unknown|string\[\]|any\[\]|number\[\]|[A-Za-z0-9_<>\[\]|&\s]+)(?=\s*=)/g,"$1"),i=i.replace(/\s+as\s+[A-Za-z0-9_<>\[\]]+/g,""),i}localHeuristicFallback(t,i){let n=t.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"").trim().replace(/\btpda[s]?\b/g,"todas").replace(/\btpd[os]\b/g,"todos").replace(/\btodso\b/g,"todos").replace(/\btodsa\b/g,"todas").replace(/\btodo[s]?\s+el\s+modelo\b/g,"todo").replace(/\bre+st[aá]blec[ea]?\b/g,"restablecer").replace(/\bre+st[aá]bl[ea]c?e?r?\b/g,"restablecer").replace(/\bresteblece\b/g,"restablecer").replace(/\breinici[ae]r?\b/g,"restablecer").replace(/\baisl[ae]m[eo]\b/g,"aislar").replace(/\basil[ae]r?\b/g,"aislar").replace(/\baislam\b/g,"aislar").replace(/\bventans\b/g,"ventanas").replace(/\bventna[s]?\b/g,"ventanas").replace(/\bmuros?\s+cotina\b/g,"muros cortina"),o=i?.selectedElements||[];if(o.length===0&&Array.isArray(window.__noraCurrentSelectedElements)&&window.__noraCurrentSelectedElements.length>0&&(o=window.__noraCurrentSelectedElements),o.length===0&&typeof document<"u"){const H=document.querySelectorAll("table tbody tr");for(let at=0;at<H.length;at++){const ut=H[at];if(ut.classList.contains("q-table-row-selected")||ut.classList.contains("selected")||ut.classList.contains("active")||ut.querySelector("input:checked")){const Ct=ut.querySelectorAll("td");if(Ct.length>=7){const Tt=ut.getAttribute("data-id")||Ct[1]?.innerText?.trim()||"";o.push({id:Tt,expressID:parseInt(Tt,10)||0,name:Ct[4]?.innerText?.trim()||Ct[2]?.innerText?.trim()||"Elemento seleccionado",category:Ct[3]?.innerText?.trim()||"",classification:Ct[1]?.innerText?.trim()||"",material:Ct[6]?.innerText?.trim()||"",level:Ct[7]?.innerText?.trim()||"",area:parseFloat(Ct[8]?.innerText?.replace(",",".")||"0")||0,length:parseFloat(Ct[9]?.innerText?.replace(",",".")||"0")||0,volume:parseFloat(Ct[10]?.innerText?.replace(",",".")||"0")||0})}}}}o.length>0&&(this.lastInspectedElement=o[0]);const r=o.length>0?o[0]:this.lastInspectedElement,a=/(?:mismo\s+tipo|mismo\s+nombre|misma\s+categor[ií]a|iguales|similares|de\s+(?:este|ese|aquel)\s*tipo|del\s+mismo|de\s+esa\s+categor[ií]a|de\s+esta\s+categor[ií]a|como\s+(?:este|ese))/i.test(n);if(a){if(!r)return{answer:"⚠️ No tengo ningún elemento de referencia. Haz clic en un elemento del modelo 3D primero.",action:{type:"none"}};const H=r.name||r.category||r.classification,at=r.classification;return/(?:oculta|ocultar|esconde|esconder|quita|quitar|remover)/i.test(n)?{answer:`👁️ He ocultado todos los elementos del tipo **${H}**${at?" ("+at+")":""}.`,action:{type:"hide",elementTypes:[H],categories:[H],message:`Ocultados elementos tipo ${H}`}}:{answer:`🎯 He aislado todos los elementos del tipo **${H}**${at?" ("+at+")":""} en el modelo 3D.`,action:{type:"isolate",elementTypes:[H],categories:[H],cameraView:"focus",message:`Aislados elementos tipo ${H}`}}}if((/(?:seleccionad[ao]s?|est[eoa]s?|es[eoa]s?|aquel(?:los|las)?|tocad[ao]s?|marcad[ao]s?|que\s*toqu[eé]|actual(?:es)?|que\s*seleccion[eé]|que\s*elemento\s*es|cual\s*es\s*est[eoa]|que\s*es\s*esto|de\s*los\s*elementos\s*(?:visibles|activos)|volumen\s+de\s+(?:est[eoa]s?|la\s*selecci[oó]n)|cuanto\s+(?:miden|pesan|tienen)\s+est[eoa]s?)/i.test(n)&&!n.includes("aisla")||/(?:volumen|area|longitud|dimension|tamano|cuanto)/i.test(n))&&(o.length>0||r)){const H=/(?:volumen|m3|cubico|cubicos)/i.test(n),at=/(?:area|superficie|m2|cuadrado|cuadrados)/i.test(n),ut=/(?:longitud|largo|metros|m\b)/i.test(n)&&!H&&!at;if(o.length>1){const ct=o.reduce((At,Zt)=>At+(Zt.volume||0),0),Ct=o.reduce((At,Zt)=>At+(Zt.area||0),0),Tt=o.reduce((At,Zt)=>At+(Zt.length||0),0);let Rt=`📌 <b>${o.length} elementos seleccionados en pantalla:</b><br>`;return H?(Rt+=`• <b>Volumen Total:</b> <strong>${ct.toFixed(3)} m³</strong><br>`,Ct>0&&(Rt+=`• <b>Área Total:</b> ${Ct.toFixed(2)} m²<br>`)):at?(Rt+=`• <b>Área Total:</b> <strong>${Ct.toFixed(2)} m²</strong><br>`,ct>0&&(Rt+=`• <b>Volumen Total:</b> ${ct.toFixed(3)} m³<br>`)):ut?Rt+=`• <b>Longitud Total:</b> <strong>${Tt.toFixed(2)} m</strong><br>`:(ct>0&&(Rt+=`• <b>Volumen Total:</b> ${ct.toFixed(3)} m³<br>`),Ct>0&&(Rt+=`• <b>Área Total:</b> ${Ct.toFixed(2)} m²<br>`),Tt>0&&(Rt+=`• <b>Longitud Total:</b> ${Tt.toFixed(2)} m<br>`)),Rt+="<br><b>Desglose de elementos:</b><br>",o.slice(0,10).forEach((At,Zt)=>{const Me=At.expressID||At.id||"",qe=At.name||At.category||"Elemento",He=At.volume?`${At.volume.toFixed(3)} m³`:"",Ui=At.area?`${At.area.toFixed(2)} m²`:"",ii=At.material&&At.material!=="SIN MATERIAL"?` | ${At.material}`:"",ui=At.level&&At.level!=="SIN NIVEL"?` | ${At.level}`:"";Rt+=`${Zt+1}. <b>${qe}</b> (ID: ${Me})${ui}${ii} ${He?`— <b>${He}</b>`:""} ${Ui?`(${Ui})`:""}<br>`}),o.length>10&&(Rt+=`<i>... y ${o.length-10} elementos más seleccionados.</i><br>`),{answer:Rt,action:{type:"none"}}}else if(r){const ct=r;if(H&&ct.volume!==void 0)return{answer:`📌 El elemento seleccionado (<b>${ct.name}</b>, ID: ${ct.expressID||ct.id}) tiene un volumen de <b>${ct.volume} m³</b> (Área: ${ct.area||0} m², Nivel: ${ct.level||"N/A"}, Material: ${ct.material||"N/A"}).`,action:{type:"none"}};if(at&&ct.area!==void 0)return{answer:`📌 El elemento seleccionado (<b>${ct.name}</b>, ID: ${ct.expressID||ct.id}) tiene un área de <b>${ct.area} m²</b> (Volumen: ${ct.volume||0} m³, Nivel: ${ct.level||"N/A"}, Material: ${ct.material||"N/A"}).`,action:{type:"none"}};const Ct=[];return ct.name&&Ct.push(`• <b>Nombre / Tipo:</b> ${ct.name}`),(ct.expressID||ct.id)&&Ct.push(`• <b>ID Express:</b> ${ct.expressID||ct.id}`),ct.category&&Ct.push(`• <b>Categoría:</b> ${ct.category}${ct.classification?" ("+ct.classification+")":""}`),ct.level&&Ct.push(`• <b>Ubicación (Nivel):</b> ${ct.level}`),ct.material&&Ct.push(`• <b>Material:</b> ${ct.material}`),ct.area>0&&Ct.push(`• <b>Área:</b> ${ct.area} m²`),ct.volume>0&&Ct.push(`• <b>Volumen:</b> ${ct.volume} m³`),ct.length>0&&Ct.push(`• <b>Longitud:</b> ${ct.length} m`),{answer:`📌 <b>Elemento seleccionado:</b><br>${Ct.join("<br>")}`,action:{type:"none"}}}}if(/(?:aisla\s*(?:solo|solamente)?\s*(?:este|el\s*seleccionado|esta\s*pieza)|ver\s*solo\s*este)/i.test(n)&&!a&&r){const H=r.name||"Elemento seleccionado";return{answer:`🎯 He enfocado y aislado el elemento **${H}** en el visor 3D.`,action:{type:"isolate",elementTypes:r.name?[r.name]:void 0,cameraView:"focus",message:`Aislado elemento ${H}`}}}try{const H=localStorage.getItem("NORA_CUSTOM_TS_CODE");if(H&&H.trim()){const at=i?.levels?Object.keys(i.levels):[],ut={query:t,availableLevels:at,activeContext:this.activeContext,parsedJSON:{action:"none",filters:[]}},ct=this.stripTypeScriptTypes(H),Tt=new Function("query","result",`${ct}
+            `}]},{role:"model",parts:[{text:'{"answer": "Entendido.", "action": {"type": "none"}}'}]},...this.chatHistory];if(!s.startsWith("AIza"))console.warn("[nora AI] Gemini API key does not start with AIza, falling back to local engine"),this.updateStatusText({text:"Key Inválida (Motor Local)",color:"#ef4444"});else for(const p of["gemini-2.0-flash","gemini-1.5-flash","gemini-1.5-pro"]){const m=`https://generativelanguage.googleapis.com/v1beta/models/${p}:generateContent?key=${s}`,f={contents:u,generationConfig:{temperature:.1,responseMimeType:"application/json"}};try{const g=await fetch(m,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(f)});if(g.ok){this.updateStatusText({text:"Gemini Copilot (Online)",color:"#34d399"});const y=(await g.json()).candidates?.[0]?.content?.parts?.[0]?.text||"";if(y){this.chatHistory.push({role:"model",parts:[{text:y}]});try{return JSON.parse(y)}catch{return{answer:y,action:{type:"none"}}}}}else console.warn(`[nora AI] Model ${p} returned status ${g.status}`),(g.status===400||g.status===403)&&this.updateStatusText({text:`Key Rechazada por Google (${g.status})`,color:"#ef4444"})}catch(g){console.warn(`[nora AI] Model ${p} fetch error:`,g)}}}const d=this.localHeuristicFallback(t,i);return this.chatHistory.push({role:"model",parts:[{text:JSON.stringify(d)}]}),d}stripTypeScriptTypes(t){if(!t)return"";let i=t;return i=i.replace(/export\s+(interface|type|enum)\s+[\s\S]*?}/g,""),i=i.replace(/(interface|type)\s+[A-Za-z0-9_]+\s*=?\s*[\s\S]*?(};|;|\n(?=[a-zA-Z]))/g,""),i=i.replace(/\)\s*:\s*([A-Za-z0-9_<>\[\]\{\}\s|&]+|\{[\s\S]*?\})\s*\{/g,") {"),i=i.replace(/(\b[A-Za-z0-9_]+)\s*:\s*(string|any|boolean|number|void|never|object|unknown|string\[\]|any\[\]|number\[\]|keyof\s+typeof\s+[A-Za-z0-9_]+|[A-Za-z0-9_<>\[\]|&\s]+)(?=[,\)\s=])/g,"$1"),i=i.replace(/(\b(?:const|let|var)\s+[A-Za-z0-9_]+)\s*:\s*(string|any|boolean|number|object|unknown|string\[\]|any\[\]|number\[\]|[A-Za-z0-9_<>\[\]|&\s]+)(?=\s*=)/g,"$1"),i=i.replace(/\s+as\s+[A-Za-z0-9_<>\[\]]+/g,""),i}localHeuristicFallback(t,i){let n=t.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"").trim().replace(/\btpda[s]?\b/g,"todas").replace(/\btpd[os]\b/g,"todos").replace(/\btodso\b/g,"todos").replace(/\btodsa\b/g,"todas").replace(/\btodo[s]?\s+el\s+modelo\b/g,"todo").replace(/\bre+st[aá]blec[ea]?\b/g,"restablecer").replace(/\bre+st[aá]bl[ea]c?e?r?\b/g,"restablecer").replace(/\bresteblece\b/g,"restablecer").replace(/\breinici[ae]r?\b/g,"restablecer").replace(/\baisl[ae]m[eo]\b/g,"aislar").replace(/\basil[ae]r?\b/g,"aislar").replace(/\baislam\b/g,"aislar").replace(/\bventans\b/g,"ventanas").replace(/\bventna[s]?\b/g,"ventanas").replace(/\bmuros?\s+cotina\b/g,"muros cortina");if(window.noraStatusAnalyst?.isStatusIntent(n)){const stRes=window.noraStatusAnalyst.resolveStatusQuery(t,i);if(stRes)return stRes;}let o=i?.selectedElements||[];if(o.length===0&&Array.isArray(window.__noraCurrentSelectedElements)&&window.__noraCurrentSelectedElements.length>0&&(o=window.__noraCurrentSelectedElements),o.length===0&&typeof document<"u"){const H=document.querySelectorAll("table tbody tr");for(let at=0;at<H.length;at++){const ut=H[at];if(ut.classList.contains("q-table-row-selected")||ut.classList.contains("selected")||ut.classList.contains("active")||ut.querySelector("input:checked")){const Ct=ut.querySelectorAll("td");if(Ct.length>=7){const Tt=ut.getAttribute("data-id")||Ct[1]?.innerText?.trim()||"";o.push({id:Tt,expressID:parseInt(Tt,10)||0,name:Ct[4]?.innerText?.trim()||Ct[2]?.innerText?.trim()||"Elemento seleccionado",category:Ct[3]?.innerText?.trim()||"",classification:Ct[1]?.innerText?.trim()||"",material:Ct[6]?.innerText?.trim()||"",level:Ct[7]?.innerText?.trim()||"",area:parseFloat(Ct[8]?.innerText?.replace(",",".")||"0")||0,length:parseFloat(Ct[9]?.innerText?.replace(",",".")||"0")||0,volume:parseFloat(Ct[10]?.innerText?.replace(",",".")||"0")||0})}}}}o.length>0&&(this.lastInspectedElement=o[0]);const r=o.length>0?o[0]:this.lastInspectedElement,a=/(?:mismo\s+tipo|mismo\s+nombre|misma\s+categor[ií]a|iguales|similares|de\s+(?:este|ese|aquel)\s*tipo|del\s+mismo|de\s+esa\s+categor[ií]a|de\s+esta\s+categor[ií]a|como\s+(?:este|ese))/i.test(n);if(a){if(!r)return{answer:"⚠️ No tengo ningún elemento de referencia. Haz clic en un elemento del modelo 3D primero.",action:{type:"none"}};const H=r.name||r.category||r.classification,at=r.classification;return/(?:oculta|ocultar|esconde|esconder|quita|quitar|remover)/i.test(n)?{answer:`👁️ He ocultado todos los elementos del tipo **${H}**${at?" ("+at+")":""}.`,action:{type:"hide",elementTypes:[H],categories:[H],message:`Ocultados elementos tipo ${H}`}}:{answer:`🎯 He aislado todos los elementos del tipo **${H}**${at?" ("+at+")":""} en el modelo 3D.`,action:{type:"isolate",elementTypes:[H],categories:[H],cameraView:"focus",message:`Aislados elementos tipo ${H}`}}}if((/(?:seleccionad[ao]s?|est[eoa]s?|es[eoa]s?|aquel(?:los|las)?|tocad[ao]s?|marcad[ao]s?|que\s*toqu[eé]|actual(?:es)?|que\s*seleccion[eé]|que\s*elemento\s*es|cual\s*es\s*est[eoa]|que\s*es\s*esto|de\s*los\s*elementos\s*(?:visibles|activos)|volumen\s+de\s+(?:est[eoa]s?|la\s*selecci[oó]n)|cuanto\s+(?:miden|pesan|tienen)\s+est[eoa]s?)/i.test(n)&&!n.includes("aisla")||/(?:volumen|area|longitud|dimension|tamano|cuanto)/i.test(n))&&(o.length>0||r)){const H=/(?:volumen|m3|cubico|cubicos)/i.test(n),at=/(?:area|superficie|m2|cuadrado|cuadrados)/i.test(n),ut=/(?:longitud|largo|metros|m\b)/i.test(n)&&!H&&!at;if(o.length>1){const ct=o.reduce((At,Zt)=>At+(Zt.volume||0),0),Ct=o.reduce((At,Zt)=>At+(Zt.area||0),0),Tt=o.reduce((At,Zt)=>At+(Zt.length||0),0);let Rt=`📌 <b>${o.length} elementos seleccionados en pantalla:</b><br>`;return H?(Rt+=`• <b>Volumen Total:</b> <strong>${ct.toFixed(3)} m³</strong><br>`,Ct>0&&(Rt+=`• <b>Área Total:</b> ${Ct.toFixed(2)} m²<br>`)):at?(Rt+=`• <b>Área Total:</b> <strong>${Ct.toFixed(2)} m²</strong><br>`,ct>0&&(Rt+=`• <b>Volumen Total:</b> ${ct.toFixed(3)} m³<br>`)):ut?Rt+=`• <b>Longitud Total:</b> <strong>${Tt.toFixed(2)} m</strong><br>`:(ct>0&&(Rt+=`• <b>Volumen Total:</b> ${ct.toFixed(3)} m³<br>`),Ct>0&&(Rt+=`• <b>Área Total:</b> ${Ct.toFixed(2)} m²<br>`),Tt>0&&(Rt+=`• <b>Longitud Total:</b> ${Tt.toFixed(2)} m<br>`)),Rt+="<br><b>Desglose de elementos:</b><br>",o.slice(0,10).forEach((At,Zt)=>{const Me=At.expressID||At.id||"",qe=At.name||At.category||"Elemento",He=At.volume?`${At.volume.toFixed(3)} m³`:"",Ui=At.area?`${At.area.toFixed(2)} m²`:"",ii=At.material&&At.material!=="SIN MATERIAL"?` | ${At.material}`:"",ui=At.level&&At.level!=="SIN NIVEL"?` | ${At.level}`:"";Rt+=`${Zt+1}. <b>${qe}</b> (ID: ${Me})${ui}${ii} ${He?`— <b>${He}</b>`:""} ${Ui?`(${Ui})`:""}<br>`}),o.length>10&&(Rt+=`<i>... y ${o.length-10} elementos más seleccionados.</i><br>`),{answer:Rt,action:{type:"none"}}}else if(r){const ct=r;if(H&&ct.volume!==void 0)return{answer:`📌 El elemento seleccionado (<b>${ct.name}</b>, ID: ${ct.expressID||ct.id}) tiene un volumen de <b>${ct.volume} m³</b> (Área: ${ct.area||0} m², Nivel: ${ct.level||"N/A"}, Material: ${ct.material||"N/A"}).`,action:{type:"none"}};if(at&&ct.area!==void 0)return{answer:`📌 El elemento seleccionado (<b>${ct.name}</b>, ID: ${ct.expressID||ct.id}) tiene un área de <b>${ct.area} m²</b> (Volumen: ${ct.volume||0} m³, Nivel: ${ct.level||"N/A"}, Material: ${ct.material||"N/A"}).`,action:{type:"none"}};const Ct=[];return ct.name&&Ct.push(`• <b>Nombre / Tipo:</b> ${ct.name}`),(ct.expressID||ct.id)&&Ct.push(`• <b>ID Express:</b> ${ct.expressID||ct.id}`),ct.category&&Ct.push(`• <b>Categoría:</b> ${ct.category}${ct.classification?" ("+ct.classification+")":""}`),ct.level&&Ct.push(`• <b>Ubicación (Nivel):</b> ${ct.level}`),ct.material&&Ct.push(`• <b>Material:</b> ${ct.material}`),ct.area>0&&Ct.push(`• <b>Área:</b> ${ct.area} m²`),ct.volume>0&&Ct.push(`• <b>Volumen:</b> ${ct.volume} m³`),ct.length>0&&Ct.push(`• <b>Longitud:</b> ${ct.length} m`),{answer:`📌 <b>Elemento seleccionado:</b><br>${Ct.join("<br>")}`,action:{type:"none"}}}}if(/(?:aisla\s*(?:solo|solamente)?\s*(?:este|el\s*seleccionado|esta\s*pieza)|ver\s*solo\s*este)/i.test(n)&&!a&&r){const H=r.name||"Elemento seleccionado";return{answer:`🎯 He enfocado y aislado el elemento **${H}** en el visor 3D.`,action:{type:"isolate",elementTypes:r.name?[r.name]:void 0,cameraView:"focus",message:`Aislado elemento ${H}`}}}try{const H=localStorage.getItem("NORA_CUSTOM_TS_CODE");if(H&&H.trim()){const at=i?.levels?Object.keys(i.levels):[],ut={query:t,availableLevels:at,activeContext:this.activeContext,parsedJSON:{action:"none",filters:[]}},ct=this.stripTypeScriptTypes(H),Tt=new Function("query","result",`${ct}
  return noraBrainCustomPipeline(query, result);`)(t,ut);if(Tt&&(Tt.message||Tt.parsedJSON?.message)){const Rt=Tt.parsedJSON?.message||Tt.message;return{answer:Rt,action:{type:Tt.action||Tt.parsedJSON?.action||"none",classifications:Tt.classificationsMatched||Tt.parsedJSON?.classifications,categories:Tt.categoriesMatched||Tt.parsedJSON?.categories,levels:Tt.levelMatched||Tt.parsedJSON?.levelMatched,message:Rt}}}}}catch(H){console.warn("[nora AI] Error en Hook TS:",H)}if(/^(?:hola|buenos\s*d[ií]as|buenas\s*tardes|buenas|saludos|hey|hi)$/i.test(n))return{answer:"👋 ¡Hola! ¿En qué puedo ayudarte con el modelo 3D? Puedes pedirme aislar elementos, medir cantidades, hacer cortes o cambiar de vista.",action:{type:"none"}};if(/(?:qu[eé]\s+puedes\s+hacer|ayuda|comandos|que\s+haces)/i.test(n))return{answer:`💡 Puedes pedirme cosas sencillas como:
 • **Aislar:** *"aisla los muros"*, *"columnas del piso 2"*
 • **Cortes y vistas:** *"corte en eje X"*, *"vista en planta"*
@@ -7145,59 +7191,613 @@ function getItemStatus(item, dateFilter) {
   return 'NINGUNO';
 }
 
-function getLiveStatusStats() {
-  const elements = typeof at === 'function' ? at() : [];
-  if (!elements || elements.length === 0) return null;
+const AI_STATUS_WEIGHTS = {
+  'NINGUNO': 0,
+  'EN PROGRESO': 0.4,
+  'PARA INSPECCIÓN': 0.8,
+  'APROBADO': 1,
+  'CERRADO': 1,
+  'RECHAZADO': 0
+};
+const aiNorm = (val) => String(val ?? '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
+const aiRound = (num, dec = 2) => Math.round((num || 0) * Math.pow(10, dec)) / Math.pow(10, dec);
+const aiPct = (part, tot) => tot > 0 ? aiRound((part / tot) * 100, 1) : 0;
+const getCriticalDays = () => {
+  const cfg = window.NORA_STATUS_CRITICAL_DAYS || {};
+  return {
+    inspeccion: Number(cfg.inspeccion) > 0 ? Number(cfg.inspeccion) : 7,
+    progreso: Number(cfg.progreso) > 0 ? Number(cfg.progreso) : 15
+  };
+};
 
-  const total = elements.length;
-  let totalArea = 0, totalVol = 0, totalLen = 0;
-  const counts = { NINGUNO: 0, 'EN PROGRESO': 0, 'PARA INSPECCIÓN': 0, APROBADO: 0, CERRADO: 0, RECHAZADO: 0 };
-  const areas = { NINGUNO: 0, 'EN PROGRESO': 0, 'PARA INSPECCIÓN': 0, APROBADO: 0, CERRADO: 0, RECHAZADO: 0 };
-  const volumes = { NINGUNO: 0, 'EN PROGRESO': 0, 'PARA INSPECCIÓN': 0, APROBADO: 0, CERRADO: 0, RECHAZADO: 0 };
-  const byClass = {};
-
-  for (const el of elements) {
-    const s = getItemStatus(el).toUpperCase();
-    const stKey = counts[s] !== undefined ? s : 'NINGUNO';
-    counts[stKey]++;
-    const a = Number(el.area || 0) || 0;
-    const v = Number(el.volume || 0) || 0;
-    const l = Number(el.length || 0) || 0;
-    totalArea += a; totalVol += v; totalLen += l;
-    areas[stKey] += a; volumes[stKey] += v;
-
-    const cls = el.classification || 'SIN CLASIFICAR';
-    if (!byClass[cls]) byClass[cls] = { total: 0, aprobado: 0, enProgreso: 0, rechazado: 0, ninguno: 0, area: 0, vol: 0 };
-    byClass[cls].total++;
-    byClass[cls].area += a;
-    byClass[cls].vol += v;
-    if (stKey === 'APROBADO' || stKey === 'CERRADO') byClass[cls].aprobado++;
-    else if (stKey === 'EN PROGRESO' || stKey === 'PARA INSPECCIÓN') byClass[cls].enProgreso++;
-    else if (stKey === 'RECHAZADO') byClass[cls].rechazado++;
-    else byClass[cls].ninguno++;
+function aiGetStatus(el, dateStr = null) {
+  let st = Ut(el, dateStr);
+  if (st === 'NINGUNO' && !dateStr) {
+    if (el?.isEjecutado) return 'APROBADO';
+    const gs = getItemStatus(el, dateStr);
+    if (gs && gs !== 'NINGUNO') st = z(gs);
   }
+  return st || 'NINGUNO';
+}
 
-  const pctAprobado = total > 0 ? Math.round(((counts.APROBADO + counts.CERRADO) / total) * 100) : 0;
-  const pctEnProgreso = total > 0 ? Math.round(((counts['EN PROGRESO'] + counts['PARA INSPECCIÓN']) / total) * 100) : 0;
-  const pctRechazado = total > 0 ? Math.round((counts.RECHAZADO / total) * 100) : 0;
-  const pctPendiente = total > 0 ? Math.round((counts.NINGUNO / total) * 100) : 0;
+function aiGetLastChange(el) {
+  for (const key of Lt(el)) {
+    const hist = _[key];
+    if (hist && hist.length > 0) return hist[hist.length - 1].at || null;
+  }
+  return null;
+}
 
+const matchesLoose = (value, targets) => {
+  const v = aiNorm(value);
+  return targets.some(tg => {
+    const n = aiNorm(tg);
+    return !!n && !!v && (v === n || v.includes(n) || n.includes(v));
+  });
+};
+
+function aiDescribeElement(el, dateStr) {
+  const status = aiGetStatus(el, dateStr);
+  const lastChange = aiGetLastChange(el);
+  const days = lastChange ? Math.floor((Date.now() - new Date(lastChange).getTime()) / 86400000) : null;
+  const lim = getCriticalDays();
+  let critical = false;
+  let reason = '';
+  if (status === 'RECHAZADO') { critical = true; reason = 'Rechazado — requiere reproceso'; }
+  else if (status === 'PARA INSPECCIÓN' && days !== null && days > lim.inspeccion) { critical = true; reason = `Inspección pendiente hace ${days} días`; }
+  else if (status === 'EN PROGRESO' && days !== null && days > lim.progreso) { critical = true; reason = `En progreso sin cambios hace ${days} días`; }
+  return {
+    modelUUID: el.modelUUID,
+    modelName: el.modelName,
+    expressID: el.expressID,
+    id: el.id,
+    name: el.nombreIntegrado || el.name || '',
+    classification: el.classification || 'SIN CLASIFICACIÓN',
+    level: el.level || 'SIN NIVEL',
+    volume: Number(el.volume || 0) || 0,
+    area: Number(el.area || 0) || 0,
+    length: Number(el.length || 0) || 0,
+    status,
+    lastChange,
+    daysInStatus: days,
+    critical,
+    reason
+  };
+}
+
+function aiGetElements(filters = {}) {
+  const dateStr = filters.date === undefined ? null : filters.date;
+  const wanted = (filters.statuses || []).map(st => String(st).toUpperCase().trim() === 'CRITICO' ? 'CRITICO' : z(st));
+  const wantsCritical = !!filters.criticalOnly || wanted.includes('CRITICO');
+  const realStatuses = wanted.filter(st => st !== 'CRITICO');
+  const out = [];
+  const all = at();
+  const resolveTargets = (field, targets) => {
+    if (!targets || targets.length === 0) return null;
+    const values = Array.from(new Set(all.map(el => String(el[field] || ''))));
+    const accepted = new Set();
+    for (const tg of targets) {
+      const exact = values.filter(v => aiNorm(v) === aiNorm(tg));
+      (exact.length > 0 ? exact : values.filter(v => matchesLoose(v, [tg]))).forEach(v => accepted.add(v));
+    }
+    return accepted;
+  };
+  const clsSet = resolveTargets('classification', filters.classifications);
+  const lvlSet = resolveTargets('level', filters.levels);
+  const mdlSet = resolveTargets('modelName', filters.models);
+  for (const el of all) {
+    if (mdlSet && !mdlSet.has(String(el.modelName || ''))) continue;
+    if (clsSet && !clsSet.has(String(el.classification || ''))) continue;
+    if (lvlSet && !lvlSet.has(String(el.level || ''))) continue;
+    const dRow = aiDescribeElement(el, dateStr);
+    const statusOk = realStatuses.length === 0 || realStatuses.includes(dRow.status);
+    const criticalOk = dRow.critical;
+    if (wantsCritical && realStatuses.length > 0) { if (!(statusOk || criticalOk)) continue; }
+    else if (wantsCritical) { if (!criticalOk) continue; }
+    else if (!statusOk) continue;
+    out.push(dRow);
+  }
+  return out;
+}
+
+function aiSummarize(rows) {
+  const counts = {};
+  const volumes = {};
+  const areas = {};
+  u.forEach(st => { counts[st] = 0; volumes[st] = 0; areas[st] = 0; });
+  let totalVol = 0, totalArea = 0, totalLen = 0, weighted = 0, weightedVol = 0, critical = 0;
+  for (const row of rows) {
+    counts[row.status] = (counts[row.status] || 0) + 1;
+    volumes[row.status] = (volumes[row.status] || 0) + row.volume;
+    areas[row.status] = (areas[row.status] || 0) + row.area;
+    totalVol += row.volume;
+    totalArea += row.area;
+    totalLen += row.length;
+    weighted += AI_STATUS_WEIGHTS[row.status] || 0;
+    weightedVol += (AI_STATUS_WEIGHTS[row.status] || 0) * row.volume;
+    if (row.critical) critical++;
+  }
+  const total = rows.length;
+  const aprob = counts['APROBADO'] + counts['CERRADO'];
+  const prog = counts['EN PROGRESO'] + counts['PARA INSPECCIÓN'];
   return {
     total,
     counts,
-    areas,
-    volumes,
-    totalArea: Math.round(totalArea * 100) / 100,
-    totalVol: Math.round(totalVol * 100) / 100,
-    totalLen: Math.round(totalLen * 100) / 100,
-    pctAprobado,
-    pctEnProgreso,
-    pctRechazado,
-    pctPendiente,
+    volumes: Object.fromEntries(Object.entries(volumes).map(([key, val]) => [key, aiRound(val)])),
+    areas: Object.fromEntries(Object.entries(areas).map(([key, val]) => [key, aiRound(val)])),
+    totalVol: aiRound(totalVol),
+    totalArea: aiRound(totalArea),
+    totalLen: aiRound(totalLen),
+    pct: Object.fromEntries(u.map(st => [st, aiPct(counts[st], total)])),
+    pctAprobado: aiPct(aprob, total),
+    pctEnProgreso: aiPct(prog, total),
+    pctPendiente: aiPct(counts['NINGUNO'], total),
+    pctRechazado: aiPct(counts['RECHAZADO'], total),
+    pctAprobadoVolumen: aiPct(volumes['APROBADO'] + volumes['CERRADO'], totalVol),
+    avancePonderado: total > 0 ? aiRound((weighted / total) * 100, 1) : 0,
+    avancePonderadoVolumen: totalVol > 0 ? aiRound((weightedVol / totalVol) * 100, 1) : 0,
+    criticos: critical
+  };
+}
+
+function aiGroupBy(rows, key) {
+  const groups = new Map();
+  for (const row of rows) {
+    const grpKey = row[key] || 'SIN DATO';
+    if (!groups.has(grpKey)) groups.set(grpKey, []);
+    groups.get(grpKey).push(row);
+  }
+  return Array.from(groups.entries()).map(([name, list]) => {
+    const sum = aiSummarize(list);
+    return {
+      name,
+      total: sum.total,
+      counts: sum.counts,
+      totalVol: sum.totalVol,
+      totalArea: sum.totalArea,
+      pctAprobado: sum.pctAprobado,
+      pctEnProgreso: sum.pctEnProgreso,
+      pctPendiente: sum.pctPendiente,
+      pctRechazado: sum.pctRechazado,
+      avancePonderado: sum.avancePonderado,
+      criticos: sum.criticos
+    };
+  }).sort((aGrp, bGrp) => bGrp.total - aGrp.total);
+}
+
+function aiGetStats(filters = {}) {
+  const rows = aiGetElements({ ...filters, statuses: undefined, criticalOnly: false });
+  const summary = aiSummarize(rows);
+  const criticalRows = rows.filter(row => row.critical)
+    .sort((aRow, bRow) => (aRow.status === 'RECHAZADO' ? -1 : 0) - (bRow.status === 'RECHAZADO' ? -1 : 0) || (bRow.daysInStatus || 0) - (aRow.daysInStatus || 0));
+  const lim = getCriticalDays();
+  const weekAgo = Date.now() - 7 * 86400000;
+  const recentChanges = rows.filter(row => row.lastChange && new Date(row.lastChange).getTime() >= weekAgo).length;
+  const byClassification = aiGroupBy(rows, 'classification');
+  const byLevel = aiGroupBy(rows, 'level');
+  return {
+    ...summary,
+    filters: { classifications: filters.classifications || [], levels: filters.levels || [], models: filters.models || [] },
+    timelineDate: filters.date ?? Q ?? null,
+    pesosAvance: AI_STATUS_WEIGHTS,
+    umbralesCriticos: { inspeccionDias: lim.inspeccion, progresoDias: lim.progreso },
+    critical: {
+      total: criticalRows.length,
+      rechazados: criticalRows.filter(row => row.status === 'RECHAZADO').length,
+      inspeccionVencida: criticalRows.filter(row => row.status === 'PARA INSPECCIÓN').length,
+      estancados: criticalRows.filter(row => row.status === 'EN PROGRESO').length,
+      top: criticalRows.slice(0, 15).map(row => ({
+        expressID: row.expressID, name: row.name, classification: row.classification,
+        level: row.level, status: row.status, days: row.daysInStatus, reason: row.reason
+      }))
+    },
+    cambiosUltimos7Dias: recentChanges,
+    byClassification,
+    byLevel,
+    classificationNames: byClassification.map(grp => grp.name),
+    levelNames: byLevel.map(grp => grp.name)
+  };
+}
+
+function aiSyncTable(opts = {}) {
+  D = opts.status && opts.status !== 'CRITICO' ? z(opts.status) : 'Todos';
+  if (opts.classification !== undefined) {
+    if (!opts.classification || opts.classification === 'Todos') {
+      $ = 'Todos';
+    } else {
+      const match = Array.from(new Set(at().map(el => el.classification))).find(cls => matchesLoose(cls, [opts.classification]));
+      $ = match || 'Todos';
+    }
+  }
+  if (opts.level !== undefined) {
+    if (!opts.level || opts.level === 'Todos') {
+      P = 'Todos';
+    } else {
+      const match = Array.from(new Set(at().map(el => el.level))).find(lvl => matchesLoose(lvl, [opts.level]));
+      P = match || 'Todos';
+    }
+  }
+  if (typeof opts.colors === 'boolean') k = opts.colors;
+  li();
+}
+
+function aiSetStatusColors(enabled) {
+  k = !!enabled;
+  qe(at());
+  li();
+}
+
+window.noraStatusAPI = {
+  STATUS_ORDER: u,
+  getStatus: (el) => aiGetStatus(el),
+  getElements: aiGetElements,
+  getStats: aiGetStats,
+  syncTable: aiSyncTable,
+  setStatusColors: aiSetStatusColors
+};
+
+function getLiveStatusStats() {
+  const elements = typeof at === 'function' ? at() : [];
+  if (!elements || elements.length === 0) return null;
+  const stats = aiGetStats();
+  const byClass = {};
+  for (const grp of stats.byClassification || []) {
+    byClass[grp.name] = {
+      total: grp.total,
+      aprobado: (grp.counts['APROBADO'] || 0) + (grp.counts['CERRADO'] || 0),
+      enProgreso: (grp.counts['EN PROGRESO'] || 0) + (grp.counts['PARA INSPECCIÓN'] || 0),
+      rechazado: grp.counts['RECHAZADO'] || 0,
+      ninguno: grp.counts['NINGUNO'] || 0,
+      area: grp.totalArea || 0,
+      vol: grp.totalVol || 0
+    };
+  }
+  return {
+    ...stats,
     byClass,
     isolatedCategory: getIsolatedCategoryName()
   };
 }
+
+window.noraStatusAnalyst = (() => {
+  const STATUS_LABEL = {
+    'NINGUNO': 'Pendientes (sin iniciar)',
+    'EN PROGRESO': 'En progreso',
+    'PARA INSPECCIÓN': 'Para inspección',
+    'APROBADO': 'Aprobados',
+    'CERRADO': 'Cerrados',
+    'RECHAZADO': 'Rechazados',
+    'CRITICO': 'Críticos'
+  };
+  const STATUS_ICON = {
+    'NINGUNO': '⚪',
+    'EN PROGRESO': '🟡',
+    'PARA INSPECCIÓN': '🔵',
+    'APROBADO': '🟢',
+    'CERRADO': '✅',
+    'RECHAZADO': '🔴',
+    'CRITICO': '🚨'
+  };
+  const ALL_STATUSES = ['NINGUNO', 'EN PROGRESO', 'PARA INSPECCIÓN', 'APROBADO', 'CERRADO', 'RECHAZADO'];
+  const sNorm = (val) => String(val ?? '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
+  const sEsc = (val) => String(val ?? '').replace(/[&<>'"*]/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;', '*': '&#42;' }[ch] || ch));
+  const sFmt = (num, dec = 1) => (Math.round((num || 0) * Math.pow(10, dec)) / Math.pow(10, dec)).toLocaleString('es-CO');
+  const sBar = (pct) => {
+    const filled = Math.max(0, Math.min(10, Math.round((pct || 0) / 10)));
+    return '▰'.repeat(filled) + '▱'.repeat(10 - filled);
+  };
+  const STATUS_PATTERNS = [
+    [/\b(rechazad[oa]s?|reprocesos?|no\s+conformes?)\b/, 'RECHAZADO'],
+    [/\b(para\s+inspeccion|inspeccion(?:es)?|por\s+inspeccionar|por\s+revisar)\b/, 'PARA INSPECCIÓN'],
+    [/\b(en\s+progreso|en\s+ejecucion|en\s+proceso|en\s+curso|ejecutandose|en\s+obra)\b/, 'EN PROGRESO'],
+    [/\b(cerrad[oa]s?)\b/, 'CERRADO'],
+    [/\b(aprobad[oa]s?|ejecutad[oa]s?|terminad[oa]s?|finalizad[oa]s?|completad[oa]s?)\b/, 'APROBADO'],
+    [/\b(pendientes?|sin\s+iniciar|sin\s+estado|ningun[oa]?|no\s+iniciad[oa]s?|por\s+ejecutar|faltantes?|sin\s+empezar)\b/, 'NINGUNO'],
+    [/\b(critic[oa]s?|en\s+riesgo|riesgos?|alertas?|estancad[oa]s?|vencid[oa]s?|problemas?|urgentes?)\b/, 'CRITICO']
+  ];
+  const GENERIC_TOKENS = new Set([
+    'estructural', 'estructura', 'arquitectura', 'arquitectonico', 'general', 'otros', 'otras', 'elementos',
+    'elemento', 'modelo', 'generico', 'genericos', 'clasificacion', 'integrado', 'varios', 'sin', 'dato'
+  ]);
+  const isStatusIntent = (query) => {
+    const q = sNorm(query);
+    const slopeUsage = /pendiente\s*(?:mayor|menor|superior|inferior|de|del|>|<|=|igual)?\s*(?:a|al|que)?\s*[0-9]/.test(q);
+    if (/\b(avances?|progreso|porcentaje\s+de\s+(?:avance|ejecucion)|como\s+va|cuanto\s+va|estados?\b|semaforo|control\s+de\s+avance|atrasad[oa]s?|rezagad[oa]s?|adelantad[oa]s?)/.test(q)) return true;
+    return STATUS_PATTERNS.some(([re, st]) => !(st === 'NINGUNO' && slopeUsage) && re.test(q));
+  };
+  const isAnalyticStatusQuery = (query) => /\b(analiza|analisis|diagnostic\w*|recomien\w*|sugier\w*|suger\w*|informe|reporte|resumen\s+ejecutivo|por\s*que|que\s+hago|conclusi\w*|evalua\w*|interpreta\w*|plan\s+de\s+accion|prioriza\w*)\b/.test(sNorm(query));
+  const detectStatuses = (q) => {
+    const slopeUsage = /pendiente\s*(?:mayor|menor|superior|inferior|de|del|>|<|=|igual)?\s*(?:a|al|que)?\s*[0-9]/.test(q);
+    const found = [];
+    for (const [re, st] of STATUS_PATTERNS) {
+      if (st === 'NINGUNO' && slopeUsage) continue;
+      if (re.test(q)) found.push(st);
+    }
+    if (found.includes('APROBADO') && !found.includes('CERRADO') && !/\bsolo\s+aprobad/.test(q)) found.push('CERRADO');
+    return found;
+  };
+  const detectLevel = (q, levelNames) => {
+    let rest = q;
+    const sorted = [...levelNames].sort((aLvl, bLvl) => bLvl.length - aLvl.length);
+    for (const name of sorted) {
+      const nName = sNorm(name);
+      if (nName.length >= 3 && rest.includes(nName)) return { levels: [name], rest: rest.replace(nName, ' ') };
+    }
+    const mLvl = rest.match(/\b(piso|nivel|planta|level|sotano|cubierta|n|p)\s*-?\s*([0-9]+)\b/);
+    if (mLvl) {
+      const word = mLvl[1], num = mLvl[2];
+      const candidates = levelNames.filter(name => (sNorm(name).match(/[0-9]+/g) || []).some(v => v === num || v === String(parseInt(num, 10))));
+      const isBasement = word === 'sotano';
+      const preferred = candidates.filter(c => isBasement === sNorm(c).includes('sotano'));
+      const pick = preferred.length > 0 ? preferred : candidates;
+      if (pick.length > 0) {
+        const sameWord = pick.find(c => sNorm(c).includes(word));
+        return { levels: [sameWord || pick[0]], rest: rest.replace(mLvl[0], ' ') };
+      }
+    }
+    return { levels: [], rest };
+  };
+  const detectClassifications = (q, names) => {
+    const scored = [];
+    for (const name of names) {
+      const tokens = sNorm(name).split(/[^a-z0-9]+/).filter(tk => tk.length >= 4 && !GENERIC_TOKENS.has(tk));
+      if (tokens.length === 0) continue;
+      let score = 0;
+      for (const tk of tokens) {
+        const stem = tk.replace(/(es|s)$/, '');
+        if (stem.length >= 3 && new RegExp(`\\b${stem}`).test(q)) score++;
+      }
+      if (score > 0) scored.push({ name, score });
+    }
+    if (scored.length === 0) return [];
+    const maxScore = Math.max(...scored.map(item => item.score));
+    return scored.filter(item => item.score === maxScore).map(item => item.name);
+  };
+  const scopeLabel = (classifications, levels) => {
+    const parts = [];
+    if (classifications.length) parts.push(classifications.map(sEsc).join(', '));
+    if (levels.length) parts.push(levels.map(sEsc).join(', '));
+    return parts.length ? ` — ${parts.join(' · ')}` : '';
+  };
+  const summaryLines = (sObj) => {
+    const c = sObj.counts || {};
+    return [
+      `${STATUS_ICON['APROBADO']} Aprobados/Cerrados: **${(c['APROBADO'] || 0) + (c['CERRADO'] || 0)}** (${sFmt(sObj.pctAprobado)}%)`,
+      `${STATUS_ICON['EN PROGRESO']} En progreso: **${c['EN PROGRESO'] || 0}** (${sFmt(sObj.pct?.['EN PROGRESO'])}%)`,
+      `${STATUS_ICON['PARA INSPECCIÓN']} Para inspección: **${c['PARA INSPECCIÓN'] || 0}** (${sFmt(sObj.pct?.['PARA INSPECCIÓN'])}%)`,
+      `${STATUS_ICON['NINGUNO']} Pendientes: **${c['NINGUNO'] || 0}** (${sFmt(sObj.pctPendiente)}%)`,
+      `${STATUS_ICON['RECHAZADO']} Rechazados: **${c['RECHAZADO'] || 0}** (${sFmt(sObj.pctRechazado)}%)`
+    ].map(ln => `• ${ln}`).join('\n');
+  };
+  const criticalLines = (sObj, limit = 6) => {
+    const cr = sObj.critical || {};
+    if (!cr.total) return '✅ No hay elementos en estado crítico.';
+    let out = `🚨 **${cr.total} elementos críticos**: ${cr.rechazados} rechazados · ${cr.inspeccionVencida} con inspección vencida (>${sObj.umbralesCriticos?.inspeccionDias}d) · ${cr.estancados} estancados en progreso (>${sObj.umbralesCriticos?.progresoDias}d)`;
+    const topList = (cr.top || []).slice(0, limit);
+    if (topList.length) {
+      out += '\n' + topList.map(el => `  ▸ #${el.expressID} ${sEsc(el.name || el.classification)} · ${sEsc(el.level)} — ${sEsc(el.reason)}`).join('\n');
+      if (cr.total > topList.length) out += `\n  … y ${cr.total - topList.length} más.`;
+    }
+    return out;
+  };
+  const laggards = (groups, label, nCount = 3) => {
+    const valid = groups.filter(grp => grp.total >= 3);
+    if (valid.length < 2) return '';
+    const worst = [...valid].sort((ga, gb) => ga.avancePonderado - gb.avancePonderado).slice(0, nCount);
+    return `🐢 **${label} más rezagados**: ` + worst.map(grp => `${sEsc(grp.name)} (${sFmt(grp.avancePonderado)}%)`).join(' · ');
+  };
+  const groupTable = (groups, status, maxRows = 12) => {
+    let rows = [...groups];
+    if (status) {
+      const isCrit = status === 'CRITICO';
+      rows = rows
+        .map(grp => ({ ...grp, _v: isCrit ? grp.criticos : (status === 'APROBADO' ? (grp.counts['APROBADO'] || 0) + (grp.counts['CERRADO'] || 0) : (grp.counts[status] || 0)) }))
+        .filter(grp => grp._v > 0)
+        .sort((ga, gb) => gb._v - ga._v);
+      if (rows.length === 0) return `No hay elementos ${STATUS_LABEL[status]?.toLowerCase() || status} en ningún grupo.`;
+      return rows.slice(0, maxRows).map(grp => `• **${sEsc(grp.name)}**: ${grp._v} de ${grp.total} (${sFmt((grp._v / grp.total) * 100)}%)`).join('\n')
+        + (rows.length > maxRows ? `\n… y ${rows.length - maxRows} más.` : '');
+    }
+    rows.sort((ga, gb) => ga.avancePonderado - gb.avancePonderado);
+    return rows.slice(0, maxRows).map(grp =>
+      `• **${sEsc(grp.name)}** ${sBar(grp.avancePonderado)} ${sFmt(grp.avancePonderado)}% — ${grp.counts['APROBADO'] + grp.counts['CERRADO']}/${grp.total} aprob.${grp.counts['RECHAZADO'] ? ` · ${grp.counts['RECHAZADO']} rech.` : ''}${grp.criticos ? ` · 🚨${grp.criticos}` : ''}`
+    ).join('\n') + (rows.length > maxRows ? `\n… y ${rows.length - maxRows} grupos más.` : '');
+  };
+  const resolveStatusQuery = (query, bimContext) => {
+    const q = sNorm(query);
+    if (!isStatusIntent(q)) return null;
+    const api = window.noraStatusAPI;
+    if (!api) {
+      return {
+        answer: '⚠️ El módulo **Control de Avance (STATUS)** aún no está inicializado. Abre el panel de Control de Avance (botón "Avance") y vuelve a preguntar.',
+        action: { type: 'none' }
+      };
+    }
+    const base = api.getStats();
+    if (!base || base.total === 0) {
+      return { answer: 'ℹ️ No hay elementos con datos de avance. Carga un modelo con propiedades primero.', action: { type: 'none' } };
+    }
+    const byLevelReq = /\bpor\s+(pisos?|niveles?|plantas?)\b|\b(que|cual|cuales)\s+(pisos?|niveles?|plantas?)\b/.test(q);
+    const byClassReq = /\bpor\s+(clasificacion(?:es)?|categorias?|tipos?|elementos?|disciplinas?|sistemas?)\b|\b(que|cual|cuales)\s+(clasificacion(?:es)?|categorias?|tipos?\s+de\s+elementos?)\b/.test(q);
+    let qClean = q.replace(/\bpor\s+(pisos?|niveles?|plantas?|clasificacion(?:es)?|categorias?|tipos?|elementos?)\b/g, ' ')
+      .replace(/\b(que|cual|cuales)\s+(pisos?|niveles?|plantas?)\b/g, ' ');
+    const lvl = detectLevel(qClean, base.levelNames || []);
+    const levels = lvl.levels;
+    qClean = lvl.rest;
+    const classifications = detectClassifications(qClean, base.classificationNames || []);
+    const rankingWorst = /\b(atrasad[oa]s?|rezagad[oa]s?|menos\s+avance|menor\s+avance|peor(?:es)?|mas\s+lent[oa]s?|mas\s+bajo)\b/.test(q);
+    const rankingBest = /\b(adelantad[oa]s?|mas\s+avance|mayor\s+avance|mejor(?:es)?|mas\s+avanzad[oa]s?|mas\s+alto)\b/.test(q);
+    let statuses = detectStatuses(q);
+    if ((rankingWorst || rankingBest) && (byLevelReq || byClassReq)) statuses = statuses.filter(st => st !== 'CRITICO');
+    const wantsGeneral = /\b(avance\s+general|avance\s+del\s+proyecto|estado\s+general|resumen\s+general|como\s+va\s+(?:el\s+)?proyecto)\b/.test(q);
+    if (wantsGeneral && !/\b(aisla\w*|muestra\w*|resalta\w*|filtra\w*)\b/.test(q)) statuses = [];
+    const wantsColorAll = /\b(colorea\w*|pinta\w*|colores?|semaforo|mapa\s+de\s+(?:estados?|avance))\b/.test(q) && statuses.length === 0;
+    const wantsClearColors = /\b(quita\w*|apaga\w*|desactiva\w*|limpia\w*|borra\w*)\b.*\bcolor/.test(q);
+    const hasVerb = /\b(aisla\w*|muestra\w*|mostrar|ver|ensena\w*|resalta\w*|filtra\w*|visualiza\w*|ubica\w*|donde|cuales|selecciona\w*|enfoca\w*|marca\w*)\b/.test(q);
+    const isCountQuestion = /\b(cuant[oa]s?|porcentaje|que\s+tanto|numero\s+de|total\s+de)\b|%/.test(q);
+    const asksSelected = /\b(este|esta|estos|estas|seleccionad[oa]s?|seleccion)\b/.test(q) && (bimContext?.selectedElements?.length || 0) > 0;
+    const wantsReport = isAnalyticStatusQuery(q);
+    const filters = { classifications: classifications.length ? classifications : undefined, levels: levels.length ? levels : undefined };
+    const scoped = (classifications.length || levels.length) ? api.getStats(filters) : base;
+    const scope = scopeLabel(classifications, levels);
+
+    if (asksSelected) {
+      const ids = new Set((bimContext.selectedElements || []).map(el => Number(el.expressID)));
+      const rows = api.getElements({}).filter(row => ids.has(Number(row.expressID)));
+      if (rows.length > 0) {
+        const lines = rows.slice(0, 10).map(row =>
+          `• #${row.expressID} ${sEsc(row.name)} — ${STATUS_ICON[row.status]} **${row.status}**${row.lastChange ? ` (desde ${new Date(row.lastChange).toLocaleDateString('es-CO')})` : ''}${row.critical ? ` 🚨 ${sEsc(row.reason)}` : ''}`
+        ).join('\n');
+        return { answer: `📌 **Estado de la selección** (${rows.length}):\n${lines}`, action: { type: 'none' } };
+      }
+    }
+    if (wantsClearColors) {
+      return { answer: '🎨 He desactivado los colores de estado en el visor.', action: { type: 'color', colorOverrides: { mode: 'status', clear: true }, message: 'Colores de estado desactivados' } };
+    }
+    if (wantsColorAll) {
+      return {
+        answer: `🎨 He coloreado el modelo por estado de avance.\n${summaryLines(base)}`,
+        action: { type: 'color', colorOverrides: { mode: 'status' }, message: 'Modelo coloreado por estado' }
+      };
+    }
+    if ((rankingWorst || rankingBest) && (byLevelReq || byClassReq || /\b(piso|nivel|clasificacion|categoria)\b/.test(q))) {
+      const useLevels = byLevelReq || (/\b(piso|nivel|planta)\b/.test(q) && !byClassReq);
+      const groups = (useLevels ? scoped.byLevel : scoped.byClassification).filter(grp => grp.total >= 1);
+      const sorted = [...groups].sort((ga, gb) => rankingWorst ? ga.avancePonderado - gb.avancePonderado : gb.avancePonderado - ga.avancePonderado);
+      const topGrp = sorted[0];
+      if (!topGrp) return { answer: 'No encontré grupos para comparar.', action: { type: 'none' } };
+      const label = useLevels ? 'nivel' : 'clasificación';
+      const list = sorted.slice(0, 5).map((grp, idx) => `${idx + 1}. **${sEsc(grp.name)}** ${sBar(grp.avancePonderado)} ${sFmt(grp.avancePonderado)}% (${grp.total} elem.${grp.counts['RECHAZADO'] ? `, ${grp.counts['RECHAZADO']} rech.` : ''})`).join('\n');
+      return {
+        answer: `${rankingWorst ? '🐢' : '🚀'} El ${label} ${rankingWorst ? 'más atrasado' : 'más adelantado'} es **${sEsc(topGrp.name)}** con ${sFmt(topGrp.avancePonderado)}% de avance ponderado.\n${list}\n\nHe aislado ese ${label} coloreado por estado.`,
+        action: {
+          type: 'status_isolate',
+          statuses: ALL_STATUSES,
+          levels: useLevels ? [topGrp.name] : filters.levels,
+          classifications: useLevels ? filters.classifications : [topGrp.name],
+          message: `Aislado ${topGrp.name} por estado`
+        }
+      };
+    }
+    if (byLevelReq || byClassReq) {
+      const useLevels = byLevelReq && !byClassReq ? true : (byClassReq && !byLevelReq ? false : true);
+      const groups = useLevels ? scoped.byLevel : scoped.byClassification;
+      const stKey = statuses.length ? statuses[0] : null;
+      const title = stKey
+        ? `${STATUS_ICON[stKey]} **${STATUS_LABEL[stKey]} por ${useLevels ? 'nivel' : 'clasificación'}**${scope}`
+        : `📊 **Avance por ${useLevels ? 'nivel' : 'clasificación'}**${scope} (ordenado de menor a mayor)`;
+      return {
+        answer: `${title}\n${groupTable(groups, stKey)}`,
+        action: stKey && hasVerb
+          ? { type: 'status_isolate', statuses: stKey === 'APROBADO' ? ['APROBADO', 'CERRADO'] : [stKey], classifications: filters.classifications, levels: filters.levels, message: `Aislados ${STATUS_LABEL[stKey]}` }
+          : { type: 'none' }
+      };
+    }
+    if (wantsReport) {
+      const recs = [];
+      if (scoped.critical?.rechazados) recs.push(`Priorizar el reproceso de los **${scoped.critical.rechazados} rechazados**.`);
+      if (scoped.critical?.inspeccionVencida) recs.push(`Programar inspección para **${scoped.critical.inspeccionVencida} elementos** con inspección vencida.`);
+      if (scoped.critical?.estancados) recs.push(`Revisar frentes de obra con **${scoped.critical.estancados} elementos** estancados en progreso.`);
+      if (scoped.pctPendiente > 50) recs.push(`El ${sFmt(scoped.pctPendiente)}% sigue sin iniciar: verificar programación y recursos.`);
+      if (scoped.cambiosUltimos7Dias === 0) recs.push('No hubo cambios de estado en los últimos 7 días: confirmar que el registro de avance esté al día.');
+      const worstLvl = laggards(scoped.byLevel || [], 'Niveles');
+      const worstCls = laggards(scoped.byClassification || [], 'Clasificaciones');
+      return {
+        answer: [
+          `📋 **Informe de avance${scope}**`,
+          `Avance ponderado: **${sFmt(scoped.avancePonderado)}%** ${sBar(scoped.avancePonderado)} · por volumen: **${sFmt(scoped.avancePonderadoVolumen)}%**`,
+          summaryLines(scoped),
+          `🕒 Cambios de estado últimos 7 días: **${scoped.cambiosUltimos7Dias}**`,
+          worstLvl, worstCls,
+          criticalLines(scoped, 5),
+          recs.length ? `💡 **Recomendaciones**\n${recs.map(rec => `• ${rec}`).join('\n')}` : ''
+        ].filter(Boolean).join('\n\n'),
+        action: { type: 'none' }
+      };
+    }
+    if (statuses.includes('CRITICO') && statuses.length === 1) {
+      const doIsolate = hasVerb || !isCountQuestion;
+      const cr = scoped.critical || {};
+      return {
+        answer: `${criticalLines(scoped, 8)}${scope ? `\n(Filtro${scope})` : ''}${doIsolate && cr.total ? '\n\nHe aislado los críticos: 🔴 rechazados · 🟠 inspección vencida / estancados.' : ''}`,
+        action: doIsolate && cr.total
+          ? { type: 'status_isolate', statuses: ['CRITICO'], classifications: filters.classifications, levels: filters.levels, message: `Aislados ${cr.total} elementos críticos` }
+          : { type: 'none' }
+      };
+    }
+    if (statuses.length > 0) {
+      const rows = api.getElements({ statuses, classifications: filters.classifications, levels: filters.levels });
+      const vol = rows.reduce((acc, row) => acc + (row.volume || 0), 0);
+      const area = rows.reduce((acc, row) => acc + (row.area || 0), 0);
+      const label = statuses.filter(stKey => !(stKey === 'CERRADO' && statuses.includes('APROBADO'))).map(stKey => STATUS_LABEL[stKey]).join(' + ');
+      const icon = STATUS_ICON[statuses[0]] || '📌';
+      const doIsolate = hasVerb || !isCountQuestion;
+      let answer = `${icon} **${label}${scope}: ${rows.length}** de ${scoped.total} elementos (${sFmt(scoped.total ? (rows.length / scoped.total) * 100 : 0)}%)`;
+      const metrics = [];
+      if (vol > 0) metrics.push(`Vol: ${sFmt(vol, 2)} m³`);
+      if (area > 0) metrics.push(`Área: ${sFmt(area, 2)} m²`);
+      if (metrics.length) answer += ` · ${metrics.join(' · ')}`;
+      if (rows.length > 0) {
+        const tally = (key) => {
+          const mp = new Map();
+          rows.forEach(row => mp.set(row[key], (mp.get(row[key]) || 0) + 1));
+          return Array.from(mp.entries()).sort((ga, gb) => gb[1] - ga[1]).slice(0, 3);
+        };
+        if (!levels.length) answer += `\n📍 Por nivel: ${tally('level').map(([key, val]) => `${sEsc(key)} (${val})`).join(' · ')}`;
+        if (!classifications.length) answer += `\n🏷️ Por clasificación: ${tally('classification').map(([key, val]) => `${sEsc(key)} (${val})`).join(' · ')}`;
+        if (statuses.includes('RECHAZADO') || statuses.includes('PARA INSPECCIÓN') || statuses.includes('EN PROGRESO')) {
+          const old = rows.filter(row => row.daysInStatus !== null).sort((ra, rb) => (rb.daysInStatus || 0) - (ra.daysInStatus || 0)).slice(0, 3);
+          if (old.length) answer += `\n⏱️ Más antiguos: ${old.map(row => `#${row.expressID} (${row.daysInStatus}d)`).join(' · ')}`;
+        }
+        if (doIsolate) answer += '\n\nLos he aislado en el visor 3D y filtrado la tabla de Control de Avance.';
+      }
+      return {
+        answer,
+        action: doIsolate && rows.length > 0
+          ? { type: 'status_isolate', statuses, classifications: filters.classifications, levels: filters.levels, message: `Aislados ${rows.length} elementos: ${label}` }
+          : { type: 'none' }
+      };
+    }
+    const answer = [
+      `📊 **Avance${scope || ' general del proyecto'}: ${sFmt(scoped.avancePonderado)}%** ${sBar(scoped.avancePonderado)}`,
+      `Total: **${scoped.total}** elementos · ${sFmt(scoped.pctAprobado)}% aprobados · avance por volumen ${sFmt(scoped.avancePonderadoVolumen)}%`,
+      summaryLines(scoped),
+      scoped.critical?.total ? `🚨 **${scoped.critical.total} críticos** (${scoped.critical.rechazados} rechazados, ${scoped.critical.inspeccionVencida} inspección vencida, ${scoped.critical.estancados} estancados)` : '✅ Sin elementos críticos',
+      !classifications.length ? laggards(scoped.byClassification || [], 'Clasificaciones') : '',
+      `ℹ️ Avance ponderado: Aprobado/Cerrado 100% · Para inspección 80% · En progreso 40% · Pendiente/Rechazado 0%`
+    ].filter(Boolean).join('\n');
+    const isolateScope = hasVerb && (classifications.length > 0 || levels.length > 0);
+    return {
+      answer: answer + (isolateScope ? '\n\nHe aislado el alcance en 3D coloreado por estado.' : ''),
+      action: isolateScope
+        ? { type: 'status_isolate', statuses: ALL_STATUSES, classifications: filters.classifications, levels: filters.levels, message: `Aislado ${[...classifications, ...levels].join(' · ')} por estado` }
+        : { type: 'none' }
+    };
+  };
+  const getStatusContextForLLM = () => {
+    const api = window.noraStatusAPI;
+    if (!api) return null;
+    try {
+      const sObj = api.getStats();
+      return {
+        total: sObj.total,
+        counts: sObj.counts,
+        pct: sObj.pct,
+        pctAprobado: sObj.pctAprobado,
+        avancePonderado: sObj.avancePonderado,
+        avancePonderadoVolumen: sObj.avancePonderadoVolumen,
+        pesosAvance: sObj.pesosAvance,
+        volumenesPorEstado: sObj.volumes,
+        critical: sObj.critical,
+        umbralesCriticos: sObj.umbralesCriticos,
+        cambiosUltimos7Dias: sObj.cambiosUltimos7Dias,
+        byLevel: (sObj.byLevel || []).slice(0, 40),
+        byClassification: (sObj.byClassification || []).slice(0, 40)
+      };
+    } catch { return null; }
+  };
+  return { isStatusIntent, isAnalyticStatusQuery, resolveStatusQuery, getStatusContextForLLM };
+})();
 
 function renderStatusCharts(st, metric = currentChartMetric) {
   currentChartMetric = metric;
@@ -7425,9 +8025,9 @@ function renderStatusCharts(st, metric = currentChartMetric) {
         </div>
 
         <div style="display: flex; align-items: center; gap: 5px;">
-          <!-- BOTÓN CLAVE: ACTIVAR LA IA EN EL MEDIO PLANO SUPERIOR -->
-          <button type="button" id="btn-chart-activate-ai-split" class="split-divider-btn primary" title="Partir panel: Activar nora AI arriba con gráficos abajo" style="padding: 3px 8px; font-size: 10px; font-weight: 700; border-radius: 5px;">
-            <i class="fa-solid fa-wand-magic-sparkles"></i> Activar IA arriba
+          <!-- BOTÓN CLAVE: ACTIVAR O ALTERNAR LA IA EN EL MEDIO PLANO SUPERIOR -->
+          <button type="button" id="btn-chart-activate-ai-split" class="split-divider-btn ${document.getElementById('properties-panel')?.classList.contains('split-mode') ? '' : 'primary'}" title="${document.getElementById('properties-panel')?.classList.contains('split-mode') ? 'Cerrar IA y ver sólo gráficos a pantalla completa' : 'Partir panel en 2: Activar nora AI arriba con gráficos abajo'}" style="padding: 3px 8px; font-size: 10px; font-weight: 700; border-radius: 5px; display: inline-flex; align-items: center; gap: 4px; ${document.getElementById('properties-panel')?.classList.contains('split-mode') ? 'color: #ef4444; border-color: #fca5a5;' : ''}">
+            <i class="fa-solid ${document.getElementById('properties-panel')?.classList.contains('split-mode') ? 'fa-expand' : 'fa-wand-magic-sparkles'}"></i> ${document.getElementById('properties-panel')?.classList.contains('split-mode') ? 'Sólo gráficos' : 'Activar IA arriba'}
           </button>
 
           <!-- Metric Pills -->
@@ -7635,14 +8235,7 @@ window.toggleSplitMode = function() {
   if (!panel) return;
   const isSplit = panel.classList.contains("split-mode");
   if (isSplit) {
-    // Cerrar split, mantener panel superior completo
-    panel.classList.remove("split-mode");
-    const contentGraf = document.getElementById("status-charts-container");
-    const divider = document.getElementById("panel-split-divider");
-    const tabSplit = document.getElementById("right-tab-split-ia");
-    if (contentGraf) contentGraf.style.display = "none";
-    if (divider) divider.style.display = "none";
-    if (tabSplit) tabSplit.classList.remove("active");
+    openStatusCharts(typeof at === 'function' ? at() : []);
   } else {
     window.activateSplitAIWithCharts();
   }
@@ -7650,7 +8243,7 @@ window.toggleSplitMode = function() {
 
 function injectAvancePromptsInNoraAI() {
   const container = document.getElementById('nora-ai-messages');
-  if (!container || container.querySelector('.avance-ai-prompt-group')) return;
+  if (!container || container.querySelector('.avance-ai-prompt-group') || container.querySelector('[data-prompt*="estado crítico"]')) return;
 
   const promptsWrap = container.querySelector('.nora-ai-prompts');
   if (!promptsWrap) return;
@@ -7668,11 +8261,32 @@ function injectAvancePromptsInNoraAI() {
     <button class="nora-ai-prompt-pill" data-prompt="Aísla en 3D los elementos EN PROGRESO" style="border-color: #f59e0b; color: #b45309; background: #fffbeb;">
       <i class="fa-solid fa-clock"></i> Aislar En Progreso
     </button>
-    <button class="nora-ai-prompt-pill" data-prompt="¿Cuál es el avance de Vigas? Aísla las vigas y muestra su estado" style="border-color: #3b82f6; color: #1d4ed8; background: #eff6ff;">
-      <i class="fa-solid fa-layer-group"></i> Avance de Vigas
+    <button class="nora-ai-prompt-pill" data-prompt="Aísla los elementos para inspección" style="border-color: #3b82f6; color: #1d4ed8; background: #eff6ff;">
+      <i class="fa-solid fa-clipboard-check"></i> Para Inspección
     </button>
     <button class="nora-ai-prompt-pill" data-prompt="Aísla los elementos RECHAZADOS en el visor 3D" style="border-color: #ef4444; color: #b91c1c; background: #fef2f2;">
       <i class="fa-solid fa-triangle-exclamation"></i> Ver Rechazados
+    </button>
+    <button class="nora-ai-prompt-pill" data-prompt="Muéstrame los elementos en estado crítico" style="border-color: #dc2626; color: #991b1b; background: #fef2f2; font-weight: 700;">
+      <i class="fa-solid fa-circle-exclamation"></i> Elementos Críticos
+    </button>
+    <button class="nora-ai-prompt-pill" data-prompt="Avance por piso" style="border-color: #6366f1; color: #4338ca; background: #eef2ff;">
+      <i class="fa-solid fa-building"></i> Avance por Piso
+    </button>
+    <button class="nora-ai-prompt-pill" data-prompt="Avance por clasificación" style="border-color: #6366f1; color: #4338ca; background: #eef2ff;">
+      <i class="fa-solid fa-list-check"></i> Avance por Clasificación
+    </button>
+    <button class="nora-ai-prompt-pill" data-prompt="¿Qué piso va más atrasado?" style="border-color: #f97316; color: #c2410c; background: #fff7ed;">
+      <i class="fa-solid fa-hourglass-half"></i> Piso más Atrasado
+    </button>
+    <button class="nora-ai-prompt-pill" data-prompt="¿Cuál es el avance de Vigas? Aísla las vigas y muestra su estado" style="border-color: #3b82f6; color: #1d4ed8; background: #eff6ff;">
+      <i class="fa-solid fa-layer-group"></i> Avance de Vigas
+    </button>
+    <button class="nora-ai-prompt-pill" data-prompt="Pinta el modelo por estado de avance" style="border-color: #8b5cf6; color: #6d28d9; background: #f5f3ff;">
+      <i class="fa-solid fa-palette"></i> Colorear por Estado
+    </button>
+    <button class="nora-ai-prompt-pill" data-prompt="Haz un informe de avance con recomendaciones" style="border-color: #0f766e; color: #0f766e; background: #f0fdfa; font-weight: 700;">
+      <i class="fa-solid fa-file-lines"></i> Informe de Avance
     </button>
   `;
   promptsWrap.insertBefore(avancePills, promptsWrap.firstChild);
@@ -7695,7 +8309,7 @@ function initSplitDividerEvents() {
 
   divider.querySelector('#btn-split-close-charts')?.addEventListener('click', (e) => {
     e.stopPropagation();
-    window.closeStatusCharts();
+    openStatusCharts(typeof at === 'function' ? at() : []);
   });
 
   // Arrastre vertical para ajustar ratio
@@ -7739,31 +8353,33 @@ function openStatusCharts(st) {
 
   initSplitDividerEvents();
 
-  if (gTab) gTab.style.display = "inline-flex";
-  if (sTab) sTab.style.display = "inline-flex";
-
+  // Abrir con SOLO GRÁFICOS (pantalla completa en panel, sin subdividir)
   if (pPan) {
     pPan.classList.remove("closed");
-    pPan.classList.add("split-mode");
+    pPan.classList.remove("split-mode");
     const desiredW = Math.min(540, Math.floor(window.innerWidth * 0.48));
     pPan.style.width = desiredW + 'px';
     document.documentElement.style.setProperty("--properties-width", desiredW + 'px');
   }
 
-  // Si nora estaba activo, mantener nora arriba. Si properties estaba activo, mantener properties arriba.
-  if (pNora && pNora.classList.contains("active")) {
-    if (nCont) nCont.style.display = "flex";
-    if (pCont) pCont.style.display = "none";
-    if (sTab) sTab.classList.add("active");
-  } else {
-    if (pProps) pProps.classList.add("active");
-    if (pNora) pNora.classList.remove("active");
-    if (pCont) pCont.style.display = "flex";
-    if (nCont) nCont.style.display = "none";
+  if (gTab) {
+    gTab.style.display = "inline-flex";
+    gTab.classList.add("active");
   }
+  if (sTab) {
+    sTab.style.display = "inline-flex";
+    sTab.classList.remove("active");
+  }
+  if (pProps) pProps.classList.remove("active");
+  if (pNora) pNora.classList.remove("active");
 
-  if (gCont) gCont.style.display = "flex";
-  if (divider) divider.style.display = "flex";
+  if (pCont) pCont.style.display = "none";
+  if (nCont) nCont.style.display = "none";
+  if (divider) divider.style.display = "none";
+  if (gCont) {
+    gCont.style.display = "flex";
+    gCont.style.height = "calc(100% - 48px)";
+  }
 
   renderStatusCharts(st || (typeof at === "function" ? at() : []));
 }
@@ -7822,6 +8438,15 @@ function setupSplitTabListeners() {
       if (panel && panel.classList.contains('split-mode')) {
         e.preventDefault();
         window.activateSplitPropsWithCharts();
+      } else {
+        const gCont = document.getElementById('status-charts-container');
+        const divider = document.getElementById('panel-split-divider');
+        const sTab = document.getElementById('right-tab-split-ia');
+        const gTab = document.getElementById('right-tab-graficos');
+        if (gCont) gCont.style.display = 'none';
+        if (divider) divider.style.display = 'none';
+        if (sTab) sTab.classList.remove('active');
+        if (gTab) gTab.classList.remove('active');
       }
     });
   }
@@ -7831,6 +8456,15 @@ function setupSplitTabListeners() {
       if (panel && panel.classList.contains('split-mode')) {
         e.preventDefault();
         window.activateSplitAIWithCharts();
+      } else {
+        const gCont = document.getElementById('status-charts-container');
+        const divider = document.getElementById('panel-split-divider');
+        const sTab = document.getElementById('right-tab-split-ia');
+        const gTab = document.getElementById('right-tab-graficos');
+        if (gCont) gCont.style.display = 'none';
+        if (divider) divider.style.display = 'none';
+        if (sTab) sTab.classList.remove('active');
+        if (gTab) gTab.classList.remove('active');
       }
     });
   }
@@ -7853,9 +8487,6 @@ window.openStatusCharts = openStatusCharts;
 window.closeStatusCharts = closeStatusCharts;
 window.renderStatusCharts = renderStatusCharts;
 window.refreshStatusCharts = () => renderStatusCharts(typeof at === "function" ? at() : []);
-window.getLiveStatusStats = getLiveStatusStats;
-
-
 window.getLiveStatusStats = getLiveStatusStats;
 
 
@@ -8012,7 +8643,7 @@ function li(){if(!o)return;const st=at();if(rt(st),st.length===0){o.innerHTML='<
 `});const xt=["TOTAL GENERAL",kt.count,kt.area.toFixed(2),kt.length.toFixed(2),kt.volume.toFixed(3)];N+=xt.map(Mt).join(",")+`\r
 `}else S==="historial"&&(N+=["ID Express","Nombre","Ninguno","En Progreso","Para Inspeccion","Aprobado","Cerrado","Rechazado"].join(",")+`\r
 `,$t.forEach(Vt=>{const kt=_[Vt.id]||[],xt={};kt.forEach(Ft=>{if(Ft.at){const ie=new Date(Ft.at);xt[Ft.status]=ie.toLocaleString("es-CO",{hour12:!1})}});const It=[Vt.expressID,Vt.name,xt.NINGUNO||"",xt["EN PROGRESO"]||"",xt["PARA INSPECCIÓN"]||"",xt.APROBADO||"",xt.CERRADO||"",xt.RECHAZADO||""];N+=It.map(Mt).join(",")+`\r
-`}));const Et=new Blob(["\uFEFF"+N],{type:"text/csv;charset=utf-8;"}),zt=document.createElement("a");if(zt.download!==void 0){const Dt=URL.createObjectURL(Et);zt.setAttribute("href",Dt),zt.setAttribute("download",pt),zt.style.visibility="hidden",document.body.appendChild(zt),zt.click(),document.body.removeChild(zt)}}n&&n.addEventListener("click",()=>{Jr()}),window.refreshStatusUI=li}async function tu(e){Z("Clasificando modelo...");const t=e.uuid;k4(t);const i=new Map,s=new Map,n=new Map,o=new Map,r=new Map,a=new Map,l=new Map,c=new Map,d=new Map,h=new Map,u=new Map,p=new Map,m=new Map,f=new Map,g=A=>{if(A==null)return null;const $=typeof A=="object"&&"value"in A?A.value:A;return $!=null&&String($).trim()!==""?String($).trim():null},b=(A,...$)=>{if(!A||typeof A!="object")return null;for(const k of $){const I=g(A[k]);if(I!==null)return I}const P=[A.data,A.attributes,A.psets,A.properties];for(const k of P)if(k&&typeof k=="object")for(const I of $){const C=g(k[I]);if(C!==null)return C}const D=new Set($.map(k=>xs(k)).filter(Boolean));for(const k of Object.keys(A))if(D.has(xs(k))){const I=g(A[k]);if(I!==null)return I}for(const k of Object.keys(A)){if(k==="ObjectPlacement"||k==="Representation"||k==="OwnerHistory"||k==="geometry")continue;const I=A[k];if(I&&typeof I=="object"&&!Array.isArray(I))for(const C of $){const M=g(I[C]);if(M!==null)return M}}return null},y=(A,$)=>{let P=b(A,"CLASIFICACIÓN","CLASIFICACION",'CLASIFICACIÃ"N',"CLASIFICACIÃ“N","CLASIFICACIÃN","Clasificación","Clasificacion","clasificación","clasificacion","classification","Classification"),D=b(A,"NIVEL INTEGRADO","Nivel Integrado","nivel integrado","NIVEL","Nivel","nivel","Level","level","LEVEL","Storey","storey","Piso","piso","Planta","planta","Building Story","IfcBuildingStorey");const k=b(A,"MATERIAL INTEGRADO","Material Integrado","material integrado","MATERIAL_INTEGRADO","material_integrado");k&&n.set($,k);let I=b(A,"NOMBRE INTEGRADO","Nombre Integrado","nombre integrado","NOMBRE_INTEGRADO","nombre_integrado");const C=b(A,"Name","name","tag","Tag");C&&r.set($,C);const M=b(A,"SUBPROYECTOS INTEGRADO","Subproyectos Integrado","subproyectos integrado","SUBPROYECTO INTEGRADO","Workset1","Workset");M&&a.set($,M);const O=b(A,"type","ifcType","Category","ObjectType","CLASIFICACIÓN","Clasificación","CLASIFICACION","clasificacion","CATEGORÍA","CATEGORIA","Categoría","categoria","TIPO","Tipo","tipo","DETALLE","Detalle","detalle");O&&c.set($,O);const U=b(A,"DETALLE","Detalle","detalle");U&&d.set($,U);let z=b(A,"VOLUMEN INTEGRADO","Volumen Integrado","volumen integrado","VOLUMEN_INTEGRADO","volumen_integrado","NetVolume","GrossVolume","Volumen","Volume"),it=b(A,"AREA INTEGRADO","ÁREA INTEGRADO","Area Integrado","Área Integrado","area integrado","área integrado","AREA_INTEGRADO","ÁREA_INTEGRADO","NetSideArea","GrossSideArea","NetArea","GrossArea","Area","Área");const R=String(A._category||A.category||A.type||A.ifcType||O||"").toUpperCase(),K=String(A.Name||A.name||C||"");if((R.includes("STAIR")||R.includes("ESCALERA")||K.includes("Run ")||K.includes("Escalera")&&K.includes("Landing"))&&(P||(P="ESCALERAS"),(!D||!z||!it||!I)&&e.properties)){const Lt=K.match(/(?:Escalera:?|Stairs?:?)(\d+)/i),rt=Lt?Lt[1]:null;for(const yt in e.properties){const jt=e.properties[yt];if(!jt)continue;if(rt&&(String(jt.Tag||jt.tag)===rt||String(yt)===rt)||String(jt._category||jt.type||"").toUpperCase()==="IFCSTAIR"){if(!D){const G=b(jt,"NIVEL INTEGRADO","Nivel Integrado","nivel integrado","NIVEL","Nivel","Level","Storey");G&&(D=G)}if(!z){const G=b(jt,"VOLUMEN INTEGRADO","Volumen Integrado","volumen integrado","NetVolume","Volume");G&&(z=G)}if(!it){const G=b(jt,"AREA INTEGRADO","ÁREA INTEGRADO","Area Integrado","NetArea","Area");G&&(it=G)}if(!I){const G=b(jt,"NOMBRE INTEGRADO","Nombre Integrado","nombre integrado");G&&(I=G)}break}}}P&&i.set($,P),D&&s.set($,D),I&&o.set($,I),z&&h.set($,us(z)),it&&u.set($,us(it));const bt=b(A,"LONGITUD INTEGRADO","Longitud Integrado","longitud integrado","LONGITUD_INTEGRADO","longitud_integrado","Length","Longitud","length","longitud","LONGITUD");if(bt&&p.set($,us(bt)),jn(A)&&m.set($,!0),Sr(A)&&f.set($,!0),!P){const Lt=b(A,"Name","name","ObjectType","objectType");Lt&&l.set($,Lt)}return!!P};let v=[];try{v=await e.getItemsIdsWithGeometry().catch(()=>[])}catch(A){console.warn("[Classify] getItemsIdsWithGeometry error:",A)}const x=e.properties&&Object.keys(e.properties).length>0;if(!x&&v&&v.length>0){Z(`[Classify] Obteniendo propiedades nativas de ${v.length} elementos...`);const A=1e3;for(let $=0;$<v.length;$+=A){const P=v.slice($,$+A);try{const D=await Nt.getData({[t]:P},{attributesDefault:!0});(D[t]||(D?Object.values(D)[0]:[])||[]).forEach((I,C)=>{const M=P[C];if(M===void 0)return;const O=I?.data||I?.attributes||I||{};y(O,M)})}catch(D){console.warn("[Classify] getData chunk error:",D)}await Rl()}}else if(x){let A=0;for(const $ in e.properties){const P=parseInt($,10);if(isNaN(P))continue;const D=e.properties[$];if(!D||typeof D!="object")continue;const k=String(D.type||D.category||D._category||"");if(ug(k))continue;const I=D.localId!==void 0?Number(D.localId):P;y(D,I),++A%3e3===0&&await Rl()}}for(const A of v)if(!i.has(A)||!s.has(A)||!n.has(A)){const $=e.properties?e.properties[A]||e.properties[String(A)]||e._propertiesByTag&&e._propertiesByTag.get(String(A))||e._propertiesByGuid&&e._propertiesByGuid.get(String(A)):null;$&&y($,A)}let _;if(v&&v.length>0)_=new Set(v);else{_=new Set;for(const A of i.keys()){const $=e.properties?e.properties[A]||e.properties[String(A)]:null,P=$?String($.type||$.category||$._category||""):"";ug(P)||_.add(A)}}let w=0;for(const A of _){const $=i.get(A)??"SIN CLASIFICAR";Ml("CLASIFICACIÓN",t,Cl($),A),Ml("NIVEL INTEGRADO",t,Cl(s.get(A)??"Sin Nivel"),A),Ml("MATERIAL INTEGRADO",t,Cl(n.get(A)??"Sin Material"),A),Ml("NOMBRE INTEGRADO",t,Cl(o.get(A)??""),A),Ml("SUBPROYECTOS INTEGRADO",t,Cl(a.get(A)??""),A),++w%2e3===0&&await Rl()}Bs.list.clear(),Bs.list.set(gc,AC(gc,fg));const E=new Map;let S=0;for(const A of _){let $=s.get(A),P=n.get(A),D=o.get(A),k=i.get(A),I=c.get(A),C=d.get(A);const M=e.properties?e.properties[String(A)]||e.properties[A]||e._propertiesByTag&&e._propertiesByTag.get(String(A))||e._propertiesByGuid&&e._propertiesByGuid.get(String(A)):null;let O=M&&b(M,"Tag","tag","TAG")||"",U=M&&b(M,"GlobalId","globalId","_guid","guid","GUID")||"";!U&&M&&(U=String(M.GlobalId?.value??M.GlobalId??M._guid?.value??M._guid??M.guid??"").trim()),!$&&M&&($=b(M,"NIVEL INTEGRADO","Nivel Integrado","nivel integrado","NIVEL","Nivel","nivel","Level","level","LEVEL","Storey","storey","Piso","piso","Planta","planta","Building Story","IfcBuildingStorey")),!P&&M&&(P=b(M,"MATERIAL INTEGRADO","Material Integrado","material integrado","MATERIAL_INTEGRADO","material_integrado")),!k&&M&&(k=b(M,"CLASIFICACIÓN","CLASIFICACION",'CLASIFICACIÃ"N',"CLASIFICACIÃ“N","Clasificación","Clasificacion","classification")),!D&&M&&(D=b(M,"NOMBRE INTEGRADO","Nombre Integrado","nombre integrado","NOMBRE_INTEGRADO","nombre_integrado")),!I&&M&&(I=b(M,"type","ifcType","Category","ObjectType","CLASIFICACIÓN","Clasificación","CATEGORÍA","Categoría","TIPO","Tipo"));let z=h.get(A)??(M?us(he(M,"VOLUMEN INTEGRADO","Volumen Integrado","volumen integrado","VOLUMEN_INTEGRADO","volumen_integrado","NetVolume","GrossVolume","Volumen","Volume")):0),it=u.get(A)??(M?us(he(M,"AREA INTEGRADO","ÁREA INTEGRADO","Area Integrado","Área Integrado","area integrado","área integrado","AREA_INTEGRADO","ÁREA_INTEGRADO","NetSideArea","GrossSideArea","Area","Área")):0);const R=p.get(A)??(M?us(he(M,"LONGITUD INTEGRADO","Longitud Integrado","longitud integrado","LONGITUD_INTEGRADO","longitud_integrado","Length","Longitud")):0),K=r.get(A)||(M?b(M,"Name","name","tag","Tag"):null),Q=String(M?._category||M?.category||M?.type||I||"").toUpperCase(),bt=String(K||M?.Name||M?.name||"");if((Q.includes("STAIR")||Q.includes("ESCALERA")||bt.includes("Run ")||bt.includes("Escalera")&&bt.includes("Landing"))&&((!k||k==="SIN CLASIFICAR")&&(k="ESCALERAS"),(!$||$==="SIN NIVEL"||z===0||it===0||!D)&&e.properties)){const yt=bt.match(/(?:Escalera:?|Stairs?:?)(\d+)/i),jt=yt?yt[1]:null;for(const Ut in e.properties){const G=e.properties[Ut];if(!G)continue;if(jt&&(String(G.Tag||G.tag)===jt||String(Ut)===jt)||String(G._category||G.type||"").toUpperCase()==="IFCSTAIR"){if(!$||$==="SIN NIVEL"){const Ot=b(G,"NIVEL INTEGRADO","Nivel Integrado","nivel integrado","NIVEL","Nivel","Level","Storey");Ot&&($=Ot)}if(z===0){const Ot=us(he(G,"VOLUMEN INTEGRADO","Volumen Integrado","volumen integrado","NetVolume","Volume"));Ot>0&&(z=Ot)}if(it===0){const Ot=us(he(G,"AREA INTEGRADO","ÁREA INTEGRADO","Area Integrado","NetArea","Area"));Ot>0&&(it=Ot)}if(!D){const Ot=b(G,"NOMBRE INTEGRADO","Nombre Integrado","nombre integrado");Ot&&(D=Ot)}break}}}const rt=K??D??`${k||"Elemento"}-${A}`;if(!O&&rt){const yt=String(rt).match(/:(\d+)$/);yt&&(O=yt[1])}E.set(A,{level:$??"SIN NIVEL",material:P??"SIN MATERIAL",nombreIntegrado:D??"SIN NOMBRE INTEGRADO",name:rt,classification:k??"SIN CLASIFICAR",volume:z,area:it,length:R,detail:C??"-",category:I??(k||"Elemento"),pilote:M&&he(M,"NÚMERO DE PILOTE","NUMERO DE PILOTE","PILOTE","Pilote","pilote")||"",isModular:m.get(A)||(M?jn(M):!1)||!1,isListon:(M?_isListonProp(M):!1)||!1,isEjecutado:f.get(A)||(M?Sr(M):!1)||!1,tag:O,guid:U}),++S%2e3===0&&await Rl()}if(Wa.set(t,E),N4(),Z(`✓ Clasificado: ${_.size} elem | CLASIF:${i.size} NIVEL:${s.size} MAT:${n.size} NOMBRE:${o.size} SUB:${a.size}`),typeof window.refreshQuantitiesUI=="function")try{window.refreshQuantitiesUI()}catch(A){console.error("Error refreshing quantities UI:",A)}}function vg(){if(!Ht)return null;const e=Ht.selection?.select;return e?e instanceof Map?e.size>0?e:null:typeof e=="object"&&Object.keys(e).length>0?e:null:null}function rW(){const e=document.getElementById("btn-hide"),t=document.getElementById("btn-isolate"),i=document.getElementById("btn-show-all");e&&e.addEventListener("click",async()=>{const s=vg();if(s){const n=new Set,o=s instanceof Map?Array.from(s.entries()):typeof s=="object"?Object.entries(s):[];for(const[,r]of o)(r instanceof Set?Array.from(r):Array.isArray(r)?r:[]).forEach(l=>n.add(Number(l)));window.__noraIsolatedVisibleIds instanceof Set&&n.forEach(r=>window.__noraIsolatedVisibleIds.delete(r)),await ue.set(!1,s),Ht.clear("select"),window.dispatchEvent(new CustomEvent("classificationFilterChanged"))}}),t&&t.addEventListener("click",async()=>{const s=vg();if(s){const n=new Set,o=s instanceof Map?Array.from(s.entries()):typeof s=="object"?Object.entries(s):[];for(const[,r]of o)(r instanceof Set?Array.from(r):Array.isArray(r)?r:[]).forEach(l=>n.add(Number(l)));window.__noraIsolatedVisibleIds=n,await ue.isolate(s),Ht.clear("select"),window.dispatchEvent(new CustomEvent("classificationFilterChanged"))}}),i&&i.addEventListener("click",async()=>{window.__noraIsolatedVisibleIds=null,window.__noraCurrentSelectedIds=new Set,window.__noraCurrentSelectedElements=[];for(const s in ve)delete ve[s];await ue.set(!0),Ht.clear("select"),Zc(),await Hn(),await fi(),window.dispatchEvent(new CustomEvent("classificationFilterChanged"))})}function aW(){const e=As(),t={},i={},s={},n={},o={},r={},a={},l={};for(const b of e){const y=b.classification||"SIN CLASIFICAR",v=b.category||b.name||"Sin Categoría",x=b.level||"SIN NIVEL",_=b.material||"SIN MATERIAL",w=b.volume||0,E=b.area||0,S=b.length||0;t[y]||(t[y]={count:0,area:0,volume:0,length:0}),t[y].count++,t[y].area+=E,t[y].volume+=w,t[y].length+=S,i[v]||(i[v]={count:0,area:0,volume:0}),i[v].count++,i[v].area+=E,i[v].volume+=w,x!=="SIN NIVEL"&&(s[x]||(s[x]={count:0,area:0,volume:0}),s[x].count++,s[x].area+=E,s[x].volume+=w),_!=="SIN MATERIAL"&&(n[_]||(n[_]={count:0,area:0,volume:0}),n[_].count++,n[_].area+=E,n[_].volume+=w),b.pilote&&(o[b.pilote]||(o[b.pilote]={count:0,area:0,volume:0}),o[b.pilote].count++,o[b.pilote].area+=E,o[b.pilote].volume+=w),x!=="SIN NIVEL"&&(r[x]||(r[x]={}),r[x][y]||(r[x][y]={count:0,area:0,volume:0,length:0}),r[x][y].count++,r[x][y].area+=E,r[x][y].volume+=w,r[x][y].length+=S),x!=="SIN NIVEL"&&_!=="SIN MATERIAL"&&(a[x]||(a[x]={}),a[x][_]||(a[x][_]={count:0,area:0,volume:0}),a[x][_].count++,a[x][_].area+=E,a[x][_].volume+=w),x!=="SIN NIVEL"&&(l[x]||(l[x]={}),l[x][v]||(l[x][v]={count:0,area:0,volume:0}),l[x][v].count++,l[x][v].area+=E,l[x][v].volume+=w)}const c=b=>{for(const y in b)typeof b[y]=="object"&&b[y]!==null&&("area"in b[y]?(b[y].area=Math.round(b[y].area*100)/100,b[y].volume=Math.round(b[y].volume*100)/100,"length"in b[y]&&(b[y].length=Math.round(b[y].length*100)/100)):c(b[y]))},d=[];try{const b=new Set,y=vg();if(y){const v=y instanceof Map?Array.from(y.entries()):typeof y=="object"?Object.entries(y):[];for(const[,x]of v)(x instanceof Set?Array.from(x):Array.isArray(x)?x:[]).forEach(w=>b.add(Number(w)))}if(window.__noraCurrentSelectedIds instanceof Set&&window.__noraCurrentSelectedIds.forEach(v=>b.add(Number(v))),b.size>0)for(const v of e)b.has(Number(v.expressID))&&d.push({expressID:v.expressID,name:v.name||v.category||"Elemento",category:v.category||"",classification:v.classification||"",level:v.level||"",material:v.material||"",detail:v.detail||"",area:Math.round((v.area||0)*100)/100,volume:Math.round((v.volume||0)*100)/100,length:Math.round((v.length||0)*100)/100,pilote:v.pilote||""})}catch(b){console.warn("Error reading selected elements for AI context:",b)}let h=0,u=0,p=0;for(const b of e)(!b.volume||b.volume===0)&&h++,(!b.level||b.level==="SIN NIVEL")&&u++,(!b.material||b.material==="SIN MATERIAL")&&p++;c(t),c(i),c(s),c(n),c(r),c(a),c(l);const m=[],f=[],g=[];for(const b of e){const y=(b.name||"").trim(),v=(b.classification||"").toLowerCase();y&&(v.includes("puerta")&&!m.includes(y)&&m.length<25?m.push(y):v.includes("muro")&&!v.includes("cortina")&&!f.includes(y)&&f.length<25?f.push(y):!g.includes(y)&&g.length<35&&g.push(y))}return{totalElements:e.length,loadedModels:qs().map(b=>({name:b.name,uuid:b.uuid,elements:b.elementCount})),selectedElements:d,hasSelection:d.length>0,classifications:t,categories:i,levels:s,materials:n,materialsList:Object.keys(n),pilotes:o,sampleDoorTypes:m,sampleWallTypes:f,sampleOtherTypes:g,anomalies:{zeroVolumeCount:h,missingLevelCount:u,missingMaterialCount:p,totalAnomalies:e.filter(b=>!b.volume||b.volume===0||!b.level||b.level==="SIN NIVEL").length},matrixByLevelAndClassification:r,matrixByLevelAndMaterial:a,matrixByLevelAndCategory:l}}const xg=new Set;function lW(){const e={ai_red:15680580,ai_green:1096065,ai_blue:3900150,ai_yellow:16096779,ai_orange:16347926,ai_purple:9133302};for(const[t,i]of Object.entries(e))if(!xg.has(t))try{Ht.styles.set(t,{color:new We(i),opacity:1,transparent:!1,depthTest:!0,depthWrite:!0,renderedFaces:yi.ONE}),xg.add(t)}catch{}}function v_(){for(const e of xg)try{Ht.clear(e)}catch{}}const x_=(e,t)=>{if(!e||!t)return!1;const i=e.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,""),s=t.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"");if(i.includes(s)||s.includes(i))return!0;const n=[["drywall","gypsum","carton yeso","durlock","placa yeso","yeso","sheetrock"],["concreto","hormigon","concrete","cemento","mortero"],["vidrio","cristal","glass","panel vidriado","acristalamiento"],["acero","steel","metal","hierro","perfil metalico","aluminio"],["pvc","sanitario","pavco","polietileno","plastico"],["ladrillo","bloque","mamposteria","arcilla","masonry"],["madera","wood","timber"]];for(const o of n){const r=o.some(l=>i.includes(l)),a=o.some(l=>s.includes(l));if(r&&a)return!0}return!1},w_=(e,t)=>{let i=0;if(t.property==="height"){if(i=e.height||e.length||0,i===0){const s=(e.name+" "+e.detail).match(/(?:h|altura|alto)\s*[=:]?\s*([0-9]+(?:[\.,][0-9]+)?)/i);s&&(i=parseFloat(s[1].replace(",",".")))}}else if(t.property==="slope"){i=e.slope||0;const s=(e.name+" "+e.detail).match(/(?:pendiente|pend|slope|s)\s*[=:]?\s*([0-9]+(?:[\.,][0-9]+)?)\s*%/i);s&&(i=parseFloat(s[1].replace(",",".")))}else if(t.property==="volume")i=e.volume||0;else if(t.property==="area")i=e.area||0;else if(t.property==="length")i=e.length||0;else if(t.property==="diameter"&&(i=parseFloat(e.diameter)||0,i===0)){const s=(e.name+" "+e.detail).match(/(?:[øØdD]|diam|di[aá]metro)\s*[=:]?\s*([0-9]+(?:[\.,][0-9]+)?)/i);s&&(i=parseFloat(s[1].replace(",",".")))}return t.operator===">"?i>t.value:t.operator===">="?i>=t.value:t.operator==="<"?i<t.value:t.operator==="<="?i<=t.value:t.operator==="=="?Math.abs(i-t.value)<.05:t.operator==="between"&&t.value2!==void 0?i>=t.value&&i<=t.value2:!0},wg=e=>{const t=((e.name||"")+" "+(e.detail||"")).toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,""),i=(e.classification||"").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,""),s=(e.category||"").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,""),n=i.includes("puerta")||s.includes("door")||s.includes("puerta")||t.includes("puerta")||t.includes("door");return!!(t.includes("puerta ventana")||t.includes("puertaventana")||t.includes("puerta-ventana")||t.includes("p-v")||t.includes("pv ")||t.includes("pv-")||t.includes("p.v")||n&&(t.includes("balcon")||t.includes("corrediza")||t.includes("vidrio")||t.includes("vidriera")||t.includes("terraza")||t.includes("exterior")||t.includes("aluminio")||t.includes("fachada")))},_g=e=>{const t=((e.name||"")+" "+(e.detail||"")+" "+(e.category||"")).toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"");return t.includes("alfajia")||t.includes("vierteagua")||t.includes("lagrimero")||t.includes("antepecho")||t.includes("remate fachada")},Eg=e=>{const t=((e.name||"")+" "+(e.detail||"")).toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,""),i=(e.classification||"").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"");return i.includes("ventana")||i.includes("cortina")||t.includes("ventana")||t.includes("window")||t.includes("muro cortina")||t.includes("curtain")},$g=e=>{const t=((e.name||"")+" "+(e.detail||"")).toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"");return(e.classification||"").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"").includes("baranda")||t.includes("baranda")||t.includes("railing")||t.includes("pasamanos")||t.includes("balcon")},Sg=e=>{const t=((e.name||"")+" "+(e.detail||"")).toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"");return(e.classification||"").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"").includes("muro")||(e.category||"").toLowerCase().includes("wall")?t.includes("fachada")||t.includes("exterior")||t.includes("envolvente")||t.includes("cortina")||t.includes("antepecho")||t.includes("ladrillo a la vista")||t.includes("panel exterior"):!1},Ih=e=>{const t=(e.classification||"").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"");return!!(t.includes("cortina")||t.includes("montante")||$g(e)||wg(e)||_g(e)||Eg(e)||Sg(e))};async function cW(e){if(!e||e.type==="none")return"";if(e.type==="show_all")return Zc(),ue&&await ue.set(!0),ae.deleteAll(),v_(),ln(),await Hn(),await fi(),window.dispatchEvent(new CustomEvent("classificationFilterChanged")),"Modelo 3D, filtros, cortes y colores analíticos restablecidos";if(e.type==="color"||e.colorOverrides){if(lW(),v_(),e.colorOverrides?.clear)return e.message||"Colores analíticos restablecidos a la vista normal";const t=As(),i=e.colorOverrides?.mode||"anomalies";if(i==="anomalies"){const s={},n={};let o=0,r=0;for(const a of t){const l=!a.volume||a.volume===0||!a.level||a.level==="SIN NIVEL",c=l?s:n;c[a.modelUUID]||(c[a.modelUUID]=[]),c[a.modelUUID].push(a.expressID),l?o++:r++}return o>0&&Ht.highlightByID("ai_red",s,!0,!1),r>0&&Ht.highlightByID("ai_green",n,!1,!1),e.message||`Auditoría visual: ${o} anomalías en rojo y ${r} elementos conformes en verde`}if(i==="heatmap"){const s=[...t].filter(n=>(n.volume||0)>0).sort((n,o)=>(n.volume||0)-(o.volume||0));if(s.length>0){const n=Math.floor(s.length*.25),o=Math.floor(s.length*.5),r=Math.floor(s.length*.75),a={},l={},c={},d={};return s.forEach((h,u)=>{let p=a;u>=r?p=d:u>=o?p=c:u>=n&&(p=l),p[h.modelUUID]||(p[h.modelUUID]=[]),p[h.modelUUID].push(h.expressID)}),Ht.highlightByID("ai_blue",a,!0,!1),Ht.highlightByID("ai_yellow",l,!1,!1),Ht.highlightByID("ai_orange",c,!1,!1),Ht.highlightByID("ai_red",d,!1,!1),e.message||"Mapa de calor aplicado: Degradado térmico según volumen de elementos"}}if(i==="presence"){const s={},n={};for(const o of t){const a=o.material!=="SIN MATERIAL"&&o.level!=="SIN NIVEL"?s:n;a[o.modelUUID]||(a[o.modelUUID]=[]),a[o.modelUUID].push(o.expressID)}return Ht.highlightByID("ai_green",s,!0,!1),Ht.highlightByID("ai_red",n,!1,!1),e.message||"Coloreado por metadatos presentes (verde) y ausentes (rojo)"}return e.message||"Modo gráfico analítico aplicado"}if(e.type==="section"||e.sectionBox){if(ae.deleteAll(),e.sectionBox?.clear)return e.message||"Caja de sección y cortes eliminados";const t=Gu(),i=e.sectionBox?.axis||"y",s=new de;i==="x"?s.set(-1,0,0):i==="z"?s.set(0,0,-1):s.set(0,-1,0);try{ae.createFromNormalAndCoplanarPoint(tt,s,t),ae.enabled=!0}catch(n){console.warn("[nora AI] Error creating section plane:",n)}if(e.cameraView){const n=yg()*2;tt.camera.controls.enabled=!0,i==="x"?await tt.camera.controls.setLookAt(t.x-n,t.y,t.z,t.x,t.y,t.z,!0):i==="z"?await tt.camera.controls.setLookAt(t.x,t.y,t.z+n,t.x,t.y,t.z,!0):await tt.camera.controls.setLookAt(t.x,t.y+n,t.z,t.x,t.y,t.z,!0)}return e.message||`Caja de sección y corte en eje ${i.toUpperCase()} generado`}if(e.type==="camera"||e.cameraView&&e.type!=="isolate"&&e.type!=="filter"){const t=Gu(),s=yg()*2;switch(tt.camera.controls.enabled=!0,e.cameraView){case"top":await tt.camera.controls.setLookAt(t.x,t.y+s,t.z,t.x,t.y,t.z,!0);break;case"bottom":await tt.camera.controls.setLookAt(t.x,t.y-s,t.z,t.x,t.y,t.z,!0);break;case"front":await tt.camera.controls.setLookAt(t.x,t.y,t.z+s,t.x,t.y,t.z,!0);break;case"back":await tt.camera.controls.setLookAt(t.x,t.y,t.z-s,t.x,t.y,t.z,!0);break;case"left":await tt.camera.controls.setLookAt(t.x-s,t.y,t.z,t.x,t.y,t.z,!0);break;case"right":await tt.camera.controls.setLookAt(t.x+s,t.y,t.z,t.x,t.y,t.z,!0);break;case"iso":await tt.camera.controls.setLookAt(t.x+s,t.y+s,t.z+s,t.x,t.y,t.z,!0);break;case"focus":default:const n=td(),o=new Cs;n.getBoundingSphere(o),o.radius>.1&&tt.camera.controls.fitToSphere(o,!0);break}return e.message||`Cámara ajustada a vista ${e.cameraView||"enfocada"}`}if(e.type==="hide"){const t=As("ALL"),i=(e.models||(e.modelName?[e.modelName]:[])).map(h=>h.toLowerCase()),s=e.classifications||[],n=e.categories||[],o=e.elementTypes||[],r=e.levels||[],a=e.materials||[],l=e.pilotes||[],c={};let d=0;for(const h of t){let u=!1;e.semanticTarget&&(e.semanticTarget==="facade"?u=Ih(h):e.semanticTarget==="doors_windows"?u=wg(h):e.semanticTarget==="alfajias"?u=_g(h):e.semanticTarget==="windows"?u=Eg(h):e.semanticTarget==="balconies"?u=$g(h):e.semanticTarget==="facade_walls"?u=Sg(h):e.semanticTarget==="interior"&&(u=!Ih(h)));const p=s.length>0&&s.some(E=>h.classification&&h.classification.toLowerCase().includes(E.toLowerCase())),m=n.length>0&&n.some(E=>h.category&&h.category.toLowerCase().includes(E.toLowerCase())||h.name&&h.name.toLowerCase().includes(E.toLowerCase())),f=o.length>0&&o.some(E=>h.name&&h.name.toLowerCase().includes(E.toLowerCase())||h.detail&&h.detail.toLowerCase().includes(E.toLowerCase())),g=r.length>0&&r.some(E=>h.level&&h.level.toLowerCase().includes(E.toLowerCase())),b=a.length>0&&a.some(E=>x_(h.material,E)),y=l.length>0&&l.some(E=>h.pilote&&h.pilote.toLowerCase().includes(E.toLowerCase()));let v=!0;e.numericFilter&&(v=w_(h,e.numericFilter));const x=i.length===0||i.some(E=>h.modelName&&h.modelName.toLowerCase().includes(E)||h.modelUUID&&h.modelUUID.toLowerCase().includes(E)),_=!!e.semanticTarget||s.length>0||n.length>0||o.length>0||r.length>0||a.length>0||l.length>0;let w=!1;i.length>0&&!_?w=x&&v:w=(u||p||m||f||g||b||y)&&v&&x,e.invertMatch&&(w=!w),w&&(c[h.modelUUID]||(c[h.modelUUID]=new Set),c[h.modelUUID].add(h.expressID),d++)}if(ue&&d>0)for(const h in c)await ue.set(!1,{[h]:c[h]});return e.message||`Ocultado(s) ${d} elementos en el visor 3D`}if(e.type==="isolate"||e.type==="filter"){Zc();const t=As("ALL"),i=(e.models||(e.modelName?[e.modelName]:[])).map(h=>h.toLowerCase()),s=e.classifications||[],n=e.categories||[],o=e.elementTypes||[],r=e.levels||[],a=e.materials||[],l=e.pilotes||[],c={};let d=0;for(const h of t){let u=!0;e.semanticTarget&&(e.semanticTarget==="facade"?u=Ih(h):e.semanticTarget==="doors_windows"?u=wg(h):e.semanticTarget==="alfajias"?u=_g(h):e.semanticTarget==="windows"?u=Eg(h):e.semanticTarget==="balconies"?u=$g(h):e.semanticTarget==="facade_walls"?u=Sg(h):e.semanticTarget==="interior"&&(u=!Ih(h)));const p=s.length===0||s.some(w=>{const E=w.toLowerCase().trim();return h.classification&&(h.classification.toLowerCase().trim()===E||h.classification.toLowerCase().includes(E))}),m=n.length===0||n.some(w=>{const E=w.toLowerCase().trim();return h.category&&h.category.toLowerCase().includes(E)||h.classification&&h.classification.toLowerCase().includes(E)||h.name&&h.name.toLowerCase().includes(E)||h.detail&&h.detail.toLowerCase().includes(E)}),f=o.length===0||o.some(w=>{const E=w.toLowerCase().trim();return h.name&&h.name.toLowerCase().includes(E)||h.detail&&h.detail.toLowerCase().includes(E)||h.category&&h.category.toLowerCase().includes(E)}),g=r.length===0||r.some(w=>{const E=w.toLowerCase();return h.level&&h.level.toLowerCase().includes(E)}),b=a.length===0||a.some(w=>x_(h.material,w)),y=l.length===0||l.some(w=>{const E=w.toLowerCase();return h.pilote&&h.pilote.toLowerCase().includes(E)});let v=!0;e.numericFilter&&(v=w_(h,e.numericFilter));const x=i.length===0||i.some(w=>h.modelName&&h.modelName.toLowerCase().includes(w)||h.modelUUID&&h.modelUUID.toLowerCase().includes(w));let _=u&&p&&m&&f&&g&&b&&y&&v&&x;e.invertMatch&&(_=!_),_&&(c[h.modelUUID]||(c[h.modelUUID]=[]),c[h.modelUUID].push(h.expressID),d++,h.name&&ye.add(h.name),h.category&&ye.add(h.category),!e.semanticTarget&&s.length>0&&h.classification&&Ni.add(h.classification))}if(ue&&d>0)try{await ue.isolate(c)}catch(h){console.warn("Error in hider.isolate:",h)}if(e.models&&e.models.length>0){const u=qs().find(p=>e.models?.some(m=>p.name.toLowerCase().includes(m.toLowerCase())));u&&(mi=u.uuid)}if(!e.semanticTarget){for(const h of s)Ni.add(h);for(const h of n)ye.add(h);for(const h of o)ye.add(h)}for(const h of r)fs.add(h);for(const h of a)ms.add(h);for(const h of l)gs.add(h);if(await Hn(),await fi(),window.dispatchEvent(new CustomEvent("classificationFilterChanged")),e.cameraView==="focus"&&d>0)try{const h=td(),u=new Cs;h.getBoundingSphere(u),u.radius>.1&&tt.camera.controls.fitToSphere(u,!0)}catch{}return e.message||`Aislado(s) ${d} elementos en el visor 3D`}return""}let kh=null;function Yu(){if(!kh)try{kh=new TH({getBIMContext:()=>aW(),execute3DAction:async o=>cW(o)});const e=document.getElementById("right-tab-properties"),t=document.getElementById("right-tab-nora"),gTab=document.getElementById("right-tab-graficos"),i=document.getElementById("properties-content"),s=document.getElementById("nora-ai-container"),gCont=document.getElementById("status-charts-container"),n=document.getElementById("properties-panel");e&&t&&i&&s&&(e.addEventListener("click",o=>{o.preventDefault(),n&&n.classList.remove("closed"),e.classList.add("active"),t.classList.remove("active"),gTab?.classList.remove("active"),i.style.display="flex",s.style.display="none",gCont&&(gCont.style.display="none")}),t.addEventListener("click",o=>{o.preventDefault(),n&&n.classList.remove("closed"),t.classList.add("active"),e.classList.remove("active"),gTab?.classList.remove("active"),s.style.display="flex",i.style.display="none",gCont&&(gCont.style.display="none"),kh&&kh.open()}),gTab&&gTab.addEventListener("click",o=>{o.preventDefault(),n&&n.classList.remove("closed"),gTab.classList.add("active"),e.classList.remove("active"),t.classList.remove("active"),gCont&&(gCont.style.display="flex"),i.style.display="none",s.style.display="none",window.refreshStatusCharts&&window.refreshStatusCharts()})),console.log("[nora AI] Copilot initialized successfully.")}catch(e){console.error("[nora AI] Initialization error:",e)}}window.setupNoraAI=Yu;function dW(){console.log("[DEBUG] Setting up measurement tools...");try{Ss=Yt.get(sM),Ss.world=tt,Ss.enabled=!1,console.log("[DEBUG] Area Tool initialized")}catch(a){console.warn("Could not initialize Area Tool:",a)}if(!Di){const a=new S_(.15,16,16),l=new id({color:16711935,transparent:!0,opacity:.8,depthTest:!1});Di=new Vr(a,l),Di.raycast=()=>{},Di.userData={isHelper:!0},Di.renderOrder=2e3,tt.scene.three.add(Di),Di.visible=!1}const e=document.getElementById("btn-measure-length"),t=document.getElementById("btn-measure-point"),i=document.getElementById("btn-measure-area"),s=document.getElementById("btn-measure-angle"),n=document.getElementById("btn-measure-slope"),o=document.getElementById("btn-measure-delete");hW(),e&&e.addEventListener("click",()=>{sa("length"),mr(e)}),t&&t.addEventListener("click",()=>{sa("point"),mr(t)}),i&&i.addEventListener("click",()=>{sa("area"),mr(i),Z("Area tool activated (Click points, Right-click to finish)")}),s&&s.addEventListener("click",()=>{sa("angle"),mr(s),Z("Angle tool activated (Click 3 points: Start, Vertex, End)")}),n&&n.addEventListener("click",()=>{sa("slope"),mr(n),Z("Slope tool activated (Click 2 points)")}),o&&o.addEventListener("click",()=>{console.log("[DEBUG] Delete button clicked");try{Ss&&typeof Ss.deleteAll=="function"&&Ss.deleteAll()}catch(a){console.warn("Error clearing tools:",a)}DC()});const r=document.getElementById("viewer-container");r&&(r.addEventListener("mousemove",uW),r.addEventListener("click",pW),window.addEventListener("keydown",a=>{if(a.key==="Escape"){let l=!1;if(hi&&(sa(hi),l=!0),$e&&$e.enabled&&($e.enabled=!1,l=!0),Ss&&Ss.enabled&&(Ss.enabled=!1,l=!0),ae&&ae.enabled){ae.enabled=!1;const d=document.getElementById("clipper-toggle");d&&d.classList.remove("active");const h=document.getElementById("clipper-controls");h&&(h.style.display="none"),l=!0}ls(null),Di&&Di.visible&&(Di.visible=!1,l=!0);const c=document.getElementById("snap-config-panel");if(c&&c.classList.contains("show")&&(c.classList.remove("show"),l=!0),Ht&&Ht.selection&&Ht.selection.select){const d=Ht.selection.select;Object.keys(d).length>0&&(Ht.clear("select"),l=!0)}mr(null),l&&Z("Todas las herramientas liberadas / Cancelado")}}),r.addEventListener("contextmenu",a=>{if(hi==="area"&&Kt.length>=3){a.preventDefault();const l=Kt[0],c=Kt[Kt.length-1];In(c,l);let d=0;for(let p=0;p<Kt.length;p++){const m=(p+1)%Kt.length;d+=Kt[p].x*Kt[m].z,d-=Kt[m].x*Kt[p].z}d=Math.abs(d)/2;const h=new de;Kt.forEach(p=>h.add(p)),h.divideScalar(Kt.length),h.y+=.2;const u=`${d.toFixed(2)}m²`;kn(u,h,{type:"area",points:Kt.map(p=>p.clone()),label:u,labelPosition:h.clone()}),Z(`Area: ${u}`),Kt=[],be&&(tt.scene.three.remove(be),be=null)}else hi&&(a.preventDefault(),Ku())}))}function hW(){const e=document.getElementById("btn-snap-config"),t=document.getElementById("snap-config-panel"),i=document.getElementById("chk-snap-point"),s=document.getElementById("chk-snap-line"),n=document.getElementById("chk-snap-face"),o=document.getElementById("slider-snap-radius"),r=document.getElementById("slider-snap-size"),a=document.getElementById("snap-radius-val"),l=document.getElementById("snap-size-val");e&&t&&(e.addEventListener("click",d=>{d.stopPropagation();const h=e.getBoundingClientRect();t.style.top=`${h.bottom+6}px`,t.style.left=`${Math.max(10,Math.min(h.left-120,window.innerWidth-280))}px`,t.classList.toggle("show")}),document.addEventListener("click",d=>{!t.contains(d.target)&&d.target!==e&&!e.contains(d.target)&&t.classList.remove("show")}));const c=()=>{if(i&&(vi.enablePoint=i.checked),s&&(vi.enableLine=s.checked),n&&(vi.enableFace=n.checked),o&&(vi.snapRadiusPx=parseFloat(o.value),a&&(a.innerText=`${o.value}px`)),r){vi.pickerSize=parseFloat(r.value),l&&(l.innerText=`${r.value}px`);const d=document.getElementById("snap-indicator-2d");if(d){const h=`${r.value}px`;d.style.width=h,d.style.height=h}}typeof Uu=="function"&&Uu()};i&&i.addEventListener("change",c),s&&s.addEventListener("change",c),n&&n.addEventListener("change",c),o&&o.addEventListener("input",c),r&&r.addEventListener("input",c),c()}function mr(e){["btn-measure-length","btn-measure-point","btn-measure-area","btn-measure-angle","btn-measure-slope"].forEach(t=>{const i=document.getElementById(t);i&&i.classList.remove("active")}),e&&e.classList.add("active")}function sa(e){if(Ss&&Ss.enabled&&(Ss.enabled=!1),hi===e)hi=null,$e&&($e.enabled=!1),Ku(),ls(null),Z("Measurement mode disabled"),mr(null),Di&&(Di.visible=!1);else{hi=e,$e&&($e.enabled=!0),Ku();let t="";switch(e){case"length":t="Distance";break;case"area":t="Area";break;case"angle":t="Angle (3 Points)";break;case"slope":t="Slope (2 Points)";break;case"point":t="Point Coordinate";break}Z(`Measurement mode: ${t}`)}}function Ku(){Kt=[],be&&(tt.scene.three.remove(be),be=null)}function DC(){if(Vu.forEach(e=>tt.scene.three.remove(e)),Vu.length=0,dg.forEach(e=>e.remove()),dg.length=0,$e&&$e.list)try{$e.list.clear()}catch{}Ku(),ey=[],Z("Measurements cleared")}function cs(e,t=16711680){const i=new S_(.1,16,16),s=new id({color:t,depthTest:!1,transparent:!0,opacity:.8}),n=new Vr(i,s);return n.position.copy(e),n.renderOrder=1e3,tt.scene.three.add(n),Vu.push(n),n}function In(e,t){const i=new br().setFromPoints([e,t]),s=new aa({color:16776960,depthTest:!1,linewidth:2}),n=new yr(i,s);return n.renderOrder=999,tt.scene.three.add(n),Vu.push(n),n}function kn(e,t,i){const s=document.createElement("div");s.className="measurement-label",s.textContent=e,s.style.position="absolute",s.style.background="rgba(0, 0, 0, 0.7)",s.style.color="white",s.style.padding="4px 8px",s.style.borderRadius="4px",s.style.pointerEvents="none",s.style.fontSize="12px",s.style.zIndex="1000",document.body.appendChild(s),dg.push(s),i&&ey.push(i);const n=()=>{if(!s.isConnected)return;const o=t.clone().project(tt.camera.three),r=(o.x*.5+.5)*window.innerWidth,a=(-(o.y*.5)+.5)*window.innerHeight;s.style.left=`${r}px`,s.style.top=`${a}px`,s.style.display=o.z>1?"none":"block",requestAnimationFrame(n)};return n(),s}async function uW(e){if(!hi){ls(null);return}Ar={x:e.clientX,y:e.clientY};const t=await hC(e);if(!t||!t.point)return;const i=t.point;if(hi==="length"&&Kt.length===1){const s=Kt[0];if(be){const n=be.geometry.attributes.position;n.setXYZ(0,s.x,s.y,s.z),n.setXYZ(1,i.x,i.y,i.z),n.needsUpdate=!0}else{const n=new br().setFromPoints([s,i]),o=new aa({color:16776960,depthTest:!1,opacity:.5,transparent:!0});be=new yr(n,o),tt.scene.three.add(be)}}else if(hi==="area"&&Kt.length>0){const s=Kt[Kt.length-1];if(be){const n=be.geometry.attributes.position;n.setXYZ(0,s.x,s.y,s.z),n.setXYZ(1,i.x,i.y,i.z),n.needsUpdate=!0}else{const n=new br().setFromPoints([s,i]),o=new aa({color:65535,depthTest:!1,opacity:.5,transparent:!0});be=new yr(n,o),tt.scene.three.add(be)}}else if(hi==="angle"&&Kt.length>0){const s=Kt[Kt.length-1];if(be){const n=be.geometry.attributes.position;n.setXYZ(0,s.x,s.y,s.z),n.setXYZ(1,i.x,i.y,i.z),n.needsUpdate=!0}else{const n=new br().setFromPoints([s,i]),o=new aa({color:16753920,depthTest:!1,opacity:.5,transparent:!0});be=new yr(n,o),tt.scene.three.add(be)}}else if(hi==="slope"&&Kt.length===1){const s=Kt[0];if(be){const n=be.geometry.attributes.position;n.setXYZ(0,s.x,s.y,s.z),n.setXYZ(1,i.x,i.y,i.z),n.needsUpdate=!0}else{const n=new br().setFromPoints([s,i]),o=new aa({color:255,depthTest:!1,opacity:.5,transparent:!0});be=new yr(n,o),tt.scene.three.add(be)}}}async function pW(e){if(!hi||e.target.closest("button")||e.target.closest(".sidebar"))return;Ar={x:e.clientX,y:e.clientY};const t=await hC(e);if(!t||!t.point)return;const i=t.point;if(hi==="point"){cs(i,65280);const s=`X:${i.x.toFixed(2)} Y:${i.y.toFixed(2)} Z:${i.z.toFixed(2)}`;kn(s,i,{type:"point",points:[i.clone()],label:s,labelPosition:i.clone()})}else if(hi==="length"){$e&&$e.enabled&&$e.create();return}else if(hi==="area"){if(Kt.push(i),cs(i,65535),Kt.length>1){const s=Kt[Kt.length-2];In(s,i)}be&&(tt.scene.three.remove(be),be=null)}else if(hi==="angle"){if(Kt.push(i),cs(i,16753920),Kt.length>1){const s=Kt[Kt.length-2];In(s,i)}if(Kt.length===3){const s=Kt[0],n=Kt[1],o=Kt[2],r=s.clone().sub(n).normalize(),a=o.clone().sub(n).normalize(),l=r.angleTo(a),d=`${gy.radToDeg(l).toFixed(1)}°`;kn(d,n,{type:"angle",points:[s.clone(),n.clone(),o.clone()],label:d,labelPosition:n.clone()}),Z(`Angle: ${d}`),Kt=[],be&&(tt.scene.three.remove(be),be=null)}}else if(hi==="slope"&&(Kt.push(i),cs(i,255),Kt.length===2)){const s=Kt[0],n=Kt[1];In(s,n),Math.abs(n.y-s.y);const o=Math.sqrt(Math.pow(n.x-s.x,2)+Math.pow(n.z-s.z,2));let r=0;o!==0?r=Math.atan(Math.abs(n.y-s.y)/o):r=Math.PI/2;const a=gy.radToDeg(r),l=s.clone().add(n).multiplyScalar(.5),c=`${a.toFixed(1)}°`;kn(c,l,{type:"slope",points:[s.clone(),n.clone()],label:c,labelPosition:l.clone()}),Z(`Slope: ${c}`),Kt=[],be&&(tt.scene.three.remove(be),be=null)}}function fW(){console.log("[DEBUG] Setting up Viewpoints Manager...");const e={getMeasurements:()=>ey,restoreMeasurements:s=>{DC(),!(!s||!Array.isArray(s))&&s.forEach(n=>{if(n.type==="point"&&n.points&&n.points.length>0){const o=new de(n.points[0].x,n.points[0].y,n.points[0].z);cs(o,65280),kn(n.label,o,n)}else if(n.type==="length"&&n.points&&n.points.length===2){const o=new de(n.points[0].x,n.points[0].y,n.points[0].z),r=new de(n.points[1].x,n.points[1].y,n.points[1].z);cs(o,16776960),cs(r,16776960),In(o,r);const a=new de(n.labelPosition.x,n.labelPosition.y,n.labelPosition.z);kn(n.label,a,n)}else if(n.type==="angle"&&n.points&&n.points.length===3){const o=new de(n.points[0].x,n.points[0].y,n.points[0].z),r=new de(n.points[1].x,n.points[1].y,n.points[1].z),a=new de(n.points[2].x,n.points[2].y,n.points[2].z);cs(o,16753920),cs(r,16753920),cs(a,16753920),In(o,r),In(r,a),kn(n.label,r,n)}else if(n.type==="slope"&&n.points&&n.points.length===2){const o=new de(n.points[0].x,n.points[0].y,n.points[0].z),r=new de(n.points[1].x,n.points[1].y,n.points[1].z);cs(o,255),cs(r,255),In(o,r);const a=new de(n.labelPosition.x,n.labelPosition.y,n.labelPosition.z);kn(n.label,a,n)}else if(n.type==="area"&&n.points&&n.points.length>2){const o=n.points.map(a=>new de(a.x,a.y,a.z));o.forEach(a=>cs(a,65535));for(let a=0;a<o.length;a++)In(o[a],o[(a+1)%o.length]);const r=new de(n.labelPosition.x,n.labelPosition.y,n.labelPosition.z);kn(n.label,r,n)}})},getHiddenItems:()=>{const s={};for(const n in ve)ve[n].size>0&&(s[n]=Array.from(ve[n]));return s},restoreHiddenItems:async s=>{await ue.set(!0),Object.keys(s).length>0&&await ue.set(!1,s)},getClippingPlanes:()=>{console.log("[Viewpoints] Getting clipping planes...");const s=[];try{const n=tt?.renderer?.three?.clippingPlanes;if(Array.isArray(n)&&n.length>0){console.log(`[Viewpoints] Found ${n.length} clipping planes in renderer.`);for(const o of n)o?.normal&&s.push({normal:o.normal.toArray(),constant:o.constant});return s}if(!ae||!ae.list)return console.warn("[Viewpoints] Clipper not initialized or list unavailable"),[];if(console.log(`[Viewpoints] Clipper list size: ${ae.list.size||ae.list.length}`),ae.list.size>0&&ae.list.forEach((o,r)=>{console.log(`[Viewpoints] Map.forEach - Plane ${r}:`,o);let a=null;const l=o;l.plane?a=l.plane:l.normal&&l.constant!==void 0?a=l:l.object&&l.object.plane&&(a=l.object.plane),a&&s.push({normal:a.normal.toArray(),constant:a.constant})}),s.length===0&&ae.planes&&Array.isArray(ae.planes)){const o=ae.planes;for(const r of o)r?.normal&&r?.constant!==void 0&&s.push({normal:r.normal.toArray(),constant:r.constant})}return console.log(`[Viewpoints] Serialized clipping planes count: ${s.length}`),s}catch(n){return console.error("[Viewpoints] Error getting clipping planes:",n),[]}},restoreClippingPlanes:s=>{console.log("[Viewpoints] Restoring clipping planes (count):",s?s.length:0),console.log("[Viewpoints] Raw planes data:",JSON.stringify(s));try{if(ae.list.size>0&&(console.log(`[Viewpoints] Clearing ${ae.list.size} existing planes...`),ae.deleteAll()),tt?.renderer?.three&&Array.isArray(tt.renderer.three.clippingPlanes)&&(tt.renderer.three.clippingPlanes=[],tt.renderer.three.localClippingEnabled=!0),!s||s.length===0){console.log("[Viewpoints] No planes to restore. Disabling clipper."),ae.enabled=!1;const r=document.getElementById("clipper-toggle");r&&r.classList.remove("active");const a=document.getElementById("clipper-controls");a&&(a.style.display="none");return}console.log("[Viewpoints] Enabling clipper tool..."),ae.enabled=!0;const n=document.getElementById("clipper-toggle");n&&n.classList.add("active");const o=document.getElementById("clipper-controls");o&&(o.style.display="flex"),s.forEach((r,a)=>{if(console.log(`[Viewpoints] Restoring plane #${a}:`,r),r.normal&&r.constant!==void 0){const l=new de(r.normal[0],r.normal[1],r.normal[2]).normalize(),c=r.constant,d=l.clone().multiplyScalar(-c);console.log(`[Viewpoints] Creating plane #${a}: normal=${l.toArray()}, constant=${c}`);const h=ae.createFromNormalAndCoplanarPoint(tt,l,d);console.log(`[Viewpoints] Plane #${a} created:`,h)}else console.warn("[Viewpoints] Invalid plane data for plane #${index}:",r)})}catch(n){console.error("[Viewpoints] Error restoring clipping planes:",n)}},getLoadedModels:()=>{const s=[],n=Nt.list&&Nt.list.size>0?Nt.list:Nt.groups,o=n instanceof Map?Array.from(n.entries()):Object.entries(n||{});console.log(`[Viewpoints] Saving models. Found ${o.length} groups/models.`),Z(`[Viewpoints] Found ${o.length} models.`);for(const[r,a]of o){const l=a.object&&a.object.visible!==void 0?a.object.visible:a.visible!==void 0?a.visible:!0;if(!l){console.log(`[Viewpoints] Model ${r} is hidden (visible=${l}). Skipping.`),Z(`[Viewpoints] Skipping hidden: ${r}`);continue}if(Z(`[Viewpoints] Processing visible: ${r}`),a.userData)if(console.log(`[Viewpoints] Inspecting model ${r}:`,a.userData),a.userData.isLocal&&a.userData.dbKey){const c=`indexeddb://${a.userData.dbKey}`;s.push({uuid:r,url:c}),console.log(`[Viewpoints] Saved local model reference: ${c}`),Z(`[Viewpoints] Saved local: ${a.userData.dbKey}`)}else a.userData.url?(s.push({uuid:r,url:a.userData.url}),console.log(`[Viewpoints] Saved remote model reference: ${a.userData.url}`),Z(`[Viewpoints] Saved remote: ${a.userData.url}`)):(console.warn(`[Viewpoints] Model ${r} has no URL or DB key. Skipping persistence.`),Z(`[Viewpoints] SKIP: No URL/DBKey for ${r}`,!0));else console.warn(`[Viewpoints] Model ${r} has no userData. Skipping persistence.`),Z(`[Viewpoints] SKIP: No userData for ${r}`,!0)}return s},restoreLoadedModels:async s=>{if(!te){const c=new URLSearchParams(window.location.search),d=c.get("project")||"",h=c.get("empresa")||"";try{te=await Gp(d,h)}catch(u){console.warn("Error loading security context in restoreLoadedModels:",u)}}const n=s.filter(c=>{const d=c.uuid.split("/").pop()||c.uuid;let h="";if(c.url&&c.url.startsWith("drive://"))try{h=new URL(c.url).hostname}catch{const y=c.url.match(/drive:\/\/([^?]+)/);y&&(h=decodeURIComponent(y[1]))}const u=te?.statusMap?.[h]||te?.statusMap?.[d.toLowerCase()]||null,p={name:d,filename:d,status:u?.status||"EN_PROGRESO",changedBy:u?.changedBy||"UNASSIGNED",changedByEmail:u?.changedByEmail||"unassigned@nora.cde",folder:d},f=new URLSearchParams(window.location.search).get("empresa")||"";return fc(te?.currentUser,p,te?.activeProject,te?.currentCompany,f,"view")?!0:(console.warn(`[SECURITY] Viewpoint restoration blocked for unauthorized model: ${d}`),Z(`Acceso denegado en punto de vista para: ${d}`,!0),!1)}),o=Nt.list&&Nt.list.size>0?Nt.list:Nt.groups,r=o instanceof Map,a=new Set(r?o.keys():Object.keys(o||{})),l=new Set(n.map(c=>c.uuid));for(const c of a){const d=r?o.get(c):o[c];if(d){const h=l.has(c);d.object&&(d.object.visible=h),d.visible!==void 0&&(d.visible=h),console.log(`[Viewpoints] Sync visibility for ${c}: ${h}`)}}Xc();for(const c of n)if(a.has(c.uuid))console.log(`[Viewpoints] Model ${c.uuid} already loaded. Skipping.`);else try{console.log(`[Viewpoints] Restoring model: ${c.uuid} from ${c.url}`);let d=c.url,h=!1,u="",p=null;if(c.url.startsWith("indexeddb://")){u=c.url.replace("indexeddb://",""),Z(`Restoring local model from storage: ${u}...`);const m=await Xp(u);if(m){console.log(`[Viewpoints] Retrieved ${m.byteLength} bytes from IDB for ${u}`);const f=new Blob([m]);d=URL.createObjectURL(f),h=!0}else{console.warn(`Local model ${u} not found in IndexedDB.`),Z(`Error: Local model ${u} expired/missing. Please reload file.`,!0);continue}}else if(c.url.startsWith("drive://"))try{const m=new URL(c.url),f=decodeURIComponent(m.hostname),g=m.searchParams.get("jsonId");Z(`Restoring Google Drive model: ${c.uuid}...`);const b=await xC(f),y=new Blob([b],{type:"application/octet-stream"});if(d=URL.createObjectURL(y),g)try{p=await wC(g)}catch(v){console.warn("Error loading JSON props for restored drive model",v)}}catch(m){console.error("Failed to resolve drive URL for restoration:",m);continue}if(console.log(`[Viewpoints] Calling loadModel with URL: ${d}`),await Zp(d,c.uuid,{propertiesJson:p,sourceUrl:c.url}),console.log(`[Viewpoints] loadModel completed for ${c.uuid}`),h){const m=r?Nt.groups.get(c.uuid):Nt.groups[c.uuid];m?(m.userData||(m.userData={}),m.userData.isLocal=!0,m.userData.dbKey=u,m.userData.url=d,console.log(`[Viewpoints] Restored local metadata for ${c.uuid}`)):console.error(`[Viewpoints] Model ${c.uuid} not found in fragments.groups after load!`)}}catch(d){console.error(`[Viewpoints] Failed to restore model ${c.uuid}:`,d)}Xc()}};Qh=new aM(Yt,tt,e,Yp);const t=document.getElementById("viewpoints-list-container");t&&Qh.createUI(t);const i=document.getElementById("btn-add-viewpoint");if(i){const s=i.cloneNode(!0);i.parentNode?.replaceChild(s,i),s.addEventListener("click",()=>{Qh?.openSaveModal()})}}fW();function __(){let e=!1;try{e=new URLSearchParams(window.location.search).get("embed")==="true"||window!==window.parent}catch{e=!0}if(e){document.body.classList.add("nora-embed-mode"),document.documentElement.classList.add("nora-embed-mode");const t=document.createElement("style");t.textContent=`
+`}));const Et=new Blob(["\uFEFF"+N],{type:"text/csv;charset=utf-8;"}),zt=document.createElement("a");if(zt.download!==void 0){const Dt=URL.createObjectURL(Et);zt.setAttribute("href",Dt),zt.setAttribute("download",pt),zt.style.visibility="hidden",document.body.appendChild(zt),zt.click(),document.body.removeChild(zt)}}n&&n.addEventListener("click",()=>{Jr()}),window.refreshStatusUI=li}async function tu(e){Z("Clasificando modelo...");const t=e.uuid;k4(t);const i=new Map,s=new Map,n=new Map,o=new Map,r=new Map,a=new Map,l=new Map,c=new Map,d=new Map,h=new Map,u=new Map,p=new Map,m=new Map,f=new Map,g=A=>{if(A==null)return null;const $=typeof A=="object"&&"value"in A?A.value:A;return $!=null&&String($).trim()!==""?String($).trim():null},b=(A,...$)=>{if(!A||typeof A!="object")return null;for(const k of $){const I=g(A[k]);if(I!==null)return I}const P=[A.data,A.attributes,A.psets,A.properties];for(const k of P)if(k&&typeof k=="object")for(const I of $){const C=g(k[I]);if(C!==null)return C}const D=new Set($.map(k=>xs(k)).filter(Boolean));for(const k of Object.keys(A))if(D.has(xs(k))){const I=g(A[k]);if(I!==null)return I}for(const k of Object.keys(A)){if(k==="ObjectPlacement"||k==="Representation"||k==="OwnerHistory"||k==="geometry")continue;const I=A[k];if(I&&typeof I=="object"&&!Array.isArray(I))for(const C of $){const M=g(I[C]);if(M!==null)return M}}return null},y=(A,$)=>{let P=b(A,"CLASIFICACIÓN","CLASIFICACION",'CLASIFICACIÃ"N',"CLASIFICACIÃ“N","CLASIFICACIÃN","Clasificación","Clasificacion","clasificación","clasificacion","classification","Classification"),D=b(A,"NIVEL INTEGRADO","Nivel Integrado","nivel integrado","NIVEL","Nivel","nivel","Level","level","LEVEL","Storey","storey","Piso","piso","Planta","planta","Building Story","IfcBuildingStorey");const k=b(A,"MATERIAL INTEGRADO","Material Integrado","material integrado","MATERIAL_INTEGRADO","material_integrado");k&&n.set($,k);let I=b(A,"NOMBRE INTEGRADO","Nombre Integrado","nombre integrado","NOMBRE_INTEGRADO","nombre_integrado");const C=b(A,"Name","name","tag","Tag");C&&r.set($,C);const M=b(A,"SUBPROYECTOS INTEGRADO","Subproyectos Integrado","subproyectos integrado","SUBPROYECTO INTEGRADO","Workset1","Workset");M&&a.set($,M);const O=b(A,"type","ifcType","Category","ObjectType","CLASIFICACIÓN","Clasificación","CLASIFICACION","clasificacion","CATEGORÍA","CATEGORIA","Categoría","categoria","TIPO","Tipo","tipo","DETALLE","Detalle","detalle");O&&c.set($,O);const U=b(A,"DETALLE","Detalle","detalle");U&&d.set($,U);let z=b(A,"VOLUMEN INTEGRADO","Volumen Integrado","volumen integrado","VOLUMEN_INTEGRADO","volumen_integrado","NetVolume","GrossVolume","Volumen","Volume"),it=b(A,"AREA INTEGRADO","ÁREA INTEGRADO","Area Integrado","Área Integrado","area integrado","área integrado","AREA_INTEGRADO","ÁREA_INTEGRADO","NetSideArea","GrossSideArea","NetArea","GrossArea","Area","Área");const R=String(A._category||A.category||A.type||A.ifcType||O||"").toUpperCase(),K=String(A.Name||A.name||C||"");if((R.includes("STAIR")||R.includes("ESCALERA")||K.includes("Run ")||K.includes("Escalera")&&K.includes("Landing"))&&(P||(P="ESCALERAS"),(!D||!z||!it||!I)&&e.properties)){const Lt=K.match(/(?:Escalera:?|Stairs?:?)(\d+)/i),rt=Lt?Lt[1]:null;for(const yt in e.properties){const jt=e.properties[yt];if(!jt)continue;if(rt&&(String(jt.Tag||jt.tag)===rt||String(yt)===rt)||String(jt._category||jt.type||"").toUpperCase()==="IFCSTAIR"){if(!D){const G=b(jt,"NIVEL INTEGRADO","Nivel Integrado","nivel integrado","NIVEL","Nivel","Level","Storey");G&&(D=G)}if(!z){const G=b(jt,"VOLUMEN INTEGRADO","Volumen Integrado","volumen integrado","NetVolume","Volume");G&&(z=G)}if(!it){const G=b(jt,"AREA INTEGRADO","ÁREA INTEGRADO","Area Integrado","NetArea","Area");G&&(it=G)}if(!I){const G=b(jt,"NOMBRE INTEGRADO","Nombre Integrado","nombre integrado");G&&(I=G)}break}}}P&&i.set($,P),D&&s.set($,D),I&&o.set($,I),z&&h.set($,us(z)),it&&u.set($,us(it));const bt=b(A,"LONGITUD INTEGRADO","Longitud Integrado","longitud integrado","LONGITUD_INTEGRADO","longitud_integrado","Length","Longitud","length","longitud","LONGITUD");if(bt&&p.set($,us(bt)),jn(A)&&m.set($,!0),Sr(A)&&f.set($,!0),!P){const Lt=b(A,"Name","name","ObjectType","objectType");Lt&&l.set($,Lt)}return!!P};let v=[];try{v=await e.getItemsIdsWithGeometry().catch(()=>[])}catch(A){console.warn("[Classify] getItemsIdsWithGeometry error:",A)}const x=e.properties&&Object.keys(e.properties).length>0;if(!x&&v&&v.length>0){Z(`[Classify] Obteniendo propiedades nativas de ${v.length} elementos...`);const A=1e3;for(let $=0;$<v.length;$+=A){const P=v.slice($,$+A);try{const D=await Nt.getData({[t]:P},{attributesDefault:!0});(D[t]||(D?Object.values(D)[0]:[])||[]).forEach((I,C)=>{const M=P[C];if(M===void 0)return;const O=I?.data||I?.attributes||I||{};y(O,M)})}catch(D){console.warn("[Classify] getData chunk error:",D)}await Rl()}}else if(x){let A=0;for(const $ in e.properties){const P=parseInt($,10);if(isNaN(P))continue;const D=e.properties[$];if(!D||typeof D!="object")continue;const k=String(D.type||D.category||D._category||"");if(ug(k))continue;const I=D.localId!==void 0?Number(D.localId):P;y(D,I),++A%3e3===0&&await Rl()}}for(const A of v)if(!i.has(A)||!s.has(A)||!n.has(A)){const $=e.properties?e.properties[A]||e.properties[String(A)]||e._propertiesByTag&&e._propertiesByTag.get(String(A))||e._propertiesByGuid&&e._propertiesByGuid.get(String(A)):null;$&&y($,A)}let _;if(v&&v.length>0)_=new Set(v);else{_=new Set;for(const A of i.keys()){const $=e.properties?e.properties[A]||e.properties[String(A)]:null,P=$?String($.type||$.category||$._category||""):"";ug(P)||_.add(A)}}let w=0;for(const A of _){const $=i.get(A)??"SIN CLASIFICAR";Ml("CLASIFICACIÓN",t,Cl($),A),Ml("NIVEL INTEGRADO",t,Cl(s.get(A)??"Sin Nivel"),A),Ml("MATERIAL INTEGRADO",t,Cl(n.get(A)??"Sin Material"),A),Ml("NOMBRE INTEGRADO",t,Cl(o.get(A)??""),A),Ml("SUBPROYECTOS INTEGRADO",t,Cl(a.get(A)??""),A),++w%2e3===0&&await Rl()}Bs.list.clear(),Bs.list.set(gc,AC(gc,fg));const E=new Map;let S=0;for(const A of _){let $=s.get(A),P=n.get(A),D=o.get(A),k=i.get(A),I=c.get(A),C=d.get(A);const M=e.properties?e.properties[String(A)]||e.properties[A]||e._propertiesByTag&&e._propertiesByTag.get(String(A))||e._propertiesByGuid&&e._propertiesByGuid.get(String(A)):null;let O=M&&b(M,"Tag","tag","TAG")||"",U=M&&b(M,"GlobalId","globalId","_guid","guid","GUID")||"";!U&&M&&(U=String(M.GlobalId?.value??M.GlobalId??M._guid?.value??M._guid??M.guid??"").trim()),!$&&M&&($=b(M,"NIVEL INTEGRADO","Nivel Integrado","nivel integrado","NIVEL","Nivel","nivel","Level","level","LEVEL","Storey","storey","Piso","piso","Planta","planta","Building Story","IfcBuildingStorey")),!P&&M&&(P=b(M,"MATERIAL INTEGRADO","Material Integrado","material integrado","MATERIAL_INTEGRADO","material_integrado")),!k&&M&&(k=b(M,"CLASIFICACIÓN","CLASIFICACION",'CLASIFICACIÃ"N',"CLASIFICACIÃ“N","Clasificación","Clasificacion","classification")),!D&&M&&(D=b(M,"NOMBRE INTEGRADO","Nombre Integrado","nombre integrado","NOMBRE_INTEGRADO","nombre_integrado")),!I&&M&&(I=b(M,"type","ifcType","Category","ObjectType","CLASIFICACIÓN","Clasificación","CATEGORÍA","Categoría","TIPO","Tipo"));let z=h.get(A)??(M?us(he(M,"VOLUMEN INTEGRADO","Volumen Integrado","volumen integrado","VOLUMEN_INTEGRADO","volumen_integrado","NetVolume","GrossVolume","Volumen","Volume")):0),it=u.get(A)??(M?us(he(M,"AREA INTEGRADO","ÁREA INTEGRADO","Area Integrado","Área Integrado","area integrado","área integrado","AREA_INTEGRADO","ÁREA_INTEGRADO","NetSideArea","GrossSideArea","Area","Área")):0);const R=p.get(A)??(M?us(he(M,"LONGITUD INTEGRADO","Longitud Integrado","longitud integrado","LONGITUD_INTEGRADO","longitud_integrado","Length","Longitud")):0),K=r.get(A)||(M?b(M,"Name","name","tag","Tag"):null),Q=String(M?._category||M?.category||M?.type||I||"").toUpperCase(),bt=String(K||M?.Name||M?.name||"");if((Q.includes("STAIR")||Q.includes("ESCALERA")||bt.includes("Run ")||bt.includes("Escalera")&&bt.includes("Landing"))&&((!k||k==="SIN CLASIFICAR")&&(k="ESCALERAS"),(!$||$==="SIN NIVEL"||z===0||it===0||!D)&&e.properties)){const yt=bt.match(/(?:Escalera:?|Stairs?:?)(\d+)/i),jt=yt?yt[1]:null;for(const Ut in e.properties){const G=e.properties[Ut];if(!G)continue;if(jt&&(String(G.Tag||G.tag)===jt||String(Ut)===jt)||String(G._category||G.type||"").toUpperCase()==="IFCSTAIR"){if(!$||$==="SIN NIVEL"){const Ot=b(G,"NIVEL INTEGRADO","Nivel Integrado","nivel integrado","NIVEL","Nivel","Level","Storey");Ot&&($=Ot)}if(z===0){const Ot=us(he(G,"VOLUMEN INTEGRADO","Volumen Integrado","volumen integrado","NetVolume","Volume"));Ot>0&&(z=Ot)}if(it===0){const Ot=us(he(G,"AREA INTEGRADO","ÁREA INTEGRADO","Area Integrado","NetArea","Area"));Ot>0&&(it=Ot)}if(!D){const Ot=b(G,"NOMBRE INTEGRADO","Nombre Integrado","nombre integrado");Ot&&(D=Ot)}break}}}const rt=K??D??`${k||"Elemento"}-${A}`;if(!O&&rt){const yt=String(rt).match(/:(\d+)$/);yt&&(O=yt[1])}E.set(A,{level:$??"SIN NIVEL",material:P??"SIN MATERIAL",nombreIntegrado:D??"SIN NOMBRE INTEGRADO",name:rt,classification:k??"SIN CLASIFICAR",volume:z,area:it,length:R,detail:C??"-",category:I??(k||"Elemento"),pilote:M&&he(M,"NÚMERO DE PILOTE","NUMERO DE PILOTE","PILOTE","Pilote","pilote")||"",isModular:m.get(A)||(M?jn(M):!1)||!1,isListon:(M?_isListonProp(M):!1)||!1,isEjecutado:f.get(A)||(M?Sr(M):!1)||!1,tag:O,guid:U}),++S%2e3===0&&await Rl()}if(Wa.set(t,E),N4(),Z(`✓ Clasificado: ${_.size} elem | CLASIF:${i.size} NIVEL:${s.size} MAT:${n.size} NOMBRE:${o.size} SUB:${a.size}`),typeof window.refreshQuantitiesUI=="function")try{window.refreshQuantitiesUI()}catch(A){console.error("Error refreshing quantities UI:",A)}}function vg(){if(!Ht)return null;const e=Ht.selection?.select;return e?e instanceof Map?e.size>0?e:null:typeof e=="object"&&Object.keys(e).length>0?e:null:null}function rW(){const e=document.getElementById("btn-hide"),t=document.getElementById("btn-isolate"),i=document.getElementById("btn-show-all");e&&e.addEventListener("click",async()=>{const s=vg();if(s){const n=new Set,o=s instanceof Map?Array.from(s.entries()):typeof s=="object"?Object.entries(s):[];for(const[,r]of o)(r instanceof Set?Array.from(r):Array.isArray(r)?r:[]).forEach(l=>n.add(Number(l)));window.__noraIsolatedVisibleIds instanceof Set&&n.forEach(r=>window.__noraIsolatedVisibleIds.delete(r)),await ue.set(!1,s),Ht.clear("select"),window.dispatchEvent(new CustomEvent("classificationFilterChanged"))}}),t&&t.addEventListener("click",async()=>{const s=vg();if(s){const n=new Set,o=s instanceof Map?Array.from(s.entries()):typeof s=="object"?Object.entries(s):[];for(const[,r]of o)(r instanceof Set?Array.from(r):Array.isArray(r)?r:[]).forEach(l=>n.add(Number(l)));window.__noraIsolatedVisibleIds=n,await ue.isolate(s),Ht.clear("select"),window.dispatchEvent(new CustomEvent("classificationFilterChanged"))}}),i&&i.addEventListener("click",async()=>{window.__noraIsolatedVisibleIds=null,window.__noraCurrentSelectedIds=new Set,window.__noraCurrentSelectedElements=[];for(const s in ve)delete ve[s];await ue.set(!0),Ht.clear("select"),Zc(),await Hn(),await fi(),window.dispatchEvent(new CustomEvent("classificationFilterChanged"))})}function aW(){const e=As(),t={},i={},s={},n={},o={},r={},a={},l={};for(const b of e){const y=b.classification||"SIN CLASIFICAR",v=b.category||b.name||"Sin Categoría",x=b.level||"SIN NIVEL",_=b.material||"SIN MATERIAL",w=b.volume||0,E=b.area||0,S=b.length||0;t[y]||(t[y]={count:0,area:0,volume:0,length:0}),t[y].count++,t[y].area+=E,t[y].volume+=w,t[y].length+=S,i[v]||(i[v]={count:0,area:0,volume:0}),i[v].count++,i[v].area+=E,i[v].volume+=w,x!=="SIN NIVEL"&&(s[x]||(s[x]={count:0,area:0,volume:0}),s[x].count++,s[x].area+=E,s[x].volume+=w),_!=="SIN MATERIAL"&&(n[_]||(n[_]={count:0,area:0,volume:0}),n[_].count++,n[_].area+=E,n[_].volume+=w),b.pilote&&(o[b.pilote]||(o[b.pilote]={count:0,area:0,volume:0}),o[b.pilote].count++,o[b.pilote].area+=E,o[b.pilote].volume+=w),x!=="SIN NIVEL"&&(r[x]||(r[x]={}),r[x][y]||(r[x][y]={count:0,area:0,volume:0,length:0}),r[x][y].count++,r[x][y].area+=E,r[x][y].volume+=w,r[x][y].length+=S),x!=="SIN NIVEL"&&_!=="SIN MATERIAL"&&(a[x]||(a[x]={}),a[x][_]||(a[x][_]={count:0,area:0,volume:0}),a[x][_].count++,a[x][_].area+=E,a[x][_].volume+=w),x!=="SIN NIVEL"&&(l[x]||(l[x]={}),l[x][v]||(l[x][v]={count:0,area:0,volume:0}),l[x][v].count++,l[x][v].area+=E,l[x][v].volume+=w)}const c=b=>{for(const y in b)typeof b[y]=="object"&&b[y]!==null&&("area"in b[y]?(b[y].area=Math.round(b[y].area*100)/100,b[y].volume=Math.round(b[y].volume*100)/100,"length"in b[y]&&(b[y].length=Math.round(b[y].length*100)/100)):c(b[y]))},d=[];try{const b=new Set,y=vg();if(y){const v=y instanceof Map?Array.from(y.entries()):typeof y=="object"?Object.entries(y):[];for(const[,x]of v)(x instanceof Set?Array.from(x):Array.isArray(x)?x:[]).forEach(w=>b.add(Number(w)))}if(window.__noraCurrentSelectedIds instanceof Set&&window.__noraCurrentSelectedIds.forEach(v=>b.add(Number(v))),b.size>0)for(const v of e)b.has(Number(v.expressID))&&d.push({expressID:v.expressID,name:v.name||v.category||"Elemento",category:v.category||"",classification:v.classification||"",level:v.level||"",material:v.material||"",detail:v.detail||"",area:Math.round((v.area||0)*100)/100,volume:Math.round((v.volume||0)*100)/100,length:Math.round((v.length||0)*100)/100,pilote:v.pilote||""})}catch(b){console.warn("Error reading selected elements for AI context:",b)}let h=0,u=0,p=0;for(const b of e)(!b.volume||b.volume===0)&&h++,(!b.level||b.level==="SIN NIVEL")&&u++,(!b.material||b.material==="SIN MATERIAL")&&p++;c(t),c(i),c(s),c(n),c(r),c(a),c(l);const m=[],f=[],g=[];for(const b of e){const y=(b.name||"").trim(),v=(b.classification||"").toLowerCase();y&&(v.includes("puerta")&&!m.includes(y)&&m.length<25?m.push(y):v.includes("muro")&&!v.includes("cortina")&&!f.includes(y)&&f.length<25?f.push(y):!g.includes(y)&&g.length<35&&g.push(y))}return{totalElements:e.length,loadedModels:qs().map(b=>({name:b.name,uuid:b.uuid,elements:b.elementCount})),selectedElements:d,hasSelection:d.length>0,classifications:t,categories:i,levels:s,materials:n,materialsList:Object.keys(n),pilotes:o,sampleDoorTypes:m,sampleWallTypes:f,sampleOtherTypes:g,anomalies:{zeroVolumeCount:h,missingLevelCount:u,missingMaterialCount:p,totalAnomalies:e.filter(b=>!b.volume||b.volume===0||!b.level||b.level==="SIN NIVEL").length},matrixByLevelAndClassification:r,matrixByLevelAndMaterial:a,matrixByLevelAndCategory:l}}const xg=new Set;function lW(){const e={ai_red:15680580,ai_green:1096065,ai_blue:3900150,ai_yellow:16096779,ai_orange:16347926,ai_purple:9133302,ai_gray:9741240};for(const[t,i]of Object.entries(e))if(!xg.has(t))try{Ht.styles.set(t,{color:new We(i),opacity:1,transparent:!1,depthTest:!0,depthWrite:!0,renderedFaces:yi.ONE}),xg.add(t)}catch{}}function v_(){for(const e of xg)try{Ht.clear(e)}catch{}}const x_=(e,t)=>{if(!e||!t)return!1;const i=e.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,""),s=t.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"");if(i.includes(s)||s.includes(i))return!0;const n=[["drywall","gypsum","carton yeso","durlock","placa yeso","yeso","sheetrock"],["concreto","hormigon","concrete","cemento","mortero"],["vidrio","cristal","glass","panel vidriado","acristalamiento"],["acero","steel","metal","hierro","perfil metalico","aluminio"],["pvc","sanitario","pavco","polietileno","plastico"],["ladrillo","bloque","mamposteria","arcilla","masonry"],["madera","wood","timber"]];for(const o of n){const r=o.some(l=>i.includes(l)),a=o.some(l=>s.includes(l));if(r&&a)return!0}return!1},w_=(e,t)=>{let i=0;if(t.property==="height"){if(i=e.height||e.length||0,i===0){const s=(e.name+" "+e.detail).match(/(?:h|altura|alto)\s*[=:]?\s*([0-9]+(?:[\.,][0-9]+)?)/i);s&&(i=parseFloat(s[1].replace(",",".")))}}else if(t.property==="slope"){i=e.slope||0;const s=(e.name+" "+e.detail).match(/(?:pendiente|pend|slope|s)\s*[=:]?\s*([0-9]+(?:[\.,][0-9]+)?)\s*%/i);s&&(i=parseFloat(s[1].replace(",",".")))}else if(t.property==="volume")i=e.volume||0;else if(t.property==="area")i=e.area||0;else if(t.property==="length")i=e.length||0;else if(t.property==="diameter"&&(i=parseFloat(e.diameter)||0,i===0)){const s=(e.name+" "+e.detail).match(/(?:[øØdD]|diam|di[aá]metro)\s*[=:]?\s*([0-9]+(?:[\.,][0-9]+)?)/i);s&&(i=parseFloat(s[1].replace(",",".")))}return t.operator===">"?i>t.value:t.operator===">="?i>=t.value:t.operator==="<"?i<t.value:t.operator==="<="?i<=t.value:t.operator==="=="?Math.abs(i-t.value)<.05:t.operator==="between"&&t.value2!==void 0?i>=t.value&&i<=t.value2:!0},wg=e=>{const t=((e.name||"")+" "+(e.detail||"")).toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,""),i=(e.classification||"").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,""),s=(e.category||"").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,""),n=i.includes("puerta")||s.includes("door")||s.includes("puerta")||t.includes("puerta")||t.includes("door");return!!(t.includes("puerta ventana")||t.includes("puertaventana")||t.includes("puerta-ventana")||t.includes("p-v")||t.includes("pv ")||t.includes("pv-")||t.includes("p.v")||n&&(t.includes("balcon")||t.includes("corrediza")||t.includes("vidrio")||t.includes("vidriera")||t.includes("terraza")||t.includes("exterior")||t.includes("aluminio")||t.includes("fachada")))},_g=e=>{const t=((e.name||"")+" "+(e.detail||"")+" "+(e.category||"")).toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"");return t.includes("alfajia")||t.includes("vierteagua")||t.includes("lagrimero")||t.includes("antepecho")||t.includes("remate fachada")},Eg=e=>{const t=((e.name||"")+" "+(e.detail||"")).toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,""),i=(e.classification||"").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"");return i.includes("ventana")||i.includes("cortina")||t.includes("ventana")||t.includes("window")||t.includes("muro cortina")||t.includes("curtain")},$g=e=>{const t=((e.name||"")+" "+(e.detail||"")).toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"");return(e.classification||"").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"").includes("baranda")||t.includes("baranda")||t.includes("railing")||t.includes("pasamanos")||t.includes("balcon")},Sg=e=>{const t=((e.name||"")+" "+(e.detail||"")).toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"");return(e.classification||"").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"").includes("muro")||(e.category||"").toLowerCase().includes("wall")?t.includes("fachada")||t.includes("exterior")||t.includes("envolvente")||t.includes("cortina")||t.includes("antepecho")||t.includes("ladrillo a la vista")||t.includes("panel exterior"):!1},Ih=e=>{const t=(e.classification||"").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"");return!!(t.includes("cortina")||t.includes("montante")||$g(e)||wg(e)||_g(e)||Eg(e)||Sg(e))};async function cW(e){if(!e||e.type==="none")return"";if(e.type==="status_isolate"||e.status||e.statuses){const api=window.noraStatusAPI;const rawStatuses=[...(e.statuses||[]),...(e.status?[String(e.status)]:[])].map(s=>String(s).toUpperCase().trim());e.criticalOnly&&rawStatuses.push("CRITICO");const statuses=rawStatuses.length>0?Array.from(new Set(rawStatuses)):["APROBADO"];if(!api)return"El módulo de Control de Avance (STATUS) aún no está inicializado";const rows=api.getElements({statuses,classifications:e.classifications,levels:e.levels,models:e.models||(e.modelName?[e.modelName]:void 0)});const STATUS_STYLE={APROBADO:"ai_green",CERRADO:"ai_green","EN PROGRESO":"ai_yellow","PARA INSPECCIÓN":"ai_blue",RECHAZADO:"ai_red",NINGUNO:"ai_gray"};const isolateMap={},styleMaps={};for(const r of rows){(isolateMap[r.modelUUID]||(isolateMap[r.modelUUID]=[])).push(r.expressID);const stName=r.critical&&statuses.includes("CRITICO")&&r.status!=="RECHAZADO"?"ai_orange":STATUS_STYLE[r.status]||"ai_purple";const stBucket=styleMaps[stName]||(styleMaps[stName]={});(stBucket[r.modelUUID]||(stBucket[r.modelUUID]=[])).push(r.expressID)}lW(),v_(),window.__noraIsolatedVisibleIds=rows.length>0?new Set(rows.map(r=>Number(r.expressID))):null;if(rows.length>0){if(ue)try{await ue.isolate(isolateMap)}catch(err){console.warn("Error in hider.isolate by status:",err)}let first=!0;for(const[stName,mp]of Object.entries(styleMaps)){try{Ht.highlightByID(stName,mp,first,!1)}catch{}first=!1}try{const box=td(),sph=new Cs;box.getBoundingSphere(sph),sph.radius>.1&&tt.camera.controls.fitToSphere(sph,!0)}catch{}}try{const singleStatus=statuses.length===1?statuses[0]:void 0;api.syncTable({status:singleStatus,classification:e.classifications?.[0]??"Todos",level:e.levels?.[0]??"Todos"})}catch{}window.dispatchEvent(new CustomEvent("classificationFilterChanged"));try{typeof window.renderStatusCharts=="function"&&window.renderStatusCharts(As("ALL"))}catch{}const label=statuses.map(s=>s==="CRITICO"?"CRÍTICO":s).join(" + ");return rows.length===0?`No hay elementos con estado ${label} para ese filtro`:e.message||`Aislados en 3D ${rows.length} elementos con estado ${label}`}if((e.type==="color"||e.colorOverrides)&&e.colorOverrides?.mode==="status"){const api=window.noraStatusAPI;return v_(),api?(api.setStatusColors(!e.colorOverrides?.clear),e.message||(e.colorOverrides?.clear?"Colores de estado desactivados":"Modelo coloreado por estado de avance")):"El módulo de Control de Avance (STATUS) aún no está inicializado"}if(e.type==="show_all"){window.__noraIsolatedVisibleIds=null;Zc();if(ue)await ue.set(!0);ae.deleteAll();v_();ln();try{window.noraStatusAPI?.syncTable({status:"Todos",classification:"Todos",level:"Todos",colors:!1})}catch{}await Hn();await fi();window.dispatchEvent(new CustomEvent("classificationFilterChanged"));try{typeof window.renderStatusCharts=="function"&&window.renderStatusCharts(As("ALL"))}catch{}return"Modelo 3D, filtros, cortes y colores analíticos restablecidos"}if(e.type==="color"||e.colorOverrides){if(lW(),v_(),e.colorOverrides?.clear)return e.message||"Colores analíticos restablecidos a la vista normal";const t=As(),i=e.colorOverrides?.mode||"anomalies";if(i==="anomalies"){const s={},n={};let o=0,r=0;for(const a of t){const l=!a.volume||a.volume===0||!a.level||a.level==="SIN NIVEL",c=l?s:n;c[a.modelUUID]||(c[a.modelUUID]=[]),c[a.modelUUID].push(a.expressID),l?o++:r++}return o>0&&Ht.highlightByID("ai_red",s,!0,!1),r>0&&Ht.highlightByID("ai_green",n,!1,!1),e.message||`Auditoría visual: ${o} anomalías en rojo y ${r} elementos conformes en verde`}if(i==="heatmap"){const s=[...t].filter(n=>(n.volume||0)>0).sort((n,o)=>(n.volume||0)-(o.volume||0));if(s.length>0){const n=Math.floor(s.length*.25),o=Math.floor(s.length*.5),r=Math.floor(s.length*.75),a={},l={},c={},d={};return s.forEach((h,u)=>{let p=a;u>=r?p=d:u>=o?p=c:u>=n&&(p=l),p[h.modelUUID]||(p[h.modelUUID]=[]),p[h.modelUUID].push(h.expressID)}),Ht.highlightByID("ai_blue",a,!0,!1),Ht.highlightByID("ai_yellow",l,!1,!1),Ht.highlightByID("ai_orange",c,!1,!1),Ht.highlightByID("ai_red",d,!1,!1),e.message||"Mapa de calor aplicado: Degradado térmico según volumen de elementos"}}if(i==="presence"){const s={},n={};for(const o of t){const a=o.material!=="SIN MATERIAL"&&o.level!=="SIN NIVEL"?s:n;a[o.modelUUID]||(a[o.modelUUID]=[]),a[o.modelUUID].push(o.expressID)}return Ht.highlightByID("ai_green",s,!0,!1),Ht.highlightByID("ai_red",n,!1,!1),e.message||"Coloreado por metadatos presentes (verde) y ausentes (rojo)"}return e.message||"Modo gráfico analítico aplicado"}if(e.type==="section"||e.sectionBox){if(ae.deleteAll(),e.sectionBox?.clear)return e.message||"Caja de sección y cortes eliminados";const t=Gu(),i=e.sectionBox?.axis||"y",s=new de;i==="x"?s.set(-1,0,0):i==="z"?s.set(0,0,-1):s.set(0,-1,0);try{ae.createFromNormalAndCoplanarPoint(tt,s,t),ae.enabled=!0}catch(n){console.warn("[nora AI] Error creating section plane:",n)}if(e.cameraView){const n=yg()*2;tt.camera.controls.enabled=!0,i==="x"?await tt.camera.controls.setLookAt(t.x-n,t.y,t.z,t.x,t.y,t.z,!0):i==="z"?await tt.camera.controls.setLookAt(t.x,t.y,t.z+n,t.x,t.y,t.z,!0):await tt.camera.controls.setLookAt(t.x,t.y+n,t.z,t.x,t.y,t.z,!0)}return e.message||`Caja de sección y corte en eje ${i.toUpperCase()} generado`}if(e.type==="camera"||e.cameraView&&e.type!=="isolate"&&e.type!=="filter"){const t=Gu(),s=yg()*2;switch(tt.camera.controls.enabled=!0,e.cameraView){case"top":await tt.camera.controls.setLookAt(t.x,t.y+s,t.z,t.x,t.y,t.z,!0);break;case"bottom":await tt.camera.controls.setLookAt(t.x,t.y-s,t.z,t.x,t.y,t.z,!0);break;case"front":await tt.camera.controls.setLookAt(t.x,t.y,t.z+s,t.x,t.y,t.z,!0);break;case"back":await tt.camera.controls.setLookAt(t.x,t.y,t.z-s,t.x,t.y,t.z,!0);break;case"left":await tt.camera.controls.setLookAt(t.x-s,t.y,t.z,t.x,t.y,t.z,!0);break;case"right":await tt.camera.controls.setLookAt(t.x+s,t.y,t.z,t.x,t.y,t.z,!0);break;case"iso":await tt.camera.controls.setLookAt(t.x+s,t.y+s,t.z+s,t.x,t.y,t.z,!0);break;case"focus":default:const n=td(),o=new Cs;n.getBoundingSphere(o),o.radius>.1&&tt.camera.controls.fitToSphere(o,!0);break}return e.message||`Cámara ajustada a vista ${e.cameraView||"enfocada"}`}if(e.type==="hide"){const t=As("ALL"),i=(e.models||(e.modelName?[e.modelName]:[])).map(h=>h.toLowerCase()),s=e.classifications||[],n=e.categories||[],o=e.elementTypes||[],r=e.levels||[],a=e.materials||[],l=e.pilotes||[],c={};let d=0;for(const h of t){let u=!1;e.semanticTarget&&(e.semanticTarget==="facade"?u=Ih(h):e.semanticTarget==="doors_windows"?u=wg(h):e.semanticTarget==="alfajias"?u=_g(h):e.semanticTarget==="windows"?u=Eg(h):e.semanticTarget==="balconies"?u=$g(h):e.semanticTarget==="facade_walls"?u=Sg(h):e.semanticTarget==="interior"&&(u=!Ih(h)));const p=s.length>0&&s.some(E=>h.classification&&h.classification.toLowerCase().includes(E.toLowerCase())),m=n.length>0&&n.some(E=>h.category&&h.category.toLowerCase().includes(E.toLowerCase())||h.name&&h.name.toLowerCase().includes(E.toLowerCase())),f=o.length>0&&o.some(E=>h.name&&h.name.toLowerCase().includes(E.toLowerCase())||h.detail&&h.detail.toLowerCase().includes(E.toLowerCase())),g=r.length>0&&r.some(E=>h.level&&h.level.toLowerCase().includes(E.toLowerCase())),b=a.length>0&&a.some(E=>x_(h.material,E)),y=l.length>0&&l.some(E=>h.pilote&&h.pilote.toLowerCase().includes(E.toLowerCase()));let v=!0;e.numericFilter&&(v=w_(h,e.numericFilter));const x=i.length===0||i.some(E=>h.modelName&&h.modelName.toLowerCase().includes(E)||h.modelUUID&&h.modelUUID.toLowerCase().includes(E)),_=!!e.semanticTarget||s.length>0||n.length>0||o.length>0||r.length>0||a.length>0||l.length>0;let w=!1;i.length>0&&!_?w=x&&v:w=(u||p||m||f||g||b||y)&&v&&x,e.invertMatch&&(w=!w),w&&(c[h.modelUUID]||(c[h.modelUUID]=new Set),c[h.modelUUID].add(h.expressID),d++)}if(ue&&d>0)for(const h in c)await ue.set(!1,{[h]:c[h]});return e.message||`Ocultado(s) ${d} elementos en el visor 3D`}if(e.type==="isolate"||e.type==="filter"){Zc();const t=As("ALL"),i=(e.models||(e.modelName?[e.modelName]:[])).map(h=>h.toLowerCase()),s=e.classifications||[],n=e.categories||[],o=e.elementTypes||[],r=e.levels||[],a=e.materials||[],l=e.pilotes||[],c={};let d=0;for(const h of t){let u=!0;e.semanticTarget&&(e.semanticTarget==="facade"?u=Ih(h):e.semanticTarget==="doors_windows"?u=wg(h):e.semanticTarget==="alfajias"?u=_g(h):e.semanticTarget==="windows"?u=Eg(h):e.semanticTarget==="balconies"?u=$g(h):e.semanticTarget==="facade_walls"?u=Sg(h):e.semanticTarget==="interior"&&(u=!Ih(h)));const p=s.length===0||s.some(w=>{const E=w.toLowerCase().trim();return h.classification&&(h.classification.toLowerCase().trim()===E||h.classification.toLowerCase().includes(E))}),m=n.length===0||n.some(w=>{const E=w.toLowerCase().trim();return h.category&&h.category.toLowerCase().includes(E)||h.classification&&h.classification.toLowerCase().includes(E)||h.name&&h.name.toLowerCase().includes(E)||h.detail&&h.detail.toLowerCase().includes(E)}),f=o.length===0||o.some(w=>{const E=w.toLowerCase().trim();return h.name&&h.name.toLowerCase().includes(E)||h.detail&&h.detail.toLowerCase().includes(E)||h.category&&h.category.toLowerCase().includes(E)}),g=r.length===0||r.some(w=>{const E=w.toLowerCase();return h.level&&h.level.toLowerCase().includes(E)}),b=a.length===0||a.some(w=>x_(h.material,w)),y=l.length===0||l.some(w=>{const E=w.toLowerCase();return h.pilote&&h.pilote.toLowerCase().includes(E)});let v=!0;e.numericFilter&&(v=w_(h,e.numericFilter));const x=i.length===0||i.some(w=>h.modelName&&h.modelName.toLowerCase().includes(w)||h.modelUUID&&h.modelUUID.toLowerCase().includes(w));let _=u&&p&&m&&f&&g&&b&&y&&v&&x;e.invertMatch&&(_=!_),_&&(c[h.modelUUID]||(c[h.modelUUID]=[]),c[h.modelUUID].push(h.expressID),d++,h.name&&ye.add(h.name),h.category&&ye.add(h.category),!e.semanticTarget&&s.length>0&&h.classification&&Ni.add(h.classification))}if(ue&&d>0)try{await ue.isolate(c)}catch(h){console.warn("Error in hider.isolate:",h)}if(e.models&&e.models.length>0){const u=qs().find(p=>e.models?.some(m=>p.name.toLowerCase().includes(m.toLowerCase())));u&&(mi=u.uuid)}if(!e.semanticTarget){for(const h of s)Ni.add(h);for(const h of n)ye.add(h);for(const h of o)ye.add(h)}for(const h of r)fs.add(h);for(const h of a)ms.add(h);for(const h of l)gs.add(h);if(await Hn(),await fi(),window.dispatchEvent(new CustomEvent("classificationFilterChanged")),e.cameraView==="focus"&&d>0)try{const h=td(),u=new Cs;h.getBoundingSphere(u),u.radius>.1&&tt.camera.controls.fitToSphere(u,!0)}catch{}return e.message||`Aislado(s) ${d} elementos en el visor 3D`}return""}let kh=null;function Yu(){if(!kh)try{kh=new TH({getBIMContext:()=>aW(),execute3DAction:async o=>cW(o)});const e=document.getElementById("right-tab-properties"),t=document.getElementById("right-tab-nora"),gTab=document.getElementById("right-tab-graficos"),i=document.getElementById("properties-content"),s=document.getElementById("nora-ai-container"),gCont=document.getElementById("status-charts-container"),n=document.getElementById("properties-panel");e&&t&&i&&s&&(e.addEventListener("click",o=>{o.preventDefault(),n&&n.classList.remove("closed"),e.classList.add("active"),t.classList.remove("active"),gTab?.classList.remove("active"),i.style.display="flex",s.style.display="none",gCont&&(gCont.style.display="none")}),t.addEventListener("click",o=>{o.preventDefault(),n&&n.classList.remove("closed"),t.classList.add("active"),e.classList.remove("active"),gTab?.classList.remove("active"),s.style.display="flex",i.style.display="none",gCont&&(gCont.style.display="none"),kh&&kh.open()}),gTab&&gTab.addEventListener("click",o=>{o.preventDefault(),n&&n.classList.remove("closed"),gTab.classList.add("active"),e.classList.remove("active"),t.classList.remove("active"),gCont&&(gCont.style.display="flex"),i.style.display="none",s.style.display="none",window.refreshStatusCharts&&window.refreshStatusCharts()})),console.log("[nora AI] Copilot initialized successfully.")}catch(e){console.error("[nora AI] Initialization error:",e)}}window.setupNoraAI=Yu;function dW(){console.log("[DEBUG] Setting up measurement tools...");try{Ss=Yt.get(sM),Ss.world=tt,Ss.enabled=!1,console.log("[DEBUG] Area Tool initialized")}catch(a){console.warn("Could not initialize Area Tool:",a)}if(!Di){const a=new S_(.15,16,16),l=new id({color:16711935,transparent:!0,opacity:.8,depthTest:!1});Di=new Vr(a,l),Di.raycast=()=>{},Di.userData={isHelper:!0},Di.renderOrder=2e3,tt.scene.three.add(Di),Di.visible=!1}const e=document.getElementById("btn-measure-length"),t=document.getElementById("btn-measure-point"),i=document.getElementById("btn-measure-area"),s=document.getElementById("btn-measure-angle"),n=document.getElementById("btn-measure-slope"),o=document.getElementById("btn-measure-delete");hW(),e&&e.addEventListener("click",()=>{sa("length"),mr(e)}),t&&t.addEventListener("click",()=>{sa("point"),mr(t)}),i&&i.addEventListener("click",()=>{sa("area"),mr(i),Z("Area tool activated (Click points, Right-click to finish)")}),s&&s.addEventListener("click",()=>{sa("angle"),mr(s),Z("Angle tool activated (Click 3 points: Start, Vertex, End)")}),n&&n.addEventListener("click",()=>{sa("slope"),mr(n),Z("Slope tool activated (Click 2 points)")}),o&&o.addEventListener("click",()=>{console.log("[DEBUG] Delete button clicked");try{Ss&&typeof Ss.deleteAll=="function"&&Ss.deleteAll()}catch(a){console.warn("Error clearing tools:",a)}DC()});const r=document.getElementById("viewer-container");r&&(r.addEventListener("mousemove",uW),r.addEventListener("click",pW),window.addEventListener("keydown",a=>{if(a.key==="Escape"){let l=!1;if(hi&&(sa(hi),l=!0),$e&&$e.enabled&&($e.enabled=!1,l=!0),Ss&&Ss.enabled&&(Ss.enabled=!1,l=!0),ae&&ae.enabled){ae.enabled=!1;const d=document.getElementById("clipper-toggle");d&&d.classList.remove("active");const h=document.getElementById("clipper-controls");h&&(h.style.display="none"),l=!0}ls(null),Di&&Di.visible&&(Di.visible=!1,l=!0);const c=document.getElementById("snap-config-panel");if(c&&c.classList.contains("show")&&(c.classList.remove("show"),l=!0),Ht&&Ht.selection&&Ht.selection.select){const d=Ht.selection.select;Object.keys(d).length>0&&(Ht.clear("select"),l=!0)}mr(null),l&&Z("Todas las herramientas liberadas / Cancelado")}}),r.addEventListener("contextmenu",a=>{if(hi==="area"&&Kt.length>=3){a.preventDefault();const l=Kt[0],c=Kt[Kt.length-1];In(c,l);let d=0;for(let p=0;p<Kt.length;p++){const m=(p+1)%Kt.length;d+=Kt[p].x*Kt[m].z,d-=Kt[m].x*Kt[p].z}d=Math.abs(d)/2;const h=new de;Kt.forEach(p=>h.add(p)),h.divideScalar(Kt.length),h.y+=.2;const u=`${d.toFixed(2)}m²`;kn(u,h,{type:"area",points:Kt.map(p=>p.clone()),label:u,labelPosition:h.clone()}),Z(`Area: ${u}`),Kt=[],be&&(tt.scene.three.remove(be),be=null)}else hi&&(a.preventDefault(),Ku())}))}function hW(){const e=document.getElementById("btn-snap-config"),t=document.getElementById("snap-config-panel"),i=document.getElementById("chk-snap-point"),s=document.getElementById("chk-snap-line"),n=document.getElementById("chk-snap-face"),o=document.getElementById("slider-snap-radius"),r=document.getElementById("slider-snap-size"),a=document.getElementById("snap-radius-val"),l=document.getElementById("snap-size-val");e&&t&&(e.addEventListener("click",d=>{d.stopPropagation();const h=e.getBoundingClientRect();t.style.top=`${h.bottom+6}px`,t.style.left=`${Math.max(10,Math.min(h.left-120,window.innerWidth-280))}px`,t.classList.toggle("show")}),document.addEventListener("click",d=>{!t.contains(d.target)&&d.target!==e&&!e.contains(d.target)&&t.classList.remove("show")}));const c=()=>{if(i&&(vi.enablePoint=i.checked),s&&(vi.enableLine=s.checked),n&&(vi.enableFace=n.checked),o&&(vi.snapRadiusPx=parseFloat(o.value),a&&(a.innerText=`${o.value}px`)),r){vi.pickerSize=parseFloat(r.value),l&&(l.innerText=`${r.value}px`);const d=document.getElementById("snap-indicator-2d");if(d){const h=`${r.value}px`;d.style.width=h,d.style.height=h}}typeof Uu=="function"&&Uu()};i&&i.addEventListener("change",c),s&&s.addEventListener("change",c),n&&n.addEventListener("change",c),o&&o.addEventListener("input",c),r&&r.addEventListener("input",c),c()}function mr(e){["btn-measure-length","btn-measure-point","btn-measure-area","btn-measure-angle","btn-measure-slope"].forEach(t=>{const i=document.getElementById(t);i&&i.classList.remove("active")}),e&&e.classList.add("active")}function sa(e){if(Ss&&Ss.enabled&&(Ss.enabled=!1),hi===e)hi=null,$e&&($e.enabled=!1),Ku(),ls(null),Z("Measurement mode disabled"),mr(null),Di&&(Di.visible=!1);else{hi=e,$e&&($e.enabled=!0),Ku();let t="";switch(e){case"length":t="Distance";break;case"area":t="Area";break;case"angle":t="Angle (3 Points)";break;case"slope":t="Slope (2 Points)";break;case"point":t="Point Coordinate";break}Z(`Measurement mode: ${t}`)}}function Ku(){Kt=[],be&&(tt.scene.three.remove(be),be=null)}function DC(){if(Vu.forEach(e=>tt.scene.three.remove(e)),Vu.length=0,dg.forEach(e=>e.remove()),dg.length=0,$e&&$e.list)try{$e.list.clear()}catch{}Ku(),ey=[],Z("Measurements cleared")}function cs(e,t=16711680){const i=new S_(.1,16,16),s=new id({color:t,depthTest:!1,transparent:!0,opacity:.8}),n=new Vr(i,s);return n.position.copy(e),n.renderOrder=1e3,tt.scene.three.add(n),Vu.push(n),n}function In(e,t){const i=new br().setFromPoints([e,t]),s=new aa({color:16776960,depthTest:!1,linewidth:2}),n=new yr(i,s);return n.renderOrder=999,tt.scene.three.add(n),Vu.push(n),n}function kn(e,t,i){const s=document.createElement("div");s.className="measurement-label",s.textContent=e,s.style.position="absolute",s.style.background="rgba(0, 0, 0, 0.7)",s.style.color="white",s.style.padding="4px 8px",s.style.borderRadius="4px",s.style.pointerEvents="none",s.style.fontSize="12px",s.style.zIndex="1000",document.body.appendChild(s),dg.push(s),i&&ey.push(i);const n=()=>{if(!s.isConnected)return;const o=t.clone().project(tt.camera.three),r=(o.x*.5+.5)*window.innerWidth,a=(-(o.y*.5)+.5)*window.innerHeight;s.style.left=`${r}px`,s.style.top=`${a}px`,s.style.display=o.z>1?"none":"block",requestAnimationFrame(n)};return n(),s}async function uW(e){if(!hi){ls(null);return}Ar={x:e.clientX,y:e.clientY};const t=await hC(e);if(!t||!t.point)return;const i=t.point;if(hi==="length"&&Kt.length===1){const s=Kt[0];if(be){const n=be.geometry.attributes.position;n.setXYZ(0,s.x,s.y,s.z),n.setXYZ(1,i.x,i.y,i.z),n.needsUpdate=!0}else{const n=new br().setFromPoints([s,i]),o=new aa({color:16776960,depthTest:!1,opacity:.5,transparent:!0});be=new yr(n,o),tt.scene.three.add(be)}}else if(hi==="area"&&Kt.length>0){const s=Kt[Kt.length-1];if(be){const n=be.geometry.attributes.position;n.setXYZ(0,s.x,s.y,s.z),n.setXYZ(1,i.x,i.y,i.z),n.needsUpdate=!0}else{const n=new br().setFromPoints([s,i]),o=new aa({color:65535,depthTest:!1,opacity:.5,transparent:!0});be=new yr(n,o),tt.scene.three.add(be)}}else if(hi==="angle"&&Kt.length>0){const s=Kt[Kt.length-1];if(be){const n=be.geometry.attributes.position;n.setXYZ(0,s.x,s.y,s.z),n.setXYZ(1,i.x,i.y,i.z),n.needsUpdate=!0}else{const n=new br().setFromPoints([s,i]),o=new aa({color:16753920,depthTest:!1,opacity:.5,transparent:!0});be=new yr(n,o),tt.scene.three.add(be)}}else if(hi==="slope"&&Kt.length===1){const s=Kt[0];if(be){const n=be.geometry.attributes.position;n.setXYZ(0,s.x,s.y,s.z),n.setXYZ(1,i.x,i.y,i.z),n.needsUpdate=!0}else{const n=new br().setFromPoints([s,i]),o=new aa({color:255,depthTest:!1,opacity:.5,transparent:!0});be=new yr(n,o),tt.scene.three.add(be)}}}async function pW(e){if(!hi||e.target.closest("button")||e.target.closest(".sidebar"))return;Ar={x:e.clientX,y:e.clientY};const t=await hC(e);if(!t||!t.point)return;const i=t.point;if(hi==="point"){cs(i,65280);const s=`X:${i.x.toFixed(2)} Y:${i.y.toFixed(2)} Z:${i.z.toFixed(2)}`;kn(s,i,{type:"point",points:[i.clone()],label:s,labelPosition:i.clone()})}else if(hi==="length"){$e&&$e.enabled&&$e.create();return}else if(hi==="area"){if(Kt.push(i),cs(i,65535),Kt.length>1){const s=Kt[Kt.length-2];In(s,i)}be&&(tt.scene.three.remove(be),be=null)}else if(hi==="angle"){if(Kt.push(i),cs(i,16753920),Kt.length>1){const s=Kt[Kt.length-2];In(s,i)}if(Kt.length===3){const s=Kt[0],n=Kt[1],o=Kt[2],r=s.clone().sub(n).normalize(),a=o.clone().sub(n).normalize(),l=r.angleTo(a),d=`${gy.radToDeg(l).toFixed(1)}°`;kn(d,n,{type:"angle",points:[s.clone(),n.clone(),o.clone()],label:d,labelPosition:n.clone()}),Z(`Angle: ${d}`),Kt=[],be&&(tt.scene.three.remove(be),be=null)}}else if(hi==="slope"&&(Kt.push(i),cs(i,255),Kt.length===2)){const s=Kt[0],n=Kt[1];In(s,n),Math.abs(n.y-s.y);const o=Math.sqrt(Math.pow(n.x-s.x,2)+Math.pow(n.z-s.z,2));let r=0;o!==0?r=Math.atan(Math.abs(n.y-s.y)/o):r=Math.PI/2;const a=gy.radToDeg(r),l=s.clone().add(n).multiplyScalar(.5),c=`${a.toFixed(1)}°`;kn(c,l,{type:"slope",points:[s.clone(),n.clone()],label:c,labelPosition:l.clone()}),Z(`Slope: ${c}`),Kt=[],be&&(tt.scene.three.remove(be),be=null)}}function fW(){console.log("[DEBUG] Setting up Viewpoints Manager...");const e={getMeasurements:()=>ey,restoreMeasurements:s=>{DC(),!(!s||!Array.isArray(s))&&s.forEach(n=>{if(n.type==="point"&&n.points&&n.points.length>0){const o=new de(n.points[0].x,n.points[0].y,n.points[0].z);cs(o,65280),kn(n.label,o,n)}else if(n.type==="length"&&n.points&&n.points.length===2){const o=new de(n.points[0].x,n.points[0].y,n.points[0].z),r=new de(n.points[1].x,n.points[1].y,n.points[1].z);cs(o,16776960),cs(r,16776960),In(o,r);const a=new de(n.labelPosition.x,n.labelPosition.y,n.labelPosition.z);kn(n.label,a,n)}else if(n.type==="angle"&&n.points&&n.points.length===3){const o=new de(n.points[0].x,n.points[0].y,n.points[0].z),r=new de(n.points[1].x,n.points[1].y,n.points[1].z),a=new de(n.points[2].x,n.points[2].y,n.points[2].z);cs(o,16753920),cs(r,16753920),cs(a,16753920),In(o,r),In(r,a),kn(n.label,r,n)}else if(n.type==="slope"&&n.points&&n.points.length===2){const o=new de(n.points[0].x,n.points[0].y,n.points[0].z),r=new de(n.points[1].x,n.points[1].y,n.points[1].z);cs(o,255),cs(r,255),In(o,r);const a=new de(n.labelPosition.x,n.labelPosition.y,n.labelPosition.z);kn(n.label,a,n)}else if(n.type==="area"&&n.points&&n.points.length>2){const o=n.points.map(a=>new de(a.x,a.y,a.z));o.forEach(a=>cs(a,65535));for(let a=0;a<o.length;a++)In(o[a],o[(a+1)%o.length]);const r=new de(n.labelPosition.x,n.labelPosition.y,n.labelPosition.z);kn(n.label,r,n)}})},getHiddenItems:()=>{const s={};for(const n in ve)ve[n].size>0&&(s[n]=Array.from(ve[n]));return s},restoreHiddenItems:async s=>{await ue.set(!0),Object.keys(s).length>0&&await ue.set(!1,s)},getClippingPlanes:()=>{console.log("[Viewpoints] Getting clipping planes...");const s=[];try{const n=tt?.renderer?.three?.clippingPlanes;if(Array.isArray(n)&&n.length>0){console.log(`[Viewpoints] Found ${n.length} clipping planes in renderer.`);for(const o of n)o?.normal&&s.push({normal:o.normal.toArray(),constant:o.constant});return s}if(!ae||!ae.list)return console.warn("[Viewpoints] Clipper not initialized or list unavailable"),[];if(console.log(`[Viewpoints] Clipper list size: ${ae.list.size||ae.list.length}`),ae.list.size>0&&ae.list.forEach((o,r)=>{console.log(`[Viewpoints] Map.forEach - Plane ${r}:`,o);let a=null;const l=o;l.plane?a=l.plane:l.normal&&l.constant!==void 0?a=l:l.object&&l.object.plane&&(a=l.object.plane),a&&s.push({normal:a.normal.toArray(),constant:a.constant})}),s.length===0&&ae.planes&&Array.isArray(ae.planes)){const o=ae.planes;for(const r of o)r?.normal&&r?.constant!==void 0&&s.push({normal:r.normal.toArray(),constant:r.constant})}return console.log(`[Viewpoints] Serialized clipping planes count: ${s.length}`),s}catch(n){return console.error("[Viewpoints] Error getting clipping planes:",n),[]}},restoreClippingPlanes:s=>{console.log("[Viewpoints] Restoring clipping planes (count):",s?s.length:0),console.log("[Viewpoints] Raw planes data:",JSON.stringify(s));try{if(ae.list.size>0&&(console.log(`[Viewpoints] Clearing ${ae.list.size} existing planes...`),ae.deleteAll()),tt?.renderer?.three&&Array.isArray(tt.renderer.three.clippingPlanes)&&(tt.renderer.three.clippingPlanes=[],tt.renderer.three.localClippingEnabled=!0),!s||s.length===0){console.log("[Viewpoints] No planes to restore. Disabling clipper."),ae.enabled=!1;const r=document.getElementById("clipper-toggle");r&&r.classList.remove("active");const a=document.getElementById("clipper-controls");a&&(a.style.display="none");return}console.log("[Viewpoints] Enabling clipper tool..."),ae.enabled=!0;const n=document.getElementById("clipper-toggle");n&&n.classList.add("active");const o=document.getElementById("clipper-controls");o&&(o.style.display="flex"),s.forEach((r,a)=>{if(console.log(`[Viewpoints] Restoring plane #${a}:`,r),r.normal&&r.constant!==void 0){const l=new de(r.normal[0],r.normal[1],r.normal[2]).normalize(),c=r.constant,d=l.clone().multiplyScalar(-c);console.log(`[Viewpoints] Creating plane #${a}: normal=${l.toArray()}, constant=${c}`);const h=ae.createFromNormalAndCoplanarPoint(tt,l,d);console.log(`[Viewpoints] Plane #${a} created:`,h)}else console.warn("[Viewpoints] Invalid plane data for plane #${index}:",r)})}catch(n){console.error("[Viewpoints] Error restoring clipping planes:",n)}},getLoadedModels:()=>{const s=[],n=Nt.list&&Nt.list.size>0?Nt.list:Nt.groups,o=n instanceof Map?Array.from(n.entries()):Object.entries(n||{});console.log(`[Viewpoints] Saving models. Found ${o.length} groups/models.`),Z(`[Viewpoints] Found ${o.length} models.`);for(const[r,a]of o){const l=a.object&&a.object.visible!==void 0?a.object.visible:a.visible!==void 0?a.visible:!0;if(!l){console.log(`[Viewpoints] Model ${r} is hidden (visible=${l}). Skipping.`),Z(`[Viewpoints] Skipping hidden: ${r}`);continue}if(Z(`[Viewpoints] Processing visible: ${r}`),a.userData)if(console.log(`[Viewpoints] Inspecting model ${r}:`,a.userData),a.userData.isLocal&&a.userData.dbKey){const c=`indexeddb://${a.userData.dbKey}`;s.push({uuid:r,url:c}),console.log(`[Viewpoints] Saved local model reference: ${c}`),Z(`[Viewpoints] Saved local: ${a.userData.dbKey}`)}else a.userData.url?(s.push({uuid:r,url:a.userData.url}),console.log(`[Viewpoints] Saved remote model reference: ${a.userData.url}`),Z(`[Viewpoints] Saved remote: ${a.userData.url}`)):(console.warn(`[Viewpoints] Model ${r} has no URL or DB key. Skipping persistence.`),Z(`[Viewpoints] SKIP: No URL/DBKey for ${r}`,!0));else console.warn(`[Viewpoints] Model ${r} has no userData. Skipping persistence.`),Z(`[Viewpoints] SKIP: No userData for ${r}`,!0)}return s},restoreLoadedModels:async s=>{if(!te){const c=new URLSearchParams(window.location.search),d=c.get("project")||"",h=c.get("empresa")||"";try{te=await Gp(d,h)}catch(u){console.warn("Error loading security context in restoreLoadedModels:",u)}}const n=s.filter(c=>{const d=c.uuid.split("/").pop()||c.uuid;let h="";if(c.url&&c.url.startsWith("drive://"))try{h=new URL(c.url).hostname}catch{const y=c.url.match(/drive:\/\/([^?]+)/);y&&(h=decodeURIComponent(y[1]))}const u=te?.statusMap?.[h]||te?.statusMap?.[d.toLowerCase()]||null,p={name:d,filename:d,status:u?.status||"EN_PROGRESO",changedBy:u?.changedBy||"UNASSIGNED",changedByEmail:u?.changedByEmail||"unassigned@nora.cde",folder:d},f=new URLSearchParams(window.location.search).get("empresa")||"";return fc(te?.currentUser,p,te?.activeProject,te?.currentCompany,f,"view")?!0:(console.warn(`[SECURITY] Viewpoint restoration blocked for unauthorized model: ${d}`),Z(`Acceso denegado en punto de vista para: ${d}`,!0),!1)}),o=Nt.list&&Nt.list.size>0?Nt.list:Nt.groups,r=o instanceof Map,a=new Set(r?o.keys():Object.keys(o||{})),l=new Set(n.map(c=>c.uuid));for(const c of a){const d=r?o.get(c):o[c];if(d){const h=l.has(c);d.object&&(d.object.visible=h),d.visible!==void 0&&(d.visible=h),console.log(`[Viewpoints] Sync visibility for ${c}: ${h}`)}}Xc();for(const c of n)if(a.has(c.uuid))console.log(`[Viewpoints] Model ${c.uuid} already loaded. Skipping.`);else try{console.log(`[Viewpoints] Restoring model: ${c.uuid} from ${c.url}`);let d=c.url,h=!1,u="",p=null;if(c.url.startsWith("indexeddb://")){u=c.url.replace("indexeddb://",""),Z(`Restoring local model from storage: ${u}...`);const m=await Xp(u);if(m){console.log(`[Viewpoints] Retrieved ${m.byteLength} bytes from IDB for ${u}`);const f=new Blob([m]);d=URL.createObjectURL(f),h=!0}else{console.warn(`Local model ${u} not found in IndexedDB.`),Z(`Error: Local model ${u} expired/missing. Please reload file.`,!0);continue}}else if(c.url.startsWith("drive://"))try{const m=new URL(c.url),f=decodeURIComponent(m.hostname),g=m.searchParams.get("jsonId");Z(`Restoring Google Drive model: ${c.uuid}...`);const b=await xC(f),y=new Blob([b],{type:"application/octet-stream"});if(d=URL.createObjectURL(y),g)try{p=await wC(g)}catch(v){console.warn("Error loading JSON props for restored drive model",v)}}catch(m){console.error("Failed to resolve drive URL for restoration:",m);continue}if(console.log(`[Viewpoints] Calling loadModel with URL: ${d}`),await Zp(d,c.uuid,{propertiesJson:p,sourceUrl:c.url}),console.log(`[Viewpoints] loadModel completed for ${c.uuid}`),h){const m=r?Nt.groups.get(c.uuid):Nt.groups[c.uuid];m?(m.userData||(m.userData={}),m.userData.isLocal=!0,m.userData.dbKey=u,m.userData.url=d,console.log(`[Viewpoints] Restored local metadata for ${c.uuid}`)):console.error(`[Viewpoints] Model ${c.uuid} not found in fragments.groups after load!`)}}catch(d){console.error(`[Viewpoints] Failed to restore model ${c.uuid}:`,d)}Xc()}};Qh=new aM(Yt,tt,e,Yp);const t=document.getElementById("viewpoints-list-container");t&&Qh.createUI(t);const i=document.getElementById("btn-add-viewpoint");if(i){const s=i.cloneNode(!0);i.parentNode?.replaceChild(s,i),s.addEventListener("click",()=>{Qh?.openSaveModal()})}}fW();function __(){let e=!1;try{e=new URLSearchParams(window.location.search).get("embed")==="true"||window!==window.parent}catch{e=!0}if(e){document.body.classList.add("nora-embed-mode"),document.documentElement.classList.add("nora-embed-mode");const t=document.createElement("style");t.textContent=`
             .nora-embed-mode #nora-top-header,
             .nora-embed-mode .nora-header,
             .nora-embed-mode #back-btn,
