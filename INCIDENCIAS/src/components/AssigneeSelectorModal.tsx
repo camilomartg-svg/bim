@@ -15,7 +15,7 @@ import {
 import { motion, AnimatePresence } from 'motion/react';
 import { cn } from '../lib/utils';
 import { TeamMember } from '../types';
-import { filterMembersByScope, IssueTypeScope, getBranchForTeamName } from '../utils/userScope';
+import { filterMembersByScope, IssueTypeScope, getBranchForTeamName, getActiveProjectData } from '../utils/userScope';
 
 export interface AssigneeSelectorModalProps {
   isOpen: boolean;
@@ -134,6 +134,156 @@ export default function AssigneeSelectorModal({
     } else {
       const identifier = member.position || member.name;
       return tempSelected.includes(identifier) || tempSelected.includes(member.name);
+    }
+  };
+
+  // Resolver líder del equipo
+  const resolveTeamLeader = (teamName: string, teamMembersList: TeamMember[]): TeamMember => {
+    if (!teamMembersList || teamMembersList.length === 0) return {} as TeamMember;
+    const proj = getActiveProjectData();
+    const iso = proj?.iso19650 || {};
+    const cleanTeam = (teamName || '').toUpperCase().trim();
+
+    let leadEmail = '';
+
+    // 1. Delivery teams
+    const dt = (iso.deliveryTeams || []).find((d: any) => (d.name || '').toUpperCase().trim() === cleanTeam);
+    if (dt && dt.leadEmail) leadEmail = dt.leadEmail.toLowerCase().trim();
+
+    // 2. Receiver teams
+    if (!leadEmail) {
+      const rt = (iso.receiverTeams || []).find((r: any) => (r.name || '').toUpperCase().trim() === cleanTeam);
+      if (rt && rt.leadEmail) leadEmail = rt.leadEmail.toLowerCase().trim();
+    }
+
+    // 3. Task teams within delivery
+    if (!leadEmail) {
+      for (const d of (iso.deliveryTeams || [])) {
+        const tt = (d.taskTeams || []).find((t: any) => (t.name || '').toUpperCase().trim() === cleanTeam);
+        if (tt && tt.leadEmail) { leadEmail = tt.leadEmail.toLowerCase().trim(); break; }
+      }
+    }
+
+    // 4. Task teams within receiver
+    if (!leadEmail) {
+      for (const r of (iso.receiverTeams || [])) {
+        const tt = (r.taskTeams || []).find((t: any) => (t.name || '').toUpperCase().trim() === cleanTeam);
+        if (tt && tt.leadEmail) { leadEmail = tt.leadEmail.toLowerCase().trim(); break; }
+      }
+    }
+
+    // 5. Roles globales ISO
+    if (!leadEmail && cleanTeam.includes('ENTREGA') && iso.liderEquipoEntrega) {
+      leadEmail = String(iso.liderEquipoEntrega).toLowerCase().trim();
+    }
+    if (!leadEmail && (cleanTeam.includes('OBRA') || cleanTeam.includes('RECEPTOR')) && iso.directorDeObra) {
+      leadEmail = String(iso.directorDeObra).toLowerCase().trim();
+    }
+
+    if (leadEmail) {
+      const found = teamMembersList.find(m => (m.email || '').toLowerCase().trim() === leadEmail);
+      if (found) return found;
+    }
+
+    // 6. Buscar en la lista por cargo / posición / rol
+    const byCargo = teamMembersList.find(m => {
+      const txt = ((m.cargo || '') + ' ' + (m.position || '') + ' ' + ((m as any).role || '')).toUpperCase();
+      return txt.includes('LÍDER') || txt.includes('LIDER') || txt.includes('LEAD') || txt.includes('DIRECTOR') || txt.includes('COORDINADOR') || txt.includes('ADMIN');
+    });
+    if (byCargo) return byCargo;
+
+    return teamMembersList[0];
+  };
+
+  // Resolver administrador de empresa
+  const resolveCompanyAdmin = (companyName: string, companyMembersList: TeamMember[]): TeamMember => {
+    if (!companyMembersList || companyMembersList.length === 0) return {} as TeamMember;
+    const adminMember = companyMembersList.find(m => {
+      const txt = ((m.cargo || '') + ' ' + (m.position || '') + ' ' + ((m as any).role || '')).toUpperCase();
+      return txt.includes('ADMINISTRADOR_EMPRESA') || txt.includes('ADMINISTRADOR') || txt.includes('ADMIN') || txt.includes('SUPER') || txt.includes('GERENTE') || txt.includes('DIRECTOR');
+    });
+    if (adminMember) return adminMember;
+
+    return companyMembersList[0];
+  };
+
+  const handleSelectEntireTeam = (teamName: string, teamMembersList: TeamMember[]) => {
+    const leader = resolveTeamLeader(teamName, teamMembersList);
+    if (!leader) return;
+
+    if (mode === 'single') {
+      if (onSelect) {
+        onSelect({
+          ...leader,
+          position: `${leader.cargo || leader.position || 'Líder'} [${teamName}]`,
+          team: teamName
+        });
+      }
+      onClose();
+    } else {
+      // Multiple mode: toggle all members of that team
+      const identifiers = teamMembersList.map(m => m.position || m.name);
+      const allSelected = identifiers.every(id => tempSelected.includes(id));
+      if (allSelected) {
+        setTempSelected(tempSelected.filter(id => !identifiers.includes(id)));
+      } else {
+        setTempSelected(Array.from(new Set([...tempSelected, ...identifiers])));
+      }
+    }
+  };
+
+  const handleSelectEntireCompany = (companyName: string, companyMembersList: TeamMember[]) => {
+    const admin = resolveCompanyAdmin(companyName, companyMembersList);
+    if (!admin) return;
+
+    if (mode === 'single') {
+      if (onSelect) {
+        onSelect({
+          ...admin,
+          position: `${admin.cargo || admin.position || 'Administrador'} [${companyName}]`,
+          company: companyName
+        });
+      }
+      onClose();
+    } else {
+      // Multiple mode: toggle all members of that company
+      const identifiers = companyMembersList.map(m => m.position || m.name);
+      const allSelected = identifiers.every(id => tempSelected.includes(id));
+      if (allSelected) {
+        setTempSelected(tempSelected.filter(id => !identifiers.includes(id)));
+      } else {
+        setTempSelected(Array.from(new Set([...tempSelected, ...identifiers])));
+      }
+    }
+  };
+
+  const isTeamSelected = (tName: string, tMembers: TeamMember[]) => {
+    if (mode === 'single') {
+      const leader = resolveTeamLeader(tName, tMembers);
+      const cleanVal = selectedValue.toLowerCase().trim();
+      return cleanVal && (
+        cleanVal.includes(`[${tName.toLowerCase()}]`) ||
+        (leader.position || '').toLowerCase().trim() === cleanVal ||
+        (leader.name || '').toLowerCase().trim() === cleanVal
+      );
+    } else {
+      const identifiers = tMembers.map(m => m.position || m.name);
+      return identifiers.length > 0 && identifiers.every(id => tempSelected.includes(id));
+    }
+  };
+
+  const isCompanySelected = (cName: string, cMembers: TeamMember[]) => {
+    if (mode === 'single') {
+      const admin = resolveCompanyAdmin(cName, cMembers);
+      const cleanVal = selectedValue.toLowerCase().trim();
+      return cleanVal && (
+        cleanVal.includes(`[${cName.toLowerCase()}]`) ||
+        (admin.position || '').toLowerCase().trim() === cleanVal ||
+        (admin.name || '').toLowerCase().trim() === cleanVal
+      );
+    } else {
+      const identifiers = cMembers.map(m => m.position || m.name);
+      return identifiers.length > 0 && identifiers.every(id => tempSelected.includes(id));
     }
   };
 
@@ -338,8 +488,8 @@ export default function AssigneeSelectorModal({
                 const br = getBranchForTeamName(teamName);
                 return (
                   <div key={teamName} className="p-4 rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-950/40 space-y-3">
-                    <div className="flex items-center justify-between border-b border-slate-200/60 dark:border-slate-800 pb-2.5">
-                      <div className="flex items-center gap-2">
+                    <div className="flex items-center justify-between border-b border-slate-200/60 dark:border-slate-800 pb-2.5 flex-wrap gap-2">
+                      <div className="flex items-center gap-2 flex-wrap">
                         <Users className={cn(
                           "w-4 h-4",
                           br === 'DELIVERY' ? "text-amber-500" : br === 'RECEIVER' ? "text-purple-500" : "text-blue-500"
@@ -350,6 +500,26 @@ export default function AssigneeSelectorModal({
                         <span className="px-2 py-0.5 rounded-full text-[8px] font-bold bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300">
                           {teamMembersList.length} {teamMembersList.length === 1 ? 'integrante' : 'integrantes'}
                         </span>
+
+                        {/* Botón para escoger todo el equipo (Líder asignado como responsable) */}
+                        <button
+                          type="button"
+                          onClick={() => handleSelectEntireTeam(teamName, teamMembersList)}
+                          className={cn(
+                            "flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-[9px] font-black uppercase tracking-wider transition-all shadow-sm active:scale-95 group border ml-1",
+                            isTeamSelected(teamName, teamMembersList)
+                              ? "bg-indigo-600 text-white border-indigo-600 ring-2 ring-indigo-500/30"
+                              : "bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-950/70 dark:hover:bg-indigo-900 text-indigo-700 dark:text-indigo-300 border-indigo-200 dark:border-indigo-800"
+                          )}
+                          title={`Asignar a todo el equipo ${teamName} (Líder: ${resolveTeamLeader(teamName, teamMembersList)?.name})`}
+                        >
+                          <ShieldCheck className={cn("w-3.5 h-3.5 transition-transform group-hover:scale-110", isTeamSelected(teamName, teamMembersList) ? "text-white" : "text-indigo-600 dark:text-indigo-400")} />
+                          <span>Escoger Todo el Equipo</span>
+                          <span className={cn("text-[8px] font-semibold opacity-85 hidden sm:inline", isTeamSelected(teamName, teamMembersList) ? "text-indigo-100" : "text-indigo-600 dark:text-indigo-400")}>
+                            (Líder: {resolveTeamLeader(teamName, teamMembersList)?.name?.split(' ')[0]})
+                          </span>
+                          {isTeamSelected(teamName, teamMembersList) && <Check className="w-3.5 h-3.5 ml-0.5 stroke-[3]" />}
+                        </button>
                       </div>
                       <span className={cn(
                         "text-[8px] font-black uppercase tracking-wider px-2 py-0.5 rounded",
@@ -397,8 +567,8 @@ export default function AssigneeSelectorModal({
             <div className="space-y-4">
               {Object.entries(membersByCompany).map(([companyName, companyMembersList]) => (
                 <div key={companyName} className="p-4 rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-950/40 space-y-3">
-                  <div className="flex items-center justify-between border-b border-slate-200/60 dark:border-slate-800 pb-2.5">
-                    <div className="flex items-center gap-2">
+                  <div className="flex items-center justify-between border-b border-slate-200/60 dark:border-slate-800 pb-2.5 flex-wrap gap-2">
+                    <div className="flex items-center gap-2 flex-wrap">
                       <Building2 className="w-4 h-4 text-emerald-500" />
                       <h4 className="text-xs font-black uppercase text-slate-900 dark:text-white tracking-wider">
                         {companyName}
@@ -406,6 +576,26 @@ export default function AssigneeSelectorModal({
                       <span className="px-2 py-0.5 rounded-full text-[8px] font-bold bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300">
                         {companyMembersList.length} {companyMembersList.length === 1 ? 'miembro' : 'miembros'}
                       </span>
+
+                      {/* Botón para escoger toda la empresa (Administrador de empresa como responsable) */}
+                      <button
+                        type="button"
+                        onClick={() => handleSelectEntireCompany(companyName, companyMembersList)}
+                        className={cn(
+                          "flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-[9px] font-black uppercase tracking-wider transition-all shadow-sm active:scale-95 group border ml-1",
+                          isCompanySelected(companyName, companyMembersList)
+                            ? "bg-emerald-600 text-white border-emerald-600 ring-2 ring-emerald-500/30"
+                            : "bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/70 dark:hover:bg-emerald-900 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800"
+                        )}
+                        title={`Asignar a toda la empresa ${companyName} (Admin: ${resolveCompanyAdmin(companyName, companyMembersList)?.name})`}
+                      >
+                        <Building2 className={cn("w-3.5 h-3.5 transition-transform group-hover:scale-110", isCompanySelected(companyName, companyMembersList) ? "text-white" : "text-emerald-600 dark:text-emerald-400")} />
+                        <span>Escoger Toda la Empresa</span>
+                        <span className={cn("text-[8px] font-semibold opacity-85 hidden sm:inline", isCompanySelected(companyName, companyMembersList) ? "text-emerald-100" : "text-emerald-600 dark:text-emerald-400")}>
+                          (Admin: {resolveCompanyAdmin(companyName, companyMembersList)?.name?.split(' ')[0]})
+                        </span>
+                        {isCompanySelected(companyName, companyMembersList) && <Check className="w-3.5 h-3.5 ml-0.5 stroke-[3]" />}
+                      </button>
                     </div>
                   </div>
 

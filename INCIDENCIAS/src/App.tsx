@@ -444,9 +444,9 @@ function Dashboard() {
         {isCreateModalOpen && (
           <CreateIssueModal 
             onClose={() => setIsCreateModalOpen(false)} 
-            onSuccess={(type) => {
-              if (type === 'report') setActiveTab('site-reports');
-              else if (type === 'issue') setActiveTab('issues');
+            onSuccess={() => {
+              // Siempre redireccionar al dashboard según requerimiento de usuario
+              setActiveTab('dashboard');
               setIsCreateModalOpen(false);
             }}
           />
