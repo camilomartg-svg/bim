@@ -3,7 +3,8 @@ import { collection, query, where, updateDoc, doc, addDoc, getDocs, getDoc, setD
 import { db } from '../services/firebase';
 import { Issue, DEGREE_OF_ACTION, Comment, Attachment, IMPACT_OPTIONS, TeamMember } from '../types';
 import { useAuth } from '../context/AuthContext';
-import { getProjectAndCompany, getProjectConfig, subscribeToIssues, subscribeToTeam, deleteIssue } from '../services/firebaseService';
+import { getProjectAndCompany, getProjectConfig, subscribeToIssues, subscribeToTeam, deleteIssue, saveIssue } from '../services/firebaseService';
+import AssigneeSelectorModal from './AssigneeSelectorModal';
 import { 
   Search, Filter, ClipboardList, Clock, User, ArrowRight, AlertCircle, 
   ChevronDown, ChevronUp, MapPin, Tag, ShieldCheck, Zap, Paperclip, Layers, Box,
@@ -1368,15 +1369,10 @@ function StatusManager({ issue, isBimPanel }: { issue: Issue, isBimPanel?: boole
   const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
 
   useEffect(() => {
-    const { projectId, companyId } = getProjectAndCompany();
-    const q = query(
-      collection(db, 'team'),
-      where('projectId', '==', projectId),
-      where('companyId', '==', companyId)
-    );
-    getDocs(q).then(snapshot => {
-      setTeamMembers(snapshot.docs.map(d => ({ id: d.id, ...d.data() } as TeamMember)));
+    const unsub = subscribeToTeam((members) => {
+      setTeamMembers(members);
     });
+    return () => unsub && unsub();
   }, []);
 
   const [redirectionType, setRedirectionType] = useState<'COLABORADOR' | 'EJECUTOR' | 'RESPONSABLE'>('COLABORADOR');
@@ -1403,12 +1399,12 @@ function StatusManager({ issue, isBimPanel }: { issue: Issue, isBimPanel?: boole
         roleText = 'colaborador';
         // Also add to reviewers if not already there
         const currentReviewerEmails = issue.reviewerEmails || [];
-        if (!currentReviewerEmails.includes(member.email)) {
+        if (member.email && !currentReviewerEmails.includes(member.email)) {
           updateData.reviewerEmails = [...currentReviewerEmails, member.email];
         }
         
         const currentReviewers = issue.reviewers || [];
-        if (!currentReviewers.includes(member.name)) {
+        if (member.name && !currentReviewers.includes(member.name)) {
           updateData.reviewers = [...currentReviewers, member.name];
         }
       } else if (redirectionType === 'EJECUTOR') {
@@ -1423,20 +1419,34 @@ function StatusManager({ issue, isBimPanel }: { issue: Issue, isBimPanel?: boole
         roleText = 'nuevo responsable';
       }
 
-      console.log('[StatusManager] updateDoc payload:', updateData);
-      await updateDoc(doc(db, 'issues', issue.id), updateData);
-
-      await addDoc(collection(db, `issues/${issue.id}/comments`), {
+      const commentText = `Incidencia redirigida a ${member.name} (${member.position}) como ${roleText}.`;
+      const newComment: Comment = {
+        id: 'cm_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5),
         userId: user?.id || 'SYSTEM',
         userName: user?.name || 'SISTEMA',
-        text: `Incidencia redirigida a ${member.name} (${member.position}) como ${roleText}.`,
+        text: commentText,
         createdAt: new Date().toISOString()
-      });
+      };
 
+      const updatedComments = [...(issue.comments || []), newComment];
+      const updatedIssue: Issue = {
+        ...issue,
+        ...updateData,
+        comments: updatedComments
+      };
+
+      await saveIssue(updatedIssue);
+
+      try {
+        await updateDoc(doc(db, 'issues', issue.id), updateData);
+        await addDoc(collection(db, `issues/${issue.id}/comments`), newComment);
+      } catch (_) {}
+
+      window.dispatchEvent(new CustomEvent('local_comments_updated', { detail: [updatedIssue] }));
       setShowRedirectionPicker(false);
     } catch (err) {
       console.error('[StatusManager] Error in handleRedirection:', err);
-      alert("Error al redirigir la incidencia. Verifique sus permisos de red y base de datos.");
+      alert("Error al redirigir la incidencia.");
     } finally {
       setIsUpdating(false);
     }
@@ -1455,6 +1465,7 @@ function StatusManager({ issue, isBimPanel }: { issue: Issue, isBimPanel?: boole
         updateData.resolvedAt = new Date().toISOString();
       }
 
+      let newComment: Comment | null = null;
       // Reset approval chain on rejection to enable the process again
       if (status === 'RECHAZADA') {
         if (issue.executor) {
@@ -1466,16 +1477,32 @@ function StatusManager({ issue, isBimPanel }: { issue: Issue, isBimPanel?: boole
         updateData.principalApproved = false;
         updateData.principalApprovedAt = null;
         
-        // Add comment for traceability
-        await addDoc(collection(db, `issues/${issue.id}/comments`), {
+        newComment = {
+          id: 'cm_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5),
           userId: user?.id || 'system',
           userName: user?.name || 'SISTEMA',
           text: `RESPUESTA RECHAZADA: ${extra?.rejectionReason || 'No se proporcionó motivo.'}`,
           createdAt: new Date().toISOString()
-        });
+        };
       }
 
-      await updateDoc(doc(db, 'issues', issue.id), updateData);
+      const updatedComments = newComment ? [...(issue.comments || []), newComment] : (issue.comments || []);
+      const updatedIssue: Issue = {
+        ...issue,
+        ...updateData,
+        comments: updatedComments
+      };
+
+      await saveIssue(updatedIssue);
+
+      try {
+        await updateDoc(doc(db, 'issues', issue.id), updateData);
+        if (newComment) {
+          await addDoc(collection(db, `issues/${issue.id}/comments`), newComment);
+        }
+      } catch (_) {}
+
+      window.dispatchEvent(new CustomEvent('local_comments_updated', { detail: [updatedIssue] }));
       setShowAgreementPicker(false);
       setShowRejectionPicker(false);
     } catch (err) {
@@ -1506,14 +1533,29 @@ function StatusManager({ issue, isBimPanel }: { issue: Issue, isBimPanel?: boole
         return;
       }
 
-      await updateDoc(doc(db, 'issues', issue.id), updateData);
-      
-      await addDoc(collection(db, `issues/${issue.id}/comments`), {
+      const newComment: Comment = {
+        id: 'cm_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5),
         userId: user?.id || 'system',
         userName: user?.name || 'SISTEMA',
         text: `CONFIRMACIÓN DE FASE: Visto Bueno (${actionText}) registrado por ${user?.name}. Se habilita siguiente etapa en la cadena de aprobación.`,
         createdAt: new Date().toISOString()
-      });
+      };
+
+      const updatedComments = [...(issue.comments || []), newComment];
+      const updatedIssue: Issue = {
+        ...issue,
+        ...updateData,
+        comments: updatedComments
+      };
+
+      await saveIssue(updatedIssue);
+
+      try {
+        await updateDoc(doc(db, 'issues', issue.id), updateData);
+        await addDoc(collection(db, `issues/${issue.id}/comments`), newComment);
+      } catch (_) {}
+
+      window.dispatchEvent(new CustomEvent('local_comments_updated', { detail: [updatedIssue] }));
     } catch (err) {
       console.error(err);
       alert("Error al confirmar respuesta parcial.");
@@ -1532,14 +1574,29 @@ function StatusManager({ issue, isBimPanel }: { issue: Issue, isBimPanel?: boole
         principalApprovedAt: new Date().toISOString()
       };
 
-      await updateDoc(doc(db, 'issues', issue.id), updateData);
-      
-      await addDoc(collection(db, `issues/${issue.id}/comments`), {
+      const newComment: Comment = {
+        id: 'cm_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5),
         userId: user?.id || 'system',
         userName: user?.name || 'SISTEMA',
         text: `RESPUESTA FINALIZADA: Respuesta técnica definitiva aprobada por el Responsable Inicial (${user?.name}).`,
         createdAt: new Date().toISOString()
-      });
+      };
+
+      const updatedComments = [...(issue.comments || []), newComment];
+      const updatedIssue: Issue = {
+        ...issue,
+        ...updateData,
+        comments: updatedComments
+      };
+
+      await saveIssue(updatedIssue);
+
+      try {
+        await updateDoc(doc(db, 'issues', issue.id), updateData);
+        await addDoc(collection(db, `issues/${issue.id}/comments`), newComment);
+      } catch (_) {}
+
+      window.dispatchEvent(new CustomEvent('local_comments_updated', { detail: [updatedIssue] }));
     } catch (err) {
       console.error(err);
       alert("Error al finalizar respuesta técnica.");
@@ -1758,44 +1815,21 @@ function StatusManager({ issue, isBimPanel }: { issue: Issue, isBimPanel?: boole
         </motion.div>
       )}
 
-      {showRedirectionPicker && (
-        <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="p-8 bg-white dark:bg-slate-950 border border-amber-500/20 rounded-[2rem] space-y-6 shadow-2xl relative overflow-hidden transition-colors">
-          <div className="absolute top-0 right-0 p-4">
-             <button onClick={() => setShowRedirectionPicker(false)} className="text-slate-400 dark:text-slate-700 hover:text-slate-900 dark:hover:text-white"><X className="w-4 h-4" /></button>
-          </div>
-          <div>
-            <h5 className="text-lg font-display font-black text-amber-500 mb-2 tracking-tight">
-              {redirectionType === 'COLABORADOR' ? 'Agregar Colaborador' : 
-               redirectionType === 'EJECUTOR' ? 'Redirigir a Ejecutor' :
-               'Redirigir a Nuevo Responsable'}
-            </h5>
-            <p className="text-[11px] text-slate-500 font-medium leading-relaxed">
-              {redirectionType === 'COLABORADOR' 
-                ? 'Selecciona a un colaborador para que apoye en la resolución de este hallazgo.' 
-                : redirectionType === 'EJECUTOR'
-                ? 'Define al ejecutor final encargado de la respuesta.'
-                : 'El hallazgo será transferido íntegramente a una nueva persona.'}
-            </p>
-          </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-h-[250px] overflow-auto pr-2 custom-scrollbar">
-            {teamMembers.map(member => (
-              <button
-                key={member.id}
-                onClick={() => handleRedirection(member)}
-                className="flex items-center gap-3 p-4 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl hover:border-amber-500/50 hover:bg-amber-500/5 transition-all text-left"
-              >
-                <div className="w-8 h-8 rounded-lg bg-amber-500 flex items-center justify-center text-white text-[10px] font-black shrink-0 uppercase">
-                  {member.name.charAt(0)}
-                </div>
-                <div className="overflow-hidden">
-                  <p className="text-[10px] font-black text-slate-900 dark:text-white uppercase truncate">{member.name}</p>
-                  <p className="text-[8px] font-bold text-slate-500 uppercase truncate">{member.position}</p>
-                </div>
-              </button>
-            ))}
-          </div>
-        </motion.div>
-      )}
+      <AssigneeSelectorModal
+        isOpen={showRedirectionPicker}
+        onClose={() => setShowRedirectionPicker(false)}
+        title={
+          redirectionType === 'COLABORADOR' 
+            ? 'Agregar Colaborador' 
+            : redirectionType === 'EJECUTOR' 
+            ? 'Redirigir a Ejecutor' 
+            : 'Redirigir a Nuevo Responsable'
+        }
+        scope="GLOBAL"
+        mode="single"
+        members={teamMembers}
+        onSelect={(member) => handleRedirection(member)}
+      />
     </div>
   );
 }

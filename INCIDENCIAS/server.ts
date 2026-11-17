@@ -13,7 +13,11 @@ async function startServer() {
   // API upload route that proxies to Google Apps Script Web App securely and bypasses CORS
   app.post("/api/upload-to-drive", async (req, res) => {
     try {
-      const { base64, mimeType, name, folderId } = req.body;
+      const base64 = req.body.base64 || req.body.content;
+      const name = req.body.name || req.body.filename;
+      const mimeType = req.body.mimeType || req.body.contentType || "application/octet-stream";
+      const folderId = req.body.folderId || "1-9SumRefiih81mc_eASsswy_W_U0-qe5";
+
       if (!base64 || !name) {
         return res.status(400).json({ status: "error", message: "Faltan parámetros requeridos: base64 o name." });
       }
@@ -31,9 +35,15 @@ async function startServer() {
         body: JSON.stringify({
           action: "uploadFile",
           content: base64,
-          contentType: mimeType || "image/jpeg",
+          contentType: mimeType,
           filename: name,
-          folderId: folderId
+          folderId: folderId,
+          companyId: req.body.companyId,
+          companyName: req.body.companyName,
+          project: req.body.project || req.body.projectId,
+          driveFolderName: req.body.driveFolderName,
+          subfolder: req.body.subfolder,
+          ...req.body
         })
       });
 

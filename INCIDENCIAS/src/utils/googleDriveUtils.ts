@@ -217,12 +217,24 @@ export async function uploadFileToDrive(
       reader.readAsDataURL(fileBlob);
     });
 
+    const cId = extraMetadata?.companyId || 'default';
+    const pId = extraMetadata?.project || extraMetadata?.projectId || 'default';
+    const { companyName, projectName } = getHumanCompanyAndProject(cId, pId);
+
     const bodyPayload = {
       action: 'uploadFile',
       content: base64,
+      base64: base64,
       contentType: fileType,
+      mimeType: fileType,
       filename: fileName,
+      name: fileName,
       folderId: folderId || INCIDENTS_DRIVE_FOLDER_ID,
+      companyId: cId,
+      companyName: extraMetadata?.companyName || companyName,
+      project: pId,
+      driveFolderName: extraMetadata?.driveFolderName || projectName,
+      subfolder: extraMetadata?.subfolder || 'ARCHIVOS_INCIDENCIAS',
       ...(extraMetadata || {})
     };
 
@@ -285,9 +297,9 @@ export async function uploadFileToDrive(
   }
 }
 
-/** Stores a JSON snapshot of an Incidencias record in the shared Drive folder. */
+/** Stores a JSON snapshot of an Incidencias record or chat in the shared Drive folder. */
 export async function archiveIncidentsRecord(
-  kind: 'configuracion' | 'incidencia',
+  kind: 'configuracion' | 'incidencia' | 'chat',
   record: unknown,
   id: string,
   companyId?: string,
@@ -304,6 +316,7 @@ export async function archiveIncidentsRecord(
   const cId = companyId || (record as any)?.companyId || 'default';
   const pId = projectId || (record as any)?.projectId || 'default';
   const { companyName, projectName } = getHumanCompanyAndProject(cId, pId);
+  const subfolder = kind === 'chat' ? 'CHATS_INCIDENCIAS' : (kind === 'incidencia' ? 'INCIDENCIAS_JSON' : 'CONFIGURACION');
 
   return uploadFileToDrive(
     new Blob([payload], { type: 'application/json' }),
@@ -315,7 +328,8 @@ export async function archiveIncidentsRecord(
       companyId: cId,
       companyName,
       project: pId,
-      driveFolderName: projectName
+      driveFolderName: projectName,
+      subfolder
     }
   );
 }

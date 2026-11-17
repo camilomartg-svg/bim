@@ -22,7 +22,8 @@ import {
   isAuthorizedForQualityFollowUp,
   generateFollowUpCode
 } from '../utils/followUpUtils';
-import { uploadFileToDrive } from '../utils/googleDriveUtils';
+import { uploadFileToDrive, archiveIncidentsRecord, getHumanCompanyAndProject, INCIDENTS_DRIVE_FOLDER_ID } from '../utils/googleDriveUtils';
+import { saveIssue, getProjectAndCompany } from '../services/firebaseService';
 
 const RCD_MATERIALS = [
   { material: "Acero", density: 7800 },
@@ -190,6 +191,87 @@ export default function DashboardChat({ selectedIssue }: DashboardChatProps) {
     }
   };
 
+  const postCommentAndSync = async (
+    commentPayload: {
+      text: string;
+      attachments?: any[];
+      userAvatar?: string;
+      userName?: string;
+      userId?: string;
+    },
+    extraIssueFields?: Partial<Issue>
+  ) => {
+    if (!activeIssue) return;
+    const authorUser = user || { id: 'SYSTEM', name: 'SISTEMA' };
+    const newComment: Comment = {
+      id: 'cm_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6),
+      userId: commentPayload.userId || authorUser.id,
+      userName: commentPayload.userName || authorUser.name,
+      text: commentPayload.text,
+      createdAt: new Date().toISOString(),
+      attachments: commentPayload.attachments || [],
+      userAvatar: commentPayload.userAvatar || authorUser.name.charAt(0)
+    } as any;
+
+    const currentComments = activeIssue.comments || [];
+    const updatedComments = [...currentComments, newComment];
+
+    setMessages(updatedComments);
+    setTimeout(() => {
+      if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    }, 100);
+
+    const updatedIssue: Issue = {
+      ...activeIssue,
+      ...extraIssueFields,
+      comments: updatedComments,
+      lastComment: newComment.text,
+      lastCommentAt: newComment.createdAt,
+      updatedAt: new Date().toISOString()
+    };
+    setLocalIssue(updatedIssue);
+
+    try {
+      await saveIssue(updatedIssue);
+    } catch (saveErr) {
+      console.error("[DashboardChat] Error guardando incidencia:", saveErr);
+    }
+
+    try {
+      const { companyId, projectId } = getProjectAndCompany();
+      await archiveIncidentsRecord(
+        'chat',
+        {
+          issueId: activeIssue.id,
+          issueCode: activeIssue.code,
+          issueTitle: activeIssue.title,
+          totalComments: updatedComments.length,
+          lastComment: newComment,
+          comments: updatedComments
+        },
+        activeIssue.id,
+        companyId,
+        projectId
+      );
+    } catch (chatArchiveErr) {
+      console.warn("[DashboardChat] No se pudo archivar chat en Drive:", chatArchiveErr);
+    }
+
+    window.dispatchEvent(new CustomEvent('local_comments_updated', { detail: [updatedIssue] }));
+
+    try {
+      await addDoc(collection(db, 'issues', activeIssue.id, 'comments'), newComment);
+      await updateDoc(doc(db, 'issues', activeIssue.id), {
+        lastComment: newComment.text,
+        lastCommentAt: newComment.createdAt,
+        updatedAt: new Date().toISOString(),
+        ...(extraIssueFields || {})
+      });
+    } catch (_) {}
+
+    return newComment;
+  };
+
   const handleCapturedDuringSync = async (attachment: any) => {
     if (!user || !activeIssue) return;
     
@@ -199,19 +281,11 @@ Se ha registrado una nueva evidencia en tiempo real (Foto/Video) tomada durante 
 • **Archivo**: ${attachment.name}`;
 
     try {
-      await addDoc(collection(db, 'issues', activeIssue.id, 'comments'), {
+      await postCommentAndSync({
         userId: user.id,
         userName: user.name,
         text: adminCommentText,
-        createdAt: new Date().toISOString(),
-        userAvatar: user.name.charAt(0),
         attachments: [{ ...attachment, name: `DURANTE: ${attachment.name}` }]
-      });
-
-      await updateDoc(doc(db, 'issues', activeIssue.id), {
-        lastComment: adminCommentText,
-        lastCommentAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
       });
 
       const reportId = activeIssue.sourceReportId || (activeIssue.id.startsWith('issue_e_apr_') ? activeIssue.id.replace('issue_e_apr_', '') : null);
@@ -236,17 +310,11 @@ Se ha registrado una nueva evidencia en tiempo real (Foto/Video) tomada durante 
   const handleDirectChatAttachment = async (attachment: any) => {
     if (!user || !activeIssue) return;
     try {
-      await addDoc(collection(db, 'issues', activeIssue.id, 'comments'), {
+      await postCommentAndSync({
         userId: user.id,
         userName: user.name,
         text: `Ha capturado un recurso multimedia usando la cámara: ${attachment.name}`,
-        createdAt: new Date().toISOString(),
-        userAvatar: user.name.charAt(0),
         attachments: [attachment]
-      });
-
-      await updateDoc(doc(db, 'issues', activeIssue.id), {
-        updatedAt: new Date().toISOString()
       });
     } catch (e) {
       console.error("Error creating comment for captured attachment:", e);
@@ -393,19 +461,32 @@ Se ha registrado una nueva evidencia en tiempo real (Foto/Video) tomada durante 
       let webViewLink = "";
       let uploadSuccess = false;
 
-      const gToken = googleAccessToken || localStorage.getItem('google_drive_token');
-      if (gToken) {
-        try {
-          console.log("Attempting direct upload to Google Drive first for file:", file.name);
-          const driveResult = await uploadFileToDrive(file, file.name, file.type, '1Bym51TtKVSzDsweJaMAh0VxCAAQQbU3w', gToken);
-          url = driveResult.url;
-          driveFileId = driveResult.id;
-          webViewLink = driveResult.webViewLink;
-          uploadSuccess = true;
-          console.log("Google Drive upload successful:", driveResult);
-        } catch (driveErr) {
-          console.warn("Google Drive upload failed inside specific chat upload, falling back to Firebase/Base64:", driveErr);
-        }
+      const { companyId, projectId } = getProjectAndCompany();
+      const { companyName, projectName } = getHumanCompanyAndProject(companyId, projectId);
+
+      try {
+        console.log("Subiendo archivo adjunto a Google Drive:", file.name);
+        const driveResult = await uploadFileToDrive(
+          file, 
+          file.name, 
+          file.type || 'application/octet-stream', 
+          INCIDENTS_DRIVE_FOLDER_ID, 
+          undefined,
+          {
+            companyId,
+            companyName,
+            project: projectId,
+            driveFolderName: projectName,
+            subfolder: 'ARCHIVOS_INCIDENCIAS'
+          }
+        );
+        url = driveResult.url;
+        driveFileId = driveResult.id;
+        webViewLink = driveResult.webViewLink;
+        uploadSuccess = true;
+        console.log("Google Drive upload exitoso:", driveResult);
+      } catch (driveErr) {
+        console.warn("Google Drive upload falló, usando Base64 como respaldo:", driveErr);
       }
 
       if (!uploadSuccess) {
@@ -445,19 +526,11 @@ Se ha registrado una nueva evidencia en tiempo real (Foto/Video) tomada durante 
 Se ha registrado una nueva evidencia tomada durante el proceso de aprovechamiento/reutilización en obra:
 • **Archivo**: ${file.name}${driveFileId ? ' (Guardado directamente en Google Drive)' : ''}`;
 
-        await addDoc(collection(db, 'issues', activeIssue.id, 'comments'), {
+        await postCommentAndSync({
           userId: user.id,
           userName: user.name,
           text: adminCommentText,
-          createdAt: new Date().toISOString(),
-          userAvatar: user.name.charAt(0),
           attachments: [{ ...attachment, name: `DURANTE: ${attachment.name}` }]
-        });
-
-        await updateDoc(doc(db, 'issues', activeIssue.id), {
-          lastComment: adminCommentText,
-          lastCommentAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString()
         });
 
         // Sync directly to the report document
@@ -601,13 +674,12 @@ Se ha registrado una nueva evidencia tomada durante el proceso de aprovechamient
 • **Registrado por**: ${user.name} (${user.position || 'Calidad'})
 • **Conclusiones / Notas de Seguimiento**: ${followUpNotes}`;
 
-      await addDoc(collection(db, 'issues', activeIssue.id, 'comments'), {
+      await postCommentAndSync({
         userId: user.id,
         userName: 'SISTEMA DE CALIDAD',
         text: systemLogMessage,
-        createdAt: new Date().toISOString(),
         userAvatar: '⚙️'
-      });
+      }, updatePayload);
 
       setShowFollowUpForm(null);
       setFollowUpNotes('');
@@ -621,23 +693,66 @@ Se ha registrado una nueva evidencia tomada durante el proceso de aprovechamient
   useEffect(() => {
     if (!selectedIssue) return;
 
-    setLoading(true);
-    const q = query(collection(db, 'issues', selectedIssue.id, 'comments'), orderBy('createdAt', 'asc'));
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const messagesData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Comment));
-      setMessages(messagesData);
+    // 1. Cargar comentarios existentes inmediatamente
+    if (selectedIssue.comments && Array.isArray(selectedIssue.comments)) {
+      setMessages(selectedIssue.comments);
       setLoading(false);
-      // Auto scroll
-      setTimeout(() => {
-        if (scrollRef.current) {
-          scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    } else {
+      setMessages([]);
+      setLoading(false);
+    }
+
+    setTimeout(() => {
+      if (scrollRef.current) {
+        scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+      }
+    }, 100);
+
+    // 2. Escuchar actualizaciones reactivas locales
+    const handleIssuesUpdated = (e: any) => {
+      const issues: Issue[] = e.detail || [];
+      const updated = issues.find(i => i.id === selectedIssue.id);
+      if (updated) {
+        setLocalIssue(updated);
+        if (updated.comments && Array.isArray(updated.comments)) {
+          setMessages(updated.comments);
+          setTimeout(() => {
+            if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+          }, 100);
         }
-      }, 100);
-    }, (error) => {
-      console.error("Chat snapshot error:", error);
+      }
+    };
+
+    window.addEventListener('local_issues_updated', handleIssuesUpdated);
+    window.addEventListener('local_comments_updated', handleIssuesUpdated);
+
+    // 3. Suscripción secundaria Firestore
+    let unsubscribeFirestore: any = null;
+    try {
+      const q = query(collection(db, 'issues', selectedIssue.id, 'comments'), orderBy('createdAt', 'asc'));
+      unsubscribeFirestore = onSnapshot(q, (snapshot) => {
+        if (!snapshot.empty) {
+          const messagesData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Comment));
+          setMessages(messagesData);
+          setLoading(false);
+          setTimeout(() => {
+            if (scrollRef.current) {
+              scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+            }
+          }, 100);
+        }
+      }, () => {
+        setLoading(false);
+      });
+    } catch (_) {
       setLoading(false);
-    });
-    return () => unsubscribe();
+    }
+
+    return () => {
+      window.removeEventListener('local_issues_updated', handleIssuesUpdated);
+      window.removeEventListener('local_comments_updated', handleIssuesUpdated);
+      if (unsubscribeFirestore) unsubscribeFirestore();
+    };
   }, [selectedIssue?.id]);
 
   const getEffectiveStatus = (issue: Issue): string => {
@@ -941,17 +1056,9 @@ ${textTrimmed ? `\n• **Sustento / Observaciones**: ${textTrimmed}` : ''}`;
         setNewMessage('');
       }
 
-      await addDoc(collection(db, 'issues', activeIssue.id, 'comments'), {
-        userId: user.id,
-        userName: user.name,
+      await postCommentAndSync({
         text: messageText,
-        createdAt: new Date().toISOString(),
-        userAvatar: user.name.charAt(0),
-        ...(commentAttachments.length > 0 ? { attachments: commentAttachments } : {})
-      });
-
-      await updateDoc(doc(db, 'issues', activeIssue.id), {
-        updatedAt: new Date().toISOString()
+        attachments: commentAttachments
       });
 
       if (!hasForm) {
@@ -983,19 +1090,32 @@ ${textTrimmed ? `\n• **Sustento / Observaciones**: ${textTrimmed}` : ''}`;
       let webViewLink = "";
       let uploadSuccess = false;
 
-      const gToken = googleAccessToken || localStorage.getItem('google_drive_token');
-      if (gToken) {
-        try {
-          console.log("Attempting direct upload to Google Drive first for file:", file.name);
-          const driveResult = await uploadFileToDrive(file, file.name, file.type, '1Bym51TtKVSzDsweJaMAh0VxCAAQQbU3w', gToken);
-          url = driveResult.url;
-          driveFileId = driveResult.id;
-          webViewLink = driveResult.webViewLink;
-          uploadSuccess = true;
-          console.log("Google Drive upload successful:", driveResult);
-        } catch (driveErr) {
-          console.warn("Google Drive upload failed inside chat upload, falling back to Firebase/Base64:", driveErr);
-        }
+      const { companyId, projectId } = getProjectAndCompany();
+      const { companyName, projectName } = getHumanCompanyAndProject(companyId, projectId);
+
+      try {
+        console.log("Subiendo archivo adjunto en chat a Google Drive:", file.name);
+        const driveResult = await uploadFileToDrive(
+          file, 
+          file.name, 
+          file.type || 'application/octet-stream', 
+          INCIDENTS_DRIVE_FOLDER_ID, 
+          undefined,
+          {
+            companyId,
+            companyName,
+            project: projectId,
+            driveFolderName: projectName,
+            subfolder: 'ARCHIVOS_INCIDENCIAS'
+          }
+        );
+        url = driveResult.url;
+        driveFileId = driveResult.id;
+        webViewLink = driveResult.webViewLink;
+        uploadSuccess = true;
+        console.log("Google Drive upload exitoso:", driveResult);
+      } catch (driveErr) {
+        console.warn("Google Drive upload falló en chat, usando Base64 como respaldo:", driveErr);
       }
 
       if (!uploadSuccess) {
@@ -1028,17 +1148,9 @@ ${textTrimmed ? `\n• **Sustento / Observaciones**: ${textTrimmed}` : ''}`;
         ...(webViewLink ? { webViewLink } : {})
       };
 
-      await addDoc(collection(db, 'issues', activeIssue.id, 'comments'), {
-        userId: user.id,
-        userName: user.name,
+      await postCommentAndSync({
         text: `Ha adjuntado un archivo: ${file.name}${driveFileId ? ' (Guardado directamente en Google Drive)' : ''}`,
-        createdAt: new Date().toISOString(),
-        userAvatar: user.name.charAt(0),
         attachments: [attachment]
-      });
-
-      await updateDoc(doc(db, 'issues', activeIssue.id), {
-        updatedAt: new Date().toISOString()
       });
 
       // Synchronize directly into parent environmental report's mediaDuring array

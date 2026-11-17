@@ -618,6 +618,8 @@ export default function CreateIssueModal({ onClose, onSuccess }: CreateIssueModa
            id: Math.random().toString(36).substr(2, 9),
            name: file.name,
            url: driveFile.webViewLink || driveFile.url,
+           driveFileId: driveFile.id,
+           webViewLink: driveFile.webViewLink,
            type: file.type || 'application/octet-stream',
            category: isImage ? 'image' : (isVideo ? 'video' : 'file')
           } as Partial<Attachment>;

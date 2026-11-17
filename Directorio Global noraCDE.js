@@ -3263,6 +3263,24 @@ function uploadFile_(e, body) {
       root = targetFolder;
     }
   }
+
+  // Estructuracion jerarquica para Incidencias: [INCIDENCIAS_ROOT] -> [Empresa] -> [Proyecto] -> [Subcarpeta]
+  const companyName = String(((body && body.companyName) || (e && e.parameter && e.parameter.companyName) || '') ?? '').trim();
+  const subfolderName = String(((body && body.subfolder) || (e && e.parameter && e.parameter.subfolder) || '') ?? '').trim();
+  if (folderId === INCIDENTS_ROOT_FOLDER_ID || folderId === '1-9SumRefiih81mc_eASsswy_W_U0-qe5' || (companyName && (driveFolderName || projectSlug))) {
+    try {
+      const incRoot = DriveApp.getFolderById(INCIDENTS_ROOT_FOLDER_ID);
+      const cName = companyName || 'EMPRESA GENERAL';
+      const pName = driveFolderName || projectSlug || 'PROYECTO GENERAL';
+      const compFolder = getOrCreateFolder(incRoot, cName);
+      const projFolder = getOrCreateFolder(compFolder, pName);
+      if (subfolderName) {
+        root = getOrCreateFolder(projFolder, subfolderName);
+      } else {
+        root = projFolder;
+      }
+    } catch (eInc) {}
+  }
   
   const filename = String(((body && body.filename) || (e && e.parameter && e.parameter.filename) || '') ?? '').trim();
   if (!filename) return { error: 'Falta filename' };
