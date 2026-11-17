@@ -162,6 +162,42 @@
                 </div>
             </div>
 
+            <!-- Project Representation Card (Visible if project param is present) -->
+            <div id="project-rep-card" class="glass-card border border-border-light dark:border-border-dark rounded-3xl p-6 md:p-8 shadow-sm space-y-4 hidden">
+                <div class="flex items-start gap-4">
+                    <div class="w-12 h-12 rounded-2xl bg-indigo-50 dark:bg-indigo-950/50 border border-indigo-200 dark:border-indigo-800 flex items-center justify-center shrink-0 text-indigo-600 dark:text-indigo-400">
+                        <span class="material-symbols-outlined text-[24px]">apartment</span>
+                    </div>
+                    <div class="flex-1">
+                        <div class="flex items-center gap-2">
+                            <h3 class="text-sm font-black uppercase tracking-wider text-zinc-900 dark:text-white">Empresa representada en el proyecto</h3>
+                            <span class="px-2 py-0.5 rounded-full text-[9px] font-bold bg-indigo-100 text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300">Específico del proyecto</span>
+                        </div>
+                        <p class="text-xs text-zinc-500 dark:text-zinc-400 mt-1">
+                            Proyecto: <span id="project-rep-project-name" class="font-extrabold text-zinc-800 dark:text-zinc-200">--</span>. Esta selección solo afectará a este proyecto específico y no modificará tu perfil global ni otros proyectos.
+                        </p>
+                    </div>
+                </div>
+
+                <div class="space-y-3 pt-2">
+                    <label for="select-project-rep" class="block text-xs font-bold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">Seleccionar Empresa que Representas</label>
+                    <select id="select-project-rep" class="w-full py-2.5 px-3.5 text-sm rounded-xl border border-border-light dark:border-border-dark bg-white dark:bg-zinc-800 focus:ring-2 focus:ring-zinc-500 dark:text-white transition-all shadow-sm font-medium">
+                        <!-- Populated by JS -->
+                    </select>
+                    <div id="wrapper-project-rep-custom" class="hidden">
+                        <label for="input-project-rep-custom" class="block text-xs font-bold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 mt-2">Especificar otra empresa:</label>
+                        <input type="text" id="input-project-rep-custom" placeholder="Nombre de la empresa..." class="w-full py-2 px-3.5 text-sm rounded-xl border border-border-light dark:border-border-dark bg-white dark:bg-zinc-800 focus:ring-2 focus:ring-zinc-500 dark:text-white transition-all shadow-sm font-medium mt-1" />
+                    </div>
+                </div>
+
+                <div class="flex items-center justify-end gap-3 pt-2 border-t border-border-light dark:border-border-dark">
+                    <button type="button" id="btn-save-project-rep" class="px-5 py-2.5 rounded-xl bg-zinc-900 hover:bg-black text-white dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-100 text-xs font-bold uppercase tracking-wider transition-all shadow-md flex items-center gap-1.5">
+                        <span class="material-symbols-outlined text-[16px]">domain_verification</span>
+                        <span>Actualizar en este Proyecto</span>
+                    </button>
+                </div>
+            </div>
+
             <!-- Form Edit Card -->
             <form id="profile-form" class="glass-card border border-border-light dark:border-border-dark rounded-3xl p-6 md:p-8 shadow-sm space-y-6">
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -453,6 +489,131 @@
                     btnSubmit.innerHTML = origContent;
                 }
             });
+
+            // --- GESTIÓN DE EMPRESA REPRESENTADA EN ESTE PROYECTO ---
+            const urlParamsProfile = new URLSearchParams(window.location.search);
+            const projectSlugParam = urlParamsProfile.get('project') || '';
+            const empresaParamVal = urlParamsProfile.get('empresa') || '';
+            const repCard = document.getElementById('project-rep-card');
+            const repProjectName = document.getElementById('project-rep-project-name');
+            const selectProjectRep = document.getElementById('select-project-rep');
+            const wrapperCustom = document.getElementById('wrapper-project-rep-custom');
+            const inputCustom = document.getElementById('input-project-rep-custom');
+            const btnSaveRep = document.getElementById('btn-save-project-rep');
+
+            if (projectSlugParam && repCard) {
+                repCard.classList.remove('hidden');
+                if (repProjectName) repProjectName.textContent = projectSlugParam.toUpperCase();
+
+                const uMail = userSession.username.toLowerCase().trim();
+                let empresasList = [];
+                try {
+                    const empRes = await fetch(`empresas.json?t=${Date.now()}`);
+                    if (empRes.ok) empresasList = await empRes.json();
+                } catch(e) {}
+
+                // Filtrar empresas a las que pertenece el usuario (Admin o Miembro no invitado)
+                const userEmps = (empresasList || []).filter(e => !e.deleted && (
+                    (Array.isArray(e.admins) && e.admins.some(a => String(a || '').toLowerCase().trim() === uMail)) ||
+                    (Array.isArray(e.members) && e.members.some(m => String(m.email || '').toLowerCase().trim() === uMail && m.role !== 'INVITADO'))
+                ));
+
+                // Obtener representación actual guardada
+                let curRep = localStorage.getItem(`project_rep_company_${projectSlugParam}_${uMail}`) || '';
+                let activeProjectData = null;
+
+                try {
+                    const driveApiUrl = 'https://script.google.com/macros/s/AKfycbx2RAQx_8K4o22xE0Mw-ETc7K_58vIoi6-PgVi64u80inuiw144ks3cgWSdCtXqIgB02g/exec';
+                    const driveRes = await fetch(`${driveApiUrl}?action=getProjectConfig&empresa=${encodeURIComponent(empresaParamVal)}&proyecto=${encodeURIComponent(projectSlugParam)}`);
+                    if (driveRes.ok) {
+                        const dData = await driveRes.json();
+                        if (dData && dData.status === 'success' && dData.data) {
+                            activeProjectData = dData.data;
+                            if (activeProjectData.landing?.title || activeProjectData.name) {
+                                repProjectName.textContent = activeProjectData.landing?.title || activeProjectData.name;
+                            }
+                            if (activeProjectData.iso19650?.memberCompanies?.[uMail]) {
+                                curRep = activeProjectData.iso19650.memberCompanies[uMail];
+                            }
+                        }
+                    }
+                } catch(e) {}
+
+                // Poblar select
+                selectProjectRep.innerHTML = '';
+                let matchedInList = false;
+                userEmps.forEach(emp => {
+                    const opt = document.createElement('option');
+                    opt.value = emp.name;
+                    opt.textContent = emp.name;
+                    if (curRep && curRep.toLowerCase() === emp.name.toLowerCase()) {
+                        opt.selected = true;
+                        matchedInList = true;
+                    }
+                    selectProjectRep.appendChild(opt);
+                });
+
+                // Opción para otra empresa personalizada
+                const optCustom = document.createElement('option');
+                optCustom.value = '__CUSTOM__';
+                optCustom.textContent = 'Otra empresa (especificar)...';
+                if (curRep && !matchedInList) {
+                    optCustom.selected = true;
+                    wrapperCustom.classList.remove('hidden');
+                    inputCustom.value = curRep;
+                }
+                selectProjectRep.appendChild(optCustom);
+
+                selectProjectRep.addEventListener('change', () => {
+                    if (selectProjectRep.value === '__CUSTOM__') {
+                        wrapperCustom.classList.remove('hidden');
+                        inputCustom.focus();
+                    } else {
+                        wrapperCustom.classList.add('hidden');
+                    }
+                });
+
+                btnSaveRep.addEventListener('click', async () => {
+                    let chosen = selectProjectRep.value === '__CUSTOM__' ? inputCustom.value.trim() : selectProjectRep.value;
+                    if (!chosen) {
+                        showToast("Por favor especifica el nombre de la empresa", false);
+                        return;
+                    }
+
+                    btnSaveRep.disabled = true;
+                    btnSaveRep.innerHTML = `<span class="material-symbols-outlined text-[16px] animate-spin">refresh</span><span>Guardando...</span>`;
+
+                    // 1. Guardar en localStorage
+                    localStorage.setItem(`project_rep_company_${projectSlugParam}_${uMail}`, chosen);
+
+                    // 2. Guardar en Drive en la configuración del proyecto
+                    try {
+                        if (!activeProjectData) activeProjectData = { slug: projectSlugParam };
+                        if (!activeProjectData.iso19650) activeProjectData.iso19650 = {};
+                        if (!activeProjectData.iso19650.memberCompanies) activeProjectData.iso19650.memberCompanies = {};
+                        activeProjectData.iso19650.memberCompanies[uMail] = chosen;
+
+                        const driveApiUrl = 'https://script.google.com/macros/s/AKfycbx2RAQx_8K4o22xE0Mw-ETc7K_58vIoi6-PgVi64u80inuiw144ks3cgWSdCtXqIgB02g/exec';
+                        await fetch(driveApiUrl, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+                            body: JSON.stringify({
+                                action: 'saveProjectConfig',
+                                empresa: empresaParamVal,
+                                proyecto: projectSlugParam,
+                                projectData: activeProjectData
+                            })
+                        });
+                        showToast(`Empresa representada en ${projectSlugParam} actualizada a: ${chosen}`);
+                    } catch(err) {
+                        console.warn(err);
+                        showToast("Guardado localmente. Error al sincronizar con Drive.", false);
+                    } finally {
+                        btnSaveRep.disabled = false;
+                        btnSaveRep.innerHTML = `<span class="material-symbols-outlined text-[16px]">domain_verification</span><span>Actualizar en este Proyecto</span>`;
+                    }
+                });
+            }
 
             // Back & Cancel Button logic
             const goBack = () => {

@@ -680,9 +680,52 @@ export const getPlatformTeam = async (companyId: string, projectId: string): Pro
         if (mb === 'receiver') branch = 'RECEIVER';
       }
 
-      const name = du?.nombre || du?.name || compMember?.name || cleanEmail.split('@')[0];
-      const companyName = du?.empresa || compMember?.empresa || company.name || 'EMPRESA';
-      const cargo = du?.cargo || compMember?.cargo || compMember?.role || 'Colaborador';
+      // Determine user's company:
+      // 1. Check if user has an explicit company representation for this project
+      const repComp = iso?.memberCompanies?.[cleanEmail] ||
+                      projectData?.memberCompanies?.[cleanEmail] ||
+                      localStorage.getItem(`project_rep_company_${projectId}_${cleanEmail}`) ||
+                      localStorage.getItem(`project_rep_company_${projectData?.slug}_${cleanEmail}`);
+
+      let companyName = repComp || '';
+
+      // Find user details across all companies in empresas.json
+      let userDetailsFromCompany: any = compMember;
+      if (Array.isArray(empresas) && empresas.length > 0) {
+        for (const comp of empresas) {
+          if (comp.deleted) continue;
+          const isMember = (comp.members || []).find((m: any) => 
+            (m.email || '').toLowerCase().trim() === cleanEmail
+          );
+          if (isMember) {
+            if (!userDetailsFromCompany || isMember.role !== 'INVITADO') {
+              userDetailsFromCompany = isMember;
+            }
+            if (!companyName) {
+              const empUser = isMember.empresaUsuario || isMember.empresa;
+              if (empUser && empUser.trim()) {
+                companyName = empUser.trim();
+                if (isMember.role !== 'INVITADO') break;
+              } else if (comp.name) {
+                companyName = comp.name.trim();
+                if (isMember.role !== 'INVITADO') break;
+              }
+            }
+          }
+          const isAdmin = (comp.admins || []).some((a: string) => a.toLowerCase().trim() === cleanEmail);
+          if (isAdmin && !companyName) {
+            companyName = comp.name.trim();
+            break;
+          }
+        }
+      }
+
+      if (!companyName) {
+        companyName = du?.empresa || du?.empresaUsuario || compMember?.empresaUsuario || compMember?.empresa || company.name || 'EMPRESA';
+      }
+
+      const name = du?.nombre || du?.name || userDetailsFromCompany?.name || userDetailsFromCompany?.nombre || cleanEmail.split('@')[0];
+      const cargo = du?.cargo || userDetailsFromCompany?.cargo || userDetailsFromCompany?.role || 'Colaborador';
       const position = `${cargo} (${name})`;
 
       return {

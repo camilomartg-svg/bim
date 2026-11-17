@@ -105,6 +105,28 @@
     if (!email) return 'Sin Empresa';
     const clean = email.toLowerCase().trim();
 
+    // 0. Si el usuario tiene una empresa que representa específicamente en este proyecto:
+    const repCompany = activeProject?.iso19650?.memberCompanies?.[clean] ||
+                       activeProject?.memberCompanies?.[clean] ||
+                       localStorage.getItem(`project_rep_company_${projectSlug}_${clean}`) ||
+                       localStorage.getItem(`project_rep_company_${activeProject?.id}_${clean}`);
+    if (repCompany) return repCompany;
+
+    // 1. Revisar si pertenece como MIEMBRO o ADMINISTRADOR a otra empresa en allCompaniesList
+    if (Array.isArray(allCompaniesList)) {
+      for (const comp of allCompaniesList) {
+        if (comp.deleted) continue;
+        if (Array.isArray(comp.members)) {
+          const found = comp.members.find(m => m.email && m.email.toLowerCase().trim() === clean && m.role !== 'INVITADO');
+          if (found && found.empresaUsuario && found.empresaUsuario.trim()) return found.empresaUsuario.trim();
+          if (found && comp.name) return comp.name.trim();
+        }
+        if (Array.isArray(comp.admins) && comp.admins.some(a => a.toLowerCase().trim() === clean)) {
+          return comp.name.trim();
+        }
+      }
+    }
+
     const companyMembers = Array.isArray(currentCompany?.members) ? currentCompany.members : [];
     const curCompMember = companyMembers.find(cm => cm.email && cm.email.toLowerCase().trim() === clean);
     if (curCompMember) {
@@ -118,12 +140,6 @@
         if (Array.isArray(comp.members)) {
           const found = comp.members.find(m => m.email && m.email.toLowerCase().trim() === clean);
           if (found && found.empresaUsuario && found.empresaUsuario.trim()) return found.empresaUsuario.trim();
-        }
-      }
-      for (const comp of allCompaniesList) {
-        if (comp.deleted) continue;
-        if (Array.isArray(comp.admins) && comp.admins.some(a => a.toLowerCase().trim() === clean)) {
-          return comp.name;
         }
       }
     }
