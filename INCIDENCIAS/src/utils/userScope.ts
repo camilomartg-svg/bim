@@ -290,3 +290,26 @@ export function isTypeAllowedForBranch(
 
   return false;
 }
+
+/**
+ * Filters assignable team members based on the issue scope:
+ * - GLOBAL: returns all members.
+ * - DELIVERY: only members of delivery teams (+ admins).
+ * - RECEIVER: only members of receiver / obra teams (+ admins).
+ */
+export function filterMembersByScope(
+  members: any[],
+  scope: IssueTypeScope = 'GLOBAL'
+): any[] {
+  if (!Array.isArray(members)) return [];
+  if (scope === 'GLOBAL') {
+    return members;
+  }
+  if (scope === 'DELIVERY') {
+    return members.filter(m => m.branch === 'DELIVERY' || m.branch === 'ADMIN' || (m.team && getBranchForTeamName(m.team) === 'DELIVERY'));
+  }
+  if (scope === 'RECEIVER') {
+    return members.filter(m => m.branch === 'RECEIVER' || m.branch === 'ADMIN' || (m.team && getBranchForTeamName(m.team) === 'RECEIVER'));
+  }
+  return members;
+}

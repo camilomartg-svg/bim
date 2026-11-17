@@ -297,6 +297,9 @@ export interface TeamMember {
   name: string;
   email: string;
   team?: string;
+  company?: string;
+  cargo?: string;
+  branch?: 'DELIVERY' | 'RECEIVER' | 'ADMIN' | 'NONE';
 }
 
 export interface UnitLevel {

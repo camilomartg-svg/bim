@@ -30,8 +30,10 @@ import {
   isTypeAllowedForBranch, 
   getBranchForTeamName, 
   getUserAssignedTeam, 
-  getActiveProjectData 
+  getActiveProjectData,
+  IssueTypeScope
 } from '../utils/userScope';
+import AssigneeSelectorModal from './AssigneeSelectorModal';
 import { X, Paperclip, Send, AlertCircle, Box, Map as MapIcon, Image as ImageIcon, FileText, Link, Plus, Trash2, Camera, User as UserIcon, MapPin, Package, ShieldCheck, Building2, ClipboardList, ChevronRight, CheckCircle2, Calendar, Zap, ArrowRight, Mic, MicOff, Video } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { cn } from '../lib/utils';
@@ -93,6 +95,9 @@ export default function CreateIssueModal({ onClose, onSuccess }: CreateIssueModa
   const [assignedPosition, setAssignedPosition] = useState('');
   const [assignedName, setAssignedName] = useState('');
   const [reviewers, setReviewers] = useState<string[]>([]);
+  const [isAssigneeModalOpen, setIsAssigneeModalOpen] = useState(false);
+  const [isReviewersModalOpen, setIsReviewersModalOpen] = useState(false);
+  const [issueTypeScopes, setIssueTypeScopes] = useState<Record<string, IssueTypeScope>>({});
   
   const [month, setMonth] = useState(MONTHS[new Date().getMonth()]);
 
@@ -245,6 +250,7 @@ export default function CreateIssueModal({ onClose, onSuccess }: CreateIssueModa
       const userBranch = getUserProjectBranch(user?.email, activeCreatorTeam);
       const activeBranch = teamBranch !== 'NONE' ? teamBranch : userBranch;
       const scopesMap = fbConfig.issueTypeScopes || {};
+      setIssueTypeScopes(scopesMap);
 
       const filteredTypes = issueTypes.filter(t => {
         // 1. Check ISO 19650 branch scope restriction:
@@ -656,6 +662,8 @@ export default function CreateIssueModal({ onClose, onSuccess }: CreateIssueModa
       prev.includes(option) ? prev.filter(o => o !== option) : [...prev, option]
     );
   };
+
+  const currentIssueScope = (issueTypeScopes[type] || 'GLOBAL') as IssueTypeScope;
 
   const addReviewer = (pos: string) => {
     if (pos && !reviewers.includes(pos)) {
@@ -1255,25 +1263,76 @@ export default function CreateIssueModal({ onClose, onSuccess }: CreateIssueModa
                  <div className="group">
                   <label className="block text-[9px] font-black uppercase tracking-[0.2em] text-slate-600 mb-2 flex items-center justify-between px-1">
                     <span className="flex items-center gap-2">Responsable Asignado <span className="text-red-500">*</span></span>
-                    <UserIcon className="w-3.5 h-3.5 text-slate-800 group-focus-within:text-blue-500 transition-colors" />
+                    <span className="text-[8px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-500">
+                      {currentIssueScope === 'GLOBAL' ? 'Todos los Miembros' : currentIssueScope === 'DELIVERY' ? 'Equipos de Entrega' : 'Equipos de Obra / Receptor'}
+                    </span>
                   </label>
                   <div className="space-y-3">
-                    <select
-                      value={assignedPosition}
-                      onChange={(e) => setAssignedPosition(e.target.value)}
-                      disabled={type === 'Informe Ambiental'}
+                    {/* Botón selector enriquecido con búsqueda por teclado, equipo y empresa */}
+                    <div 
+                      onClick={() => {
+                        if (type !== 'Informe Ambiental') {
+                          setIsAssigneeModalOpen(true);
+                        }
+                      }}
                       className={cn(
-                        "w-full px-4 py-3 sm:px-6 sm:py-4 border rounded-xl text-xs sm:text-[13px] font-bold outline-none transition-all shadow-inner",
-                        type === 'Informe Ambiental' 
-                          ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-600 dark:text-emerald-400 cursor-not-allowed" 
-                          : "bg-slate-50 dark:bg-slate-900/50 border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white focus:border-slate-400 dark:focus:border-slate-700"
+                        "w-full p-3.5 sm:p-4 border rounded-xl transition-all cursor-pointer shadow-sm flex items-center justify-between gap-3 group/card",
+                        type === 'Informe Ambiental'
+                          ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-600 dark:text-emerald-400 cursor-not-allowed"
+                          : assignedPosition
+                            ? "bg-indigo-50/50 dark:bg-indigo-950/20 border-indigo-200 dark:border-indigo-800 hover:border-indigo-400"
+                            : "bg-slate-50 dark:bg-slate-900/50 border-slate-200 dark:border-slate-800 hover:border-slate-400"
                       )}
                     >
-                      <option value="">Seleccionar Cargo / Disciplina...</option>
-                      {sortedTeam.map(p => <option key={p.position} value={p.position}>{p.position}</option>)}
-                    </select>
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div className={cn(
+                          "w-10 h-10 rounded-xl flex items-center justify-center font-black text-xs shrink-0 transition-transform group-hover/card:scale-105",
+                          assignedPosition 
+                            ? "bg-indigo-600 text-white shadow-md shadow-indigo-600/30" 
+                            : "bg-slate-200 dark:bg-slate-800 text-slate-500"
+                        )}>
+                          {assignedName ? assignedName.slice(0, 1).toUpperCase() : <UserIcon className="w-5 h-5" />}
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          {assignedPosition ? (
+                            <>
+                              <div className="flex items-center gap-2">
+                                <span className="text-xs font-black text-slate-900 dark:text-white uppercase truncate">
+                                  {assignedName || assignedPosition}
+                                </span>
+                                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
+                              </div>
+                              <p className="text-[10px] text-slate-500 dark:text-slate-400 font-semibold truncate">
+                                {assignedPosition} {responsibleCompany ? `• ${responsibleCompany}` : ''}
+                              </p>
+                            </>
+                          ) : (
+                            <>
+                              <span className="text-xs font-bold text-slate-500 dark:text-slate-400 block truncate">
+                                Seleccionar Responsable Asignado...
+                              </span>
+                              <span className="text-[9px] text-slate-400 dark:text-slate-500 font-medium">
+                                Buscar por teclado, equipo o empresa
+                              </span>
+                            </>
+                          )}
+                        </div>
+                      </div>
+                      
+                      {type !== 'Informe Ambiental' && (
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          <button
+                            type="button"
+                            className="px-3 py-1.5 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-[10px] font-black uppercase text-indigo-600 dark:text-indigo-400 tracking-wider shadow-sm hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors"
+                          >
+                            {assignedPosition ? 'Cambiar' : 'Buscar'}
+                          </button>
+                        </div>
+                      )}
+                    </div>
+
                     {type === 'Informe Ambiental' && (
-                      <p className="text-[9px] font-black uppercase tracking-wider text-emerald-550 mt-1 px-1">
+                      <p className="text-[9px] font-black uppercase tracking-wider text-emerald-500 mt-1 px-1">
                         🔒 Dirigido obligatoriamente al Director de Obra para incidencias ambientales formales.
                       </p>
                     )}
@@ -1301,24 +1360,6 @@ export default function CreateIssueModal({ onClose, onSuccess }: CreateIssueModa
                         )}
                       </div>
                     )}
-                    <AnimatePresence>
-                      {assignedName && (
-                        <motion.div 
-                          initial={{ opacity: 0, y: -10 }} 
-                          animate={{ opacity: 1, y: 0 }}
-                          exit={{ opacity: 0, y: -10 }}
-                          className="px-4 py-2.5 bg-emerald-500/5 border border-emerald-500/10 rounded-lg flex items-center justify-between shadow-sm"
-                        >
-                          <div className="flex items-center gap-2.5">
-                            <div className="w-6 h-6 bg-emerald-500 rounded-md flex items-center justify-center text-white font-black text-[9px]">
-                              {assignedName.slice(0,1)}
-                            </div>
-                            <span className="text-[9.5px] font-black text-emerald-400 uppercase tracking-wider">{assignedName}</span>
-                          </div>
-                          <span className="text-[8px] font-black text-emerald-500/40 uppercase tracking-widest">Verificado</span>
-                        </motion.div>
-                      )}
-                    </AnimatePresence>
                   </div>
                 </div>
               </div>
@@ -1326,20 +1367,19 @@ export default function CreateIssueModal({ onClose, onSuccess }: CreateIssueModa
 
             {isFieldVisible('reviewers') && (
               <div className="space-y-4">
-                <label className="block text-[9px] font-black uppercase tracking-[0.2em] text-slate-600 mb-2 px-1">Comité de Revisión</label>
-                <div className="flex gap-2">
-                  <select
-                    id="rev-select"
-                    className="flex-1 px-4 py-3 sm:px-6 sm:py-4 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-800 rounded-xl text-xs sm:text-[13px] text-slate-900 dark:text-white font-bold focus:border-slate-400 dark:focus:border-slate-700 outline-none transition-all shadow-inner"
-                    onChange={(e) => {
-                      addReviewer(e.target.value);
-                      e.target.value = '';
-                    }}
+                <div className="flex items-center justify-between px-1 mb-2">
+                  <label className="block text-[9px] font-black uppercase tracking-[0.2em] text-slate-600">
+                    Comité de Revisión ({reviewers.length})
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => setIsReviewersModalOpen(true)}
+                    className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg bg-indigo-50 dark:bg-indigo-950/40 border border-indigo-200 dark:border-indigo-800 text-[10px] font-black uppercase tracking-wider text-indigo-600 dark:text-indigo-400 hover:bg-indigo-100 transition-colors"
                   >
-                    <option value="">Añadir Revisor...</option>
-                    {sortedTeam.map(p => <option key={p.position} value={p.position}>{p.position}</option>)}
-                  </select>
+                    <Plus className="w-3 h-3" /> Añadir / Gestionar
+                  </button>
                 </div>
+                
                 <div className="flex flex-wrap gap-2 p-3.5 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-900 border-dashed rounded-xl min-h-[52px]">
                    {reviewers.map(r => (
                      <motion.div 
@@ -1355,7 +1395,16 @@ export default function CreateIssueModal({ onClose, onSuccess }: CreateIssueModa
                        </button>
                      </motion.div>
                    ))}
-                   {reviewers.length === 0 && <p className="text-[9px] text-slate-500 font-bold uppercase tracking-widest w-full text-center py-1 italic">Sin revisores definidos</p>}
+                   {reviewers.length === 0 && (
+                     <div 
+                       onClick={() => setIsReviewersModalOpen(true)}
+                       className="w-full text-center py-2 cursor-pointer group"
+                     >
+                       <p className="text-[9px] text-slate-400 dark:text-slate-500 font-bold uppercase tracking-widest group-hover:text-indigo-500 transition-colors italic">
+                         + Clic para seleccionar revisores por nombre, equipo o empresa
+                       </p>
+                     </div>
+                   )}
                 </div>
               </div>
             )}
@@ -2236,6 +2285,38 @@ export default function CreateIssueModal({ onClose, onSuccess }: CreateIssueModa
           </div>
         </div>
       </motion.div>
+
+      {/* Modal de Asignación de Responsable Individual */}
+      <AssigneeSelectorModal
+        isOpen={isAssigneeModalOpen}
+        onClose={() => setIsAssigneeModalOpen(false)}
+        title="Seleccionar Responsable Asignado"
+        scope={currentIssueScope}
+        mode="single"
+        selectedValue={assignedPosition || assignedName}
+        members={customTeam}
+        onSelect={(m) => {
+          setAssignedPosition(m.position);
+          setAssignedName(m.name);
+          if (m.company) {
+            setResponsibleCompany(m.company);
+          }
+        }}
+      />
+
+      {/* Modal de Asignación de Comité de Revisores */}
+      <AssigneeSelectorModal
+        isOpen={isReviewersModalOpen}
+        onClose={() => setIsReviewersModalOpen(false)}
+        title="Seleccionar Comité de Revisión"
+        scope={currentIssueScope}
+        mode="multiple"
+        selectedValues={reviewers}
+        members={customTeam}
+        onSelectMultiple={(selectedMembers) => {
+          setReviewers(selectedMembers.map(m => m.position || m.name));
+        }}
+      />
     </div>
   );
 }

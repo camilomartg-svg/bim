@@ -508,7 +508,7 @@ function DangerItem({
 }
 
 export default function ConfigPanel() {
-  const [activeTab, setActiveTab] = useState<ConfigTab>('fields');
+  const [activeTab, setActiveTab] = useState<ConfigTab>('types');
   const [config, setConfig] = useState<FieldConfig[]>(DEFAULT_CONFIG);
   const [typeOverrides, setTypeOverrides] = useState<Record<string, TypeOverride>>({});
   const [selectedConfigKey, setSelectedConfigKey] = useState<string>('GLOBAL');
@@ -1129,8 +1129,8 @@ const changeTypeScope = (id: string, scope: 'GLOBAL' | 'DELIVERY' | 'RECEIVER') 
   }
 
   return (
-    <div className="flex-1 p-8 bg-[var(--bg-main)] overflow-auto transition-colors duration-300">
-      <div className="max-w-5xl mx-auto space-y-8">
+    <div className="flex-1 p-6 sm:p-8 lg:p-10 bg-[var(--bg-main)] overflow-auto transition-colors duration-300 w-full">
+      <div className="w-full space-y-8">
         <header className="flex flex-col md:flex-row md:items-end justify-between gap-6">
           <div className="flex-1">
             <h1 className="text-4xl font-display font-black text-slate-900 dark:text-white tracking-tight">Personalización</h1>
@@ -1184,8 +1184,8 @@ const changeTypeScope = (id: string, scope: 'GLOBAL' | 'DELIVERY' | 'RECEIVER') 
         {/* Tab Navigation */}
         <div className="flex p-1.5 bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-2xl w-fit shadow-sm transition-colors flex-wrap">
           {[
-            { id: 'fields', label: 'Campos', icon: Settings },
             { id: 'types', label: 'Tipos', icon: FileText },
+            { id: 'fields', label: 'Campos', icon: Settings },
             { id: 'impacts', label: 'Afectaciones', icon: Layout },
             { id: 'units', label: 'Ubicaciones', icon: MapPin },
             { id: 'activities', label: 'Actividades', icon: Briefcase },

@@ -16,6 +16,8 @@ import { format, differenceInDays, isPast } from 'date-fns';
 import { getMedicionDueDate, getEficaciaDueDate, isMedicionAlertActive, isEficaciaAlertActive, generateFollowUpCode } from '../utils/followUpUtils';
 import { getProjectConfig, subscribeToTeam, deleteIssue, syncIssueStatusToParentReport } from '../services/firebaseService';
 import { uploadFileToDrive, getAuthenticatedDriveUrl } from '../utils/googleDriveUtils';
+import { IssueTypeScope } from '../utils/userScope';
+import AssigneeSelectorModal from './AssigneeSelectorModal';
 
 interface IssueDetailProps {
   issue: Issue;
@@ -38,6 +40,8 @@ export default function IssueDetail({ issue: initialIssue, onClose, onOpenReport
   const [teamMembers, setTeamMembers] = useState<any[]>([]);
   const [showRedirectionPicker, setShowRedirectionPicker] = useState(false);
   const [selectedRedirection, setSelectedRedirection] = useState<any>(null);
+  const [isReviewersModalOpen, setIsReviewersModalOpen] = useState(false);
+  const [typeScopes, setTypeScopes] = useState<Record<string, IssueTypeScope>>({});
   const { user, googleAccessToken } = useAuth();
 
   const [largo, setLargo] = useState<number | ''>('');
@@ -280,6 +284,9 @@ export default function IssueDetail({ issue: initialIssue, onClose, onOpenReport
     async function loadConfig() {
       const fbConfig = await getProjectConfig();
       if (fbConfig) {
+        if (fbConfig.issueTypeScopes) {
+          setTypeScopes(fbConfig.issueTypeScopes);
+        }
         let visibility = fbConfig.fieldVisibility || {};
 
         // Type Overrides (Apply on top of global)
@@ -1536,58 +1543,7 @@ export default function IssueDetail({ issue: initialIssue, onClose, onOpenReport
                     </motion.div>
                   )}
 
-                  {showRedirectionPicker && (
-                    <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} className="mt-4 p-8 bg-amber-500/5 border border-amber-500/20 rounded-[2.5rem] space-y-6 overflow-hidden shadow-inner">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-4">
-                           <div className="w-12 h-12 bg-amber-600 rounded-[1.25rem] flex items-center justify-center text-white shadow-xl shadow-amber-600/20">
-                             <ArrowRight className="w-6 h-6" />
-                           </div>
-                           <div>
-                              <h5 className="text-xl font-display font-black text-white tracking-tight leading-none">
-                                {redirectionType === 'COLABORADOR' ? 'Agregar Colaborador' : 
-                                 redirectionType === 'EJECUTOR' ? 'Redirigir a Ejecutor' :
-                                 'Redirigir a Nuevo Responsable'}
-                              </h5>
-                              <p className="text-[9px] font-black text-slate-500 uppercase tracking-[0.2em] mt-2">
-                                {redirectionType === 'COLABORADOR' 
-                                  ? 'Delegue el hallazgo a un colaborador para apoyo técnico' 
-                                  : redirectionType === 'EJECUTOR'
-                                    ? 'Defina al ejecutor final encargado de la respuesta'
-                                    : 'Transfiera la responsabilidad principal a otro miembro'}
-                              </p>
-                           </div>
-                        </div>
-                        <button onClick={() => setShowRedirectionPicker(false)} className="p-2 hover:bg-slate-800 rounded-lg text-slate-500 transition-colors">
-                          <X className="w-5 h-5" />
-                        </button>
-                      </div>
-
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3 max-h-[400px] overflow-y-auto pr-2 custom-scrollbar">
-                        {teamMembers.map((member) => (
-                          <button
-                            key={member.id}
-                            onClick={() => handleRedirection(member)}
-                            className="flex items-center gap-4 p-5 bg-slate-100 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-2xl hover:border-amber-500/50 hover:bg-amber-500/5 transition-all group text-left shadow-sm active:scale-95"
-                          >
-                            <div className="w-10 h-10 bg-slate-900 border border-slate-800 rounded-xl flex items-center justify-center text-slate-600 group-hover:text-amber-500 group-hover:border-amber-500/30 transition-all">
-                              <UserIcon className="w-5 h-5" />
-                            </div>
-                            <div className="flex-1 min-w-0">
-                              <p className="text-[11px] font-black text-white truncate uppercase mb-0.5">{member.name}</p>
-                              <div className="flex items-center gap-2">
-                                <span className="text-[8px] font-black text-slate-500 uppercase tracking-widest">{member.position}</span>
-                                {member.team && (
-                                  <span className="text-[7px] font-black px-1.5 py-0.5 bg-blue-500/10 text-blue-400 rounded-md border border-blue-500/10 uppercase tracking-tighter">{member.team}</span>
-                                )}
-                              </div>
-                            </div>
-                            <ArrowRight className="w-4 h-4 text-slate-800 group-hover:text-amber-500 transition-colors" />
-                          </button>
-                        ))}
-                      </div>
-                    </motion.div>
-                  )}
+                  {/* Redirection is now handled by AssigneeSelectorModal */}
                 </AnimatePresence>
           </section>
 
@@ -1767,7 +1723,19 @@ export default function IssueDetail({ issue: initialIssue, onClose, onOpenReport
                                <UserIcon className="w-5 h-5 text-slate-600" />
                              </div>
                              <div className="flex flex-col flex-1">
-                               <span className="text-[8px] font-black text-slate-600 uppercase tracking-widest mb-0.5">RESPONSABLE INICIAL / DIRECTOR</span>
+                               <div className="flex items-center justify-between mb-0.5">
+                                 <span className="text-[8px] font-black text-slate-600 uppercase tracking-widest">RESPONSABLE INICIAL / DIRECTOR</span>
+                                 <button
+                                   type="button"
+                                   onClick={() => {
+                                     setRedirectionType('RESPONSABLE');
+                                     setShowRedirectionPicker(true);
+                                   }}
+                                   className="px-2 py-0.5 rounded-lg bg-indigo-50 dark:bg-indigo-950/40 border border-indigo-200 dark:border-indigo-800 text-[8px] font-black uppercase text-indigo-600 dark:text-indigo-400 hover:bg-indigo-100 transition-colors"
+                                 >
+                                   Reasignar
+                                 </button>
+                               </div>
                                <div className="flex items-center gap-2">
                                   <span className="text-xs font-bold text-slate-800 dark:text-white">{issue.assignedName}</span>
                                   {(issue.principalApproved || issue.status === 'RESPONDIDA') && (
@@ -1848,7 +1816,18 @@ export default function IssueDetail({ issue: initialIssue, onClose, onOpenReport
                     </div>
                     {isFieldVisible('reviewers') && (
                       <div className="pt-2">
-                        <span className="text-[8px] font-black text-slate-600 uppercase tracking-widest mb-3 block px-1">COMITÉ DE REVISIÓN</span>
+                        <div className="flex items-center justify-between mb-3 px-1">
+                          <span className="text-[8px] font-black text-slate-600 uppercase tracking-widest">
+                            COMITÉ DE REVISIÓN ({issue.reviewers?.length || 0})
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => setIsReviewersModalOpen(true)}
+                            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-indigo-50 dark:bg-indigo-950/40 border border-indigo-200 dark:border-indigo-800 text-[9px] font-black uppercase text-indigo-600 dark:text-indigo-400 hover:bg-indigo-100 transition-colors"
+                          >
+                            Gestionar
+                          </button>
+                        </div>
                         
                         {issue.reviewers && issue.reviewers.length > 0 && (
                           <div className="flex flex-wrap gap-2">
@@ -1871,6 +1850,60 @@ export default function IssueDetail({ issue: initialIssue, onClose, onOpenReport
            </section>
         </div>
       </div>
+
+      {/* Selector Modal para Redirección y Reasignación de Responsable */}
+      <AssigneeSelectorModal
+        isOpen={showRedirectionPicker}
+        onClose={() => setShowRedirectionPicker(false)}
+        title={
+          redirectionType === 'COLABORADOR'
+            ? 'Delegar a Colaborador'
+            : redirectionType === 'EJECUTOR'
+              ? 'Redirigir a Responsable Ejecutor'
+              : 'Reasignar Responsable Principal'
+        }
+        scope={(typeScopes[issue.type] || 'GLOBAL') as IssueTypeScope}
+        mode="single"
+        selectedValue={
+          redirectionType === 'COLABORADOR'
+            ? issue.redirectedTo?.name || ''
+            : redirectionType === 'EJECUTOR'
+              ? issue.executor?.name || ''
+              : issue.assignedName || ''
+        }
+        members={teamMembers}
+        onSelect={(member) => handleRedirection(member)}
+      />
+
+      {/* Selector Modal para Comité de Revisión */}
+      <AssigneeSelectorModal
+        isOpen={isReviewersModalOpen}
+        onClose={() => setIsReviewersModalOpen(false)}
+        title="Gestionar Comité de Revisión"
+        scope={(typeScopes[issue.type] || 'GLOBAL') as IssueTypeScope}
+        mode="multiple"
+        selectedValues={issue.reviewers || []}
+        members={teamMembers}
+        onSelectMultiple={async (selectedMembers) => {
+          try {
+            setIsUpdating(true);
+            const newReviewers = selectedMembers.map(m => m.position || m.name);
+            const newEmails = selectedMembers.map(m => m.email).filter(Boolean);
+            await updateDoc(doc(db, 'issues', issue.id), {
+              reviewers: newReviewers,
+              reviewerEmails: newEmails,
+              updatedAt: new Date().toISOString()
+            });
+            setIssue(prev => ({ ...prev, reviewers: newReviewers, reviewerEmails: newEmails }));
+            setIsReviewersModalOpen(false);
+          } catch (err) {
+            console.error('Error updating reviewers:', err);
+            alert('Error al actualizar el comité de revisión.');
+          } finally {
+            setIsUpdating(false);
+          }
+        }}
+      />
     </motion.div>
   );
 }

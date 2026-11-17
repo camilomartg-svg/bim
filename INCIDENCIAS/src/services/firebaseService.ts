@@ -472,75 +472,171 @@ export const getPlatformTeam = async (companyId: string, projectId: string): Pro
   const request = (async () => {
   try {
     // 1. Fetch empresas.json
-    const empresasRes = await fetch('../empresas.json');
-    if (!empresasRes.ok) {
-      throw new Error(`Failed to fetch empresas.json: ${empresasRes.statusText}`);
-    }
-    const empresas = await empresasRes.json();
+    let empresas: any[] = [];
+    try {
+      const empresasRes = await fetch('../empresas.json');
+      if (empresasRes.ok) {
+        empresas = await empresasRes.json();
+      }
+    } catch (_) {}
     
-    const company = empresas.find((e: any) => e && !e.deleted && (e.id === companyId || e.id?.toLowerCase() === companyId?.toLowerCase() || e.name?.toLowerCase() === companyId?.toLowerCase()));
-    if (!company) {
-      console.warn(`Company ${companyId} not found in empresas.json`);
-      return null;
-    }
-    
+    const company = empresas.find((e: any) => e && !e.deleted && (e.id === companyId || e.id?.toLowerCase() === companyId?.toLowerCase() || e.name?.toLowerCase() === companyId?.toLowerCase())) || { name: 'HIDROSANITARIO SAS', members: [] };
     const companyMembers = company.members || [];
     
-    // 2. Fetch config-<companyId>.json to see project members and task teams
-    let projectMembersEmails: string[] = [];
-    let equiposDeTarea: any[] = [];
+    // 2. Fetch project config & ISO data from Drive or local cache
+    let projectData: any = null;
     try {
-        const configRes = await fetch(`../config-${companyId}.json`);
-      if (configRes.ok) {
-        const configData = await configRes.json();
-        const project = configData.projects?.find((p: any) => p.slug === projectId || p.name === projectId);
-        if (project) {
-          if (project.members) {
-            projectMembersEmails = project.members.map((email: string) => email.toLowerCase().trim());
-          }
-          if (project.equiposDeTarea) {
-            equiposDeTarea = project.equiposDeTarea;
+      const rawProj = sessionStorage.getItem('activeProject') || localStorage.getItem('activeProject') || localStorage.getItem('cached_project_iso_data');
+      if (rawProj) {
+        projectData = JSON.parse(rawProj);
+      }
+    } catch (_) {}
+
+    if (!projectData || !projectData.members || projectData.members.length === 0) {
+      try {
+        const { companyName, projectName } = getHumanCompanyAndProject(companyId, projectId);
+        const driveUrl = new URL(INCIDENCES_CONFIG_SCRIPT_URL || FILES_GATEWAY_URL);
+        driveUrl.searchParams.set('action', 'getProjectConfig');
+        driveUrl.searchParams.set('empresa', companyName || companyId);
+        driveUrl.searchParams.set('companyId', companyId);
+        driveUrl.searchParams.set('proyecto', projectId);
+        driveUrl.searchParams.set('projectName', projectName || projectId);
+        const driveRes = await fetch(driveUrl.toString());
+        if (driveRes.ok) {
+          const driveJson = await driveRes.json();
+          if (driveJson?.status === 'success' && driveJson.data) {
+            projectData = driveJson.data;
+            try {
+              localStorage.setItem('cached_project_iso_data', JSON.stringify(projectData));
+              localStorage.setItem('activeProject', JSON.stringify(projectData));
+            } catch (_) {}
           }
         }
+      } catch (err) {
+        console.warn('Could not load project config from Google Drive in getPlatformTeam:', err);
       }
-    } catch (e) {
-      console.warn(`Could not load config-${companyId}.json, defaulting to all company members`, e);
     }
-    
-    // 3. Filter company members
-    let filteredMembers = companyMembers;
-    if (projectMembersEmails.length > 0) {
-      filteredMembers = companyMembers.filter((m: any) => m.email && projectMembersEmails.includes(m.email.toLowerCase().trim()));
+
+    // 3. Fetch directory users from Google Script for real names, companies and positions
+    let dirUsers: any[] = [];
+    try {
+      const dirRes = await fetch(INCIDENCES_CONFIG_SCRIPT_URL || FILES_GATEWAY_URL);
+      if (dirRes.ok) {
+        dirUsers = await dirRes.json();
+      }
+    } catch (err) {
+      console.warn('Could not fetch directory users from gateway:', err);
     }
-    
-    // 4. Map to TeamMember format
-    return filteredMembers.map((m: any) => {
-      const displayName = m.name || m.email || 'Colaborador';
-      const cargo = m.cargo || m.especialidad || m.role || 'Colaborador';
-      const position = `${cargo} (${displayName})`;
-      
+
+    const iso = projectData?.iso19650 || {};
+    const deliveryTeams = Array.isArray(iso.deliveryTeams) ? iso.deliveryTeams : [];
+    const receiverTeams = Array.isArray(iso.receiverTeams) ? iso.receiverTeams : [];
+
+    // Collect all member emails from project
+    const memberEmailsSet = new Set<string>();
+    if (Array.isArray(projectData?.members)) {
+      projectData.members.forEach((e: string) => { if (e) memberEmailsSet.add(e.toLowerCase().trim()); });
+    }
+    // Also include leaders and teams members
+    if (iso.liderEquipoEntrega) memberEmailsSet.add(iso.liderEquipoEntrega.toLowerCase().trim());
+    if (iso.directorDeObra) memberEmailsSet.add(iso.directorDeObra.toLowerCase().trim());
+    (iso.projectAdmins || []).forEach((e: string) => { if (e) memberEmailsSet.add(e.toLowerCase().trim()); });
+    deliveryTeams.forEach((dt: any) => {
+      if (dt.leadEmail) memberEmailsSet.add(dt.leadEmail.toLowerCase().trim());
+      (dt.members || []).forEach((m: any) => {
+        const mail = (typeof m === 'string' ? m : m.email || m.username || '').toLowerCase().trim();
+        if (mail) memberEmailsSet.add(mail);
+      });
+      (dt.taskTeams || []).forEach((tt: any) => {
+        (tt.members || []).forEach((m: any) => {
+          const mail = (typeof m === 'string' ? m : m.email || m.username || '').toLowerCase().trim();
+          if (mail) memberEmailsSet.add(mail);
+        });
+      });
+    });
+    receiverTeams.forEach((rt: any) => {
+      if (rt.leadEmail) memberEmailsSet.add(rt.leadEmail.toLowerCase().trim());
+      (rt.members || []).forEach((m: any) => {
+        const mail = (typeof m === 'string' ? m : m.email || m.username || '').toLowerCase().trim();
+        if (mail) memberEmailsSet.add(mail);
+      });
+      (rt.taskTeams || []).forEach((tt: any) => {
+        (tt.members || []).forEach((m: any) => {
+          const mail = (typeof m === 'string' ? m : m.email || m.username || '').toLowerCase().trim();
+          if (mail) memberEmailsSet.add(mail);
+        });
+      });
+    });
+
+    // If still empty, fall back to company members
+    if (memberEmailsSet.size === 0) {
+      companyMembers.forEach((m: any) => {
+        if (m.email) memberEmailsSet.add(m.email.toLowerCase().trim());
+      });
+    }
+
+    const memberEmails = Array.from(memberEmailsSet);
+
+    // Map each member to rich format
+    return memberEmails.map((email: string) => {
+      const cleanEmail = email.toLowerCase().trim();
+      const du = Array.isArray(dirUsers) ? dirUsers.find((u: any) => (u.email || '').toLowerCase().trim() === cleanEmail) : null;
+      const compMember = companyMembers.find((m: any) => (m.email || '').toLowerCase().trim() === cleanEmail);
+
       let teamGroup = 'GENERAL';
-      const userEmail = m.email ? m.email.toLowerCase().trim() : '';
-      if (equiposDeTarea && equiposDeTarea.length > 0) {
-        const foundTeam = equiposDeTarea.find((t: any) => 
-          t.members && t.members.some((email: string) => email.toLowerCase().trim() === userEmail)
-        );
-        if (foundTeam) {
-          teamGroup = foundTeam.name;
-        } else {
-          teamGroup = (m.especialidad || m.empresaUsuario || 'GENERAL');
+      let branch: 'DELIVERY' | 'RECEIVER' | 'ADMIN' | 'NONE' = 'NONE';
+
+      // Check delivery teams
+      for (const dt of deliveryTeams) {
+        const isLead = (dt.leadEmail || '').toLowerCase().trim() === cleanEmail;
+        const isMem = (dt.members || []).some((m: any) => (typeof m === 'string' ? m : m.email || '').toLowerCase().trim() === cleanEmail);
+        const isTaskMem = (dt.taskTeams || []).some((tt: any) => (tt.members || []).some((m: any) => (typeof m === 'string' ? m : m.email || '').toLowerCase().trim() === cleanEmail));
+        if (isLead || isMem || isTaskMem) {
+          teamGroup = dt.name;
+          branch = 'DELIVERY';
+          break;
         }
-      } else {
-        teamGroup = (m.especialidad || m.empresaUsuario || 'GENERAL');
       }
-      teamGroup = teamGroup.toUpperCase().trim();
+
+      // Check receiver teams
+      if (branch === 'NONE') {
+        for (const rt of receiverTeams) {
+          const isLead = (rt.leadEmail || '').toLowerCase().trim() === cleanEmail;
+          const isMem = (rt.members || []).some((m: any) => (typeof m === 'string' ? m : m.email || '').toLowerCase().trim() === cleanEmail);
+          const isTaskMem = (rt.taskTeams || []).some((tt: any) => (tt.members || []).some((m: any) => (typeof m === 'string' ? m : m.email || '').toLowerCase().trim() === cleanEmail));
+          if (isLead || isMem || isTaskMem) {
+            teamGroup = rt.name;
+            branch = 'RECEIVER';
+            break;
+          }
+        }
+      }
+
+      if (cleanEmail === (iso.liderEquipoEntrega || '').toLowerCase().trim()) branch = 'DELIVERY';
+      if (cleanEmail === (iso.directorDeObra || '').toLowerCase().trim()) branch = 'RECEIVER';
+      if ((iso.projectAdmins || []).map((a: string) => a.toLowerCase().trim()).includes(cleanEmail)) branch = 'ADMIN';
+
+      // Check memberBranches explicit mapping
+      if (iso.memberBranches && iso.memberBranches[cleanEmail]) {
+        const mb = iso.memberBranches[cleanEmail].toLowerCase().trim();
+        if (mb === 'delivery') branch = 'DELIVERY';
+        if (mb === 'receiver') branch = 'RECEIVER';
+      }
+
+      const name = du?.nombre || du?.name || compMember?.name || cleanEmail.split('@')[0];
+      const companyName = du?.empresa || compMember?.empresa || company.name || 'EMPRESA';
+      const cargo = du?.cargo || compMember?.cargo || compMember?.role || 'Colaborador';
+      const position = `${cargo} (${name})`;
 
       return {
-        id: userEmail || Math.random().toString(36).substring(2, 9),
-        name: displayName,
-        email: m.email || '',
-        position: position,
-        team: teamGroup
+        id: cleanEmail,
+        email: cleanEmail,
+        name,
+        cargo,
+        position,
+        company: companyName,
+        team: teamGroup.toUpperCase().trim(),
+        branch
       };
     });
   } catch (error) {
