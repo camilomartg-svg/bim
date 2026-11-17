@@ -108,8 +108,8 @@ export default function CreateIssueModal({ onClose, onSuccess }: CreateIssueModa
 
   const [responsibleCompany, setResponsibleCompany] = useState('');
   const [economicActivity, setEconomicActivity] = useState(DEFAULT_ECONOMIC_ACTIVITIES[0]);
-  const [danger, setDanger] = useState(DEFAULT_DANGERS[0]);
-  const [dangerDescription, setDangerDescription] = useState(DANGER_DESCRIPTIONS[DEFAULT_DANGERS[0]][0]);
+  const [danger, setDanger] = useState('');
+  const [dangerDescription, setDangerDescription] = useState('');
   const [proposedActionPlan, setProposedActionPlan] = useState('');
 
   // Report Mode States
@@ -706,33 +706,41 @@ export default function CreateIssueModal({ onClose, onSuccess }: CreateIssueModa
     // Validation
     const errors: string[] = [];
     if (!title.trim()) errors.push("Título (Obligatorio)");
-    if (!description.trim()) errors.push("Descripción Técnica (Obligatorio)");
+    if (isFieldVisible('description') && !description.trim()) errors.push("Descripción Técnica (Obligatorio)");
     if (isFieldVisible('type') && !type) errors.push("Tipo de Incidencia");
     if (isFieldVisible('degreeOfAction') && !degreeOfAction) errors.push("Grado de Respuesta");
     if (isFieldVisible('impact') && impact.length === 0) errors.push("Prioridad / Afectación (seleccione al menos una o 'NINGUNA')");
     if (isFieldVisible('dueDate') && !dueDate) errors.push("Fecha de Vencimiento");
     if (isFieldVisible('assignedPosition') && !assignedPosition) errors.push("Responsable Asignado");
     
-    // Jerarquía de ubicación obligatoria
-    if (selectedUnits.length === 0) errors.push("Unidad Estructural (Selección Mínima)");
-    
-    // Auto-select NINGUNA if empty but available
-    const finalLevels = selectedLevels.length > 0 ? selectedLevels : (getAvailableLevels().includes("NINGUNA") ? ["NINGUNA"] : []);
-    const finalSpaces = selectedSpaces.length > 0 ? selectedSpaces : (getAvailableSpaces().includes("NINGUNA") ? ["NINGUNA"] : []);
+    // Jerarquía de ubicación obligatoria SOLO si el campo de ubicación está visible
+    let finalLevels = selectedLevels;
+    let finalSpaces = selectedSpaces;
 
-    if (finalLevels.length === 0) errors.push("Nivel / Piso (Seleccione al menos uno o 'NINGUNA')");
-    if (finalSpaces.length === 0) errors.push("Espacio Específico (Seleccione al menos uno o 'NINGUNA')");
+    if (isFieldVisible('location')) {
+      if (selectedUnits.length === 0) errors.push("Unidad Estructural (Selección Mínima)");
+      
+      // Auto-select NINGUNA if empty but available
+      finalLevels = selectedLevels.length > 0 ? selectedLevels : (getAvailableLevels().includes("NINGUNA") ? ["NINGUNA"] : []);
+      finalSpaces = selectedSpaces.length > 0 ? selectedSpaces : (getAvailableSpaces().includes("NINGUNA") ? ["NINGUNA"] : []);
+
+      if (finalLevels.length === 0) errors.push("Nivel / Piso (Seleccione al menos uno o 'NINGUNA')");
+      if (finalSpaces.length === 0) errors.push("Espacio Específico (Seleccione al menos uno o 'NINGUNA')");
+    }
 
     // Add validation for new fields if visible
-    if (isFieldVisible('economicActivity') && !economicActivity) errors.push("Actividad Económica");
+    if (isFieldVisible('economicActivity') && !economicActivity) errors.push("Actividad");
     if (isFieldVisible('danger') && !danger) errors.push("Factor de Peligro");
+    if (isFieldVisible('dangerDescription') && danger && !dangerDescription) errors.push("Descripción del Peligro");
     if (isFieldVisible('proposedActionPlan') && !proposedActionPlan.trim()) errors.push("Plan de Acción Propuesto");
 
     if (errors.length > 0) {
-      setShowLocationError(selectedUnits.length === 0 || finalLevels.length === 0 || finalSpaces.length === 0);
+      if (isFieldVisible('location')) {
+        setShowLocationError(selectedUnits.length === 0 || finalLevels.length === 0 || finalSpaces.length === 0);
+      }
       alert("⚠️ Verifique los siguientes campos:\n\n" + errors.map(e => `• ${e}`).join("\n"));
       
-      if (selectedUnits.length === 0 || selectedLevels.length === 0 || selectedSpaces.length === 0) {
+      if (isFieldVisible('location') && (selectedUnits.length === 0 || finalLevels.length === 0 || finalSpaces.length === 0)) {
         const locationSection = document.getElementById('location-section');
         if (locationSection) {
           locationSection.scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -807,13 +815,13 @@ export default function CreateIssueModal({ onClose, onSuccess }: CreateIssueModa
         dueDate,
         attachments: cleanedAttachments,
         comments: [],
-        locations: {
+        locations: isFieldVisible('location') ? {
           units: selectedUnits,
           levels: finalLevels,
           spaces: finalSpaces
-        },
+        } : { units: [], levels: [], spaces: [] },
         month,
-        responsibleCompany,
+        responsibleCompany: responsibleCompany || (assignedMember as any)?.company || '',
         economicActivity,
         danger,
         dangerDescription,
@@ -1096,7 +1104,7 @@ export default function CreateIssueModal({ onClose, onSuccess }: CreateIssueModa
               {isFieldVisible('economicActivity') && (
                 <div>
                   <label className="block text-[9px] font-black uppercase tracking-[0.2em] text-slate-600 mb-2 px-1">
-                    Actividad Económica <span className="text-red-500">*</span>
+                    Actividad <span className="text-red-500">*</span>
                   </label>
                   <select
                     value={economicActivity}
@@ -1158,28 +1166,30 @@ export default function CreateIssueModal({ onClose, onSuccess }: CreateIssueModa
           {/* Section 2: Details & Description */}
           <section className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-8">
             <div className="lg:col-span-2 space-y-4 sm:space-y-6">
-              <div>
-                <label className="block text-[9px] font-black uppercase tracking-[0.2em] text-slate-600 mb-2 px-1 flex items-center justify-between">
-                  <span>Descripción Técnica <span className="text-red-500">*</span></span>
-                  <button
-                    type="button"
-                    onClick={() => isListening ? stopSpeechRecognition() : startSpeechRecognition((text) => setDescription(prev => prev ? `${prev} ${text}` : text))}
-                    className={cn(
-                      "flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[8px] font-black uppercase tracking-wider transition-all",
-                      isListening ? "bg-red-500 text-white animate-pulse" : "bg-slate-100 dark:bg-slate-800 text-slate-500 hover:bg-slate-200"
-                    )}
-                  >
-                    {isListening ? <MicOff className="w-3 h-3" /> : <Mic className="w-3 h-3" />}
-                    {isListening ? 'Parar dictado' : 'Dictar por voz'}
-                  </button>
-                </label>
-                <textarea
-                  value={description}
-                  onChange={(e) => setDescription(e.target.value)}
-                  placeholder="Describa el hallazgo con precisión técnica..."
-                  className="w-full px-4 py-3 sm:px-6 sm:py-4 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-800 rounded-xl text-xs sm:text-[13px] text-slate-900 dark:text-white font-semibold focus:border-slate-400 dark:focus:border-slate-700 outline-none transition-all resize-none h-28 sm:h-32 shadow-inner placeholder:text-slate-400 dark:placeholder:text-slate-700"
-                />
-              </div>
+              {isFieldVisible('description') && (
+                <div>
+                  <label className="block text-[9px] font-black uppercase tracking-[0.2em] text-slate-600 mb-2 px-1 flex items-center justify-between">
+                    <span>Descripción Técnica <span className="text-red-500">*</span></span>
+                    <button
+                      type="button"
+                      onClick={() => isListening ? stopSpeechRecognition() : startSpeechRecognition((text) => setDescription(prev => prev ? `${prev} ${text}` : text))}
+                      className={cn(
+                        "flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[8px] font-black uppercase tracking-wider transition-all",
+                        isListening ? "bg-red-500 text-white animate-pulse" : "bg-slate-100 dark:bg-slate-800 text-slate-500 hover:bg-slate-200"
+                      )}
+                    >
+                      {isListening ? <MicOff className="w-3 h-3" /> : <Mic className="w-3 h-3" />}
+                      {isListening ? 'Parar dictado' : 'Dictar por voz'}
+                    </button>
+                  </label>
+                  <textarea
+                    value={description}
+                    onChange={(e) => setDescription(e.target.value)}
+                    placeholder="Describa el hallazgo con precisión técnica..."
+                    className="w-full px-4 py-3 sm:px-6 sm:py-4 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-800 rounded-xl text-xs sm:text-[13px] text-slate-900 dark:text-white font-semibold focus:border-slate-400 dark:focus:border-slate-700 outline-none transition-all resize-none h-28 sm:h-32 shadow-inner placeholder:text-slate-400 dark:placeholder:text-slate-700"
+                  />
+                </div>
+              )}
 
               {isFieldVisible('proposedActionPlan') && (
                 <div>
@@ -1336,30 +1346,6 @@ export default function CreateIssueModal({ onClose, onSuccess }: CreateIssueModa
                         🔒 Dirigido obligatoriamente al Director de Obra para incidencias ambientales formales.
                       </p>
                     )}
-
-                    {isFieldVisible('responsibleCompany') && (
-                      <div className="relative">
-                        <Building2 className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                        {customCompanies.length > 0 ? (
-                          <select
-                            value={responsibleCompany}
-                            onChange={(e) => setResponsibleCompany(e.target.value)}
-                            className="w-full pl-11 pr-4 py-3 sm:py-4 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-800 rounded-xl text-[10px] sm:text-[11px] text-slate-900 dark:text-white font-black uppercase tracking-wider focus:border-emerald-500 outline-none transition-all shadow-inner appearance-none cursor-pointer"
-                          >
-                            <option value="">EMPRESA CORRESPONSABLE...</option>
-                            {customCompanies.sort().map(c => <option key={c} value={c}>{c}</option>)}
-                          </select>
-                        ) : (
-                          <input
-                            type="text"
-                            value={responsibleCompany}
-                            onChange={(e) => setResponsibleCompany(e.target.value.toUpperCase())}
-                            placeholder="EMPRESA CORRESPONSABLE..."
-                            className="w-full pl-11 pr-4 py-3 sm:py-4 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-800 rounded-xl text-[10px] sm:text-[11px] text-slate-900 dark:text-white font-black uppercase tracking-wider focus:border-emerald-500 outline-none transition-all shadow-inner placeholder:text-slate-400"
-                          />
-                        )}
-                      </div>
-                    )}
                   </div>
                 </div>
               </div>
@@ -1411,7 +1397,8 @@ export default function CreateIssueModal({ onClose, onSuccess }: CreateIssueModa
           </section>
           
           {/* LOCATION HIERARCHY SECTION */}
-          <section id="location-section" className={cn(
+          {isFieldVisible('location') && (
+            <section id="location-section" className={cn(
             "bg-slate-50 dark:bg-slate-900/40 p-4 sm:p-8 rounded-xl border transition-all duration-500 space-y-6 sm:space-y-8",
             showLocationError ? "border-red-500 shadow-lg shadow-red-500/10" : "border-slate-200 dark:border-slate-800"
           )}>
@@ -1532,6 +1519,7 @@ export default function CreateIssueModal({ onClose, onSuccess }: CreateIssueModa
               </div>
             </div>
           </section>
+        )}
 
           {/* Section 5: Annexes */}
           {isFieldVisible('attachments') && (

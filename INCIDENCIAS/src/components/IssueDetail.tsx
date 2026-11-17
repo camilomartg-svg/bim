@@ -1061,7 +1061,7 @@ export default function IssueDetail({ issue: initialIssue, onClose, onOpenReport
                         <p className="text-xs font-bold text-slate-800 dark:text-white">{issue.month || "NO REGISTRADO"}</p>
                      </div>
                      <div className="bg-slate-100/50 dark:bg-slate-950/80 border border-slate-200 dark:border-slate-800 p-5 rounded-2xl">
-                        <p className="text-[7px] font-black text-slate-500 uppercase tracking-widest mb-1">Actividad Económica</p>
+                        <p className="text-[7px] font-black text-slate-500 uppercase tracking-widest mb-1">Actividad</p>
                         <p className="text-xs font-bold text-slate-800 dark:text-white">{issue.economicActivity || "NO REGISTRADA"}</p>
                      </div>
                      <div className="bg-slate-100/50 dark:bg-slate-950/80 border border-slate-200 dark:border-slate-800 p-5 rounded-2xl">

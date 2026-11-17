@@ -952,7 +952,7 @@ export default function DashboardSummary({ onSelectIssue, onOpenReport, selected
                                       <p className="text-[10px] font-bold text-white uppercase">{issue.month || "N/R"}</p>
                                    </div>
                                    <div>
-                                      <p className="text-[7px] font-black text-slate-500 uppercase tracking-widest mb-1">Actividad Económica</p>
+                                      <p className="text-[7px] font-black text-slate-500 uppercase tracking-widest mb-1">Actividad</p>
                                       <p className="text-[10px] font-bold text-white uppercase truncate">{issue.economicActivity || "N/R"}</p>
                                    </div>
                                    <div>

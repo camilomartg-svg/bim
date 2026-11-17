@@ -67,10 +67,11 @@ const DEFAULT_CONFIG: FieldConfig[] = [
   { id: 'assignedPosition', label: 'Responsable Asignado', icon: User, visible: true },
   { id: 'reviewers', label: 'Revisores Adicionales', icon: User, visible: true },
   { id: 'dueDate', label: 'Fecha de Vencimiento', icon: Calendar, visible: true },
+  { id: 'location', label: 'Ubicación del Hallazgo', icon: MapPin, visible: true },
+  { id: 'description', label: 'Descripción del Hallazgo', icon: FileText, visible: true },
   { id: 'attachments', label: 'Documentación y Evidencia', icon: Paperclip, visible: true },
   { id: 'month', label: 'Mes', icon: Calendar, visible: true },
-  { id: 'responsibleCompany', label: 'Empresa Responsable', icon: Building2, visible: true },
-  { id: 'economicActivity', label: 'Actividad Económica', icon: Briefcase, visible: true },
+  { id: 'economicActivity', label: 'Actividad', icon: Briefcase, visible: true },
   { id: 'danger', label: 'Peligros', icon: AlertTriangle, visible: true },
   { id: 'dangerDescription', label: 'Descripción del Peligro', icon: ShieldAlert, visible: true },
   { id: 'issueClass', label: 'Clase', icon: Hash, visible: true },
@@ -1502,7 +1503,7 @@ const changeTypeScope = (id: string, scope: 'GLOBAL' | 'DELIVERY' | 'RECEIVER') 
                     <div className="w-10 h-10 rounded-2xl bg-emerald-500 flex items-center justify-center text-white shadow-lg shadow-emerald-500/10">
                       <Briefcase className="w-5 h-5" />
                     </div>
-                    <h3 className="text-[10px] font-black text-slate-400 dark:text-slate-600 uppercase tracking-[0.3em]">Lista de Actividades Económicas</h3>
+                    <h3 className="text-[10px] font-black text-slate-400 dark:text-slate-600 uppercase tracking-[0.3em]">Lista de Actividades</h3>
                   </div>
                   <div className="flex gap-4">
                     <button 

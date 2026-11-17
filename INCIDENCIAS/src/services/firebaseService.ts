@@ -297,49 +297,106 @@ export const saveReport = async (report: any) => {
 // Issues
 export const subscribeToIssues = (callback: (issues: Issue[]) => void) => {
   const { projectId, companyId } = getProjectAndCompany();
-  const q = query(
-    collection(db, 'issues'),
-    where('projectId', '==', projectId),
-    where('companyId', '==', companyId),
-    orderBy('createdAt', 'desc')
-  );
-  return onSnapshot(q, (snapshot) => {
-    const issues = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Issue));
-    callback(issues);
-  }, (error) => {
-    handleFirestoreError(error, OperationType.GET, 'issues');
-  });
+  const cacheKey = `cached_issues_${companyId}_${projectId}`;
+
+  // 1. Inmediatamente servir datos locales si existen
+  try {
+    const cached = JSON.parse(localStorage.getItem(cacheKey) || '[]');
+    if (Array.isArray(cached) && cached.length > 0) {
+      callback(cached);
+    }
+  } catch (_) {}
+
+  // 2. Escuchar actualizaciones locales inmediatas
+  const handleLocalUpdate = (e: any) => {
+    if (e.detail && Array.isArray(e.detail)) {
+      callback(e.detail);
+    }
+  };
+  window.addEventListener('local_issues_updated', handleLocalUpdate);
+
+  // 3. Suscripción a Firestore con tolerancia total a fallos
+  let unsubscribeFirestore = () => {};
+  try {
+    const q = query(
+      collection(db, 'issues'),
+      where('projectId', '==', projectId),
+      where('companyId', '==', companyId),
+      orderBy('createdAt', 'desc')
+    );
+    unsubscribeFirestore = onSnapshot(q, (snapshot) => {
+      const issues = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Issue));
+      if (issues.length > 0) {
+        try {
+          localStorage.setItem(cacheKey, JSON.stringify(issues));
+        } catch (_) {}
+        callback(issues);
+      }
+    }, (error) => {
+      console.warn("Firestore snapshot skipped (operando en modo Google Drive / local):", error?.message || error);
+    });
+  } catch (err) {
+    console.warn("Firestore subscription error (usando modo Google Drive / local):", err);
+  }
+
+  return () => {
+    window.removeEventListener('local_issues_updated', handleLocalUpdate);
+    try {
+      unsubscribeFirestore();
+    } catch (_) {}
+  };
 };
 
 export const saveIssue = async (issue: Omit<Issue, 'id'> & { id?: string }) => {
   const path = 'issues';
   const { projectId, companyId } = getProjectAndCompany();
+  const issueId = issue.id || ('iss_' + Date.now() + '_' + Math.random().toString(36).substring(2, 8));
+
+  const savedIssue: Issue = {
+    ...issue,
+    id: issueId,
+    projectId,
+    companyId,
+    createdAt: (issue as any).createdAt || new Date().toISOString(),
+    updatedAt: new Date().toISOString()
+  };
+
+  // 1. Actualizar caché local inmediatamente para que la UI responda sin demoras
+  const cacheKey = `cached_issues_${companyId}_${projectId}`;
   try {
-    if (issue.id) {
-      const savedIssue = {
-        ...issue,
-        projectId,
-        companyId,
-        updatedAt: new Date().toISOString()
-      };
-      await setDoc(doc(db, path, issue.id), savedIssue, { merge: true });
-      await archiveIncidentsRecord('incidencia', savedIssue, issue.id);
-      return issue.id;
+    const localIssues: Issue[] = JSON.parse(localStorage.getItem(cacheKey) || '[]');
+    const idx = localIssues.findIndex(i => i.id === issueId);
+    if (idx >= 0) {
+      localIssues[idx] = savedIssue;
     } else {
-      const savedIssue = {
-        ...issue,
-        projectId,
-        companyId,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
-      };
-      const docRef = await addDoc(collection(db, path), savedIssue);
-      await archiveIncidentsRecord('incidencia', { id: docRef.id, ...savedIssue }, docRef.id);
-      return docRef.id;
+      localIssues.unshift(savedIssue);
     }
-  } catch (error) {
-    handleFirestoreError(error, OperationType.WRITE, path);
+    localStorage.setItem(cacheKey, JSON.stringify(localIssues));
+    window.dispatchEvent(new CustomEvent('local_issues_updated', { detail: localIssues }));
+  } catch (cacheErr) {
+    console.warn("[saveIssue] Local storage cache warning:", cacheErr);
   }
+
+  // 2. PRINCIPAL: Guardar JSON directamente en Google Drive bajo la carpeta del proyecto
+  try {
+    await archiveIncidentsRecord('incidencia', savedIssue, issueId, companyId, projectId);
+    console.log("[saveIssue] Incidencia guardada exitosamente en Google Drive:", issueId);
+  } catch (driveErr) {
+    console.error("[saveIssue] Error al archivar incidencia en Google Drive:", driveErr);
+  }
+
+  // 3. SECUNDARIO: Sincronización en Firestore no bloqueante con timeout
+  try {
+    await safeFirestoreCall(
+      setDoc(doc(db, path, issueId), savedIssue, { merge: true }),
+      1200,
+      null
+    );
+  } catch (firestoreErr) {
+    console.warn("[saveIssue] Firestore sync skipped (guardado en Drive y local completado):", firestoreErr);
+  }
+
+  return issueId;
 };
 
 export const deleteIssue = async (id: string) => {

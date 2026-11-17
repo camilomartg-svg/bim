@@ -197,7 +197,8 @@ export async function uploadFileToDrive(
   fileName: string,
   fileType: string,
   folderId?: string,
-  accessToken?: string
+  accessToken?: string,
+  extraMetadata?: Record<string, any>
 ): Promise<DriveUploadResult> {
   console.log(`[Drive Gateway Upload] Initializing upload for: ${fileName} (${fileType}, ${fileBlob.size} bytes)`);
 
@@ -216,6 +217,15 @@ export async function uploadFileToDrive(
       reader.readAsDataURL(fileBlob);
     });
 
+    const bodyPayload = {
+      action: 'uploadFile',
+      content: base64,
+      contentType: fileType,
+      filename: fileName,
+      folderId: folderId || INCIDENTS_DRIVE_FOLDER_ID,
+      ...(extraMetadata || {})
+    };
+
     // 2. Post to the local backend proxy first (which is 100% immune to iframe/browser CORS restrictions)
     let res: Response;
     let fallbackToDirect = false;
@@ -226,13 +236,7 @@ export async function uploadFileToDrive(
         headers: {
           "Content-Type": "application/json"
         },
-        body: JSON.stringify({
-          action: 'uploadFile',
-          content: base64,
-          contentType: fileType,
-          filename: fileName,
-          folderId: folderId || INCIDENTS_DRIVE_FOLDER_ID
-        })
+        body: JSON.stringify(bodyPayload)
       });
 
       if (!res.ok) {
@@ -249,13 +253,7 @@ export async function uploadFileToDrive(
         headers: {
           "Content-Type": "text/plain;charset=utf-8"
         },
-        body: JSON.stringify({
-          action: 'uploadFile',
-          content: base64,
-          contentType: fileType,
-          filename: fileName,
-          folderId: folderId || INCIDENTS_DRIVE_FOLDER_ID
-        })
+        body: JSON.stringify(bodyPayload)
       });
     }
 
@@ -291,7 +289,9 @@ export async function uploadFileToDrive(
 export async function archiveIncidentsRecord(
   kind: 'configuracion' | 'incidencia',
   record: unknown,
-  id: string
+  id: string,
+  companyId?: string,
+  projectId?: string
 ): Promise<DriveUploadResult> {
   const safeId = String(id || 'sin-id').replace(/[^a-zA-Z0-9_-]/g, '_');
   const payload = JSON.stringify({
@@ -300,11 +300,23 @@ export async function archiveIncidentsRecord(
     archivedAt: new Date().toISOString(),
     record
   }, null, 2);
+
+  const cId = companyId || (record as any)?.companyId || 'default';
+  const pId = projectId || (record as any)?.projectId || 'default';
+  const { companyName, projectName } = getHumanCompanyAndProject(cId, pId);
+
   return uploadFileToDrive(
     new Blob([payload], { type: 'application/json' }),
     `${kind}_${safeId}_${Date.now()}.json`,
     'application/json',
-    INCIDENTS_DRIVE_FOLDER_ID
+    INCIDENTS_DRIVE_FOLDER_ID,
+    undefined,
+    {
+      companyId: cId,
+      companyName,
+      project: pId,
+      driveFolderName: projectName
+    }
   );
 }
 
