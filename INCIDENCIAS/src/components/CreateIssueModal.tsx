@@ -25,7 +25,13 @@ import {
   saveIssue,
   saveReport
 } from '../services/firebaseService';
-import { getUserProjectBranch, isTypeAllowedForBranch } from '../utils/userScope';
+import { 
+  getUserProjectBranch, 
+  isTypeAllowedForBranch, 
+  getBranchForTeamName, 
+  getUserAssignedTeam, 
+  getActiveProjectData 
+} from '../utils/userScope';
 import { X, Paperclip, Send, AlertCircle, Box, Map as MapIcon, Image as ImageIcon, FileText, Link, Plus, Trash2, Camera, User as UserIcon, MapPin, Package, ShieldCheck, Building2, ClipboardList, ChevronRight, CheckCircle2, Calendar, Zap, ArrowRight, Mic, MicOff, Video } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { cn } from '../lib/utils';
@@ -178,7 +184,22 @@ export default function CreateIssueModal({ onClose, onSuccess }: CreateIssueModa
   const [attachments, setAttachments] = useState<Partial<Attachment>[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isListening, setIsListening] = useState(false);
-  const [activeCreatorTeam, setActiveCreatorTeam] = useState((user as any)?.team || 'ARQUITECTURA');
+  const [activeCreatorTeam, setActiveCreatorTeam] = useState<string>(() => {
+    const assigned = getUserAssignedTeam((user as any)?.email);
+    return assigned || (user as any)?.team || 'ARQUITECTURA';
+  });
+  const [allProjectTeams, setAllProjectTeams] = useState<string[]>(['ARQUITECTURA', 'ESTRUCTURAL', 'BIM OBRA', 'OBRA']);
+
+  const isAdmin = user?.role === 'admin' || (user?.role as string) === 'super admin' || Boolean((user as any)?.isSuperAdmin) || getUserProjectBranch(user?.email) === 'ADMIN';
+
+  useEffect(() => {
+    if (user?.email) {
+      const assigned = getUserAssignedTeam(user.email);
+      if (assigned) {
+        setActiveCreatorTeam(assigned);
+      }
+    }
+  }, [user?.email]);
   
   // State for which context is picking from CDE
   const [cdeTarget, setCdeTarget] = useState<{ type: 'issue' | 'block', blockId?: string }>({ type: 'issue' });
@@ -196,6 +217,16 @@ export default function CreateIssueModal({ onClose, onSuccess }: CreateIssueModa
       let impactOptions = fbConfig.impactOptions || IMPACT_OPTIONS;
       let allowedUnitIds: string[] | undefined = undefined;
       
+      // Update available project teams
+      const proj = getActiveProjectData();
+      const iso = proj?.iso19650 || {};
+      const delivNames = Array.isArray(iso.deliveryTeams) ? iso.deliveryTeams.map((d: any) => d.name) : [];
+      const recvNames = Array.isArray(iso.receiverTeams) ? iso.receiverTeams.map((r: any) => r.name) : [];
+      const combined = Array.from(new Set([...delivNames, ...recvNames, ...(fbConfig.teams || [])])).filter(Boolean);
+      if (combined.length > 0) {
+        setAllProjectTeams(combined);
+      }
+
       // Type Overrides (Apply on top of global)
       if (type && fbConfig.typeOverrides?.[type]) {
         const typeOverride = fbConfig.typeOverrides[type];
@@ -208,14 +239,20 @@ export default function CreateIssueModal({ onClose, onSuccess }: CreateIssueModa
       setFieldSettings(fieldArray);
       setCustomImpacts(impactOptions);
 
-      // Filter types based on user ISO 19650 branch permissions (Global vs Entrega vs Receptor) and overrides
-      const userBranch = getUserProjectBranch(user?.email);
+      // Determine active branch scope:
+      // The active team determines the branch (DELIVERY vs RECEIVER). If team doesn't match, check user branch.
+      const teamBranch = getBranchForTeamName(activeCreatorTeam);
+      const userBranch = getUserProjectBranch(user?.email, activeCreatorTeam);
+      const activeBranch = teamBranch !== 'NONE' ? teamBranch : userBranch;
       const scopesMap = fbConfig.issueTypeScopes || {};
 
       const filteredTypes = issueTypes.filter(t => {
-        // 1. Check ISO 19650 branch scope restriction
+        // 1. Check ISO 19650 branch scope restriction:
+        // - GLOBAL: visible to everyone.
+        // - DELIVERY: only for delivery teams.
+        // - RECEIVER: only for receiver teams.
         const scope = scopesMap[t] || 'GLOBAL';
-        if (!isTypeAllowedForBranch(scope, userBranch)) {
+        if (!isTypeAllowedForBranch(scope, activeBranch)) {
           return false;
         }
 
@@ -320,7 +357,7 @@ export default function CreateIssueModal({ onClose, onSuccess }: CreateIssueModa
       if (unsubscribeTeam) unsubscribeTeam();
       if (unsubscribeUnits) unsubscribeUnits();
     };
-  }, [type, user]);
+  }, [type, user, activeCreatorTeam]);
 
   const startSpeechRecognition = (onTranscript: (text: string) => void) => {
     const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
@@ -846,27 +883,31 @@ export default function CreateIssueModal({ onClose, onSuccess }: CreateIssueModa
                 </h2>
                 <div className="hidden sm:inline-block px-2.5 py-0.5 bg-blue-500/10 text-blue-500 dark:text-blue-400 rounded-full text-[8px] font-black uppercase tracking-widest border border-blue-500/20">SISTEMA CDE</div>
               </div>
-              <p className="text-[8px] sm:text-[9px] text-slate-400 dark:text-slate-600 font-bold uppercase tracking-wider">
-                {activeMode === 'issue' ? (
-                   <span className="flex items-center gap-1.5">
-                     EQUIPO: <span className={cn(
-                       "px-1.5 py-0.5 rounded border text-[8px]",
-                       activeCreatorTeam === 'ARQUITECTURA' ? "bg-amber-500/10 border-amber-500/20 text-amber-500" :
-                       activeCreatorTeam === 'COORDINACIÓN TÉCNICA' ? "bg-cyan-500/10 border-cyan-500/20 text-cyan-600" :
-                       "bg-slate-500/10 border-slate-500/20 text-slate-500"
-                     )}>{activeCreatorTeam}</span>
-                   </span>
+              <div className="text-[8px] sm:text-[9px] text-slate-400 dark:text-slate-600 font-bold uppercase tracking-wider flex items-center gap-1.5 mt-0.5">
+                <span>{activeMode === 'issue' ? 'EQUIPO:' : 'EMITIDO POR:'}</span>
+                {isAdmin && allProjectTeams.length > 1 ? (
+                  <select
+                    value={activeCreatorTeam}
+                    onChange={(e) => setActiveCreatorTeam(e.target.value)}
+                    className="px-2 py-0.5 rounded-lg border text-[9px] font-black uppercase tracking-wider bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200 outline-none cursor-pointer hover:border-slate-400 transition-all shadow-sm"
+                  >
+                    {allProjectTeams.map(t => {
+                      const br = getBranchForTeamName(t);
+                      const label = br === 'DELIVERY' ? 'ENTREGA' : br === 'RECEIVER' ? 'RECEPTOR' : 'GENERAL';
+                      return <option key={t} value={t}>{t} [{label}]</option>;
+                    })}
+                  </select>
                 ) : (
-                   <span className="flex items-center gap-1.5">
-                     EMITIDO POR: <span className={cn(
-                       "px-1.5 py-0.5 rounded border text-[8px]",
-                       activeCreatorTeam === 'ARQUITECTURA' ? "bg-amber-500/10 border-amber-500/20 text-amber-500" :
-                       activeCreatorTeam === 'COORDINACIÓN TÉCNICA' ? "bg-cyan-500/10 border-cyan-500/20 text-cyan-500" :
-                       "bg-slate-500/10 border-slate-500/20 text-slate-500"
-                     )}>{activeCreatorTeam}</span>
-                   </span>
+                  <span className={cn(
+                    "px-1.5 py-0.5 rounded border text-[8px] font-black tracking-wider uppercase",
+                    getBranchForTeamName(activeCreatorTeam) === 'DELIVERY' ? "bg-amber-500/10 border-amber-500/30 text-amber-600 dark:text-amber-400" :
+                    getBranchForTeamName(activeCreatorTeam) === 'RECEIVER' ? "bg-purple-500/10 border-purple-500/30 text-purple-600 dark:text-purple-400" :
+                    "bg-slate-500/10 border-slate-500/20 text-slate-500"
+                  )}>
+                    {activeCreatorTeam} ({getBranchForTeamName(activeCreatorTeam) === 'DELIVERY' ? 'ENTREGA' : getBranchForTeamName(activeCreatorTeam) === 'RECEIVER' ? 'RECEPTOR' : 'GENERAL'})
+                  </span>
                 )}
-              </p>
+              </div>
             </div>
           </div>
           <button onClick={onClose} className="p-2 sm:p-3 bg-slate-100 dark:bg-slate-900 hover:bg-slate-200 dark:hover:bg-slate-800 rounded-xl transition-all border border-slate-200 dark:border-slate-800 shadow-sm active:scale-95 group">

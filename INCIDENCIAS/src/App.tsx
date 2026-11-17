@@ -23,6 +23,7 @@ import DashboardChat from './components/DashboardChat';
 import { db } from './services/firebase';
 import { doc, getDoc, onSnapshot } from 'firebase/firestore';
 import { getProjectAndCompany } from './services/firebaseService';
+import { loadAndCacheProjectIso } from './utils/userScope';
 
 // Component for displaying standard restricted access view to matching style
 function RestrictedView({ title, onBack }: { title: string; onBack: () => void }) {
@@ -88,6 +89,7 @@ function Dashboard() {
 
   useEffect(() => {
     const { companyId, projectId } = getProjectAndCompany();
+    loadAndCacheProjectIso(companyId, projectId).catch(() => {});
     const unsub = onSnapshot(doc(db, 'config', `${companyId}_${projectId}`), (snap) => {
       if (snap.exists()) {
         setProjectConfig(snap.data());

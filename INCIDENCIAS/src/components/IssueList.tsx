@@ -57,10 +57,13 @@ export default function IssueList({ onSelectIssue, view = 'active', onOpenReport
   }, []);
 
   const filteredIssues = issues.filter(issue => {
-    // Filter by ISO 19650 Branch Scope (Global vs Entrega vs Receptor)
+    // Filter by ISO 19650 Branch Scope:
+    // - Globales: le salen a todos los usuarios
+    // - Entrega: solo a usuarios de equipo de entrega (y admins supervisores)
+    // - Recepción: solo a usuarios de equipo de recepción (y admins supervisores)
     const userBranch = getUserProjectBranch(user?.email);
     const scope = (issue.type && typeScopes[issue.type]) || 'GLOBAL';
-    if (!isTypeAllowedForBranch(scope, userBranch)) {
+    if (userBranch !== 'ADMIN' && !isTypeAllowedForBranch(scope, userBranch)) {
       return false;
     }
 

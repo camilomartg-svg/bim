@@ -767,6 +767,11 @@
         if (driveData && driveData.status === 'success' && driveData.data) {
           activeProject = driveData.data;
           loadedFromDrive = true;
+          try {
+            localStorage.setItem('activeProject', JSON.stringify(activeProject));
+            sessionStorage.setItem('activeProject', JSON.stringify(activeProject));
+            localStorage.setItem('cached_project_iso_data', JSON.stringify(activeProject));
+          } catch (e) {}
           console.log('✅ Proyecto cargado exitosamente desde Google Drive:', activeProject.name);
         }
       }
@@ -5775,6 +5780,12 @@ window.openAddMemberToReceiverTeamModal = function (receiverId) {
 
     // Sincronizar estructura interna
     syncBackToEquiposDeTarea();
+
+    try {
+      localStorage.setItem('activeProject', JSON.stringify(activeProject));
+      sessionStorage.setItem('activeProject', JSON.stringify(activeProject));
+      localStorage.setItem('cached_project_iso_data', JSON.stringify(activeProject));
+    } catch (e) {}
 
     const companyName = (currentCompany && currentCompany.name) ? currentCompany.name : (companyId || 'General');
     const projectName = activeProject.name || activeProject.title || (projectSlug ? projectSlug.replace(/[-_]/g, ' ') : 'Proyecto');

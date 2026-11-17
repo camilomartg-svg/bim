@@ -16,8 +16,8 @@ export type StoredStructuralUnit = {
 };
 
 // Nora Google Apps Script Gateway (Shared Drive storage engine)
-const FILES_GATEWAY_URL = "https://script.google.com/macros/s/AKfycbx2RAQx_8K4o22xE0Mw-ETc7K_58vIoi6-PgVi64u80inuiw144ks3cgWSdCtXqIgB02g/exec";
-const INCIDENCES_CONFIG_SCRIPT_URL = import.meta.env.VITE_INCIDENCIAS_CONFIG_SCRIPT_URL?.trim() || FILES_GATEWAY_URL;
+export const FILES_GATEWAY_URL = "https://script.google.com/macros/s/AKfycbx2RAQx_8K4o22xE0Mw-ETc7K_58vIoi6-PgVi64u80inuiw144ks3cgWSdCtXqIgB02g/exec";
+export const INCIDENCES_CONFIG_SCRIPT_URL = import.meta.env.VITE_INCIDENCIAS_CONFIG_SCRIPT_URL?.trim() || FILES_GATEWAY_URL;
 const APPS_SCRIPT_TIMEOUT_MS = 30_000;
 
 export function getHumanCompanyAndProject(companyId: string, projectId: string): { companyName: string; projectName: string } {
