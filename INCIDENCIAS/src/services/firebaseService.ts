@@ -17,6 +17,7 @@ import { db, auth } from './firebase';
 import {
   archiveIncidentsRecord,
   loadIncidentsLocationsFromSheet,
+  loadIncidentsConfigFromSheet,
   saveIncidentsConfigToSheet,
   saveIncidentsLocationsToSheet
 } from '../utils/googleDriveUtils';
@@ -640,24 +641,39 @@ export const getProjectConfig = async () => {
   if (cachedInMemory) return cachedInMemory;
   let fbConfig: any = null;
   
+  // 1. Local storage fallback
+  try {
+    const cached = localStorage.getItem(`cached_project_config_${configDocId}`) || localStorage.getItem('cached_project_config');
+    if (cached) {
+      fbConfig = JSON.parse(cached);
+    }
+  } catch (cacheErr) {
+    console.error("Local project config storage fallbacks failed:", cacheErr);
+  }
+
+  // 2. Firestore read
   try {
     const docSnap = await getDoc(doc(db, 'config', configDocId));
     if (docSnap.exists()) {
-      fbConfig = docSnap.data();
+      fbConfig = { ...(fbConfig || {}), ...docSnap.data() };
     }
   } catch (error) {
-    console.warn("Firestore error reading config/project. Attempting local storage fallback:", error);
+    console.warn("Firestore error reading config/project:", error);
+  }
+
+  // 3. Google Drive fallback if types are empty or not loaded
+  if (!fbConfig || !fbConfig.issueTypes || fbConfig.issueTypes.length === 0) {
     try {
-      const cached = localStorage.getItem(`cached_project_config_${configDocId}`) || localStorage.getItem('cached_project_config');
-      if (cached) {
-        fbConfig = JSON.parse(cached);
+      const driveCfg = await loadIncidentsConfigFromSheet(companyId, projectId);
+      if (driveCfg) {
+        fbConfig = { ...driveCfg, ...(fbConfig || {}) };
       }
-    } catch (cacheErr) {
-      console.error("Local project config storage fallbacks failed:", cacheErr);
+    } catch (driveErr) {
+      console.warn("Drive config reading warning:", driveErr);
     }
   }
 
-  // Load platform config to merge companies and teams
+  // 4. Load platform config to merge companies and teams
   const platformConfig = await getPlatformConfig(companyId);
   if (platformConfig) {
     if (!fbConfig) {
@@ -688,36 +704,61 @@ export const getProjectConfig = async () => {
 export const saveProjectConfig = async (config: any) => {
   const { projectId, companyId } = getProjectAndCompany();
   const configDocId = `${companyId}_${projectId}`;
+
+  // 1. Inmediatamente actualizar memoria y caché local
+  projectConfigCache.set(configDocId, config);
+  try {
+    localStorage.setItem(`cached_project_config_${configDocId}`, JSON.stringify(config));
+    localStorage.setItem('cached_project_config', JSON.stringify(config));
+  } catch (cacheStoreErr) {
+    console.warn("Could not write project config to local cache on save", cacheStoreErr);
+  }
+
+  // 2. PRINCIPAL: Guardar directamente en Google Drive (Carpeta raíz 1-9SumRefiih81mc_eASsswy_W_U0-qe5)
+  let driveStorageResult: any = null;
+  try {
+    let locations: any[] = [];
+    try {
+      const unitsSnapshot = await getDocs(query(
+        collection(db, 'units'),
+        where('projectId', '==', projectId),
+        where('companyId', '==', companyId)
+      ));
+      locations = unitsSnapshot.docs.map((unitDoc) => ({
+        id: unitDoc.id,
+        ...unitDoc.data()
+      }));
+    } catch (locErr) {
+      console.warn("Units query skipped for locations backup:", locErr);
+    }
+
+    driveStorageResult = await saveIncidentsConfigToSheet({
+      ...config,
+      projectId,
+      companyId,
+      locations,
+      updatedAt: new Date().toISOString()
+    }, companyId, projectId);
+    console.log("Configuración guardada en Google Drive:", driveStorageResult);
+  } catch (driveErr: any) {
+    console.error("Error guardando en Google Drive:", driveErr);
+    throw new Error(driveErr?.message || "No se pudo guardar la configuración en Google Drive.");
+  }
+
+  // 3. SECUNDARIO: Sincronizar en Firestore (no bloquea si reglas rechazan)
   try {
     await setDoc(doc(db, 'config', configDocId), {
       ...config,
       projectId,
-      companyId
-    }, { merge: true });
-    projectConfigCache.set(configDocId, config);
-    const unitsSnapshot = await getDocs(query(
-      collection(db, 'units'),
-      where('projectId', '==', projectId),
-      where('companyId', '==', companyId)
-    ));
-    const locations = unitsSnapshot.docs.map((unitDoc) => ({
-      id: unitDoc.id,
-      ...unitDoc.data()
-    }));
-    await saveIncidentsConfigToSheet({
-      ...config,
-      projectId,
       companyId,
-      locations
-    }, companyId, projectId);
-    try {
-      localStorage.setItem(`cached_project_config_${configDocId}`, JSON.stringify(config));
-    } catch (cacheStoreErr) {
-      console.warn("Could not write project config to local cache on save", cacheStoreErr);
-    }
-  } catch (error) {
-    handleFirestoreError(error, OperationType.WRITE, 'config/' + configDocId);
+      driveStorage: driveStorageResult || null,
+      updatedAt: new Date().toISOString()
+    }, { merge: true });
+  } catch (firestoreErr) {
+    console.warn("Firestore sync skipped (Drive save succeeded):", firestoreErr);
   }
+
+  return driveStorageResult;
 };
 
 // Structural Units

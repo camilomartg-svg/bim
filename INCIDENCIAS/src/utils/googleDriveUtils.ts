@@ -15,21 +15,54 @@ export type StoredStructuralUnit = {
   spaces: Array<{ id: string; name: string; levelName?: string }>;
 };
 
-// This existing gateway is exclusively for file uploads and must not receive
-// Incidencias configuration traffic.
+// Nora Google Apps Script Gateway (Shared Drive storage engine)
 const FILES_GATEWAY_URL = "https://script.google.com/macros/s/AKfycbx2RAQx_8K4o22xE0Mw-ETc7K_58vIoi6-PgVi64u80inuiw144ks3cgWSdCtXqIgB02g/exec";
-// A separately deployed Apps Script, dedicated to the per-project settings sheet.
-const INCIDENCES_CONFIG_SCRIPT_URL = import.meta.env.VITE_INCIDENCIAS_CONFIG_SCRIPT_URL?.trim() || '';
-const APPS_SCRIPT_TIMEOUT_MS = 15_000;
+const INCIDENCES_CONFIG_SCRIPT_URL = import.meta.env.VITE_INCIDENCIAS_CONFIG_SCRIPT_URL?.trim() || FILES_GATEWAY_URL;
+const APPS_SCRIPT_TIMEOUT_MS = 30_000;
+
+export function getHumanCompanyAndProject(companyId: string, projectId: string): { companyName: string; projectName: string } {
+  let companyName = companyId;
+  let projectName = projectId;
+
+  try {
+    const urlParams = new URLSearchParams(window.location.search);
+    const driveFolderName = urlParams.get('driveFolderName');
+    if (driveFolderName) {
+      projectName = decodeURIComponent(driveFolderName).replace(/\+/g, ' ').trim();
+    }
+
+    const rawProj = sessionStorage.getItem('activeProject') || localStorage.getItem('activeProject');
+    if (rawProj) {
+      const p = JSON.parse(rawProj);
+      if (p.name && p.name.trim()) projectName = p.name.trim();
+    }
+
+    const rawComp = sessionStorage.getItem('currentCompany') || localStorage.getItem('currentCompany');
+    if (rawComp) {
+      const c = JSON.parse(rawComp);
+      if (c.name && c.name.trim()) companyName = c.name.trim();
+    }
+
+    const rawUser = sessionStorage.getItem('userAccount') || localStorage.getItem('userAccount');
+    if (rawUser) {
+      const u = JSON.parse(rawUser);
+      if (u.empresa && u.empresa.trim() && (companyName === companyId || !companyName)) {
+        companyName = u.empresa.trim();
+      }
+    }
+  } catch (e) {
+    console.warn('Error obtaining human company and project names:', e);
+  }
+
+  return { companyName, projectName };
+}
 
 async function postToAppsScript(payload: unknown): Promise<any> {
-  if (!INCIDENCES_CONFIG_SCRIPT_URL) {
-    throw new Error('Falta configurar VITE_INCIDENCIAS_CONFIG_SCRIPT_URL con la URL del Apps Script exclusivo de Configuración de Incidencias.');
-  }
+  const targetUrl = INCIDENCES_CONFIG_SCRIPT_URL || FILES_GATEWAY_URL;
   const controller = new AbortController();
   const timeout = window.setTimeout(() => controller.abort(), APPS_SCRIPT_TIMEOUT_MS);
   try {
-    const response = await fetch(INCIDENCES_CONFIG_SCRIPT_URL, {
+    const response = await fetch(targetUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'text/plain;charset=utf-8' },
       body: JSON.stringify(payload),
@@ -39,7 +72,7 @@ async function postToAppsScript(payload: unknown): Promise<any> {
     return await response.json();
   } catch (error: any) {
     if (error?.name === 'AbortError') {
-      throw new Error('Drive tardó más de 15 segundos en responder. La configuración local sí se guardó; verifica el despliegue del Apps Script.');
+      throw new Error('Drive tardó más de 30 segundos en responder. Verifica el despliegue del Apps Script.');
     }
     throw error;
   } finally {
@@ -56,11 +89,17 @@ export async function saveIncidentsConfigToSheet(
   config: unknown,
   companyId: string,
   projectId: string
-): Promise<{ spreadsheetUrl: string }> {
+): Promise<{ spreadsheetUrl: string; projectFolderId?: string; companyFolderId?: string }> {
+  const { companyName, projectName } = getHumanCompanyAndProject(companyId, projectId);
   const result = await postToAppsScript({
     action: 'saveIncidentsProjectConfig',
-    company: { id: companyId, name: companyId },
-    project: { id: projectId, slug: projectId, name: projectId },
+    company: { id: companyId, name: companyName },
+    companyId: companyId,
+    companyName: companyName,
+    project: { id: projectId, slug: projectId, name: projectName },
+    projectId: projectId,
+    projectSlug: projectId,
+    projectName: projectName,
     config
   });
   if (result.status !== 'success') throw new Error(result.message || 'No se pudo guardar la configuración en Drive.');
@@ -74,25 +113,63 @@ export async function saveIncidentsLocationsToSheet(
   companyId: string,
   projectId: string
 ): Promise<void> {
+  const { companyName, projectName } = getHumanCompanyAndProject(companyId, projectId);
   const result = await postToAppsScript({
     action: 'saveIncidentsLocation', operation, unit,
-    company: { id: companyId, name: companyId },
-    project: { id: projectId, slug: projectId, name: projectId }
+    company: { id: companyId, name: companyName },
+    companyId: companyId,
+    companyName: companyName,
+    project: { id: projectId, slug: projectId, name: projectName },
+    projectId: projectId,
+    projectSlug: projectId,
+    projectName: projectName
   });
   if (result.status !== 'success') throw new Error(result.message || 'No se pudo guardar la ubicación en Drive.');
 }
 
 export async function loadIncidentsLocationsFromSheet(companyId: string, projectId: string): Promise<StoredStructuralUnit[]> {
-  if (!INCIDENCES_CONFIG_SCRIPT_URL) return [];
-  const url = new URL(INCIDENCES_CONFIG_SCRIPT_URL);
-  url.searchParams.set('action', 'getIncidentsLocations');
-  url.searchParams.set('empresa', companyId);
-  url.searchParams.set('proyecto', projectId);
-  const response = await fetch(url.toString());
-  if (!response.ok) throw new Error(`Google Drive respondió con código ${response.status}.`);
-  const result = await response.json();
-  if (result.status !== 'success') throw new Error(result.message || 'No se pudieron cargar las ubicaciones desde Drive.');
-  return Array.isArray(result.units) ? result.units : [];
+  const targetUrl = INCIDENCES_CONFIG_SCRIPT_URL || FILES_GATEWAY_URL;
+  if (!targetUrl) return [];
+  const { companyName, projectName } = getHumanCompanyAndProject(companyId, projectId);
+  try {
+    const url = new URL(targetUrl);
+    url.searchParams.set('action', 'getIncidentsLocations');
+    url.searchParams.set('empresa', companyName);
+    url.searchParams.set('proyecto', projectName);
+    url.searchParams.set('companyId', companyId);
+    url.searchParams.set('projectId', projectId);
+    const response = await fetch(url.toString());
+    if (!response.ok) throw new Error(`Google Drive respondió con código ${response.status}.`);
+    const result = await response.json();
+    if (result.status !== 'success') throw new Error(result.message || 'No se pudieron cargar las ubicaciones desde Drive.');
+    return Array.isArray(result.units) ? result.units : [];
+  } catch (err) {
+    console.warn("Could not load locations from Google Drive:", err);
+    return [];
+  }
+}
+
+export async function loadIncidentsConfigFromSheet(companyId: string, projectId: string): Promise<any | null> {
+  const targetUrl = INCIDENCES_CONFIG_SCRIPT_URL || FILES_GATEWAY_URL;
+  if (!targetUrl) return null;
+  const { companyName, projectName } = getHumanCompanyAndProject(companyId, projectId);
+  try {
+    const url = new URL(targetUrl);
+    url.searchParams.set('action', 'getIncidentsProjectConfig');
+    url.searchParams.set('empresa', companyName);
+    url.searchParams.set('proyecto', projectName);
+    url.searchParams.set('companyId', companyId);
+    url.searchParams.set('projectId', projectId);
+    const response = await fetch(url.toString());
+    if (!response.ok) return null;
+    const result = await response.json();
+    if (result && result.status === 'success' && result.config) {
+      return result.config;
+    }
+  } catch (e) {
+    console.warn('Could not load Incidencias config from Google Drive:', e);
+  }
+  return null;
 }
 
 /**

@@ -1171,10 +1171,11 @@ const changeTypeScope = (id: string, scope: 'GLOBAL' | 'DELIVERY' | 'RECEIVER') 
             <button 
               onClick={handleSave}
               disabled={isSaving}
+              title="Guardar configuración directamente en Google Drive"
               className="bg-slate-900 disabled:opacity-60 dark:bg-white text-white dark:text-slate-900 px-8 py-3.5 rounded-2xl font-black text-[10px] uppercase tracking-[0.2em] shadow-xl shadow-slate-900/10 dark:shadow-white/5 flex items-center justify-center gap-3 hover:bg-slate-800 dark:hover:bg-slate-100 transition-all active:scale-95"
             >
-              <Save className="w-4 h-4" />
-              {isSaving ? 'Guardando…' : 'Guardar Configuración'}
+              {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+              {isSaving ? 'Guardando en Drive…' : 'Guardar Configuración'}
             </button>
           </div>
         </header>
@@ -2237,7 +2238,7 @@ const changeTypeScope = (id: string, scope: 'GLOBAL' | 'DELIVERY' | 'RECEIVER') 
             className="fixed bottom-10 left-1/2 -translate-x-1/2 bg-emerald-500 text-white px-8 py-3 rounded-full font-bold text-xs uppercase tracking-widest shadow-2xl flex items-center gap-3 z-50 border border-emerald-400/50"
           >
             <CheckCircle className="w-4 h-4" />
-            Preferencias Actualizadas
+            Configuración Guardada en Google Drive
           </motion.div>
         )}
       </AnimatePresence>
