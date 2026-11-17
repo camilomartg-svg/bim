@@ -603,23 +603,35 @@ export const subscribeToTeam = (callback: (team: any[]) => void) => {
   };
 };
 
+// Helper to prevent offline or missing Firestore databases from hanging forever
+const safeFirestoreCall = async <T>(promise: Promise<T>, timeoutMs = 1200, fallback: T = null as any): Promise<T> => {
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<T>((resolve) => setTimeout(() => resolve(fallback), timeoutMs))
+    ]);
+  } catch (err) {
+    console.warn("Firestore safe call timed out or failed:", err);
+    return fallback;
+  }
+};
+
 export const saveTeamMember = async (member: any) => {
   const path = 'team';
   const { projectId, companyId } = getProjectAndCompany();
   try {
-    if (member.id) {
-      await setDoc(doc(db, path, member.id), {
-        ...member,
-        projectId,
-        companyId
-      }, { merge: true });
-    } else {
-      await addDoc(collection(db, path), {
-        ...member,
-        projectId,
-        companyId
-      });
-    }
+    const firestorePromise = member.id
+      ? setDoc(doc(db, path, member.id), {
+          ...member,
+          projectId,
+          companyId
+        }, { merge: true })
+      : addDoc(collection(db, path), {
+          ...member,
+          projectId,
+          companyId
+        });
+    await safeFirestoreCall(firestorePromise, 1000, null);
   } catch (error) {
     handleFirestoreError(error, OperationType.WRITE, path);
   }
@@ -651,10 +663,10 @@ export const getProjectConfig = async () => {
     console.error("Local project config storage fallbacks failed:", cacheErr);
   }
 
-  // 2. Firestore read
+  // 2. Firestore read with timeout safeguard
   try {
-    const docSnap = await getDoc(doc(db, 'config', configDocId));
-    if (docSnap.exists()) {
+    const docSnap: any = await safeFirestoreCall(getDoc(doc(db, 'config', configDocId)), 1200, null);
+    if (docSnap && typeof docSnap.exists === 'function' && docSnap.exists()) {
       fbConfig = { ...(fbConfig || {}), ...docSnap.data() };
     }
   } catch (error) {
@@ -719,15 +731,21 @@ export const saveProjectConfig = async (config: any) => {
   try {
     let locations: any[] = [];
     try {
-      const unitsSnapshot = await getDocs(query(
-        collection(db, 'units'),
-        where('projectId', '==', projectId),
-        where('companyId', '==', companyId)
-      ));
-      locations = unitsSnapshot.docs.map((unitDoc) => ({
-        id: unitDoc.id,
-        ...unitDoc.data()
-      }));
+      const unitsSnapshot: any = await safeFirestoreCall(
+        getDocs(query(
+          collection(db, 'units'),
+          where('projectId', '==', projectId),
+          where('companyId', '==', companyId)
+        )),
+        1000,
+        null
+      );
+      if (unitsSnapshot && unitsSnapshot.docs) {
+        locations = unitsSnapshot.docs.map((unitDoc: any) => ({
+          id: unitDoc.id,
+          ...unitDoc.data()
+        }));
+      }
     } catch (locErr) {
       console.warn("Units query skipped for locations backup:", locErr);
     }
@@ -745,15 +763,19 @@ export const saveProjectConfig = async (config: any) => {
     throw new Error(driveErr?.message || "No se pudo guardar la configuración en Google Drive.");
   }
 
-  // 3. SECUNDARIO: Sincronizar en Firestore (no bloquea si reglas rechazan)
+  // 3. SECUNDARIO: Sincronizar en Firestore sin bloquear la UI ni el guardado de Drive
   try {
-    await setDoc(doc(db, 'config', configDocId), {
-      ...config,
-      projectId,
-      companyId,
-      driveStorage: driveStorageResult || null,
-      updatedAt: new Date().toISOString()
-    }, { merge: true });
+    await safeFirestoreCall(
+      setDoc(doc(db, 'config', configDocId), {
+        ...config,
+        projectId,
+        companyId,
+        driveStorage: driveStorageResult || null,
+        updatedAt: new Date().toISOString()
+      }, { merge: true }),
+      1200,
+      null
+    );
   } catch (firestoreErr) {
     console.warn("Firestore sync skipped (Drive save succeeded):", firestoreErr);
   }

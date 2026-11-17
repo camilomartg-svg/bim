@@ -839,8 +839,9 @@ export default function ConfigPanel() {
       setGlobalImpacts(impactData);
       setGlobalTypes(typeData);
       
-      for (const member of team) {
-        await saveTeamMember(member);
+      // Sincronizar miembros en segundo plano sin bloquear el guardado de Drive
+      if (team && team.length > 0) {
+        Promise.allSettled(team.map(member => saveTeamMember(member))).catch(() => {});
       }
     } else if (configMode === 'type') {
       const existingOverride = typeOverrides[selectedConfigKey] || {};

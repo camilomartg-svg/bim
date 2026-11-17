@@ -153,6 +153,8 @@ export async function loadIncidentsConfigFromSheet(companyId: string, projectId:
   const targetUrl = INCIDENCES_CONFIG_SCRIPT_URL || FILES_GATEWAY_URL;
   if (!targetUrl) return null;
   const { companyName, projectName } = getHumanCompanyAndProject(companyId, projectId);
+  const controller = new AbortController();
+  const timeout = window.setTimeout(() => controller.abort(), 8000);
   try {
     const url = new URL(targetUrl);
     url.searchParams.set('action', 'getIncidentsProjectConfig');
@@ -160,7 +162,7 @@ export async function loadIncidentsConfigFromSheet(companyId: string, projectId:
     url.searchParams.set('proyecto', projectName);
     url.searchParams.set('companyId', companyId);
     url.searchParams.set('projectId', projectId);
-    const response = await fetch(url.toString());
+    const response = await fetch(url.toString(), { signal: controller.signal });
     if (!response.ok) return null;
     const result = await response.json();
     if (result && result.status === 'success' && result.config) {
@@ -168,6 +170,8 @@ export async function loadIncidentsConfigFromSheet(companyId: string, projectId:
     }
   } catch (e) {
     console.warn('Could not load Incidencias config from Google Drive:', e);
+  } finally {
+    window.clearTimeout(timeout);
   }
   return null;
 }
