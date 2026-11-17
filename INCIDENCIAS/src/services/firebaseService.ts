@@ -884,20 +884,30 @@ export const saveProjectConfig = async (config: any) => {
   try {
     let locations: any[] = [];
     try {
-      const unitsSnapshot: any = await safeFirestoreCall(
-        getDocs(query(
-          collection(db, 'units'),
-          where('projectId', '==', projectId),
-          where('companyId', '==', companyId)
-        )),
-        1000,
-        null
-      );
-      if (unitsSnapshot && unitsSnapshot.docs) {
-        locations = unitsSnapshot.docs.map((unitDoc: any) => ({
-          id: unitDoc.id,
-          ...unitDoc.data()
-        }));
+      const unitsCacheKey = `cached_units_${companyId}_${projectId}`;
+      const localUnitsRaw = localStorage.getItem(unitsCacheKey) || localStorage.getItem('cached_units');
+      if (localUnitsRaw) {
+        const parsed = JSON.parse(localUnitsRaw);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          locations = parsed;
+        }
+      }
+      if (locations.length === 0) {
+        const unitsSnapshot: any = await safeFirestoreCall(
+          getDocs(query(
+            collection(db, 'units'),
+            where('projectId', '==', projectId),
+            where('companyId', '==', companyId)
+          )),
+          1000,
+          null
+        );
+        if (unitsSnapshot && unitsSnapshot.docs) {
+          locations = unitsSnapshot.docs.map((unitDoc: any) => ({
+            id: unitDoc.id,
+            ...unitDoc.data()
+          }));
+        }
       }
     } catch (locErr) {
       console.warn("Units query skipped for locations backup:", locErr);
@@ -939,62 +949,205 @@ export const saveProjectConfig = async (config: any) => {
 // Structural Units
 export const subscribeToUnits = (callback: (units: StructuralUnit[]) => void) => {
   const { projectId, companyId } = getProjectAndCompany();
-  let remoteUnits: StructuralUnit[] = [];
-  let lastFirestoreUnits: StructuralUnit[] | null = null;
+  const cacheKey = `cached_units_${companyId}_${projectId}`;
+  let deliveredUnits: StructuralUnit[] = [];
+
+  // 1. Inmediatamente servir datos locales si existen
+  try {
+    const localRaw = localStorage.getItem(cacheKey) || localStorage.getItem('cached_units');
+    if (localRaw) {
+      const parsed = JSON.parse(localRaw);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        deliveredUnits = parsed;
+        callback(parsed);
+      }
+    }
+
+    // Fallback secundario: revisar si el proyecto tiene locations en config
+    if (deliveredUnits.length === 0) {
+      const configDocId = `${companyId}_${projectId}`;
+      const cfgRaw = localStorage.getItem(`cached_project_config_${configDocId}`) || localStorage.getItem('cached_project_config');
+      if (cfgRaw) {
+        const parsedCfg = JSON.parse(cfgRaw);
+        if (Array.isArray(parsedCfg.locations) && parsedCfg.locations.length > 0) {
+          deliveredUnits = parsedCfg.locations;
+          localStorage.setItem(cacheKey, JSON.stringify(deliveredUnits));
+          callback(deliveredUnits);
+        }
+      }
+    }
+  } catch (e) {
+    console.warn("Error reading local cached units:", e);
+  }
+
+  // 2. Escuchar actualizaciones locales en tiempo real
+  const localHandler = (e: any) => {
+    if (e?.detail && Array.isArray(e.detail)) {
+      deliveredUnits = e.detail;
+      callback(e.detail);
+    }
+  };
+  window.addEventListener('local_units_updated', localHandler);
+
+  // 3. Cargar desde Google Drive en segundo plano
+  let isMounted = true;
   loadIncidentsLocationsFromSheet(companyId, projectId)
     .then((units) => {
-      remoteUnits = units as StructuralUnit[];
-      if (!lastFirestoreUnits || lastFirestoreUnits.length === 0) callback(remoteUnits);
+      if (!isMounted) return;
+      if (Array.isArray(units) && units.length > 0) {
+        deliveredUnits = units as StructuralUnit[];
+        try {
+          localStorage.setItem(cacheKey, JSON.stringify(units));
+          localStorage.setItem('cached_units', JSON.stringify(units));
+        } catch (_) {}
+        callback(deliveredUnits);
+      }
     })
     .catch((error) => console.warn('No se pudieron cargar las ubicaciones desde Drive:', error));
-  const q = query(
-    collection(db, 'units'),
-    where('projectId', '==', projectId),
-    where('companyId', '==', companyId)
-  );
-  return onSnapshot(q, (snapshot) => {
-    const units = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as StructuralUnit));
-    lastFirestoreUnits = units;
-    callback(units.length > 0 ? units : remoteUnits);
-  }, (error) => {
-    handleFirestoreError(error, OperationType.GET, 'units');
-  });
+
+  // 4. Firestore snapshot sin bloquear ni emitir errores destructivos
+  let unsubscribeFirestore = () => {};
+  try {
+    const q = query(
+      collection(db, 'units'),
+      where('projectId', '==', projectId),
+      where('companyId', '==', companyId)
+    );
+    unsubscribeFirestore = onSnapshot(q, (snapshot) => {
+      if (!isMounted) return;
+      const units = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as StructuralUnit));
+      if (units.length > 0) {
+        deliveredUnits = units;
+        try {
+          localStorage.setItem(cacheKey, JSON.stringify(units));
+          localStorage.setItem('cached_units', JSON.stringify(units));
+        } catch (_) {}
+        callback(units);
+      } else if (deliveredUnits.length > 0) {
+        callback(deliveredUnits);
+      }
+    }, (error) => {
+      console.warn("Firestore snapshot skipped for units (using Drive/cache):", error?.message || error);
+    });
+  } catch (fsErr) {
+    console.warn("Firestore subscription failed for units:", fsErr);
+  }
+
+  return () => {
+    isMounted = false;
+    window.removeEventListener('local_units_updated', localHandler);
+    unsubscribeFirestore();
+  };
 };
 
 export const saveUnit = async (unit: Omit<StructuralUnit, 'id'> & { id?: string }) => {
   const path = 'units';
   const { projectId, companyId } = getProjectAndCompany();
+  const unitId = unit.id || `unit_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+  const fullUnit: StructuralUnit = {
+    ...unit,
+    id: unitId
+  };
+
+  // 1. Guardar de inmediato en caché local
   try {
-    let savedUnit: StructuralUnit;
-    if (unit.id) {
-      const { id, ...rest } = unit;
-      await setDoc(doc(db, path, id), {
-        ...rest,
-        projectId,
-        companyId
-      }, { merge: true });
-      savedUnit = unit as StructuralUnit;
+    const cacheKey = `cached_units_${companyId}_${projectId}`;
+    const raw = localStorage.getItem(cacheKey);
+    let currentUnits: StructuralUnit[] = raw ? JSON.parse(raw) : [];
+    const index = currentUnits.findIndex(u => u.id === unitId || u.name === fullUnit.name);
+    if (index >= 0) {
+      currentUnits[index] = fullUnit;
     } else {
-      const docRef = await addDoc(collection(db, path), {
-        ...unit,
+      currentUnits.push(fullUnit);
+    }
+    localStorage.setItem(cacheKey, JSON.stringify(currentUnits));
+    localStorage.setItem('cached_units', JSON.stringify(currentUnits));
+
+    // También actualizar en config local para respaldo integrado
+    const configDocId = `${companyId}_${projectId}`;
+    const rawCfg = localStorage.getItem(`cached_project_config_${configDocId}`);
+    if (rawCfg) {
+      try {
+        const parsedCfg = JSON.parse(rawCfg);
+        parsedCfg.locations = currentUnits;
+        localStorage.setItem(`cached_project_config_${configDocId}`, JSON.stringify(parsedCfg));
+      } catch (_) {}
+    }
+
+    // Notificar reactivamente a los componentes suscritos
+    window.dispatchEvent(new CustomEvent('local_units_updated', { detail: currentUnits }));
+    window.dispatchEvent(new Event('storage_settings_updated'));
+  } catch (cacheErr) {
+    console.warn("Could not save unit to localStorage:", cacheErr);
+  }
+
+  // 2. Guardar en Google Drive
+  try {
+    await saveIncidentsLocationsToSheet('upsert', fullUnit, companyId, projectId);
+  } catch (driveErr) {
+    console.warn("Could not save unit to Google Drive sheet:", driveErr);
+  }
+
+  // 3. Sincronizar Firestore de forma segura sin bloquear
+  try {
+    await safeFirestoreCall(
+      setDoc(doc(db, path, unitId), {
+        ...fullUnit,
         projectId,
         companyId
-      });
-      savedUnit = { ...unit, id: docRef.id } as StructuralUnit;
-    }
-    await saveIncidentsLocationsToSheet('upsert', savedUnit, companyId, projectId);
-  } catch (error) {
-    handleFirestoreError(error, OperationType.WRITE, path);
+      }, { merge: true }),
+      1200,
+      null
+    );
+  } catch (firestoreErr) {
+    console.warn("Firestore sync skipped for unit:", firestoreErr);
   }
+
+  return fullUnit;
 };
 
 export const deleteUnit = async (id: string) => {
   const { projectId, companyId } = getProjectAndCompany();
+  // 1. Eliminar inmediatamente de caché local
   try {
-    await deleteDoc(doc(db, 'units', id));
+    const cacheKey = `cached_units_${companyId}_${projectId}`;
+    const raw = localStorage.getItem(cacheKey);
+    if (raw) {
+      let currentUnits: StructuralUnit[] = JSON.parse(raw);
+      currentUnits = currentUnits.filter(u => u.id !== id);
+      localStorage.setItem(cacheKey, JSON.stringify(currentUnits));
+      localStorage.setItem('cached_units', JSON.stringify(currentUnits));
+
+      // Actualizar config local
+      const configDocId = `${companyId}_${projectId}`;
+      const rawCfg = localStorage.getItem(`cached_project_config_${configDocId}`);
+      if (rawCfg) {
+        try {
+          const parsedCfg = JSON.parse(rawCfg);
+          parsedCfg.locations = currentUnits;
+          localStorage.setItem(`cached_project_config_${configDocId}`, JSON.stringify(parsedCfg));
+        } catch (_) {}
+      }
+
+      window.dispatchEvent(new CustomEvent('local_units_updated', { detail: currentUnits }));
+      window.dispatchEvent(new Event('storage_settings_updated'));
+    }
+  } catch (cacheErr) {
+    console.warn("Could not delete unit from localStorage:", cacheErr);
+  }
+
+  // 2. Guardar eliminación en Google Drive
+  try {
     await saveIncidentsLocationsToSheet('delete', { id }, companyId, projectId);
-  } catch (error) {
-    handleFirestoreError(error, OperationType.DELETE, `units/${id}`);
+  } catch (driveErr) {
+    console.warn("Could not delete unit from Google Drive sheet:", driveErr);
+  }
+
+  // 3. Sincronizar Firestore
+  try {
+    await safeFirestoreCall(deleteDoc(doc(db, 'units', id)), 1200, null);
+  } catch (firestoreErr) {
+    console.warn("Firestore delete skipped for unit:", firestoreErr);
   }
 };
 

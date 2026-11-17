@@ -187,8 +187,7 @@ function UnitRow({
                   });
                   setOverrides(updatedOverrides);
                   const fbConfig = await getProjectConfig();
-                  const key = 'typeOverrides';
-                  await saveProjectConfig({ ...fbConfig, [key]: updatedOverrides });
+                  await saveProjectConfig({ ...fbConfig, typeOverrides: updatedOverrides });
                   window.dispatchEvent(new Event('storage_settings_updated'));
                 }}
                 className="px-3 py-1.5 bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 rounded-lg text-[8px] font-black uppercase tracking-widest hover:bg-emerald-500 hover:text-white transition-all whitespace-nowrap"
@@ -209,8 +208,7 @@ function UnitRow({
                   });
                   setOverrides(updatedOverrides);
                   const fbConfig = await getProjectConfig();
-                  const key = 'typeOverrides';
-                  await saveProjectConfig({ ...fbConfig, [key]: updatedOverrides });
+                  await saveProjectConfig({ ...fbConfig, typeOverrides: updatedOverrides });
                   window.dispatchEvent(new Event('storage_settings_updated'));
                 }}
                 className="px-3 py-1.5 bg-red-500/10 text-red-500 border border-red-500/20 rounded-lg text-[8px] font-black uppercase tracking-widest hover:bg-red-500 hover:text-white transition-all whitespace-nowrap"
@@ -239,12 +237,10 @@ function UnitRow({
                 
                 setOverrides(updatedOverrides);
                 
-                // Save immediately to Firebase
                 const fbConfig = await getProjectConfig();
-                const key = 'typeOverrides';
                 await saveProjectConfig({
                   ...fbConfig,
-                  [key]: updatedOverrides
+                  typeOverrides: updatedOverrides
                 });
                 
                 window.dispatchEvent(new Event('storage_settings_updated'));
@@ -828,17 +824,21 @@ export default function ConfigPanel() {
 
     let newGlobalFields = globalFields;
     let newGlobalImpacts = globalImpacts;
-    let newGlobalTypes = globalTypes;
+    const currentAllTypes = Array.from(new Set([
+      ...types.map(t => t.name.trim()).filter(Boolean),
+      ...globalTypes.map(t => t.trim()).filter(Boolean)
+    ])).filter(Boolean);
+    let newGlobalTypes = currentAllTypes.length > 0 ? currentAllTypes : globalTypes;
     let newTypeOverrides = { ...typeOverrides };
 
     if (selectedConfigKey === 'GLOBAL') {
       newGlobalFields = config;
       newGlobalImpacts = impactData;
-      newGlobalTypes = typeData;
+      newGlobalTypes = currentAllTypes.length > 0 ? currentAllTypes : typeData;
       
       setGlobalFields(config);
       setGlobalImpacts(impactData);
-      setGlobalTypes(typeData);
+      setGlobalTypes(newGlobalTypes);
       
       // Sincronizar miembros en segundo plano sin bloquear el guardado de Drive
       if (team && team.length > 0) {
@@ -848,6 +848,7 @@ export default function ConfigPanel() {
       const existingOverride = typeOverrides[selectedConfigKey] || {};
       newTypeOverrides[selectedConfigKey] = {
         ...existingOverride,
+        units: existingOverride.units || [],
         fieldVisibility: currentVisibility,
         impactOptions: impactData,
         issueTypes: typeData,
@@ -1929,61 +1930,67 @@ const changeTypeScope = (id: string, scope: 'GLOBAL' | 'DELIVERY' | 'RECEIVER') 
                     <h3 className="text-[10px] font-black text-slate-400 dark:text-slate-600 uppercase tracking-[0.3em]">Jerarquía de Ubicaciones</h3>
                   </div>
                   <div className="flex gap-4">
-                    {selectedConfigKey === 'GLOBAL' && (
-                      <div className="flex gap-2">
-                        <button 
-                          onClick={async () => {
-                            if (!confirm(`¿Activar todas las unidades para todos los tipos?`)) return;
-                            
-                            const overrides = typeOverrides;
-                            const setOverrides = setTypeOverrides;
-                            const allScopes = globalTypes;
-                            const key = 'typeOverrides';
+                    {(() => {
+                      const allKnownScopes = Array.from(new Set([
+                        ...types.map(t => t.name.trim()).filter(Boolean),
+                        ...globalTypes.map(t => t.trim()).filter(Boolean),
+                        ...Object.keys(typeOverrides)
+                      ])).filter(Boolean);
 
-                            const updatedOverrides = { ...overrides };
-                            const allUnitIds = units.map(u => u.id);
-                            allScopes.forEach(scope => {
-                              updatedOverrides[scope] = {
-                                ...(updatedOverrides[scope] || {}),
-                                units: allUnitIds
-                              };
-                            });
-                            setOverrides(updatedOverrides);
-                            const fbConfig = await getProjectConfig();
-                            await saveProjectConfig({ ...fbConfig, [key]: updatedOverrides });
-                            window.dispatchEvent(new Event('storage_settings_updated'));
-                          }}
-                          className="px-4 py-2 bg-emerald-500 text-white rounded-xl text-[9px] font-black uppercase tracking-widest hover:bg-emerald-600 transition-all shadow-lg"
-                        >
-                          Activar para todos
-                        </button>
-                        <button 
-                          onClick={async () => {
-                            if (!confirm(`¿Desactivar todas las unidades para todos los tipos?`)) return;
+                      return (
+                        <>
+                          {selectedConfigKey === 'GLOBAL' && (
+                            <div className="flex gap-2">
+                              <button 
+                                onClick={async () => {
+                                  if (!confirm(`¿Activar todas las unidades para todos los tipos?`)) return;
+                                  
+                                  const allScopes = allKnownScopes;
+                                  const allUnitIds = units.map(u => u.id);
+                                  const updatedOverrides = { ...typeOverrides };
 
-                            const overrides = typeOverrides;
-                            const setOverrides = setTypeOverrides;
-                            const allScopes = globalTypes;
-                            const key = 'typeOverrides';
+                                  allScopes.forEach(scope => {
+                                    updatedOverrides[scope] = {
+                                      ...(updatedOverrides[scope] || {}),
+                                      units: allUnitIds
+                                    };
+                                  });
+                                  setTypeOverrides(updatedOverrides);
+                                  const fbConfig = await getProjectConfig();
+                                  await saveProjectConfig({ ...fbConfig, typeOverrides: updatedOverrides });
+                                  window.dispatchEvent(new Event('storage_settings_updated'));
+                                }}
+                                className="px-4 py-2 bg-emerald-500 text-white rounded-xl text-[9px] font-black uppercase tracking-widest hover:bg-emerald-600 transition-all shadow-lg"
+                              >
+                                Activar para todos
+                              </button>
+                              <button 
+                                onClick={async () => {
+                                  if (!confirm(`¿Desactivar todas las unidades para todos los tipos?`)) return;
 
-                            const updatedOverrides = { ...overrides };
-                            allScopes.forEach(scope => {
-                              updatedOverrides[scope] = {
-                                ...(updatedOverrides[scope] || {}),
-                                units: []
-                              };
-                            });
-                            setOverrides(updatedOverrides);
-                            const fbConfig = await getProjectConfig();
-                            await saveProjectConfig({ ...fbConfig, [key]: updatedOverrides });
-                            window.dispatchEvent(new Event('storage_settings_updated'));
-                          }}
-                          className="px-4 py-2 bg-red-500 text-white rounded-xl text-[9px] font-black uppercase tracking-widest hover:bg-red-600 transition-all shadow-lg"
-                        >
-                          Desactivar para todos
-                        </button>
-                      </div>
-                    )}
+                                  const allScopes = allKnownScopes;
+                                  const updatedOverrides = { ...typeOverrides };
+
+                                  allScopes.forEach(scope => {
+                                    updatedOverrides[scope] = {
+                                      ...(updatedOverrides[scope] || {}),
+                                      units: []
+                                    };
+                                  });
+                                  setTypeOverrides(updatedOverrides);
+                                  const fbConfig = await getProjectConfig();
+                                  await saveProjectConfig({ ...fbConfig, typeOverrides: updatedOverrides });
+                                  window.dispatchEvent(new Event('storage_settings_updated'));
+                                }}
+                                className="px-4 py-2 bg-red-500 text-white rounded-xl text-[9px] font-black uppercase tracking-widest hover:bg-red-600 transition-all shadow-lg"
+                              >
+                                Desactivar para todos
+                              </button>
+                            </div>
+                          )}
+                        </>
+                      );
+                    })()}
                     <button 
                       onClick={async () => {
                         await saveUnit({
@@ -2000,25 +2007,33 @@ const changeTypeScope = (id: string, scope: 'GLOBAL' | 'DELIVERY' | 'RECEIVER') 
                 </div>
 
                 <div className="space-y-6">
-                  {units
-                    .sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' }))
-                    .map((unit) => (
-                    <UnitRow 
-                      key={unit.id}
-                      unit={unit}
-                      onDelete={deleteUnit}
-                      selectedScope={selectedConfigKey}
-                      configMode={configMode}
-                      overrides={typeOverrides}
-                      setOverrides={setTypeOverrides}
-                      allScopes={globalTypes}
-                      onBulkOpen={() => {
-                        setBulkTargetUnit(units.indexOf(unit));
-                        setBulkMode('single');
-                        setBulkFormat(prev => ({ ...prev, level: unit.levels[0]?.name || '' }));
-                      }}
-                    />
-                  ))}
+                  {(() => {
+                    const allKnownScopes = Array.from(new Set([
+                      ...types.map(t => t.name.trim()).filter(Boolean),
+                      ...globalTypes.map(t => t.trim()).filter(Boolean),
+                      ...Object.keys(typeOverrides)
+                    ])).filter(Boolean);
+
+                    return units
+                      .sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' }))
+                      .map((unit) => (
+                      <UnitRow 
+                        key={unit.id}
+                        unit={unit}
+                        onDelete={deleteUnit}
+                        selectedScope={selectedConfigKey}
+                        configMode={configMode}
+                        overrides={typeOverrides}
+                        setOverrides={setTypeOverrides}
+                        allScopes={allKnownScopes}
+                        onBulkOpen={() => {
+                          setBulkTargetUnit(units.indexOf(unit));
+                          setBulkMode('single');
+                          setBulkFormat(prev => ({ ...prev, level: unit.levels[0]?.name || '' }));
+                        }}
+                      />
+                    ));
+                  })()}
                   {units.length === 0 && (
                     <div className="text-center py-20 bg-slate-50 dark:bg-slate-950/50 rounded-[3rem] border-2 border-dashed border-slate-100 dark:border-slate-800">
                       <MapPin className="w-12 h-12 text-slate-200 dark:text-slate-800 mx-auto mb-4" />

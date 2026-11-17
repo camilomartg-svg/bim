@@ -147,7 +147,7 @@ export default function CreateIssueModal({ onClose, onSuccess }: CreateIssueModa
     if (selectedUnits.length === 0) return [];
     const levels = new Set<string>();
     selectedUnits.forEach(unitName => {
-      const unit = hierarchyUnits.find(u => u.name === unitName);
+      const unit = hierarchyUnits.find(u => u.name === unitName || u.id === unitName);
       if (unit) {
         unit.levels.forEach(lvl => levels.add(lvl.name));
       }
@@ -161,7 +161,7 @@ export default function CreateIssueModal({ onClose, onSuccess }: CreateIssueModa
     if (selectedLevels.length === 0) return [];
     const spaces = new Set<string>();
     selectedUnits.forEach(unitName => {
-      const unit = hierarchyUnits.find(u => u.name === unitName);
+      const unit = hierarchyUnits.find(u => u.name === unitName || u.id === unitName);
       if (unit) {
         selectedLevels.forEach(lvlName => {
           if (lvlName === "NINGUNA") {
@@ -341,9 +341,15 @@ export default function CreateIssueModal({ onClose, onSuccess }: CreateIssueModa
       // Units subscription needs the allowedUnitIds
       if (unsubscribeUnits) unsubscribeUnits();
       unsubscribeUnits = subscribeToUnits((fetchedUnits) => {
-        const filtered = allowedUnitIds !== undefined
-          ? fetchedUnits.filter(u => allowedUnitIds!.includes(u.id))
-          : fetchedUnits;
+        let filtered = fetchedUnits;
+        if (allowedUnitIds !== undefined && allowedUnitIds.length > 0) {
+          filtered = fetchedUnits.filter(u => 
+            allowedUnitIds!.includes(u.id) || 
+            allowedUnitIds!.includes(u.name)
+          );
+        } else if (allowedUnitIds !== undefined && allowedUnitIds.length === 0) {
+          filtered = [];
+        }
         setHierarchyUnits(filtered);
       });
     };
