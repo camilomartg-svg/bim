@@ -148,7 +148,7 @@
                 <p id="project-address" class="mx-auto mt-2 max-w-2xl text-sm leading-8 text-[#6f6f69] dark:text-slate-400"></p>
               </div>
               <div class="bg-white dark:bg-slate-900">
-                <div id="map-wrapper" class="relative h-[560px] w-full overflow-hidden bg-slate-200 dark:bg-slate-700 md:h-[680px]">
+                <div id="map-wrapper" class="relative isolate h-[560px] w-full overflow-hidden bg-slate-200 dark:bg-slate-700 md:h-[680px]">
                   <div id="project-map" class="h-full w-full"></div>
                   <div id="map-ctrl-hint" class="pointer-events-none absolute left-1/2 top-6 -translate-x-1/2 rounded-none border border-slate-300 bg-white/95 px-4 py-2 text-xs font-semibold uppercase tracking-[0.18em] text-slate-800 shadow-sm dark:border-slate-600 dark:bg-slate-800/95 dark:text-white">
                     Mantén CTRL para navegar el mapa
@@ -183,8 +183,8 @@
   </div>
 
   <!-- Modal de Selección de Empresa de Representación para el Proyecto -->
-  <div id="rep-company-modal" class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm hidden p-4">
-    <div class="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-3xl p-6 md:p-8 max-w-lg w-full shadow-2xl space-y-5 animate-in fade-in zoom-in duration-200">
+  <div id="rep-company-modal" class="fixed inset-0 z-[99999] flex items-center justify-center bg-black/60 backdrop-blur-sm hidden p-4" style="z-index: 99999;">
+    <div class="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-3xl p-6 md:p-8 max-w-lg w-full shadow-2xl space-y-5 animate-in fade-in zoom-in duration-200 relative z-10">
       <div class="flex items-start gap-4">
         <div class="w-12 h-12 rounded-2xl bg-indigo-50 dark:bg-indigo-950/50 border border-indigo-200 dark:border-indigo-800 flex items-center justify-center shrink-0 text-indigo-600 dark:text-indigo-400">
           <span class="material-symbols-outlined text-[24px]">domain</span>
@@ -672,7 +672,7 @@
             </div>
 
             <!-- Dropdown Menú de Usuario -->
-            <div id="user-dropdown-menu" class="hidden absolute right-0 top-full mt-2 w-72 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl shadow-2xl p-3 z-50 animate-in fade-in zoom-in-95 duration-150">
+            <div id="user-dropdown-menu" class="hidden absolute right-0 top-full mt-2 w-72 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl shadow-2xl p-3 z-[9999] animate-in fade-in zoom-in-95 duration-150" style="z-index: 9999;">
               <div class="px-2.5 py-2 border-b border-zinc-100 dark:border-zinc-800">
                 <p class="text-[9px] font-bold uppercase tracking-wider text-zinc-400">Sesión Activa</p>
                 <p class="text-xs font-bold text-zinc-900 dark:text-white truncate">${escapeHtml(userName)}</p>
