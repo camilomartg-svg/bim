@@ -5,9 +5,14 @@ document.addEventListener('DOMContentLoaded', async () => {
     const ua = JSON.parse(localStorage.getItem('userAccount') || sessionStorage.getItem('userAccount') || 'null');
     if (ua) {
         userRole = ua.role;
-        userEmail = (ua.username || '').toLowerCase();
+        userEmail = (ua.username || '').toLowerCase().trim();
     }
   } catch(e) {}
+
+  const superAdminEmails = ['imagina3ddesign@gmail.com', 'mcmartinezg@unal.edu.co'];
+  if (superAdminEmails.includes(userEmail)) {
+      userRole = 'SUPER_ADMINISTRADOR';
+  }
 
   // Ajustar la interfaz de forma síncrona e inmediata según el rol del usuario
   if (userRole === 'SUPER_ADMINISTRADOR') {
@@ -173,31 +178,28 @@ document.addEventListener('DOMContentLoaded', async () => {
             });
             if(addedNew) showBanner('Se descubrieron nuevas empresas registradas. Haz clic en Guardar para integrarlas permanentemente.', 'success');
 
-            // Reconciliar administradores principales de la hoja "Empresas"
+            // Reconciliar administradores principales de la hoja "Empresas" (solo para empresas nuevas sin miembros)
             empresas.forEach(emp => {
                 const gc = gCompanies.find(c => c.id === emp.id || (emp.name && c.name && emp.name.toLowerCase().trim() === c.name.toLowerCase().trim()));
                 if (gc && gc.email && gc.email.trim() !== '') {
                     const adminEmail = gc.email.toLowerCase().trim();
                     if (!emp.admins) emp.admins = [];
-                    if (!emp.admins.some(a => a.toLowerCase().trim() === adminEmail)) {
-                        emp.admins.push(adminEmail);
-                    }
                     if (!emp.members) emp.members = [];
                     const mIdx = emp.members.findIndex(m => m.email && m.email.toLowerCase().trim() === adminEmail);
-                    const memberData = {
-                        name: adminEmail.split('@')[0],
-                        email: adminEmail,
-                        role: 'ADMINISTRADOR_EMPRESA',
-                        empresaUsuario: emp.name,
-                        especialidad: '',
-                        cargo: 'Administrador de Empresa'
-                    };
-                    if (mIdx > -1) {
-                        emp.members[mIdx].role = 'ADMINISTRADOR_EMPRESA';
-                        if (!emp.members[mIdx].cargo || emp.members[mIdx].cargo === '') {
-                            emp.members[mIdx].cargo = 'Administrador de Empresa';
+                    // SÓLO si el miembro no existe en absoluto, se agrega como admin inicial de registro.
+                    // Si ya existe en emp.members, NUNCA sobreescribir su rol (respetar la configuración guardada).
+                    if (mIdx === -1) {
+                        if (!emp.admins.some(a => a.toLowerCase().trim() === adminEmail)) {
+                            emp.admins.push(adminEmail);
                         }
-                    } else {
+                        const memberData = {
+                            name: adminEmail.split('@')[0],
+                            email: adminEmail,
+                            role: 'ADMINISTRADOR_EMPRESA',
+                            empresaUsuario: emp.name,
+                            especialidad: '',
+                            cargo: 'Administrador de Empresa'
+                        };
                         emp.members.push(memberData);
                     }
                 }
@@ -266,25 +268,26 @@ document.addEventListener('DOMContentLoaded', async () => {
                          const isGuApproved = String(gu.estado || '').toUpperCase().trim() === 'APROBADO' || gu.rol === 'SUPER_ADMINISTRADOR' || gu.rol === 'ADMINISTRADOR_EMPRESA';
                          if (email && isGuApproved && userBestCompanyMap.get(email) === emp.id) {
                              const mIdx = emp.members.findIndex(m => m.email && m.email.toLowerCase().trim() === email);
-                             const memberData = {
-                                 name: gu.nombre || email.split('@')[0],
-                                 email: email,
-                                 role: gu.rol || 'INVITADO',
-                                 empresaUsuario: gu.empresa,
-                                 especialidad: gu.especialidad || '',
-                                 cargo: gu.cargo || ''
-                             };
-                             if (mIdx > -1) {
-                                 emp.members[mIdx] = { ...emp.members[mIdx], ...memberData };
-                             } else {
+                             if (mIdx === -1) {
+                                 // Sólo agregar si no existe en la empresa
+                                 const memberData = {
+                                     name: gu.nombre || email.split('@')[0],
+                                     email: email,
+                                     role: gu.rol || 'INVITADO',
+                                     empresaUsuario: gu.empresa,
+                                     especialidad: gu.especialidad || '',
+                                     cargo: gu.cargo || ''
+                                 };
                                  emp.members.push(memberData);
-                             }
-                             
-                             if (gu.rol === 'ADMINISTRADOR_EMPRESA') {
-                                 const adminExists = emp.admins.some(a => a.toLowerCase().trim() === email);
-                                 if (!adminExists) {
-                                     emp.admins.push(email);
+                                 if (gu.rol === 'ADMINISTRADOR_EMPRESA') {
+                                     if (!emp.admins.some(a => a.toLowerCase().trim() === email)) {
+                                         emp.admins.push(email);
+                                     }
                                  }
+                             } else {
+                                 // Si ya existe en emp.members, NO sobreescribir su rol ni empresaUsuario
+                                 if (!emp.members[mIdx].name && gu.nombre) emp.members[mIdx].name = gu.nombre;
+                                 if (!emp.members[mIdx].especialidad && gu.especialidad) emp.members[mIdx].especialidad = gu.especialidad;
                              }
                          }
                     });
@@ -359,8 +362,31 @@ document.addEventListener('DOMContentLoaded', async () => {
       }
       renderList();
       if (selectedIndex === -1 && empresas.length > 0) {
-        const firstActiveIdx = empresas.findIndex(e => !e.deleted);
-        if (firstActiveIdx > -1) selectEmpresa(firstActiveIdx);
+        const urlParams = new URLSearchParams(window.location.search);
+        const paramEmpId = urlParams.get('empresa');
+
+        let targetIdx = -1;
+        if (paramEmpId) {
+          targetIdx = empresas.findIndex(e => !e.deleted && (e.id === paramEmpId || e.slug === paramEmpId || (e.name && e.name.toLowerCase() === paramEmpId.toLowerCase())));
+        }
+
+        if (targetIdx === -1) {
+          if (userRole === 'SUPER_ADMINISTRADOR') {
+            targetIdx = empresas.findIndex(e => !e.deleted);
+          } else {
+            targetIdx = empresas.findIndex(e => !e.deleted && (
+              (Array.isArray(e.admins) && e.admins.some(a => String(a || '').toLowerCase().trim() === userEmail)) ||
+              (Array.isArray(e.members) && e.members.some(m => String(m.email || '').toLowerCase().trim() === userEmail && (m.role === 'ADMINISTRADOR_EMPRESA' || m.role === 'ADMINISTRADOR')))
+            ));
+          }
+        }
+
+        if (targetIdx > -1) {
+          selectEmpresa(targetIdx);
+        } else if (userRole === 'SUPER_ADMINISTRADOR') {
+          const firstActiveIdx = empresas.findIndex(e => !e.deleted);
+          if (firstActiveIdx > -1) selectEmpresa(firstActiveIdx);
+        }
       }
     } catch (e) { showBanner('Error cargando datos', 'error'); }
   }
@@ -388,10 +414,10 @@ document.addEventListener('DOMContentLoaded', async () => {
           const globalTabs = document.getElementById('global-tabs-container');
           if(globalTabs) globalTabs.classList.add('hidden');
           if(globalTabs) globalTabs.classList.remove('md:flex');
-      }
-      
-      if (userRole === 'ADMINISTRADOR_EMPRESA') {
-          hasAccess = emp.members && emp.members.some(m => m.email && m.email.toLowerCase() === userEmail && (m.role === 'ADMINISTRADOR_EMPRESA' || m.role === 'ADMINISTRADOR'));
+
+          const inAdmins = Array.isArray(emp.admins) && emp.admins.some(a => String(a || '').toLowerCase().trim() === userEmail);
+          const inMembers = Array.isArray(emp.members) && emp.members.some(m => String(m.email || '').toLowerCase().trim() === userEmail && (m.role === 'ADMINISTRADOR_EMPRESA' || m.role === 'ADMINISTRADOR'));
+          hasAccess = inAdmins || inMembers;
       }
 
       if (!matchesSearch || !hasAccess) return '';
@@ -437,8 +463,10 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     // Security context validation
     let hasAccess = userRole === 'SUPER_ADMINISTRADOR';
-    if (!hasAccess && userRole === 'ADMINISTRADOR_EMPRESA') {
-      hasAccess = emp.members && emp.members.some(m => m.email && m.email.toLowerCase() === userEmail && (m.role === 'ADMINISTRADOR_EMPRESA' || m.role === 'ADMINISTRADOR'));
+    if (!hasAccess) {
+      const inAdmins = Array.isArray(emp.admins) && emp.admins.some(a => String(a || '').toLowerCase().trim() === userEmail);
+      const inMembers = Array.isArray(emp.members) && emp.members.some(m => String(m.email || '').toLowerCase().trim() === userEmail && (m.role === 'ADMINISTRADOR_EMPRESA' || m.role === 'ADMINISTRADOR'));
+      hasAccess = inAdmins || inMembers;
     }
     if (!hasAccess) {
       alert('Acceso denegado. No tienes permisos para gestionar esta empresa.');
@@ -904,12 +932,24 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (!m) return;
     m[field] = val;
     if (field === 'role') {
-      if (val === 'MIEMBRO' || val === 'ADMINISTRADOR_EMPRESA') {
+      const emailClean = (m.email || '').toLowerCase().trim();
+      if (!Array.isArray(emp.admins)) emp.admins = [];
+      if (val === 'ADMINISTRADOR_EMPRESA') {
         m.empresaUsuario = emp.name;
-      } else if (val === 'INVITADO') {
-        m.cargo = '';
-        const extEmp = resolveMemberCompany(m, emp);
-        m.empresaUsuario = extEmp !== 'Invitados / Externos' ? extEmp : '';
+        if (emailClean && !emp.admins.some(a => String(a).toLowerCase().trim() === emailClean)) {
+          emp.admins.push(emailClean);
+        }
+      } else {
+        if (emailClean) {
+          emp.admins = emp.admins.filter(a => String(a).toLowerCase().trim() !== emailClean);
+        }
+        if (val === 'MIEMBRO') {
+          m.empresaUsuario = emp.name;
+        } else if (val === 'INVITADO') {
+          m.cargo = '';
+          const extEmp = resolveMemberCompany(m, emp);
+          m.empresaUsuario = extEmp !== 'Invitados / Externos' ? extEmp : '';
+        }
       }
       renderUsers();
     } else if (field === 'email') {
@@ -1283,7 +1323,7 @@ let contentBase = '';
         
         const cutoffDay = 3;
         const licInfo = window.WompiModule ? window.WompiModule.getProjectLicenseStatus(p, cutoffDay) : { badgeColor: 'bg-emerald-100 text-emerald-800', badgeText: 'Licencia Activa', message: '' };
-        const effectiveStatus = (licInfo.status === 'SUSPENDED') ? 'Inactivo' : (p.status || 'Activo');
+        const effectiveStatus = (licInfo.status === 'SUSPENDED' || licInfo.status === 'EXPIRED_PURGE') ? 'Inactivo' : (p.status || 'Activo');
 
         return `
           <div class="border-b border-slate-100 last:border-0 bg-slate-50">
@@ -1500,9 +1540,11 @@ let contentBase = '';
       let totalAmountCOP = 0;
       let proratedCount = 0;
       let trialCount = 0;
+      const currentPlan = window.currentBillingPlan || 'monthly';
+      const planMeta = (window.WompiModule && window.WompiModule.PREPAY_PLANS && window.WompiModule.PREPAY_PLANS[currentPlan]) ? window.WompiModule.PREPAY_PLANS[currentPlan] : { months: 1, discount: 0, label: 'Mes a Mes' };
 
       licensedProjects.forEach(p => {
-        const bill = window.WompiModule ? window.WompiModule.getProjectBillingAmount(p, 3) : { amountCOP: 137564, isProrated: false, isTrial: false };
+        const bill = window.WompiModule ? window.WompiModule.getProjectBillingAmount(p, 3, new Date(), currentPlan) : { amountCOP: 137564, isProrated: false, isTrial: false };
         totalAmountCOP += bill.amountCOP;
         if (bill.isProrated) proratedCount++;
         if (bill.isTrial) trialCount++;
@@ -1513,9 +1555,11 @@ let contentBase = '';
       if (countEl && totalEl) {
         countEl.textContent = count;
 
-        let subText = `Facturación mensual unificada el día 3 de cada mes ($137.564 COP por proyecto)`;
-        if (trialCount > 0 && proratedCount > 0) {
-          subText = `* Incluye ${trialCount} proyecto(s) en Licencia Tester Gratuita ($0 COP) y cobro proporcional por días faltantes.`;
+        let subText = `Facturación unificada el día 3 de cada mes`;
+        if (planMeta.discount > 0) {
+          subText = `* Plan ${planMeta.label} (${planMeta.months} meses por adelantado con ${Math.round(planMeta.discount * 100)}% de descuento aplicado).`;
+        } else if (trialCount > 0 && proratedCount > 0) {
+          subText = `* Incluye ${trialCount} proyecto(s) en Licencia Tester Gratuita ($0 COP) y cobro proporcional por días faltantes al corte.`;
         } else if (trialCount > 0) {
           subText = `* Incluye ${trialCount} proyecto(s) en Licencia Tester Gratuita ($0 COP).`;
         } else if (proratedCount > 0) {
@@ -1963,13 +2007,19 @@ let contentBase = '';
     } else {
       msg += `⚠️ Nota: Quedan sólo ${check.businessDaysUntilCutoff} días hábiles antes de la fecha de corte (${check.nextCutoffDate}). Para evitar la renovación del ciclo entrante se requiere un preaviso mínimo de 5 días hábiles colombianos. El proyecto permanecerá activo hasta cumplir el ciclo actual.`;
     }
-    msg += `\n\n📌 Al vencer la licencia, tus datos y archivos BIM se mantendrán almacenados de forma segura durante 90 días calendario antes de su eliminación permanente.`;
+    msg += `\n\n📌 Al vencer la licencia o superar los 5 días de gracia, el proyecto quedará suspendido y tus datos y archivos BIM se mantendrán almacenados durante 6 meses (180 días) antes de su eliminación permanente.`;
 
     if (confirm(msg)) {
       proj.cancelledAt = new Date().toISOString();
       renderProjects();
       showBanner('Licencia cancelada para el proyecto. El cambio ha sido registrado.', 'info');
     }
+  };
+
+  window.currentBillingPlan = 'monthly';
+  window.changeBillingPlan = (plan) => {
+    window.currentBillingPlan = plan;
+    renderProjects();
   };
 
   window.payConsolidatedWompi = async () => {
@@ -1996,13 +2046,14 @@ let contentBase = '';
       return;
     }
 
+    const plan = window.currentBillingPlan || 'monthly';
     let totalAmountCOP = 0;
     activeLicensedProjects.forEach(p => {
-      const bill = window.WompiModule ? window.WompiModule.getProjectBillingAmount(p, 3) : { amountCOP: 137564 };
+      const bill = window.WompiModule ? window.WompiModule.getProjectBillingAmount(p, 3, new Date(), plan) : { amountCOP: 137564 };
       totalAmountCOP += bill.amountCOP;
     });
     const amountInCents = totalAmountCOP * 100;
-    const reference = `NORABIM-${emp.code || emp.id}-${Date.now()}`;
+    const reference = `NORABIM-${emp.code || emp.id}-${plan}-${Date.now()}`;
 
     try {
       showBanner('Abriendo Pasarela Wompi Checkout...', 'info');
@@ -2324,6 +2375,10 @@ let contentBase = '';
           emp.members.forEach(m => {
             delete m._unsaved;
           });
+          // Asegurar que emp.admins refleje estrictamente a los miembros con rol ADMINISTRADOR_EMPRESA
+          emp.admins = emp.members
+            .filter(m => m.role === 'ADMINISTRADOR_EMPRESA' && m.email)
+            .map(m => String(m.email).toLowerCase().trim());
         }
       }
 

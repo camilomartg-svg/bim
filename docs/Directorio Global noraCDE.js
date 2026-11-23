@@ -1853,15 +1853,15 @@ function saveAdminBundle_(payload) {
       if (!Array.isArray(emp.admins)) emp.admins = [];
       if (!Array.isArray(emp.members)) emp.members = [];
 
+      // Sincronizar emp.admins exactamente con los miembros que tienen rol ADMINISTRADOR_EMPRESA
+      emp.admins = emp.members
+        .filter(function(m) { return m && m.role === 'ADMINISTRADOR_EMPRESA' && m.email; })
+        .map(function(m) { return String(m.email).toLowerCase().trim(); });
+
       emp.members.forEach(function(m) {
         if (!m || !m.email || !String(m.email).trim()) return;
         const em = String(m.email).toLowerCase().trim();
         m.email = em;
-        if (m.role === 'ADMINISTRADOR_EMPRESA') {
-          if (!emp.admins.some(function(a) { return String(a).toLowerCase().trim() === em; })) {
-            emp.admins.push(em);
-          }
-        }
         const isInternal = (m.role === 'ADMINISTRADOR_EMPRESA' || m.role === 'MIEMBRO' || !m.role);
         if (isInternal) {
           usersBatch.push({

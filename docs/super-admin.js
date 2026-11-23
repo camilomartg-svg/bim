@@ -178,31 +178,28 @@ document.addEventListener('DOMContentLoaded', async () => {
             });
             if(addedNew) showBanner('Se descubrieron nuevas empresas registradas. Haz clic en Guardar para integrarlas permanentemente.', 'success');
 
-            // Reconciliar administradores principales de la hoja "Empresas"
+            // Reconciliar administradores principales de la hoja "Empresas" (solo para empresas nuevas sin miembros)
             empresas.forEach(emp => {
                 const gc = gCompanies.find(c => c.id === emp.id || (emp.name && c.name && emp.name.toLowerCase().trim() === c.name.toLowerCase().trim()));
                 if (gc && gc.email && gc.email.trim() !== '') {
                     const adminEmail = gc.email.toLowerCase().trim();
                     if (!emp.admins) emp.admins = [];
-                    if (!emp.admins.some(a => a.toLowerCase().trim() === adminEmail)) {
-                        emp.admins.push(adminEmail);
-                    }
                     if (!emp.members) emp.members = [];
                     const mIdx = emp.members.findIndex(m => m.email && m.email.toLowerCase().trim() === adminEmail);
-                    const memberData = {
-                        name: adminEmail.split('@')[0],
-                        email: adminEmail,
-                        role: 'ADMINISTRADOR_EMPRESA',
-                        empresaUsuario: emp.name,
-                        especialidad: '',
-                        cargo: 'Administrador de Empresa'
-                    };
-                    if (mIdx > -1) {
-                        emp.members[mIdx].role = 'ADMINISTRADOR_EMPRESA';
-                        if (!emp.members[mIdx].cargo || emp.members[mIdx].cargo === '') {
-                            emp.members[mIdx].cargo = 'Administrador de Empresa';
+                    // SÓLO si el miembro no existe en absoluto, se agrega como admin inicial de registro.
+                    // Si ya existe en emp.members, NUNCA sobreescribir su rol (respetar la configuración guardada).
+                    if (mIdx === -1) {
+                        if (!emp.admins.some(a => a.toLowerCase().trim() === adminEmail)) {
+                            emp.admins.push(adminEmail);
                         }
-                    } else {
+                        const memberData = {
+                            name: adminEmail.split('@')[0],
+                            email: adminEmail,
+                            role: 'ADMINISTRADOR_EMPRESA',
+                            empresaUsuario: emp.name,
+                            especialidad: '',
+                            cargo: 'Administrador de Empresa'
+                        };
                         emp.members.push(memberData);
                     }
                 }
@@ -271,25 +268,26 @@ document.addEventListener('DOMContentLoaded', async () => {
                          const isGuApproved = String(gu.estado || '').toUpperCase().trim() === 'APROBADO' || gu.rol === 'SUPER_ADMINISTRADOR' || gu.rol === 'ADMINISTRADOR_EMPRESA';
                          if (email && isGuApproved && userBestCompanyMap.get(email) === emp.id) {
                              const mIdx = emp.members.findIndex(m => m.email && m.email.toLowerCase().trim() === email);
-                             const memberData = {
-                                 name: gu.nombre || email.split('@')[0],
-                                 email: email,
-                                 role: gu.rol || 'INVITADO',
-                                 empresaUsuario: gu.empresa,
-                                 especialidad: gu.especialidad || '',
-                                 cargo: gu.cargo || ''
-                             };
-                             if (mIdx > -1) {
-                                 emp.members[mIdx] = { ...emp.members[mIdx], ...memberData };
-                             } else {
+                             if (mIdx === -1) {
+                                 // Sólo agregar si no existe en la empresa
+                                 const memberData = {
+                                     name: gu.nombre || email.split('@')[0],
+                                     email: email,
+                                     role: gu.rol || 'INVITADO',
+                                     empresaUsuario: gu.empresa,
+                                     especialidad: gu.especialidad || '',
+                                     cargo: gu.cargo || ''
+                                 };
                                  emp.members.push(memberData);
-                             }
-                             
-                             if (gu.rol === 'ADMINISTRADOR_EMPRESA') {
-                                 const adminExists = emp.admins.some(a => a.toLowerCase().trim() === email);
-                                 if (!adminExists) {
-                                     emp.admins.push(email);
+                                 if (gu.rol === 'ADMINISTRADOR_EMPRESA') {
+                                     if (!emp.admins.some(a => a.toLowerCase().trim() === email)) {
+                                         emp.admins.push(email);
+                                     }
                                  }
+                             } else {
+                                 // Si ya existe en emp.members, NO sobreescribir su rol ni empresaUsuario
+                                 if (!emp.members[mIdx].name && gu.nombre) emp.members[mIdx].name = gu.nombre;
+                                 if (!emp.members[mIdx].especialidad && gu.especialidad) emp.members[mIdx].especialidad = gu.especialidad;
                              }
                          }
                     });
@@ -934,12 +932,24 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (!m) return;
     m[field] = val;
     if (field === 'role') {
-      if (val === 'MIEMBRO' || val === 'ADMINISTRADOR_EMPRESA') {
+      const emailClean = (m.email || '').toLowerCase().trim();
+      if (!Array.isArray(emp.admins)) emp.admins = [];
+      if (val === 'ADMINISTRADOR_EMPRESA') {
         m.empresaUsuario = emp.name;
-      } else if (val === 'INVITADO') {
-        m.cargo = '';
-        const extEmp = resolveMemberCompany(m, emp);
-        m.empresaUsuario = extEmp !== 'Invitados / Externos' ? extEmp : '';
+        if (emailClean && !emp.admins.some(a => String(a).toLowerCase().trim() === emailClean)) {
+          emp.admins.push(emailClean);
+        }
+      } else {
+        if (emailClean) {
+          emp.admins = emp.admins.filter(a => String(a).toLowerCase().trim() !== emailClean);
+        }
+        if (val === 'MIEMBRO') {
+          m.empresaUsuario = emp.name;
+        } else if (val === 'INVITADO') {
+          m.cargo = '';
+          const extEmp = resolveMemberCompany(m, emp);
+          m.empresaUsuario = extEmp !== 'Invitados / Externos' ? extEmp : '';
+        }
       }
       renderUsers();
     } else if (field === 'email') {
@@ -2365,6 +2375,10 @@ let contentBase = '';
           emp.members.forEach(m => {
             delete m._unsaved;
           });
+          // Asegurar que emp.admins refleje estrictamente a los miembros con rol ADMINISTRADOR_EMPRESA
+          emp.admins = emp.members
+            .filter(m => m.role === 'ADMINISTRADOR_EMPRESA' && m.email)
+            .map(m => String(m.email).toLowerCase().trim());
         }
       }
 

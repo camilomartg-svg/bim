@@ -171,22 +171,29 @@
     "name": "ELECTRICOS SAS",
     "code": "ELE",
     "admins": [
-      "alc.spk.1@gmail.com"
+      "nora.spk.2@gmail.com"
     ],
     "zonaHoraria": "America/Bogota",
     "members": [
       {
-        "name": "Cuenta1",
+        "name": "spk.1",
         "email": "alc.spk.1@gmail.com",
-        "role": "ADMINISTRADOR_EMPRESA",
+        "role": "MIEMBRO",
         "empresaUsuario": "ELECTRICOS SAS",
         "especialidad": "CCTV, Eléctrica, Obras industriales",
-        "cargo": "Administrador de Empresa"
+        "cargo": ""
       },
       {
         "name": "Cuenta5",
         "email": "alc.spk.5@gmail.com",
         "role": "MIEMBRO",
+        "empresaUsuario": "ELECTRICOS SAS",
+        "cargo": "Diseñador Eléctrico"
+      },
+      {
+        "name": "Nora spk 2",
+        "email": "nora.spk.2@gmail.com",
+        "role": "ADMINISTRADOR_EMPRESA",
         "empresaUsuario": "ELECTRICOS SAS",
         "cargo": "Diseñador Eléctrico"
       }
