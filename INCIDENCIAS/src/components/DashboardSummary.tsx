@@ -21,13 +21,14 @@ interface DashboardSummaryProps {
   onOpenReport?: (reportId: string) => void;
   selectedIssueId?: string;
   filterRole: 'author' | 'responsible' | 'reviewer' | 'bim';
+  isSuspended?: boolean;
 }
 
 type SortOption = 'dueDate' | 'createdAt' | 'degreeOfAction' | 'title';
 
 type SortCriteria = { field: SortOption; order: 'asc' | 'desc' };
 
-export default function DashboardSummary({ onSelectIssue, onOpenReport, selectedIssueId, filterRole }: DashboardSummaryProps) {
+export default function DashboardSummary({ onSelectIssue, onOpenReport, selectedIssueId, filterRole, isSuspended }: DashboardSummaryProps) {
   const [issues, setIssues] = useState<Issue[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
@@ -1131,7 +1132,7 @@ export default function DashboardSummary({ onSelectIssue, onOpenReport, selected
                                </div>
 
                                <h4 className="text-[9px] font-black text-slate-500 uppercase tracking-[0.2em] px-1 mb-1">Gestión de Acciones</h4>
-                               <StatusManager issue={issue} isBimPanel={filterRole === 'bim'} />
+                               <StatusManager issue={issue} isBimPanel={filterRole === 'bim'} isSuspended={isSuspended} />
                                           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-8 pt-6 border-t border-slate-200 dark:border-slate-800/50">
                                {isFieldVisible('impact') && (
                                  <div>
@@ -1335,7 +1336,7 @@ function FilterSelect({ label, options, selected, onChange }: { label: string, o
   );
 }
 
-function StatusManager({ issue, isBimPanel }: { issue: Issue, isBimPanel?: boolean }) {
+function StatusManager({ issue, isBimPanel, isSuspended }: { issue: Issue, isBimPanel?: boolean, isSuspended?: boolean }) {
   const { user } = useAuth();
   const [isUpdating, setIsUpdating] = useState(false);
   const [showConfirmDelete, setShowConfirmDelete] = useState(false);
@@ -1742,10 +1743,14 @@ function StatusManager({ issue, isBimPanel }: { issue: Issue, isBimPanel?: boole
         {actions.map(action => (
           <button
             key={action.id}
-            disabled={isUpdating || issue.status === action.id}
+            disabled={isUpdating || issue.status === action.id || isSuspended}
             onClick={(e) => {
-              e.stopPropagation();
-              if (action.onClick) action.onClick();
+            e.stopPropagation();
+            if (isSuspended) {
+              alert("Accion bloqueada: No se pueden realizar acciones o responder incidencias mientras el proyecto este suspendido por mora (+5 dias).");
+              return;
+            }
+            if (action.onClick) action.onClick();
               else if (action.needsDate) setShowAgreementPicker(true);
               else if (action.needsJustification) setShowRejectionPicker(true);
               else if (action.needsRedirection) setShowRedirectionPicker(true);

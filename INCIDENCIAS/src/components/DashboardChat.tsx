@@ -8,7 +8,7 @@ import {
   Send, Paperclip, Image as ImageIcon, Video, Mic, 
   FilePlus, MessageSquare, User, MoreVertical, X, 
   CheckCircle2, Clock, ThumbsUp, ThumbsDown, AlertCircle, AlertTriangle,
-  ChevronDown, ChevronUp, Maximize2, Layers, Camera, RefreshCw
+  ChevronDown, ChevronUp, Maximize2, Layers, Camera, RefreshCw, Lock
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { cn } from '../lib/utils';
@@ -47,9 +47,10 @@ const RCD_MATERIALS = [
 
 interface DashboardChatProps {
   selectedIssue: Issue | null;
+  isSuspended?: boolean;
 }
 
-export default function DashboardChat({ selectedIssue }: DashboardChatProps) {
+export default function DashboardChat({ selectedIssue, isSuspended }: DashboardChatProps) {
   const [messages, setMessages] = useState<Comment[]>([]);
   const [newMessage, setNewMessage] = useState('');
   const [loading, setLoading] = useState(false);
@@ -771,6 +772,10 @@ Se ha registrado una nueva evidencia tomada durante el proceso de aprovechamient
 
   const handleSendMessage = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
+    if (isSuspended) {
+      alert('🚫 ACCIÓN BLOQUEADA: No se pueden enviar respuestas ni interactuar en incidencias mientras el proyecto esté suspendido por mora (+5 días).');
+      return;
+    }
     
     const textTrimmed = newMessage.trim();
     const hasGeneralForm = !isAprovechamientoIssue && showAcopioForm && acopioLargo !== '' && acopioAncho !== '' && acopioFondo !== '';
@@ -1628,6 +1633,17 @@ ${textTrimmed ? `\n• **Sustento / Observaciones**: ${textTrimmed}` : ''}`;
 
        {/* Input Bar */}
       <div className="p-6 lg:p-10 pt-0">
+        {isSuspended ? (
+          <div className="bg-red-500/10 border border-red-500/30 rounded-2xl p-5 text-center shadow-lg">
+            <div className="flex items-center justify-center gap-2 text-red-600 dark:text-red-400 text-xs font-black uppercase tracking-wider mb-1.5">
+              <Lock className="w-4 h-4" />
+              <span>Respuestas e Intervenciones Bloqueadas</span>
+            </div>
+            <p className="text-[11px] text-red-700/90 dark:text-red-300/90 font-medium max-w-md mx-auto">
+              Este proyecto presenta más de 5 días de mora en su mensualidad. Para reactivar el canal de respuestas y la trazabilidad de esta incidencia, regularice el pago de la licencia.
+            </p>
+          </div>
+        ) : (
          <div className="bg-white dark:bg-[#020617]/80 backdrop-blur-2xl border border-slate-200 dark:border-slate-800/50 rounded-[2.5rem] lg:rounded-[3.5rem] p-4 shadow-2xl relative transition-colors duration-300">
             <div className="flex items-center gap-3 mb-4 ml-6 lg:ml-10">
                <div className="flex items-center bg-slate-50 dark:bg-slate-900/50 p-1 rounded-xl border border-slate-200 dark:border-slate-800/50">
@@ -1982,6 +1998,7 @@ ${textTrimmed ? `\n• **Sustento / Observaciones**: ${textTrimmed}` : ''}`;
               </div>
             </form>
          </div>
+        )}
          <input 
            type="file" 
            ref={fileInputRef} 

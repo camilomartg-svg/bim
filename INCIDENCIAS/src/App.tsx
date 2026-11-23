@@ -24,6 +24,7 @@ import { db } from './services/firebase';
 import { doc, getDoc, onSnapshot } from 'firebase/firestore';
 import { getProjectAndCompany } from './services/firebaseService';
 import { loadAndCacheProjectIso } from './utils/userScope';
+import { checkIncidenciasLicense, ProjectLicenseStatus } from './utils/licenseGuard';
 
 // Component for displaying standard restricted access view to matching style
 function RestrictedView({ title, onBack }: { title: string; onBack: () => void }) {
@@ -74,6 +75,7 @@ function Dashboard() {
     }
   }, [isMobilePhone, activeTab]);
 
+  const [licenseStatus, setLicenseStatus] = useState<ProjectLicenseStatus>({ canAccess: true, isSuspended: false, status: 'ACTIVE', overdueDays: 0 });
   const [projectConfig, setProjectConfig] = useState<any>(() => {
     try {
       const cached = localStorage.getItem('cached_project_config');
@@ -90,6 +92,7 @@ function Dashboard() {
   useEffect(() => {
     const { companyId, projectId } = getProjectAndCompany();
     loadAndCacheProjectIso(companyId, projectId).catch(() => {});
+    checkIncidenciasLicense().then(setLicenseStatus);
     const unsub = onSnapshot(doc(db, 'config', `${companyId}_${projectId}`), (snap) => {
       if (snap.exists()) {
         setProjectConfig(snap.data());
@@ -186,7 +189,7 @@ function Dashboard() {
                    )}
                  </div>
                )}
-               <DashboardChat selectedIssue={selectedIssue} />
+               <DashboardChat selectedIssue={selectedIssue} isSuspended={licenseStatus.isSuspended} />
             </section>
 
             {/* Right Column: Execution/Management (50% on PC, 100% on Mobile when summary tab active) */}
@@ -197,8 +200,15 @@ function Dashboard() {
                {/* Fixed Header within Right Column */}
                <div className="px-3 md:px-5 py-2 md:py-3.5 bg-white/50 dark:bg-black/50 backdrop-blur-xl border-b border-slate-100 dark:border-[#111111]">
                   <button 
-                    onClick={() => setIsCreateModalOpen(true)}
-                    className="w-full bg-[#FFC000] text-slate-900 px-4 md:px-5 py-2.5 rounded-lg font-black text-[8.5px] uppercase tracking-[0.15em] hover:bg-amber-400 transition-all shadow-md active:scale-[0.98] flex items-center justify-center gap-2 group"
+                    onClick={() => {
+                      if (licenseStatus.isSuspended) {
+                        alert("Accion bloqueada: El proyecto se encuentra suspendido por presentar mas de 5 dias de mora en su mensualidad.");
+                        return;
+                      }
+                      setIsCreateModalOpen(true);
+                    }}
+                    disabled={licenseStatus.isSuspended}
+                    className={cn("w-full transition-all shadow-md flex items-center justify-center gap-2 group", licenseStatus.isSuspended ? "bg-red-500/20 text-red-700 dark:text-red-400 border border-red-500/30 cursor-not-allowed px-4 py-2.5 rounded-lg font-black text-[8.5px] uppercase tracking-[0.15em]" : "bg-[#FFC000] text-slate-900 px-4 md:px-5 py-2.5 rounded-lg font-black text-[8.5px] uppercase tracking-[0.15em] hover:bg-amber-400 active:scale-[0.98]")}
                   >
                     <Plus className="w-3.5 h-3.5 group-hover:rotate-90 transition-transform duration-500" />
                     Registrar Hallazgo en Obra
@@ -249,6 +259,7 @@ function Dashboard() {
                     }}
                     selectedIssueId={selectedIssue?.id}
                     filterRole={summaryFilter}
+                    isSuspended={licenseStatus.isSuspended}
                   />
                </div>
             </section>
@@ -288,6 +299,7 @@ function Dashboard() {
               {selectedIssue ? (
                 <IssueDetail 
                   key={selectedIssue.id}
+                  isSuspended={licenseStatus.isSuspended}
                   issue={selectedIssue} 
                   onClose={() => setSelectedIssue(null)} 
                   onOpenReport={(reportId) => {
@@ -434,6 +446,22 @@ function Dashboard() {
              </div>
           </div>
         </header>
+        {licenseStatus.isSuspended && (
+          <div className="bg-red-600 text-white px-4 py-2 text-xs font-bold flex items-center justify-between shrink-0 shadow-sm z-40">
+            <div className="flex items-center gap-2">
+              <AlertCircle className="w-4 h-4 shrink-0 text-white animate-pulse" />
+              <span>
+                <strong>PROYECTO SUSPENDIDO (+5 dias de mora):</strong> La creacion de nuevas incidencias y las respuestas tecnicas en el chat estan bloqueadas por falta de pago de la mensualidad.
+              </span>
+            </div>
+            <a 
+              href="../super-admin.html?tab=wompi" 
+              className="ml-4 px-2.5 py-1 bg-white text-red-700 rounded-md text-[10px] font-black uppercase tracking-wider hover:bg-slate-100 transition-colors shrink-0"
+            >
+              Gestionar Pago
+            </a>
+          </div>
+        )}
 
         <div className="flex-1 overflow-hidden flex flex-col relative">
           {renderContent()}

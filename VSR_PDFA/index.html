@@ -29,10 +29,12 @@
   </style>
   <script src="../nora-drive-store.js"></script>
   <script src="../nora-navigation.js?v=20261114_03"></script>
+  <script type="module" crossorigin src="./assets/index-F_x0noZe.js"></script>
+  <link rel="stylesheet" crossorigin href="./assets/index-DLffm0E6.css">
+    <script src="../wompi-integration.js"></script>
 </head>
 <body class="bg-[#000000]">
-  <div id="root"></div>
-  <script type="module" src="./index.tsx"></script>
+  <div id="root"></div>
 
             <!-- VIEWER LOGO INJECT START -->
     <script>
@@ -87,7 +89,27 @@
                 let darkLogo = config.portal?.logoDark || 'https://i.postimg.cc/FFfBKzb8/LOGO-TEXTO-NORA-BLANCO.png';
                 
                 if (projectSlug && config.projects) {
-                    const proj = config.projects.find(p => p.slug === projectSlug);
+                    const proj = config.projects.find(p => p.slug === projectSlug || p.id === projectSlug || p.name === projectSlug);
+                    if (proj) {
+                        try {
+                            const userAccount = JSON.parse(sessionStorage.getItem('userAccount') || localStorage.getItem('userAccount') || '{}');
+                            const isSuperAdmin = userAccount.role === 'SUPER_ADMINISTRADOR' || userAccount.username === 'imagina3ddesign@gmail.com';
+                            if (!isSuperAdmin && window.WompiModule) {
+                                const lic = window.WompiModule.canAccessProject(proj, 3);
+                                if (!lic.canAccess) {
+                                    window.WompiModule.renderSuspensionOverlay(document.body, {
+                                        moduleName: 'Visor PDF (Planos 2D)',
+                                        moduleDescription: 'La consulta y visualización de planos en formato PDF se encuentra suspendida por falta de pago (+5 días de mora).',
+                                        projectSlug: proj.slug || projectSlug,
+                                        companyId: companyId
+                                    });
+                                    const pdfEl = document.getElementById('pdf-viewer-container') || document.getElementById('viewer') || document.body;
+                                    if (pdfEl && pdfEl !== document.body) { pdfEl.style.filter = 'blur(8px)'; pdfEl.style.pointerEvents = 'none'; }
+                                    return;
+                                }
+                            }
+                        } catch (licErr) { console.warn('Error comprobando suspension en VSR_PDFA:', licErr); }
+                    }
                     if (proj && proj.landing) {
                         // Priorizar viewerLogo (el nuevo campo), sino usar portalLogo
                         if (proj.landing.viewerLogoLight) lightLogo = proj.landing.viewerLogoLight;

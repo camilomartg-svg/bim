@@ -829,7 +829,28 @@
       const licCheck = window.WompiModule ? window.WompiModule.canAccessProject(project, 3) : { canAccess: true, status: 'ACTIVE' };
       const isProjectBlocked = !licCheck.canAccess && !isGlobalSuperAdmin;
 
-      // Banner de Periodo de Gracia
+      // Banner Superior de Suspensión de Servicio por Mora > 5 días
+      if (isProjectBlocked) {
+        const mainContentEl = document.querySelector('main') || document.getElementById('project-tools-container')?.parentElement;
+        if (mainContentEl) {
+          const suspendedBanner = document.createElement('div');
+          suspendedBanner.className = 'w-full mb-6 p-4 rounded-xl bg-rose-50 border-2 border-rose-500 text-rose-950 text-xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-md animate-in fade-in duration-200';
+          suspendedBanner.innerHTML = `
+            <div class="flex items-center gap-2.5">
+              <span class="material-symbols-outlined text-rose-600 text-2xl shrink-0">block</span>
+              <div>
+                <strong class="font-extrabold uppercase text-rose-900">Servicio Suspendido por Falta de Pago:</strong> Han transcurrido más de 5 días desde la emisión del cobro sin registrarse la cancelación de la mensualidad. La consulta de modelos 3D, planos PDF y DWG, carga de archivos y gestión de incidencias se encuentran inhabilitadas.
+              </div>
+            </div>
+            <a href="super-admin.html" class="shrink-0 bg-rose-600 hover:bg-rose-700 text-white font-bold px-4 py-2 rounded-lg text-xs shadow transition-all flex items-center gap-1.5 uppercase tracking-wider">
+              <span class="material-symbols-outlined text-sm">payments</span> Pagar Licencia
+            </a>
+          `;
+          mainContentEl.prepend(suspendedBanner);
+        }
+      }
+
+      // Banner de Periodo de Gracia (Días 1 a 5)
       if (licCheck.status === 'GRACE_PERIOD' && !isProjectBlocked) {
         const mainContentEl = document.querySelector('main') || document.getElementById('project-tools-container')?.parentElement;
         if (mainContentEl) {

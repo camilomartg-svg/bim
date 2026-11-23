@@ -61,6 +61,7 @@
     }
   </style>
   <script src="nora-drive-store.js"></script>
+  <script src="wompi-integration.js"></script>
 </head>
 <body class="bg-slate-50 text-text-light dark:bg-slate-950 dark:text-text-dark min-h-screen flex flex-col transition-colors duration-300">
   <div id="page-shell" class="flex-1 flex flex-col">
@@ -126,6 +127,25 @@
           <select id="project-select" class="w-full rounded-lg border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-sm text-slate-900 dark:text-white focus:border-blue-500 focus:ring-blue-500">
             <!-- Dynamic project list -->
           </select>
+        </div>
+
+        <!-- Project Suspended Warning Banner -->
+        <div id="project-suspended-warning" class="mb-6 p-4 rounded-xl border border-red-500/30 bg-red-500/10 dark:bg-red-950/40 text-red-700 dark:text-red-300 hidden">
+          <div class="flex items-start gap-3">
+            <span class="material-symbols-outlined text-2xl text-red-600 dark:text-red-400 shrink-0">lock</span>
+            <div class="flex-1">
+              <h4 class="text-xs font-black uppercase tracking-wider mb-1 text-red-700 dark:text-red-300">Carga de Archivos Suspendida</h4>
+              <p class="text-xs leading-relaxed opacity-90">
+                Este proyecto presenta más de 5 días de mora en su mensualidad. La subida de nuevos archivos, versiones y modelos ha sido temporalmente bloqueada.
+              </p>
+              <div class="mt-2.5">
+                <a id="btn-pay-suspension-upload" href="super-admin.html" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-bold uppercase tracking-wider bg-red-600 text-white hover:bg-red-700 transition-colors shadow-sm">
+                  <span class="material-symbols-outlined text-[14px]">credit_card</span>
+                  <span>Gestionar Pago de Licencia</span>
+                </a>
+              </div>
+            </div>
+          </div>
         </div>
 
         <!-- Drag and Drop Area -->
@@ -2484,6 +2504,58 @@
         projectSubtitle.textContent = 'Error al cargar la configuración del proyecto.';
       }
 
+      function isCurrentProjectSuspended() {
+        if (!window.WompiModule || !activeProject) return false;
+        try {
+          const userAccount = JSON.parse(sessionStorage.getItem('userAccount') || localStorage.getItem('userAccount') || '{}');
+          if (userAccount.role === 'SUPER_ADMINISTRADOR' || userAccount.username === 'imagina3ddesign@gmail.com') {
+            return false;
+          }
+          const lic = window.WompiModule.canAccessProject(activeProject, 3);
+          return !lic.canAccess;
+        } catch (e) {
+          console.warn('Error verificando suspensión en upload:', e);
+          return false;
+        }
+      }
+
+      function updateProjectSuspensionUI() {
+        const isSuspended = isCurrentProjectSuspended();
+        const warningEl = document.getElementById('project-suspended-warning');
+        const payBtn = document.getElementById('btn-pay-suspension-upload');
+        if (payBtn) {
+          const sParams = new URLSearchParams();
+          if (companyId) sParams.set('empresa', companyId);
+          if (activeProject && activeProject.slug) sParams.set('project', activeProject.slug);
+          payBtn.href = `super-admin.html?tab=wompi&${sParams.toString()}`;
+        }
+        if (isSuspended) {
+          if (warningEl) warningEl.classList.remove('hidden');
+          if (dropZone) {
+            dropZone.classList.add('opacity-40', 'pointer-events-none', 'cursor-not-allowed', 'border-red-400/50');
+            dropZone.title = 'Carga bloqueada: Proyecto suspendido por falta de pago (+5 días de mora)';
+          }
+          if (fileInput) fileInput.disabled = true;
+          if (uploadBtn) {
+            uploadBtn.disabled = true;
+            uploadBtn.classList.add('opacity-50', 'cursor-not-allowed');
+            uploadBtn.title = 'Proyecto suspendido por falta de pago';
+          }
+        } else {
+          if (warningEl) warningEl.classList.add('hidden');
+          if (dropZone) {
+            dropZone.classList.remove('opacity-40', 'pointer-events-none', 'cursor-not-allowed', 'border-red-400/50');
+            dropZone.title = '';
+          }
+          if (fileInput) fileInput.disabled = false;
+          if (uploadBtn) {
+            uploadBtn.disabled = false;
+            uploadBtn.classList.remove('opacity-50', 'cursor-not-allowed');
+            uploadBtn.title = '';
+          }
+        }
+      }
+
       function updateProjectUI() {
         if (!activeProject) return;
         projectTitle.textContent = `Administrar ${activeProject.name}`;
@@ -2498,6 +2570,8 @@
           if (activeProject.slug) sParams.set('proyecto', activeProject.slug);
           btnGotoSimplified.href = `CARGA_SIMPLIFICADA.html${sParams.toString() ? '?' + sParams.toString() : ''}`;
         }
+
+        updateProjectSuspensionUI();
       }
 
       // Drag and drop event handlers
@@ -2521,17 +2595,30 @@
         const dt = e.dataTransfer;
         const files = dt.files;
         if (files.length) {
+          if (isCurrentProjectSuspended()) {
+            alert('🚫 CARGA BLOQUEADA: Este proyecto se encuentra suspendido por presentar más de 5 días de mora en su mensualidad.');
+            return;
+          }
           handleFilesSelection(files);
         }
       });
 
       dropZone.addEventListener('click', () => {
         if (isUploading) return;
+        if (isCurrentProjectSuspended()) {
+          alert('🚫 CARGA BLOQUEADA: Este proyecto se encuentra suspendido por presentar más de 5 días de mora en su mensualidad.');
+          return;
+        }
         fileInput.click();
       });
 
       fileInput.addEventListener('change', (e) => {
         if (e.target.files.length) {
+          if (isCurrentProjectSuspended()) {
+            alert('🚫 CARGA BLOQUEADA: Este proyecto se encuentra suspendido por presentar más de 5 días de mora en su mensualidad.');
+            e.target.value = '';
+            return;
+          }
           handleFilesSelection(e.target.files);
         }
       });
@@ -2813,6 +2900,10 @@
 
       function handleFilesSelection(filesList) {
         if (isUploading) return;
+        if (isCurrentProjectSuspended()) {
+          alert('🚫 CARGA BLOQUEADA: Este proyecto se encuentra suspendido por presentar más de 5 días de mora en su mensualidad.');
+          return;
+        }
 
         const effectivePerms = getCurrentEffectivePermissions();
         let canEditCurrent = false;
@@ -3365,6 +3456,10 @@
 
       uploadBtn.addEventListener('click', async () => {
         if (selectedFiles.length === 0 || !activeProject || isUploading) return;
+        if (isCurrentProjectSuspended()) {
+          alert('🚫 CARGA BLOQUEADA: No se pueden subir archivos mientras el proyecto esté suspendido por mora (+5 días).');
+          return;
+        }
 
         // Doble validación: verificar que no haya archivos .frag o .json huérfanos sin su .rvt
         const orphaned = selectedFiles.find(f => {
@@ -4731,6 +4826,10 @@
 
       btnSubmitVerModal.addEventListener('click', async () => {
         if (!targetVersionFile || !activeProject) return;
+        if (isCurrentProjectSuspended()) {
+          alert('🚫 CARGA BLOQUEADA: No se pueden registrar nuevas versiones en un proyecto suspendido por mora (+5 días).');
+          return;
+        }
         const versionTag = verInputTag.value.trim();
         const comments = verInputComments.value.trim();
 

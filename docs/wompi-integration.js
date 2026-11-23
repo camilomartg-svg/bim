@@ -259,8 +259,38 @@ window.WompiModule = (function () {
       };
     }
 
-    // Determinar fecha de referencia (paidUntil o fecha de creación/activación del proyecto)
-    const refDate = paidUntil || (project.createdAt ? new Date(project.createdAt) : today);
+    // Determinar fecha de referencia (paidUntil, fecha de emisión de cobro o creación del proyecto)
+    let refDate = null;
+    if (paidUntil) {
+      refDate = new Date(paidUntil);
+    } else if (project.paymentIssuedAt) {
+      refDate = new Date(project.paymentIssuedAt);
+    } else if (project.invoiceIssuedAt) {
+      refDate = new Date(project.invoiceIssuedAt);
+    } else if (project.createdAt) {
+      refDate = new Date(project.createdAt);
+    } else {
+      // Extraer timestamp numérico del slug o id (ej: nuevo-proyecto-1794667104070)
+      const idOrSlug = String(project.id || project.slug || '');
+      const match = idOrSlug.match(/(\d{10,13})/);
+      if (match) {
+        const ts = parseInt(match[1], 10);
+        const d = new Date(ts);
+        if (d.getFullYear() >= 2020 && d.getFullYear() <= 2030) {
+          refDate = d;
+        }
+      }
+    }
+
+    // Si aún no se determina fecha de emisión previa, tomar la fecha de corte unificada del mes (día 3)
+    if (!refDate) {
+      const day = 3;
+      if (today.getDate() >= day) {
+        refDate = new Date(today.getFullYear(), today.getMonth(), day);
+      } else {
+        refDate = new Date(today.getFullYear(), today.getMonth() - 1, day);
+      }
+    }
     refDate.setHours(0, 0, 0, 0);
 
     const diffTime = today - refDate;
@@ -378,6 +408,76 @@ window.WompiModule = (function () {
     }
   }
 
+  /**
+   * Renderiza una pantalla de bloqueo total con diseño oscuro/blur sobre cualquier contenedor o página
+   * cuando el proyecto se encuentra suspendido por falta de pago (mora > 5 días).
+   */
+  function renderSuspensionOverlay(targetContainer, options = {}) {
+    const container = targetContainer || document.body;
+    if (document.getElementById('nora-suspension-overlay')) return;
+
+    const overlay = document.createElement('div');
+    overlay.id = 'nora-suspension-overlay';
+    overlay.style.position = 'fixed';
+    overlay.style.top = '0';
+    overlay.style.left = '0';
+    overlay.style.width = '100vw';
+    overlay.style.height = '100vh';
+    overlay.style.zIndex = '2147483647';
+    overlay.style.backgroundColor = 'rgba(8, 10, 15, 0.96)';
+    overlay.style.backdropFilter = 'blur(16px)';
+    overlay.style.webkitBackdropFilter = 'blur(16px)';
+    overlay.style.display = 'flex';
+    overlay.style.alignItems = 'center';
+    overlay.style.justifyContent = 'center';
+    overlay.style.padding = '20px';
+    overlay.style.fontFamily = 'Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+    overlay.style.color = '#ffffff';
+    overlay.style.boxSizing = 'border-box';
+
+    const moduleName = options.moduleName || 'esta herramienta';
+    const moduleDesc = options.moduleDescription || 'La consulta, visualización y operación de este módulo se encuentran bloqueadas.';
+    const daysLeft = options.daysLeftToPurge || 175;
+    const projectSlug = options.projectSlug || '';
+    const companyId = options.companyId || '';
+    const backUrl = options.backUrl || (projectSlug ? `../project-landing.html?project=${encodeURIComponent(projectSlug)}&empresa=${encodeURIComponent(companyId)}` : '../home.html');
+    const payUrl = options.payUrl || '../super-admin.html';
+
+    overlay.innerHTML = `
+      <div style="max-width: 560px; width: 100%; background: #18181b; border: 2px solid #f43f5e; border-radius: 24px; padding: 36px 32px; box-shadow: 0 25px 50px -12px rgba(244, 63, 94, 0.35); text-align: center; box-sizing: border-box;">
+        <div style="width: 72px; height: 72px; background: rgba(244, 63, 94, 0.15); border: 2px solid #f43f5e; border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto 20px auto; color: #f43f5e;">
+          <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+            <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+          </svg>
+        </div>
+        <h2 style="font-size: 22px; font-weight: 800; color: #ffffff; margin: 0 0 10px 0; letter-spacing: -0.02em;">
+          Proyecto Suspendido por Falta de Pago
+        </h2>
+        <p style="font-size: 13px; color: #cbd5e1; line-height: 1.6; margin: 0 0 20px 0;">
+          El periodo de gracia de <strong>5 días posteriores a la fecha de corte</strong> ha finalizado sin registrar el pago de la mensualidad del proyecto.
+        </p>
+        <div style="background: rgba(244, 63, 94, 0.12); border: 1px solid rgba(244, 63, 94, 0.35); border-radius: 14px; padding: 14px 18px; margin-bottom: 22px; text-align: left;">
+          <p style="font-size: 12px; font-weight: 700; color: #fda4af; margin: 0 0 4px 0;">🚫 Restricción Activa en ${moduleName}:</p>
+          <p style="font-size: 12px; color: #f1f5f9; margin: 0; line-height: 1.5;">${moduleDesc} Para reactivar el servicio inmediatamente, efectúa el pago correspondiente.</p>
+        </div>
+        <div style="font-size: 11px; color: #94a3b8; margin-bottom: 24px;">
+          Retención de datos antes de eliminación definitiva: <strong style="color: #f43f5e;">${daysLeft} días</strong>
+        </div>
+        <div style="display: flex; gap: 12px; justify-content: center; flex-wrap: wrap;">
+          <a href="${payUrl}" style="background: #f43f5e; color: #ffffff; text-decoration: none; font-weight: 700; font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em; padding: 12px 24px; border-radius: 12px; box-shadow: 0 4px 12px rgba(244, 63, 94, 0.4); display: inline-flex; align-items: center; gap: 8px;">
+            Pagar Licencia en Pasarela Wompi
+          </a>
+          <a href="${backUrl}" style="background: rgba(255, 255, 255, 0.08); color: #e2e8f0; text-decoration: none; font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em; padding: 12px 20px; border-radius: 12px; border: 1px solid rgba(255, 255, 255, 0.15); display: inline-flex; align-items: center; gap: 8px;">
+            Volver al Portal
+          </a>
+        </div>
+      </div>
+    `;
+
+    container.appendChild(overlay);
+  }
+
   return {
     TOTAL_PRICE_PER_PROJECT_COP,
     PREPAY_PLANS,
@@ -390,6 +490,7 @@ window.WompiModule = (function () {
     generateIntegritySignature,
     getProjectLicenseStatus,
     canAccessProject,
+    renderSuspensionOverlay,
     launchCheckout
   };
 })();

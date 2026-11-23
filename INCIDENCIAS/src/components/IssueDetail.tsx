@@ -20,6 +20,7 @@ import { IssueTypeScope } from '../utils/userScope';
 import AssigneeSelectorModal from './AssigneeSelectorModal';
 
 interface IssueDetailProps {
+  isSuspended?: boolean;
   issue: Issue;
   onClose: () => void;
   onOpenReport?: (reportId: string) => void;
@@ -1419,7 +1420,13 @@ export default function IssueDetail({ issue: initialIssue, onClose, onOpenReport
                             <div className="flex flex-col gap-2">
                               <span className="text-[7px] font-black text-emerald-500 uppercase tracking-widest pl-1">Etapa Final: Cierre de Incidencia</span>
                               <button 
-                                onClick={handleFinalApproval}
+                                onClick={() => {
+                                  if (isSuspended) {
+                                    alert("Accion bloqueada: Proyecto suspendido por falta de pago (+5 dias).");
+                                    return;
+                                  }
+                                  handleFinalApproval();
+                                }}
                                 className="px-8 py-4 bg-emerald-600 text-white rounded-2xl text-[10px] font-black uppercase tracking-[0.15em] hover:bg-emerald-500 transition-all shadow-xl shadow-emerald-600/10 flex items-center gap-2.5 active:scale-95"
                               >
                                 <CheckCircle2 className="w-4 h-4" /> FINALIZAR RESPUESTA TÉCNICA

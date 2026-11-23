@@ -1,4 +1,4 @@
-﻿<!doctype html>
+<!doctype html>
 <html lang="en">
 
 <head>
@@ -81,9 +81,12 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>VSR IFCA | nora</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet" />
-    <link rel="stylesheet" href="/src/style.css">
-    <script type="module" src="/src/main.ts"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet" />
+  <script src="../wompi-integration.js"></script>
+  <script type="module" crossorigin src="./assets/main-Br2hJjuQ.js"></script>
+  <link rel="modulepreload" crossorigin href="./assets/viewpoints-manager-DcOIyzzy.js">
+  <link rel="stylesheet" crossorigin href="./assets/main-CpqwKxs6.css">
+
     <style id="nora-status-charts-styles">
         #properties-panel {
             max-width: 50vw !important;
@@ -343,21 +346,20 @@
                 <button class="right-tab-btn active" id="right-tab-properties" data-tab="properties" title="Ver propiedades del elemento">
                     <span class="material-symbols-outlined" style="font-size: 16px;">info</span> <span>Propiedades</span>
                 </button>
-                <button class="right-tab-btn" id="right-tab-nora" data-tab="nora-ai" title="nora AI Copilot">
-                    <i class="fa-solid fa-wand-magic-sparkles" style="font-size: 13px;"></i> <span>nora AI</span>
-                </button>
                 <button class="right-tab-btn" id="right-tab-graficos" data-tab="status-charts" title="Gráficos de Avance y Estado" style="display: none; align-items: center; gap: 5px;">
                     <i class="fa-solid fa-chart-pie" style="font-size: 13px; color: #3b82f6;"></i> <span>Gráficos</span>
                 </button>
                 <button class="right-tab-btn" id="right-tab-split-ia" data-tab="split-ia" title="Partir en 2: IA Arriba + Gráficos Abajo" style="display: none; align-items: center; gap: 4px; background: linear-gradient(135deg, rgba(139,92,246,0.12), rgba(59,130,246,0.12)); border: 1px dashed #8b5cf6; color: #7c3aed; font-weight: 700; border-radius: 6px; padding: 4px 8px;">
                     <i class="fa-solid fa-table-columns fa-rotate-270" style="font-size: 11px;"></i> <span>IA + Gráficos</span>
                 </button>
+                <button class="right-tab-btn" id="right-tab-nora" data-tab="nora-ai" title="nora AI Copilot">
+                    <i class="fa-solid fa-wand-magic-sparkles" style="font-size: 13px;"></i> <span>nora AI</span>
+                </button>
             </div>
             <div class="properties-content right-tab-content active" id="properties-content">
                 <div class="no-selection">Selecciona un elemento para ver sus propiedades</div>
             </div>
-            <div class="right-tab-content" id="nora-ai-container" style="display: none; flex: 1; flex-direction: column; overflow: hidden; height: calc(100% - 48px);">
-            </div>
+            <div class="right-tab-content" id="nora-ai-container" style="display: none; flex: 1; flex-direction: column; overflow: hidden; height: calc(100% - 48px);"></div>
             
             <div id="panel-split-divider" style="display: none;">
                 <div style="display: flex; align-items: center; gap: 6px; font-weight: 700; color: #64748b; font-size: 10px; letter-spacing: 0.3px;">
@@ -733,7 +735,27 @@
                 let darkLogo = config.portal?.logoDark || 'https://i.postimg.cc/FFfBKzb8/LOGO-TEXTO-NORA-BLANCO.png';
                 
                 if (projectSlug && config.projects) {
-                    const proj = config.projects.find(p => p.slug === projectSlug);
+                    const proj = config.projects.find(p => p.slug === projectSlug || p.id === projectSlug || p.name === projectSlug);
+                    if (proj) {
+                        try {
+                            const userAccount = JSON.parse(sessionStorage.getItem('userAccount') || localStorage.getItem('userAccount') || '{}');
+                            const isSuperAdmin = userAccount.role === 'SUPER_ADMINISTRADOR' || userAccount.username === 'imagina3ddesign@gmail.com';
+                            if (!isSuperAdmin && window.WompiModule) {
+                                const lic = window.WompiModule.canAccessProject(proj, 3);
+                                if (!lic.canAccess) {
+                                    window.WompiModule.renderSuspensionOverlay(document.body, {
+                                        moduleName: 'Visor IFC (Modelos 3D)',
+                                        moduleDescription: 'La consulta y visualización de modelos BIM 3D se encuentra suspendida por falta de pago (+5 días de mora).',
+                                        projectSlug: proj.slug || projectSlug,
+                                        companyId: companyId
+                                    });
+                                    const appEl = document.getElementById('viewer-container') || document.getElementById('app');
+                                    if (appEl) { appEl.style.filter = 'blur(8px)'; appEl.style.pointerEvents = 'none'; }
+                                    return;
+                                }
+                            }
+                        } catch (licErr) { console.warn('Error comprobando suspension en VSR_IFCA:', licErr); }
+                    }
                     if (proj && proj.landing) {
                         // Priorizar viewerLogo (el nuevo campo), sino usar portalLogo
                         if (proj.landing.viewerLogoLight) lightLogo = proj.landing.viewerLogoLight;
