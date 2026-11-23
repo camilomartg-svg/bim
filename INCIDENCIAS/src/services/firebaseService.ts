@@ -20,6 +20,12 @@ import {
   saveIncidentsConfigToSheet,
   saveIncidentsLocationsToSheet
 } from '../utils/googleDriveUtils';
+import {
+  fetchIncidentsFromDrive,
+  getCachedIncidents,
+  saveIncidentToDrive,
+  deleteIncidentFromDrive
+} from './driveIncidentsService';
 import { handleFirestoreError, OperationType } from './firestore-errors';
 import { 
   Issue, 
@@ -293,77 +299,82 @@ export const saveReport = async (report: any) => {
   }
 };
 
-// Issues
+// Issues - Single Source of Truth: Google Drive (1-9SumRefiih81mc_eASsswy_W_U0-qe5 / [Empresa] / [Proyecto])
 export const subscribeToIssues = (callback: (issues: Issue[]) => void) => {
   const { projectId, companyId } = getProjectAndCompany();
-  const q = query(
-    collection(db, 'issues'),
-    where('projectId', '==', projectId),
-    where('companyId', '==', companyId),
-    orderBy('createdAt', 'desc')
-  );
-  return onSnapshot(q, (snapshot) => {
-    const issues = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Issue));
-    callback(issues);
-  }, (error) => {
-    handleFirestoreError(error, OperationType.GET, 'issues');
+
+  // 1. Inmediatamente emitir incidencias en caché local para que nunca esté en blanco ni parpadee
+  const cached = getCachedIncidents(companyId, projectId);
+  if (cached.length > 0) {
+    callback(cached);
+  }
+
+  // 2. Cargar incidencias frescas directamente desde Google Drive
+  fetchIncidentsFromDrive(companyId, projectId).then((fresh) => {
+    callback(fresh);
+  }).catch((err) => {
+    console.warn('[firebaseService] No se pudieron cargar incidencias frescas desde Google Drive:', err);
   });
+
+  // 3. Escuchar actualizaciones locales y entre pestañas
+  const handleUpdate = (e: any) => {
+    const detail = e.detail;
+    if (detail && detail.incidents) {
+      if (detail.companyId === companyId && detail.projectId === projectId) {
+        callback(detail.incidents);
+      }
+    } else {
+      const current = getCachedIncidents(companyId, projectId);
+      callback(current);
+    }
+  };
+
+  window.addEventListener('nora_incidents_updated', handleUpdate);
+
+  // 4. Polling periódico cada 12 segundos para sincronizar cambios remotos en Google Drive
+  const interval = setInterval(() => {
+    fetchIncidentsFromDrive(companyId, projectId).then((fresh) => {
+      callback(fresh);
+    }).catch(() => {});
+  }, 12000);
+
+  return () => {
+    window.removeEventListener('nora_incidents_updated', handleUpdate);
+    clearInterval(interval);
+  };
 };
 
 export const saveIssue = async (issue: Omit<Issue, 'id'> & { id?: string }) => {
-  const path = 'issues';
   const { projectId, companyId } = getProjectAndCompany();
   try {
-    if (issue.id) {
-      const savedIssue = {
-        ...issue,
-        projectId,
-        companyId,
-        updatedAt: new Date().toISOString()
-      };
-      await setDoc(doc(db, path, issue.id), savedIssue, { merge: true });
-      await archiveIncidentsRecord('incidencia', savedIssue, issue.id);
-      return issue.id;
-    } else {
-      const savedIssue = {
-        ...issue,
-        projectId,
-        companyId,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
-      };
-      const docRef = await addDoc(collection(db, path), savedIssue);
-      await archiveIncidentsRecord('incidencia', { id: docRef.id, ...savedIssue }, docRef.id);
-      return docRef.id;
-    }
+    const savedId = await saveIncidentToDrive(issue, companyId, projectId);
+    return savedId;
   } catch (error) {
-    handleFirestoreError(error, OperationType.WRITE, path);
+    console.error('[firebaseService] Error guardando incidencia en Google Drive:', error);
+    throw error;
   }
 };
 
 export const deleteIssue = async (id: string) => {
-  console.log(`[firebaseService] Starting deleteIssue for ID: ${id}`);
-  const path = `issues/${id}`;
+  const { projectId, companyId } = getProjectAndCompany();
   try {
-    // 1. Delete comments subcollection (try to clean up)
-    try {
-      const commentsRef = collection(db, 'issues', id, 'comments');
-      const commentsSnapshot = await getDocs(commentsRef);
-      console.log(`[firebaseService] Found ${commentsSnapshot.size} comments to delete`);
-      const deletePromises = commentsSnapshot.docs.map(doc => deleteDoc(doc.ref));
-      await Promise.all(deletePromises);
-    } catch (e) {
-      console.warn("[firebaseService] Warning: Could not delete some comments", e);
-    }
-
-    // 2. Delete the issue itself
-    const issueRef = doc(db, 'issues', id);
-    await deleteDoc(issueRef);
-    console.log(`[firebaseService] Successfully deleted issue: ${id}`);
+    await deleteIncidentFromDrive(id, companyId, projectId);
   } catch (error) {
-    console.error(`[firebaseService] Fatal error deleting issue ${id}:`, error);
-    handleFirestoreError(error, OperationType.DELETE, path);
+    console.error(`[firebaseService] Error eliminando incidencia ${id} en Drive:`, error);
   }
+};
+
+export const updateIssue = async (id: string, updates: Partial<Issue>) => {
+  const { projectId, companyId } = getProjectAndCompany();
+  const cached = getCachedIncidents(companyId, projectId);
+  const existing = cached.find(i => i.id === id);
+  const merged: Issue = {
+    ...(existing || {}),
+    ...updates,
+    id,
+    updatedAt: new Date().toISOString()
+  } as Issue;
+  return saveIssue(merged);
 };
 
 // Platform integration helpers

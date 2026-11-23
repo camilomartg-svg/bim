@@ -64,14 +64,19 @@ export default function DashboardChat({ selectedIssue, isSuspended }: DashboardC
     setLocalIssue(selectedIssue);
     if (!selectedIssue) return;
 
-    const unsubIssue = onSnapshot(doc(db, 'issues', selectedIssue.id), (docSnap) => {
-      if (docSnap.exists()) {
-        setLocalIssue({ id: docSnap.id, ...docSnap.data() } as Issue);
+    const handleSync = (e: any) => {
+      const incs = e.detail?.incidents;
+      if (Array.isArray(incs)) {
+        const found = incs.find((i: any) => i.id === selectedIssue.id);
+        if (found) {
+          setLocalIssue(found);
+          if (found.comments) setMessages(found.comments);
+        }
       }
-    });
-
+    };
+    window.addEventListener('nora_incidents_updated', handleSync);
     return () => {
-      unsubIssue();
+      window.removeEventListener('nora_incidents_updated', handleSync);
     };
   }, [selectedIssue?.id]);
 
@@ -726,6 +731,10 @@ Se ha registrado una nueva evidencia tomada durante el proceso de aprovechamient
 
     window.addEventListener('local_issues_updated', handleIssuesUpdated);
     window.addEventListener('local_comments_updated', handleIssuesUpdated);
+    const handleDriveSync = (e: any) => {
+      if (e.detail?.incidents) handleIssuesUpdated({ detail: e.detail.incidents });
+    };
+    window.addEventListener('nora_incidents_updated', handleDriveSync);
 
     // 3. Suscripción secundaria Firestore
     let unsubscribeFirestore: any = null;
@@ -752,6 +761,7 @@ Se ha registrado una nueva evidencia tomada durante el proceso de aprovechamient
     return () => {
       window.removeEventListener('local_issues_updated', handleIssuesUpdated);
       window.removeEventListener('local_comments_updated', handleIssuesUpdated);
+      window.removeEventListener('nora_incidents_updated', handleDriveSync);
       if (unsubscribeFirestore) unsubscribeFirestore();
     };
   }, [selectedIssue?.id]);

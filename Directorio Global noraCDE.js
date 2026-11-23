@@ -153,7 +153,94 @@ function saveIncidentsLocation_(data) {
 }
 
 function saveIncidentsProjectConfig_(data) {
+  const company = data.company || { id: data.companyId, name: data.companyName }
+
+function resolveIncidentsProjectFolder_(companyData, projectData) {
+  const root = DriveApp.getFolderById(INCIDENTS_ROOT_FOLDER_ID);
+  const cName = String((companyData && (companyData.name || companyData.id)) || 'Empresa sin nombre').trim();
+  const pName = String((projectData && (projectData.name || projectData.slug || projectData.id)) || 'Proyecto sin nombre').trim();
+  const companyFolder = getOrCreateFolder(root, cName);
+  const projectFolder = getOrCreateFolder(companyFolder, pName);
+  return { companyFolder: companyFolder, projectFolder: projectFolder };
+}
+
+function saveIncident_(data) {
   const company = data.company || { id: data.companyId, name: data.companyName };
+  const project = data.project || { id: data.projectId, slug: data.projectId, name: data.projectName };
+  const incident = data.incident || data.record;
+  if (!incident || !incident.id) {
+    return { status: 'error', message: 'Falta el objeto incident o incident.id' };
+  }
+  const resolved = resolveIncidentsProjectFolder_(company, project);
+  const projectFolder = resolved.projectFolder;
+  const filename = 'incidencia_' + String(incident.id).trim() + '.json';
+
+  const existingFiles = projectFolder.getFilesByName(filename);
+  while (existingFiles.hasNext()) {
+    existingFiles.next().setTrashed(true);
+  }
+
+  const file = projectFolder.createFile(filename, JSON.stringify(incident, null, 2), MimeType.PLAIN_TEXT);
+  try {
+    file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+  } catch (_) {}
+
+  return {
+    status: 'success',
+    fileId: file.getId(),
+    url: file.getUrl(),
+    incidentId: incident.id,
+    projectFolderId: projectFolder.getId()
+  };
+}
+
+function getIncidents_(data) {
+  const company = data.company || { id: data.companyId, name: data.companyName };
+  const project = data.project || { id: data.projectId, slug: data.projectId, name: data.projectName };
+  const resolved = resolveIncidentsProjectFolder_(company, project);
+  const projectFolder = resolved.projectFolder;
+
+  const incidents = [];
+  const files = projectFolder.getFiles();
+  while (files.hasNext()) {
+    const f = files.next();
+    const name = f.getName();
+    if (name.startsWith('incidencia_') && name.endsWith('.json')) {
+      try {
+        const content = f.getBlob().getDataAsString('UTF-8');
+        const parsed = JSON.parse(content);
+        const inc = (parsed && parsed.record) ? parsed.record : parsed;
+        if (inc && inc.id) {
+          incidents.push(inc);
+        }
+      } catch (err) {}
+    }
+  }
+
+  return {
+    status: 'success',
+    incidents: incidents,
+    projectFolderId: projectFolder.getId()
+  };
+}
+
+function deleteIncident_(data) {
+  const company = data.company || { id: data.companyId, name: data.companyName };
+  const project = data.project || { id: data.projectId, slug: data.projectId, name: data.projectName };
+  const incidentId = String(data.incidentId || data.id || '').trim();
+  if (!incidentId) return { status: 'error', message: 'Falta incidentId' };
+
+  const resolved = resolveIncidentsProjectFolder_(company, project);
+  const projectFolder = resolved.projectFolder;
+  const filename = 'incidencia_' + incidentId + '.json';
+  const existingFiles = projectFolder.getFilesByName(filename);
+  let count = 0;
+  while (existingFiles.hasNext()) {
+    existingFiles.next().setTrashed(true);
+    count++;
+  }
+  return { status: 'success', deleted: count > 0, count: count };
+};
   const project = data.project || { id: data.projectId, slug: data.projectId, name: data.projectName };
   if (!company || !(company.name || company.id) || !project || !(project.name || project.slug || project.id)) {
     return { status: 'error', message: 'Faltan los datos de empresa o proyecto para guardar la configuración.' };
@@ -1981,7 +2068,16 @@ function doPost(e) {
       return output_(uploadFile_(e, data), callback);
     }
     if (action === 'saveIncidentsProjectConfig') {
-      return output_(saveIncidentsProjectConfig_(data || {}), callback);
+      return output_(saveIncidentsProjectConfig_(data || {}
+    if (action === 'getIncidents') {
+      return output_(getIncidents_(data || e.parameter || {}), callback);
+    }
+    if (action === 'saveIncident') {
+      return output_(saveIncident_(data || {}), callback);
+    }
+    if (action === 'deleteIncident') {
+      return output_(deleteIncident_(data || {}), callback);
+    }), callback);
     }
     if (action === 'saveIncidentsLocation') {
       return output_(saveIncidentsLocation_(data || {}), callback);

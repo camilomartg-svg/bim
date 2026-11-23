@@ -14,7 +14,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { cn } from '../lib/utils';
 import { format, differenceInDays, isPast } from 'date-fns';
 import { getMedicionDueDate, getEficaciaDueDate, isMedicionAlertActive, isEficaciaAlertActive, generateFollowUpCode } from '../utils/followUpUtils';
-import { getProjectConfig, subscribeToTeam, deleteIssue, syncIssueStatusToParentReport } from '../services/firebaseService';
+import { getProjectConfig, subscribeToTeam, deleteIssue, syncIssueStatusToParentReport, saveIssue } from '../services/firebaseService';
 import { uploadFileToDrive, getAuthenticatedDriveUrl } from '../utils/googleDriveUtils';
 import { IssueTypeScope } from '../utils/userScope';
 import AssigneeSelectorModal from './AssigneeSelectorModal';
@@ -44,6 +44,38 @@ export default function IssueDetail({ issue: initialIssue, onClose, onOpenReport
   const [isReviewersModalOpen, setIsReviewersModalOpen] = useState(false);
   const [typeScopes, setTypeScopes] = useState<Record<string, IssueTypeScope>>({});
   const { user, googleAccessToken } = useAuth();
+
+  const persistIssueUpdate = async (
+    updateData: Partial<Issue>,
+    newCommentPayload?: { userId?: string; userName?: string; text: string; attachments?: any[] }
+  ) => {
+    let currentComments = [...(issue.comments || comments || [])];
+    if (newCommentPayload && newCommentPayload.text) {
+      const newCommentObj: Comment = {
+        id: 'cm_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6),
+        userId: newCommentPayload.userId || user?.id || 'system',
+        userName: newCommentPayload.userName || user?.name || 'SISTEMA',
+        text: newCommentPayload.text,
+        createdAt: new Date().toISOString(),
+        attachments: newCommentPayload.attachments || []
+      } as any;
+      currentComments.push(newCommentObj);
+      setComments(currentComments);
+    }
+    const merged: Issue = {
+      ...issue,
+      ...updateData,
+      comments: currentComments,
+      updatedAt: new Date().toISOString()
+    };
+    setIssue(merged);
+    try {
+      await saveIssue(merged);
+    } catch (err) {
+      console.warn('[IssueDetail] Error guardando actualización de incidencia en Drive:', err);
+    }
+    return merged;
+  };
 
   const [largo, setLargo] = useState<number | ''>('');
   const [ancho, setAncho] = useState<number | ''>('');
