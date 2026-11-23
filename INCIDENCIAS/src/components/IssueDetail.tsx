@@ -24,6 +24,7 @@ interface IssueDetailProps {
   issue: Issue;
   onClose: () => void;
   onOpenReport?: (reportId: string) => void;
+  isPaymentAdmin?: boolean;
 }
 
 export default function IssueDetail({ issue: initialIssue, onClose, onOpenReport }: IssueDetailProps) {
@@ -1454,7 +1455,10 @@ export default function IssueDetail({ issue: initialIssue, onClose, onOpenReport
                               <button 
                                 onClick={() => {
                                   if (isSuspended) {
-                                    alert("Accion bloqueada: Proyecto suspendido por falta de pago (+5 dias).");
+                                    const msg = isPaymentAdmin
+                                    ? "Acción bloqueada: Proyecto suspendido por falta de pago (+5 días)."
+                                    : "Acción bloqueada: Las funciones de este proyecto se encuentran temporalmente inhabilitadas. Contacta al administrador.";
+                                  alert(msg);
                                     return;
                                   }
                                   handleFinalApproval();

@@ -22,13 +22,14 @@ interface DashboardSummaryProps {
   selectedIssueId?: string;
   filterRole: 'author' | 'responsible' | 'reviewer' | 'bim';
   isSuspended?: boolean;
+  isPaymentAdmin?: boolean;
 }
 
 type SortOption = 'dueDate' | 'createdAt' | 'degreeOfAction' | 'title';
 
 type SortCriteria = { field: SortOption; order: 'asc' | 'desc' };
 
-export default function DashboardSummary({ onSelectIssue, onOpenReport, selectedIssueId, filterRole, isSuspended }: DashboardSummaryProps) {
+export default function DashboardSummary({ onSelectIssue, onOpenReport, selectedIssueId, filterRole, isSuspended, isPaymentAdmin }: DashboardSummaryProps) {
   const [issues, setIssues] = useState<Issue[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
@@ -1132,7 +1133,7 @@ export default function DashboardSummary({ onSelectIssue, onOpenReport, selected
                                </div>
 
                                <h4 className="text-[9px] font-black text-slate-500 uppercase tracking-[0.2em] px-1 mb-1">Gestión de Acciones</h4>
-                               <StatusManager issue={issue} isBimPanel={filterRole === 'bim'} isSuspended={isSuspended} />
+                               <StatusManager issue={issue} isBimPanel={filterRole === 'bim'} isSuspended={isSuspended} isPaymentAdmin={isPaymentAdmin} />
                                           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-8 pt-6 border-t border-slate-200 dark:border-slate-800/50">
                                {isFieldVisible('impact') && (
                                  <div>
@@ -1336,7 +1337,7 @@ function FilterSelect({ label, options, selected, onChange }: { label: string, o
   );
 }
 
-function StatusManager({ issue, isBimPanel, isSuspended }: { issue: Issue, isBimPanel?: boolean, isSuspended?: boolean }) {
+function StatusManager({ issue, isBimPanel, isSuspended, isPaymentAdmin }: { issue: Issue, isBimPanel?: boolean, isSuspended?: boolean, isPaymentAdmin?: boolean }) {
   const { user } = useAuth();
   const [isUpdating, setIsUpdating] = useState(false);
   const [showConfirmDelete, setShowConfirmDelete] = useState(false);
@@ -1747,7 +1748,10 @@ function StatusManager({ issue, isBimPanel, isSuspended }: { issue: Issue, isBim
             onClick={(e) => {
             e.stopPropagation();
             if (isSuspended) {
-              alert("Accion bloqueada: No se pueden realizar acciones o responder incidencias mientras el proyecto este suspendido por mora (+5 dias).");
+              const msg = isPaymentAdmin
+                ? "Acción bloqueada: No se pueden realizar acciones o responder incidencias mientras el proyecto esté suspendido por mora (+5 días)."
+                : "Acción bloqueada: Las funciones de este proyecto se encuentran temporalmente inhabilitadas. Contacta al administrador.";
+              alert(msg);
               return;
             }
             if (action.onClick) action.onClick();

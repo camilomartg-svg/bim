@@ -48,9 +48,10 @@ const RCD_MATERIALS = [
 interface DashboardChatProps {
   selectedIssue: Issue | null;
   isSuspended?: boolean;
+  isPaymentAdmin?: boolean;
 }
 
-export default function DashboardChat({ selectedIssue, isSuspended }: DashboardChatProps) {
+export default function DashboardChat({ selectedIssue, isSuspended, isPaymentAdmin }: DashboardChatProps) {
   const [messages, setMessages] = useState<Comment[]>([]);
   const [newMessage, setNewMessage] = useState('');
   const [loading, setLoading] = useState(false);
@@ -783,7 +784,10 @@ Se ha registrado una nueva evidencia tomada durante el proceso de aprovechamient
   const handleSendMessage = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     if (isSuspended) {
-      alert('🚫 ACCIÓN BLOQUEADA: No se pueden enviar respuestas ni interactuar en incidencias mientras el proyecto esté suspendido por mora (+5 días).');
+      const msg = isPaymentAdmin
+        ? '🚫 ACCIÓN BLOQUEADA: No se pueden enviar respuestas ni interactuar en incidencias mientras el proyecto esté suspendido por mora (+5 días).'
+        : '🚫 PROYECTO SUSPENDIDO: Las funciones de este proyecto se encuentran temporalmente inhabilitadas. Contacta al administrador.';
+      alert(msg);
       return;
     }
     
@@ -1650,7 +1654,7 @@ ${textTrimmed ? `\n• **Sustento / Observaciones**: ${textTrimmed}` : ''}`;
               <span>Respuestas e Intervenciones Bloqueadas</span>
             </div>
             <p className="text-[11px] text-red-700/90 dark:text-red-300/90 font-medium max-w-md mx-auto">
-              Este proyecto presenta más de 5 días de mora en su mensualidad. Para reactivar el canal de respuestas y la trazabilidad de esta incidencia, regularice el pago de la licencia.
+              {isPaymentAdmin ? 'Este proyecto presenta más de 5 días de mora en su mensualidad. Para reactivar el canal de respuestas y la trazabilidad de esta incidencia, regularice el pago de la licencia.' : 'El acceso a las funciones de este proyecto se encuentra temporalmente inhabilitado. Contacta al administrador.'}
             </p>
           </div>
         ) : (

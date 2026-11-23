@@ -6,6 +6,7 @@ export interface ProjectLicenseStatus {
   status: 'ACTIVE' | 'GRACE_PERIOD' | 'SUSPENDED' | 'EXPIRED' | 'UNPAID';
   overdueDays: number;
   message?: string;
+  isPaymentAdmin?: boolean;
 }
 
 let cachedStatus: { key: string; result: ProjectLicenseStatus; timestamp: number } | null = null;
@@ -22,8 +23,20 @@ export async function checkIncidenciasLicense(): Promise<ProjectLicenseStatus> {
       userAccount.username === 'imagina3ddesign@gmail.com' ||
       userAccount.email === 'imagina3ddesign@gmail.com';
 
+    const userRole = String(userAccount.role || '').toUpperCase().trim();
+    const userCargo = String(userAccount.cargo || userAccount.position || '').toUpperCase().trim();
+    const userEmail = String(userAccount.email || userAccount.username || '').toLowerCase().trim();
+
+    const isPaymentAdmin = isSuperAdmin ||
+      userRole === 'ADMINISTRADOR_EMPRESA' || userRole === 'ADMIN_EMPRESA' || userRole === 'ADMINISTRADOR' ||
+      userRole === 'ADMINISTRADOR_PROYECTO' || userRole === 'ADMIN_PROYECTO' ||
+      userCargo.includes('ADMINISTRADOR DE EMPRESA') || userCargo.includes('ADMIN EMPRESA') ||
+      userCargo.includes('ADMINISTRADOR DE PROYECTO') || userCargo.includes('ADMIN PROYECTO') ||
+      userCargo.includes('LIDER') || userCargo.includes('LÍDER') ||
+      userEmail === 'mcmartinezg@unal.edu.co';
+
     if (isSuperAdmin) {
-      return { canAccess: true, isSuspended: false, status: 'ACTIVE', overdueDays: 0 };
+      return { canAccess: true, isSuspended: false, status: 'ACTIVE', overdueDays: 0, isPaymentAdmin: true };
     }
 
     const { projectId, companyId } = getProjectAndCompany();
@@ -72,6 +85,30 @@ export async function checkIncidenciasLicense(): Promise<ProjectLicenseStatus> {
       project = { id: projectId, slug: projectId };
     }
 
+    // 4. Verificar si el proyecto es Tester / Ensayo / Demo / Trial
+    const urlParams = new URLSearchParams(window.location.search);
+    const driveFolderName = decodeURIComponent(urlParams.get('driveFolderName') || '').toLowerCase();
+    const isTesterProject = Boolean(
+      project.isTester === true || project.tester === true ||
+      project.isTrial === true || project.trial === true ||
+      project.customTrialExpiry ||
+      /tester|ensayo|demo|prueba/i.test(project.name || '') ||
+      /tester|ensayo|demo|prueba/i.test(project.slug || project.id || '') ||
+      /tester|ensayo|demo|prueba/i.test(driveFolderName)
+    );
+
+    if (isTesterProject) {
+      const output: ProjectLicenseStatus = {
+        canAccess: true,
+        isSuspended: false,
+        status: 'ACTIVE',
+        overdueDays: 0,
+        isPaymentAdmin
+      };
+      cachedStatus = { key: cacheKey, result: output, timestamp: Date.now() };
+      return output;
+    }
+
     // Check with global WompiModule if available
     if (typeof (window as any).WompiModule !== 'undefined') {
       const res = (window as any).WompiModule.canAccessProject(project, 3);
@@ -80,7 +117,8 @@ export async function checkIncidenciasLicense(): Promise<ProjectLicenseStatus> {
         isSuspended: !res.canAccess,
         status: res.status,
         overdueDays: res.overdueDays,
-        message: res.message
+        message: res.message,
+        isPaymentAdmin
       };
       cachedStatus = { key: cacheKey, result: output, timestamp: Date.now() };
       return output;
@@ -89,7 +127,7 @@ export async function checkIncidenciasLicense(): Promise<ProjectLicenseStatus> {
     // Direct calculation matching WompiModule
     const paymentStatus = (project.paymentStatus || '').toUpperCase();
     if (paymentStatus === 'PAID') {
-      const output: ProjectLicenseStatus = { canAccess: true, isSuspended: false, status: 'ACTIVE', overdueDays: 0 };
+      const output: ProjectLicenseStatus = { canAccess: true, isSuspended: false, status: 'ACTIVE', overdueDays: 0, isPaymentAdmin };
       cachedStatus = { key: cacheKey, result: output, timestamp: Date.now() };
       return output;
     }
@@ -123,7 +161,8 @@ export async function checkIncidenciasLicense(): Promise<ProjectLicenseStatus> {
         canAccess: true,
         isSuspended: false,
         status: overdueDays > 0 ? 'GRACE_PERIOD' : 'ACTIVE',
-        overdueDays: Math.max(0, overdueDays)
+        overdueDays: Math.max(0, overdueDays),
+        isPaymentAdmin
       };
       cachedStatus = { key: cacheKey, result: output, timestamp: Date.now() };
       return output;
@@ -134,7 +173,10 @@ export async function checkIncidenciasLicense(): Promise<ProjectLicenseStatus> {
       isSuspended: true,
       status: 'SUSPENDED',
       overdueDays,
-      message: `El proyecto presenta ${overdueDays} días de mora en su mensualidad (+5 días). Servicio suspendido.`
+      isPaymentAdmin,
+      message: isPaymentAdmin
+        ? `El proyecto presenta ${overdueDays} días de mora en su mensualidad (+5 días). Servicio suspendido.`
+        : 'El acceso a las funciones de este proyecto se encuentra temporalmente suspendido.'
     };
     cachedStatus = { key: cacheKey, result: output, timestamp: Date.now() };
     return output;

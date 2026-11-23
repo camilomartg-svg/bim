@@ -198,7 +198,93 @@ window.WompiModule = (function () {
    * - SUSPENDED: Sin pago pasados 5 días. Servicio interrumpido / Inactivo.
    * - EXPIRED_PURGE: Superados 90 días de mora.
    */
+  function isTesterProject(project) {
+    if (!project) return false;
+    if (project.isTester === true || project.tester === true || project.isTrial === true || project.trial === true) return true;
+    if (project.customTrialExpiry) return true;
+    const name = String(project.name || '').toLowerCase();
+    const slug = String(project.slug || project.id || '').toLowerCase();
+    const tipo = String(project.tipo || project.plan || project.type || '').toLowerCase();
+    const folder = String(project.driveFolderName || '').toLowerCase();
+    if (folder.includes('tester') || folder.includes('ensayo') || folder.includes('demo') || folder.includes('prueba')) return true;
+    if (name.includes('tester') || name.includes('ensayo') || name.includes('demo') || name.includes('prueba')) return true;
+    if (slug.includes('tester') || slug.includes('ensayo') || slug.includes('demo') || slug.includes('prueba')) return true;
+    if (tipo.includes('tester') || tipo.includes('trial') || tipo.includes('demo') || tipo.includes('gratuito')) return true;
+
+    if (typeof window !== 'undefined') {
+      try {
+        const urlParams = new URLSearchParams(window.location.search);
+        const dfn = decodeURIComponent(urlParams.get('driveFolderName') || '').toLowerCase();
+        if (dfn.includes('tester') || dfn.includes('ensayo') || dfn.includes('demo') || dfn.includes('prueba')) return true;
+      } catch (_) {}
+    }
+    return false;
+  }
+
+  function isPaymentAdmin(userAccount, companyData, projectData) {
+    if (!userAccount) return false;
+    const role = String(userAccount.role || '').toUpperCase().trim();
+    const cargo = String(userAccount.cargo || userAccount.position || '').toUpperCase().trim();
+    const email = String(userAccount.email || userAccount.username || '').toLowerCase().trim();
+
+    // 1. Súper Administrador
+    if (role === 'SUPER_ADMINISTRADOR' || role === 'SUPERADMIN' || email === 'imagina3ddesign@gmail.com' || email === 'mcmartinezg@unal.edu.co') {
+      return true;
+    }
+
+    // 2. Administrador de Empresa
+    if (role === 'ADMINISTRADOR_EMPRESA' || role === 'ADMIN_EMPRESA' || role === 'ADMINISTRADOR' ||
+        cargo.includes('ADMINISTRADOR DE EMPRESA') || cargo.includes('ADMIN EMPRESA')) {
+      return true;
+    }
+    if (companyData) {
+      const inAdmins = Array.isArray(companyData.admins) && companyData.admins.some(a => String(a).toLowerCase().trim() === email);
+      const inMembers = Array.isArray(companyData.members) && companyData.members.some(m => {
+        const mEmail = String(m.email || m.username || '').toLowerCase().trim();
+        const mRole = String(m.role || m.cargo || '').toUpperCase();
+        return mEmail === email && (mRole.includes('ADMIN') || mRole.includes('LIDER') || mRole.includes('LÍDER'));
+      });
+      if (inAdmins || inMembers) return true;
+    }
+
+    // 3. Administrador de Proyecto / Líder de Proyecto
+    if (role === 'ADMINISTRADOR_PROYECTO' || role === 'ADMIN_PROYECTO' ||
+        cargo.includes('ADMINISTRADOR DE PROYECTO') || cargo.includes('ADMIN PROYECTO') ||
+        cargo.includes('LIDER') || cargo.includes('LÍDER')) {
+      return true;
+    }
+    if (projectData) {
+      if (projectData.creatorEmail && projectData.creatorEmail.toLowerCase().trim() === email) return true;
+      if (projectData.creatorId && projectData.creatorId === userAccount.id) return true;
+      if (Array.isArray(projectData.admins) && projectData.admins.some(a => String(a).toLowerCase().trim() === email)) return true;
+      if (Array.isArray(projectData.members)) {
+        const pMember = projectData.members.find(m => {
+          const mEmail = (typeof m === 'string' ? m : m.email || m.username || '').toLowerCase().trim();
+          return mEmail === email;
+        });
+        if (pMember && typeof pMember === 'object') {
+          const mRole = String(pMember.role || pMember.cargo || '').toUpperCase();
+          if (mRole.includes('ADMIN') || mRole.includes('LIDER') || mRole.includes('LÍDER')) return true;
+        }
+      }
+    }
+
+    return false;
+  }
+
   function getProjectLicenseStatus(project, cutoffDay = 3) {
+    if (!project) return { status: 'ACTIVE', badgeText: 'Licencia Activa', badgeColor: 'bg-emerald-100 text-emerald-800 border-emerald-300', canAccess: true };
+
+    if (isTesterProject(project)) {
+      return {
+        status: 'CUSTOM_TRIAL',
+        badgeText: '🎁 Proyecto Tester / Ensayo',
+        badgeColor: 'bg-purple-100 text-purple-900 border-purple-300 font-bold',
+        message: 'Proyecto de prueba / tester con acceso libre habilitado permanentemente.',
+        canAccess: true
+      };
+    }
+
     if (project.hasLicense === false) {
       return {
         status: 'DISABLED',
@@ -341,6 +427,16 @@ window.WompiModule = (function () {
    * - Proyectos con mora > 5 días (SUSPENDED o EXPIRED_PURGE) o DISABLED: BLOQUEADO (canAccess: false).
    */
   function canAccessProject(project, cutoffDay = 3) {
+    if (isTesterProject(project)) {
+      return {
+        canAccess: true,
+        status: 'CUSTOM_TRIAL',
+        overdueDays: 0,
+        graceDaysLeft: 5,
+        daysLeftToPurge: 180,
+        message: 'Proyecto de prueba / tester con acceso libre habilitado permanentemente.'
+      };
+    }
     const lic = getProjectLicenseStatus(project, cutoffDay);
     const isAllowed = (lic.status === 'ACTIVE' || lic.status === 'CUSTOM_TRIAL' || lic.status === 'GRACE_PERIOD' || lic.status === 'CANCELLED');
     return {
@@ -491,6 +587,8 @@ window.WompiModule = (function () {
     getProjectLicenseStatus,
     canAccessProject,
     renderSuspensionOverlay,
-    launchCheckout
+    launchCheckout,
+    isTesterProject,
+    isPaymentAdmin
   };
 })();

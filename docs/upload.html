@@ -2523,23 +2523,48 @@
         const isSuspended = isCurrentProjectSuspended();
         const warningEl = document.getElementById('project-suspended-warning');
         const payBtn = document.getElementById('btn-pay-suspension-upload');
+        const userAccount = JSON.parse(sessionStorage.getItem('userAccount') || localStorage.getItem('userAccount') || '{}');
+        const isPaymentAdmin = window.WompiModule && typeof window.WompiModule.isPaymentAdmin === 'function'
+          ? window.WompiModule.isPaymentAdmin(userAccount, window.currentCompanyData, activeProject)
+          : false;
+
         if (payBtn) {
           const sParams = new URLSearchParams();
           if (companyId) sParams.set('empresa', companyId);
           if (activeProject && activeProject.slug) sParams.set('project', activeProject.slug);
           payBtn.href = `super-admin.html?tab=wompi&${sParams.toString()}`;
+          if (!isPaymentAdmin) {
+            payBtn.classList.add('hidden');
+          } else {
+            payBtn.classList.remove('hidden');
+          }
+        }
+        if (warningEl) {
+          const warningTitle = warningEl.querySelector('h4');
+          const warningDesc = warningEl.querySelector('p');
+          if (!isPaymentAdmin) {
+            if (warningTitle) warningTitle.textContent = 'Proyecto Suspendido';
+            if (warningDesc) warningDesc.textContent = 'Las funciones de este proyecto se encuentran temporalmente inhabilitadas. Contacta al administrador para más información.';
+          } else {
+            if (warningTitle) warningTitle.textContent = 'Carga de Archivos Suspendida';
+            if (warningDesc) warningDesc.textContent = 'Este proyecto presenta más de 5 días de mora en su mensualidad. La subida de nuevos archivos, versiones y modelos ha sido temporalmente bloqueada.';
+          }
         }
         if (isSuspended) {
           if (warningEl) warningEl.classList.remove('hidden');
           if (dropZone) {
             dropZone.classList.add('opacity-40', 'pointer-events-none', 'cursor-not-allowed', 'border-red-400/50');
-            dropZone.title = 'Carga bloqueada: Proyecto suspendido por falta de pago (+5 días de mora)';
+            dropZone.title = isPaymentAdmin
+              ? 'Carga bloqueada: Proyecto suspendido por falta de pago (+5 días de mora)'
+              : 'Carga bloqueada: Proyecto temporalmente suspendido';
           }
           if (fileInput) fileInput.disabled = true;
           if (uploadBtn) {
             uploadBtn.disabled = true;
             uploadBtn.classList.add('opacity-50', 'cursor-not-allowed');
-            uploadBtn.title = 'Proyecto suspendido por falta de pago';
+            uploadBtn.title = isPaymentAdmin
+              ? 'Proyecto suspendido por falta de pago'
+              : 'Proyecto temporalmente suspendido';
           }
         } else {
           if (warningEl) warningEl.classList.add('hidden');
@@ -2596,7 +2621,9 @@
         const files = dt.files;
         if (files.length) {
           if (isCurrentProjectSuspended()) {
-            alert('🚫 CARGA BLOQUEADA: Este proyecto se encuentra suspendido por presentar más de 5 días de mora en su mensualidad.');
+            const _uAcc = JSON.parse(sessionStorage.getItem('userAccount') || localStorage.getItem('userAccount') || '{}');
+          const _isPayAdmin = window.WompiModule && typeof window.WompiModule.isPaymentAdmin === 'function' ? window.WompiModule.isPaymentAdmin(_uAcc, window.currentCompanyData, activeProject) : false;
+          alert(_isPayAdmin ? '🚫 CARGA BLOQUEADA: Este proyecto se encuentra suspendido por presentar más de 5 días de mora en su mensualidad.' : '🚫 PROYECTO SUSPENDIDO: Las funciones de este proyecto se encuentran temporalmente inhabilitadas. Contacta al administrador.');
             return;
           }
           handleFilesSelection(files);
@@ -2606,7 +2633,9 @@
       dropZone.addEventListener('click', () => {
         if (isUploading) return;
         if (isCurrentProjectSuspended()) {
-          alert('🚫 CARGA BLOQUEADA: Este proyecto se encuentra suspendido por presentar más de 5 días de mora en su mensualidad.');
+          const _uAcc = JSON.parse(sessionStorage.getItem('userAccount') || localStorage.getItem('userAccount') || '{}');
+          const _isPayAdmin = window.WompiModule && typeof window.WompiModule.isPaymentAdmin === 'function' ? window.WompiModule.isPaymentAdmin(_uAcc, window.currentCompanyData, activeProject) : false;
+          alert(_isPayAdmin ? '🚫 CARGA BLOQUEADA: Este proyecto se encuentra suspendido por presentar más de 5 días de mora en su mensualidad.' : '🚫 PROYECTO SUSPENDIDO: Las funciones de este proyecto se encuentran temporalmente inhabilitadas. Contacta al administrador.');
           return;
         }
         fileInput.click();
@@ -2615,7 +2644,9 @@
       fileInput.addEventListener('change', (e) => {
         if (e.target.files.length) {
           if (isCurrentProjectSuspended()) {
-            alert('🚫 CARGA BLOQUEADA: Este proyecto se encuentra suspendido por presentar más de 5 días de mora en su mensualidad.');
+            const _uAcc = JSON.parse(sessionStorage.getItem('userAccount') || localStorage.getItem('userAccount') || '{}');
+          const _isPayAdmin = window.WompiModule && typeof window.WompiModule.isPaymentAdmin === 'function' ? window.WompiModule.isPaymentAdmin(_uAcc, window.currentCompanyData, activeProject) : false;
+          alert(_isPayAdmin ? '🚫 CARGA BLOQUEADA: Este proyecto se encuentra suspendido por presentar más de 5 días de mora en su mensualidad.' : '🚫 PROYECTO SUSPENDIDO: Las funciones de este proyecto se encuentran temporalmente inhabilitadas. Contacta al administrador.');
             e.target.value = '';
             return;
           }
@@ -2901,7 +2932,9 @@
       function handleFilesSelection(filesList) {
         if (isUploading) return;
         if (isCurrentProjectSuspended()) {
-          alert('🚫 CARGA BLOQUEADA: Este proyecto se encuentra suspendido por presentar más de 5 días de mora en su mensualidad.');
+          const _uAcc = JSON.parse(sessionStorage.getItem('userAccount') || localStorage.getItem('userAccount') || '{}');
+          const _isPayAdmin = window.WompiModule && typeof window.WompiModule.isPaymentAdmin === 'function' ? window.WompiModule.isPaymentAdmin(_uAcc, window.currentCompanyData, activeProject) : false;
+          alert(_isPayAdmin ? '🚫 CARGA BLOQUEADA: Este proyecto se encuentra suspendido por presentar más de 5 días de mora en su mensualidad.' : '🚫 PROYECTO SUSPENDIDO: Las funciones de este proyecto se encuentran temporalmente inhabilitadas. Contacta al administrador.');
           return;
         }
 
@@ -3457,7 +3490,9 @@
       uploadBtn.addEventListener('click', async () => {
         if (selectedFiles.length === 0 || !activeProject || isUploading) return;
         if (isCurrentProjectSuspended()) {
-          alert('🚫 CARGA BLOQUEADA: No se pueden subir archivos mientras el proyecto esté suspendido por mora (+5 días).');
+          const _uAcc = JSON.parse(sessionStorage.getItem('userAccount') || localStorage.getItem('userAccount') || '{}');
+          const _isPayAdmin = window.WompiModule && typeof window.WompiModule.isPaymentAdmin === 'function' ? window.WompiModule.isPaymentAdmin(_uAcc, window.currentCompanyData, activeProject) : false;
+          alert(_isPayAdmin ? '🚫 CARGA BLOQUEADA: Este proyecto se encuentra suspendido por presentar más de 5 días de mora en su mensualidad.' : '🚫 PROYECTO SUSPENDIDO: Las funciones de este proyecto se encuentran temporalmente inhabilitadas. Contacta al administrador.');
           return;
         }
 
@@ -4827,7 +4862,9 @@
       btnSubmitVerModal.addEventListener('click', async () => {
         if (!targetVersionFile || !activeProject) return;
         if (isCurrentProjectSuspended()) {
-          alert('🚫 CARGA BLOQUEADA: No se pueden registrar nuevas versiones en un proyecto suspendido por mora (+5 días).');
+          const _uAcc = JSON.parse(sessionStorage.getItem('userAccount') || localStorage.getItem('userAccount') || '{}');
+          const _isPayAdmin = window.WompiModule && typeof window.WompiModule.isPaymentAdmin === 'function' ? window.WompiModule.isPaymentAdmin(_uAcc, window.currentCompanyData, activeProject) : false;
+          alert(_isPayAdmin ? '🚫 CARGA BLOQUEADA: Este proyecto se encuentra suspendido por presentar más de 5 días de mora en su mensualidad.' : '🚫 PROYECTO SUSPENDIDO: Las funciones de este proyecto se encuentran temporalmente inhabilitadas. Contacta al administrador.');
           return;
         }
         const versionTag = verInputTag.value.trim();

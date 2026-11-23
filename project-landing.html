@@ -851,7 +851,7 @@
       }
 
       // Banner de Periodo de Gracia (Días 1 a 5)
-      if (licCheck.status === 'GRACE_PERIOD' && !isProjectBlocked) {
+      if (licCheck.status === 'GRACE_PERIOD' && !isProjectBlocked && isPaymentAdminUser) {
         const mainContentEl = document.querySelector('main') || document.getElementById('project-tools-container')?.parentElement;
         if (mainContentEl) {
           const graceBanner = document.createElement('div');

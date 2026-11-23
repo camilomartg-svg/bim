@@ -189,7 +189,7 @@ function Dashboard() {
                    )}
                  </div>
                )}
-               <DashboardChat selectedIssue={selectedIssue} isSuspended={licenseStatus.isSuspended} />
+               <DashboardChat selectedIssue={selectedIssue} isSuspended={licenseStatus.isSuspended} isPaymentAdmin={licenseStatus.isPaymentAdmin} />
             </section>
 
             {/* Right Column: Execution/Management (50% on PC, 100% on Mobile when summary tab active) */}
@@ -202,7 +202,10 @@ function Dashboard() {
                   <button 
                     onClick={() => {
                       if (licenseStatus.isSuspended) {
-                        alert("Accion bloqueada: El proyecto se encuentra suspendido por presentar mas de 5 dias de mora en su mensualidad.");
+                        const msg = licenseStatus.isPaymentAdmin
+                        ? "Acción bloqueada: El proyecto se encuentra suspendido por presentar más de 5 días de mora en su mensualidad."
+                        : "Acción bloqueada: Las funciones de este proyecto se encuentran temporalmente inhabilitadas. Contacta al administrador.";
+                      alert(msg);
                         return;
                       }
                       setIsCreateModalOpen(true);
@@ -300,6 +303,7 @@ function Dashboard() {
                 <IssueDetail 
                   key={selectedIssue.id}
                   isSuspended={licenseStatus.isSuspended}
+                  isPaymentAdmin={licenseStatus.isPaymentAdmin}
                   issue={selectedIssue} 
                   onClose={() => setSelectedIssue(null)} 
                   onOpenReport={(reportId) => {
@@ -447,20 +451,31 @@ function Dashboard() {
           </div>
         </header>
         {licenseStatus.isSuspended && (
-          <div className="bg-red-600 text-white px-4 py-2 text-xs font-bold flex items-center justify-between shrink-0 shadow-sm z-40">
-            <div className="flex items-center gap-2">
-              <AlertCircle className="w-4 h-4 shrink-0 text-white animate-pulse" />
-              <span>
-                <strong>PROYECTO SUSPENDIDO (+5 dias de mora):</strong> La creacion de nuevas incidencias y las respuestas tecnicas en el chat estan bloqueadas por falta de pago de la mensualidad.
-              </span>
+          licenseStatus.isPaymentAdmin ? (
+            <div className="bg-red-600 text-white px-4 py-2 text-xs font-semibold flex items-center justify-between shrink-0 shadow-sm z-40">
+              <div className="flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 shrink-0 text-white animate-pulse" />
+                <span>
+                  <strong>PROYECTO SUSPENDIDO (+5 días de mora):</strong> La creación de nuevas incidencias y las respuestas técnicas en el chat están bloqueadas por falta de pago de la mensualidad.
+                </span>
+              </div>
+              <a 
+                href="../super-admin.html?tab=wompi" 
+                className="ml-4 px-2.5 py-1 bg-white text-red-700 rounded-md text-[10px] font-black uppercase tracking-wider hover:bg-slate-100 transition-colors shrink-0"
+              >
+                Gestionar Pago
+              </a>
             </div>
-            <a 
-              href="../super-admin.html?tab=wompi" 
-              className="ml-4 px-2.5 py-1 bg-white text-red-700 rounded-md text-[10px] font-black uppercase tracking-wider hover:bg-slate-100 transition-colors shrink-0"
-            >
-              Gestionar Pago
-            </a>
-          </div>
+          ) : (
+            <div className="bg-slate-800 text-white px-4 py-2 text-xs font-medium flex items-center justify-between shrink-0 shadow-sm z-40">
+              <div className="flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 shrink-0 text-amber-400" />
+                <span>
+                  <strong>PROYECTO SUSPENDIDO:</strong> Las funciones de este proyecto se encuentran temporalmente inhabilitadas. Contacta al administrador para más información.
+                </span>
+              </div>
+            </div>
+          )
         )}
 
         <div className="flex-1 overflow-hidden flex flex-col relative">
