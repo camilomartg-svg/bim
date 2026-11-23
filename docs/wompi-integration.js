@@ -221,40 +221,20 @@ window.WompiModule = (function () {
     return false;
   }
 
-  function isPaymentAdmin(userAccount, companyData, projectData) {
+  function isPaymentAdmin(userAccount, companyData, projectData, representedCompany) {
     if (!userAccount) return false;
+    const email = String(userAccount.email || userAccount.username || '').toLowerCase().trim();
     const role = String(userAccount.role || '').toUpperCase().trim();
     const cargo = String(userAccount.cargo || userAccount.position || '').toUpperCase().trim();
-    const email = String(userAccount.email || userAccount.username || '').toLowerCase().trim();
 
-    // 1. Súper Administrador
+    // 1. Súper Administrador Global
     if (role === 'SUPER_ADMINISTRADOR' || role === 'SUPERADMIN' || email === 'imagina3ddesign@gmail.com' || email === 'mcmartinezg@unal.edu.co') {
       return true;
     }
 
-    // 2. Administrador de Empresa
-    if (role === 'ADMINISTRADOR_EMPRESA' || role === 'ADMIN_EMPRESA' || role === 'ADMINISTRADOR' ||
-        cargo.includes('ADMINISTRADOR DE EMPRESA') || cargo.includes('ADMIN EMPRESA')) {
-      return true;
-    }
-    if (companyData) {
-      const inAdmins = Array.isArray(companyData.admins) && companyData.admins.some(a => String(a).toLowerCase().trim() === email);
-      const inMembers = Array.isArray(companyData.members) && companyData.members.some(m => {
-        const mEmail = String(m.email || m.username || '').toLowerCase().trim();
-        const mRole = String(m.role || m.cargo || '').toUpperCase();
-        return mEmail === email && (mRole.includes('ADMIN') || mRole.includes('LIDER') || mRole.includes('LÍDER'));
-      });
-      if (inAdmins || inMembers) return true;
-    }
-
-    // 3. Administrador de Proyecto / Líder de Proyecto
-    if (role === 'ADMINISTRADOR_PROYECTO' || role === 'ADMIN_PROYECTO' ||
-        cargo.includes('ADMINISTRADOR DE PROYECTO') || cargo.includes('ADMIN PROYECTO') ||
-        cargo.includes('LIDER') || cargo.includes('LÍDER')) {
-      return true;
-    }
+    // 2. Administrador de Proyecto / Líder de Proyecto
     if (projectData) {
-      if (projectData.creatorEmail && projectData.creatorEmail.toLowerCase().trim() === email) return true;
+      if (projectData.creatorEmail && String(projectData.creatorEmail).toLowerCase().trim() === email) return true;
       if (projectData.creatorId && projectData.creatorId === userAccount.id) return true;
       if (Array.isArray(projectData.admins) && projectData.admins.some(a => String(a).toLowerCase().trim() === email)) return true;
       if (Array.isArray(projectData.members)) {
@@ -266,6 +246,36 @@ window.WompiModule = (function () {
           const mRole = String(pMember.role || pMember.cargo || '').toUpperCase();
           if (mRole.includes('ADMIN') || mRole.includes('LIDER') || mRole.includes('LÍDER')) return true;
         }
+      }
+    }
+    if (role === 'ADMINISTRADOR_PROYECTO' || role === 'ADMIN_PROYECTO' ||
+        cargo.includes('ADMINISTRADOR DE PROYECTO') || cargo.includes('ADMIN PROYECTO')) {
+      return true;
+    }
+
+    // 3. Administrador de Empresa propietaria del proyecto
+    // Si el usuario en este proyecto seleccionó representar a una empresa externa diferente a la dueña del proyecto,
+    // NO actúa como administrador de la empresa dueña en este proyecto (es un colaborador/contratista externo).
+    const hostCompanyName = companyData ? String(companyData.name || '').trim().toLowerCase() : '';
+    const repCompName = representedCompany ? String(representedCompany).trim().toLowerCase() : '';
+
+    if (repCompName && hostCompanyName && repCompName !== hostCompanyName) {
+      return false;
+    }
+
+    if (companyData) {
+      const inAdmins = Array.isArray(companyData.admins) && companyData.admins.some(a => String(a).toLowerCase().trim() === email);
+      if (inAdmins) return true;
+      const inMembers = Array.isArray(companyData.members) && companyData.members.some(m => {
+        const mEmail = String(m.email || m.username || '').toLowerCase().trim();
+        const mRole = String(m.role || m.cargo || '').toUpperCase();
+        return mEmail === email && (mRole.includes('ADMIN_EMPRESA') || mRole.includes('ADMINISTRADOR_EMPRESA') || mRole === 'ADMINISTRADOR');
+      });
+      if (inMembers) return true;
+    } else {
+      if (role === 'ADMINISTRADOR_EMPRESA' || role === 'ADMIN_EMPRESA' || role === 'ADMINISTRADOR' ||
+          cargo.includes('ADMINISTRADOR DE EMPRESA') || cargo.includes('ADMIN EMPRESA')) {
+        return true;
       }
     }
 
@@ -539,37 +549,71 @@ window.WompiModule = (function () {
     const backUrl = options.backUrl || (projectSlug ? `../project-landing.html?project=${encodeURIComponent(projectSlug)}&empresa=${encodeURIComponent(companyId)}` : '../home.html');
     const payUrl = options.payUrl || '../super-admin.html';
 
-    overlay.innerHTML = `
-      <div style="max-width: 560px; width: 100%; background: #18181b; border: 2px solid #f43f5e; border-radius: 24px; padding: 36px 32px; box-shadow: 0 25px 50px -12px rgba(244, 63, 94, 0.35); text-align: center; box-sizing: border-box;">
-        <div style="width: 72px; height: 72px; background: rgba(244, 63, 94, 0.15); border: 2px solid #f43f5e; border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto 20px auto; color: #f43f5e;">
-          <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-            <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
-            <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
-          </svg>
+    let isPayAdmin = options.isAdmin;
+    if (typeof isPayAdmin === 'undefined') {
+      try {
+        const uAcc = JSON.parse(sessionStorage.getItem('userAccount') || localStorage.getItem('userAccount') || '{}');
+        isPayAdmin = isPaymentAdmin(uAcc, options.companyData || (typeof window !== 'undefined' ? window.currentCompanyData : null), options.projectData, options.representedCompany);
+      } catch (e) {
+        isPayAdmin = false;
+      }
+    }
+
+    if (!isPayAdmin) {
+      overlay.innerHTML = `
+        <div style="max-width: 520px; width: 100%; background: #18181b; border: 1px solid rgba(255, 255, 255, 0.15); border-radius: 24px; padding: 36px 32px; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.7); text-align: center; box-sizing: border-box;">
+          <div style="width: 72px; height: 72px; background: rgba(255, 255, 255, 0.06); border: 2px solid rgba(255, 255, 255, 0.2); border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto 20px auto; color: #f1f5f9;">
+            <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+              <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+            </svg>
+          </div>
+          <h2 style="font-size: 22px; font-weight: 800; color: #ffffff; margin: 0 0 10px 0; letter-spacing: -0.02em;">
+            Proyecto Bloqueado
+          </h2>
+          <p style="font-size: 13px; color: #cbd5e1; line-height: 1.6; margin: 0 0 24px 0;">
+            El acceso a las funciones, modelos y herramientas de este proyecto se encuentra temporalmente inhabilitado. Si necesitas acceso, contacta al administrador del proyecto.
+          </p>
+          <div style="display: flex; gap: 12px; justify-content: center; flex-wrap: wrap;">
+            <a href="${backUrl}" style="background: rgba(255, 255, 255, 0.12); color: #ffffff; text-decoration: none; font-weight: 700; font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em; padding: 12px 24px; border-radius: 12px; border: 1px solid rgba(255, 255, 255, 0.25); display: inline-flex; align-items: center; gap: 8px;">
+              Volver al Portal
+            </a>
+          </div>
         </div>
-        <h2 style="font-size: 22px; font-weight: 800; color: #ffffff; margin: 0 0 10px 0; letter-spacing: -0.02em;">
-          Proyecto Suspendido por Falta de Pago
-        </h2>
-        <p style="font-size: 13px; color: #cbd5e1; line-height: 1.6; margin: 0 0 20px 0;">
-          El periodo de gracia de <strong>5 días posteriores a la fecha de corte</strong> ha finalizado sin registrar el pago de la mensualidad del proyecto.
-        </p>
-        <div style="background: rgba(244, 63, 94, 0.12); border: 1px solid rgba(244, 63, 94, 0.35); border-radius: 14px; padding: 14px 18px; margin-bottom: 22px; text-align: left;">
-          <p style="font-size: 12px; font-weight: 700; color: #fda4af; margin: 0 0 4px 0;">🚫 Restricción Activa en ${moduleName}:</p>
-          <p style="font-size: 12px; color: #f1f5f9; margin: 0; line-height: 1.5;">${moduleDesc} Para reactivar el servicio inmediatamente, efectúa el pago correspondiente.</p>
+      `;
+    } else {
+      overlay.innerHTML = `
+        <div style="max-width: 560px; width: 100%; background: #18181b; border: 2px solid #f43f5e; border-radius: 24px; padding: 36px 32px; box-shadow: 0 25px 50px -12px rgba(244, 63, 94, 0.35); text-align: center; box-sizing: border-box;">
+          <div style="width: 72px; height: 72px; background: rgba(244, 63, 94, 0.15); border: 2px solid #f43f5e; border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto 20px auto; color: #f43f5e;">
+            <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+              <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+            </svg>
+          </div>
+          <h2 style="font-size: 22px; font-weight: 800; color: #ffffff; margin: 0 0 10px 0; letter-spacing: -0.02em;">
+            Proyecto Suspendido por Falta de Pago
+          </h2>
+          <p style="font-size: 13px; color: #cbd5e1; line-height: 1.6; margin: 0 0 20px 0;">
+            El periodo de gracia de <strong>5 días posteriores a la fecha de corte</strong> ha finalizado sin registrar el pago de la mensualidad del proyecto.
+          </p>
+          <div style="background: rgba(244, 63, 94, 0.12); border: 1px solid rgba(244, 63, 94, 0.35); border-radius: 14px; padding: 14px 18px; margin-bottom: 22px; text-align: left;">
+            <p style="font-size: 12px; font-weight: 700; color: #fda4af; margin: 0 0 4px 0;">🚫 Restricción Activa en ${moduleName}:</p>
+            <p style="font-size: 12px; color: #f1f5f9; margin: 0; line-height: 1.5;">${moduleDesc} Para reactivar el servicio inmediatamente, efectúa el pago correspondiente.</p>
+          </div>
+          <div style="font-size: 11px; color: #94a3b8; margin-bottom: 24px;">
+            Retención de datos antes de eliminación definitiva: <strong style="color: #f43f5e;">${daysLeft} días</strong>
+          </div>
+          <div style="display: flex; gap: 12px; justify-content: center; flex-wrap: wrap;">
+            <a href="${payUrl}" style="background: #f43f5e; color: #ffffff; text-decoration: none; font-weight: 700; font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em; padding: 12px 24px; border-radius: 12px; box-shadow: 0 4px 12px rgba(244, 63, 94, 0.4); display: inline-flex; align-items: center; gap: 8px;">
+              Pagar Licencia en Pasarela Wompi
+            </a>
+            <a href="${backUrl}" style="background: rgba(255, 255, 255, 0.08); color: #e2e8f0; text-decoration: none; font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em; padding: 12px 20px; border-radius: 12px; border: 1px solid rgba(255, 255, 255, 0.15); display: inline-flex; align-items: center; gap: 8px;">
+              Volver al Portal
+            </a>
+          </div>
         </div>
-        <div style="font-size: 11px; color: #94a3b8; margin-bottom: 24px;">
-          Retención de datos antes de eliminación definitiva: <strong style="color: #f43f5e;">${daysLeft} días</strong>
-        </div>
-        <div style="display: flex; gap: 12px; justify-content: center; flex-wrap: wrap;">
-          <a href="${payUrl}" style="background: #f43f5e; color: #ffffff; text-decoration: none; font-weight: 700; font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em; padding: 12px 24px; border-radius: 12px; box-shadow: 0 4px 12px rgba(244, 63, 94, 0.4); display: inline-flex; align-items: center; gap: 8px;">
-            Pagar Licencia en Pasarela Wompi
-          </a>
-          <a href="${backUrl}" style="background: rgba(255, 255, 255, 0.08); color: #e2e8f0; text-decoration: none; font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em; padding: 12px 20px; border-radius: 12px; border: 1px solid rgba(255, 255, 255, 0.15); display: inline-flex; align-items: center; gap: 8px;">
-            Volver al Portal
-          </a>
-        </div>
-      </div>
-    `;
+      `;
+    }
 
     container.appendChild(overlay);
   }

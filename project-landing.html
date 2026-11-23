@@ -784,6 +784,7 @@
             (e.name && e.name.toLowerCase() === cleanEmpIdProj.toLowerCase())
           );
           if (emp) {
+            window.currentCompanyData = emp;
             const heroImageEl = document.getElementById('project-hero-image');
             if (heroImageEl && emp.image) {
               heroImageEl.style.backgroundImage = `url('${emp.image}')`;
@@ -829,23 +830,43 @@
       const licCheck = window.WompiModule ? window.WompiModule.canAccessProject(project, 3) : { canAccess: true, status: 'ACTIVE' };
       const isProjectBlocked = !licCheck.canAccess && !isGlobalSuperAdmin;
 
+      // Obtener representación de empresa del usuario en este proyecto (si existe)
+      const userEmailForRep = userAccount ? (userAccount.username || userAccount.email || '').toLowerCase().trim() : '';
+      const repCompanyInProject = (project.iso19650 && project.iso19650.memberCompanies && project.iso19650.memberCompanies[userEmailForRep]) ||
+                                  localStorage.getItem(`project_rep_company_${project.slug}_${userEmailForRep}`) ||
+                                  (project.id ? localStorage.getItem(`project_rep_company_${project.id}_${userEmailForRep}`) : null);
+
+      const isPaymentAdminUser = isGlobalSuperAdmin || (window.WompiModule && typeof window.WompiModule.isPaymentAdmin === 'function'
+        ? window.WompiModule.isPaymentAdmin(userAccount, window.currentCompanyData, project, repCompanyInProject)
+        : false);
+
       // Banner Superior de Suspensión de Servicio por Mora > 5 días
       if (isProjectBlocked) {
         const mainContentEl = document.querySelector('main') || document.getElementById('project-tools-container')?.parentElement;
         if (mainContentEl) {
           const suspendedBanner = document.createElement('div');
-          suspendedBanner.className = 'w-full mb-6 p-4 rounded-xl bg-rose-50 border-2 border-rose-500 text-rose-950 text-xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-md animate-in fade-in duration-200';
-          suspendedBanner.innerHTML = `
-            <div class="flex items-center gap-2.5">
-              <span class="material-symbols-outlined text-rose-600 text-2xl shrink-0">block</span>
-              <div>
-                <strong class="font-extrabold uppercase text-rose-900">Servicio Suspendido por Falta de Pago:</strong> Han transcurrido más de 5 días desde la emisión del cobro sin registrarse la cancelación de la mensualidad. La consulta de modelos 3D, planos PDF y DWG, carga de archivos y gestión de incidencias se encuentran inhabilitadas.
+          if (isPaymentAdminUser) {
+            suspendedBanner.className = 'w-full mb-6 p-4 rounded-xl bg-rose-50 border-2 border-rose-500 text-rose-950 text-xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-md animate-in fade-in duration-200';
+            suspendedBanner.innerHTML = `
+              <div class="flex items-center gap-2.5">
+                <span class="material-symbols-outlined text-rose-600 text-2xl shrink-0">block</span>
+                <div>
+                  <strong class="font-extrabold uppercase text-rose-900">Servicio Suspendido por Falta de Pago:</strong> Han transcurrido más de 5 días desde la emisión del cobro sin registrarse la cancelación de la mensualidad. La consulta de modelos 3D, planos PDF y DWG, carga de archivos y gestión de incidencias se encuentran inhabilitadas.
+                </div>
               </div>
-            </div>
-            <a href="super-admin.html" class="shrink-0 bg-rose-600 hover:bg-rose-700 text-white font-bold px-4 py-2 rounded-lg text-xs shadow transition-all flex items-center gap-1.5 uppercase tracking-wider">
-              <span class="material-symbols-outlined text-sm">payments</span> Pagar Licencia
-            </a>
-          `;
+              <a href="super-admin.html?tab=wompi&empresa=${encodeURIComponent(empParam)}&project=${encodeURIComponent(project.slug)}" class="shrink-0 bg-rose-600 hover:bg-rose-700 text-white font-bold px-4 py-2 rounded-lg text-xs shadow transition-all flex items-center gap-1.5 uppercase tracking-wider">
+                <span class="material-symbols-outlined text-sm">payments</span> Pagar Licencia
+              </a>
+            `;
+          } else {
+            suspendedBanner.className = 'w-full mb-6 p-4 rounded-xl bg-slate-900 border border-slate-700 text-white text-xs flex items-center gap-3 shadow-md animate-in fade-in duration-200';
+            suspendedBanner.innerHTML = `
+              <span class="material-symbols-outlined text-amber-400 text-2xl shrink-0">lock</span>
+              <div>
+                <strong class="font-extrabold uppercase text-amber-400">Proyecto Bloqueado:</strong> El acceso a las herramientas, modelos y documentación de este proyecto se encuentra temporalmente inhabilitado. Contacta al administrador para más información.
+              </div>
+            `;
+          }
           mainContentEl.prepend(suspendedBanner);
         }
       }
@@ -888,31 +909,51 @@
       const toolsContainer = document.getElementById('project-tools-container');
       if (toolsContainer) {
         if (isProjectBlocked) {
-          toolsContainer.innerHTML = `
-            <div class="col-span-full w-full p-8 rounded-2xl bg-rose-50/90 dark:bg-rose-950/40 border-2 border-rose-500/80 shadow-lg text-center max-w-2xl mx-auto my-4">
-              <div class="w-16 h-16 rounded-full bg-rose-100 dark:bg-rose-900/60 text-rose-600 dark:text-rose-400 flex items-center justify-center mx-auto mb-4 text-3xl font-black">
-                <span class="material-symbols-outlined text-4xl">lock</span>
+          if (isPaymentAdminUser) {
+            toolsContainer.innerHTML = `
+              <div class="col-span-full w-full p-8 rounded-2xl bg-rose-50/90 dark:bg-rose-950/40 border-2 border-rose-500/80 shadow-lg text-center max-w-2xl mx-auto my-4">
+                <div class="w-16 h-16 rounded-full bg-rose-100 dark:bg-rose-900/60 text-rose-600 dark:text-rose-400 flex items-center justify-center mx-auto mb-4 text-3xl font-black">
+                  <span class="material-symbols-outlined text-4xl">lock</span>
+                </div>
+                <h3 class="text-xl font-extrabold text-rose-950 dark:text-rose-100 mb-2">Proyecto Bloqueado por Falta de Pago</h3>
+                <p class="text-xs sm:text-sm text-rose-800 dark:text-rose-300 mb-4 leading-relaxed">
+                  El periodo de gracia de <strong>5 días</strong> posteriores a la fecha de corte ha finalizado sin registrar el pago de la mensualidad. La visualización de modelos 3D (IFC), planos 2D (PDF y DWG), carga/descarga de archivos y reporte de incidencias se encuentran temporalmente bloqueados.
+                </p>
+                <div class="inline-flex items-center gap-2 bg-white dark:bg-slate-900 px-4 py-2 rounded-xl border border-rose-300 dark:border-rose-800 text-xs font-bold text-rose-700 dark:text-rose-300 mb-6 shadow-sm">
+                  <span class="material-symbols-outlined text-base text-rose-500">timer</span>
+                  Retención de datos antes de eliminación definitiva: <strong>${licCheck.daysLeftToPurge} días</strong>
+                </div>
+                <div class="flex flex-col sm:flex-row items-center justify-center gap-3">
+                  <a href="super-admin.html?tab=wompi&empresa=${encodeURIComponent(empParam)}&project=${encodeURIComponent(project.slug)}" class="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-6 py-3 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs uppercase tracking-wider shadow-md transition-all">
+                    <span class="material-symbols-outlined text-base">payments</span>
+                    Pagar Licencia en Pasarela Wompi
+                  </a>
+                  <a href="home.html" class="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-6 py-3 rounded-xl bg-white hover:bg-slate-100 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 font-bold text-xs uppercase tracking-wider border border-slate-300 dark:border-slate-700 shadow-sm transition-all">
+                    <span class="material-symbols-outlined text-base">arrow_back</span>
+                    Volver al Home
+                  </a>
+                </div>
               </div>
-              <h3 class="text-xl font-extrabold text-rose-950 dark:text-rose-100 mb-2">Proyecto Bloqueado por Falta de Pago</h3>
-              <p class="text-xs sm:text-sm text-rose-800 dark:text-rose-300 mb-4 leading-relaxed">
-                El periodo de gracia de <strong>5 días</strong> posteriores a la fecha de corte ha finalizado sin registrar el pago de la mensualidad. La visualización de modelos 3D (IFC), planos 2D (PDF y DWG), carga/descarga de archivos y reporte de incidencias se encuentran temporalmente bloqueados.
-              </p>
-              <div class="inline-flex items-center gap-2 bg-white dark:bg-slate-900 px-4 py-2 rounded-xl border border-rose-300 dark:border-rose-800 text-xs font-bold text-rose-700 dark:text-rose-300 mb-6 shadow-sm">
-                <span class="material-symbols-outlined text-base text-rose-500">timer</span>
-                Retención de datos antes de eliminación definitiva: <strong>${licCheck.daysLeftToPurge} días</strong>
+            `;
+          } else {
+            toolsContainer.innerHTML = `
+              <div class="col-span-full w-full p-8 rounded-2xl bg-white/90 dark:bg-slate-900/90 border border-slate-200 dark:border-slate-800 shadow-xl text-center max-w-xl mx-auto my-6">
+                <div class="w-16 h-16 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 flex items-center justify-center mx-auto mb-4 text-3xl font-black">
+                  <span class="material-symbols-outlined text-4xl">lock</span>
+                </div>
+                <h3 class="text-2xl font-black uppercase tracking-tight text-slate-900 dark:text-white mb-2">Proyecto Bloqueado</h3>
+                <p class="text-xs sm:text-sm text-slate-600 dark:text-slate-400 mb-6 leading-relaxed">
+                  El acceso a las herramientas, modelos y documentación de este proyecto se encuentra temporalmente inhabilitado. Si necesitas acceso, por favor contacta al administrador del proyecto.
+                </p>
+                <div class="flex items-center justify-center">
+                  <a href="home.html" class="inline-flex items-center justify-center gap-2 px-6 py-3 rounded-xl bg-slate-900 hover:bg-slate-800 dark:bg-white dark:hover:bg-slate-100 text-white dark:text-slate-900 font-bold text-xs uppercase tracking-wider shadow-md transition-all">
+                    <span class="material-symbols-outlined text-base">arrow_back</span>
+                    Volver al Home
+                  </a>
+                </div>
               </div>
-              <div class="flex flex-col sm:flex-row items-center justify-center gap-3">
-                <a href="super-admin.html" class="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-6 py-3 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs uppercase tracking-wider shadow-md transition-all">
-                  <span class="material-symbols-outlined text-base">payments</span>
-                  Pagar Licencia en Pasarela Wompi
-                </a>
-                <a href="home.html" class="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-6 py-3 rounded-xl bg-white hover:bg-slate-100 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 font-bold text-xs uppercase tracking-wider border border-slate-300 dark:border-slate-700 shadow-sm transition-all">
-                  <span class="material-symbols-outlined text-base">arrow_back</span>
-                  Volver al Home
-                </a>
-              </div>
-            </div>
-          `;
+            `;
+          }
         } else if (allTools.length) {
           const grouped = allTools.reduce((acc, tool) => {
             acc[tool.groupName] = acc[tool.groupName] || [];
