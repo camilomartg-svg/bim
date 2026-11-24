@@ -27,6 +27,8 @@ import {
   deleteIncidentFromDrive
 } from './driveIncidentsService';
 import { handleFirestoreError, OperationType } from './firestore-errors';
+import { getActiveProjectData, loadAndCacheProjectIso } from '../utils/userScope';
+import { FILES_GATEWAY_URL } from '../utils/googleDriveUtils';
 import { 
   Issue, 
   Comment, 
@@ -479,85 +481,285 @@ export const getPlatformTeam = async (companyId: string, projectId: string): Pro
   const cacheKey = `${companyId}_${projectId}`;
   const cached = platformTeamCache.get(cacheKey);
   if (cached) return cached;
+
   const request = (async () => {
-  try {
-    // 1. Fetch empresas.json
-    const empresasRes = await fetch('../empresas.json');
-    if (!empresasRes.ok) {
-      throw new Error(`Failed to fetch empresas.json: ${empresasRes.statusText}`);
-    }
-    const empresas = await empresasRes.json();
-    
-    const company = empresas.find((e: any) => e && !e.deleted && (e.id === companyId || e.id?.toLowerCase() === companyId?.toLowerCase() || e.name?.toLowerCase() === companyId?.toLowerCase()));
-    if (!company) {
-      console.warn(`Company ${companyId} not found in empresas.json`);
+    try {
+      // 1. Fetch empresas.json (all companies in Nora)
+      let allCompanies: any[] = [];
+      try {
+        const empresasRes = await fetch('../empresas.json?t=' + Date.now());
+        if (empresasRes.ok) {
+          allCompanies = await empresasRes.json();
+        }
+      } catch (err) {
+        console.warn("Could not load empresas.json:", err);
+      }
+
+      // Map users across all companies in empresas.json
+      const companyUsersMap = new Map<string, { member: any; companyName: string }>();
+      allCompanies.forEach((comp: any) => {
+        if (!comp || comp.deleted) return;
+        const compName = String(comp.name || comp.razonSocial || '').trim();
+        if (Array.isArray(comp.members)) {
+          comp.members.forEach((m: any) => {
+            if (m && m.email) {
+              const clean = String(m.email).toLowerCase().trim();
+              if (!companyUsersMap.has(clean)) {
+                companyUsersMap.set(clean, { member: m, companyName: compName });
+              }
+            }
+          });
+        }
+      });
+
+      // 2. Fetch Nora Global Directory from Google Apps Script (all registered users)
+      const dirUsersMap = new Map<string, any>();
+      try {
+        const gatewayUrl = (typeof FILES_GATEWAY_URL !== 'undefined' && FILES_GATEWAY_URL) 
+          ? FILES_GATEWAY_URL 
+          : 'https://script.google.com/macros/s/AKfycbx2RAQx_8K4o22xE0Mw-ETc7K_58vIoi6-PgVi64u80inuiw144ks3cgWSdCtXqIgB02g/exec';
+        const dirRes = await fetch(gatewayUrl);
+        if (dirRes.ok) {
+          const dirUsers = await dirRes.json();
+          if (Array.isArray(dirUsers)) {
+            dirUsers.forEach((u: any) => {
+              if (u && u.email) {
+                dirUsersMap.set(String(u.email).toLowerCase().trim(), u);
+              }
+            });
+          }
+        }
+      } catch (e) {
+        console.warn("Could not fetch global directory users:", e);
+      }
+
+      // 3. Load activeProject data (ISO 19650 teams, assigned members)
+      let activeProject: any = null;
+      try {
+        activeProject = getActiveProjectData();
+      } catch (_) {}
+
+      if (!activeProject || !Array.isArray(activeProject.members) || activeProject.members.length === 0) {
+        try {
+          activeProject = await loadAndCacheProjectIso(companyId, projectId);
+        } catch (_) {}
+      }
+
+      // Fallback: check config-<companyId>.json or portal-config.json
+      if (!activeProject || !Array.isArray(activeProject.members) || activeProject.members.length === 0) {
+        try {
+          const configRes = await fetch(`../config-${companyId}.json?t=` + Date.now());
+          if (configRes.ok) {
+            const configData = await configRes.json();
+            const foundProj = configData.projects?.find((p: any) => p.slug === projectId || p.name === projectId || p.id === projectId);
+            if (foundProj) {
+              activeProject = { ...(activeProject || {}), ...foundProj };
+            }
+          }
+        } catch (_) {}
+      }
+
+      if (!activeProject || !Array.isArray(activeProject.members) || activeProject.members.length === 0) {
+        try {
+          const portalRes = await fetch(`../portal-config.json?t=` + Date.now());
+          if (portalRes.ok) {
+            const portalData = await portalRes.json();
+            const foundProj = portalData.projects?.find((p: any) => p.slug === projectId || p.name === projectId || p.id === projectId);
+            if (foundProj) {
+              activeProject = { ...(activeProject || {}), ...foundProj };
+            }
+          }
+        } catch (_) {}
+      }
+
+      const iso = activeProject?.iso19650 || {};
+      const deliveryTeams = Array.isArray(iso.deliveryTeams) ? iso.deliveryTeams : [];
+      const receiverTeams = Array.isArray(iso.receiverTeams) ? iso.receiverTeams : [];
+      const projectAdmins = Array.isArray(iso.projectAdmins) ? iso.projectAdmins : [];
+      const memberBranches = iso.memberBranches || {};
+      const memberCompanies = iso.memberCompanies || {};
+
+      // 4. Collect all authorized project member emails
+      const projectMemberEmailsSet = new Set<string>();
+
+      // From activeProject.members (the official authorized directory of 11+ members)
+      if (Array.isArray(activeProject?.members)) {
+        activeProject.members.forEach((m: any) => {
+          const clean = (typeof m === 'string' ? m : m.email || m.username || '').toLowerCase().trim();
+          if (clean) projectMemberEmailsSet.add(clean);
+        });
+      }
+
+      // From project admins
+      projectAdmins.forEach((adm: any) => {
+        const clean = (typeof adm === 'string' ? adm : adm.email || adm.username || '').toLowerCase().trim();
+        if (clean) projectMemberEmailsSet.add(clean);
+      });
+
+      // From delivery teams (leads, members, task teams)
+      deliveryTeams.forEach((dt: any) => {
+        if (dt.leadEmail) projectMemberEmailsSet.add(String(dt.leadEmail).toLowerCase().trim());
+        if (Array.isArray(dt.members)) {
+          dt.members.forEach((m: any) => {
+            const clean = (typeof m === 'string' ? m : m.email || '').toLowerCase().trim();
+            if (clean) projectMemberEmailsSet.add(clean);
+          });
+        }
+        if (Array.isArray(dt.taskTeams)) {
+          dt.taskTeams.forEach((tt: any) => {
+            if (Array.isArray(tt.members)) {
+              tt.members.forEach((m: any) => {
+                const clean = (typeof m === 'string' ? m : m.email || '').toLowerCase().trim();
+                if (clean) projectMemberEmailsSet.add(clean);
+              });
+            }
+          });
+        }
+      });
+
+      // From receiver teams (leads, members, task teams)
+      receiverTeams.forEach((rt: any) => {
+        if (rt.leadEmail) projectMemberEmailsSet.add(String(rt.leadEmail).toLowerCase().trim());
+        if (Array.isArray(rt.members)) {
+          rt.members.forEach((m: any) => {
+            const clean = (typeof m === 'string' ? m : m.email || '').toLowerCase().trim();
+            if (clean) projectMemberEmailsSet.add(clean);
+          });
+        }
+        if (Array.isArray(rt.taskTeams)) {
+          rt.taskTeams.forEach((tt: any) => {
+            if (Array.isArray(tt.members)) {
+              tt.members.forEach((m: any) => {
+                const clean = (typeof m === 'string' ? m : m.email || '').toLowerCase().trim();
+                if (clean) projectMemberEmailsSet.add(clean);
+              });
+            }
+          });
+        }
+      });
+
+      if (iso.directorDeObra) {
+        projectMemberEmailsSet.add(String(iso.directorDeObra).toLowerCase().trim());
+      }
+      if (activeProject?.creatorEmail) {
+        projectMemberEmailsSet.add(String(activeProject.creatorEmail).toLowerCase().trim());
+      }
+
+      // Also ensure members of the host company are included
+      const hostCompany = allCompanies.find((c: any) => c && !c.deleted && (c.id === companyId || c.name?.toLowerCase() === companyId?.toLowerCase()));
+      if (hostCompany && Array.isArray(hostCompany.members)) {
+        hostCompany.members.forEach((m: any) => {
+          if (m && m.email) {
+            projectMemberEmailsSet.add(String(m.email).toLowerCase().trim());
+          }
+        });
+      }
+
+      // Fallback: If no members were found, include all users from all companies in empresas.json
+      if (projectMemberEmailsSet.size === 0) {
+        companyUsersMap.forEach((_, email) => {
+          projectMemberEmailsSet.add(email);
+        });
+      }
+
+      // 5. Build full TeamMember objects
+      const resultTeam: any[] = [];
+      projectMemberEmailsSet.forEach((email) => {
+        const dirU = dirUsersMap.get(email);
+        const compU = companyUsersMap.get(email);
+        const m = compU?.member;
+
+        const displayName = dirU?.nombre || dirU?.name || m?.name || m?.nombre || email.split('@')[0];
+        const cargo = dirU?.cargo || dirU?.especialidad || m?.cargo || m?.especialidad || m?.role || 'Colaborador';
+        const position = `${cargo} (${displayName})`;
+
+        // Resolve Company
+        let companyName = memberCompanies[email] || dirU?.empresa || m?.empresaUsuario || compU?.companyName || hostCompany?.name || 'Empresa';
+        companyName = companyName.trim();
+
+        // Resolve Team and Branch
+        let teamName = '';
+        let branch: 'DELIVERY' | 'RECEIVER' | 'ADMIN' | 'NONE' = 'NONE';
+
+        if (projectAdmins.some((a: any) => String(a).toLowerCase().trim() === email)) {
+          branch = 'ADMIN';
+          teamName = 'ADMINISTRACIÓN';
+        }
+
+        for (const dt of deliveryTeams) {
+          if (dt.leadEmail && String(dt.leadEmail).toLowerCase().trim() === email) {
+            branch = 'DELIVERY';
+            teamName = dt.name;
+            break;
+          }
+          if (Array.isArray(dt.members) && dt.members.some((dm: any) => String(dm).toLowerCase().trim() === email)) {
+            branch = 'DELIVERY';
+            teamName = dt.name;
+          }
+          if (Array.isArray(dt.taskTeams)) {
+            for (const tt of dt.taskTeams) {
+              if (Array.isArray(tt.members) && tt.members.some((tm: any) => String(tm).toLowerCase().trim() === email)) {
+                branch = 'DELIVERY';
+                teamName = tt.name || dt.name;
+                break;
+              }
+            }
+          }
+          if (branch === 'DELIVERY') break;
+        }
+
+        if (branch === 'NONE') {
+          for (const rt of receiverTeams) {
+            if (rt.leadEmail && String(rt.leadEmail).toLowerCase().trim() === email) {
+              branch = 'RECEIVER';
+              teamName = rt.name;
+              break;
+            }
+            if (Array.isArray(rt.members) && rt.members.some((rm: any) => String(rm).toLowerCase().trim() === email)) {
+              branch = 'RECEIVER';
+              teamName = rt.name;
+            }
+            if (Array.isArray(rt.taskTeams)) {
+              for (const tt of rt.taskTeams) {
+                if (Array.isArray(tt.members) && tt.members.some((tm: any) => String(tm).toLowerCase().trim() === email)) {
+                  branch = 'RECEIVER';
+                  teamName = tt.name || rt.name;
+                  break;
+                }
+              }
+            }
+            if (branch === 'RECEIVER') break;
+          }
+        }
+
+        if (memberBranches[email]) {
+          branch = String(memberBranches[email]).toUpperCase().trim() as any;
+        }
+
+        if (!teamName) {
+          teamName = dirU?.especialidad || m?.especialidad || m?.empresaUsuario || companyName || 'GENERAL';
+        }
+        teamName = teamName.toUpperCase().trim();
+
+        resultTeam.push({
+          id: email,
+          name: displayName,
+          email: email,
+          position: position,
+          team: teamName,
+          company: companyName,
+          cargo: cargo,
+          branch: branch
+        });
+      });
+
+      return resultTeam;
+    } catch (error) {
+      console.warn("Error loading platform team: ", error);
       return null;
     }
-    
-    const companyMembers = company.members || [];
-    
-    // 2. Fetch config-<companyId>.json to see project members and task teams
-    let projectMembersEmails: string[] = [];
-    let equiposDeTarea: any[] = [];
-    try {
-        const configRes = await fetch(`../config-${companyId}.json`);
-      if (configRes.ok) {
-        const configData = await configRes.json();
-        const project = configData.projects?.find((p: any) => p.slug === projectId || p.name === projectId);
-        if (project) {
-          if (project.members) {
-            projectMembersEmails = project.members.map((email: string) => email.toLowerCase().trim());
-          }
-          if (project.equiposDeTarea) {
-            equiposDeTarea = project.equiposDeTarea;
-          }
-        }
-      }
-    } catch (e) {
-      console.warn(`Could not load config-${companyId}.json, defaulting to all company members`, e);
-    }
-    
-    // 3. Filter company members
-    let filteredMembers = companyMembers;
-    if (projectMembersEmails.length > 0) {
-      filteredMembers = companyMembers.filter((m: any) => m.email && projectMembersEmails.includes(m.email.toLowerCase().trim()));
-    }
-    
-    // 4. Map to TeamMember format
-    return filteredMembers.map((m: any) => {
-      const displayName = m.name || m.email || 'Colaborador';
-      const cargo = m.cargo || m.especialidad || m.role || 'Colaborador';
-      const position = `${cargo} (${displayName})`;
-      
-      let teamGroup = 'GENERAL';
-      const userEmail = m.email ? m.email.toLowerCase().trim() : '';
-      if (equiposDeTarea && equiposDeTarea.length > 0) {
-        const foundTeam = equiposDeTarea.find((t: any) => 
-          t.members && t.members.some((email: string) => email.toLowerCase().trim() === userEmail)
-        );
-        if (foundTeam) {
-          teamGroup = foundTeam.name;
-        } else {
-          teamGroup = (m.especialidad || m.empresaUsuario || 'GENERAL');
-        }
-      } else {
-        teamGroup = (m.especialidad || m.empresaUsuario || 'GENERAL');
-      }
-      teamGroup = teamGroup.toUpperCase().trim();
-
-      return {
-        id: userEmail || Math.random().toString(36).substring(2, 9),
-        name: displayName,
-        email: m.email || '',
-        position: position,
-        team: teamGroup
-      };
-    });
-  } catch (error) {
-    console.warn("Error loading platform team: ", error);
-    return null;
-  }
   })();
+
   platformTeamCache.set(cacheKey, request);
   return request;
 };
