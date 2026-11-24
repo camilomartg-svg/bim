@@ -96,6 +96,8 @@
             }
         }
     </style>
+    <script src="nora-drive-store.js"></script>
+    <script src="nora-navigation.js"></script>
 </head>
 <body class="h-full bg-background-light dark:bg-background-dark text-gray-900 dark:text-gray-100 transition-colors duration-300">
     <div class="flex flex-col h-full">
@@ -123,6 +125,7 @@
                         <span>Token</span>
                     </button>
                     <!-- Theme Toggle -->
+                    <div id="user-header-container" class="relative"></div>
                     <button id="theme-toggle" aria-label="Cambiar tema" class="rounded-xl border border-border-light dark:border-border-dark bg-white dark:bg-slate-800 p-2 hover:bg-gray-50 dark:hover:bg-slate-700 transition-all shadow-sm">
                         <span class="material-symbols-outlined block">dark_mode</span>
                     </button>
@@ -263,5 +266,6 @@
 
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="project-settings.js?v=1786130000000"></script>
+    <script src="nora-user-header.js"></script>
 </body>
 </html>

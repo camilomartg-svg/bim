@@ -1,4 +1,5 @@
 import React from 'react';
+import { isIncidentsAdmin } from '../utils/userScope';
 import { LayoutDashboard, FileText, Settings, Bell, LogOut, Package, ClipboardList, Layers, XCircle, ShieldCheck, Leaf } from 'lucide-react';
 import { motion } from 'motion/react';
 import { cn } from '../lib/utils';
@@ -40,7 +41,7 @@ export default function Sidebar({
                     user?.position?.toUpperCase().includes('BIM') ||
                     user?.email?.toLowerCase() === 'imagina3ddesign@gmail.com';
 
-  const isAdmin = user?.role === 'admin' || (user?.role as string) === 'super admin' || Boolean((user as any)?.isSuperAdmin);
+  const isAdmin = isIncidentsAdmin(user);
 
   const fullMenuItems = [
     { id: 'dashboard', icon: LayoutDashboard, label: 'Dashboard' },

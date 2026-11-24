@@ -23,7 +23,8 @@ import DashboardChat from './components/DashboardChat';
 import { db } from './services/firebase';
 import { doc, getDoc, onSnapshot } from 'firebase/firestore';
 import { getProjectAndCompany } from './services/firebaseService';
-import { loadAndCacheProjectIso } from './utils/userScope';
+import { loadAndCacheProjectIso, isIncidentsAdmin } from './utils/userScope';
+import { UserHeaderBadge } from './components/UserHeaderBadge';
 import { checkIncidenciasLicense, ProjectLicenseStatus } from './utils/licenseGuard';
 
 // Component for displaying standard restricted access view to matching style
@@ -103,7 +104,7 @@ function Dashboard() {
 
   const userTeam = (user?.team || "").toUpperCase().trim();
   const userPosition = user?.position || "";
-  const isAdmin = user?.role === 'admin' || (user?.role as string) === 'super admin' || Boolean((user as any)?.isSuperAdmin);
+  const isAdmin = isIncidentsAdmin(user);
 
   const siteAllowed: string[] = projectConfig?.siteReportsAllowedTeams || projectConfig?.siteReportsAllowedProfiles || [];
   const qualityAllowed: string[] = projectConfig?.qualityReportsAllowedTeams || projectConfig?.qualityReportsAllowedProfiles || [];
@@ -434,20 +435,7 @@ function Dashboard() {
                 <span className="sm:hidden">DRIVE OK</span>
               </div>
 
-             <div className="flex items-center gap-2">
-               <div className="text-right hidden sm:block">
-                 <p className="text-[8px] font-black text-slate-900 dark:text-white uppercase tracking-tight leading-none">{user?.name}</p>
-                 <p className="text-[6.5px] font-bold text-slate-400 dark:text-slate-600 uppercase tracking-widest mt-1">{user?.position || 'Usuario BIM'}</p>
-               </div>
-               <div className="w-6 h-6 sm:w-7 sm:h-7 bg-slate-900 dark:bg-white rounded-lg flex items-center justify-center p-1 shadow-sm">
-                 <img 
-                    src="https://i.postimg.cc/yY0XpLzW/LOGO-BIM-BLANCO-ICO.png" 
-                    alt="BIM Logo" 
-                    className="w-full h-full object-contain dark:filter dark:invert"
-                    referrerPolicy="no-referrer"
-                 />
-               </div>
-             </div>
+             <UserHeaderBadge />
           </div>
         </header>
         {licenseStatus.isSuspended && (

@@ -687,20 +687,7 @@
             void loadPortalConfig();
 
             // --- GESTIÓN DE AUTENTICACIÓN ---
-            if (userAccount) {
-                authContainer.innerHTML = `
-                <a href="perfil.html" class="flex items-center gap-1 hover:underline text-[10px] uppercase tracking-wider font-medium text-text-light dark:text-white" title="Ver mi perfil">
-                    <span class="material-symbols-outlined text-[14px]">account_circle</span>
-                    <span>Hola, ${userAccount.name.split(' ')[0]}</span>
-                </a>
-                <button id="logout-button" class="text-text-light dark:text-white hover:text-primary text-[10px] uppercase tracking-wider font-medium">Cerrar sesión</button>
-            `;
-                document.getElementById('logout-button').addEventListener('click', () => {
-                    sessionStorage.removeItem('userAccount'); // Limpiar ambas ubicaciones
-                    localStorage.removeItem('userAccount');
-                    window.location.reload();
-                });
-            }
+            if (userAccount && window.NoraUserHeader) window.NoraUserHeader.init(authContainer);
 
             // --- CONTROL DE ACCESO POR USUARIO ---
             if (userAccount) {
@@ -786,6 +773,7 @@
             });
         });
     </script>
+    <script src="nora-user-header.js"></script>
 </body>
 
 </html>

@@ -1069,22 +1069,7 @@
       // Session load
       const userAccount = JSON.parse(sessionStorage.getItem('userAccount') || localStorage.getItem('userAccount') || 'null');
       if (userAccount) {
-        authContainer.innerHTML = `
-          <div class="flex items-center gap-3">
-            <span class="text-sm font-medium">Hola, ${userAccount.name.split(' ')[0]}</span>
-            <button id="logout-btn" class="flex items-center justify-center p-1.5 rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 hover:bg-red-50 dark:hover:bg-red-950/30 hover:border-red-200 dark:hover:border-red-900 hover:text-red-600 dark:hover:text-red-400 transition-colors" title="Cerrar sesión">
-              <span class="material-symbols-outlined text-[16px]">logout</span>
-            </button>
-          </div>
-        `;
-        document.getElementById('logout-btn').addEventListener('click', () => {
-          if (confirm('¿Cerrar sesión?')) {
-            sessionStorage.removeItem('userAccount');
-            localStorage.removeItem('userAccount');
-            window.location.reload();
-          }
-        });
-      }
+        if (window.NoraUserHeader) window.NoraUserHeader.init(authContainer); }
 
       // Time updater
       const updateNow = () => {
@@ -5556,5 +5541,6 @@
       }
     }
 </script>
+  <script src="nora-user-header.js"></script>
 </body>
 </html>
