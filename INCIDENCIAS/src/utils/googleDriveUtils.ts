@@ -139,11 +139,11 @@ const folderResolvePromises = new Map<string, Promise<string>>();
  */
 export async function resolveIncidentsProjectFolderId(companyId: string, projectId: string): Promise<string> {
   const { companyName, projectName } = getHumanCompanyAndProject(companyId, projectId);
-  const cacheKey = `nora_inc_folder_v2_${companyName}_${projectName}`;
+  const cacheKey = `nora_inc_folder_v3_${companyName}_${projectName}`;
 
   try {
     const cached = localStorage.getItem(cacheKey);
-    if (cached && cached.trim().length > 10) {
+    if (cached && cached.trim().length > 10 && cached.trim() !== INCIDENTS_DRIVE_FOLDER_ID) {
       return cached.trim();
     }
   } catch (_) {}
@@ -153,6 +153,28 @@ export async function resolveIncidentsProjectFolderId(companyId: string, project
 
   const promise = (async () => {
     try {
+      // 1. getIncidentsProjectConfig safely resolves the project folder without mutating files
+      const data = await postToAppsScript({
+        action: 'getIncidentsProjectConfig',
+        company: { id: companyId, name: companyName },
+        companyName,
+        project: { id: projectId, slug: projectId, name: projectName },
+        projectName
+      });
+      const folderId = data?.projectFolderId || data?.storage?.projectFolderId;
+      if (folderId && String(folderId).trim().length > 10 && String(folderId).trim() !== INCIDENTS_DRIVE_FOLDER_ID) {
+        const cleanId = String(folderId).trim();
+        try {
+          localStorage.setItem(cacheKey, cleanId);
+        } catch (_) {}
+        return cleanId;
+      }
+    } catch (err) {
+      console.warn('[googleDriveUtils] Error resolving projectFolderId via getIncidentsProjectConfig:', err);
+    }
+
+    // 2. Fallback: saveIncidentsProjectConfig
+    try {
       const data = await postToAppsScript({
         action: 'saveIncidentsProjectConfig',
         company: { id: companyId, name: companyName },
@@ -161,19 +183,19 @@ export async function resolveIncidentsProjectFolderId(companyId: string, project
         projectName
       });
       const folderId = data?.storage?.projectFolderId || data?.projectFolderId;
-      if (folderId && String(folderId).trim().length > 10) {
+      if (folderId && String(folderId).trim().length > 10 && String(folderId).trim() !== INCIDENTS_DRIVE_FOLDER_ID) {
         const cleanId = String(folderId).trim();
         try {
           localStorage.setItem(cacheKey, cleanId);
         } catch (_) {}
         return cleanId;
       }
-    } catch (err) {
-      console.warn('[googleDriveUtils] Error resolving projectFolderId from gateway:', err);
+    } catch (err2) {
+      console.warn('[googleDriveUtils] Fallback folder resolution failed:', err2);
     } finally {
       folderResolvePromises.delete(cacheKey);
     }
-    return '1Gotb8NKYre22k1p5LrvcuG23z79TvAMl';
+    return INCIDENTS_DRIVE_FOLDER_ID;
   })();
 
   folderResolvePromises.set(cacheKey, promise);
@@ -221,45 +243,63 @@ export async function saveIncidentsConfigToSheet(
   companyId: string,
   projectId: string
 ): Promise<{ spreadsheetUrl?: string; projectFolderId?: string; fileId?: string }> {
-  const folderId = await resolveIncidentsProjectFolderId(companyId, projectId);
-  const jsonStr = JSON.stringify(config, null, 2);
-  const base64 = utf8ToBase64(jsonStr);
+  const { companyName, projectName } = getHumanCompanyAndProject(companyId, projectId);
+  
+  // Save directly via saveIncidentsProjectConfig: this action trashes any existing config_incidencias.json,
+  // creates the single updated config_incidencias.json, updates the spreadsheet, and returns the projectFolderId!
+  let res: any = null;
+  try {
+    res = await postToAppsScript({
+      action: 'saveIncidentsProjectConfig',
+      company: { id: companyId, name: companyName },
+      companyId,
+      companyName,
+      project: { id: projectId, slug: projectId, name: projectName },
+      projectId,
+      projectSlug: projectId,
+      projectName,
+      config
+    });
+  } catch (apiErr) {
+    console.warn('[googleDriveUtils] saveIncidentsProjectConfig returned error, trying fallback:', apiErr);
+  }
 
-  // 1. Save config_incidencias.json directly in the project folder
-  const uploadRes = await postToAppsScript({
-    action: 'uploadFile',
-    folderId,
-    filename: 'config_incidencias.json',
-    name: 'config_incidencias.json',
-    contentType: 'application/json',
-    mimeType: 'application/json',
-    content: base64,
-    base64
-  });
+  const projectFolderId = res?.storage?.projectFolderId || res?.projectFolderId;
+  if (projectFolderId) {
+    const cacheKey = `nora_inc_folder_v3_${companyName}_${projectName}`;
+    try {
+      localStorage.setItem(cacheKey, String(projectFolderId).trim());
+    } catch (_) {}
+  }
 
-  if (uploadRes?.status === 'error' || uploadRes?.error) {
-    throw new Error(uploadRes.message || uploadRes.error || 'No se pudo guardar config_incidencias.json en Drive.');
+  // Fallback if needed
+  if (!res || res.status === 'error' || res.error) {
+    const folderId = projectFolderId || await resolveIncidentsProjectFolderId(companyId, projectId);
+    const jsonStr = JSON.stringify(config, null, 2);
+    const base64 = utf8ToBase64(jsonStr);
+    const uploadRes = await postToAppsScript({
+      action: 'uploadFile',
+      folderId,
+      filename: 'config_incidencias.json',
+      name: 'config_incidencias.json',
+      contentType: 'application/json',
+      mimeType: 'application/json',
+      content: base64,
+      base64
+    });
+    invalidateIncidentsFolderListCache(companyId, projectId);
+    return {
+      projectFolderId: folderId,
+      fileId: uploadRes?.fileId || uploadRes?.id
+    };
   }
 
   invalidateIncidentsFolderListCache(companyId, projectId);
 
-  // 2. Also sync spreadsheet backup in the background without blocking UI
-  const { companyName, projectName } = getHumanCompanyAndProject(companyId, projectId);
-  postToAppsScript({
-    action: 'saveIncidentsProjectConfig',
-    company: { id: companyId, name: companyName },
-    companyId,
-    companyName,
-    project: { id: projectId, slug: projectId, name: projectName },
-    projectId,
-    projectSlug: projectId,
-    projectName,
-    config
-  }).catch(() => {});
-
   return {
-    projectFolderId: folderId,
-    fileId: uploadRes?.fileId || uploadRes?.id
+    projectFolderId: projectFolderId,
+    fileId: res?.fileId,
+    spreadsheetUrl: res?.storage?.spreadsheetUrl || res?.fileUrl
   };
 }
 
@@ -309,44 +349,17 @@ export async function loadIncidentsConfigFromSheet(companyId: string, projectId:
 }
 
 /**
- * Saves the complete array of structural units (locations/spaces) as ubicaciones_incidencias.json
- * inside 1-9SumRefiih81mc_eASsswy_W_U0-qe5 -> [Empresa] -> [Proyecto]
+ * Locations are kept directly inside config_incidencias.json.
+ * No separate ubicaciones_incidencias.json files are created!
  */
-export async function saveAllIncidentsLocationsToDrive(
-  units: StoredStructuralUnit[],
-  companyId: string,
-  projectId: string
-): Promise<void> {
-  const folderId = await resolveIncidentsProjectFolderId(companyId, projectId);
-  const jsonStr = JSON.stringify(units, null, 2);
-  const base64 = utf8ToBase64(jsonStr);
-
-  await postToAppsScript({
-    action: 'uploadFile',
-    folderId,
-    filename: 'ubicaciones_incidencias.json',
-    name: 'ubicaciones_incidencias.json',
-    contentType: 'application/json',
-    mimeType: 'application/json',
-    content: base64,
-    base64
-  });
-
-  invalidateIncidentsFolderListCache(companyId, projectId);
-}
-
-/** Keeps the location hierarchy in the project's Drive folder & spreadsheet. */
 export async function saveIncidentsLocationsToSheet(
   operation: 'upsert' | 'delete',
   unit: StoredStructuralUnit | { id: string },
   companyId: string,
   projectId: string,
-  allUnits?: StoredStructuralUnit[]
+  _allUnits?: StoredStructuralUnit[]
 ): Promise<void> {
-  if (Array.isArray(allUnits)) {
-    await saveAllIncidentsLocationsToDrive(allUnits, companyId, projectId);
-  }
-  // Background sync to spreadsheet
+  // Sync to spreadsheet without creating extra JSON files
   const { companyName, projectName } = getHumanCompanyAndProject(companyId, projectId);
   postToAppsScript({
     action: 'saveIncidentsLocation',
@@ -363,48 +376,14 @@ export async function saveIncidentsLocationsToSheet(
 }
 
 export async function loadIncidentsLocationsFromSheet(companyId: string, projectId: string): Promise<StoredStructuralUnit[]> {
-  // 1. Try ubicaciones_incidencias.json or config_incidencias.json in the project folder first (fast, shares list call!)
+  // 1. Try reading directly from config_incidencias.json
   try {
-    const files = await listIncidentsFolderFiles(companyId, projectId);
-    const locFiles = files
-      .filter((f: any) => f.name === 'ubicaciones_incidencias.json')
-      .sort((a: any, b: any) => new Date(b.lastUpdated || 0).getTime() - new Date(a.lastUpdated || 0).getTime());
-
-    if (locFiles.length > 0) {
-      const latest = locFiles[0];
-      const cacheKey = `nora_loc_file_${latest.fileId}`;
-      try {
-        const cachedRaw = localStorage.getItem(cacheKey);
-        if (cachedRaw) {
-          const parsed = JSON.parse(cachedRaw);
-          if (parsed && parsed.lastUpdated === latest.lastUpdated && Array.isArray(parsed.data)) {
-            return parsed.data;
-          }
-        }
-      } catch (_) {}
-
-      const textData = await postToAppsScript({ action: 'text', id: latest.fileId });
-      if (textData && textData.text) {
-        const parsedUnits = JSON.parse(textData.text);
-        if (Array.isArray(parsedUnits)) {
-          try {
-            localStorage.setItem(cacheKey, JSON.stringify({
-              lastUpdated: latest.lastUpdated,
-              data: parsedUnits
-            }));
-          } catch (_) {}
-          return parsedUnits;
-        }
-      }
-    }
-
-    // Check if config_incidencias.json has locations embedded
     const cfg = await loadIncidentsConfigFromSheet(companyId, projectId);
     if (cfg && Array.isArray(cfg.locations) && cfg.locations.length > 0) {
       return cfg.locations;
     }
   } catch (err) {
-    console.warn('Could not load ubicaciones_incidencias.json from Drive:', err);
+    console.warn('Could not load locations from config_incidencias.json:', err);
   }
 
   // 2. Fallback: spreadsheet getIncidentsLocations
@@ -470,6 +449,7 @@ export async function uploadFileToDrive(
     const urlParams = new URLSearchParams(window.location.search);
     const cId = extraMetadata?.companyId || urlParams.get('empresa') || 'default';
     const pId = extraMetadata?.project || extraMetadata?.projectId || urlParams.get('project') || 'default';
+    const { companyName, projectName } = getHumanCompanyAndProject(cId, pId);
 
     // Always resolve the exact [Empresa] -> [Proyecto] folder inside 1-9SumRefiih81mc_eASsswy_W_U0-qe5
     let targetFolderId = folderId;
@@ -477,8 +457,6 @@ export async function uploadFileToDrive(
       targetFolderId = await resolveIncidentsProjectFolderId(cId, pId);
     }
 
-    // Do NOT pass 'project' or 'subfolder' so uploadFile_ places the attachment directly in [Empresa]/[Proyecto]
-    // without triggering CDE model spreadsheet status registration.
     const bodyPayload = {
       action: 'uploadFile',
       content: base64,
@@ -487,7 +465,10 @@ export async function uploadFileToDrive(
       mimeType: fileType || 'application/octet-stream',
       filename: fileName,
       name: fileName,
-      folderId: targetFolderId
+      folderId: targetFolderId,
+      companyName,
+      driveFolderName: projectName,
+      project: pId
     };
 
     const res = await fetch(FILES_GATEWAY_URL, {

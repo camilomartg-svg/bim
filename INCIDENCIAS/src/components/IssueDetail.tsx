@@ -111,7 +111,7 @@ export default function IssueDetail({ issue: initialIssue, onClose, onOpenReport
         try {
           console.log("Attempting direct upload to Google Drive first for file:", file.name);
           // Standard RCD Evidence destination folder
-          const driveResult = await uploadFileToDrive(file, file.name, file.type, '1Bym51TtKVSzDsweJaMAh0VxCAAQQbU3w', gToken);
+          const driveResult = await uploadFileToDrive(file, file.name, file.type, undefined, gToken, { companyId: issue.companyId, projectId: issue.projectId });
           url = driveResult.url;
           driveFileId = driveResult.id;
           webViewLink = driveResult.webViewLink;

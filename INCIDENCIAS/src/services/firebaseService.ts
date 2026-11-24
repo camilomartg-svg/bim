@@ -805,12 +805,18 @@ export function getCachedUnits(companyId: string, projectId: string): Structural
     const raw = localStorage.getItem(key);
     if (raw) {
       const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed)) return parsed;
+      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
     }
     const rawCfg = localStorage.getItem(`cached_project_config_${companyId}_${projectId}`);
     if (rawCfg) {
       const parsedCfg = JSON.parse(rawCfg);
-      if (Array.isArray(parsedCfg?.locations)) return parsedCfg.locations;
+      if (Array.isArray(parsedCfg?.locations) && parsedCfg.locations.length > 0) return parsedCfg.locations;
+    }
+    // Also check global or legacy keys if specific key is empty
+    const fallbackRaw = localStorage.getItem('cached_project_config');
+    if (fallbackRaw) {
+      const parsedFallback = JSON.parse(fallbackRaw);
+      if (Array.isArray(parsedFallback?.locations) && parsedFallback.locations.length > 0) return parsedFallback.locations;
     }
   } catch (_) {}
   return [];
@@ -1002,20 +1008,18 @@ export const saveUnit = async (unit: Omit<StructuralUnit, 'id'> & { id?: string 
 
   // Also keep cached_project_config in sync
   const configDocId = `${companyId}_${projectId}`;
-  const cachedCfg = projectConfigCache.get(configDocId);
-  if (cachedCfg) {
-    const updatedCfg = { ...cachedCfg, locations: updatedUnits };
-    projectConfigCache.set(configDocId, updatedCfg);
-    try {
-      localStorage.setItem(`cached_project_config_${configDocId}`, JSON.stringify(updatedCfg));
-    } catch (_) {}
-  }
-
-  // 2. Persist to Google Drive (ubicaciones_incidencias.json & spreadsheet)
+  const cachedCfg = projectConfigCache.get(configDocId) || {};
+  const updatedCfg = { ...cachedCfg, locations: updatedUnits };
+  projectConfigCache.set(configDocId, updatedCfg);
   try {
-    await saveIncidentsLocationsToSheet('upsert', savedUnit, companyId, projectId, updatedUnits);
+    localStorage.setItem(`cached_project_config_${configDocId}`, JSON.stringify(updatedCfg));
+  } catch (_) {}
+
+  // 2. Persist directly to config_incidencias.json in Google Drive (single file!)
+  try {
+    await saveProjectConfig(updatedCfg);
   } catch (err) {
-    console.error('[firebaseService] Error guardando ubicación en Google Drive:', err);
+    console.error('[firebaseService] Error guardando config_incidencias.json en Google Drive:', err);
   }
 };
 
@@ -1028,20 +1032,18 @@ export const deleteUnit = async (id: string) => {
   updateCachedUnits(updatedUnits, companyId, projectId);
 
   const configDocId = `${companyId}_${projectId}`;
-  const cachedCfg = projectConfigCache.get(configDocId);
-  if (cachedCfg) {
-    const updatedCfg = { ...cachedCfg, locations: updatedUnits };
-    projectConfigCache.set(configDocId, updatedCfg);
-    try {
-      localStorage.setItem(`cached_project_config_${configDocId}`, JSON.stringify(updatedCfg));
-    } catch (_) {}
-  }
-
-  // 2. Persist deletion to Google Drive
+  const cachedCfg = projectConfigCache.get(configDocId) || {};
+  const updatedCfg = { ...cachedCfg, locations: updatedUnits };
+  projectConfigCache.set(configDocId, updatedCfg);
   try {
-    await saveIncidentsLocationsToSheet('delete', { id }, companyId, projectId, updatedUnits);
+    localStorage.setItem(`cached_project_config_${configDocId}`, JSON.stringify(updatedCfg));
+  } catch (_) {}
+
+  // 2. Persist deletion directly to config_incidencias.json in Google Drive
+  try {
+    await saveProjectConfig(updatedCfg);
   } catch (err) {
-    console.error('[firebaseService] Error eliminando ubicación en Google Drive:', err);
+    console.error('[firebaseService] Error actualizando config_incidencias.json en Google Drive:', err);
   }
 };
 

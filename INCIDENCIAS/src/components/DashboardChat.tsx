@@ -465,11 +465,7 @@ Se ha registrado una nueva evidencia en tiempo real (Foto/Video) tomada durante 
 
       try {
         console.log("Subiendo archivo adjunto a Google Drive:", file.name);
-        const driveResult = await uploadFileToDrive(
-          file, 
-          file.name, 
-          file.type || 'application/octet-stream', 
-          INCIDENTS_DRIVE_FOLDER_ID, 
+        const driveResult = await uploadFileToDrive(file, file.name, file.type || 'application/octet-stream', undefined, 
           undefined,
           {
             companyId,
@@ -1090,11 +1086,7 @@ ${textTrimmed ? `\n• **Sustento / Observaciones**: ${textTrimmed}` : ''}`;
 
       try {
         console.log("Subiendo archivo adjunto en chat a Google Drive:", file.name);
-        const driveResult = await uploadFileToDrive(
-          file, 
-          file.name, 
-          file.type || 'application/octet-stream', 
-          INCIDENTS_DRIVE_FOLDER_ID, 
+        const driveResult = await uploadFileToDrive(file, file.name, file.type || 'application/octet-stream', undefined, 
           undefined,
           {
             companyId,

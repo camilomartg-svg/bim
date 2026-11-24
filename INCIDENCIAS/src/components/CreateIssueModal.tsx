@@ -24,6 +24,8 @@ import {
   getProjectConfig,
   subscribeToTeam,
   subscribeToUnits,
+  getCachedUnits,
+  getProjectAndCompany,
   saveIssue,
   updateIssue,
   saveReport
@@ -143,7 +145,14 @@ export default function CreateIssueModal({ onClose, onSuccess }: CreateIssueModa
   const [selectedUnits, setSelectedUnits] = useState<string[]>([]);
   const [selectedLevels, setSelectedLevels] = useState<string[]>([]);
   const [selectedSpaces, setSelectedSpaces] = useState<string[]>([]);
-  const [hierarchyUnits, setHierarchyUnits] = useState<StructuralUnit[]>([]);
+  const [hierarchyUnits, setHierarchyUnits] = useState<StructuralUnit[]>(() => {
+    try {
+      const { projectId, companyId } = getProjectAndCompany();
+      return getCachedUnits(companyId, projectId);
+    } catch (_) {
+      return [];
+    }
+  });
   const [showLocationError, setShowLocationError] = useState(false);
 
   const getAvailableLevels = () => {
@@ -345,13 +354,17 @@ export default function CreateIssueModal({ onClose, onSuccess }: CreateIssueModa
       if (unsubscribeUnits) unsubscribeUnits();
       unsubscribeUnits = subscribeToUnits((fetchedUnits) => {
         let filtered = fetchedUnits;
-        if (allowedUnitIds !== undefined && allowedUnitIds.length > 0) {
-          filtered = fetchedUnits.filter(u => 
-            allowedUnitIds!.includes(u.id) || 
-            allowedUnitIds!.includes(u.name)
+        if (Array.isArray(allowedUnitIds) && allowedUnitIds.length > 0) {
+          const matched = fetchedUnits.filter(u => 
+            allowedUnitIds.includes(u.id) || 
+            allowedUnitIds.includes(u.name)
           );
-        } else if (allowedUnitIds !== undefined && allowedUnitIds.length === 0) {
-          filtered = [];
+          filtered = matched.length > 0 ? matched : fetchedUnits;
+        } else {
+          filtered = fetchedUnits;
+        }
+        if (filtered.length === 0 && fetchedUnits.length > 0) {
+          filtered = fetchedUnits;
         }
         setHierarchyUnits(filtered);
       });
@@ -610,8 +623,9 @@ export default function CreateIssueModal({ onClose, onSuccess }: CreateIssueModa
     const files = e.target.files;
     if (files) {
       try {
+        const { companyId, projectId } = getProjectAndCompany();
         const uploaded = await Promise.all(Array.from(files).map(async file => {
-          const driveFile = await uploadFileToDrive(file, file.name, file.type || 'application/octet-stream');
+          const driveFile = await uploadFileToDrive(file, file.name, file.type || 'application/octet-stream', undefined, undefined, { companyId, projectId });
           const isImage = file.type.startsWith('image/');
           const isVideo = file.type.startsWith('video/');
           return {
