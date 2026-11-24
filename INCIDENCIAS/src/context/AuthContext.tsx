@@ -80,7 +80,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           email: email,
           role: role,
           position: assignedPosition,
-          team: assignedTeam
+          team: assignedTeam,
+          systemRole: (() => {
+            try {
+              const nu = JSON.parse(sessionStorage.getItem('userAccount') || localStorage.getItem('userAccount') || '{}');
+              return nu.role || '';
+            } catch (_) { return ''; }
+          })()
         };
         setUser(immediateUser);
         setLoading(false);
@@ -99,7 +105,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 const teamData = teamSnap.docs[0].data();
                 teamPosition = teamData.position || teamPosition;
                 teamGroup = teamData.team || '';
-                teamRole = teamData.role || teamRole;
+                if (role !== 'admin' && !noraRole.includes('ADMIN') && !noraRole.includes('SUPER')) {
+                  teamRole = teamData.role || teamRole;
+                }
               }
             } catch (teamErr) {
               console.warn("Could not fetch team info, using default/email fallback", teamErr);

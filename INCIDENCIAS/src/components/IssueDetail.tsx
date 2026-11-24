@@ -1883,6 +1883,7 @@ export default function IssueDetail({ issue: initialIssue, onClose, onOpenReport
 
       {/* Selector Modal para Redirección y Reasignación de Responsable */}
       <AssigneeSelectorModal
+        position="right"
         isOpen={showRedirectionPicker}
         onClose={() => setShowRedirectionPicker(false)}
         title={
@@ -1907,6 +1908,7 @@ export default function IssueDetail({ issue: initialIssue, onClose, onOpenReport
 
       {/* Selector Modal para Comité de Revisión */}
       <AssigneeSelectorModal
+        position="right"
         isOpen={isReviewersModalOpen}
         onClose={() => setIsReviewersModalOpen(false)}
         title="Gestionar Comité de Revisión"

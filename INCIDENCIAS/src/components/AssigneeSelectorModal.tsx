@@ -29,6 +29,7 @@ export interface AssigneeSelectorModalProps {
   onSelect?: (member: TeamMember) => void;
   onSelectMultiple?: (members: TeamMember[]) => void;
   members: TeamMember[];
+  position?: 'center' | 'right';
 }
 
 export default function AssigneeSelectorModal({
@@ -41,7 +42,8 @@ export default function AssigneeSelectorModal({
   selectedValues = [],
   onSelect,
   onSelectMultiple,
-  members = []
+  members = [],
+  position = 'center'
 }: AssigneeSelectorModalProps) {
   const { user } = useAuth();
   const [searchTerm, setSearchTerm] = useState('');
@@ -335,7 +337,7 @@ export default function AssigneeSelectorModal({
   };
 
   return (
-    <div className="fixed inset-0 z-[120] bg-slate-950/70 backdrop-blur-md flex items-center justify-center p-3 sm:p-4 overflow-y-auto animate-in fade-in duration-200">
+    <div className={cn("fixed z-[120] p-3 sm:p-4 overflow-y-auto animate-in fade-in duration-200 flex items-center justify-center", position === "right" ? "inset-y-0 right-0 left-0 md:left-1/2 bg-slate-950/60 backdrop-blur-sm" : "inset-0 bg-slate-950/70 backdrop-blur-md")}>
       <motion.div 
         initial={{ opacity: 0, scale: 0.95, y: 10 }}
         animate={{ opacity: 1, scale: 1, y: 0 }}

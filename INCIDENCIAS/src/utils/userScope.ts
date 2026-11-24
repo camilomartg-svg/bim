@@ -342,12 +342,15 @@ export function isIncidentsAdmin(user?: any): boolean {
     }
 
     const email = String(user?.email || u?.email || u?.username || '').toLowerCase().trim();
-    const role = String(user?.role || u?.role || '').toUpperCase().trim();
+    const uRole = String(u?.role || '').toUpperCase().trim();
+    const userRole = String(user?.role || '').toUpperCase().trim();
+    const systemRole = String(user?.systemRole || '').toUpperCase().trim();
+    const combinedRoles = `${uRole} ${userRole} ${systemRole}`;
     const cargo = String(user?.cargo || u?.cargo || user?.position || u?.position || '').toUpperCase().trim();
 
     // 1. Super Administrador Global
     if (
-      role.includes('SUPER') ||
+      combinedRoles.includes('SUPER') ||
       Boolean(user?.isSuperAdmin) ||
       Boolean(u?.isSuperAdmin) ||
       email === 'imagina3ddesign@gmail.com' ||
@@ -358,10 +361,11 @@ export function isIncidentsAdmin(user?: any): boolean {
 
     // 2. Administrador de Empresa
     if (
-      role === 'ADMINISTRADOR_EMPRESA' ||
-      role === 'ADMIN_EMPRESA' ||
-      role === 'ADMINISTRADOR' ||
-      role.includes('EMPRESA') ||
+      combinedRoles.includes('ADMINISTRADOR_EMPRESA') ||
+      combinedRoles.includes('ADMIN_EMPRESA') ||
+      combinedRoles.includes('EMPRESA') ||
+      uRole === 'ADMINISTRADOR' ||
+      userRole === 'ADMINISTRADOR' ||
       cargo.includes('ADMINISTRADOR DE EMPRESA') ||
       cargo.includes('ADMIN EMPRESA')
     ) {
@@ -384,11 +388,10 @@ export function isIncidentsAdmin(user?: any): boolean {
 
     // 3. Administrador de Proyecto (Rol A según ISO 19650, creador o admins de proyecto)
     if (
-      role === 'ADMINISTRADOR_PROYECTO' ||
-      role === 'ADMIN_PROYECTO' ||
-      role === 'ADMIN_PROYECTO_A' ||
-      role === 'ROL_A' ||
-      role.includes('PROYECTO') ||
+      combinedRoles.includes('ADMINISTRADOR_PROYECTO') ||
+      combinedRoles.includes('ADMIN_PROYECTO') ||
+      combinedRoles.includes('ROL_A') ||
+      combinedRoles.includes('PROYECTO') ||
       cargo.includes('ADMINISTRADOR DE PROYECTO') ||
       cargo.includes('ADMIN PROYECTO') ||
       cargo.includes('LIDER') ||

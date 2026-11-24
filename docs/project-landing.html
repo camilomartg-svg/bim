@@ -870,7 +870,8 @@
 
       const isGlobalSuperAdmin = Boolean(userAccount && (userAccount.role === 'SUPER_ADMINISTRADOR' || userAccount.username === 'imagina3ddesign@gmail.com'));
       const licCheck = window.WompiModule ? window.WompiModule.canAccessProject(project, 3) : { canAccess: true, status: 'ACTIVE' };
-      const isProjectBlocked = !licCheck.canAccess && !isGlobalSuperAdmin;
+      // Solo los administradores (Super admin, Empresa admin, Proyecto admin) ven los bloqueos rojos
+      const isProjectBlocked = !licCheck.canAccess && !isGlobalSuperAdmin && isPaymentAdminUser;
 
       // Obtener representación de empresa del usuario en este proyecto (si existe)
       const userEmailForRep = userAccount ? (userAccount.username || userAccount.email || '').toLowerCase().trim() : '';

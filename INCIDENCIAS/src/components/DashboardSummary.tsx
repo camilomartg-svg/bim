@@ -1811,6 +1811,7 @@ function StatusManager({ issue, isBimPanel, isSuspended, isPaymentAdmin }: { iss
       )}
 
       <AssigneeSelectorModal
+        position="right"
         isOpen={showRedirectionPicker}
         onClose={() => setShowRedirectionPicker(false)}
         title={

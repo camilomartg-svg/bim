@@ -111,12 +111,15 @@
                         } else {
                             // Update role if changed
                             if (ua.role !== dbUser.rol) {
-                                const isEmpAdmin = ua.role === 'ADMINISTRADOR_EMPRESA' || ua.role === 'SUPER_ADMINISTRADOR';
-                                if (!isEmpAdmin || (dbUser.rol === 'SUPER_ADMINISTRADOR' || dbUser.rol === 'ADMINISTRADOR_EMPRESA')) {
-                                    ua.role = dbUser.rol;
-                                    const cacheLocation = localStorage.getItem('userAccount') ? 'localStorage' : 'sessionStorage';
-                                    window[cacheLocation].setItem('userAccount', JSON.stringify(ua));
-                                    window.location.reload();
+                                const currentRoleNorm = String(ua.role || '').toUpperCase().trim();
+                                const dbRolNorm = String(dbUser.rol || '').toUpperCase().trim();
+                                if (currentRoleNorm !== dbRolNorm && dbRolNorm) {
+                                    const isEmpAdmin = currentRoleNorm === 'ADMINISTRADOR_EMPRESA' || currentRoleNorm === 'SUPER_ADMINISTRADOR';
+                                    if (!isEmpAdmin || (dbRolNorm === 'SUPER_ADMINISTRADOR' || dbRolNorm === 'ADMINISTRADOR_EMPRESA')) {
+                                        ua.role = dbUser.rol;
+                                        const cacheLocation = localStorage.getItem('userAccount') ? 'localStorage' : 'sessionStorage';
+                                        window[cacheLocation].setItem('userAccount', JSON.stringify(ua));
+                                    }
                                 }
                             }
                         }
@@ -373,7 +376,8 @@
                             }
 
                             const licCheck = window.WompiModule ? window.WompiModule.canAccessProject(project, 3) : { canAccess: true, status: 'ACTIVE' };
-                            const isBlocked = !licCheck.canAccess && !isSuperAdmin;
+                            // Los bloqueos rojos solo se le muestran al Super Administrador, Administrador de Empresa y Administrador de Proyecto
+                            const isBlocked = !licCheck.canAccess && !isSuperAdmin && isPaymentAdminUser;
                             const isPaymentAdminUser = isSuperAdmin || (window.WompiModule && typeof window.WompiModule.isPaymentAdmin === 'function'
                                 ? window.WompiModule.isPaymentAdmin(userAccount, window.currentEmpresaData, project)
                                 : false);
