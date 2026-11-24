@@ -775,31 +775,71 @@
 
       const urlParamsProject = new URLSearchParams(window.location.search);
       const empresaIdProject = urlParamsProject.get('empresa');
-      if (empresaIdProject) {
-        fetch('empresas.json').then(r => r.json()).then(empresas => {
-          const cleanEmpIdProj = decodeURIComponent(empresaIdProject).trim();
-          const emp = empresas.find(e => 
-            e.id === cleanEmpIdProj || 
-            e.id === empresaIdProject || 
-            (e.name && e.name.toLowerCase() === cleanEmpIdProj.toLowerCase())
-          );
-          if (emp) {
-            window.currentCompanyData = emp;
-            const heroImageEl = document.getElementById('project-hero-image');
-            if (heroImageEl && emp.image) {
-              heroImageEl.style.backgroundImage = `url('${emp.image}')`;
-            }
-            const companyNameEl = document.getElementById('project-company-name');
-            if (companyNameEl) {
-              companyNameEl.textContent = emp.name;
-              companyNameEl.classList.remove('hidden');
-            }
+      let currentCompany = null;
+      let allEmpresas = [];
+
+      try {
+        const empResp = await fetch('empresas.json');
+        if (empResp.ok) {
+          allEmpresas = await empResp.json();
+          if (empresaIdProject && Array.isArray(allEmpresas)) {
+            const cleanEmpIdProj = decodeURIComponent(empresaIdProject).trim();
+            currentCompany = allEmpresas.find(e => 
+              e.id === cleanEmpIdProj || 
+              e.id === empresaIdProject || 
+              (e.name && e.name.toLowerCase() === cleanEmpIdProj.toLowerCase())
+            ) || null;
           }
-        }).catch(e => console.warn(e));
+        }
+      } catch (err) {
+        console.warn('Error fetching empresas.json:', err);
+      }
+
+      if (currentCompany) {
+        window.currentCompanyData = currentCompany;
+        const heroImageEl = document.getElementById('project-hero-image');
+        if (heroImageEl && currentCompany.image) {
+          heroImageEl.style.backgroundImage = `url('${currentCompany.image}')`;
+        }
+        const companyNameEl = document.getElementById('project-company-name');
+        if (companyNameEl) {
+          companyNameEl.textContent = currentCompany.name;
+          companyNameEl.classList.remove('hidden');
+        }
       } else {
         const heroImageEl = document.getElementById('project-hero-image');
         if (heroImageEl && config.portal?.heroImages?.length) {
           heroImageEl.style.backgroundImage = `url('${config.portal.heroImages[0]}')`;
+        }
+      }
+
+      // Sincronizar el rol y datos reales del usuario desde el directorio oficial de empresas
+      if (userAccount && Array.isArray(allEmpresas)) {
+        const uEmail = String(userAccount.email || userAccount.username || '').toLowerCase().trim();
+        let foundMember = null;
+        let isFoundInAdmins = false;
+        if (currentCompany) {
+          foundMember = Array.isArray(currentCompany.members) && currentCompany.members.find(m => String(m.email || m.username || '').toLowerCase().trim() === uEmail);
+          isFoundInAdmins = Array.isArray(currentCompany.admins) && currentCompany.admins.some(a => String(a).toLowerCase().trim() === uEmail);
+        }
+        if (!foundMember) {
+          for (const c of allEmpresas) {
+            const m = Array.isArray(c.members) && c.members.find(mb => String(mb.email || mb.username || '').toLowerCase().trim() === uEmail);
+            if (m) {
+              foundMember = m;
+              isFoundInAdmins = Array.isArray(c.admins) && c.admins.some(a => String(a).toLowerCase().trim() === uEmail);
+              break;
+            }
+          }
+        }
+        if (foundMember) {
+          const updatedRole = foundMember.role || (isFoundInAdmins ? 'ADMINISTRADOR_EMPRESA' : 'MIEMBRO');
+          userAccount.role = updatedRole;
+          if (foundMember.cargo !== undefined) userAccount.cargo = foundMember.cargo;
+          try {
+            sessionStorage.setItem('userAccount', JSON.stringify(userAccount));
+            localStorage.setItem('userAccount', JSON.stringify(userAccount));
+          } catch (_) {}
         }
       }
 
@@ -834,7 +874,10 @@
       const userEmailForRep = userAccount ? (userAccount.username || userAccount.email || '').toLowerCase().trim() : '';
       const repCompanyInProject = (project.iso19650 && project.iso19650.memberCompanies && project.iso19650.memberCompanies[userEmailForRep]) ||
                                   localStorage.getItem(`project_rep_company_${project.slug}_${userEmailForRep}`) ||
-                                  (project.id ? localStorage.getItem(`project_rep_company_${project.id}_${userEmailForRep}`) : null);
+                                  (project.id ? localStorage.getItem(`project_rep_company_${project.id}_${userEmailForRep}`) : null) ||
+                                  (project.iso19650 && project.iso19650.assignments && project.iso19650.assignments[userEmailForRep]?.empresa) ||
+                                  (project.members && project.members.find(m => (m.email || m.username || '').toLowerCase() === userEmailForRep)?.empresa) ||
+                                  (userAccount ? userAccount.empresaUsuario || userAccount.empresa || userAccount.company : null);
 
       const isPaymentAdminUser = isGlobalSuperAdmin || (window.WompiModule && typeof window.WompiModule.isPaymentAdmin === 'function'
         ? window.WompiModule.isPaymentAdmin(userAccount, window.currentCompanyData, project, repCompanyInProject)

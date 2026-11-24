@@ -225,37 +225,56 @@ window.WompiModule = (function () {
     if (!userAccount) return false;
     const email = String(userAccount.email || userAccount.username || '').toLowerCase().trim();
     const role = String(userAccount.role || '').toUpperCase().trim();
-    const cargo = String(userAccount.cargo || userAccount.position || '').toUpperCase().trim();
 
     // 1. Súper Administrador Global
-    if (role === 'SUPER_ADMINISTRADOR' || role === 'SUPERADMIN' || email === 'imagina3ddesign@gmail.com' || email === 'mcmartinezg@unal.edu.co') {
+    if (role === 'SUPER_ADMINISTRADOR' || role === 'SUPERADMIN' ||
+        email === 'imagina3ddesign@gmail.com' || email === 'mcmartinezg@unal.edu.co') {
       return true;
     }
 
-    // 2. Administrador de Proyecto / Líder de Proyecto
+    // 2. Administrador de Proyecto (ÚNICA Y EXCLUSIVAMENTE ROL A / ADJUDICADOR)
+    // NOTA CLAVE: El Líder de Equipo de Entrega (Rol B), Equipo de Entrega (Rol C),
+    // Líder de Obra (Rol D) y Equipo de Trabajo de Obra (Rol E) NO SON administradores de proyecto.
     if (projectData) {
       if (projectData.creatorEmail && String(projectData.creatorEmail).toLowerCase().trim() === email) return true;
       if (projectData.creatorId && projectData.creatorId === userAccount.id) return true;
       if (Array.isArray(projectData.admins) && projectData.admins.some(a => String(a).toLowerCase().trim() === email)) return true;
+
+      // ISO 19650 Rol A: Administrador de Proyecto / Adjudicador
+      if (projectData.iso19650 && projectData.iso19650.leaders) {
+        const leadA = projectData.iso19650.leaders.adminProyecto ||
+                      projectData.iso19650.leaders.adjudicador ||
+                      projectData.iso19650.leaders.rolA ||
+                      projectData.iso19650.leaders.admin;
+        if (leadA) {
+          const leadEmail = typeof leadA === 'string' ? leadA : (leadA.email || leadA.username || '');
+          if (String(leadEmail).toLowerCase().trim() === email) return true;
+        }
+      }
+
+      // Miembro del proyecto con rol explícito de Administrador de Proyecto (Rol A)
       if (Array.isArray(projectData.members)) {
         const pMember = projectData.members.find(m => {
           const mEmail = (typeof m === 'string' ? m : m.email || m.username || '').toLowerCase().trim();
           return mEmail === email;
         });
         if (pMember && typeof pMember === 'object') {
-          const mRole = String(pMember.role || pMember.cargo || '').toUpperCase();
-          if (mRole.includes('ADMIN') || mRole.includes('LIDER') || mRole.includes('LÍDER')) return true;
+          const mRole = String(pMember.role || '').toUpperCase().trim();
+          // Excluir terminantemente LIDER_EQUIPO_ENTREGA (Rol B) o LIDER_OBRA (Rol D)
+          if (mRole === 'ADMINISTRADOR_PROYECTO' || mRole === 'ADMIN_PROYECTO' || mRole === 'ADMIN_PROYECTO_A' || mRole === 'ROL_A') {
+            return true;
+          }
         }
       }
     }
-    if (role === 'ADMINISTRADOR_PROYECTO' || role === 'ADMIN_PROYECTO' ||
-        cargo.includes('ADMINISTRADOR DE PROYECTO') || cargo.includes('ADMIN PROYECTO')) {
+
+    if (role === 'ADMINISTRADOR_PROYECTO' || role === 'ADMIN_PROYECTO') {
       return true;
     }
 
-    // 3. Administrador de Empresa propietaria del proyecto
+    // 3. Administrador de Empresa (Empresa anfitriona / dueña del proyecto)
     // Si el usuario en este proyecto seleccionó representar a una empresa externa diferente a la dueña del proyecto,
-    // NO actúa como administrador de la empresa dueña en este proyecto (es un colaborador/contratista externo).
+    // actúa como colaborador/contratista externo en este proyecto y NO tiene rol administrativo de pago sobre el proyecto anfitrión.
     const hostCompanyName = companyData ? String(companyData.name || '').trim().toLowerCase() : '';
     const repCompName = representedCompany ? String(representedCompany).trim().toLowerCase() : '';
 
@@ -266,15 +285,19 @@ window.WompiModule = (function () {
     if (companyData) {
       const inAdmins = Array.isArray(companyData.admins) && companyData.admins.some(a => String(a).toLowerCase().trim() === email);
       if (inAdmins) return true;
+
       const inMembers = Array.isArray(companyData.members) && companyData.members.some(m => {
         const mEmail = String(m.email || m.username || '').toLowerCase().trim();
-        const mRole = String(m.role || m.cargo || '').toUpperCase();
-        return mEmail === email && (mRole.includes('ADMIN_EMPRESA') || mRole.includes('ADMINISTRADOR_EMPRESA') || mRole === 'ADMINISTRADOR');
+        const mRole = String(m.role || '').toUpperCase().trim();
+        return mEmail === email && (mRole === 'ADMIN_EMPRESA' || mRole === 'ADMINISTRADOR_EMPRESA');
       });
       if (inMembers) return true;
+
+      // Si companyData está presente y el usuario no figura en admins ni miembros administradores, no es admin de empresa
+      return false;
     } else {
-      if (role === 'ADMINISTRADOR_EMPRESA' || role === 'ADMIN_EMPRESA' || role === 'ADMINISTRADOR' ||
-          cargo.includes('ADMINISTRADOR DE EMPRESA') || cargo.includes('ADMIN EMPRESA')) {
+      // Fallback sin companyData: Solo si su rol estricto de sistema es ADMINISTRADOR_EMPRESA
+      if (role === 'ADMINISTRADOR_EMPRESA' || role === 'ADMIN_EMPRESA') {
         return true;
       }
     }
