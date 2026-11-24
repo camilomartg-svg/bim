@@ -30,7 +30,7 @@ interface IssueDetailProps {
 
 export default function IssueDetail({ issue: initialIssue, onClose, onOpenReport }: IssueDetailProps) {
   const [issue, setIssue] = useState<Issue>(initialIssue);
-  const [comments, setComments] = useState<Comment[]>([]);
+  const [comments, setComments] = useState<Comment[]>(initialIssue.comments || []);
   const [newComment, setNewComment] = useState('');
   const [isUpdating, setIsUpdating] = useState(false);
   const [showConfirmDelete, setShowConfirmDelete] = useState(false);
@@ -151,27 +151,18 @@ export default function IssueDetail({ issue: initialIssue, onClose, onOpenReport
         ...(webViewLink ? { webViewLink } : {})
       };
 
-      // Update Issue's attachments
+      // Update Issue's attachments and post system comment in Drive JSON
       const updatedAttachments = [...(issue.attachments || []), attachment];
-      await updateDoc(doc(db, 'issues', issue.id), {
-        attachments: updatedAttachments,
-        updatedAt: new Date().toISOString()
-      });
-
-      setIssue(prev => ({
-        ...prev,
-        attachments: updatedAttachments
-      }));
-
-      // Post a system comment in the chat
-      await addDoc(collection(db, 'issues', issue.id, 'comments'), {
-        userId: user?.id || 'system',
-        userName: user?.name || 'SISTEMA',
-        text: `📸 NUEVA EVIDENCIA DE CAMPO CARGADA:\n• El usuario ha subido el archivo **${file.name}** directamente desde el panel de control del hallazgo.${driveFileId ? ' Sincronizado en el repositorio oficial de Google Drive.' : ''}`,
-        createdAt: new Date().toISOString(),
-        userAvatar: user?.name ? user.name.charAt(0) : 'S',
-        attachments: [attachment]
-      });
+      await persistIssueAndComment(
+        { attachments: updatedAttachments },
+        {
+          userId: user?.id || 'system',
+          userName: user?.name || 'SISTEMA',
+          text: `📸 NUEVA EVIDENCIA DE CAMPO CARGADA:\n• El usuario ha subido el archivo **${file.name}** directamente desde el panel de control del hallazgo.${driveFileId ? ' Sincronizado en el repositorio oficial de Google Drive.' : ''}`,
+          userAvatar: user?.name ? user.name.charAt(0) : 'S',
+          attachments: [attachment]
+        }
+      );
 
       // Sync directly to the parent report document
       const reportId = issue.sourceReportId || (issue.id.startsWith('issue_e_apr_') ? issue.id.replace('issue_e_apr_', '') : null);
@@ -231,18 +222,10 @@ export default function IssueDetail({ issue: initialIssue, onClose, onOpenReport
         acopioAreaRecuperada: calculatedArea,
         updatedAt: new Date().toISOString()
       };
-      await updateDoc(doc(db, 'issues', issue.id), updateData);
-      
-      setIssue(prev => ({
-        ...prev,
-        ...updateData
-      }));
-
-      await addDoc(collection(db, 'issues', issue.id, 'comments'), {
+      await persistIssueAndComment(updateData, {
         userId: user?.id || 'system',
         userName: user?.name || 'SISTEMA',
-        text: `📊 ACTUALIZACIÓN DE ACOPIO: Largo: ${numLargo}m, Ancho: ${numAncho}m, Alto: ${numAlto}m | Área final recuperada: ${calculatedArea.toFixed(1)}m² | Volumen total reutilizado: ${calculatedVolumen.toFixed(1)}m³ (Duración: ${duracion || 0} días).`,
-        createdAt: new Date().toISOString()
+        text: `📊 ACTUALIZACIÓN DE ACOPIO: Largo: ${numLargo}m, Ancho: ${numAncho}m, Alto: ${numAlto}m | Área final recuperada: ${calculatedArea.toFixed(1)}m² | Volumen total reutilizado: ${calculatedVolumen.toFixed(1)}m³ (Duración: ${duracion || 0} días).`
       });
 
       // Synchronize directly with parent report and update the logs accordingly
@@ -355,22 +338,22 @@ export default function IssueDetail({ issue: initialIssue, onClose, onOpenReport
   };
 
   useEffect(() => {
-    const unsubIssue = onSnapshot(doc(db, 'issues', initialIssue.id), (doc) => {
-      if (doc.exists()) {
-        setIssue({ id: doc.id, ...doc.data() } as Issue);
+    setIssue(initialIssue);
+    setComments(initialIssue.comments || []);
+
+    const handleIncidentsUpdated = (e: any) => {
+      const list: Issue[] = e.detail?.incidents || [];
+      const found = list.find((i) => i.id === initialIssue.id);
+      if (found) {
+        setIssue(found);
+        setComments(found.comments || []);
       }
-    });
-
-    const q = query(collection(db, 'issues', initialIssue.id, 'comments'), orderBy('createdAt', 'asc'));
-    const unsubComments = onSnapshot(q, (snapshot) => {
-      setComments(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Comment)));
-    });
-
-    return () => {
-      unsubIssue();
-      unsubComments();
     };
-  }, [initialIssue.id]);
+    window.addEventListener('nora_incidents_updated', handleIncidentsUpdated);
+    return () => {
+      window.removeEventListener('nora_incidents_updated', handleIncidentsUpdated);
+    };
+  }, [initialIssue]);
 
   useEffect(() => {
     const unsubscribe = subscribeToTeam((teamData) => {
@@ -385,6 +368,33 @@ export default function IssueDetail({ issue: initialIssue, onClose, onOpenReport
     });
     return () => unsubscribe();
   }, []);
+
+  const persistIssueAndComment = async (updateData: Record<string, any>, commentPayload?: { userId?: string; userName?: string; text: string; attachments?: any[]; userAvatar?: string }) => {
+    let updatedComments = [...(issue.comments || comments || [])];
+    if (commentPayload && commentPayload.text) {
+      const newCommentObj: Comment = {
+        id: 'cm_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6),
+        userId: commentPayload.userId || user?.id || 'system',
+        userName: commentPayload.userName || user?.name || 'SISTEMA',
+        text: commentPayload.text,
+        createdAt: new Date().toISOString(),
+        ...(commentPayload.attachments ? { attachments: commentPayload.attachments } : {}),
+        ...(commentPayload.userAvatar ? { userAvatar: commentPayload.userAvatar } : {})
+      } as any;
+      updatedComments.push(newCommentObj);
+    }
+    const mergedIssue: Issue = {
+      ...issue,
+      ...updateData,
+      comments: updatedComments,
+      ...(commentPayload ? { lastComment: commentPayload.text, lastCommentAt: new Date().toISOString() } : {}),
+      updatedAt: new Date().toISOString()
+    } as Issue;
+    setIssue(mergedIssue);
+    setComments(updatedComments);
+    await saveIssue(mergedIssue);
+    return mergedIssue;
+  };
 
   const getEffectiveStatus = (issue: Issue): string => {
     if (issue.status === 'ACUERDO') return 'ACUERDO';
@@ -435,27 +445,21 @@ export default function IssueDetail({ issue: initialIssue, onClose, onOpenReport
         updateData.resolvedAt = new Date().toISOString();
       }
 
-      // Reset approval chain on rejection to enable the process again
+      let rejectionComment: { text: string } | undefined;
       if (status === 'RECHAZADA') {
         if (issue.executor) {
-          updateData['executor.approved'] = false;
-          updateData['executor.approvedAt'] = null;
+          updateData.executor = { ...issue.executor, approved: false, approvedAt: null };
         }
         updateData.collaboratorApproved = false;
         updateData.collaboratorApprovedAt = null;
         updateData.principalApproved = false;
         updateData.principalApprovedAt = null;
-        
-        // Add comment for traceability
-        await addDoc(collection(db, 'issues', issue.id, 'comments'), {
-          userId: user?.id || 'system',
-          userName: user?.name || 'SISTEMA',
-          text: `RESPUESTA RECHAZADA: ${extra?.rejectionReason || 'No se proporcionó motivo.'}`,
-          createdAt: new Date().toISOString()
-        });
+        rejectionComment = {
+          text: `RESPUESTA RECHAZADA: ${extra?.rejectionReason || 'No se proporcionó motivo.'}`
+        };
       }
 
-      await updateDoc(doc(db, 'issues', issue.id), updateData);
+      await persistIssueAndComment(updateData, rejectionComment);
       await syncIssueStatusToParentReport(issue, status);
       setShowAgreementPicker(false);
       setShowRejectionPicker(false);
@@ -492,15 +496,10 @@ export default function IssueDetail({ issue: initialIssue, onClose, onOpenReport
         return;
       }
 
-      await updateDoc(doc(db, 'issues', issue.id), updateData);
-      await syncIssueStatusToParentReport(issue, 'REVISION_RESPONSABLE');
-      
-      await addDoc(collection(db, 'issues', issue.id, 'comments'), {
-        userId: user?.id || 'system',
-        userName: user?.name || 'SISTEMA',
-        text: `CONFIRMACIÓN DE FASE: Visto Bueno (${actionText}) registrado por ${user?.name}. Se habilita siguiente etapa en la cadena de aprobación.`,
-        createdAt: new Date().toISOString()
+      await persistIssueAndComment(updateData, {
+        text: `CONFIRMACIÓN DE FASE: Visto Bueno (${actionText}) registrado por ${user?.name}. Se habilita siguiente etapa en la cadena de aprobación.`
       });
+      await syncIssueStatusToParentReport(issue, 'REVISION_RESPONSABLE');
     } catch (err) {
       console.error(err);
       alert("Error al confirmar respuesta parcial.");
@@ -519,15 +518,10 @@ export default function IssueDetail({ issue: initialIssue, onClose, onOpenReport
         principalApprovedAt: new Date().toISOString()
       };
 
-      await updateDoc(doc(db, 'issues', issue.id), updateData);
-      await syncIssueStatusToParentReport(issue, 'RESPONDIDA');
-      
-      await addDoc(collection(db, 'issues', issue.id, 'comments'), {
-        userId: user?.id || 'system',
-        userName: user?.name || 'SISTEMA',
-        text: `RESPUESTA FINALIZADA: Respuesta técnica definitiva aprobada por el Responsable Inicial (${user?.name}).`,
-        createdAt: new Date().toISOString()
+      await persistIssueAndComment(updateData, {
+        text: `RESPUESTA FINALIZADA: Respuesta técnica definitiva aprobada por el Responsable Inicial (${user?.name}).`
       });
+      await syncIssueStatusToParentReport(issue, 'RESPONDIDA');
     } catch (err) {
       console.error(err);
       alert("Error al finalizar respuesta técnica.");
@@ -540,11 +534,10 @@ export default function IssueDetail({ issue: initialIssue, onClose, onOpenReport
     e.preventDefault();
     if (!newComment.trim() || !user) return;
     try {
-      await addDoc(collection(db, 'issues', issue.id, 'comments'), {
+      await persistIssueAndComment({}, {
         userId: user.id,
         userName: user.name,
-        text: newComment,
-        createdAt: new Date().toISOString(),
+        text: newComment
       });
       setNewComment('');
     } catch (err) { 
@@ -601,15 +594,8 @@ export default function IssueDetail({ issue: initialIssue, onClose, onOpenReport
         roleText = 'nuevo responsable';
       }
 
-      console.log('[IssueDetail] updateDoc payload:', updateData);
-      await updateDoc(doc(db, 'issues', issue.id), updateData);
-      
-      // Add a system comment about the redirection
-      await addDoc(collection(db, 'issues', issue.id, 'comments'), {
-        userId: user?.id || 'system',
-        userName: user?.name || 'SISTEMA',
-        text: `Incidencia redirigida a ${member.name} (${member.position}) como ${roleText}.`,
-        createdAt: new Date().toISOString()
+      await persistIssueAndComment(updateData, {
+        text: `Incidencia redirigida a ${member.name} (${member.position}) como ${roleText}.`
       });
 
       setShowRedirectionPicker(false);
@@ -1933,12 +1919,10 @@ export default function IssueDetail({ issue: initialIssue, onClose, onOpenReport
             setIsUpdating(true);
             const newReviewers = selectedMembers.map(m => m.position || m.name);
             const newEmails = selectedMembers.map(m => m.email).filter(Boolean);
-            await updateDoc(doc(db, 'issues', issue.id), {
+            await persistIssueAndComment({
               reviewers: newReviewers,
-              reviewerEmails: newEmails,
-              updatedAt: new Date().toISOString()
+              reviewerEmails: newEmails
             });
-            setIssue(prev => ({ ...prev, reviewers: newReviewers, reviewerEmails: newEmails }));
             setIsReviewersModalOpen(false);
           } catch (err) {
             console.error('Error updating reviewers:', err);

@@ -1,3 +1,4 @@
+import { subscribeToIssues } from '../services/firebaseService';
 import React, { useState, useEffect } from 'react';
 import { collection, query, getDocs } from 'firebase/firestore';
 import { db } from '../services/firebase';
@@ -43,22 +44,11 @@ export default function ReportGenerator() {
   const [selectedFields, setSelectedFields] = useState<string[]>(['code', 'title', 'status', 'degreeOfAction', 'specialty', 'creatorName']);
 
   useEffect(() => {
-    const fetchData = async () => {
-      try {
-        const qIssues = query(collection(db, 'issues'));
-        const snapshotIssues = await getDocs(qIssues);
-        setIssues(snapshotIssues.docs.map(doc => ({ id: doc.id, ...doc.data() } as Issue)));
-
-        const qReports = query(collection(db, 'reports'));
-        const snapshotReports = await getDocs(qReports);
-        setReports(snapshotReports.docs.map(doc => ({ id: doc.id, ...doc.data() } as any)));
-      } catch (err) {
-        console.error("Error fetching metrics data:", err);
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchData();
+    const unsub = subscribeToIssues((fetchedIssues) => {
+      setIssues(fetchedIssues);
+      setLoading(false);
+    });
+    return () => unsub();
   }, []);
 
   // General Issue Stats

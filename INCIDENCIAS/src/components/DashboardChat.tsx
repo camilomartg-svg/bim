@@ -266,15 +266,7 @@ export default function DashboardChat({ selectedIssue, isSuspended, isPaymentAdm
 
     window.dispatchEvent(new CustomEvent('local_comments_updated', { detail: [updatedIssue] }));
 
-    try {
-      await addDoc(collection(db, 'issues', activeIssue.id, 'comments'), newComment);
-      await updateDoc(doc(db, 'issues', activeIssue.id), {
-        lastComment: newComment.text,
-        lastCommentAt: newComment.createdAt,
-        updatedAt: new Date().toISOString(),
-        ...(extraIssueFields || {})
-      });
-    } catch (_) {}
+    // Guardado directamente en el JSON de la incidencia en Google Drive vía saveIssue(updatedIssue)
 
     return newComment;
   };
@@ -658,10 +650,7 @@ Se ha registrado una nueva evidencia tomada durante el proceso de aprovechamient
         ];
       }
 
-      await updateDoc(doc(db, 'issues', activeIssue.id), {
-        ...updatePayload,
-        updatedAt: new Date().toISOString()
-      });
+      // Se sincroniza mediante postCommentAndSync -> saveIssue
 
       let reviewLabel = "";
       if (isMedicion) {
@@ -740,21 +729,7 @@ Se ha registrado una nueva evidencia tomada durante el proceso de aprovechamient
     // 3. Suscripción secundaria Firestore
     let unsubscribeFirestore: any = null;
     try {
-      const q = query(collection(db, 'issues', selectedIssue.id, 'comments'), orderBy('createdAt', 'asc'));
-      unsubscribeFirestore = onSnapshot(q, (snapshot) => {
-        if (!snapshot.empty) {
-          const messagesData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Comment));
-          setMessages(messagesData);
-          setLoading(false);
-          setTimeout(() => {
-            if (scrollRef.current) {
-              scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-            }
-          }, 100);
-        }
-      }, () => {
-        setLoading(false);
-      });
+      // Comentarios leídos directamente desde el JSON de la incidencia en Google Drive
     } catch (_) {
       setLoading(false);
     }
@@ -801,6 +776,7 @@ Se ha registrado una nueva evidencia tomada durante el proceso de aprovechamient
 
     let messageText = textTrimmed;
     let commentAttachments: any[] = [];
+    let extraFieldsForIssue: Record<string, any> | undefined;
 
     try {
       if (hasForm) {
@@ -924,7 +900,7 @@ Se ha registrado una nueva evidencia tomada durante el proceso de aprovechamient
           }
 
           // 1. Update issue state on firestore with custom Aprovechamiento cumulative fields
-          await updateDoc(doc(db, 'issues', activeIssue.id), cumulativePayload);
+          extraFieldsForIssue = cumulativePayload;
 
           // 2. Format custom message for Aprovechamiento chat
           messageText = `🌳 **[REGISTRO DE APROVECHAMIENTO Y REUTILIZACIÓN RCD]**
@@ -1051,7 +1027,7 @@ ${textTrimmed || 'Sin observaciones adicionales registradas.'}`;
             }
           }
 
-          await updateDoc(doc(db, 'issues', activeIssue.id), updatePayload);
+          extraFieldsForIssue = updatePayload;
 
           const formMsgText = `📦 **[RESPUESTA DE CONTROL DE ACOPIO - CUBICACIÓN]**
 • **Largo del Espacio**: ${numLargo} ml
@@ -1078,7 +1054,7 @@ ${textTrimmed ? `\n• **Sustento / Observaciones**: ${textTrimmed}` : ''}`;
       await postCommentAndSync({
         text: messageText,
         attachments: commentAttachments
-      });
+      }, extraFieldsForIssue);
 
       if (!hasForm) {
         setNewMessage('');

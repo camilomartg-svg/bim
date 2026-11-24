@@ -1,5 +1,6 @@
 /**
  * Google Drive integration utilities via secure Google Apps Script Gateway.
+ * Everything is stored under INCIDENTS_DRIVE_FOLDER_ID (1-9SumRefiih81mc_eASsswy_W_U0-qe5) -> [Empresa] -> [Proyecto]
  */
 
 interface DriveUploadResult {
@@ -18,36 +19,74 @@ export type StoredStructuralUnit = {
 // Nora Google Apps Script Gateway (Shared Drive storage engine)
 export const FILES_GATEWAY_URL = "https://script.google.com/macros/s/AKfycbx2RAQx_8K4o22xE0Mw-ETc7K_58vIoi6-PgVi64u80inuiw144ks3cgWSdCtXqIgB02g/exec";
 export const INCIDENCES_CONFIG_SCRIPT_URL = import.meta.env.VITE_INCIDENCIAS_CONFIG_SCRIPT_URL?.trim() || FILES_GATEWAY_URL;
-const APPS_SCRIPT_TIMEOUT_MS = 30_000;
+const APPS_SCRIPT_TIMEOUT_MS = 25_000;
+
+export const INCIDENTS_DRIVE_FOLDER_ID = '1-9SumRefiih81mc_eASsswy_W_U0-qe5';
+
+// Known Company ID -> Official Name mapping from empresas.json
+const KNOWN_COMPANIES_MAP: Record<string, string> = {
+  'empresa-1786128422720': 'Mesh Estudio SAS',
+  'empresa-1786449580850': 'HIDROSANITARIO SAS',
+  'empresa-1786449656145': 'ELECTRICOS SAS',
+  'empresa-1793619605466': 'GLITCH',
+  'EMPRESA_PRUEBA': 'Nueva Empresa'
+};
+
+export function registerCompanyName(companyId: string, companyName: string) {
+  if (!companyId || !companyName) return;
+  KNOWN_COMPANIES_MAP[companyId] = companyName.trim();
+  try {
+    const raw = localStorage.getItem('nora_companies_map');
+    const parsed = raw ? JSON.parse(raw) : {};
+    parsed[companyId] = companyName.trim();
+    localStorage.setItem('nora_companies_map', JSON.stringify(parsed));
+  } catch (_) {}
+}
 
 export function getHumanCompanyAndProject(companyId: string, projectId: string): { companyName: string; projectName: string } {
-  let companyName = companyId;
-  let projectName = projectId;
+  let companyName = companyId || 'Empresa';
+  let projectName = projectId || 'Proyecto';
 
   try {
+    // 1. Resolve Company Name by companyId (NEVER overwrite with logged-in user's personal company!)
+    if (KNOWN_COMPANIES_MAP[companyId]) {
+      companyName = KNOWN_COMPANIES_MAP[companyId];
+    } else {
+      const rawMap = localStorage.getItem('nora_companies_map');
+      if (rawMap) {
+        const parsedMap = JSON.parse(rawMap);
+        if (parsedMap[companyId]) {
+          companyName = parsedMap[companyId];
+        }
+      }
+    }
+
+    if (companyName === companyId) {
+      const rawComp = sessionStorage.getItem('currentCompany') || localStorage.getItem('currentCompany');
+      if (rawComp) {
+        const c = JSON.parse(rawComp);
+        if (c && (c.id === companyId || !companyId || companyId === 'default') && c.name && c.name.trim()) {
+          companyName = c.name.trim();
+          registerCompanyName(companyId, companyName);
+        }
+      }
+    }
+
+    // 2. Resolve Project Name
     const urlParams = new URLSearchParams(window.location.search);
     const driveFolderName = urlParams.get('driveFolderName');
-    if (driveFolderName) {
+    if (driveFolderName && driveFolderName.trim()) {
       projectName = decodeURIComponent(driveFolderName).replace(/\+/g, ' ').trim();
-    }
-
-    const rawProj = sessionStorage.getItem('activeProject') || localStorage.getItem('activeProject');
-    if (rawProj) {
-      const p = JSON.parse(rawProj);
-      if (p.name && p.name.trim()) projectName = p.name.trim();
-    }
-
-    const rawComp = sessionStorage.getItem('currentCompany') || localStorage.getItem('currentCompany');
-    if (rawComp) {
-      const c = JSON.parse(rawComp);
-      if (c.name && c.name.trim()) companyName = c.name.trim();
-    }
-
-    const rawUser = sessionStorage.getItem('userAccount') || localStorage.getItem('userAccount');
-    if (rawUser) {
-      const u = JSON.parse(rawUser);
-      if (u.empresa && u.empresa.trim() && (companyName === companyId || !companyName)) {
-        companyName = u.empresa.trim();
+    } else {
+      const rawProj = sessionStorage.getItem('activeProject') || localStorage.getItem('activeProject');
+      if (rawProj) {
+        const p = JSON.parse(rawProj);
+        if (p && (p.slug === projectId || p.id === projectId || !projectId || projectId === 'default')) {
+          const pName = p.dataSources?.driveFolderName || p.name || p.title;
+          if (pName && pName.trim()) {
+            projectName = pName.trim();
+          }
+        }
       }
     }
   } catch (e) {
@@ -57,7 +96,7 @@ export function getHumanCompanyAndProject(companyId: string, projectId: string):
   return { companyName, projectName };
 }
 
-async function postToAppsScript(payload: unknown): Promise<any> {
+export async function postToAppsScript(payload: unknown): Promise<any> {
   const targetUrl = INCIDENCES_CONFIG_SCRIPT_URL || FILES_GATEWAY_URL;
   const controller = new AbortController();
   const timeout = window.setTimeout(() => controller.abort(), APPS_SCRIPT_TIMEOUT_MS);
@@ -72,7 +111,7 @@ async function postToAppsScript(payload: unknown): Promise<any> {
     return await response.json();
   } catch (error: any) {
     if (error?.name === 'AbortError') {
-      throw new Error('Drive tardó más de 30 segundos en responder. Verifica el despliegue del Apps Script.');
+      throw new Error('Drive tardó demasiado en responder.');
     }
     throw error;
   } finally {
@@ -80,54 +119,295 @@ async function postToAppsScript(payload: unknown): Promise<any> {
   }
 }
 
-// Shared project repository. The Apps Script gateway owns the Drive access,
-// so each user can save records without connecting a personal Google account.
-export const INCIDENTS_DRIVE_FOLDER_ID =
-  '1-9SumRefiih81mc_eASsswy_W_U0-qe5';
+function utf8ToBase64(str: string): string {
+  const utf8Bytes = new TextEncoder().encode(str);
+  let binary = '';
+  const chunkSize = 0x8000;
+  for (let i = 0; i < utf8Bytes.length; i += chunkSize) {
+    binary += String.fromCharCode.apply(null, Array.from(utf8Bytes.subarray(i, i + chunkSize)));
+  }
+  return btoa(binary);
+}
 
+// In-memory deduplication for folder resolution
+const folderResolvePromises = new Map<string, Promise<string>>();
+
+/**
+ * Resolves the exact Google Drive Project Folder ID inside INCIDENTS_DRIVE_FOLDER_ID:
+ * 1-9SumRefiih81mc_eASsswy_W_U0-qe5 -> [Empresa] -> [Proyecto]
+ * Never uses URL driveFolderId (which belongs to the 3D/2D CDE models folder).
+ */
+export async function resolveIncidentsProjectFolderId(companyId: string, projectId: string): Promise<string> {
+  const { companyName, projectName } = getHumanCompanyAndProject(companyId, projectId);
+  const cacheKey = `nora_inc_folder_v2_${companyName}_${projectName}`;
+
+  try {
+    const cached = localStorage.getItem(cacheKey);
+    if (cached && cached.trim().length > 10) {
+      return cached.trim();
+    }
+  } catch (_) {}
+
+  const existingPromise = folderResolvePromises.get(cacheKey);
+  if (existingPromise) return existingPromise;
+
+  const promise = (async () => {
+    try {
+      const data = await postToAppsScript({
+        action: 'saveIncidentsProjectConfig',
+        company: { id: companyId, name: companyName },
+        companyName,
+        project: { id: projectId, slug: projectId, name: projectName },
+        projectName
+      });
+      const folderId = data?.storage?.projectFolderId || data?.projectFolderId;
+      if (folderId && String(folderId).trim().length > 10) {
+        const cleanId = String(folderId).trim();
+        try {
+          localStorage.setItem(cacheKey, cleanId);
+        } catch (_) {}
+        return cleanId;
+      }
+    } catch (err) {
+      console.warn('[googleDriveUtils] Error resolving projectFolderId from gateway:', err);
+    } finally {
+      folderResolvePromises.delete(cacheKey);
+    }
+    return '1Gotb8NKYre22k1p5LrvcuG23z79TvAMl';
+  })();
+
+  folderResolvePromises.set(cacheKey, promise);
+  return promise;
+}
+
+// Short-lived cache for folder file listings so config, locations, and incidents share 1 list call
+const listFolderCache = new Map<string, { timestamp: number; promise: Promise<any[]> }>();
+
+export async function listIncidentsFolderFiles(companyId: string, projectId: string, forceRefresh = false): Promise<any[]> {
+  const folderId = await resolveIncidentsProjectFolderId(companyId, projectId);
+  const now = Date.now();
+  const cached = listFolderCache.get(folderId);
+  if (!forceRefresh && cached && (now - cached.timestamp < 2500)) {
+    return cached.promise;
+  }
+
+  const promise = (async () => {
+    try {
+      const listData = await postToAppsScript({
+        action: 'list',
+        folderId
+      });
+      return Array.isArray(listData?.allModels) ? listData.allModels : [];
+    } catch (err) {
+      console.warn('[googleDriveUtils] Error listing folder files:', err);
+      return [];
+    }
+  })();
+
+  listFolderCache.set(folderId, { timestamp: now, promise });
+  return promise;
+}
+
+export function invalidateIncidentsFolderListCache(companyId: string, projectId: string) {
+  listFolderCache.clear();
+}
+
+/**
+ * Saves the full Incidencias project configuration (including locations) as config_incidencias.json
+ * inside 1-9SumRefiih81mc_eASsswy_W_U0-qe5 -> [Empresa] -> [Proyecto]
+ */
 export async function saveIncidentsConfigToSheet(
   config: unknown,
   companyId: string,
   projectId: string
-): Promise<{ spreadsheetUrl: string; projectFolderId?: string; companyFolderId?: string }> {
+): Promise<{ spreadsheetUrl?: string; projectFolderId?: string; fileId?: string }> {
+  const folderId = await resolveIncidentsProjectFolderId(companyId, projectId);
+  const jsonStr = JSON.stringify(config, null, 2);
+  const base64 = utf8ToBase64(jsonStr);
+
+  // 1. Save config_incidencias.json directly in the project folder
+  const uploadRes = await postToAppsScript({
+    action: 'uploadFile',
+    folderId,
+    filename: 'config_incidencias.json',
+    name: 'config_incidencias.json',
+    contentType: 'application/json',
+    mimeType: 'application/json',
+    content: base64,
+    base64
+  });
+
+  if (uploadRes?.status === 'error' || uploadRes?.error) {
+    throw new Error(uploadRes.message || uploadRes.error || 'No se pudo guardar config_incidencias.json en Drive.');
+  }
+
+  invalidateIncidentsFolderListCache(companyId, projectId);
+
+  // 2. Also sync spreadsheet backup in the background without blocking UI
   const { companyName, projectName } = getHumanCompanyAndProject(companyId, projectId);
-  const result = await postToAppsScript({
+  postToAppsScript({
     action: 'saveIncidentsProjectConfig',
     company: { id: companyId, name: companyName },
-    companyId: companyId,
-    companyName: companyName,
+    companyId,
+    companyName,
     project: { id: projectId, slug: projectId, name: projectName },
-    projectId: projectId,
+    projectId,
     projectSlug: projectId,
-    projectName: projectName,
+    projectName,
     config
-  });
-  if (result.status !== 'success') throw new Error(result.message || 'No se pudo guardar la configuración en Drive.');
-  return result.storage;
+  }).catch(() => {});
+
+  return {
+    projectFolderId: folderId,
+    fileId: uploadRes?.fileId || uploadRes?.id
+  };
 }
 
-/** Keeps the location hierarchy in the project's Drive spreadsheet as a durable fallback. */
+/**
+ * Loads config_incidencias.json from 1-9SumRefiih81mc_eASsswy_W_U0-qe5 -> [Empresa] -> [Proyecto]
+ */
+export async function loadIncidentsConfigFromSheet(companyId: string, projectId: string): Promise<any | null> {
+  try {
+    const files = await listIncidentsFolderFiles(companyId, projectId);
+    const configFiles = files
+      .filter((f: any) => f.name === 'config_incidencias.json')
+      .sort((a: any, b: any) => new Date(b.lastUpdated || 0).getTime() - new Date(a.lastUpdated || 0).getTime());
+
+    if (configFiles.length === 0) return null;
+    const latestFile = configFiles[0];
+
+    const fileCacheKey = `nora_cfg_file_${latestFile.fileId}`;
+    try {
+      const cachedRaw = localStorage.getItem(fileCacheKey);
+      if (cachedRaw) {
+        const parsed = JSON.parse(cachedRaw);
+        if (parsed && parsed.lastUpdated === latestFile.lastUpdated && parsed.data) {
+          return parsed.data;
+        }
+      }
+    } catch (_) {}
+
+    const textData = await postToAppsScript({
+      action: 'text',
+      id: latestFile.fileId
+    });
+
+    if (textData && textData.text) {
+      const parsedConfig = JSON.parse(textData.text);
+      try {
+        localStorage.setItem(fileCacheKey, JSON.stringify({
+          lastUpdated: latestFile.lastUpdated,
+          data: parsedConfig
+        }));
+      } catch (_) {}
+      return parsedConfig;
+    }
+  } catch (e) {
+    console.warn('Could not load config_incidencias.json from Google Drive:', e);
+  }
+  return null;
+}
+
+/**
+ * Saves the complete array of structural units (locations/spaces) as ubicaciones_incidencias.json
+ * inside 1-9SumRefiih81mc_eASsswy_W_U0-qe5 -> [Empresa] -> [Proyecto]
+ */
+export async function saveAllIncidentsLocationsToDrive(
+  units: StoredStructuralUnit[],
+  companyId: string,
+  projectId: string
+): Promise<void> {
+  const folderId = await resolveIncidentsProjectFolderId(companyId, projectId);
+  const jsonStr = JSON.stringify(units, null, 2);
+  const base64 = utf8ToBase64(jsonStr);
+
+  await postToAppsScript({
+    action: 'uploadFile',
+    folderId,
+    filename: 'ubicaciones_incidencias.json',
+    name: 'ubicaciones_incidencias.json',
+    contentType: 'application/json',
+    mimeType: 'application/json',
+    content: base64,
+    base64
+  });
+
+  invalidateIncidentsFolderListCache(companyId, projectId);
+}
+
+/** Keeps the location hierarchy in the project's Drive folder & spreadsheet. */
 export async function saveIncidentsLocationsToSheet(
   operation: 'upsert' | 'delete',
   unit: StoredStructuralUnit | { id: string },
   companyId: string,
-  projectId: string
+  projectId: string,
+  allUnits?: StoredStructuralUnit[]
 ): Promise<void> {
+  if (Array.isArray(allUnits)) {
+    await saveAllIncidentsLocationsToDrive(allUnits, companyId, projectId);
+  }
+  // Background sync to spreadsheet
   const { companyName, projectName } = getHumanCompanyAndProject(companyId, projectId);
-  const result = await postToAppsScript({
-    action: 'saveIncidentsLocation', operation, unit,
+  postToAppsScript({
+    action: 'saveIncidentsLocation',
+    operation,
+    unit,
     company: { id: companyId, name: companyName },
-    companyId: companyId,
-    companyName: companyName,
+    companyId,
+    companyName,
     project: { id: projectId, slug: projectId, name: projectName },
-    projectId: projectId,
+    projectId,
     projectSlug: projectId,
-    projectName: projectName
-  });
-  if (result.status !== 'success') throw new Error(result.message || 'No se pudo guardar la ubicación en Drive.');
+    projectName
+  }).catch(() => {});
 }
 
 export async function loadIncidentsLocationsFromSheet(companyId: string, projectId: string): Promise<StoredStructuralUnit[]> {
+  // 1. Try ubicaciones_incidencias.json or config_incidencias.json in the project folder first (fast, shares list call!)
+  try {
+    const files = await listIncidentsFolderFiles(companyId, projectId);
+    const locFiles = files
+      .filter((f: any) => f.name === 'ubicaciones_incidencias.json')
+      .sort((a: any, b: any) => new Date(b.lastUpdated || 0).getTime() - new Date(a.lastUpdated || 0).getTime());
+
+    if (locFiles.length > 0) {
+      const latest = locFiles[0];
+      const cacheKey = `nora_loc_file_${latest.fileId}`;
+      try {
+        const cachedRaw = localStorage.getItem(cacheKey);
+        if (cachedRaw) {
+          const parsed = JSON.parse(cachedRaw);
+          if (parsed && parsed.lastUpdated === latest.lastUpdated && Array.isArray(parsed.data)) {
+            return parsed.data;
+          }
+        }
+      } catch (_) {}
+
+      const textData = await postToAppsScript({ action: 'text', id: latest.fileId });
+      if (textData && textData.text) {
+        const parsedUnits = JSON.parse(textData.text);
+        if (Array.isArray(parsedUnits)) {
+          try {
+            localStorage.setItem(cacheKey, JSON.stringify({
+              lastUpdated: latest.lastUpdated,
+              data: parsedUnits
+            }));
+          } catch (_) {}
+          return parsedUnits;
+        }
+      }
+    }
+
+    // Check if config_incidencias.json has locations embedded
+    const cfg = await loadIncidentsConfigFromSheet(companyId, projectId);
+    if (cfg && Array.isArray(cfg.locations) && cfg.locations.length > 0) {
+      return cfg.locations;
+    }
+  } catch (err) {
+    console.warn('Could not load ubicaciones_incidencias.json from Drive:', err);
+  }
+
+  // 2. Fallback: spreadsheet getIncidentsLocations
   const targetUrl = INCIDENCES_CONFIG_SCRIPT_URL || FILES_GATEWAY_URL;
   if (!targetUrl) return [];
   const { companyName, projectName } = getHumanCompanyAndProject(companyId, projectId);
@@ -139,58 +419,31 @@ export async function loadIncidentsLocationsFromSheet(companyId: string, project
     url.searchParams.set('companyId', companyId);
     url.searchParams.set('projectId', projectId);
     const response = await fetch(url.toString());
-    if (!response.ok) throw new Error(`Google Drive respondió con código ${response.status}.`);
+    if (!response.ok) return [];
     const result = await response.json();
-    if (result.status !== 'success') throw new Error(result.message || 'No se pudieron cargar las ubicaciones desde Drive.');
-    return Array.isArray(result.units) ? result.units : [];
-  } catch (err) {
-    console.warn("Could not load locations from Google Drive:", err);
-    return [];
-  }
-}
-
-export async function loadIncidentsConfigFromSheet(companyId: string, projectId: string): Promise<any | null> {
-  const targetUrl = INCIDENCES_CONFIG_SCRIPT_URL || FILES_GATEWAY_URL;
-  if (!targetUrl) return null;
-  const { companyName, projectName } = getHumanCompanyAndProject(companyId, projectId);
-  const controller = new AbortController();
-  const timeout = window.setTimeout(() => controller.abort(), 8000);
-  try {
-    const url = new URL(targetUrl);
-    url.searchParams.set('action', 'getIncidentsProjectConfig');
-    url.searchParams.set('empresa', companyName);
-    url.searchParams.set('proyecto', projectName);
-    url.searchParams.set('companyId', companyId);
-    url.searchParams.set('projectId', projectId);
-    const response = await fetch(url.toString(), { signal: controller.signal });
-    if (!response.ok) return null;
-    const result = await response.json();
-    if (result && result.status === 'success' && result.config) {
-      return result.config;
+    if (result?.status === 'success' && Array.isArray(result.units)) {
+      return result.units;
     }
-  } catch (e) {
-    console.warn('Could not load Incidencias config from Google Drive:', e);
-  } finally {
-    window.clearTimeout(timeout);
-  }
-  return null;
+  } catch (_) {}
+  return [];
 }
 
 /**
  * Gets or creates a folder on Google Drive.
- * Stubbed to use your pre-configured folder ID.
  */
 export async function getOrCreateFolder(
   folderName: string,
   accessToken?: string
 ): Promise<string> {
-  console.log(`[Drive Folder] Utilizing pre-configured folder gateway. returning default folder.`);
-  return '1Bym51TtKVSzDsweJaMAh0VxCAAQQbU3w';
+  const urlParams = new URLSearchParams(window.location.search);
+  const cId = urlParams.get('empresa') || 'default';
+  const pId = urlParams.get('project') || 'default';
+  return resolveIncidentsProjectFolderId(cId, pId);
 }
 
 /**
- * Uploads a file (Blob) to Google Drive using the secure Google Apps Script Gateway.
- * Bypasses OAuth, popups, and manual syncing!
+ * Uploads an attachment (Blob) directly into the project's folder in Google Drive:
+ * 1-9SumRefiih81mc_eASsswy_W_U0-qe5 -> [Empresa] -> [Proyecto]
  */
 export async function uploadFileToDrive(
   fileBlob: Blob,
@@ -200,104 +453,83 @@ export async function uploadFileToDrive(
   accessToken?: string,
   extraMetadata?: Record<string, any>
 ): Promise<DriveUploadResult> {
-  console.log(`[Drive Gateway Upload] Initializing upload for: ${fileName} (${fileType}, ${fileBlob.size} bytes)`);
-
   try {
-    // 1. Convert Blob to Base64
     const base64 = await new Promise<string>((resolve, reject) => {
       const reader = new FileReader();
       reader.onloadend = () => {
         const resultString = reader.result as string;
-        const base64Data = resultString.split(',')[1]; // Extracts the clean raw base64 after the data: part
+        const base64Data = resultString.split(',')[1];
         resolve(base64Data || '');
       };
-      reader.onerror = (err) => {
+      reader.onerror = () => {
         reject(new Error("Fallo al leer los bytes del archivo para el envío."));
       };
       reader.readAsDataURL(fileBlob);
     });
 
-    const cId = extraMetadata?.companyId || 'default';
-    const pId = extraMetadata?.project || extraMetadata?.projectId || 'default';
-    const { companyName, projectName } = getHumanCompanyAndProject(cId, pId);
+    const urlParams = new URLSearchParams(window.location.search);
+    const cId = extraMetadata?.companyId || urlParams.get('empresa') || 'default';
+    const pId = extraMetadata?.project || extraMetadata?.projectId || urlParams.get('project') || 'default';
 
+    // Always resolve the exact [Empresa] -> [Proyecto] folder inside 1-9SumRefiih81mc_eASsswy_W_U0-qe5
+    let targetFolderId = folderId;
+    if (!targetFolderId || targetFolderId === INCIDENTS_DRIVE_FOLDER_ID || targetFolderId === '1Bym51TtKVSzDsweJaMAh0VxCAAQQbU3w') {
+      targetFolderId = await resolveIncidentsProjectFolderId(cId, pId);
+    }
+
+    // Do NOT pass 'project' or 'subfolder' so uploadFile_ places the attachment directly in [Empresa]/[Proyecto]
+    // without triggering CDE model spreadsheet status registration.
     const bodyPayload = {
       action: 'uploadFile',
       content: base64,
       base64: base64,
-      contentType: fileType,
-      mimeType: fileType,
+      contentType: fileType || 'application/octet-stream',
+      mimeType: fileType || 'application/octet-stream',
       filename: fileName,
       name: fileName,
-      folderId: folderId || INCIDENTS_DRIVE_FOLDER_ID,
-      companyId: cId,
-      companyName: extraMetadata?.companyName || companyName,
-      project: pId,
-      driveFolderName: extraMetadata?.driveFolderName || projectName,
-      subfolder: extraMetadata?.subfolder || 'ARCHIVOS_INCIDENCIAS',
-      ...(extraMetadata || {})
+      folderId: targetFolderId
     };
 
-    // 2. Post to the local backend proxy first (which is 100% immune to iframe/browser CORS restrictions)
-    let res: Response;
-    let fallbackToDirect = false;
+    const res = await fetch(FILES_GATEWAY_URL, {
+      method: "POST",
+      headers: {
+        "Content-Type": "text/plain;charset=utf-8"
+      },
+      body: JSON.stringify(bodyPayload)
+    });
 
-    try {
-      res = await fetch("/api/upload-to-drive", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify(bodyPayload)
-      });
-
-      if (!res.ok) {
-        throw new Error(`Server proxy error status: ${res.status}`);
-      }
-    } catch (proxyErr) {
-      console.warn("[Drive Gateway Upload] Proxy endpoint failed or bypassed, falling back to direct CORS request:", proxyErr);
-      fallbackToDirect = true;
+    if (!res.ok) {
+      throw new Error(`El gateway respondió con código ${res.status}`);
     }
 
-    if (fallbackToDirect) {
-      res = await fetch(FILES_GATEWAY_URL, {
-        method: "POST",
-        headers: {
-          "Content-Type": "text/plain;charset=utf-8"
-        },
-        body: JSON.stringify(bodyPayload)
-      });
-    }
-
-    if (!res!.ok) {
-      throw new Error(`El gateway respondió con código ${res!.status}`);
-    }
-
-    const payload = await res!.json();
-    if (payload.status === "error") {
-      throw new Error(payload.message || "Error desconocido devuelto por Google Apps Script.");
+    const payload = await res.json();
+    if (payload.status === "error" || payload.error) {
+      throw new Error(payload.message || payload.error || "Error devuelto por Google Apps Script.");
     }
 
     const fileId = payload.id || payload.fileId;
     if (!fileId) throw new Error(payload.message || 'El gateway no devolvió el ID del archivo guardado.');
-    console.log(`[Drive Gateway Upload] Completed successfully! File ID: ${fileId}`);
 
-    // Create immediate renderable thumbnail/image link using our secure Node.js proxy endpoint
-    const renderUrl = `/api/drive-image/${fileId}`;
+    const webViewLink = payload.webViewLink || `https://drive.google.com/file/d/${fileId}/view`;
+    const isImage = (fileType || '').startsWith('image/');
+    const renderUrl = isImage
+      ? `https://drive.google.com/thumbnail?id=${fileId}&sz=w1600`
+      : webViewLink;
 
     return {
       id: fileId,
-      webViewLink: payload.webViewLink || `https://drive.google.com/file/d/${fileId}/view`,
+      webViewLink,
       url: renderUrl
     };
-
   } catch (err: any) {
     console.error(`[Drive Gateway Upload] Error uploading via Apps Script:`, err);
     throw new Error(`Google Drive Gateway Error: ${err.message || String(err)}`);
   }
 }
 
-/** Stores a JSON snapshot of an Incidencias record or chat in the shared Drive folder. */
+/**
+ * Legacy helper kept for compatibility; does not create scattered files.
+ */
 export async function archiveIncidentsRecord(
   kind: 'configuracion' | 'incidencia' | 'chat',
   record: unknown,
@@ -305,45 +537,22 @@ export async function archiveIncidentsRecord(
   companyId?: string,
   projectId?: string
 ): Promise<DriveUploadResult> {
-  const safeId = String(id || 'sin-id').replace(/[^a-zA-Z0-9_-]/g, '_');
-  const payload = JSON.stringify({
-    schema: 'nora-incidencias/v1',
-    kind,
-    archivedAt: new Date().toISOString(),
-    record
-  }, null, 2);
-
-  const cId = companyId || (record as any)?.companyId || 'default';
-  const pId = projectId || (record as any)?.projectId || 'default';
-  const { companyName, projectName } = getHumanCompanyAndProject(cId, pId);
-  const subfolder = kind === 'chat' ? 'CHATS_INCIDENCIAS' : (kind === 'incidencia' ? 'INCIDENCIAS_JSON' : 'CONFIGURACION');
-
-  return uploadFileToDrive(
-    new Blob([payload], { type: 'application/json' }),
-    `${kind}_${safeId}_${Date.now()}.json`,
-    'application/json',
-    INCIDENTS_DRIVE_FOLDER_ID,
-    undefined,
-    {
-      companyId: cId,
-      companyName,
-      project: pId,
-      driveFolderName: projectName,
-      subfolder
-    }
-  );
+  return {
+    id: String(id || ''),
+    webViewLink: '',
+    url: ''
+  };
 }
 
 /**
- * Extends any Google Drive proxy images with an active Bearer Token to access 100% private Google Drive files server-side.
+ * Resolves any Google Drive proxy or file URL so it works both locally and on GitHub Pages (norabim.com).
  */
 export function getAuthenticatedDriveUrl(url: string | undefined, token: string | null): string {
   if (!url) return '';
   if (url.startsWith('/api/drive-image/')) {
-    const activeToken = token || localStorage.getItem('google_drive_token');
-    if (activeToken) {
-      const separator = url.includes('?') ? '&' : '?';
-      return `${url}${separator}token=${encodeURIComponent(activeToken)}`;
+    const fileId = url.replace('/api/drive-image/', '').split('?')[0].trim();
+    if (fileId) {
+      return `https://drive.google.com/thumbnail?id=${fileId}&sz=w1600`;
     }
   }
   return url;

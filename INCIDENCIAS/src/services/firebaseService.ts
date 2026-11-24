@@ -16,9 +16,12 @@ import {
 import { db, auth } from './firebase';
 import {
   archiveIncidentsRecord,
+  loadIncidentsConfigFromSheet,
   loadIncidentsLocationsFromSheet,
   saveIncidentsConfigToSheet,
-  saveIncidentsLocationsToSheet
+  saveIncidentsLocationsToSheet,
+  registerCompanyName,
+  FILES_GATEWAY_URL
 } from '../utils/googleDriveUtils';
 import {
   fetchIncidentsFromDrive,
@@ -28,7 +31,6 @@ import {
 } from './driveIncidentsService';
 import { handleFirestoreError, OperationType } from './firestore-errors';
 import { getActiveProjectData, loadAndCacheProjectIso } from '../utils/userScope';
-import { FILES_GATEWAY_URL } from '../utils/googleDriveUtils';
 import { 
   Issue, 
   Comment, 
@@ -234,7 +236,7 @@ export const saveReport = async (report: any) => {
           };
           
           const cleanedData = cleanObject(issueData);
-          await setDoc(doc(db, 'issues', issueId), cleanedData, { merge: true });
+          await saveIssue(cleanedData);
         } catch (blockErr) {
           console.error(`Error saving individual issue block ${block.id}:`, blockErr);
         }
@@ -288,7 +290,7 @@ export const saveReport = async (report: any) => {
           };
           
           const cleanedData = cleanObject(issueData);
-          await setDoc(doc(db, 'issues', issueId), cleanedData, { merge: true });
+          await saveIssue(cleanedData);
         } catch (blockErr) {
           console.error(`Error saving individual issue block ${block.id}:`, blockErr);
         }
@@ -500,6 +502,7 @@ export const getPlatformTeam = async (companyId: string, projectId: string): Pro
       allCompanies.forEach((comp: any) => {
         if (!comp || comp.deleted) return;
         const compName = String(comp.name || comp.razonSocial || '').trim();
+        if (comp.id && compName) registerCompanyName(comp.id, compName);
         if (Array.isArray(comp.members)) {
           comp.members.forEach((m: any) => {
             if (m && m.email) {
@@ -767,270 +770,278 @@ export const getPlatformTeam = async (companyId: string, projectId: string): Pro
 // Team
 export const subscribeToTeam = (callback: (team: any[]) => void) => {
   const { projectId, companyId } = getProjectAndCompany();
-  
   let active = true;
-  let storedUnsubscribe: (() => void) | null = null;
-  
+
   getPlatformTeam(companyId, projectId).then((platformTeam) => {
     if (!active) return;
     if (platformTeam && platformTeam.length > 0) {
       callback(platformTeam);
     } else {
-      // Fallback: use Firestore
-      const q = query(
-        collection(db, 'team'),
-        where('projectId', '==', projectId),
-        where('companyId', '==', companyId)
-      );
-      storedUnsubscribe = onSnapshot(q, (snapshot) => {
-        if (!active) return;
-        const team = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-        callback(team);
-      }, (error) => {
-        handleFirestoreError(error, OperationType.GET, 'team');
-      });
+      callback([]);
     }
   }).catch((err) => {
-    console.warn("Error loading platform team, falling back to Firestore team collection", err);
-    if (!active) return;
-    const q = query(
-      collection(db, 'team'),
-      where('projectId', '==', projectId),
-      where('companyId', '==', companyId)
-    );
-    storedUnsubscribe = onSnapshot(q, (snapshot) => {
-      if (!active) return;
-      const team = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      callback(team);
-    }, (error) => {
-      handleFirestoreError(error, OperationType.GET, 'team');
-    });
+    console.warn("Error loading platform team:", err);
+    if (active) callback([]);
   });
 
   return () => {
     active = false;
-    if (storedUnsubscribe) {
-      storedUnsubscribe();
-    }
   };
 };
 
-export const saveTeamMember = async (member: any) => {
-  const path = 'team';
-  const { projectId, companyId } = getProjectAndCompany();
-  try {
-    if (member.id) {
-      await setDoc(doc(db, path, member.id), {
-        ...member,
-        projectId,
-        companyId
-      }, { merge: true });
-    } else {
-      await addDoc(collection(db, path), {
-        ...member,
-        projectId,
-        companyId
-      });
-    }
-  } catch (error) {
-    handleFirestoreError(error, OperationType.WRITE, path);
-  }
+export const saveTeamMember = async (_member: any) => {
+  // Team members are managed through Nora Directory / equipo.html (ISO 19650)
+  return;
 };
 
-export const deleteTeamMember = async (id: string) => {
-  try {
-    await deleteDoc(doc(db, 'team', id));
-  } catch (error) {
-    handleFirestoreError(error, OperationType.DELETE, `team/${id}`);
-  }
+export const deleteTeamMember = async (_id: string) => {
+  return;
 };
+
+// Local cache helper for structural units (locations / spaces)
+export function getCachedUnits(companyId: string, projectId: string): StructuralUnit[] {
+  const key = `nora_units_${companyId}_${projectId}`;
+  try {
+    const raw = localStorage.getItem(key);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) return parsed;
+    }
+    const rawCfg = localStorage.getItem(`cached_project_config_${companyId}_${projectId}`);
+    if (rawCfg) {
+      const parsedCfg = JSON.parse(rawCfg);
+      if (Array.isArray(parsedCfg?.locations)) return parsedCfg.locations;
+    }
+  } catch (_) {}
+  return [];
+}
+
+function updateCachedUnits(units: StructuralUnit[], companyId: string, projectId: string) {
+  const key = `nora_units_${companyId}_${projectId}`;
+  try {
+    localStorage.setItem(key, JSON.stringify(units));
+  } catch (_) {}
+  window.dispatchEvent(new CustomEvent('nora_units_updated', {
+    detail: { units, companyId, projectId }
+  }));
+}
 
 // Config
+const inFlightConfigPromises = new Map<string, Promise<any>>();
+
 export const getProjectConfig = async () => {
   const { projectId, companyId } = getProjectAndCompany();
   const configDocId = `${companyId}_${projectId}`;
   const cachedInMemory = projectConfigCache.get(configDocId);
   if (cachedInMemory) return cachedInMemory;
-  let fbConfig: any = null;
-  
-  // 1. Prioridad: Cargar desde Google Drive (fuente de verdad oficial y permanente)
-  try {
-    const driveConfig = await loadIncidentsConfigFromSheet(companyId, projectId);
-    if (driveConfig && typeof driveConfig === 'object') {
-      fbConfig = driveConfig;
-      console.log("[Drive] Configuración de incidencias cargada exitosamente desde Google Drive.");
-    }
-  } catch (driveErr) {
-    console.warn("Error leyendo configuración de incidencias desde Drive:", driveErr);
-  }
 
-  // 2. Fallback: Firestore
-  if (!fbConfig) {
+  const existingPromise = inFlightConfigPromises.get(configDocId);
+  if (existingPromise) return existingPromise;
+
+  const promise = (async () => {
+    let fbConfig: any = null;
+
+    // 1. Cargar desde Google Drive (config_incidencias.json en carpeta Empresa -> Proyecto)
     try {
-      const docSnap = await getDoc(doc(db, 'config', configDocId));
-      if (docSnap.exists()) {
-        fbConfig = docSnap.data();
+      const driveConfig = await loadIncidentsConfigFromSheet(companyId, projectId);
+      if (driveConfig && typeof driveConfig === 'object') {
+        fbConfig = driveConfig;
+        if (Array.isArray(driveConfig.locations) && driveConfig.locations.length > 0) {
+          const currentUnits = getCachedUnits(companyId, projectId);
+          if (currentUnits.length === 0) {
+            updateCachedUnits(driveConfig.locations, companyId, projectId);
+          }
+        }
       }
-    } catch (error) {
-      console.warn("Firestore error reading config/project fallback:", error);
+    } catch (driveErr) {
+      console.warn("Error leyendo configuración de incidencias desde Drive:", driveErr);
     }
-  }
 
-  // 3. Fallback: Almacenamiento local
-  if (!fbConfig) {
-    try {
-      const cached = localStorage.getItem(`cached_project_config_${configDocId}`) || localStorage.getItem('cached_project_config');
-      if (cached) {
-        fbConfig = JSON.parse(cached);
-      }
-    } catch (cacheErr) {
-      console.error("Local project config storage fallbacks failed:", cacheErr);
-    }
-  }
-
-  // Load platform config to merge companies and teams if missing
-  const platformConfig = await getPlatformConfig(companyId);
-  if (platformConfig) {
+    // 2. Fallback: Almacenamiento local
     if (!fbConfig) {
-      fbConfig = {
-        impactOptions: [],
-        issueTypes: [],
-        economicActivities: [],
-        dangers: [],
-        dangerDescriptions: {}
-      };
+      try {
+        const cached = localStorage.getItem(`cached_project_config_${configDocId}`) || localStorage.getItem('cached_project_config');
+        if (cached) {
+          fbConfig = JSON.parse(cached);
+        }
+      } catch (cacheErr) {
+        console.warn("Local project config fallback failed:", cacheErr);
+      }
     }
-    if (platformConfig.responsibleCompanies && (!fbConfig.responsibleCompanies || fbConfig.responsibleCompanies.length === 0)) {
-      fbConfig.responsibleCompanies = platformConfig.responsibleCompanies;
-    }
-    if (platformConfig.teams && (!fbConfig.teams || fbConfig.teams.length === 0)) {
-      fbConfig.teams = platformConfig.teams;
-    }
-  }
 
-  if (fbConfig) {
-    try {
-      projectConfigCache.set(configDocId, fbConfig);
-      localStorage.setItem(`cached_project_config_${configDocId}`, JSON.stringify(fbConfig));
-    } catch (cacheStoreErr) {
-      console.warn("Could not save merged project config to local cache", cacheStoreErr);
+    // 3. Merge platform config companies and teams if missing
+    const platformConfig = await getPlatformConfig(companyId);
+    if (platformConfig) {
+      if (!fbConfig) {
+        fbConfig = {
+          impactOptions: [],
+          issueTypes: [],
+          economicActivities: [],
+          dangers: [],
+          dangerDescriptions: {}
+        };
+      }
+      if (platformConfig.responsibleCompanies && (!fbConfig.responsibleCompanies || fbConfig.responsibleCompanies.length === 0)) {
+        fbConfig.responsibleCompanies = platformConfig.responsibleCompanies;
+      }
+      if (platformConfig.teams && (!fbConfig.teams || fbConfig.teams.length === 0)) {
+        fbConfig.teams = platformConfig.teams;
+      }
     }
+
+    if (fbConfig) {
+      try {
+        projectConfigCache.set(configDocId, fbConfig);
+        localStorage.setItem(`cached_project_config_${configDocId}`, JSON.stringify(fbConfig));
+      } catch (_) {}
+    }
+
+    return fbConfig;
+  })();
+
+  inFlightConfigPromises.set(configDocId, promise);
+  try {
+    return await promise;
+  } finally {
+    inFlightConfigPromises.delete(configDocId);
   }
-  
-  return fbConfig;
 };
 
 export const saveProjectConfig = async (config: any) => {
   const { projectId, companyId } = getProjectAndCompany();
   const configDocId = `${companyId}_${projectId}`;
-  
-  // Actualizar caché inmediatamente
-  projectConfigCache.set(configDocId, config);
+
+  const locations = Array.isArray(config.locations) && config.locations.length > 0
+    ? config.locations
+    : getCachedUnits(companyId, projectId);
+
+  const fullConfig = {
+    ...config,
+    projectId,
+    companyId,
+    locations
+  };
+
+  // 1. Actualizar caché inmediatamente (0ms)
+  projectConfigCache.set(configDocId, fullConfig);
   try {
-    localStorage.setItem(`cached_project_config_${configDocId}`, JSON.stringify(config));
+    localStorage.setItem(`cached_project_config_${configDocId}`, JSON.stringify(fullConfig));
+    if (Array.isArray(locations) && locations.length > 0) {
+      localStorage.setItem(`nora_units_${configDocId}`, JSON.stringify(locations));
+    }
   } catch (_) {}
 
-  // 1. Guardar de forma garantizada en Google Drive en la carpeta de la empresa y proyecto
-  try {
-    let locations = config.locations || [];
-    if (!locations.length) {
-      try {
-        const unitsSnapshot = await getDocs(query(
-          collection(db, 'units'),
-          where('projectId', '==', projectId),
-          where('companyId', '==', companyId)
-        ));
-        if (!unitsSnapshot.empty) {
-          locations = unitsSnapshot.docs.map((unitDoc) => ({
-            id: unitDoc.id,
-            ...unitDoc.data()
-          }));
-        }
-      } catch (_) {}
-    }
-
-    await saveIncidentsConfigToSheet({
-      ...config,
-      projectId,
-      companyId,
-      locations
-    }, companyId, projectId);
-    console.log("[Drive] Configuración de incidencias guardada exitosamente en Google Drive.");
-  } catch (driveErr) {
-    console.error("Error guardando configuración de incidencias en Google Drive:", driveErr);
-  }
-
-  // 2. Guardar en Firestore si está disponible (sin bloquear en caso de error)
-  try {
-    await setDoc(doc(db, 'config', configDocId), {
-      ...config,
-      projectId,
-      companyId
-    }, { merge: true });
-  } catch (error) {
-    console.warn("Firestore setDoc para config ignorado o no disponible:", error);
-  }
+  // 2. Guardar en Google Drive en 1-9SumRefiih81mc_eASsswy_W_U0-qe5 -> [Empresa] -> [Proyecto] -> config_incidencias.json
+  await saveIncidentsConfigToSheet(fullConfig, companyId, projectId);
 };
 
-// Structural Units
+// Structural Units (Ubicaciones / Niveles / Espacios) - Pure Google Drive + Local Cache (No Firestore hang)
 export const subscribeToUnits = (callback: (units: StructuralUnit[]) => void) => {
   const { projectId, companyId } = getProjectAndCompany();
-  let remoteUnits: StructuralUnit[] = [];
-  let lastFirestoreUnits: StructuralUnit[] | null = null;
+  let active = true;
+
+  // 1. Emit cached units immediately (0ms)
+  const cached = getCachedUnits(companyId, projectId);
+  if (cached.length > 0) {
+    callback(cached);
+  }
+
+  // 2. Listen for local updates when user adds/edits/deletes units, levels, or spaces
+  const handleLocalUnitsUpdate = (e: any) => {
+    if (!active) return;
+    const detail = e.detail;
+    if (detail && detail.companyId === companyId && detail.projectId === projectId && Array.isArray(detail.units)) {
+      callback(detail.units);
+    }
+  };
+  window.addEventListener('nora_units_updated', handleLocalUnitsUpdate);
+
+  // 3. Load fresh locations from Google Drive
   loadIncidentsLocationsFromSheet(companyId, projectId)
-    .then((units) => {
-      remoteUnits = units as StructuralUnit[];
-      if (!lastFirestoreUnits || lastFirestoreUnits.length === 0) callback(remoteUnits);
+    .then((remoteUnits) => {
+      if (!active) return;
+      if (Array.isArray(remoteUnits) && remoteUnits.length > 0) {
+        updateCachedUnits(remoteUnits as StructuralUnit[], companyId, projectId);
+      } else {
+        const current = getCachedUnits(companyId, projectId);
+        callback(current);
+      }
     })
-    .catch((error) => console.warn('No se pudieron cargar las ubicaciones desde Drive:', error));
-  const q = query(
-    collection(db, 'units'),
-    where('projectId', '==', projectId),
-    where('companyId', '==', companyId)
-  );
-  return onSnapshot(q, (snapshot) => {
-    const units = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as StructuralUnit));
-    lastFirestoreUnits = units;
-    callback(units.length > 0 ? units : remoteUnits);
-  }, (error) => {
-    handleFirestoreError(error, OperationType.GET, 'units');
-  });
+    .catch((error) => {
+      console.warn('No se pudieron cargar las ubicaciones desde Drive:', error);
+      if (active) callback(getCachedUnits(companyId, projectId));
+    });
+
+  return () => {
+    active = false;
+    window.removeEventListener('nora_units_updated', handleLocalUnitsUpdate);
+  };
 };
 
 export const saveUnit = async (unit: Omit<StructuralUnit, 'id'> & { id?: string }) => {
-  const path = 'units';
   const { projectId, companyId } = getProjectAndCompany();
+  const unitId = unit.id || ('u_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6));
+  const savedUnit: StructuralUnit = {
+    ...unit,
+    id: unitId,
+    levels: Array.isArray(unit.levels) ? unit.levels : [],
+    spaces: Array.isArray(unit.spaces) ? unit.spaces : []
+  } as StructuralUnit;
+
+  // 1. Optimistic local update (0ms UI update!)
+  const existing = getCachedUnits(companyId, projectId);
+  const idx = existing.findIndex(u => u.id === unitId);
+  let updatedUnits: StructuralUnit[];
+  if (idx >= 0) {
+    updatedUnits = [...existing];
+    updatedUnits[idx] = savedUnit;
+  } else {
+    updatedUnits = [...existing, savedUnit];
+  }
+  updateCachedUnits(updatedUnits, companyId, projectId);
+
+  // Also keep cached_project_config in sync
+  const configDocId = `${companyId}_${projectId}`;
+  const cachedCfg = projectConfigCache.get(configDocId);
+  if (cachedCfg) {
+    const updatedCfg = { ...cachedCfg, locations: updatedUnits };
+    projectConfigCache.set(configDocId, updatedCfg);
+    try {
+      localStorage.setItem(`cached_project_config_${configDocId}`, JSON.stringify(updatedCfg));
+    } catch (_) {}
+  }
+
+  // 2. Persist to Google Drive (ubicaciones_incidencias.json & spreadsheet)
   try {
-    let savedUnit: StructuralUnit;
-    if (unit.id) {
-      const { id, ...rest } = unit;
-      await setDoc(doc(db, path, id), {
-        ...rest,
-        projectId,
-        companyId
-      }, { merge: true });
-      savedUnit = unit as StructuralUnit;
-    } else {
-      const docRef = await addDoc(collection(db, path), {
-        ...unit,
-        projectId,
-        companyId
-      });
-      savedUnit = { ...unit, id: docRef.id } as StructuralUnit;
-    }
-    await saveIncidentsLocationsToSheet('upsert', savedUnit, companyId, projectId);
-  } catch (error) {
-    handleFirestoreError(error, OperationType.WRITE, path);
+    await saveIncidentsLocationsToSheet('upsert', savedUnit, companyId, projectId, updatedUnits);
+  } catch (err) {
+    console.error('[firebaseService] Error guardando ubicación en Google Drive:', err);
   }
 };
 
 export const deleteUnit = async (id: string) => {
   const { projectId, companyId } = getProjectAndCompany();
+
+  // 1. Optimistic local removal (0ms UI update!)
+  const existing = getCachedUnits(companyId, projectId);
+  const updatedUnits = existing.filter(u => u.id !== id);
+  updateCachedUnits(updatedUnits, companyId, projectId);
+
+  const configDocId = `${companyId}_${projectId}`;
+  const cachedCfg = projectConfigCache.get(configDocId);
+  if (cachedCfg) {
+    const updatedCfg = { ...cachedCfg, locations: updatedUnits };
+    projectConfigCache.set(configDocId, updatedCfg);
+    try {
+      localStorage.setItem(`cached_project_config_${configDocId}`, JSON.stringify(updatedCfg));
+    } catch (_) {}
+  }
+
+  // 2. Persist deletion to Google Drive
   try {
-    await deleteDoc(doc(db, 'units', id));
-    await saveIncidentsLocationsToSheet('delete', { id }, companyId, projectId);
-  } catch (error) {
-    handleFirestoreError(error, OperationType.DELETE, `units/${id}`);
+    await saveIncidentsLocationsToSheet('delete', { id }, companyId, projectId, updatedUnits);
+  } catch (err) {
+    console.error('[firebaseService] Error eliminando ubicación en Google Drive:', err);
   }
 };
 

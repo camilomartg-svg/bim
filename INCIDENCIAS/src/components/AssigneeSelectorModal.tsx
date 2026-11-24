@@ -15,6 +15,7 @@ import {
 import { motion, AnimatePresence } from 'motion/react';
 import { cn } from '../lib/utils';
 import { TeamMember } from '../types';
+import { useAuth } from '../context/AuthContext';
 import { filterMembersByScope, IssueTypeScope, getBranchForTeamName, getActiveProjectData } from '../utils/userScope';
 
 export interface AssigneeSelectorModalProps {
@@ -42,6 +43,7 @@ export default function AssigneeSelectorModal({
   onSelectMultiple,
   members = []
 }: AssigneeSelectorModalProps) {
+  const { user } = useAuth();
   const [searchTerm, setSearchTerm] = useState('');
   const [filterMode, setFilterMode] = useState<'individual' | 'team' | 'company'>('individual');
   const [tempSelected, setTempSelected] = useState<string[]>([]);
@@ -58,8 +60,31 @@ export default function AssigneeSelectorModal({
   // - DELIVERY: solo miembros de equipo de entrega
   // - RECEIVER: solo miembros de equipo de recepción
   const scopedMembers = useMemo(() => {
-    return filterMembersByScope(members, scope);
-  }, [members, scope]);
+    const byScope = filterMembersByScope(members, scope);
+
+    // Un usuario no debe poder ponerse incidencias a sí mismo
+    const selfEmails = new Set<string>();
+    const selfNames = new Set<string>();
+    if (user?.email) selfEmails.add(String(user.email).toLowerCase().trim());
+    if (user?.name) selfNames.add(String(user.name).toLowerCase().trim());
+    try {
+      const rawAcc = sessionStorage.getItem('userAccount') || localStorage.getItem('userAccount');
+      if (rawAcc) {
+        const acc = JSON.parse(rawAcc);
+        if (acc?.email) selfEmails.add(String(acc.email).toLowerCase().trim());
+        if (acc?.username) selfEmails.add(String(acc.username).toLowerCase().trim());
+        if (acc?.name) selfNames.add(String(acc.name).toLowerCase().trim());
+      }
+    } catch (_) {}
+
+    return byScope.filter((m) => {
+      const mEmail = String(m.email || '').toLowerCase().trim();
+      const mName = String(m.name || '').toLowerCase().trim();
+      if (mEmail && selfEmails.has(mEmail)) return false;
+      if (mName && selfNames.has(mName)) return false;
+      return true;
+    });
+  }, [members, scope, user?.email, user?.name]);
 
   // 2. Filtrado en tiempo real con teclado
   const filteredMembers = useMemo(() => {

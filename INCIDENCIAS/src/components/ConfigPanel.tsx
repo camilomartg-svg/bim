@@ -906,7 +906,8 @@ export default function ConfigPanel() {
       environmentalReportsAllowedTeams: environmentalReportsAllowedTeams,
       siteReportsAllowedProfiles: siteReportsAllowedTeams,
       qualityReportsAllowedProfiles: qualityReportsAllowedTeams,
-      environmentalReportsAllowedProfiles: environmentalReportsAllowedTeams
+      environmentalReportsAllowedProfiles: environmentalReportsAllowedTeams,
+      locations: units
     };
     await saveProjectConfig(configToSave);
 
@@ -1178,7 +1179,7 @@ const changeTypeScope = (id: string, scope: 'GLOBAL' | 'DELIVERY' | 'RECEIVER') 
               className="bg-slate-900 disabled:opacity-60 dark:bg-white text-white dark:text-slate-900 px-8 py-3.5 rounded-2xl font-black text-[10px] uppercase tracking-[0.2em] shadow-xl shadow-slate-900/10 dark:shadow-white/5 flex items-center justify-center gap-3 hover:bg-slate-800 dark:hover:bg-slate-100 transition-all active:scale-95"
             >
               {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-              {isSaving ? 'Guardando en Drive…' : 'Guardar Configuración'}
+              {isSaving ? 'Guardando…' : 'Guardar'}
             </button>
           </div>
         </header>

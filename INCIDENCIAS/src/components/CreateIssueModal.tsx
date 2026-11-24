@@ -1,3 +1,4 @@
+import { getCachedIncidents } from '../services/driveIncidentsService';
 import { isIncidentsAdmin } from '../utils/userScope';
 import React, { useState, useEffect } from 'react';
 import { collection, addDoc, getDocs, query, where, orderBy, updateDoc, doc } from 'firebase/firestore';
@@ -24,6 +25,7 @@ import {
   subscribeToTeam,
   subscribeToUnits,
   saveIssue,
+  updateIssue,
   saveReport
 } from '../services/firebaseService';
 import { 
@@ -515,10 +517,7 @@ export default function CreateIssueModal({ onClose, onSuccess }: CreateIssueModa
 
       if (linkedIssueIds.length > 0 && reportId) {
         await Promise.all(linkedIssueIds.map(id => 
-          updateDoc(doc(db, 'issues', id), {
-            sourceReportId: reportId,
-            sourceReportTitle: reportTitle || 'INFORME DE OBRA'
-          })
+          updateIssue(id, { sourceReportId: reportId, sourceReportTitle: reportTitle || 'INFORME DE OBRA' })
         ));
       }
 
@@ -699,12 +698,11 @@ export default function CreateIssueModal({ onClose, onSuccess }: CreateIssueModa
   const generateCode = async (specialty: string) => {
     const prefix = specialty.slice(0, 3).toUpperCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
     try {
-      const q = query(collection(db, 'issues'), where('specialty', '==', specialty));
-      const snapshot = await getDocs(q);
-      const nextNum = (snapshot.size + 1).toString().padStart(3, '0');
+      const existing = getCachedIncidents();
+      const matching = existing.filter(i => (i.specialty || '').toUpperCase() === specialty.toUpperCase() || (i.code || '').startsWith(prefix + '-'));
+      const nextNum = (matching.length + 1).toString().padStart(3, '0');
       return `${prefix}-${nextNum}`;
     } catch (err) {
-      console.warn("Failed to get count for code, using random suffix", err);
       return `${prefix}-${Math.floor(Math.random() * 900) + 100}`;
     }
   };
@@ -721,6 +719,27 @@ export default function CreateIssueModal({ onClose, onSuccess }: CreateIssueModa
     if (isFieldVisible('impact') && impact.length === 0) errors.push("Prioridad / Afectación (seleccione al menos una o 'NINGUNA')");
     if (isFieldVisible('dueDate') && !dueDate) errors.push("Fecha de Vencimiento");
     if (isFieldVisible('assignedPosition') && !assignedPosition) errors.push("Responsable Asignado");
+    if (assignedPosition) {
+      const candidate = customTeam.find(p => p.position === assignedPosition || p.name === assignedName);
+      const selfEmails = new Set<string>();
+      const selfNames = new Set<string>();
+      if (user?.email) selfEmails.add(String(user.email).toLowerCase().trim());
+      if (user?.name) selfNames.add(String(user.name).toLowerCase().trim());
+      try {
+        const rawAcc = sessionStorage.getItem('userAccount') || localStorage.getItem('userAccount');
+        if (rawAcc) {
+          const acc = JSON.parse(rawAcc);
+          if (acc?.email) selfEmails.add(String(acc.email).toLowerCase().trim());
+          if (acc?.username) selfEmails.add(String(acc.username).toLowerCase().trim());
+          if (acc?.name) selfNames.add(String(acc.name).toLowerCase().trim());
+        }
+      } catch (_) {}
+      const candEmail = String((candidate as any)?.email || '').toLowerCase().trim();
+      const candName = String(candidate?.name || assignedName || '').toLowerCase().trim();
+      if ((candEmail && selfEmails.has(candEmail)) || (candName && selfNames.has(candName))) {
+        errors.push("No puedes asignarte una incidencia a ti mismo. Selecciona otro responsable.");
+      }
+    }
     
     // Jerarquía de ubicación obligatoria SOLO si el campo de ubicación está visible
     let finalLevels = selectedLevels;

@@ -1439,10 +1439,7 @@ function StatusManager({ issue, isBimPanel, isSuspended, isPaymentAdmin }: { iss
 
       await saveIssue(updatedIssue);
 
-      try {
-        await updateDoc(doc(db, 'issues', issue.id), updateData);
-        await addDoc(collection(db, `issues/${issue.id}/comments`), newComment);
-      } catch (_) {}
+      // Sincronizado directamente con Google Drive vía saveIssue
 
       window.dispatchEvent(new CustomEvent('local_comments_updated', { detail: [updatedIssue] }));
       setShowRedirectionPicker(false);
@@ -1497,12 +1494,7 @@ function StatusManager({ issue, isBimPanel, isSuspended, isPaymentAdmin }: { iss
 
       await saveIssue(updatedIssue);
 
-      try {
-        await updateDoc(doc(db, 'issues', issue.id), updateData);
-        if (newComment) {
-          await addDoc(collection(db, `issues/${issue.id}/comments`), newComment);
-        }
-      } catch (_) {}
+      // Sincronizado directamente con Google Drive vía saveIssue
 
       window.dispatchEvent(new CustomEvent('local_comments_updated', { detail: [updatedIssue] }));
       setShowAgreementPicker(false);
@@ -1552,10 +1544,7 @@ function StatusManager({ issue, isBimPanel, isSuspended, isPaymentAdmin }: { iss
 
       await saveIssue(updatedIssue);
 
-      try {
-        await updateDoc(doc(db, 'issues', issue.id), updateData);
-        await addDoc(collection(db, `issues/${issue.id}/comments`), newComment);
-      } catch (_) {}
+      // Sincronizado directamente con Google Drive vía saveIssue
 
       window.dispatchEvent(new CustomEvent('local_comments_updated', { detail: [updatedIssue] }));
     } catch (err) {
@@ -1593,10 +1582,7 @@ function StatusManager({ issue, isBimPanel, isSuspended, isPaymentAdmin }: { iss
 
       await saveIssue(updatedIssue);
 
-      try {
-        await updateDoc(doc(db, 'issues', issue.id), updateData);
-        await addDoc(collection(db, `issues/${issue.id}/comments`), newComment);
-      } catch (_) {}
+      // Sincronizado directamente con Google Drive vía saveIssue
 
       window.dispatchEvent(new CustomEvent('local_comments_updated', { detail: [updatedIssue] }));
     } catch (err) {
