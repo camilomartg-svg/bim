@@ -492,6 +492,7 @@ export const getPlatformTeam = async (companyId: string, projectId: string): Pro
         const empresasRes = await fetch('../empresas.json?t=' + Date.now());
         if (empresasRes.ok) {
           allCompanies = await empresasRes.json();
+          try { sessionStorage.setItem('allCompanies', JSON.stringify(allCompanies)); } catch (_) {}
         }
       } catch (err) {
         console.warn("Could not load empresas.json:", err);
@@ -648,14 +649,25 @@ export const getPlatformTeam = async (companyId: string, projectId: string): Pro
         projectMemberEmailsSet.add(String(activeProject.creatorEmail).toLowerCase().trim());
       }
 
-      // Also ensure members of the host company are included
-      const hostCompany = allCompanies.find((c: any) => c && !c.deleted && (c.id === companyId || c.name?.toLowerCase() === companyId?.toLowerCase()));
-      if (hostCompany && Array.isArray(hostCompany.members)) {
-        hostCompany.members.forEach((m: any) => {
-          if (m && m.email) {
-            projectMemberEmailsSet.add(String(m.email).toLowerCase().trim());
-          }
-        });
+      // Validate against companies: exclude users who were removed/suspended from their companies
+      const validCompanyEmails = new Set<string>();
+      allCompanies.forEach((comp: any) => {
+        if (!comp || comp.deleted) return;
+        if (Array.isArray(comp.admins)) {
+          comp.admins.forEach((a: string) => validCompanyEmails.add(String(a).toLowerCase().trim()));
+        }
+        if (Array.isArray(comp.members)) {
+          comp.members.forEach((m: any) => {
+            if (m && m.email) validCompanyEmails.add(String(m.email).toLowerCase().trim());
+          });
+        }
+      });
+
+      // Filter out any members who are suspended or no longer in their companies
+      for (const email of Array.from(projectMemberEmailsSet)) {
+        if (!validCompanyEmails.has(email) && email !== 'imagina3ddesign@gmail.com' && email !== 'mcmartinezg@unal.edu.co') {
+          projectMemberEmailsSet.delete(email);
+        }
       }
 
       // Fallback: If no members were found, include all users from all companies in empresas.json

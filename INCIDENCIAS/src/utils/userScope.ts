@@ -459,3 +459,156 @@ export function isIncidentsAdmin(user?: any): boolean {
 
   return false;
 }
+
+
+export interface UserStatusInfo {
+  isSuspendedFromCompany: boolean;
+  isRemovedFromProject: boolean;
+  isActiveInProject: boolean;
+  label?: string;
+  badgeType?: 'suspended' | 'removed_from_project' | 'active';
+}
+
+/**
+ * Returns whether a given user is suspended from the company, removed from the project, or active.
+ */
+export function getUserProjectStatus(
+  emailOrName?: string,
+  projectData?: any,
+  allCompaniesData?: any[]
+): UserStatusInfo {
+  if (!emailOrName) {
+    return { isSuspendedFromCompany: false, isRemovedFromProject: false, isActiveInProject: true, badgeType: 'active' };
+  }
+  const clean = String(emailOrName).toLowerCase().trim();
+  if (!clean || clean === 'ninguna' || clean === 'sin asignar') {
+    return { isSuspendedFromCompany: false, isRemovedFromProject: false, isActiveInProject: true, badgeType: 'active' };
+  }
+
+  // 1. Super Admins are always active
+  if (
+    clean === 'imagina3ddesign@gmail.com' ||
+    clean === 'mcmartinezg@unal.edu.co'
+  ) {
+    return { isSuspendedFromCompany: false, isRemovedFromProject: false, isActiveInProject: true, badgeType: 'active' };
+  }
+
+  // 2. Check allCompanies
+  let companies: any[] = allCompaniesData || [];
+  if (!companies || companies.length === 0) {
+    try {
+      const rawAll = typeof window !== 'undefined' ? (sessionStorage.getItem('allCompanies') || localStorage.getItem('allCompanies')) : null;
+      if (rawAll) {
+        const parsed = JSON.parse(rawAll);
+        if (Array.isArray(parsed)) companies = parsed;
+      }
+    } catch (_) {}
+  }
+  if (!companies || companies.length === 0) {
+    try {
+      const rawComp = typeof window !== 'undefined' ? (sessionStorage.getItem('currentCompany') || localStorage.getItem('currentCompany')) : null;
+      if (rawComp) {
+        const c = JSON.parse(rawComp);
+        if (c) companies = [c];
+      }
+    } catch (_) {}
+  }
+
+  let foundInAnyCompany = false;
+  if (companies.length > 0) {
+    for (const comp of companies) {
+      if (!comp || comp.deleted) continue;
+      if (Array.isArray(comp.admins) && comp.admins.some((a: string) => String(a).toLowerCase().trim() === clean)) {
+        foundInAnyCompany = true;
+        break;
+      }
+      if (Array.isArray(comp.members)) {
+        const found = comp.members.find((m: any) => {
+          const mEmail = String(m?.email || m?.username || '').toLowerCase().trim();
+          const mName = String(m?.name || m?.nombre || '').toLowerCase().trim();
+          return mEmail === clean || (clean.length > 3 && mName === clean);
+        });
+        if (found) {
+          foundInAnyCompany = true;
+          break;
+        }
+      }
+    }
+  } else {
+    // If companies not loaded, fallback to active
+    foundInAnyCompany = true;
+  }
+
+  // 3. Check activeProject
+  const proj = projectData || getActiveProjectData();
+  let inProject = false;
+  if (proj) {
+    if (proj.creatorEmail && String(proj.creatorEmail).toLowerCase().trim() === clean) inProject = true;
+    if (proj.creatorName && String(proj.creatorName).toLowerCase().trim() === clean) inProject = true;
+
+    if (Array.isArray(proj.members)) {
+      if (proj.members.some((m: any) => {
+        const mEmail = (typeof m === 'string' ? m : m?.email || m?.username || '').toLowerCase().trim();
+        const mName = (typeof m === 'object' ? (m?.name || m?.nombre || '') : '').toLowerCase().trim();
+        return mEmail === clean || (clean.length > 3 && mName === clean);
+      })) {
+        inProject = true;
+      }
+    }
+
+    const iso = proj.iso19650 || {};
+    if (Array.isArray(iso.projectAdmins)) {
+      if (iso.projectAdmins.some((a: any) => {
+        const aEmail = (typeof a === 'string' ? a : a?.email || a?.username || '').toLowerCase().trim();
+        return aEmail === clean;
+      })) {
+        inProject = true;
+      }
+    }
+
+    const teams = [
+      ...(Array.isArray(iso.deliveryTeams) ? iso.deliveryTeams : []),
+      ...(Array.isArray(iso.receiverTeams) ? iso.receiverTeams : [])
+    ];
+    for (const t of teams) {
+      if (t.leadEmail && String(t.leadEmail).toLowerCase().trim() === clean) { inProject = true; break; }
+      if (Array.isArray(t.members) && t.members.some((m: any) => (typeof m === 'string' ? m : m?.email || '').toLowerCase().trim() === clean)) { inProject = true; break; }
+      if (Array.isArray(t.taskTeams)) {
+        for (const tt of t.taskTeams) {
+          if (Array.isArray(tt.members) && tt.members.some((m: any) => (typeof m === 'string' ? m : m?.email || '').toLowerCase().trim() === clean)) {
+            inProject = true;
+            break;
+          }
+        }
+      }
+      if (inProject) break;
+    }
+  }
+
+  if (!foundInAnyCompany) {
+    return {
+      isSuspendedFromCompany: true,
+      isRemovedFromProject: true,
+      isActiveInProject: false,
+      label: 'Usuario Suspendido / Inactivo',
+      badgeType: 'suspended'
+    };
+  }
+
+  if (!inProject) {
+    return {
+      isSuspendedFromCompany: false,
+      isRemovedFromProject: true,
+      isActiveInProject: false,
+      label: 'Ya no hace parte del proyecto',
+      badgeType: 'removed_from_project'
+    };
+  }
+
+  return {
+    isSuspendedFromCompany: false,
+    isRemovedFromProject: false,
+    isActiveInProject: true,
+    badgeType: 'active'
+  };
+}

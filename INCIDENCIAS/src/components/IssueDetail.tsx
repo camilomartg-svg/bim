@@ -650,6 +650,11 @@ export default function IssueDetail({ issue: initialIssue, onClose, onOpenReport
                     user?.email?.toLowerCase() === 'imagina3ddesign@gmail.com';
   const isAdminUser = isIncidentsAdmin(user) || user?.role === 'admin' || isBimTeam;
   const canManage = (isAuthor || isAdminUser);
+  const canRedirect = isIncidentsAdmin(user) || isAuthor || isInitialResponsible || isCollaborator;
+
+  const assignedStatus = useMemo(() => {
+    return getUserProjectStatus(issue.assignedEmail || issue.assignedName);
+  }, [issue.assignedEmail, issue.assignedName]);
 
   // Approval Chain Logic
   const hasExecutor = !!issue.executor;
@@ -1460,30 +1465,27 @@ export default function IssueDetail({ issue: initialIssue, onClose, onOpenReport
 
                        {/* MANAGEMENT BUTTONS (Redirection, Anulation, etc.) */}
                        <div className="flex flex-wrap gap-3 pt-4 border-t border-slate-800">
-                          {(isInitialResponsible || isAdminUser) && !isNextExecutor && !isExecutor && (
+                          {canRedirect && !isExecutor && (
                             <>
                               <button 
                                 onClick={() => { setRedirectionType('COLABORADOR'); setShowRedirectionPicker(true); }}
-                                className="px-6 py-4 bg-slate-900 border border-slate-800 text-slate-400 rounded-2xl text-[10px] font-black uppercase tracking-[0.15em] hover:bg-slate-800 hover:text-white transition-all flex items-center gap-2.5 active:scale-95"
+                                className="px-5 py-3.5 bg-slate-900 border border-slate-800 text-slate-300 rounded-2xl text-[10px] font-black uppercase tracking-[0.15em] hover:bg-slate-800 hover:text-white transition-all flex items-center gap-2.5 active:scale-95 shadow-sm"
                               >
-                                <ArrowRight className="w-4 h-4" /> Delegar a Colaborador
+                                <ArrowRight className="w-4 h-4 text-amber-500" /> Delegar a Colaborador
                               </button>
                               <button 
                                 onClick={() => { setRedirectionType('EJECUTOR'); setShowRedirectionPicker(true); }}
-                                className="px-6 py-4 bg-slate-900 border border-slate-800 text-slate-400 rounded-2xl text-[10px] font-black uppercase tracking-[0.15em] hover:bg-slate-800 hover:text-white transition-all flex items-center gap-2.5 active:scale-95"
+                                className="px-5 py-3.5 bg-slate-900 border border-slate-800 text-slate-300 rounded-2xl text-[10px] font-black uppercase tracking-[0.15em] hover:bg-slate-800 hover:text-white transition-all flex items-center gap-2.5 active:scale-95 shadow-sm"
                               >
-                                <ArrowRight className="w-4 h-4" /> Redirigir a Ejecutor
+                                <ArrowRight className="w-4 h-4 text-indigo-500" /> Redirigir a Ejecutor
+                              </button>
+                              <button 
+                                onClick={() => { setRedirectionType('RESPONSABLE'); setShowRedirectionPicker(true); }}
+                                className="px-5 py-3.5 bg-indigo-950/60 border border-indigo-800/80 text-indigo-300 rounded-2xl text-[10px] font-black uppercase tracking-[0.15em] hover:bg-indigo-900 hover:text-white transition-all flex items-center gap-2.5 active:scale-95 shadow-sm"
+                              >
+                                <ArrowRight className="w-4 h-4 text-emerald-400" /> Reasignar Responsable
                               </button>
                             </>
-                          )}
-                          
-                          {isCollaborator && !isNextExecutor && !isNextCollaborator && !isExecutor && (
-                            <button 
-                              onClick={() => { setRedirectionType('EJECUTOR'); setShowRedirectionPicker(true); }}
-                              className="px-6 py-4 bg-slate-900 border border-slate-800 text-slate-400 rounded-2xl text-[10px] font-black uppercase tracking-[0.15em] hover:bg-slate-800 hover:text-white transition-all flex items-center gap-2.5 active:scale-95"
-                            >
-                              <ArrowRight className="w-4 h-4" /> Redirigir a Ejecutor
-                            </button>
                           )}
 
                           {canManage && (
@@ -1766,12 +1768,41 @@ export default function IssueDetail({ issue: initialIssue, onClose, onOpenReport
                                    Reasignar
                                  </button>
                                </div>
-                               <div className="flex items-center gap-2">
+                               <div className="flex flex-wrap items-center gap-2">
                                   <span className="text-xs font-bold text-slate-800 dark:text-white">{issue.assignedName}</span>
+                                  {assignedStatus.isSuspendedFromCompany && (
+                                    <span className="px-2 py-0.5 rounded-md bg-rose-500/15 text-rose-500 border border-rose-500/30 text-[8px] font-black uppercase tracking-wider inline-flex items-center gap-1 shadow-sm">
+                                      <AlertTriangle className="w-2.5 h-2.5" /> Usuario Suspendido / Inactivo
+                                    </span>
+                                  )}
+                                  {!assignedStatus.isSuspendedFromCompany && assignedStatus.isRemovedFromProject && (
+                                    <span className="px-2 py-0.5 rounded-md bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30 text-[8px] font-black uppercase tracking-wider inline-flex items-center gap-1 shadow-sm">
+                                      <AlertTriangle className="w-2.5 h-2.5" /> Ya no hace parte del proyecto
+                                    </span>
+                                  )}
                                   {(issue.principalApproved || issue.status === 'RESPONDIDA') && (
                                     <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" strokeWidth={3} />
                                   )}
                                </div>
+                               {(assignedStatus.isSuspendedFromCompany || assignedStatus.isRemovedFromProject) && (
+                                 <div className="mt-2.5 p-2.5 bg-amber-500/10 border border-amber-500/25 rounded-xl flex items-center justify-between gap-2">
+                                   <div className="flex items-center gap-1.5 min-w-0">
+                                     <AlertTriangle className="w-3.5 h-3.5 text-amber-500 shrink-0" />
+                                     <span className="text-[9.5px] font-bold text-amber-700 dark:text-amber-300 truncate">
+                                       {assignedStatus.isSuspendedFromCompany ? 'Responsable retirado de la empresa.' : 'Responsable ya no pertenece a este proyecto.'}
+                                     </span>
+                                   </div>
+                                   {canRedirect && (
+                                     <button
+                                       type="button"
+                                       onClick={() => { setRedirectionType('RESPONSABLE'); setShowRedirectionPicker(true); }}
+                                       className="px-2.5 py-1 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-[8.5px] font-black uppercase tracking-wider shrink-0 transition-all shadow-sm"
+                                     >
+                                       Redirigir
+                                     </button>
+                                   )}
+                                 </div>
+                               )}
                                <span className="text-[7px] text-slate-500 font-bold uppercase mt-0.5">{issue.assignedPosition} {issue.assignedEmail ? `(${issue.assignedEmail})` : ''}</span>
                                
                                <div className="mt-2 pt-2 border-t border-slate-100 dark:border-slate-800/60 flex items-center justify-between">

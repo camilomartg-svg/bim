@@ -17,7 +17,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { cn } from '../lib/utils';
 import { TeamMember } from '../types';
 import { useAuth } from '../context/AuthContext';
-import { filterMembersByScope, IssueTypeScope, getBranchForTeamName, getActiveProjectData } from '../utils/userScope';
+import { filterMembersByScope, IssueTypeScope, getBranchForTeamName, getActiveProjectData, getUserProjectStatus } from '../utils/userScope';
 
 export interface AssigneeSelectorModalProps {
   isOpen: boolean;
@@ -89,6 +89,11 @@ export default function AssigneeSelectorModal({
       const mName = String(m.name || '').toLowerCase().trim();
       if (mEmail && selfEmails.has(mEmail)) return false;
       if (mName && selfNames.has(mName)) return false;
+
+      // Excluir terminantemente usuarios suspendidos o que ya no hacen parte del proyecto
+      const status = getUserProjectStatus(mEmail || mName);
+      if (status.isSuspendedFromCompany || status.isRemovedFromProject) return false;
+
       return true;
     });
   }, [members, scope, user?.email, user?.name]);

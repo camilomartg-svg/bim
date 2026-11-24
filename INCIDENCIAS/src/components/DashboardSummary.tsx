@@ -857,7 +857,24 @@ export default function DashboardSummary({ onSelectIssue, onOpenReport, selected
                         </div>
                         <div className="flex flex-col">
                           <span className="text-[9px] font-bold text-slate-600 dark:text-slate-300 uppercase tracking-widest leading-none">
-                            {issue.assignedName || '-' }
+                            {(() => {
+    const st = getUserProjectStatus(issue.assignedEmail || issue.assignedName);
+    return (
+      <span className="flex items-center gap-1.5">
+        <span>{issue.assignedName || '-'}</span>
+        {st.isSuspendedFromCompany && (
+          <span className="px-1.5 py-0.2 rounded text-[7.5px] font-black uppercase bg-rose-500/20 text-rose-600 dark:text-rose-400 border border-rose-500/30">
+            Suspendido
+          </span>
+        )}
+        {!st.isSuspendedFromCompany && st.isRemovedFromProject && (
+          <span className="px-1.5 py-0.2 rounded text-[7.5px] font-black uppercase bg-amber-500/20 text-amber-600 dark:text-amber-400 border border-amber-500/30">
+            Fuera de Proyecto
+          </span>
+        )}
+      </span>
+    );
+  })()}
                           </span>
                           <span className="text-[7px] text-slate-400 dark:text-slate-600 font-bold uppercase tracking-widest mt-1">Responsable Original</span>
                           {((issue.assignedEmail && teamMemberMap[issue.assignedEmail]) || issue.assignedTeam) && (
@@ -1354,8 +1371,9 @@ function StatusManager({ issue, isBimPanel, isSuspended, isPaymentAdmin }: { iss
   const isExecutor = issue.executor?.email?.toLowerCase() === userEmail_lower;
   const isResponsible = isInitialResponsible || isCollaborator || isExecutor;
   const isReviewer = issue.reviewerEmails?.some(email => email.toLowerCase() === userEmail_lower);
-  const isExplicitAdmin = user?.email?.toLowerCase() === 'imagina3ddesign@gmail.com';
-  const isAdminUser = user?.role === 'admin' || user?.position?.toUpperCase().includes('BIM') || isExplicitAdmin;
+  const isExplicitAdmin = user?.email?.toLowerCase() === 'imagina3ddesign@gmail.com' || user?.email?.toLowerCase() === 'mcmartinezg@unal.edu.co';
+  const isAdminUser = isIncidentsAdmin(user) || user?.role === 'admin' || user?.position?.toUpperCase().includes('BIM') || isExplicitAdmin;
+  const canRedirect = isAdminUser || isAuthor || isInitialResponsible || isCollaborator;
 
   // Approval Chain Logic (DashboardSummary version)
   const hasExecutor = !!issue.executor;
@@ -1655,29 +1673,26 @@ function StatusManager({ issue, isBimPanel, isSuspended, isPaymentAdmin }: { iss
         });
       }
 
-      // Redirection Management - DEFINITIVELY EXCLUDE EXECUTOR
-      if (!isExecutor && !isNextExecutor && (isInitialResponsible || isCollaborator || isAdminUser) && issue.status !== 'RESPONDIDA' && issue.status !== 'RESUELTA') {
-        if (isInitialResponsible || isAdminUser) {
-          actions.push({ 
-            id: 'AGREGAR_COLAB', 
-            label: 'AGREGAR COLABORADOR', 
-            color: 'bg-slate-800 hover:bg-slate-700 font-black', 
-            onClick: () => { setRedirectionType('COLABORADOR'); setShowRedirectionPicker(true); }
-          });
-          actions.push({ 
-            id: 'REDIRIGIR_EXEC', 
-            label: 'REDIRIGIR A EJECUTOR', 
-            color: 'bg-slate-800 hover:bg-slate-700 font-black', 
-            onClick: () => { setRedirectionType('EJECUTOR'); setShowRedirectionPicker(true); }
-          });
-        } else if (isCollaborator) {
-          actions.push({ 
-            id: 'REDIRIGIR_EXEC', 
-            label: 'REDIRIGIR A EJECUTOR', 
-            color: 'bg-slate-800 hover:bg-slate-700 font-black', 
-            onClick: () => { setRedirectionType('EJECUTOR'); setShowRedirectionPicker(true); } 
-          });
-        }
+      // Redirection Management - Active for Super Admin, Empresa Admin, Proyecto Admin, Author, and Responsible
+      if (!isExecutor && !isNextExecutor && canRedirect && issue.status !== 'RESPONDIDA' && issue.status !== 'RESUELTA') {
+        actions.push({ 
+          id: 'AGREGAR_COLAB', 
+          label: 'AGREGAR COLABORADOR', 
+          color: 'bg-slate-800 hover:bg-slate-700 font-black', 
+          onClick: () => { setRedirectionType('COLABORADOR'); setShowRedirectionPicker(true); }
+        });
+        actions.push({ 
+          id: 'REDIRIGIR_EXEC', 
+          label: 'REDIRIGIR A EJECUTOR', 
+          color: 'bg-slate-800 hover:bg-slate-700 font-black', 
+          onClick: () => { setRedirectionType('EJECUTOR'); setShowRedirectionPicker(true); }
+        });
+        actions.push({ 
+          id: 'REASIGNAR_RESP', 
+          label: 'REASIGNAR RESPONSABLE', 
+          color: 'bg-indigo-700 hover:bg-indigo-600 font-black', 
+          onClick: () => { setRedirectionType('RESPONSABLE'); setShowRedirectionPicker(true); }
+        });
       }
     } else if (canManage) {
       if (!isExecutor) {

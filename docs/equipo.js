@@ -506,6 +506,32 @@
   function normalizeProjectIsoStructure() {
     if (!activeProject) return;
 
+    // Purgar automáticamente de miembros autorizados a usuarios que fueron retirados de la empresa
+    if (activeProject && Array.isArray(activeProject.members) && currentCompany) {
+      const compMemberEmails = new Set(
+        (Array.isArray(currentCompany.members) ? currentCompany.members : [])
+          .map(m => (m?.email || '').toLowerCase().trim())
+          .filter(Boolean)
+      );
+      const compAdminEmails = new Set(
+        (Array.isArray(currentCompany.admins) ? currentCompany.admins : [])
+          .map(a => String(a).toLowerCase().trim())
+          .filter(Boolean)
+      );
+      const currentCompName = (currentCompany.name || '').toLowerCase().trim();
+
+      activeProject.members = activeProject.members.filter(pm => {
+        const email = (typeof pm === 'string' ? pm : pm?.email || '').toLowerCase().trim();
+        if (!email) return false;
+        const regComp = (getUserRegisteredCompany(email) || '').toLowerCase().trim();
+        if (regComp === currentCompName && !compMemberEmails.has(email) && !compAdminEmails.has(email)) {
+          console.warn('[ISO-19650] Usuario ' + email + ' fue retirado de la empresa ' + currentCompany.name + '. Removiendo de miembros autorizados.');
+          return false;
+        }
+        return true;
+      });
+    }
+
     if (!Array.isArray(activeProject.members)) {
       activeProject.members = [];
     }

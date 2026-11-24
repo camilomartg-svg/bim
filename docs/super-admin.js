@@ -971,9 +971,39 @@ document.addEventListener('DOMContentLoaded', async () => {
   window.deleteUser = (idx) => {
     if (selectedIndex === -1 || !empresas[selectedIndex] || !empresas[selectedIndex].members) return;
     const m = empresas[selectedIndex].members[idx];
-    const confirmMsg = m && m._unsaved ? '¿Descartar este nuevo usuario sin guardar?' : '¿Eliminar usuario?';
+    const confirmMsg = m && m._unsaved ? '¿Descartar este nuevo usuario sin guardar?' : '¿Eliminar usuario de la empresa?';
     if(confirm(confirmMsg)) {
+      const removedEmail = (m?.email || '').toLowerCase().trim();
       empresas[selectedIndex].members.splice(idx, 1);
+      
+      // Limpiar también de todos los proyectos de la empresa
+      if (removedEmail) {
+        const emp = empresas[selectedIndex];
+        const compId = emp.id;
+        const config = (window.companyConfigs && window.companyConfigs[compId]) || emp;
+        if (config && Array.isArray(config.projects)) {
+          config.projects.forEach(p => {
+            if (Array.isArray(p.members)) {
+              p.members = p.members.filter(pm => (typeof pm === 'string' ? pm : pm.email || '').toLowerCase().trim() !== removedEmail);
+            }
+            if (p.iso19650) {
+              if (Array.isArray(p.iso19650.projectAdmins)) {
+                p.iso19650.projectAdmins = p.iso19650.projectAdmins.filter(a => (typeof a === 'string' ? a : a.email || '').toLowerCase().trim() !== removedEmail);
+              }
+              if (Array.isArray(p.iso19650.deliveryTeams)) {
+                p.iso19650.deliveryTeams.forEach(dt => {
+                  if (Array.isArray(dt.members)) dt.members = dt.members.filter(dm => (typeof dm === 'string' ? dm : dm.email || '').toLowerCase().trim() !== removedEmail);
+                });
+              }
+              if (Array.isArray(p.iso19650.receiverTeams)) {
+                p.iso19650.receiverTeams.forEach(rt => {
+                  if (Array.isArray(rt.members)) rt.members = rt.members.filter(rm => (typeof rm === 'string' ? rm : rm.email || '').toLowerCase().trim() !== removedEmail);
+                });
+              }
+            }
+          });
+        }
+      }
       renderUsers();
     }
   };
