@@ -88,10 +88,48 @@ const MOCK_TEAM = [
 
 type ConfigTab = 'fields' | 'types' | 'impacts' | 'units' | 'activities' | 'dangers' | 'companies' | 'qualityReportConfig' | 'reportPermissions';
 
+// Helper to calculate the next sequential unit name (e.g. TORRE 3 -> TORRE 4; UNIDAD 3 -> UNIDAD 4; TORRE -> TORRE 2)
+export function getNextSequentialUnitName(baseName: string, existingUnits: StructuralUnit[]): string {
+  const existingNames = new Set(existingUnits.map(u => (u.name || '').trim().toUpperCase()));
+  const trimmed = (baseName || 'UNIDAD').trim();
+  
+  // Match trailing number, e.g. "TORRE 3", "UNIDAD 02", "BLOQUE-4", "TORRE3"
+  const match = trimmed.match(/^(.*?)(\s*[-_]?\s*)(\d+)$/);
+  
+  let prefix = trimmed;
+  let sep = ' ';
+  let startNum = 2;
+  let padLength = 0;
+
+  if (match) {
+    prefix = match[1].trim();
+    sep = match[2] || ' ';
+    startNum = parseInt(match[3], 10) + 1;
+    padLength = match[3].length;
+  } else {
+    prefix = trimmed;
+    sep = ' ';
+    startNum = 2;
+  }
+
+  let nextNum = startNum;
+  let candidate = '';
+  while (true) {
+    const numStr = padLength > 1 ? String(nextNum).padStart(padLength, '0') : String(nextNum);
+    candidate = `${prefix}${sep}${numStr}`.replace(/\s+/g, ' ').trim().toUpperCase();
+    if (!existingNames.has(candidate)) {
+      break;
+    }
+    nextNum++;
+  }
+  return candidate;
+}
+
 // Sub-component for a Structural Unit Row to handle local state and avoid re-render performance issues
 function UnitRow({ 
   unit, 
   onDelete,
+  onDuplicate,
   selectedScope, 
   configMode,
   overrides, 
@@ -101,6 +139,7 @@ function UnitRow({
 }: { 
   unit: StructuralUnit, 
   onDelete: (id: string) => void,
+  onDuplicate: (unit: StructuralUnit) => void,
   selectedScope: string,
   configMode: 'role' | 'type',
   overrides: Record<string, any>,
@@ -259,6 +298,14 @@ function UnitRow({
               )}
             </button>
           )}
+
+          <button 
+            onClick={() => onDuplicate(unit)} 
+            className="p-2 text-slate-300 hover:text-emerald-500 transition-all hover:bg-emerald-500/10 rounded-xl group/dup active:scale-90"
+            title="Duplicar Unidad (Crea la siguiente en secuencia con todos sus pisos y espacios)"
+          >
+            <Copy className="w-5 h-5" />
+          </button>
 
           <button 
             onClick={() => onDelete(unit.id)} 
@@ -977,6 +1024,57 @@ export default function ConfigPanel() {
     
     await saveUnit({ ...unit, spaces: newSpaces, levels: newLevels });
     setBulkTargetUnit(null);
+  };
+
+  const handleDuplicateUnit = async (sourceUnit: StructuralUnit) => {
+    // 1. Calculate next sequential name based on existing units (e.g. TORRE 3 -> TORRE 4)
+    const newName = getNextSequentialUnitName(sourceUnit.name, units);
+
+    // 2. Clone levels with new unique IDs
+    const clonedLevels = (sourceUnit.levels || []).map((lvl, idx) => ({
+      id: 'l_' + Date.now() + '_' + idx + '_' + Math.random().toString(36).substr(2, 6),
+      name: lvl.name
+    }));
+
+    // 3. Clone spaces with new unique IDs and preserve levelName
+    const clonedSpaces = (sourceUnit.spaces || []).map((sp, idx) => ({
+      id: 's_' + Date.now() + '_' + idx + '_' + Math.random().toString(36).substr(2, 6),
+      name: sp.name,
+      levelName: sp.levelName
+    }));
+
+    const newUnitId = 'u_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6);
+
+    const duplicatedUnit: StructuralUnit = {
+      id: newUnitId,
+      name: newName,
+      levels: clonedLevels,
+      spaces: clonedSpaces
+    };
+
+    // 4. Replicate active overrides if sourceUnit was active in any scope
+    let updatedOverrides = { ...typeOverrides };
+    let overridesChanged = false;
+    Object.keys(updatedOverrides).forEach(scope => {
+      const scopeUnits = updatedOverrides[scope]?.units || [];
+      if (scopeUnits.includes(sourceUnit.id)) {
+        updatedOverrides[scope] = {
+          ...(updatedOverrides[scope] || {}),
+          units: [...scopeUnits, newUnitId]
+        };
+        overridesChanged = true;
+      }
+    });
+
+    if (overridesChanged) {
+      setTypeOverrides(updatedOverrides);
+      const fbConfig = await getProjectConfig();
+      await saveProjectConfig({ ...fbConfig, typeOverrides: updatedOverrides });
+    }
+
+    // 5. Save the duplicated unit
+    await saveUnit(duplicatedUnit);
+    window.dispatchEvent(new Event('storage_settings_updated'));
   };
 
 const addItem = (type: 'impact' | 'type' | 'team' | 'activity' | 'danger' | 'company' | 'team_name' | 'quality_source' | 'quality_hito' | 'quality_type') => {
@@ -2022,6 +2120,7 @@ const changeTypeScope = (id: string, scope: 'GLOBAL' | 'DELIVERY' | 'RECEIVER') 
                         key={unit.id}
                         unit={unit}
                         onDelete={deleteUnit}
+                        onDuplicate={handleDuplicateUnit}
                         selectedScope={selectedConfigKey}
                         configMode={configMode}
                         overrides={typeOverrides}
