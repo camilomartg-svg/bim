@@ -200,24 +200,31 @@ window.WompiModule = (function () {
    */
   function isTesterProject(project) {
     if (!project) return false;
-    if (project.isTester === true || project.tester === true || project.isTrial === true || project.trial === true) return true;
-    if (project.customTrialExpiry) return true;
-    const name = String(project.name || '').toLowerCase();
-    const slug = String(project.slug || project.id || '').toLowerCase();
-    const tipo = String(project.tipo || project.plan || project.type || '').toLowerCase();
-    const folder = String(project.driveFolderName || '').toLowerCase();
-    if (folder.includes('tester') || folder.includes('ensayo') || folder.includes('demo') || folder.includes('prueba')) return true;
-    if (name.includes('tester') || name.includes('ensayo') || name.includes('demo') || name.includes('prueba')) return true;
-    if (slug.includes('tester') || slug.includes('ensayo') || slug.includes('demo') || slug.includes('prueba')) return true;
-    if (tipo.includes('tester') || tipo.includes('trial') || tipo.includes('demo') || tipo.includes('gratuito')) return true;
+    
+    // Si se desactivó explícitamente el estado de tester, NO es tester
+    if (project.isTester === false) return false;
 
-    if (typeof window !== 'undefined') {
-      try {
-        const urlParams = new URLSearchParams(window.location.search);
-        const dfn = decodeURIComponent(urlParams.get('driveFolderName') || '').toLowerCase();
-        if (dfn.includes('tester') || dfn.includes('ensayo') || dfn.includes('demo') || dfn.includes('prueba')) return true;
-      } catch (_) {}
+    // Si tiene fecha de expiración de prueba/tester personalizada
+    if (project.customTrialExpiry) {
+      const trialEnd = new Date(project.customTrialExpiry);
+      const now = Date.now();
+      if (!isNaN(trialEnd.getTime()) && now <= trialEnd.getTime()) {
+        return true;
+      }
+      return false; // Venció el periodo de tester!
     }
+
+    // Si tiene la bandera de tester activa explícitamente sin expiración
+    if (project.isTester === true || project.tester === true || project.isTrial === true || project.trial === true) {
+      return true;
+    }
+
+    // Tipo explícito de plan tester
+    const tipo = String(project.tipo || project.plan || project.type || '').toLowerCase().trim();
+    if (tipo === 'tester' || tipo === 'trial') {
+      return true;
+    }
+
     return false;
   }
 
@@ -592,9 +599,30 @@ window.WompiModule = (function () {
     }
 
     if (!isPayAdmin) {
-      // Los colaboradores/miembros normales no deben ver bloqueos ni interrupciones
+      overlay.innerHTML = `
+        <div style="max-width: 520px; width: 100%; background: #18181b; border: 1px solid rgba(255, 255, 255, 0.15); border-radius: 24px; padding: 36px 32px; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.7); text-align: center; box-sizing: border-box;">
+          <div style="width: 72px; height: 72px; background: rgba(255, 255, 255, 0.06); border: 2px solid rgba(255, 255, 255, 0.2); border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto 20px auto; color: #f1f5f9;">
+            <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+              <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+            </svg>
+          </div>
+          <h2 style="font-size: 22px; font-weight: 800; color: #ffffff; margin: 0 0 10px 0; letter-spacing: -0.02em;">
+            Proyecto Bloqueado
+          </h2>
+          <p style="font-size: 13px; color: #cbd5e1; line-height: 1.6; margin: 0 0 24px 0;">
+            El acceso a las funciones, modelos y herramientas de este proyecto se encuentra temporalmente inhabilitado. Si necesitas acceso, contacta al administrador del proyecto.
+          </p>
+          <div style="display: flex; gap: 12px; justify-content: center; flex-wrap: wrap;">
+            <a href="${backUrl}" style="background: rgba(255, 255, 255, 0.12); color: #ffffff; text-decoration: none; font-weight: 700; font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em; padding: 12px 24px; border-radius: 12px; border: 1px solid rgba(255, 255, 255, 0.25); display: inline-flex; align-items: center; gap: 8px;">
+              Volver al Portal
+            </a>
+          </div>
+        </div>
+      `;
+      document.body.appendChild(overlay);
       return;
-    }
+    } else {
       overlay.innerHTML = `
         <div style="max-width: 560px; width: 100%; background: #18181b; border: 2px solid #f43f5e; border-radius: 24px; padding: 36px 32px; box-shadow: 0 25px 50px -12px rgba(244, 63, 94, 0.35); text-align: center; box-sizing: border-box;">
           <div style="width: 72px; height: 72px; background: rgba(244, 63, 94, 0.15); border: 2px solid #f43f5e; border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto 20px auto; color: #f43f5e;">

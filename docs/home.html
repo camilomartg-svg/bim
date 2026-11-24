@@ -376,8 +376,7 @@
                             }
 
                             const licCheck = window.WompiModule ? window.WompiModule.canAccessProject(project, 3) : { canAccess: true, status: 'ACTIVE' };
-                            // Los bloqueos rojos solo se le muestran al Super Administrador, Administrador de Empresa y Administrador de Proyecto
-                            const isBlocked = !licCheck.canAccess && !isSuperAdmin && isPaymentAdminUser;
+                            const isBlocked = !licCheck.canAccess && !isSuperAdmin;
                             const isPaymentAdminUser = isSuperAdmin || (window.WompiModule && typeof window.WompiModule.isPaymentAdmin === 'function'
                                 ? window.WompiModule.isPaymentAdmin(userAccount, window.currentEmpresaData, project)
                                 : false);

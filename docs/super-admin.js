@@ -3411,16 +3411,146 @@ window.quickApproveUser = async function(email, nombre, companyName = '') {
 };
 
 // ==========================================
-// MÓDULO: GESTIÓN GLOBAL DE PROYECTOS Y LICENCIAS
+// MÓDULO: GESTIÓN GLOBAL DE PROYECTOS Y LICENCIAS (SUPER ADMINISTRADOR)
 // ==========================================
+
+let globalProjectStatusFilter = 'ALL';
+
+window.setGlobalProjectStatusFilter = function(filter) {
+    globalProjectStatusFilter = filter;
+    ['all', 'suspended', 'grace', 'active', 'tester'].forEach(f => {
+        const btn = document.getElementById('filter-btn-' + f);
+        if (btn) {
+            if (f.toUpperCase() === filter || (f === 'all' && filter === 'ALL') || (f === 'grace' && filter === 'GRACE_PERIOD')) {
+                btn.className = 'px-2.5 py-1 rounded-lg bg-white shadow-sm font-black text-slate-900 transition-all';
+            } else {
+                btn.className = 'px-2.5 py-1 rounded-lg font-bold text-slate-500 hover:text-slate-800 transition-all';
+            }
+        }
+    });
+    renderGlobalProjects();
+};
+
 window.toggleGlobalProjectLicense = (companyId, projectSlug, checked) => {
     const config = window.companyConfigs[companyId];
     if (config && config.projects) {
         const p = config.projects.find(proj => proj.slug === projectSlug);
         if (p) {
             p.hasLicense = checked;
+            showBanner(`Licencia de ${p.name} ${checked ? 'activada' : 'desactivada'}. Haz clic en 'Guardar Cambios' arriba para aplicar.`, 'info');
             renderGlobalProjects();
         }
+    }
+};
+
+/**
+ * Retira la condición de tester a un proyecto para que entre en cobro o suspensión según mora
+ */
+window.removeProjectTester = function(companyId, projectSlug) {
+    const config = window.companyConfigs[companyId];
+    if (!config || !config.projects) return;
+    const p = config.projects.find(proj => proj.slug === projectSlug);
+    if (!p) return;
+
+    if (!confirm(`¿Deseas retirar la licencia de TESTER al proyecto "${p.name}"?\n\nEl proyecto pasará de inmediato a regirse por la fecha de corte y facturación normal, y si presenta mora superior a 5 días quedará suspendido.`)) {
+        return;
+    }
+
+    p.isTester = false;
+    p.tester = false;
+    p.isTrial = false;
+    delete p.customTrialExpiry;
+
+    showBanner(`Licencia tester retirada de "${p.name}". Recuerda hacer clic en "Guardar Cambios" arriba a la derecha para sincronizar con Google Drive.`, 'success');
+    renderGlobalProjects();
+};
+
+/**
+ * Otorga o cambia la duración de la licencia tester en días (+7, +15, +30 o días personalizados)
+ */
+window.grantProjectTesterDays = function(companyId, projectSlug, days) {
+    const config = window.companyConfigs[companyId];
+    if (!config || !config.projects) return;
+    const p = config.projects.find(proj => proj.slug === projectSlug);
+    if (!p) return;
+
+    p.isTester = true;
+    p.hasLicense = true;
+
+    if (days === 0) {
+        // Permanente
+        delete p.customTrialExpiry;
+        showBanner(`Proyecto "${p.name}" marcado como TESTER PERMANENTE. Recuerda hacer clic en "Guardar Cambios" arriba.`, 'success');
+    } else {
+        // Calcular fecha base: si ya tiene expiry a futuro, sumar desde allí; si no, desde hoy
+        let baseDate = new Date();
+        if (p.customTrialExpiry) {
+            const currentExp = new Date(p.customTrialExpiry);
+            if (currentExp > baseDate) {
+                baseDate = currentExp;
+            }
+        }
+        const newExpiry = new Date(baseDate.getTime() + days * 24 * 60 * 60 * 1000);
+        p.customTrialExpiry = newExpiry.toISOString();
+        showBanner(`Licencia tester de "${p.name}" ampliada hasta el ${newExpiry.toLocaleDateString('es-CO')}. Recuerda hacer clic en "Guardar Cambios" arriba.`, 'success');
+    }
+
+    renderGlobalProjects();
+};
+
+/**
+ * Reduce los días de tester de un proyecto
+ */
+window.reduceProjectTesterDays = function(companyId, projectSlug, days) {
+    const config = window.companyConfigs[companyId];
+    if (!config || !config.projects) return;
+    const p = config.projects.find(proj => proj.slug === projectSlug);
+    if (!p) return;
+
+    if (!p.customTrialExpiry) {
+        // Si era permanente, fijar a partir de hoy
+        const newExpiry = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+        p.customTrialExpiry = newExpiry.toISOString();
+        p.isTester = true;
+        showBanner(`Tester permanente de "${p.name}" ajustado a 7 días (hasta ${newExpiry.toLocaleDateString('es-CO')}). Haz clic en "Guardar Cambios".`, 'info');
+    } else {
+        const currentExp = new Date(p.customTrialExpiry);
+        const newExpiry = new Date(currentExp.getTime() - days * 24 * 60 * 60 * 1000);
+        if (newExpiry <= new Date()) {
+            // Ya venció
+            p.customTrialExpiry = newExpiry.toISOString();
+            showBanner(`Licencia tester reducida. El periodo de prueba ha expirado para "${p.name}". Haz clic en "Guardar Cambios".`, 'warning');
+        } else {
+            p.customTrialExpiry = newExpiry.toISOString();
+            showBanner(`Licencia tester reducida en ${days} días (nueva fecha: ${newExpiry.toLocaleDateString('es-CO')}). Haz clic en "Guardar Cambios".`, 'info');
+        }
+    }
+
+    renderGlobalProjects();
+};
+
+/**
+ * Prompt para dar días de tester específicos
+ */
+window.promptProjectTester = function(companyId, projectSlug) {
+    const opt = prompt(
+        "OTORGAR LICENCIA TESTER A ESTE PROYECTO:\n\n" +
+        "1 = 7 días de prueba\n" +
+        "2 = 15 días de prueba\n" +
+        "3 = 30 días de prueba\n" +
+        "4 = Tester Permanente\n\n" +
+        "Escribe 1, 2, 3 o 4 (o el número exacto de días):",
+        "1"
+    );
+    if (!opt) return;
+    const trim = opt.trim();
+    if (trim === '1') grantProjectTesterDays(companyId, projectSlug, 7);
+    else if (trim === '2') grantProjectTesterDays(companyId, projectSlug, 15);
+    else if (trim === '3') grantProjectTesterDays(companyId, projectSlug, 30);
+    else if (trim === '4') grantProjectTesterDays(companyId, projectSlug, 0);
+    else {
+        const num = parseInt(trim, 10);
+        if (!isNaN(num) && num > 0) grantProjectTesterDays(companyId, projectSlug, num);
     }
 };
 
@@ -3443,6 +3573,8 @@ window.renderGlobalProjects = function() {
 
     let totalProjectsCount = 0;
     let activeLicensesCount = 0;
+    let suspendedProjectsCount = 0;
+    let testerProjectsCount = 0;
 
     // Build list of companies with their matching projects
     const activeCompanies = window.empresas.filter(e => !e.deleted);
@@ -3453,24 +3585,110 @@ window.renderGlobalProjects = function() {
         const config = window.companyConfigs[emp.id] || { projects: [] };
         const projects = config.projects || [];
         
-        // Filter projects
-        const matchingProjects = projects.filter(p => {
+        // Compute statistics for each project
+        const evaluatedProjects = projects.map(p => {
+            // Determine creation date
+            let createdAtStr = 'N/D';
+            let createdDate = null;
+            if (p.createdAt) {
+                const cd = new Date(p.createdAt);
+                if (!isNaN(cd.getTime())) {
+                    createdDate = cd;
+                    createdAtStr = cd.toLocaleDateString('es-CO');
+                }
+            }
+            if (!createdDate) {
+                const match = String(p.slug || p.id || '').match(/(\d{10,13})/);
+                if (match) {
+                    const ts = parseInt(match[1], 10);
+                    const cd = new Date(ts);
+                    if (!isNaN(cd.getTime()) && cd.getFullYear() >= 2020 && cd.getFullYear() <= 2030) {
+                        createdDate = cd;
+                        createdAtStr = cd.toLocaleDateString('es-CO');
+                    }
+                }
+            }
+
+            // License Status from WompiModule
+            const lic = window.WompiModule ? window.WompiModule.getProjectLicenseStatus(p, 3) : { status: 'ACTIVE', badgeText: 'Licencia Activa' };
+            const isTester = Boolean(window.WompiModule && window.WompiModule.isTesterProject(p));
+
+            // Suspension Date computation:
+            let suspensionDateStr = 'Al día';
+            let suspensionDetail = '';
+            
+            if (isTester) {
+                if (p.customTrialExpiry) {
+                    const te = new Date(p.customTrialExpiry);
+                    suspensionDateStr = te.toLocaleDateString('es-CO');
+                    const daysLeft = Math.ceil((te.getTime() - Date.now()) / (1000 * 60 * 60 * 24));
+                    suspensionDetail = daysLeft >= 0 ? `(${daysLeft}d restantes)` : '(Vencido)';
+                } else {
+                    suspensionDateStr = 'Prueba Permanente';
+                }
+            } else if (p.hasLicense === false) {
+                suspensionDateStr = 'Desactivado';
+            } else if (lic.status === 'SUSPENDED' || lic.status === 'EXPIRED_PURGE') {
+                // Suspended
+                const overdue = lic.overdueDays || 6;
+                const suspDate = new Date(Date.now() - (overdue - 5) * 24 * 60 * 60 * 1000);
+                suspensionDateStr = `⛔ Suspendido ${suspDate.toLocaleDateString('es-CO')}`;
+                suspensionDetail = `(${overdue}d mora)`;
+            } else if (lic.status === 'GRACE_PERIOD') {
+                const graceLeft = lic.graceDaysLeft || 1;
+                const graceSusp = new Date(Date.now() + graceLeft * 24 * 60 * 60 * 1000);
+                suspensionDateStr = `⚠️ Suspende: ${graceSusp.toLocaleDateString('es-CO')}`;
+                suspensionDetail = `(${graceLeft}d de gracia)`;
+            } else {
+                suspensionDateStr = 'Próximo corte: Día 3';
+                suspensionDetail = '(5d de gracia)';
+            }
+
+            return {
+                ...p,
+                createdAtStr,
+                lic,
+                isTester,
+                suspensionDateStr,
+                suspensionDetail
+            };
+        });
+
+        // Filter projects by search and status filter
+        const matchingProjects = evaluatedProjects.filter(p => {
+            // Status filter
+            if (globalProjectStatusFilter === 'SUSPENDED') {
+                if (p.lic.status !== 'SUSPENDED' && p.lic.status !== 'EXPIRED_PURGE') return false;
+            } else if (globalProjectStatusFilter === 'GRACE_PERIOD') {
+                if (p.lic.status !== 'GRACE_PERIOD') return false;
+            } else if (globalProjectStatusFilter === 'ACTIVE') {
+                if (p.lic.status !== 'ACTIVE' || p.isTester || p.hasLicense === false) return false;
+            } else if (globalProjectStatusFilter === 'TESTER') {
+                if (!p.isTester) return false;
+            }
+
+            // Search filter
             if (!searchVal) return true;
             const nameMatch = (p.name || '').toLowerCase().includes(searchVal);
             const slugMatch = (p.slug || '').toLowerCase().includes(searchVal);
             const companyMatch = (emp.name || '').toLowerCase().includes(searchVal) || (emp.razonSocial || '').toLowerCase().includes(searchVal);
-            return nameMatch || slugMatch || companyMatch;
+            const statusMatch = (p.lic.status || '').toLowerCase().includes(searchVal) || (p.lic.badgeText || '').toLowerCase().includes(searchVal);
+            return nameMatch || slugMatch || companyMatch || statusMatch;
         });
 
-        if (searchVal && matchingProjects.length === 0) {
+        // Tally stats across ALL projects (not just filtered)
+        totalProjectsCount += projects.length;
+        evaluatedProjects.forEach(ep => {
+            if (ep.isTester) testerProjectsCount++;
+            else if (ep.lic.status === 'SUSPENDED' || ep.lic.status === 'EXPIRED_PURGE') suspendedProjectsCount++;
+            else if (ep.hasLicense !== false) activeLicensesCount++;
+        });
+
+        if ((searchVal || globalProjectStatusFilter !== 'ALL') && matchingProjects.length === 0) {
             return; // Skip company if searching and no projects match
         }
 
-        // Aggregate statistics
-        totalProjectsCount += projects.length;
-        activeLicensesCount += projects.filter(p => p.hasLicense !== false).length;
-
-        const companyLicensesCount = projects.filter(p => p.hasLicense !== false).length;
+        const companyLicensesCount = projects.filter(p => p.hasLicense !== false && !window.WompiModule?.isTesterProject(p)).length;
         const basePrice = 115600;
         const subtotal = companyLicensesCount * basePrice;
         const iva = subtotal * 0.19;
@@ -3485,17 +3703,17 @@ window.renderGlobalProjects = function() {
                     <img src="${emp.image || 'https://i.postimg.cc/02mTnnQv/21bd5ee9d2351270615280386caad1f3.jpg'}" class="w-10 h-10 rounded-xl object-cover border border-slate-200" onerror="this.src='https://i.postimg.cc/02mTnnQv/21bd5ee9d2351270615280386caad1f3.jpg'">
                     <div>
                         <h3 class="text-sm font-bold text-slate-800">${emp.razonSocial || emp.name || 'Sin Nombre'}</h3>
-                        <p class="text-xs text-slate-500">ID: ${emp.id} &middot; Código: ${emp.code}</p>
+                        <p class="text-xs text-slate-500">ID: ${emp.id} &middot; Código: ${emp.code} &middot; Proyectos: ${projects.length}</p>
                     </div>
                 </div>
                 <div class="flex flex-wrap items-center gap-4 text-right">
                     <div class="bg-blue-50 border border-blue-200 rounded-xl px-4 py-2 text-left md:text-right">
                         <div class="text-[10px] font-bold text-blue-700 uppercase tracking-wider">Facturación Mensual</div>
-                        <div class="text-sm font-black text-blue-900">$${total.toLocaleString('es-CO')} COP</div>
-                        <div class="text-[9px] text-blue-600">Subtotal: $${subtotal.toLocaleString('es-CO')} + IVA (19%): $${iva.toLocaleString('es-CO')}</div>
+                        <div class="text-sm font-black text-blue-900">${total.toLocaleString('es-CO')} COP</div>
+                        <div class="text-[9px] text-blue-600">Subtotal: ${subtotal.toLocaleString('es-CO')} + IVA (19%): ${iva.toLocaleString('es-CO')}</div>
                     </div>
                     <button onclick="switchGlobalView('empresas'); selectEmpresa(${empIdx});" class="px-3 py-1.5 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 rounded-xl text-xs font-semibold shadow-sm transition-all flex items-center gap-1">
-                        <span class="material-symbols-outlined text-sm">edit</span> Gestionar
+                        <span class="material-symbols-outlined text-sm">edit</span> Ficha Empresa
                     </button>
                 </div>
             </div>
@@ -3504,33 +3722,106 @@ window.renderGlobalProjects = function() {
             <div class="overflow-x-auto">
                 <table class="w-full text-left text-xs">
                     <thead>
-                        <tr class="text-slate-400 font-bold uppercase tracking-wider border-b border-slate-100">
-                            <th class="pb-2 pl-2">Proyecto</th>
-                            <th class="pb-2">Slug</th>
-                            <th class="pb-2">Estado</th>
-                            <th class="pb-2 text-center">Licencia Activa</th>
-                            <th class="pb-2 text-right pr-2">Costo (COP)</th>
+                        <tr class="text-slate-400 font-bold uppercase tracking-wider border-b border-slate-200 text-[10px]">
+                            <th class="pb-2.5 pl-2">Proyecto & Creación</th>
+                            <th class="pb-2.5">Estado Op.</th>
+                            <th class="pb-2.5">Estado Licencia / Pago</th>
+                            <th class="pb-2.5">Corte / Suspensión</th>
+                            <th class="pb-2.5 text-center">Control Tester</th>
+                            <th class="pb-2.5 text-center">Lic. Activa</th>
+                            <th class="pb-2.5 text-right pr-2">Costo (COP)</th>
                         </tr>
                     </thead>
                     <tbody class="divide-y divide-slate-100">
                         ${matchingProjects.map(p => {
                             const licensed = p.hasLicense !== false;
-                            const projectPrice = licensed ? 115600 : 0;
-                            const projectIva = projectPrice * 0.19;
-                            const projectTotal = projectPrice + projectIva;
+                            const isTester = p.isTester;
+                            const projectPrice = (licensed && !isTester) ? 115600 : 0;
+                            const isSusp = p.lic.status === 'SUSPENDED' || p.lic.status === 'EXPIRED_PURGE';
+                            const isGrace = p.lic.status === 'GRACE_PERIOD';
 
                             return `
-                            <tr class="hover:bg-white/60 transition-colors">
-                                <td class="py-3 pl-2 font-semibold text-slate-800">${p.name || 'Sin Nombre'}</td>
-                                <td class="py-3 font-mono text-[10px] text-slate-500">${p.slug}</td>
-                                <td class="py-3">
-                                    <span class="px-2 py-0.5 rounded font-bold uppercase text-[9px] tracking-wider ${p.status === 'Activo' ? 'bg-emerald-100 text-emerald-700' : p.status === 'Cerrado' ? 'bg-rose-100 text-rose-700' : 'bg-slate-200 text-slate-700'}">${p.status}</span>
+                            <tr class="hover:bg-white/80 transition-colors ${isSusp ? 'bg-rose-50/40' : ''}">
+                                <!-- Nombre y Fecha Creación -->
+                                <td class="py-3 pl-2">
+                                    <div class="font-bold text-slate-800 text-xs">${p.name || 'Sin Nombre'}</div>
+                                    <div class="font-mono text-[9px] text-slate-400">${p.slug}</div>
+                                    <div class="text-[9px] text-slate-500 font-medium flex items-center gap-1 mt-0.5">
+                                        <span class="material-symbols-outlined text-[11px] text-slate-400">calendar_today</span>
+                                        Creado: <strong>${p.createdAtStr}</strong>
+                                    </div>
                                 </td>
+
+                                <!-- Estado Operativo -->
+                                <td class="py-3">
+                                    <span class="px-2 py-0.5 rounded font-bold uppercase text-[9px] tracking-wider ${p.status === 'Activo' ? 'bg-emerald-100 text-emerald-700' : p.status === 'Cerrado' ? 'bg-rose-100 text-rose-700' : 'bg-slate-200 text-slate-700'}">${p.status || 'Activo'}</span>
+                                </td>
+
+                                <!-- Estado Licencia / Pago -->
+                                <td class="py-3">
+                                    ${isTester ? `
+                                        <div class="inline-flex flex-col gap-0.5">
+                                            <span class="px-2 py-0.5 rounded-full font-extrabold text-[9px] bg-purple-100 text-purple-800 border border-purple-300 flex items-center gap-1 w-max">
+                                                <span class="material-symbols-outlined text-xs">card_giftcard</span> TESTER / PRUEBA
+                                            </span>
+                                            <span class="text-[9px] text-purple-700 font-medium pl-1">${p.suspensionDetail || 'Acceso Libre'}</span>
+                                        </div>
+                                    ` : !licensed ? `
+                                        <span class="px-2 py-0.5 rounded-full font-bold text-[9px] bg-slate-200 text-slate-600">DESACTIVADO</span>
+                                    ` : isSusp ? `
+                                        <div class="inline-flex flex-col gap-0.5">
+                                            <span class="px-2 py-0.5 rounded-full font-extrabold text-[9px] bg-rose-100 text-rose-800 border border-rose-400 flex items-center gap-1 animate-pulse w-max">
+                                                <span class="material-symbols-outlined text-xs">block</span> SUSPENDIDO
+                                            </span>
+                                            <span class="text-[9px] text-rose-700 font-bold pl-1">Sin pago ${p.suspensionDetail}</span>
+                                        </div>
+                                    ` : isGrace ? `
+                                        <div class="inline-flex flex-col gap-0.5">
+                                            <span class="px-2 py-0.5 rounded-full font-extrabold text-[9px] bg-amber-100 text-amber-900 border border-amber-400 flex items-center gap-1 w-max">
+                                                <span class="material-symbols-outlined text-xs">timer</span> EN GRACIA
+                                            </span>
+                                            <span class="text-[9px] text-amber-700 font-semibold pl-1">${p.suspensionDetail}</span>
+                                        </div>
+                                    ` : `
+                                        <span class="px-2 py-0.5 rounded-full font-bold text-[9px] bg-emerald-100 text-emerald-800 border border-emerald-300 flex items-center gap-1 w-max">
+                                            <span class="material-symbols-outlined text-xs">check_circle</span> AL DÍA / ACTIVO
+                                        </span>
+                                    `}
+                                </td>
+
+                                <!-- Fecha Corte y Fecha Suspensión -->
+                                <td class="py-3">
+                                    <div class="text-[10px] font-bold text-slate-700">${p.suspensionDateStr}</div>
+                                    ${p.suspensionDetail && !isTester && !isSusp ? `<div class="text-[9px] text-slate-400">${p.suspensionDetail}</div>` : ''}
+                                </td>
+
+                                <!-- Control Tester (Retirar / Reducir / Ampliar) -->
+                                <td class="py-3 text-center">
+                                    ${isTester ? `
+                                        <div class="inline-flex items-center gap-1 bg-white p-1 rounded-xl border border-purple-200 shadow-sm">
+                                            <button title="Ampliar 7 días" onclick="grantProjectTesterDays('${emp.id}', '${p.slug}', 7)" class="px-1.5 py-0.5 text-[9px] font-black bg-purple-50 text-purple-700 hover:bg-purple-100 rounded transition-all">+7d</button>
+                                            <button title="Ampliar 15 días" onclick="grantProjectTesterDays('${emp.id}', '${p.slug}', 15)" class="px-1.5 py-0.5 text-[9px] font-black bg-purple-50 text-purple-700 hover:bg-purple-100 rounded transition-all">+15d</button>
+                                            <button title="Ampliar 30 días" onclick="grantProjectTesterDays('${emp.id}', '${p.slug}', 30)" class="px-1.5 py-0.5 text-[9px] font-black bg-purple-50 text-purple-700 hover:bg-purple-100 rounded transition-all">+30d</button>
+                                            <button title="Reducir 7 días" onclick="reduceProjectTesterDays('${emp.id}', '${p.slug}', 7)" class="px-1.5 py-0.5 text-[9px] font-black bg-slate-100 text-slate-700 hover:bg-slate-200 rounded transition-all">-7d</button>
+                                            <button title="Retirar tester inmediatamente (pasa a cobro/suspensión)" onclick="removeProjectTester('${emp.id}', '${p.slug}')" class="px-2 py-0.5 text-[9px] font-black bg-rose-600 hover:bg-rose-700 text-white rounded transition-all flex items-center gap-0.5 shadow-sm">
+                                                <span class="material-symbols-outlined text-[10px]">close</span> Retirar
+                                            </button>
+                                        </div>
+                                    ` : `
+                                        <button onclick="promptProjectTester('${emp.id}', '${p.slug}')" class="px-2.5 py-1 text-[10px] font-bold bg-white border border-slate-200 text-purple-700 hover:bg-purple-50 rounded-xl transition-all shadow-sm flex items-center gap-1 mx-auto">
+                                            <span class="material-symbols-outlined text-xs">card_giftcard</span> + Dar Tester
+                                        </button>
+                                    `}
+                                </td>
+
+                                <!-- Licencia Activa -->
                                 <td class="py-3 text-center">
                                     <input type="checkbox" class="rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer h-4 w-4" ${licensed ? 'checked' : ''} onchange="toggleGlobalProjectLicense('${emp.id}', '${p.slug}', this.checked)">
                                 </td>
+
+                                <!-- Costo -->
                                 <td class="py-3 text-right pr-2 font-bold text-slate-800">
-                                    ${licensed ? `$137.564 <span class="text-[9px] text-slate-400 font-normal">($115.600 + IVA)</span>` : '$0'}
+                                    ${projectPrice > 0 ? `$137.564 <span class="text-[9px] text-slate-400 font-normal">($115.600 + IVA)</span>` : '$0'}
                                 </td>
                             </tr>
                             `;
@@ -3546,8 +3837,8 @@ window.renderGlobalProjects = function() {
         html = `
         <div class="text-center py-12 text-slate-500 flex flex-col items-center justify-center">
             <span class="material-symbols-outlined text-4xl mb-2 text-slate-300">search_off</span>
-            <p class="font-semibold">No se encontraron proyectos</p>
-            <p class="text-xs text-slate-400">Intenta buscar con otros términos o limpia el filtro.</p>
+            <p class="font-semibold">No se encontraron proyectos con el criterio seleccionado</p>
+            <p class="text-xs text-slate-400">Intenta cambiar el filtro de estado o el término de búsqueda.</p>
         </div>
         `;
     }
@@ -3557,6 +3848,8 @@ window.renderGlobalProjects = function() {
     // Update global KPI stats
     const totalProjectsEl = document.getElementById('stat-total-projects');
     const activeLicensesEl = document.getElementById('stat-active-licenses');
+    const suspendedProjectsEl = document.getElementById('stat-suspended-projects');
+    const testerProjectsEl = document.getElementById('stat-tester-projects');
     const totalBillingEl = document.getElementById('stat-total-billing');
 
     const totalBillingBase = activeLicensesCount * 115600;
@@ -3565,17 +3858,15 @@ window.renderGlobalProjects = function() {
 
     if (totalProjectsEl) totalProjectsEl.textContent = totalProjectsCount;
     if (activeLicensesEl) activeLicensesEl.textContent = activeLicensesCount;
+    if (suspendedProjectsEl) suspendedProjectsEl.textContent = suspendedProjectsCount;
+    if (testerProjectsEl) testerProjectsEl.textContent = testerProjectsCount;
     if (totalBillingEl) {
         totalBillingEl.innerHTML = `
-          <div>$${totalBillingTotal.toLocaleString('es-CO')} COP</div>
-          <div class="text-[10px] text-slate-400 font-normal mt-0.5">Subtotal: $${totalBillingBase.toLocaleString('es-CO')} + IVA (19%)</div>
+          <div>${totalBillingTotal.toLocaleString('es-CO')} COP</div>
+          <div class="text-[9px] text-slate-400 font-normal mt-0.5">Subtotal: ${totalBillingBase.toLocaleString('es-CO')} + IVA (19%)</div>
         `;
     }
 };
-
-// ==========================================
-// MÓDULO: SUPER ADMINISTRACIÓN - ENTRENAMIENTO NORA AI
-// ==========================================
 
 window.switchGlobalView = function(viewName) {
     const empresasView = document.getElementById('empresas-view');
