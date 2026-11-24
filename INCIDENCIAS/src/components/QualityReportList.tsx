@@ -1,3 +1,4 @@
+import { isIncidentsAdmin } from '../utils/userScope';
 import React, { useState, useEffect } from 'react';
 import { 
   FileText, 
@@ -1909,7 +1910,7 @@ export default function QualityReportList() {
               </div>
 
               <footer className="p-8 border-t border-slate-200 dark:border-slate-800 flex flex-wrap justify-end gap-3 shrink-0 bg-white/50 dark:bg-[#020617]/50">
-                {(isBimTeam || user?.role === 'admin') && (
+                {(isBimTeam || isIncidentsAdmin(user)) && (
                   <div className="flex items-center gap-2">
                     {isConfirmingDelete ? (
                       <>

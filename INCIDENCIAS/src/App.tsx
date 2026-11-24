@@ -271,7 +271,7 @@ function Dashboard() {
         );
       case 'issues':
       case 'anuladas':
-        if (!isBimTeam && user?.role !== 'admin') {
+        if (!isBimTeam && !isAdmin) {
           return (
             <div className="flex-1 flex items-center justify-center bg-white dark:bg-[#020617]">
                <div className="text-center p-8 bg-slate-50 dark:bg-slate-900 shadow-2xl shadow-indigo-500/10 rounded-3xl border border-slate-200 dark:border-slate-800 animate-in fade-in zoom-in duration-500">
@@ -355,7 +355,7 @@ function Dashboard() {
         }
         return <EnvironmentalReportList />;
       case 'settings':
-        if (user?.role !== 'admin') {
+        if (!isAdmin) {
           return <RestrictedView title="Configuración" onBack={() => setActiveTab('dashboard')} />;
         }
         return <ConfigPanel />;

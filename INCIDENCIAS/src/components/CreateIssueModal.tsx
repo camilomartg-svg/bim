@@ -1,3 +1,4 @@
+import { isIncidentsAdmin } from '../utils/userScope';
 import React, { useState, useEffect } from 'react';
 import { collection, addDoc, getDocs, query, where, orderBy, updateDoc, doc } from 'firebase/firestore';
 import { db } from '../services/firebase';
@@ -195,7 +196,7 @@ export default function CreateIssueModal({ onClose, onSuccess }: CreateIssueModa
   });
   const [allProjectTeams, setAllProjectTeams] = useState<string[]>(['ARQUITECTURA', 'ESTRUCTURAL', 'BIM OBRA', 'OBRA']);
 
-  const isAdmin = user?.role === 'admin' || (user?.role as string) === 'super admin' || Boolean((user as any)?.isSuperAdmin) || getUserProjectBranch(user?.email) === 'ADMIN';
+  const isAdmin = isIncidentsAdmin(user) || user?.role === 'admin' || (user?.role as string) === 'super admin' || Boolean((user as any)?.isSuperAdmin) || getUserProjectBranch(user?.email) === 'ADMIN';
 
   useEffect(() => {
     if (user?.email) {

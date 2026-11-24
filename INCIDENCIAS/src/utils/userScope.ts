@@ -9,15 +9,28 @@ export type IssueTypeScope = 'GLOBAL' | 'DELIVERY' | 'RECEIVER';
  */
 export function getActiveProjectData(): any | null {
   try {
-    const rawProj = sessionStorage.getItem('activeProject') || localStorage.getItem('activeProject');
+    let proj: any = null;
+    const rawProj = (typeof window !== 'undefined') ? (sessionStorage.getItem('activeProject') || localStorage.getItem('activeProject') || sessionStorage.getItem('currentProject') || localStorage.getItem('currentProject')) : null;
     if (rawProj) {
-      const parsed = JSON.parse(rawProj);
-      if (parsed?.iso19650) return parsed;
+      try {
+        proj = JSON.parse(rawProj);
+      } catch (_) {}
     }
-    const cachedIso = localStorage.getItem('cached_project_iso_data');
+    const cachedIso = (typeof window !== 'undefined') ? localStorage.getItem('cached_project_iso_data') : null;
     if (cachedIso) {
-      return JSON.parse(cachedIso);
+      try {
+        const parsedIso = JSON.parse(cachedIso);
+        proj = {
+          ...(proj || {}),
+          ...parsedIso,
+          iso19650: {
+            ...(proj?.iso19650 || {}),
+            ...(parsedIso?.iso19650 || parsedIso || {})
+          }
+        };
+      } catch (_) {}
     }
+    return proj;
   } catch (e) {
     console.warn('Error reading activeProject data:', e);
   }
@@ -318,55 +331,127 @@ export function filterMembersByScope(
  * Evaluates whether the user is an Administrator (Super Admin, Empresa Admin, or Proyecto Admin).
  * Per project rules: Super Admin, Company Admin, and Project Admin (Rol A) have permission to configure.
  */
-export function isIncidentsAdmin(user: any): boolean {
-  if (!user) return false;
-  const email = String(user.email || '').toLowerCase().trim();
-  const role = String(user.role || '').toUpperCase().trim();
-
-  // 1. Super Administrador
-  if (role.includes('SUPER') || email === 'imagina3ddesign@gmail.com' || email === 'mcmartinezg@unal.edu.co') {
-    return true;
-  }
-
-  // 2. Administrador de Empresa / Proyecto en userAccount
+export function isIncidentsAdmin(user?: any): boolean {
   try {
     const rawAccount = typeof window !== 'undefined' ? (sessionStorage.getItem('userAccount') || localStorage.getItem('userAccount')) : null;
+    let u: any = null;
     if (rawAccount) {
-      const u = JSON.parse(rawAccount);
-      const uEmail = String(u.email || u.username || '').toLowerCase().trim();
-      const uRole = String(u.role || '').toUpperCase().trim();
-      if (uRole.includes('SUPER') || uEmail === 'imagina3ddesign@gmail.com' || uEmail === 'mcmartinezg@unal.edu.co') return true;
-      if (uRole === 'ADMINISTRADOR_EMPRESA' || uRole === 'ADMIN_EMPRESA' || uRole === 'ADMINISTRADOR') return true;
-      if (uRole === 'ADMINISTRADOR_PROYECTO' || uRole === 'ADMIN_PROYECTO') return true;
+      try {
+        u = JSON.parse(rawAccount);
+      } catch (_) {}
     }
-  } catch (_) {}
 
-  // 3. Administrador de Proyecto (Rol A en ISO 19650 o creador del proyecto)
-  try {
-    const proj = getActiveProjectData();
-    if (proj) {
-      if (proj.creatorEmail && String(proj.creatorEmail).toLowerCase().trim() === email) return true;
-      if (Array.isArray(proj.admins) && proj.admins.some((a: string) => String(a).toLowerCase().trim() === email)) return true;
-      if (Array.isArray(proj.iso19650?.projectAdmins) && proj.iso19650.projectAdmins.some((a: string) => String(a).toLowerCase().trim() === email)) return true;
-      const leadA = proj.iso19650?.adminProyecto || proj.iso19650?.adjudicador || (proj.iso19650?.leaders && (proj.iso19650.leaders.adminProyecto || proj.iso19650.leaders.adjudicador || proj.iso19650.leaders.rolA));
-      if (leadA) {
-        const leadEmail = typeof leadA === 'string' ? leadA : (leadA.email || leadA.username || '');
-        if (String(leadEmail).toLowerCase().trim() === email) return true;
+    const email = String(user?.email || u?.email || u?.username || '').toLowerCase().trim();
+    const role = String(user?.role || u?.role || '').toUpperCase().trim();
+    const cargo = String(user?.cargo || u?.cargo || user?.position || u?.position || '').toUpperCase().trim();
+
+    // 1. Super Administrador Global
+    if (
+      role.includes('SUPER') ||
+      Boolean(user?.isSuperAdmin) ||
+      Boolean(u?.isSuperAdmin) ||
+      email === 'imagina3ddesign@gmail.com' ||
+      email === 'mcmartinezg@unal.edu.co'
+    ) {
+      return true;
+    }
+
+    // 2. Administrador de Empresa
+    if (
+      role === 'ADMINISTRADOR_EMPRESA' ||
+      role === 'ADMIN_EMPRESA' ||
+      role === 'ADMINISTRADOR' ||
+      role.includes('EMPRESA') ||
+      cargo.includes('ADMINISTRADOR DE EMPRESA') ||
+      cargo.includes('ADMIN EMPRESA')
+    ) {
+      return true;
+    }
+
+    // En currentCompany o empresas en storage
+    try {
+      const rawComp = typeof window !== 'undefined' ? (sessionStorage.getItem('currentCompany') || localStorage.getItem('currentCompany')) : null;
+      if (rawComp) {
+        const c = JSON.parse(rawComp);
+        if (Array.isArray(c.admins) && c.admins.some((a: string) => String(a).toLowerCase().trim() === email)) return true;
+        if (Array.isArray(c.members) && c.members.some((m: any) => {
+          const mEmail = String(m.email || m.username || '').toLowerCase().trim();
+          const mRole = String(m.role || '').toUpperCase().trim();
+          return mEmail === email && (mRole.includes('ADMIN') || mRole.includes('EMPRESA'));
+        })) return true;
       }
-    }
-  } catch (_) {}
+    } catch (_) {}
 
-  // 4. Administrador de Empresa en currentCompany
-  try {
-    const rawComp = typeof window !== 'undefined' ? (sessionStorage.getItem('currentCompany') || localStorage.getItem('currentCompany')) : null;
-    if (rawComp) {
-      const c = JSON.parse(rawComp);
-      if (Array.isArray(c.admins) && c.admins.some((a: string) => String(a).toLowerCase().trim() === email)) return true;
+    // 3. Administrador de Proyecto (Rol A según ISO 19650, creador o admins de proyecto)
+    if (
+      role === 'ADMINISTRADOR_PROYECTO' ||
+      role === 'ADMIN_PROYECTO' ||
+      role === 'ADMIN_PROYECTO_A' ||
+      role === 'ROL_A' ||
+      role.includes('PROYECTO') ||
+      cargo.includes('ADMINISTRADOR DE PROYECTO') ||
+      cargo.includes('ADMIN PROYECTO') ||
+      cargo.includes('LIDER') ||
+      cargo.includes('LÍDER')
+    ) {
+      return true;
     }
-  } catch (_) {}
 
-  if (role === 'ADMIN' || user.role === 'admin' || user.role === 'super admin' || Boolean(user.isSuperAdmin)) {
-    return true;
+    try {
+      const proj = getActiveProjectData();
+      if (proj) {
+        if (proj.creatorEmail && String(proj.creatorEmail).toLowerCase().trim() === email) return true;
+        if (proj.creatorId && u?.id && String(proj.creatorId) === String(u.id)) return true;
+        if (Array.isArray(proj.admins) && proj.admins.some((a: string) => String(a).toLowerCase().trim() === email)) return true;
+
+        if (proj.iso19650) {
+          if (Array.isArray(proj.iso19650.projectAdmins) &&
+              proj.iso19650.projectAdmins.some((a: string) => String(a).toLowerCase().trim() === email)) {
+            return true;
+          }
+          const leadA = proj.iso19650.adminProyecto ||
+                        proj.iso19650.adjudicador ||
+                        proj.iso19650.liderProyecto ||
+                        (proj.iso19650.leaders && (proj.iso19650.leaders.adminProyecto || proj.iso19650.leaders.adjudicador || proj.iso19650.leaders.rolA || proj.iso19650.leaders.admin));
+          if (leadA) {
+            const leadEmail = typeof leadA === 'string' ? leadA : (leadA.email || leadA.username || '');
+            if (String(leadEmail).toLowerCase().trim() === email) return true;
+          }
+        }
+
+        if (Array.isArray(proj.members)) {
+          const pMember = proj.members.find((m: any) => {
+            const mEmail = (typeof m === 'string' ? m : m.email || m.username || '').toLowerCase().trim();
+            return mEmail === email;
+          });
+          if (pMember && typeof pMember === 'object') {
+            const mRole = String(pMember.role || '').toUpperCase().trim();
+            if (mRole.includes('ADMIN') || mRole.includes('PROYECTO') || mRole === 'ROL_A') {
+              return true;
+            }
+          }
+        }
+      }
+    } catch (_) {}
+
+    // Check with WompiModule if available on window
+    try {
+      if (typeof (window as any).WompiModule?.isPaymentAdmin === 'function') {
+        const proj = getActiveProjectData();
+        const rawComp = sessionStorage.getItem('currentCompany') || localStorage.getItem('currentCompany');
+        const comp = rawComp ? JSON.parse(rawComp) : null;
+        if ((window as any).WompiModule.isPaymentAdmin(u || user, comp, proj)) {
+          return true;
+        }
+      }
+    } catch (_) {}
+
+    // 4. Admin general
+    if (role === 'ADMIN' || user?.role === 'admin' || user?.role === 'super admin') {
+      return true;
+    }
+  } catch (err) {
+    console.warn('Error in isIncidentsAdmin check:', err);
   }
 
   return false;

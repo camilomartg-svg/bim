@@ -1,3 +1,4 @@
+import { isIncidentsAdmin } from '../utils/userScope';
 import React, { useState, useEffect } from 'react';
 import { FileText, Calendar, User, ChevronRight, Eye, Download, Filter, Search, ShieldCheck, Building2, MapPin, Map as MapIcon, Trash2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
@@ -357,7 +358,7 @@ export default function SiteReportList({ initialSelectedReportId, onClearInitial
                   </div>
                 </div>
                      <div className="p-6 lg:p-8 border-t border-slate-200 dark:border-slate-800 bg-slate-100/50 dark:bg-slate-900/50 flex flex-wrap justify-end items-center gap-4">
-                 {(isBimTeam || user?.role === 'admin') && (
+                 {(isBimTeam || isIncidentsAdmin(user)) && (
                    <div className="flex items-center gap-2">
                      {isConfirmingDelete ? (
                        <>

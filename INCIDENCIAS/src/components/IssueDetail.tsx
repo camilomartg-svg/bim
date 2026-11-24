@@ -1,3 +1,4 @@
+import { isIncidentsAdmin } from '../utils/userScope';
 import React, { useEffect, useState } from 'react';
 import { collection, query, orderBy, onSnapshot, addDoc, updateDoc, doc, deleteDoc, getDoc } from 'firebase/firestore';
 import { db, storage } from '../services/firebase';
@@ -661,7 +662,7 @@ export default function IssueDetail({ issue: initialIssue, onClose, onOpenReport
   const isBimTeam = user?.team?.toUpperCase().includes('BIM') || 
                     user?.position?.toUpperCase().includes('BIM') ||
                     user?.email?.toLowerCase() === 'imagina3ddesign@gmail.com';
-  const isAdminUser = user?.role === 'admin' || isBimTeam;
+  const isAdminUser = isIncidentsAdmin(user) || user?.role === 'admin' || isBimTeam;
   const canManage = (isAuthor || isAdminUser);
 
   // Approval Chain Logic

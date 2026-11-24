@@ -1,3 +1,4 @@
+import { isIncidentsAdmin } from '../utils/userScope';
 import React, { useEffect, useState } from 'react';
 import { addDoc, serverTimestamp, updateDoc, doc } from 'firebase/firestore';
 import { db } from '../services/firebase';
@@ -76,7 +77,7 @@ export default function IssueList({ onSelectIssue, view = 'active', onOpenReport
     
     if (view === 'anuladas') {
       if (!isAnulada) return false;
-      if (issue.creatorId !== user?.id && user?.role !== 'admin' && !user?.position?.toUpperCase().includes('BIM')) return false;
+      if (issue.creatorId !== user?.id && !isIncidentsAdmin(user) && !user?.position?.toUpperCase().includes('BIM')) return false;
     } else {
       if (isAnulada) return false;
     }
