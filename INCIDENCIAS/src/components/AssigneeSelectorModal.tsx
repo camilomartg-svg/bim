@@ -1,3 +1,4 @@
+import { createPortal } from 'react-dom';
 import React, { useState, useMemo, useEffect } from 'react';
 import { 
   X, 
@@ -46,6 +47,10 @@ export default function AssigneeSelectorModal({
   position = 'center'
 }: AssigneeSelectorModalProps) {
   const { user } = useAuth();
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => {
+    setMounted(true);
+  }, []);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterMode, setFilterMode] = useState<'individual' | 'team' | 'company'>('individual');
   const [tempSelected, setTempSelected] = useState<string[]>([]);
@@ -125,7 +130,7 @@ export default function AssigneeSelectorModal({
     return map;
   }, [filteredMembers]);
 
-  if (!isOpen) return null;
+  if (!isOpen || !mounted) return null;
 
   const handleMemberClick = (member: TeamMember) => {
     if (mode === 'single') {
@@ -336,8 +341,10 @@ export default function AssigneeSelectorModal({
     );
   };
 
-  return (
-    <div className={cn("fixed z-[120] p-3 sm:p-4 overflow-y-auto animate-in fade-in duration-200 flex items-center justify-center", position === "right" ? "inset-y-0 right-0 left-0 md:left-1/2 bg-slate-950/60 backdrop-blur-sm" : "inset-0 bg-slate-950/70 backdrop-blur-md")}>
+  if (!isOpen || !mounted) return null;
+
+  return createPortal(
+    <div className={cn("fixed z-[9999] p-3 sm:p-4 overflow-y-auto animate-in fade-in duration-200 flex items-center justify-center", position === "right" ? "inset-y-0 right-0 left-0 md:left-1/2 bg-slate-950/60 backdrop-blur-sm" : "inset-0 bg-slate-950/70 backdrop-blur-md")}>
       <motion.div 
         initial={{ opacity: 0, scale: 0.95, y: 10 }}
         animate={{ opacity: 1, scale: 1, y: 0 }}
@@ -689,6 +696,7 @@ export default function AssigneeSelectorModal({
           </div>
         )}
       </motion.div>
-    </div>
+    </div>,
+    document.body
   );
 }
