@@ -181,19 +181,23 @@ export async function enqueueOfflineIssue(
 
   // 3. Save raw file blobs in IndexedDB
   if (filesMap.size > 0) {
-    const tx = db.transaction([FILES_STORE], 'readwrite');
-    const store = tx.objectStore(FILES_STORE);
-
+    // A. Prepare and optimize all file records in memory FIRST (outside IDB transaction)
+    const fileRecords: PendingFileRecord[] = [];
     for (const [attachmentId, fileBlob] of filesMap.entries()) {
       const att = issue.attachments?.find(a => a.id === attachmentId);
-      const fileName = att?.name || `Adjunto_${Date.now()}`;
+      let fileName = att?.name || `Adjunto_${Date.now()}`;
       const fileType = att?.type || fileBlob.type || 'application/octet-stream';
-      const category = (att?.category as any) || (fileType.startsWith('image/') ? 'image' : fileType.startsWith('video/') ? 'video' : 'file');
+      const isImg = fileType.startsWith('image/');
+      const isVid = fileType.startsWith('video/');
+      const category = (att?.category as any) || (isImg ? 'image' : isVid ? 'video' : 'file');
 
-      // Light image optimization
+      // Ensure proper extension
+      if (isImg && !fileName.includes('.')) fileName += '.jpg';
+      if (isVid && !fileName.includes('.')) fileName += '.mp4';
+
       const finalBlob = await optimizeImageForUpload(fileBlob);
 
-      const fileRecord: PendingFileRecord = {
+      fileRecords.push({
         id: `${issue.id}_${attachmentId}`,
         issueId: issue.id,
         attachmentId,
@@ -204,11 +208,16 @@ export async function enqueueOfflineIssue(
         status: 'QUEUED',
         attempts: 0,
         createdAt: new Date().toISOString()
-      };
-      store.put(fileRecord);
+      });
     }
 
+    // B. Open IndexedDB transaction and synchronously store records without yielding
     await new Promise<void>((resolve, reject) => {
+      const tx = db.transaction([FILES_STORE], 'readwrite');
+      const store = tx.objectStore(FILES_STORE);
+      for (const rec of fileRecords) {
+        store.put(rec);
+      }
       tx.oncomplete = () => resolve();
       tx.onerror = () => reject(tx.error);
     });
@@ -322,9 +331,10 @@ export async function triggerBackgroundSync(): Promise<void> {
           const atts = issueRec.issueData.attachments || [];
           const matchedAtt = atts.find(a => a.id === fileRecord.attachmentId);
           if (matchedAtt) {
-            matchedAtt.url = driveResult.webViewLink || driveResult.url;
+            matchedAtt.url = driveResult.url || driveResult.webViewLink;
             matchedAtt.webViewLink = driveResult.webViewLink;
             matchedAtt.driveFileId = driveResult.id;
+            matchedAtt.isLocalPending = false;
           }
 
           // Update in IndexedDB

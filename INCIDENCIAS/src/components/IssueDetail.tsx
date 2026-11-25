@@ -113,20 +113,19 @@ export default function IssueDetail({ issue: initialIssue, onClose, onOpenReport
       let webViewLink = "";
       let uploadSuccess = false;
 
-      const gToken = googleAccessToken || localStorage.getItem('google_drive_token');
-      if (gToken) {
-        try {
-          console.log("Attempting direct upload to Google Drive first for file:", file.name);
-          // Standard RCD Evidence destination folder
-          const driveResult = await uploadFileToDrive(file, file.name, file.type, undefined, gToken, { companyId: issue.companyId, projectId: issue.projectId });
-          url = driveResult.url;
-          driveFileId = driveResult.id;
-          webViewLink = driveResult.webViewLink;
-          uploadSuccess = true;
-          console.log("Google Drive upload successful:", driveResult);
-        } catch (driveErr) {
-          console.warn("Google Drive upload failed in detail panel, falling back to Firebase/Base64:", driveErr);
-        }
+      try {
+        console.log("Attempting direct upload to Google Drive for file:", file.name);
+        const { companyId, projectId } = getProjectAndCompany();
+        const cId = issue.companyId || companyId;
+        const pId = issue.projectId || projectId;
+        const driveResult = await uploadFileToDrive(file, file.name, file.type, undefined, undefined, { companyId: cId, projectId: pId });
+        url = driveResult.url;
+        driveFileId = driveResult.id;
+        webViewLink = driveResult.webViewLink;
+        uploadSuccess = true;
+        console.log("Google Drive upload successful:", driveResult);
+      } catch (driveErr) {
+        console.warn("Google Drive upload failed in detail panel, falling back to Firebase/Base64:", driveErr);
       }
 
       if (!uploadSuccess) {
@@ -2146,12 +2145,12 @@ export default function IssueDetail({ issue: initialIssue, onClose, onOpenReport
                         className="flex items-center gap-6 p-6 bg-slate-100/50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-800 rounded-[1.75rem] hover:border-slate-350 dark:hover:border-slate-700 hover:bg-slate-150 dark:hover:bg-slate-900 transition-all group shadow-sm active:scale-[0.99]"
                       >
                         <div className="w-12 h-12 bg-slate-100 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl flex items-center justify-center text-slate-600 group-hover:bg-white group-hover:text-[#020617] transition-all shadow-sm">
-                          {att.type.includes('image') ? <ImageIcon className="w-6 h-6" /> : <FileText className="w-6 h-6" />}
+                          {att.type?.includes('image') ? <ImageIcon className="w-6 h-6" /> : (att.type?.includes('video') || att.category === 'video') ? <Video className="w-6 h-6 text-purple-500" /> : <FileText className="w-6 h-6" />}
                         </div>
                         <div className="overflow-hidden flex-1 text-left">
                           <p className="text-[13px] font-black text-slate-800 dark:text-white truncate uppercase tracking-tight group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">{att.name}</p>
                           <div className="flex items-center gap-2.5 mt-1.5">
-                             <p className="text-[8px] text-slate-600 font-bold uppercase tracking-widest leading-none">{att.category.replace('_', ' ')}</p>
+                             <p className="text-[8px] text-slate-600 font-bold uppercase tracking-widest leading-none">{(att.category || 'ADJUNTO').replace('_', ' ')}</p>
                           </div>
                         </div>
                         <div className="p-2.5 bg-slate-100 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg group-hover:bg-slate-800 transition-colors">

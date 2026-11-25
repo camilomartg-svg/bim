@@ -626,7 +626,7 @@ export default function CreateIssueModal({ onClose, onSuccess }: CreateIssueModa
     if (files) {
       const newAtts: Partial<Attachment>[] = [];
       Array.from(files).forEach(file => {
-        const attId = Math.random().toString(36).substr(2, 9);
+        const attId = 'att_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6);
         const url = URL.createObjectURL(file);
         pendingFilesRef.current.set(attId, file);
         const isImage = file.type.startsWith('image/');
@@ -641,6 +641,29 @@ export default function CreateIssueModal({ onClose, onSuccess }: CreateIssueModa
         });
       });
       setAttachments(prev => [...prev, ...newAtts]);
+    }
+    e.target.value = '';
+  };
+
+  const handleMediaCapture = (e: React.ChangeEvent<HTMLInputElement>, kind: 'image' | 'video') => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const attId = 'att_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6);
+      const url = URL.createObjectURL(file);
+      pendingFilesRef.current.set(attId, file);
+      const isImg = kind === 'image' || file.type.startsWith('image/');
+      const ext = isImg ? '.jpg' : '.mp4';
+      const defaultName = isImg ? `Captura_${Date.now()}${ext}` : `Video_${Date.now()}${ext}`;
+      const name = file.name && file.name.includes('.') ? file.name : defaultName;
+
+      setAttachments(prev => [...prev, {
+        id: attId,
+        name,
+        url,
+        type: file.type || (isImg ? 'image/jpeg' : 'video/mp4'),
+        category: kind,
+        isLocalPending: true
+      }]);
     }
     e.target.value = '';
   };
@@ -674,6 +697,10 @@ export default function CreateIssueModal({ onClose, onSuccess }: CreateIssueModa
   };
 
   const removeAttachment = (index: number) => {
+    const attToRemove = attachments[index];
+    if (attToRemove?.id) {
+      pendingFilesRef.current.delete(attToRemove.id);
+    }
     setAttachments(attachments.filter((_, i) => i !== index));
   };
 
@@ -869,10 +896,26 @@ export default function CreateIssueModal({ onClose, onSuccess }: CreateIssueModa
         proposedActionPlan
       };
 
-      console.log("Saving issue data:", issueData);
+      const { projectId, companyId } = getProjectAndCompany();
+      const issueId = 'iss_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6);
+
+      const fullIssue: Issue = {
+        ...issueData,
+        id: issueId,
+        companyId,
+        projectId,
+        isLocalPending: pendingFilesRef.current.size > 0 || !navigator.onLine
+      };
+
+      console.log("Saving issue data:", fullIssue);
       
-      // Use the service which includes better error logging and timestamp handling
-      await saveIssue(issueData);
+      // If there are pending local attachments (photos, videos, files) OR offline mode:
+      if (pendingFilesRef.current.size > 0 || !navigator.onLine) {
+        console.log(`[CreateIssueModal] Guardando ${pendingFilesRef.current.size} adjuntos locales con offlineSyncService...`);
+        await enqueueOfflineIssue(fullIssue, pendingFilesRef.current, companyId, projectId);
+      } else {
+        await saveIssue(fullIssue);
+      }
       
       if (onSuccess) onSuccess('issue');
       onClose();
@@ -1593,19 +1636,7 @@ export default function CreateIssueModal({ onClose, onSuccess }: CreateIssueModa
                       accept="video/*" 
                       capture="environment" 
                       className="hidden" 
-                      onChange={(e) => {
-                        const file = e.target.files?.[0];
-                        if (file) {
-                          const url = URL.createObjectURL(file);
-                          setAttachments([...attachments, { 
-                            id: Math.random().toString(36).substr(2, 9), 
-                            name: `Video_${new Date().getTime()}`, 
-                            url: url, 
-                            type: file.type || 'video/mp4',
-                            category: 'video' 
-                          }]);
-                        }
-                      }}
+                      onChange={(e) => handleMediaCapture(e, 'video')}
                      />
                    </label>
                    <label className="flex items-center justify-center gap-1.5 px-3 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg text-[8.5px] font-black uppercase tracking-wider text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 transition-all shadow-sm cursor-pointer active:scale-95">
@@ -1615,19 +1646,7 @@ export default function CreateIssueModal({ onClose, onSuccess }: CreateIssueModa
                       accept="image/*" 
                       capture="environment" 
                       className="hidden" 
-                      onChange={(e) => {
-                        const file = e.target.files?.[0];
-                        if (file) {
-                          const url = URL.createObjectURL(file);
-                          setAttachments([...attachments, { 
-                            id: Math.random().toString(36).substr(2, 9), 
-                            name: `Captura_${new Date().getTime()}`, 
-                            url: url, 
-                            type: file.type || 'image/jpeg',
-                            category: 'image' 
-                          }]);
-                        }
-                      }}
+                      onChange={(e) => handleMediaCapture(e, 'image')}
                      />
                    </label>
                  </div>
