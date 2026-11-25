@@ -14,6 +14,7 @@ import {
 import { motion, AnimatePresence } from 'motion/react';
 import { cn } from '../lib/utils';
 import { format, differenceInDays, isPast } from 'date-fns';
+import { es } from 'date-fns/locale';
 import { getMedicionDueDate, getEficaciaDueDate, isMedicionAlertActive, isEficaciaAlertActive, generateFollowUpCode } from '../utils/followUpUtils';
 import { getProjectConfig, subscribeToTeam, deleteIssue, syncIssueStatusToParentReport, saveIssue } from '../services/firebaseService';
 import { uploadFileToDrive, getAuthenticatedDriveUrl } from '../utils/googleDriveUtils';

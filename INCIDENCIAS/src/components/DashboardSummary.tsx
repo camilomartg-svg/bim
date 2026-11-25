@@ -15,6 +15,7 @@ import {
 import { motion, AnimatePresence } from 'motion/react';
 import { cn } from '../lib/utils';
 import { format, differenceInDays, isPast } from 'date-fns';
+import { es } from 'date-fns/locale';
 import { isMedicionAlertActive, isEficaciaAlertActive } from '../utils/followUpUtils';
 
 interface DashboardSummaryProps {

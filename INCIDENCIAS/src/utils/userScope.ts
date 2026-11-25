@@ -444,7 +444,7 @@ export function isIncidentsAdmin(user?: any): boolean {
     } catch (_) {}
 
     // 4. Admin general
-    if (role === 'ADMIN' || user?.role === 'admin' || user?.role === 'super admin') {
+    if (userRole === 'ADMIN' || uRole === 'ADMIN' || user?.role === 'admin' || user?.role === 'super admin') {
       return true;
     }
   } catch (err) {
