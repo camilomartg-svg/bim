@@ -110,7 +110,7 @@
                     <div>
                         <div class="flex justify-between items-center mb-1">
                             <label for="password" class="block text-sm font-medium text-gray-700 dark:text-gray-300">Contraseña</label>
-                            <a href="#" class="text-sm text-gray-500 hover:text-primary dark:hover:text-white transition duration-200">¿Olvidaste tu contraseña?</a>
+                            <a href="#" onclick="handleForgotPassword(); return false;" class="text-sm text-gray-500 hover:text-primary dark:hover:text-white transition duration-200">¿Olvidaste tu contraseña?</a>
                         </div>
                         <input type="password" id="password" name="user_login_password" autocomplete="new-password" value="" class="w-full px-4 py-3 rounded-lg border border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-800 focus:ring-2 focus:ring-primary focus:border-primary transition duration-200" placeholder="••••••••">
                     </div>
@@ -132,30 +132,36 @@
                     <div class="flex-grow border-t border-gray-300 dark:border-gray-700"></div>
                 </div>
 
-                <!-- Botones Sociales -->
-                <div class="space-y-4">
-                    <!-- Botón Funcional de Microsoft -->
-                    <button id="login-button" class="w-full flex items-center justify-center bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 font-semibold py-3 px-4 rounded-lg border border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700 shadow-sm transition duration-300">
-                        <svg class="w-6 h-6 mr-3" viewBox="0 0 24 24" fill="currentColor" style="color: #00a4ef;">
-                            <path d="M11.4 24H0V12.6h11.4V24zM24 24H12.6V12.6H24V24zM11.4 11.4H0V0h11.4v11.4zm12.6 0H12.6V0H24v11.4z"/>
-                        </svg>
-                        Microsoft
-                    </button>
-
-                    <!-- Botón Visual de Google -->
-                    <button type="button" id="google-login-button" class="w-full flex items-center justify-center bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 font-semibold py-3 px-4 rounded-lg border border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700 shadow-sm transition duration-300">                        <svg class="w-6 h-6 mr-3 z-0" viewBox="0 0 24 24" fill="currentColor">
+                <!-- Botones Sociales (Google, Microsoft, Apple) -->
+                <div class="space-y-3">
+                    <!-- Botón Google -->
+                    <button type="button" id="google-login-button" class="w-full flex items-center justify-center bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 font-semibold py-3 px-4 rounded-xl border border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700 shadow-sm transition duration-200">
+                        <svg class="w-5 h-5 mr-3" viewBox="0 0 24 24">
                             <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
                             <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
                             <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
                             <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
                         </svg>
-                        <span class="z-0">Google</span>
+                        <span>Continuar con Google</span>
                     </button>
 
-                    <!-- Botón de Otro Usuario -->
-                    <button id="switch-user-button" class="w-full flex items-center justify-center bg-transparent text-gray-500 dark:text-gray-400 font-medium py-3 px-4 hover:text-primary dark:hover:text-white transition duration-300">
-                        <span class="material-symbols-outlined mr-2 text-xl">swap_horiz</span>
-                        Iniciar con otro usuario (Microsoft)
+                    <!-- Botón Microsoft -->
+                    <button type="button" id="login-button" class="w-full flex items-center justify-center bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 font-semibold py-3 px-4 rounded-xl border border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700 shadow-sm transition duration-200">
+                        <svg class="w-5 h-5 mr-3" viewBox="0 0 24 24">
+                            <path fill="#f25022" d="M1 1h10v10H1z"/>
+                            <path fill="#00a4ef" d="M1 13h10v10H1z"/>
+                            <path fill="#7fba00" d="M13 1h10v10H13z"/>
+                            <path fill="#ffb900" d="M13 13h10v10H13z"/>
+                        </svg>
+                        <span>Continuar con Microsoft</span>
+                    </button>
+
+                    <!-- Botón Apple -->
+                    <button type="button" id="apple-login-button" class="w-full flex items-center justify-center bg-black hover:bg-gray-900 text-white font-semibold py-3 px-4 rounded-xl shadow-sm transition duration-200">
+                        <svg class="w-5 h-5 mr-3 fill-current" viewBox="0 0 170 170">
+                            <path d="M150.37 130.25c-2.45 5.66-5.35 10.87-8.71 15.66-4.58 6.53-8.33 11.05-11.22 13.56-4.48 4.12-9.28 6.23-14.42 6.35-3.69 0-8.14-1.05-13.32-3.18-5.19-2.12-9.97-3.17-14.34-3.17-4.58 0-9.49 1.05-14.75 3.17-5.26 2.13-9.5 3.24-12.74 3.35-4.35.13-9.16-1.9-14.42-6.08-3.7-3.04-7.6-7.7-11.71-13.98-5.99-9.14-10.74-19.74-14.25-31.81-3.51-12.07-5.26-23.49-5.26-34.25 0-16.14 4.08-29.43 12.24-39.87 8.16-10.44 18.39-15.77 30.68-15.99 4.35 0 9.28 1.15 14.79 3.46 5.51 2.31 9.38 3.52 11.61 3.63 1.96-.22 6.04-1.58 12.24-4.08 6.2-2.5 11.42-3.69 15.66-3.58 11.53.54 20.89 4.78 28.08 12.72-9.9 5.99-14.74 14.36-14.52 25.13.22 8.49 3.37 15.66 9.47 21.54 6.09 5.87 13.59 9.36 22.49 10.45-2.07 6.42-4.68 12.72-7.84 18.91zM119.22 31.84c0-7.72 2.72-15.12 8.16-22.19 5.44-7.07 12.29-11.53 20.56-13.38.33 1.63.49 3.26.49 4.9 0 7.72-2.83 15.12-8.49 22.19-5.65 7.07-12.51 11.64-20.56 13.71-.11-1.64-.16-3.4-.16-5.23z"/>
+                        </svg>
+                        <span>Continuar con Apple</span>
                     </button>
                 </div>
 
@@ -1185,10 +1191,124 @@
     </script>
     <script src="https://accounts.google.com/gsi/client" onload="initGoogleAuth()" async defer></script>
     
-    <!-- FIREBASE AUTHENTICATION (MÓDULO) -->
+    <!-- FIREBASE AUTHENTICATION (MÓDULO OFICIAL - PROYECTO INGRESOS NORA EXTERNOS) -->
+    <script>
+        // Función unificada para resolver sesión post-autenticación de Firebase
+        window.handleUnifiedAuthSuccess = async function(user) {
+            if (!user || !user.email) {
+                throw new Error("No se pudo obtener el correo electrónico del usuario autenticado.");
+            }
+            const normalizedAccountEmail = user.email.toLowerCase().trim();
+            let userRole = null;
+            let companyName = '';
+            let cargo = '';
+            let especialidad = '';
+            let adminEmpresaId = null;
+
+            // 1. Validar Super Administradores
+            try {
+                const configRes = await fetch('portal-config.json?t=' + Date.now());
+                if (configRes.ok) {
+                    const portalConfig = await configRes.json();
+                    const superAdmins = portalConfig.superAdmins || ['imagina3ddesign@gmail.com', 'mcmartinezg@unal.edu.co'];
+                    if (superAdmins.some(e => e.toLowerCase() === normalizedAccountEmail)) {
+                        userRole = 'SUPER_ADMINISTRADOR';
+                        companyName = 'nora CDE';
+                        cargo = 'Super Administrador';
+                    }
+                }
+            } catch (e) {}
+
+            // 2. Validar Administrador de Empresa o Miembro en empresas.json
+            if (!userRole) {
+                try {
+                    const empRes = await fetch('empresas.json?t=' + Date.now());
+                    if (empRes.ok) {
+                        const empresas = await empRes.json();
+                        for (const emp of empresas) {
+                            if (!emp || emp.deleted) continue;
+                            if (Array.isArray(emp.admins) && emp.admins.some(a => String(a).toLowerCase().trim() === normalizedAccountEmail)) {
+                                userRole = 'ADMINISTRADOR_EMPRESA';
+                                companyName = emp.name;
+                                adminEmpresaId = emp.id;
+                                cargo = 'Administrador de Empresa';
+                                break;
+                            }
+                            if (Array.isArray(emp.members)) {
+                                const member = emp.members.find(m => m && m.email && m.email.toLowerCase().trim() === normalizedAccountEmail);
+                                if (member) {
+                                    userRole = member.role || 'MIEMBRO';
+                                    companyName = member.empresaUsuario || emp.name;
+                                    adminEmpresaId = emp.id;
+                                    cargo = member.cargo || member.role || 'Colaborador';
+                                    especialidad = member.especialidad || '';
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                } catch (e) {}
+            }
+
+            // 3. Si no tiene rol asignado aún, se le asigna rol base INVITADO
+            if (!userRole) {
+                userRole = 'INVITADO';
+            }
+
+            const userProfile = {
+                name: user.displayName || user.email.split('@')[0],
+                username: user.email,
+                email: user.email,
+                role: userRole,
+                empresa: companyName,
+                especialidad: especialidad,
+                cargo: cargo,
+                adminEmpresaId: adminEmpresaId,
+                picture: user.photoURL || '',
+                firebaseUid: user.uid
+            };
+
+            const keepSignedIn = document.getElementById('keep-signed-in')?.checked;
+            const storage = keepSignedIn ? localStorage : sessionStorage;
+            storage.setItem('userAccount', JSON.stringify(userProfile));
+
+            sessionStorage.removeItem('cachedCompanies_v2');
+            localStorage.removeItem('cachedCompanies_v2');
+            if (window.NoraDriveStore) window.NoraDriveStore.invalidateCache();
+
+            window.location.href = getPostLoginRedirect();
+        };
+
+        window.handleForgotPassword = async function() {
+            const emailInput = document.getElementById('email');
+            const email = (emailInput ? emailInput.value : '').trim() || prompt('Ingresa tu correo electrónico para enviarte el enlace de restablecimiento de contraseña:');
+            if (!email) return;
+            try {
+                if (!window.sendPasswordResetEmail || !window.firebaseAuth) {
+                    alert('El módulo de autenticación de Firebase aún se está inicializando. Por favor espera un momento.');
+                    return;
+                }
+                await window.sendPasswordResetEmail(window.firebaseAuth, email);
+                alert('✅ Enlace de restablecimiento enviado a ' + email + '. Por favor revisa tu bandeja de entrada o spam.');
+            } catch (err) {
+                console.error('Password reset error:', err);
+                let msg = 'Error al enviar enlace de restablecimiento: ' + (err.message || err);
+                if (err.code === 'auth/user-not-found') msg = 'No existe ninguna cuenta registrada con este correo.';
+                alert(msg);
+            }
+        };
+    </script>
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-        import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
+        import { 
+            getAuth, 
+            signInWithEmailAndPassword, 
+            createUserWithEmailAndPassword,
+            signInWithPopup,
+            GoogleAuthProvider,
+            OAuthProvider,
+            sendPasswordResetEmail
+        } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
 
         const firebaseConfig = {
             apiKey: "AIzaSyBQIlXsDtDFlc6VqCfamJERBjTUcBTb2hA",
@@ -1203,127 +1323,119 @@
         const app = initializeApp(firebaseConfig);
         const auth = getAuth(app);
         
-        // Export to window for global access
         window.firebaseAuth = auth;
         window.signInWithEmailAndPassword = signInWithEmailAndPassword;
         window.createUserWithEmailAndPassword = createUserWithEmailAndPassword;
+        window.sendPasswordResetEmail = sendPasswordResetEmail;
+        window.signInWithPopup = signInWithPopup;
 
-        // Firebase Login Handler
-        document.getElementById('traditional-login-form').addEventListener('submit', async (e) => {
-            e.preventDefault();
-            const email = document.getElementById('email').value.trim();
-            const password = document.getElementById('password').value;
-            const btn = e.target.querySelector('button');
-            const originalBtnText = btn.innerHTML;
-            
-            if (!email || !password) {
-                document.getElementById('error-message').textContent = "Por favor ingresa correo y contraseña.";
-                return;
-            }
-            
-            btn.innerHTML = `<span class="animate-spin material-symbols-outlined mr-2">autorenew</span> Validando...`;
-            btn.disabled = true;
-            document.getElementById('error-message').textContent = "";
+        const googleProvider = new GoogleAuthProvider();
+        const microsoftProvider = new OAuthProvider('microsoft.com');
+        microsoftProvider.setCustomParameters({ prompt: 'select_account' });
+        const appleProvider = new OAuthProvider('apple.com');
+        appleProvider.addScope('email');
+        appleProvider.addScope('name');
 
-            try {
-                await window.signInWithEmailAndPassword(window.firebaseAuth, email, password);
+        // 1. Formulario tradicional (Correo / Contraseña)
+        const loginForm = document.getElementById('traditional-login-form');
+        if (loginForm) {
+            loginForm.addEventListener('submit', async (e) => {
+                e.preventDefault();
+                const email = document.getElementById('email').value.trim();
+                const password = document.getElementById('password').value;
+                const btn = e.target.querySelector('button');
+                const originalBtnText = btn.innerHTML;
                 
-                // --- INICIA LÓGICA DE ASIGNACIÓN DE ROLES (Idéntica a MSAL/Google) ---
-                const normalizedAccountEmail = email.toLowerCase();
-                let userRole = null;
-                const ROLES_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbx2RAQx_8K4o22xE0Mw-ETc7K_58vIoi6-PgVi64u80inuiw144ks3cgWSdCtXqIgB02g/exec';
+                if (!email || !password) {
+                    document.getElementById('error-message').textContent = "Por favor ingresa correo y contraseña.";
+                    return;
+                }
+                
+                btn.innerHTML = `<span class="animate-spin material-symbols-outlined mr-2">autorenew</span> Validando...`;
+                btn.disabled = true;
+                document.getElementById('error-message').textContent = "";
 
-                // 1. Check Super Admins
                 try {
-                    const configRes = await fetch('portal-config.json');
-                    if (configRes.ok) {
-                        const portalConfig = await configRes.json();
-                        const superAdmins = portalConfig.superAdmins || ['imagina3ddesign@gmail.com', 'mcmartinezg@unal.edu.co'];
-                        if (superAdmins.some(e => e.toLowerCase() === normalizedAccountEmail)) {
-                            userRole = 'SUPER_ADMINISTRADOR';
-                        }
+                    const cred = await signInWithEmailAndPassword(auth, email, password);
+                    await window.handleUnifiedAuthSuccess(cred.user);
+                } catch (error) {
+                    console.error("Firebase Login Error", error);
+                    let msg = "Error al iniciar sesión. Revisa tus credenciales.";
+                    if (error.code === 'auth/invalid-credential' || error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password') {
+                        msg = "Correo o contraseña incorrectos.";
+                    } else if (error.code === 'auth/invalid-email') {
+                        msg = "El formato del correo electrónico no es válido.";
                     }
-                } catch (err) {}
-
-                // 2. Check Company Admins/Members
-                if (!userRole) {
-                    try {
-                        const empRes = await fetch('empresas.json');
-                        if (empRes.ok) {
-                            const empresas = await empRes.json();
-                            // First check if user is an administrator in any company
-                            for (const empresa of empresas) {
-                                if (empresa.admins && empresa.admins.some(e => e.toLowerCase() === normalizedAccountEmail)) {
-                                    userRole = 'ADMINISTRADOR_EMPRESA';
-                                    window.adminEmpresaId = empresa.id;
-                                    break;
-                                }
-                            }
-                            // If not an administrator, check company membership
-                            if (!userRole) {
-                                for (const empresa of empresas) {
-                                    if (empresa.members) {
-                                        const member = empresa.members.find(m => m.email.toLowerCase() === normalizedAccountEmail);
-                                        if (member) {
-                                            userRole = member.role || 'INVITADO';
-                                            window.adminEmpresaId = empresa.id;
-                                            break;
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    } catch (err) {}
-                }
-
-                // 3. Check General Roles
-                if (!userRole) {
-                    try {
-                        const response = await fetch(ROLES_SCRIPT_URL);
-                        const rolesList = await response.json();
-                        const userData = rolesList.reverse().find(u => u.email && u.email.trim().toLowerCase() === normalizedAccountEmail);
-                        if (userData) {
-                            userRole = userData.rol;
-                        }
-                    } catch (err) {}
-                }
-
-                // Si el usuario existe en Firebase pero no tiene un rol explícito en nuestras bases de datos, asume INVITADO
-                if (!userRole) {
-                    userRole = 'INVITADO';
-                }
-
-                if (userRole) {
-                    const userProfile = {
-                        name: email.split('@')[0], // Fallback if we don't have their name saved locally
-                        username: email,
-                        role: userRole,
-                        adminEmpresaId: window.adminEmpresaId || null,
-                        picture: ''
-                    };
-                    const cacheLocation = document.getElementById('keep-signed-in').checked ? "localStorage" : "sessionStorage";
-                    window[cacheLocation].setItem('userAccount', JSON.stringify(userProfile));
-                    sessionStorage.removeItem('cachedCompanies_v2');
-                    localStorage.removeItem('cachedCompanies_v2');
-                    if (window.NoraDriveStore) window.NoraDriveStore.invalidateCache();
-                    window.location.href = getPostLoginRedirect();
-                } else {
-                    document.getElementById('error-message').textContent = "Tu usuario no tiene un rol asignado en el sistema.";
+                    document.getElementById('error-message').textContent = msg;
                     btn.innerHTML = originalBtnText;
                     btn.disabled = false;
                 }
-            } catch (error) {
-                console.error("Firebase Login Error", error);
-                let msg = "Error al iniciar sesión. Revisa tus credenciales.";
-                if (error.code === 'auth/invalid-credential' || error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password') {
-                    msg = "Correo o contraseña incorrectos.";
+            });
+        }
+
+        // 2. Inicio de sesión con Google (Firebase Auth)
+        const googleLoginBtn = document.getElementById('google-login-button');
+        if (googleLoginBtn) {
+            googleLoginBtn.addEventListener('click', async () => {
+                document.getElementById('error-message').textContent = "";
+                try {
+                    const result = await signInWithPopup(auth, googleProvider);
+                    await window.handleUnifiedAuthSuccess(result.user);
+                } catch (error) {
+                    console.error("Google Auth Error:", error);
+                    if (error.code !== 'auth/popup-closed-by-user') {
+                        document.getElementById('error-message').textContent = "Error al autenticar con Google: " + (error.message || error);
+                    }
                 }
-                document.getElementById('error-message').textContent = msg;
-                btn.innerHTML = originalBtnText;
-                btn.disabled = false;
-            }
-        });
+            });
+        }
+
+        // 3. Inicio de sesión con Microsoft (Firebase OAuth con fallback a MSAL)
+        const msftLoginBtn = document.getElementById('login-button');
+        if (msftLoginBtn) {
+            msftLoginBtn.addEventListener('click', async () => {
+                document.getElementById('error-message').textContent = "";
+                try {
+                    const result = await signInWithPopup(auth, microsoftProvider);
+                    await window.handleUnifiedAuthSuccess(result.user);
+                } catch (error) {
+                    console.error("Microsoft Auth Error (Firebase):", error);
+                    if (error.code === 'auth/operation-not-allowed' || error.code === 'auth/configuration-not-found') {
+                        // Fallback a MSAL si el proveedor Microsoft aún requiere secret en Firebase Console
+                        if (typeof handleLogin === 'function') {
+                            handleLogin(false);
+                            return;
+                        }
+                    }
+                    if (error.code !== 'auth/popup-closed-by-user') {
+                        document.getElementById('error-message').textContent = "Error al autenticar con Microsoft: " + (error.message || error);
+                    }
+                }
+            });
+        }
+
+        // 4. Inicio de sesión con Apple (Firebase OAuth)
+        const appleLoginBtn = document.getElementById('apple-login-button');
+        if (appleLoginBtn) {
+            appleLoginBtn.addEventListener('click', async () => {
+                document.getElementById('error-message').textContent = "";
+                try {
+                    const result = await signInWithPopup(auth, appleProvider);
+                    await window.handleUnifiedAuthSuccess(result.user);
+                } catch (error) {
+                    console.error("Apple Auth Error:", error);
+                    if (error.code === 'auth/operation-not-allowed' || error.code === 'auth/configuration-not-found') {
+                        document.getElementById('error-message').textContent = "El proveedor de Apple debe estar habilitado en la consola de Firebase.";
+                        return;
+                    }
+                    if (error.code !== 'auth/popup-closed-by-user') {
+                        document.getElementById('error-message').textContent = "Error al autenticar con Apple: " + (error.message || error);
+                    }
+                }
+            });
+        }
     </script>
+
     <script src="pwa-helper.js"></script>
 </body>
 </html>
