@@ -697,7 +697,8 @@
             }
         }
 
-        if (loginButton) loginButton.addEventListener('click', () => handleLogin(false));
+        // Listener MSAL original desactivado para evitar apertura doble con Firebase Auth:
+        // if (loginButton) loginButton.addEventListener('click', () => handleLogin(false));
         if (switchUserButton) switchUserButton.addEventListener('click', () => handleLogin(true));
 
         // --- LÓGICA DE REGISTRO / GOOGLE ---
@@ -809,16 +810,17 @@
             });
         };
 
-        const googleLoginButton = document.getElementById('google-login-button');
-        if (googleLoginButton) {
-            googleLoginButton.addEventListener('click', () => {
-                if (googleTokenClient) {
-                    googleTokenClient.requestAccessToken();
-                } else {
-                    errorMessage.textContent = "El servicio de Google aún está cargando...";
-                }
-            });
-        }
+        // Listener directo de Google GIS desactivado para evitar apertura doble con Firebase Auth:
+        // const googleLoginButton = document.getElementById('google-login-button');
+        // if (googleLoginButton) {
+        //     googleLoginButton.addEventListener('click', () => {
+        //         if (googleTokenClient) {
+        //             googleTokenClient.requestAccessToken();
+        //         } else {
+        //             errorMessage.textContent = "El servicio de Google aún está cargando...";
+        //         }
+        //     });
+        // }
 
         const loginSection = document.getElementById('login-section');
         const registrationSection = document.getElementById('registration-section');
@@ -1261,7 +1263,26 @@
                 } catch (e) {}
             }
 
-            // 3. Si no tiene rol asignado aún, se le asigna rol base INVITADO
+            // 3. Fallback a base de datos remota de Google Sheets si no se encontró en empresas.json
+            if (!userRole) {
+                try {
+                    const ROLES_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbx2RAQx_8K4o22xE0Mw-ETc7K_58vIoi6-PgVi64u80inuiw144ks3cgWSdCtXqIgB02g/exec';
+                    const response = await fetch(ROLES_SCRIPT_URL);
+                    if (response.ok) {
+                        const data = await response.json();
+                        const users = data.data || [];
+                        const userEntry = users.find(u => u && u.email && u.email.toLowerCase().trim() === normalizedAccountEmail);
+                        if (userEntry) {
+                            userRole = userEntry.rol || 'MIEMBRO';
+                            companyName = userEntry.empresa || '';
+                            cargo = userEntry.cargo || '';
+                            especialidad = userEntry.especialidad || '';
+                        }
+                    }
+                } catch (e) {}
+            }
+
+            // 4. Si no tiene rol asignado aún, se le asigna rol base INVITADO
             if (!userRole) {
                 userRole = 'INVITADO';
             }
@@ -1280,8 +1301,13 @@
             };
 
             const keepSignedIn = document.getElementById('keep-signed-in')?.checked;
-            const storage = keepSignedIn ? localStorage : sessionStorage;
-            storage.setItem('userAccount', JSON.stringify(userProfile));
+            if (keepSignedIn) {
+                localStorage.setItem('userAccount', JSON.stringify(userProfile));
+                sessionStorage.removeItem('userAccount');
+            } else {
+                sessionStorage.setItem('userAccount', JSON.stringify(userProfile));
+                localStorage.removeItem('userAccount');
+            }
 
             sessionStorage.removeItem('cachedCompanies_v2');
             localStorage.removeItem('cachedCompanies_v2');
