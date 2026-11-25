@@ -42,9 +42,6 @@ export function getActiveProjectData(): any | null {
  */
 export async function loadAndCacheProjectIso(companyId?: string, projectId?: string): Promise<any> {
   try {
-    const cached = getActiveProjectData();
-    if (cached?.iso19650) return cached;
-
     const urlParams = new URLSearchParams(window.location.search);
     const compId = companyId || urlParams.get('empresa') || '';
     const projId = projectId || urlParams.get('project') || '';
@@ -58,6 +55,7 @@ export async function loadAndCacheProjectIso(companyId?: string, projectId?: str
     url.searchParams.set('companyId', compId);
     url.searchParams.set('proyecto', projId);
     url.searchParams.set('projectName', projectName || projId);
+    url.searchParams.set('t', String(Date.now()));
 
     const res = await fetch(url.toString());
     if (res.ok) {
@@ -74,7 +72,7 @@ export async function loadAndCacheProjectIso(companyId?: string, projectId?: str
   } catch (e) {
     console.warn('Could not load project ISO data from Drive:', e);
   }
-  return null;
+  return getActiveProjectData();
 }
 
 /**

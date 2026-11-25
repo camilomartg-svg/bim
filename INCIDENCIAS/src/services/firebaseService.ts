@@ -540,12 +540,12 @@ export const getPlatformTeam = async (companyId: string, projectId: string): Pro
       // 3. Load activeProject data (ISO 19650 teams, assigned members)
       let activeProject: any = null;
       try {
-        activeProject = getActiveProjectData();
+        activeProject = await loadAndCacheProjectIso(companyId, projectId);
       } catch (_) {}
 
       if (!activeProject || !Array.isArray(activeProject.members) || activeProject.members.length === 0) {
         try {
-          activeProject = await loadAndCacheProjectIso(companyId, projectId);
+          activeProject = getActiveProjectData();
         } catch (_) {}
       }
 
@@ -584,9 +584,9 @@ export const getPlatformTeam = async (companyId: string, projectId: string): Pro
       const memberCompanies = iso.memberCompanies || {};
 
       // 4. Collect all authorized project member emails
+      // SOURCE OF TRUTH: activeProject.members (Personal Autorizado del proyecto en equipo.html)
       const projectMemberEmailsSet = new Set<string>();
 
-      // From activeProject.members (the official authorized directory of 11+ members)
       if (Array.isArray(activeProject?.members)) {
         activeProject.members.forEach((m: any) => {
           const clean = (typeof m === 'string' ? m : m.email || m.username || '').toLowerCase().trim();
@@ -600,77 +600,19 @@ export const getPlatformTeam = async (companyId: string, projectId: string): Pro
         if (clean) projectMemberEmailsSet.add(clean);
       });
 
-      // From delivery teams (leads, members, task teams)
-      deliveryTeams.forEach((dt: any) => {
-        if (dt.leadEmail) projectMemberEmailsSet.add(String(dt.leadEmail).toLowerCase().trim());
-        if (Array.isArray(dt.members)) {
-          dt.members.forEach((m: any) => {
-            const clean = (typeof m === 'string' ? m : m.email || '').toLowerCase().trim();
-            if (clean) projectMemberEmailsSet.add(clean);
-          });
-        }
-        if (Array.isArray(dt.taskTeams)) {
-          dt.taskTeams.forEach((tt: any) => {
-            if (Array.isArray(tt.members)) {
-              tt.members.forEach((m: any) => {
-                const clean = (typeof m === 'string' ? m : m.email || '').toLowerCase().trim();
-                if (clean) projectMemberEmailsSet.add(clean);
-              });
-            }
-          });
-        }
-      });
-
-      // From receiver teams (leads, members, task teams)
-      receiverTeams.forEach((rt: any) => {
-        if (rt.leadEmail) projectMemberEmailsSet.add(String(rt.leadEmail).toLowerCase().trim());
-        if (Array.isArray(rt.members)) {
-          rt.members.forEach((m: any) => {
-            const clean = (typeof m === 'string' ? m : m.email || '').toLowerCase().trim();
-            if (clean) projectMemberEmailsSet.add(clean);
-          });
-        }
-        if (Array.isArray(rt.taskTeams)) {
-          rt.taskTeams.forEach((tt: any) => {
-            if (Array.isArray(tt.members)) {
-              tt.members.forEach((m: any) => {
-                const clean = (typeof m === 'string' ? m : m.email || '').toLowerCase().trim();
-                if (clean) projectMemberEmailsSet.add(clean);
-              });
-            }
-          });
-        }
-      });
-
-      if (iso.directorDeObra) {
-        projectMemberEmailsSet.add(String(iso.directorDeObra).toLowerCase().trim());
-      }
       if (activeProject?.creatorEmail) {
         projectMemberEmailsSet.add(String(activeProject.creatorEmail).toLowerCase().trim());
       }
 
-      // Validate against companies: exclude users who were removed/suspended from their companies
-      const validCompanyEmails = new Set<string>();
-      allCompanies.forEach((comp: any) => {
-        if (!comp || comp.deleted) return;
-        if (Array.isArray(comp.admins)) {
-          comp.admins.forEach((a: string) => validCompanyEmails.add(String(a).toLowerCase().trim()));
-        }
-        if (Array.isArray(comp.members)) {
-          comp.members.forEach((m: any) => {
-            if (m && m.email) validCompanyEmails.add(String(m.email).toLowerCase().trim());
-          });
-        }
-      });
-
-      // Filter out any members who are suspended or no longer in their companies
+      // Only filter out members if explicitly marked SUSPENDIDO in the global directory
       for (const email of Array.from(projectMemberEmailsSet)) {
-        if (!validCompanyEmails.has(email) && email !== 'imagina3ddesign@gmail.com' && email !== 'mcmartinezg@unal.edu.co') {
+        const dirU = dirUsersMap.get(email);
+        if (dirU && String(dirU.estado || '').toUpperCase().trim() === 'SUSPENDIDO') {
           projectMemberEmailsSet.delete(email);
         }
       }
 
-      // Fallback: If no members were found, include all users from all companies in empresas.json
+      // Fallback: If no members were found at all, include all users from all companies in empresas.json
       if (projectMemberEmailsSet.size === 0) {
         companyUsersMap.forEach((_, email) => {
           projectMemberEmailsSet.add(email);
