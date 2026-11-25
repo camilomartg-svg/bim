@@ -506,30 +506,50 @@
   function normalizeProjectIsoStructure() {
     if (!activeProject) return;
 
-    // Purgar automáticamente de miembros autorizados a usuarios que fueron retirados de la empresa
-    if (activeProject && Array.isArray(activeProject.members) && currentCompany) {
-      const compMemberEmails = new Set(
-        (Array.isArray(currentCompany.members) ? currentCompany.members : [])
-          .map(m => (m?.email || '').toLowerCase().trim())
-          .filter(Boolean)
-      );
-      const compAdminEmails = new Set(
-        (Array.isArray(currentCompany.admins) ? currentCompany.admins : [])
-          .map(a => String(a).toLowerCase().trim())
-          .filter(Boolean)
-      );
-      const currentCompName = (currentCompany.name || '').toLowerCase().trim();
+    // Purgar estrictamente: solo miembros pertenecientes a la empresa actual pueden ser miembros autorizados del proyecto
+    if (activeProject && currentCompany) {
+      const compValidEmails = new Set();
+      if (Array.isArray(currentCompany.members)) {
+        currentCompany.members.forEach(m => {
+          if (m && m.email) compValidEmails.add(String(m.email).toLowerCase().trim());
+        });
+      }
+      if (Array.isArray(currentCompany.admins)) {
+        currentCompany.admins.forEach(a => {
+          if (a) compValidEmails.add(String(a).toLowerCase().trim());
+        });
+      }
 
-      activeProject.members = activeProject.members.filter(pm => {
-        const email = (typeof pm === 'string' ? pm : pm?.email || '').toLowerCase().trim();
-        if (!email) return false;
-        const regComp = (getUserRegisteredCompany(email) || '').toLowerCase().trim();
-        if (regComp === currentCompName && !compMemberEmails.has(email) && !compAdminEmails.has(email)) {
-          console.warn('[ISO-19650] Usuario ' + email + ' fue retirado de la empresa ' + currentCompany.name + '. Removiendo de miembros autorizados.');
-          return false;
+      if (compValidEmails.size > 0 && Array.isArray(activeProject.members)) {
+        const initialCount = activeProject.members.length;
+        activeProject.members = activeProject.members.filter(pm => {
+          const email = (typeof pm === 'string' ? pm : pm?.email || '').toLowerCase().trim();
+          return compValidEmails.has(email);
+        });
+
+        // Depurar también de los equipos ISO
+        if (activeProject.iso19650) {
+          if (Array.isArray(activeProject.iso19650.deliveryTeams)) {
+            activeProject.iso19650.deliveryTeams.forEach(dt => {
+              if (Array.isArray(dt.members)) {
+                dt.members = dt.members.filter(m => compValidEmails.has(String(m).toLowerCase().trim()));
+              }
+            });
+          }
+          if (Array.isArray(activeProject.iso19650.receiverTeams)) {
+            activeProject.iso19650.receiverTeams.forEach(rt => {
+              if (Array.isArray(rt.members)) {
+                rt.members = rt.members.filter(m => compValidEmails.has(String(m).toLowerCase().trim()));
+              }
+            });
+          }
         }
-        return true;
-      });
+
+        if (activeProject.members.length !== initialCount) {
+          console.log('[ISO-19650] Depurados ' + (initialCount - activeProject.members.length) + ' miembros que no pertenecen a ' + currentCompany.name);
+          setTimeout(() => { if (typeof saveProjectToDrive === 'function') saveProjectToDrive(true); }, 500);
+        }
+      }
     }
 
     if (!Array.isArray(activeProject.members)) {
@@ -2748,15 +2768,17 @@
       });
     }
 
-    // 4) Miembros ya en activeProject.members
+    // 4) Miembros ya en activeProject.members (estrictamente filtrados a la empresa del proyecto)
     assignedMembers.forEach(pm => {
       const email = String(pm).toLowerCase().trim();
-      if (!userMap.has(email)) {
+      const isFromCurrentCompany = (Array.isArray(currentCompany?.members) && currentCompany.members.some(m => String(m.email).toLowerCase().trim() === email)) ||
+                                   (Array.isArray(currentCompany?.admins) && currentCompany.admins.some(a => String(a).toLowerCase().trim() === email));
+      if (isFromCurrentCompany && !userMap.has(email)) {
         upsertUser({
           email,
           nombre: getUserRegisteredName(email),
-          empresa: getUserRegisteredCompany(email),
-          rol: 'COLABORADOR',
+          empresa: currentCompany?.name || 'Empresa',
+          rol: 'MIEMBRO',
           especialidad: '',
           cargo: ''
         });

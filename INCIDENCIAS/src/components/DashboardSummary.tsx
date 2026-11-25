@@ -1,3 +1,4 @@
+import { isIncidentsAdmin, getUserProjectStatus } from '../utils/userScope';
 import React, { useEffect, useState } from 'react';
 import { collection, query, where, updateDoc, doc, addDoc, getDocs, getDoc, setDoc } from 'firebase/firestore';
 import { db } from '../services/firebase';
