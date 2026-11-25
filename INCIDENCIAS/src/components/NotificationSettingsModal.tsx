@@ -191,7 +191,14 @@ export default function NotificationSettingsModal({
   const handleSaveAndClose = async () => {
     setIsSaving(true);
     try {
-      await onSave(draftPrefs);
+      const savePromise = onSave(draftPrefs);
+      await Promise.race([
+        savePromise,
+        new Promise(resolve => setTimeout(resolve, 800))
+      ]);
+      onClose();
+    } catch (err) {
+      console.warn("Error al guardar preferencias:", err);
       onClose();
     } finally {
       setIsSaving(false);

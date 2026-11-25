@@ -1,9 +1,8 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Issue, Comment } from '../types';
 import { useAuth } from '../context/AuthContext';
-import { subscribeToIssues } from '../services/firebaseService';
-import { db } from '../services/firebase';
-import { doc, getDoc, setDoc } from 'firebase/firestore';
+import { subscribeToIssues, getProjectAndCompany } from '../services/firebaseService';
+import { saveNotificationPreferencesToDrive, fetchNotificationPreferencesFromDrive } from '../services/driveIncidentsService';
 import { isMedicionAlertActive, isEficaciaAlertActive } from '../utils/followUpUtils';
 import { isIncidentsAdmin } from '../utils/userScope';
 import { 
@@ -97,16 +96,15 @@ export default function NotificationsView({ onSelectIssue, canAccessBim }: Notif
     return DEFAULT_NOTIFICATION_PREFERENCES;
   });
 
-  // Sync preferences with Firestore user document for multi-device persistence
+  // Sync preferences with Google Drive project folder (Empresa / Proyecto)
   useEffect(() => {
     if (!userIdentifier || userIdentifier === 'default_user') return;
-    const cleanId = userIdentifier.toLowerCase().replace(/[^a-z0-9]/g, '_');
-    getDoc(doc(db, 'user_notification_preferences', cleanId)).then((snap) => {
-      if (snap.exists()) {
-        const firestorePrefs = snap.data() as UserNotificationPreferences;
-        setPreferences(firestorePrefs);
+    const { companyId, projectId } = getProjectAndCompany();
+    fetchNotificationPreferencesFromDrive(userIdentifier, companyId, projectId).then((drivePrefs) => {
+      if (drivePrefs) {
+        setPreferences(drivePrefs);
         try {
-          localStorage.setItem(storageKey, JSON.stringify(firestorePrefs));
+          localStorage.setItem(storageKey, JSON.stringify(drivePrefs));
         } catch (_) {}
       }
     }).catch(console.error);
@@ -118,19 +116,8 @@ export default function NotificationsView({ onSelectIssue, canAccessBim }: Notif
       localStorage.setItem(storageKey, JSON.stringify(newPrefs));
     } catch (_) {}
 
-    if (userIdentifier && userIdentifier !== 'default_user') {
-      const cleanId = userIdentifier.toLowerCase().replace(/[^a-z0-9]/g, '_');
-      try {
-        await setDoc(doc(db, 'user_notification_preferences', cleanId), {
-          ...newPrefs,
-          userId: user?.id || '',
-          userEmail: user?.email || '',
-          updatedAt: new Date().toISOString()
-        }, { merge: true });
-      } catch (err) {
-        console.error("Error guardando preferencias en Firestore:", err);
-      }
-    }
+    const { companyId, projectId } = getProjectAndCompany();
+    await saveNotificationPreferencesToDrive(newPrefs, userIdentifier, companyId, projectId);
   };
 
   const [readIds, setReadIds] = useState<string[]>(() => {

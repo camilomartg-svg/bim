@@ -297,3 +297,105 @@ if (channel) {
     }
   };
 }
+
+/**
+ * Saves user notification preferences directly into Google Drive:
+ * 1-9SumRefiih81mc_eASsswy_W_U0-qe5 -> [Empresa] -> [Proyecto] -> notif_prefs_[user].json
+ */
+export async function saveNotificationPreferencesToDrive(
+  prefs: any,
+  userIdentifier: string,
+  companyId?: string,
+  projectId?: string
+): Promise<void> {
+  const { companyId: cId, projectId: pId } = getContext(companyId, projectId);
+  const cleanUser = (userIdentifier || 'user').toLowerCase().replace(/[^a-z0-9]/g, '_');
+  const cacheKey = `nora_notif_prefs_${cleanUser}_${cId}_${pId}`;
+
+  // 1. Optimistic instant local storage update
+  try {
+    localStorage.setItem(cacheKey, JSON.stringify(prefs));
+    localStorage.setItem(`nora_notif_prefs_${cleanUser}`, JSON.stringify(prefs));
+  } catch (_) {}
+
+  // 2. Persist in Drive folder
+  try {
+    const folderId = await resolveIncidentsProjectFolderId(cId, pId);
+    const payload = {
+      ...prefs,
+      userIdentifier,
+      companyId: cId,
+      projectId: pId,
+      updatedAt: new Date().toISOString()
+    };
+
+    const jsonStr = JSON.stringify(payload, null, 2);
+    const utf8Bytes = new TextEncoder().encode(jsonStr);
+    let binary = '';
+    const chunkSize = 0x8000;
+    for (let i = 0; i < utf8Bytes.length; i += chunkSize) {
+      binary += String.fromCharCode.apply(null, Array.from(utf8Bytes.subarray(i, i + chunkSize)));
+    }
+    const base64 = btoa(binary);
+
+    const filename = `notif_prefs_${cleanUser}.json`;
+    await postToAppsScript({
+      action: 'uploadFile',
+      folderId: folderId,
+      filename: filename,
+      name: filename,
+      contentType: 'application/json',
+      mimeType: 'application/json',
+      content: base64,
+      base64: base64
+    });
+
+    invalidateIncidentsFolderListCache(cId, pId);
+  } catch (err) {
+    console.warn('[driveIncidentsService] Error guardando preferencias en Drive:', err);
+  }
+}
+
+/**
+ * Loads user notification preferences from Google Drive:
+ * 1-9SumRefiih81mc_eASsswy_W_U0-qe5 -> [Empresa] -> [Proyecto] -> notif_prefs_[user].json
+ */
+export async function fetchNotificationPreferencesFromDrive(
+  userIdentifier: string,
+  companyId?: string,
+  projectId?: string
+): Promise<any | null> {
+  const { companyId: cId, projectId: pId } = getContext(companyId, projectId);
+  const cleanUser = (userIdentifier || 'user').toLowerCase().replace(/[^a-z0-9]/g, '_');
+  const cacheKey = `nora_notif_prefs_${cleanUser}_${cId}_${pId}`;
+
+  // 1. Check local storage first
+  try {
+    const cached = localStorage.getItem(cacheKey) || localStorage.getItem(`nora_notif_prefs_${cleanUser}`);
+    if (cached) return JSON.parse(cached);
+  } catch (_) {}
+
+  // 2. Fetch from Drive
+  try {
+    const allFiles = await listIncidentsFolderFiles(cId, pId);
+    const targetName = `notif_prefs_${cleanUser}.json`;
+    const targetFile = allFiles.find((f: any) => f.name === targetName);
+    if (targetFile && targetFile.fileId) {
+      const textData = await postToAppsScript({ action: 'text', id: targetFile.fileId });
+      if (textData && textData.text) {
+        const parsed = JSON.parse(textData.text);
+        if (parsed) {
+          try {
+            localStorage.setItem(cacheKey, JSON.stringify(parsed));
+          } catch (_) {}
+          return parsed;
+        }
+      }
+    }
+  } catch (err) {
+    console.warn('[driveIncidentsService] Error leyendo preferencias de Drive:', err);
+  }
+
+  return null;
+}
+
