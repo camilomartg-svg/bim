@@ -112,9 +112,14 @@ function Dashboard() {
   const qualityAllowed: string[] = projectConfig?.qualityReportsAllowedTeams || projectConfig?.qualityReportsAllowedProfiles || [];
   const envAllowed: string[] = projectConfig?.environmentalReportsAllowedTeams || projectConfig?.environmentalReportsAllowedProfiles || [];
 
-  const canViewSite = isBimTeam || isAdmin || siteAllowed.length === 0 || siteAllowed.includes(userTeam) || siteAllowed.includes(userPosition);
-  const canViewQuality = isBimTeam || isAdmin || qualityAllowed.length === 0 || qualityAllowed.includes(userTeam) || qualityAllowed.includes(userPosition);
-  const canViewEnv = isBimTeam || isAdmin || envAllowed.length === 0 || envAllowed.includes(userTeam) || envAllowed.includes(userPosition);
+  // Super admin project module toggles (default: false / desactivados por defecto)
+  const isSiteModuleEnabled = Boolean(projectConfig?.enableSiteReports);
+  const isQualityModuleEnabled = Boolean(projectConfig?.enableQualityReports);
+  const isEnvModuleEnabled = Boolean(projectConfig?.enableEnvironmentalReports);
+
+  const canViewSite = isSiteModuleEnabled && (isAdmin || isBimTeam || siteAllowed.length === 0 || siteAllowed.includes(userTeam) || siteAllowed.includes(userPosition));
+  const canViewQuality = isQualityModuleEnabled && (isAdmin || isBimTeam || qualityAllowed.length === 0 || qualityAllowed.includes(userTeam) || qualityAllowed.includes(userPosition));
+  const canViewEnv = isEnvModuleEnabled && (isAdmin || isBimTeam || envAllowed.length === 0 || envAllowed.includes(userTeam) || envAllowed.includes(userPosition));
 
   const handleOpenIssue = async (issueId: string) => {
     if (isMobilePhone) return;

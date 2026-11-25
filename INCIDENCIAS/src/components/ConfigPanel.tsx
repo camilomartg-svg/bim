@@ -601,6 +601,9 @@ export default function ConfigPanel() {
   const [qualityCodeStart, setQualityCodeStart] = useState<string>("0001");
   
   // Report tab view permissions by task teams
+  const [enableSiteReports, setEnableSiteReports] = useState<boolean>(false);
+  const [enableQualityReports, setEnableQualityReports] = useState<boolean>(false);
+  const [enableEnvironmentalReports, setEnableEnvironmentalReports] = useState<boolean>(false);
   const [siteReportsAllowedTeams, setSiteReportsAllowedTeams] = useState<string[]>([]);
   const [qualityReportsAllowedTeams, setQualityReportsAllowedTeams] = useState<string[]>([]);
   const [environmentalReportsAllowedTeams, setEnvironmentalReportsAllowedTeams] = useState<string[]>([]);
@@ -716,6 +719,10 @@ export default function ConfigPanel() {
             };
           }));
           setQualityCodeStart(qCodeStart);
+
+          setEnableSiteReports(Boolean(fbConfig.enableSiteReports));
+          setEnableQualityReports(Boolean(fbConfig.enableQualityReports));
+          setEnableEnvironmentalReports(Boolean(fbConfig.enableEnvironmentalReports));
 
           setSiteReportsAllowedTeams(fbConfig.siteReportsAllowedTeams || fbConfig.siteReportsAllowedProfiles || []);
           setQualityReportsAllowedTeams(fbConfig.qualityReportsAllowedTeams || fbConfig.qualityReportsAllowedProfiles || []);
@@ -948,6 +955,9 @@ export default function ConfigPanel() {
       qualityHitos: qualityHitosData,
       qualityTypes: qualityTypesData,
       qualityCodeStart: qualityCodeStart,
+      enableSiteReports: enableSiteReports,
+      enableQualityReports: enableQualityReports,
+      enableEnvironmentalReports: enableEnvironmentalReports,
       siteReportsAllowedTeams: siteReportsAllowedTeams,
       qualityReportsAllowedTeams: qualityReportsAllowedTeams,
       environmentalReportsAllowedTeams: environmentalReportsAllowedTeams,
@@ -1292,7 +1302,7 @@ const changeTypeScope = (id: string, scope: 'GLOBAL' | 'DELIVERY' | 'RECEIVER') 
             { id: 'activities', label: 'Actividades', icon: Briefcase },
             { id: 'dangers', label: 'Peligros', icon: AlertTriangle },
             { id: 'qualityReportConfig', label: 'Informe de control', icon: ClipboardList },
-            { id: 'reportPermissions', label: 'Permisos de Informes', icon: Eye }
+            { id: 'reportPermissions', label: 'Módulos de Informes', icon: Layers }
           ].filter(tab => {
             if (tab.id === 'types' && selectedConfigKey !== 'GLOBAL') return false;
             // Also hide dangers/activities/units in type-specific config if preferred, but user only mentioned types
@@ -1833,20 +1843,19 @@ const changeTypeScope = (id: string, scope: 'GLOBAL' | 'DELIVERY' | 'RECEIVER') 
                 {/* Visual Header */}
                 <div className="mb-10 flex flex-col md:flex-row items-start gap-4 p-8 bg-slate-50 dark:bg-slate-950/20 border border-slate-100 dark:border-slate-800 rounded-[2rem]">
                   <div className="w-12 h-12 bg-amber-500 rounded-2xl flex items-center justify-center text-white shadow-lg shrink-0">
-                    <Eye className="w-6 h-6" />
+                    <Layers className="w-6 h-6" />
                   </div>
                   <div className="flex-1 space-y-2">
-                    <h3 className="text-base font-black text-slate-900 dark:text-white uppercase tracking-tight">Visibilidad de Informes por Equipos de Tarea</h3>
+                    <h3 className="text-base font-black text-slate-900 dark:text-white uppercase tracking-tight">Activación y Permisos de Módulos de Informes</h3>
                     <p className="text-xs text-slate-500 font-medium tracking-tight leading-relaxed">
-                      Determina qué <strong>Equipos de Tarea</strong> del proyecto tienen permiso para visualizar cada módulo de informe.
-                      Los equipos y miembros se sincronizan automáticamente con la configuración del proyecto y la estructura de personal.
+                      El <strong>Super Administrador</strong> puede activar o desactivar individualmente para cada empresa o proyecto los módulos de <strong>Informes de Obra</strong>, <strong>Informes de Calidad</strong> e <strong>Informes Ambientales</strong>. Por defecto se mantienen <strong>desactivados</strong> hasta que se activen en esta configuración.
                     </p>
                     <div className="flex flex-wrap items-center gap-2 pt-2">
                       <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-amber-500/10 text-amber-600 dark:text-amber-400 rounded-lg text-[9px] font-black uppercase tracking-wider">
-                        👑 Super Administradores y Administradores de Empresa: Acceso Total Incondicional
+                        👑 Configuración individual por Empresa y Proyecto
                       </span>
-                      <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 rounded-lg text-[9px] font-black uppercase tracking-wider">
-                        ℹ️ Si no seleccionas ningún equipo, el informe será público para todo el personal
+                      <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 rounded-lg text-[9px] font-black uppercase tracking-wider">
+                        🔒 Desactivados por defecto para mayor orden
                       </span>
                     </div>
                   </div>
@@ -1856,6 +1865,48 @@ const changeTypeScope = (id: string, scope: 'GLOBAL' | 'DELIVERY' | 'RECEIVER') 
                 <div className="space-y-8">
                   {/* Site Reports Allowed Teams */}
                   <div className="bg-slate-50 dark:bg-slate-950/20 border border-slate-100 dark:border-slate-800 p-8 rounded-[2rem]">
+                    {/* Master Switch Obra */}
+                    <div className="flex items-center justify-between p-4 bg-white dark:bg-[#0c0f1d] border border-slate-200 dark:border-slate-800 rounded-2xl mb-6 shadow-sm">
+                      <div className="flex items-center gap-3">
+                        <div className={cn(
+                          "w-3.5 h-3.5 rounded-full transition-all shrink-0",
+                          enableSiteReports ? "bg-emerald-500 shadow-md shadow-emerald-500/50" : "bg-slate-300 dark:bg-slate-700"
+                        )} />
+                        <div>
+                          <p className="text-xs font-black uppercase tracking-wider text-slate-800 dark:text-white">
+                            Estado del Módulo en este Proyecto
+                          </p>
+                          <p className="text-[10px] text-slate-500 font-medium mt-0.5">
+                            {enableSiteReports 
+                              ? "Módulo activado por el Super Administrador para esta empresa/proyecto." 
+                              : "Módulo desactivado por defecto. No visible en la barra lateral."}
+                          </p>
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setEnableSiteReports(!enableSiteReports)}
+                        className={cn(
+                          "px-4 py-2 rounded-xl font-black text-[9px] uppercase tracking-widest transition-all shadow-md active:scale-95 flex items-center gap-1.5 shrink-0",
+                          enableSiteReports 
+                            ? "bg-emerald-500 text-white hover:bg-emerald-600 shadow-emerald-500/20" 
+                            : "bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-300 dark:hover:bg-slate-700"
+                        )}
+                      >
+                        {enableSiteReports ? (
+                          <>
+                            <Check className="w-3.5 h-3.5" />
+                            <span>ACTIVADO</span>
+                          </>
+                        ) : (
+                          <>
+                            <X className="w-3.5 h-3.5" />
+                            <span>DESACTIVADO</span>
+                          </>
+                        )}
+                      </button>
+                    </div>
+
                     <div className="flex items-center justify-between mb-6 flex-wrap gap-4">
                       <div className="flex items-center gap-3">
                         <div className="w-10 h-10 rounded-2xl bg-slate-900 dark:bg-white flex items-center justify-center text-white dark:text-slate-900 shadow-lg shrink-0">
@@ -1868,11 +1919,13 @@ const changeTypeScope = (id: string, scope: 'GLOBAL' | 'DELIVERY' | 'RECEIVER') 
                       </div>
                       <span className={cn(
                         "px-3 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-widest",
-                        siteReportsAllowedTeams.length === 0 
-                          ? "bg-emerald-500/15 text-emerald-500" 
-                          : "bg-blue-500/15 text-blue-500"
+                        !enableSiteReports
+                          ? "bg-slate-200 text-slate-500 dark:bg-slate-800 dark:text-slate-400"
+                          : siteReportsAllowedTeams.length === 0 
+                            ? "bg-emerald-500/15 text-emerald-500" 
+                            : "bg-blue-500/15 text-blue-500"
                       )}>
-                        {siteReportsAllowedTeams.length === 0 ? "PÚBLICO: TODOS LOS EQUIPOS" : `RESTRINGIDO: ${siteReportsAllowedTeams.length} EQUIPO(S)`}
+                        {!enableSiteReports ? "MÓDULO DESACTIVADO" : siteReportsAllowedTeams.length === 0 ? "PÚBLICO: TODOS LOS EQUIPOS" : `RESTRINGIDO: ${siteReportsAllowedTeams.length} EQUIPO(S)`}
                       </span>
                     </div>
 
@@ -1908,6 +1961,48 @@ const changeTypeScope = (id: string, scope: 'GLOBAL' | 'DELIVERY' | 'RECEIVER') 
 
                   {/* Quality Reports Allowed Teams */}
                   <div className="bg-slate-50 dark:bg-slate-950/20 border border-slate-100 dark:border-slate-800 p-8 rounded-[2rem]">
+                    {/* Master Switch Calidad */}
+                    <div className="flex items-center justify-between p-4 bg-white dark:bg-[#0c0f1d] border border-slate-200 dark:border-slate-800 rounded-2xl mb-6 shadow-sm">
+                      <div className="flex items-center gap-3">
+                        <div className={cn(
+                          "w-3.5 h-3.5 rounded-full transition-all shrink-0",
+                          enableQualityReports ? "bg-indigo-500 shadow-md shadow-indigo-500/50" : "bg-slate-300 dark:bg-slate-700"
+                        )} />
+                        <div>
+                          <p className="text-xs font-black uppercase tracking-wider text-slate-800 dark:text-white">
+                            Estado del Módulo en este Proyecto
+                          </p>
+                          <p className="text-[10px] text-slate-500 font-medium mt-0.5">
+                            {enableQualityReports 
+                              ? "Módulo activado por el Super Administrador para esta empresa/proyecto." 
+                              : "Módulo desactivado por defecto. No visible en la barra lateral."}
+                          </p>
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setEnableQualityReports(!enableQualityReports)}
+                        className={cn(
+                          "px-4 py-2 rounded-xl font-black text-[9px] uppercase tracking-widest transition-all shadow-md active:scale-95 flex items-center gap-1.5 shrink-0",
+                          enableQualityReports 
+                            ? "bg-indigo-500 text-white hover:bg-indigo-600 shadow-indigo-500/20" 
+                            : "bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-300 dark:hover:bg-slate-700"
+                        )}
+                      >
+                        {enableQualityReports ? (
+                          <>
+                            <Check className="w-3.5 h-3.5" />
+                            <span>ACTIVADO</span>
+                          </>
+                        ) : (
+                          <>
+                            <X className="w-3.5 h-3.5" />
+                            <span>DESACTIVADO</span>
+                          </>
+                        )}
+                      </button>
+                    </div>
+
                     <div className="flex items-center justify-between mb-6 flex-wrap gap-4">
                       <div className="flex items-center gap-3">
                         <div className="w-10 h-10 rounded-2xl bg-indigo-500 flex items-center justify-center text-white shadow-lg shrink-0">
@@ -1920,11 +2015,13 @@ const changeTypeScope = (id: string, scope: 'GLOBAL' | 'DELIVERY' | 'RECEIVER') 
                       </div>
                       <span className={cn(
                         "px-3 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-widest",
-                        qualityReportsAllowedTeams.length === 0 
-                          ? "bg-emerald-500/15 text-emerald-500" 
-                          : "bg-indigo-500/15 text-indigo-500"
+                        !enableQualityReports
+                          ? "bg-slate-200 text-slate-500 dark:bg-slate-800 dark:text-slate-400"
+                          : qualityReportsAllowedTeams.length === 0 
+                            ? "bg-emerald-500/15 text-emerald-500" 
+                            : "bg-indigo-500/15 text-indigo-500"
                       )}>
-                        {qualityReportsAllowedTeams.length === 0 ? "PÚBLICO: TODOS LOS EQUIPOS" : `RESTRINGIDO: ${qualityReportsAllowedTeams.length} EQUIPO(S)`}
+                        {!enableQualityReports ? "MÓDULO DESACTIVADO" : qualityReportsAllowedTeams.length === 0 ? "PÚBLICO: TODOS LOS EQUIPOS" : `RESTRINGIDO: ${qualityReportsAllowedTeams.length} EQUIPO(S)`}
                       </span>
                     </div>
 
@@ -1960,6 +2057,48 @@ const changeTypeScope = (id: string, scope: 'GLOBAL' | 'DELIVERY' | 'RECEIVER') 
 
                   {/* Environmental Reports Allowed Teams */}
                   <div className="bg-slate-50 dark:bg-slate-950/20 border border-slate-100 dark:border-slate-800 p-8 rounded-[2rem]">
+                    {/* Master Switch Ambiental */}
+                    <div className="flex items-center justify-between p-4 bg-white dark:bg-[#0c0f1d] border border-slate-200 dark:border-slate-800 rounded-2xl mb-6 shadow-sm">
+                      <div className="flex items-center gap-3">
+                        <div className={cn(
+                          "w-3.5 h-3.5 rounded-full transition-all shrink-0",
+                          enableEnvironmentalReports ? "bg-emerald-500 shadow-md shadow-emerald-500/50" : "bg-slate-300 dark:bg-slate-700"
+                        )} />
+                        <div>
+                          <p className="text-xs font-black uppercase tracking-wider text-slate-800 dark:text-white">
+                            Estado del Módulo en este Proyecto
+                          </p>
+                          <p className="text-[10px] text-slate-500 font-medium mt-0.5">
+                            {enableEnvironmentalReports 
+                              ? "Módulo activado por el Super Administrador para esta empresa/proyecto." 
+                              : "Módulo desactivado por defecto. No visible en la barra lateral."}
+                          </p>
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setEnableEnvironmentalReports(!enableEnvironmentalReports)}
+                        className={cn(
+                          "px-4 py-2 rounded-xl font-black text-[9px] uppercase tracking-widest transition-all shadow-md active:scale-95 flex items-center gap-1.5 shrink-0",
+                          enableEnvironmentalReports 
+                            ? "bg-emerald-500 text-white hover:bg-emerald-600 shadow-emerald-500/20" 
+                            : "bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-300 dark:hover:bg-slate-700"
+                        )}
+                      >
+                        {enableEnvironmentalReports ? (
+                          <>
+                            <Check className="w-3.5 h-3.5" />
+                            <span>ACTIVADO</span>
+                          </>
+                        ) : (
+                          <>
+                            <X className="w-3.5 h-3.5" />
+                            <span>DESACTIVADO</span>
+                          </>
+                        )}
+                      </button>
+                    </div>
+
                     <div className="flex items-center justify-between mb-6 flex-wrap gap-4">
                       <div className="flex items-center gap-3">
                         <div className="w-10 h-10 rounded-2xl bg-emerald-500 flex items-center justify-center text-white shadow-lg shrink-0">
@@ -1972,11 +2111,13 @@ const changeTypeScope = (id: string, scope: 'GLOBAL' | 'DELIVERY' | 'RECEIVER') 
                       </div>
                       <span className={cn(
                         "px-3 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-widest",
-                        environmentalReportsAllowedTeams.length === 0 
-                          ? "bg-emerald-500/15 text-emerald-500" 
-                          : "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400"
+                        !enableEnvironmentalReports
+                          ? "bg-slate-200 text-slate-500 dark:bg-slate-800 dark:text-slate-400"
+                          : environmentalReportsAllowedTeams.length === 0 
+                            ? "bg-emerald-500/15 text-emerald-500" 
+                            : "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400"
                       )}>
-                        {environmentalReportsAllowedTeams.length === 0 ? "PÚBLICO: TODOS LOS EQUIPOS" : `RESTRINGIDO: ${environmentalReportsAllowedTeams.length} EQUIPO(S)`}
+                        {!enableEnvironmentalReports ? "MÓDULO DESACTIVADO" : environmentalReportsAllowedTeams.length === 0 ? "PÚBLICO: TODOS LOS EQUIPOS" : `RESTRINGIDO: ${environmentalReportsAllowedTeams.length} EQUIPO(S)`}
                       </span>
                     </div>
 

@@ -18,9 +18,9 @@ import { useAuth } from '../context/AuthContext';
 export default function Sidebar({ 
   activeTab, 
   setActiveTab,
-  canViewSite = true,
-  canViewQuality = true,
-  canViewEnv = true
+  canViewSite = false,
+  canViewQuality = false,
+  canViewEnv = false
 }: SidebarProps) {
   const { logout, user } = useAuth();
   const [isMobilePhone, setIsMobilePhone] = useState<boolean>(() => {
