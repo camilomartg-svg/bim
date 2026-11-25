@@ -231,6 +231,7 @@ export default function DashboardChat({ selectedIssue, isSuspended, isPaymentAdm
       userAvatar?: string;
       userName?: string;
       userId?: string;
+      userEmail?: string;
     },
     extraIssueFields?: Partial<Issue>
   ) => {
@@ -239,6 +240,7 @@ export default function DashboardChat({ selectedIssue, isSuspended, isPaymentAdm
     const newComment: Comment = {
       id: 'cm_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6),
       userId: commentPayload.userId || authorUser.id,
+      userEmail: commentPayload.userEmail || (authorUser as any).email || (user as any)?.email || '',
       userName: commentPayload.userName || authorUser.name,
       text: commentPayload.text,
       createdAt: new Date().toISOString(),
@@ -1563,19 +1565,51 @@ ${textTrimmed ? `\n• **Sustento / Observaciones**: ${textTrimmed}` : ''}`;
         
         <AnimatePresence mode="popLayout">
           {messages.map((msg, idx) => {
-            const currentUserId = (user?.id || '').toLowerCase().trim();
-            const currentUserEmail = (user?.email || '').toLowerCase().trim();
-            const currentUserName = (user?.name || '').toLowerCase().trim();
+            const isGenericToken = (str?: string) => {
+              if (!str) return true;
+              const s = str.toLowerCase().trim();
+              return (
+                s === 'local_user' ||
+                s === 'system' ||
+                s === 'sistema' ||
+                s === 'anonymous' ||
+                s === 'anonimo' ||
+                s === 'usuario' ||
+                s === 'null' ||
+                s === 'undefined'
+              );
+            };
 
-            const msgUserId = (msg.userId || '').toLowerCase().trim();
-            const msgUserEmail = ((msg as any).userEmail || '').toLowerCase().trim();
-            const msgUserName = (msg.userName || '').toLowerCase().trim();
+            const cleanStr = (s?: string) => (s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
 
-            const isMe = Boolean(
-              (currentUserEmail && (msgUserEmail === currentUserEmail || msgUserId === currentUserEmail)) ||
-              (currentUserId && (msgUserId === currentUserId || msgUserEmail === currentUserId)) ||
-              (currentUserName && (msgUserName === currentUserName || (currentUserEmail && currentUserEmail.split('@')[0] === msgUserName)))
-            );
+            const myEmail = (user?.email || '').toLowerCase().trim();
+            const myNameClean = cleanStr(user?.name);
+            const myNameRaw = (user?.name || '').toLowerCase().trim();
+            const myId = (user?.id || '').trim();
+
+            const mEmail = ((msg as any).userEmail || (msg.userId?.includes('@') ? msg.userId : '')).toLowerCase().trim();
+            const mNameClean = cleanStr(msg.userName);
+            const mNameRaw = (msg.userName || '').toLowerCase().trim();
+            const mId = (msg.userId || '').trim();
+
+            let isMe = false;
+
+            // 1. Coincidencia estricta por correo
+            if (myEmail && mEmail && myEmail === mEmail) {
+              isMe = true;
+            }
+            // 2. Coincidencia estricta por ID único no genérico (UID de Firebase)
+            else if (myId && mId && !isGenericToken(myId) && !isGenericToken(mId) && myId === mId) {
+              isMe = true;
+            }
+            // 3. Coincidencia por nombre de usuario alfanumérico limpio
+            else if (myNameClean && mNameClean && !isGenericToken(myNameRaw) && !isGenericToken(mNameRaw)) {
+              if (myNameClean === mNameClean) {
+                isMe = true;
+              } else if (myEmail && cleanStr(myEmail.split('@')[0]) === mNameClean) {
+                isMe = true;
+              }
+            }
 
             return (
               <motion.div
@@ -1600,19 +1634,19 @@ ${textTrimmed ? `\n• **Sustento / Observaciones**: ${textTrimmed}` : ''}`;
                    <div className={cn(
                      "p-5 sm:p-6 rounded-[2rem] relative shadow-xl transition-all group",
                      isMe 
-                       ? "bg-blue-600 dark:bg-blue-600 text-white rounded-br-none shadow-blue-600/25 border border-blue-500/40" 
+                       ? "bg-slate-900 dark:bg-[#1e293b] text-white rounded-br-none border border-slate-800 dark:border-slate-700/60 shadow-black/10" 
                        : "bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-200 rounded-bl-none border border-slate-200 dark:border-slate-800 shadow-slate-200/5 dark:shadow-black/20"
                    )}>
                       <div className={cn("flex items-center mb-3 gap-4", isMe ? "justify-end flex-row-reverse" : "justify-between")}>
                          <div className={cn("flex flex-col", isMe ? "text-right" : "text-left")}>
-                           <span className={cn("text-[9px] font-black uppercase tracking-[0.1em]", isMe ? "text-blue-100" : "text-slate-900 dark:text-white")}>
-                             {msg.userName} {isMe ? '(Tú)' : ''}
+                           <span className={cn("text-[9px] font-black uppercase tracking-[0.1em]", isMe ? "text-slate-300 dark:text-slate-300" : "text-slate-900 dark:text-white")}>
+                             {msg.userName || (isMe ? 'Tú' : 'Usuario')}
                            </span>
-                           <span className={cn("text-[7px] font-bold uppercase tracking-widest mt-0.5", isMe ? "text-blue-200/70" : "text-slate-400 dark:text-slate-500")}>
+                           <span className="text-[7px] font-bold uppercase tracking-widest mt-0.5 text-slate-400 dark:text-slate-500">
                              Cargo Auditado
                            </span>
                          </div>
-                         <span className={cn("text-[8px] font-black uppercase tracking-widest", isMe ? "text-blue-200/70" : "text-slate-400 dark:text-slate-500")}>
+                         <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500">
                            {format(new Date(msg.createdAt), 'HH:mm')}
                          </span>
                       </div>
@@ -1628,16 +1662,16 @@ ${textTrimmed ? `\n• **Sustento / Observaciones**: ${textTrimmed}` : ''}`;
                                 rel="noreferrer"
                                 className={cn(
                                   "flex items-center gap-3 p-3.5 rounded-2xl border transition-all duration-300 group/att",
-                                  isMe ? "bg-white/10 border-white/20 hover:bg-white/20 text-white" : "bg-[#020617]/50 border-slate-800 hover:bg-slate-800/50"
+                                  isMe ? "bg-white/5 border-white/10 hover:bg-white/10 text-white" : "bg-[#020617]/50 border-slate-800 hover:bg-slate-800/50"
                                 )}
                               >
-                                 <div className={cn("w-9 h-9 rounded-xl flex items-center justify-center shadow-lg transition-transform group-hover/att:scale-105", isMe ? "bg-white/20 text-white" : "bg-slate-900 text-slate-400")}>
+                                 <div className={cn("w-9 h-9 rounded-xl flex items-center justify-center shadow-lg transition-transform group-hover/att:scale-105", isMe ? "bg-white/10 text-white" : "bg-slate-900 text-slate-400")}>
                                    {att.category === 'image' ? <ImageIcon className="w-4 h-4" /> : 
                                     att.category === 'video' ? <Video className="w-4 h-4" /> : <Paperclip className="w-4 h-4" />}
                                  </div>
                                  <div className="flex flex-col overflow-hidden text-left flex-1">
                                    <span className={cn("text-[11px] font-black truncate tracking-tight", isMe ? "text-white" : "text-slate-100")}>{att.name}</span>
-                                   <span className={cn("text-[8px] font-bold uppercase tracking-widest mt-0.5", isMe ? "text-blue-200/70" : "text-slate-500")}>Evidencia Técnica Sincronizada</span>
+                                   <span className="text-[8px] font-bold uppercase tracking-widest mt-0.5 text-slate-400 dark:text-slate-500">Evidencia Técnica Sincronizada</span>
                                  </div>
                                  <div className="opacity-0 group-hover/att:opacity-100 transition-opacity pr-1">
                                     <Clock className={cn("w-3.5 h-3.5", isMe ? "text-white/60" : "text-slate-600")} />
@@ -1647,12 +1681,12 @@ ${textTrimmed ? `\n• **Sustento / Observaciones**: ${textTrimmed}` : ''}`;
                         </div>
                       )}
 
-                      <div className={cn("flex items-center gap-4 mt-4 border-t pt-3", isMe ? "border-white/15" : "border-slate-100 dark:border-slate-800/50")}>
+                      <div className={cn("flex items-center gap-4 mt-4 border-t pt-3", isMe ? "border-white/10" : "border-slate-100 dark:border-slate-800/50")}>
                          <div className="flex items-center gap-2">
-                            <button className={cn("p-1.5 rounded-lg transition-all hover:scale-110", isMe ? "hover:bg-white/10 text-white/80" : "hover:bg-slate-800 text-slate-500")}><ThumbsUp className="w-3.5 h-3.5" /></button>
-                            <button className={cn("p-1.5 rounded-lg transition-all hover:scale-110", isMe ? "hover:bg-white/10 text-white/80" : "hover:bg-slate-800 text-slate-500")}><ThumbsDown className="w-3.5 h-3.5" /></button>
+                            <button className={cn("p-1.5 rounded-lg transition-all hover:scale-110", isMe ? "hover:bg-white/10 text-slate-400 hover:text-white" : "hover:bg-slate-800 text-slate-500")}><ThumbsUp className="w-3.5 h-3.5" /></button>
+                            <button className={cn("p-1.5 rounded-lg transition-all hover:scale-110", isMe ? "hover:bg-white/10 text-slate-400 hover:text-white" : "hover:bg-slate-800 text-slate-500")}><ThumbsDown className="w-3.5 h-3.5" /></button>
                          </div>
-                         <div className={cn("ml-auto flex items-center gap-4 text-[8px] font-black uppercase tracking-[0.2em]", isMe ? "text-blue-100" : "text-slate-500 dark:text-slate-500")}>
+                         <div className={cn("ml-auto flex items-center gap-4 text-[8px] font-black uppercase tracking-[0.2em]", isMe ? "text-slate-400" : "text-slate-500 dark:text-slate-500")}>
                             <span className="hover:underline cursor-pointer transition-colors">Protocolar</span>
                             <span className="hover:underline cursor-pointer transition-colors">Exportar</span>
                          </div>
@@ -1661,7 +1695,7 @@ ${textTrimmed ? `\n• **Sustento / Observaciones**: ${textTrimmed}` : ''}`;
                  </div>
 
                 {isMe && (
-                  <div className="w-9 h-9 rounded-xl bg-blue-600 text-white border border-blue-500 flex items-center justify-center text-[10px] font-black shrink-0 shadow-sm mb-1 transition-colors">
+                  <div className="w-9 h-9 rounded-xl bg-slate-800 dark:bg-slate-800 text-white border border-slate-700 dark:border-slate-700 flex items-center justify-center text-[10px] font-black shrink-0 shadow-sm mb-1 transition-colors">
                     {msg.userName?.charAt(0) || user?.name?.charAt(0) || 'YO'}
                   </div>
                 )}
@@ -1679,7 +1713,7 @@ ${textTrimmed ? `\n• **Sustento / Observaciones**: ${textTrimmed}` : ''}`;
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 12, scale: 0.9 }}
             onClick={() => scrollToBottom(true)}
-            className="absolute bottom-28 right-6 lg:right-10 z-30 flex items-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-full shadow-2xl shadow-blue-600/40 text-[9.5px] font-black uppercase tracking-wider transition-all hover:scale-105 active:scale-95 border border-white/20 cursor-pointer"
+            className="absolute bottom-28 right-6 lg:right-10 z-30 flex items-center gap-2 px-4 py-2.5 bg-slate-900 dark:bg-slate-800 hover:bg-black text-white rounded-full shadow-2xl text-[9.5px] font-black uppercase tracking-wider transition-all hover:scale-105 active:scale-95 border border-slate-700 cursor-pointer"
             title="Ir al mensaje más reciente"
           >
             <ChevronDown className="w-4 h-4 animate-bounce" />
