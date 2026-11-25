@@ -131,6 +131,9 @@
 
         <div class="w-full md:w-1/3 flex justify-end gap-2 items-center">
           <div id="user-header-container" class="relative"></div>
+          <button id="global-modules-config-btn" onclick="openGlobalModulesModal()" type="button" class="rounded-xl bg-slate-900 hover:bg-slate-800 text-white px-4 py-2.5 text-xs font-bold shadow-md transition-all flex items-center gap-1.5 border border-slate-700">
+            <span class="material-symbols-outlined text-indigo-400 text-base">layers</span> Módulos CDE
+          </button>
           <button id="global-wompi-config-btn" onclick="openGlobalWompiModal()" type="button" class="rounded-xl bg-slate-900 hover:bg-slate-800 text-white px-4 py-2.5 text-xs font-bold shadow-md transition-all flex items-center gap-1.5 border border-slate-700">
             <span class="material-symbols-outlined text-amber-400 text-base">key</span> Credenciales Wompi
           </button>
@@ -1225,6 +1228,94 @@
             </div>
         </div>
     </div>
+
+  
+  <!-- MODAL DE CONFIGURACIÓN GLOBAL DE MÓDULOS CDE E INFORMES -->
+  <div id="global-modules-modal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+    <div class="bg-white w-full max-w-xl rounded-2xl shadow-2xl border border-slate-200 overflow-hidden">
+      <div class="bg-slate-900 px-6 py-4 flex justify-between items-center text-white">
+        <div class="flex items-center gap-2">
+          <span class="material-symbols-outlined text-indigo-400 text-xl">layers</span>
+          <h3 class="font-bold text-base">Control Global de Módulos CDE e Informes</h3>
+        </div>
+        <button type="button" onclick="closeGlobalModulesModal()" class="text-slate-400 hover:text-white transition-colors">
+          <span class="material-symbols-outlined text-xl">close</span>
+        </button>
+      </div>
+
+      <div class="p-6 space-y-4">
+        <div class="bg-amber-50 border border-amber-200 rounded-xl p-3 text-xs text-amber-900 flex items-start gap-2">
+          <span class="material-symbols-outlined text-amber-500 text-base shrink-0 mt-0.5">info</span>
+          <div>
+            <strong>Configuración Maestra para todo el CDE:</strong>
+            Por defecto, todos los módulos de informes y modelos están <strong>desactivados</strong>. Puedes definir los valores por defecto o aplicarlos masivamente a todos los proyectos de todas las empresas.
+          </div>
+        </div>
+
+        <div class="space-y-3 pt-2">
+          <div class="flex items-center justify-between p-3.5 rounded-xl border border-slate-200 bg-slate-50">
+            <div>
+              <div class="font-bold text-xs text-slate-800">Informes de Obra</div>
+              <div class="text-[11px] text-slate-500">Bitácora técnica de obra diaria</div>
+            </div>
+            <label class="relative inline-flex items-center cursor-pointer">
+              <input type="checkbox" id="global-mod-site" class="sr-only peer">
+              <div class="w-11 h-6 bg-slate-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-500"></div>
+            </label>
+          </div>
+
+          <div class="flex items-center justify-between p-3.5 rounded-xl border border-slate-200 bg-slate-50">
+            <div>
+              <div class="font-bold text-xs text-slate-800">Informes de Calidad</div>
+              <div class="text-[11px] text-slate-500">Protocolos de verificación y ensayos</div>
+            </div>
+            <label class="relative inline-flex items-center cursor-pointer">
+              <input type="checkbox" id="global-mod-quality" class="sr-only peer">
+              <div class="w-11 h-6 bg-slate-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-500"></div>
+            </label>
+          </div>
+
+          <div class="flex items-center justify-between p-3.5 rounded-xl border border-slate-200 bg-slate-50">
+            <div>
+              <div class="font-bold text-xs text-slate-800">Informes Ambientales</div>
+              <div class="text-[11px] text-slate-500">Seguimiento ambiental y gestión de residuos</div>
+            </div>
+            <label class="relative inline-flex items-center cursor-pointer">
+              <input type="checkbox" id="global-mod-env" class="sr-only peer">
+              <div class="w-11 h-6 bg-slate-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-500"></div>
+            </label>
+          </div>
+
+          <div class="flex items-center justify-between p-3.5 rounded-xl border border-slate-200 bg-slate-50">
+            <div>
+              <div class="font-bold text-xs text-slate-800">Modelos CDE</div>
+              <div class="text-[11px] text-slate-500">Visualización de modelos BIM 3D</div>
+            </div>
+            <label class="relative inline-flex items-center cursor-pointer">
+              <input type="checkbox" id="global-mod-models" class="sr-only peer">
+              <div class="w-11 h-6 bg-slate-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-500"></div>
+            </label>
+          </div>
+        </div>
+
+        <div class="flex flex-col sm:flex-row gap-2 pt-2">
+          <button type="button" onclick="disableAllModulesEverywhere()" class="flex-1 py-2.5 px-3 rounded-xl border border-rose-300 bg-rose-50 hover:bg-rose-100 text-rose-700 text-xs font-bold transition-all">
+            Desactivar Todos en Todo el CDE
+          </button>
+          <button type="button" onclick="applyGlobalModulesToAllProjects()" class="flex-1 py-2.5 px-3 rounded-xl bg-slate-800 hover:bg-slate-900 text-white text-xs font-bold transition-all">
+            Aplicar Estado a TODOS los Proyectos
+          </button>
+        </div>
+      </div>
+
+      <div class="bg-slate-50 px-6 py-3 flex justify-between items-center border-t border-slate-200">
+        <span class="text-[11px] text-slate-400">Recuerda pulsar "Guardar Cambios" para sincronizar</span>
+        <button type="button" onclick="closeGlobalModulesModal()" class="px-5 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs shadow-md transition-all">
+          Cerrar
+        </button>
+      </div>
+    </div>
+  </div>
 
   <!-- MODAL DE CONFIGURACIÓN GLOBAL WOMPI (EXCLUSIVO SÚPER ADMINISTRADOR) -->
   <div id="global-wompi-modal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">

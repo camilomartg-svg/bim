@@ -160,6 +160,12 @@
                     <span class="material-symbols-outlined shrink-0">info</span>
                     <span class="sidebar-text truncate">Generalidades</span>
                 </button>
+                <!-- Super Admin Tab: Módulos CDE e Informes -->
+                <button id="tab-btn-modules" data-tab="modules" title="Módulos CDE" class="tab-btn hidden items-center gap-3 px-4 py-3 rounded-2xl text-sm font-semibold tracking-wide transition-all w-full text-left text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-slate-800/50">
+                    <span class="material-symbols-outlined shrink-0 text-amber-500">layers</span>
+                    <span class="sidebar-text truncate">Módulos CDE</span>
+                    <span class="sidebar-text ml-auto text-[8px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20">Super Admin</span>
+                </button>
             </aside>
 
             <!-- Notification Banner -->
@@ -241,6 +247,117 @@
                         </div>
                         <div class="overflow-hidden rounded-2xl border border-border-light dark:border-border-dark shadow-inner">
                             <div id="settings-map"></div>
+                        </div>
+                    </div>
+                
+                <!-- Tab: Módulos CDE (Super Admin Only) -->
+                <div id="tab-content-modules" class="tab-panel hidden space-y-6">
+                    <div class="bg-white dark:bg-card-dark rounded-3xl border border-border-light dark:border-border-dark p-6 shadow-sm">
+                        <div class="flex flex-col sm:flex-row sm:items-center justify-between pb-4 mb-6 border-b border-border-light dark:border-border-dark gap-3">
+                            <div>
+                                <div class="flex items-center gap-2">
+                                    <span class="material-symbols-outlined text-amber-500 text-xl">layers</span>
+                                    <h2 class="text-lg font-bold tracking-tight">Módulos CDE e Informes</h2>
+                                </div>
+                                <p class="text-xs text-gray-500 mt-1">Control de activación individual de módulos para este proyecto. Por defecto todos los módulos se encuentran <strong class="text-gray-700 dark:text-gray-300">desactivados</strong>.</p>
+                            </div>
+                            <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20 self-start sm:self-auto">
+                                <span class="material-symbols-outlined text-[14px]">shield_person</span>
+                                Super Administrador
+                            </span>
+                        </div>
+
+                        <div class="grid gap-4 md:grid-cols-2">
+                            <!-- Modulo: Informes de Obra -->
+                            <div class="p-5 rounded-2xl border border-border-light dark:border-border-dark bg-slate-50/50 dark:bg-slate-900/40 flex flex-col justify-between gap-4">
+                                <div>
+                                    <div class="flex items-center justify-between mb-2">
+                                        <div class="flex items-center gap-2">
+                                            <span class="material-symbols-outlined text-indigo-500 text-lg">assignment</span>
+                                            <h3 class="text-sm font-bold tracking-wide">Informes de Obra</h3>
+                                        </div>
+                                        <span id="badge-mod-site" class="text-[9px] font-black uppercase tracking-widest px-2.5 py-1 rounded-lg bg-slate-200 dark:bg-slate-800 text-slate-500">DESACTIVADO</span>
+                                    </div>
+                                    <p class="text-xs text-gray-500 leading-relaxed">Bitácora técnica diaria, registro fotográfico y trazabilidad de avance en campo.</p>
+                                </div>
+                                <div class="flex items-center justify-between pt-3 border-t border-slate-200/60 dark:border-slate-800/60">
+                                    <span class="text-xs font-semibold text-gray-600 dark:text-gray-400">Habilitar en este proyecto</span>
+                                    <label class="relative inline-flex items-center cursor-pointer">
+                                        <input type="checkbox" id="mod-site-reports" class="sr-only peer">
+                                        <div class="w-11 h-6 bg-slate-300 peer-focus:outline-none rounded-full peer dark:bg-slate-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-500"></div>
+                                    </label>
+                                </div>
+                            </div>
+
+                            <!-- Modulo: Informes de Calidad -->
+                            <div class="p-5 rounded-2xl border border-border-light dark:border-border-dark bg-slate-50/50 dark:bg-slate-900/40 flex flex-col justify-between gap-4">
+                                <div>
+                                    <div class="flex items-center justify-between mb-2">
+                                        <div class="flex items-center gap-2">
+                                            <span class="material-symbols-outlined text-emerald-500 text-lg">verified</span>
+                                            <h3 class="text-sm font-bold tracking-wide">Informes de Calidad</h3>
+                                        </div>
+                                        <span id="badge-mod-quality" class="text-[9px] font-black uppercase tracking-widest px-2.5 py-1 rounded-lg bg-slate-200 dark:bg-slate-800 text-slate-500">DESACTIVADO</span>
+                                    </div>
+                                    <p class="text-xs text-gray-500 leading-relaxed">Protocolos de verificación, no conformidades, hitos y ensayos técnicos de obra.</p>
+                                </div>
+                                <div class="flex items-center justify-between pt-3 border-t border-slate-200/60 dark:border-slate-800/60">
+                                    <span class="text-xs font-semibold text-gray-600 dark:text-gray-400">Habilitar en este proyecto</span>
+                                    <label class="relative inline-flex items-center cursor-pointer">
+                                        <input type="checkbox" id="mod-quality-reports" class="sr-only peer">
+                                        <div class="w-11 h-6 bg-slate-300 peer-focus:outline-none rounded-full peer dark:bg-slate-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-500"></div>
+                                    </label>
+                                </div>
+                            </div>
+
+                            <!-- Modulo: Informes Ambientales -->
+                            <div class="p-5 rounded-2xl border border-border-light dark:border-border-dark bg-slate-50/50 dark:bg-slate-900/40 flex flex-col justify-between gap-4">
+                                <div>
+                                    <div class="flex items-center justify-between mb-2">
+                                        <div class="flex items-center gap-2">
+                                            <span class="material-symbols-outlined text-teal-500 text-lg">eco</span>
+                                            <h3 class="text-sm font-bold tracking-wide">Informes Ambientales</h3>
+                                        </div>
+                                        <span id="badge-mod-env" class="text-[9px] font-black uppercase tracking-widest px-2.5 py-1 rounded-lg bg-slate-200 dark:bg-slate-800 text-slate-500">DESACTIVADO</span>
+                                    </div>
+                                    <p class="text-xs text-gray-500 leading-relaxed">Gestión y control ambiental, manejo de residuos, vertimientos y cumplimiento normativo.</p>
+                                </div>
+                                <div class="flex items-center justify-between pt-3 border-t border-slate-200/60 dark:border-slate-800/60">
+                                    <span class="text-xs font-semibold text-gray-600 dark:text-gray-400">Habilitar en este proyecto</span>
+                                    <label class="relative inline-flex items-center cursor-pointer">
+                                        <input type="checkbox" id="mod-env-reports" class="sr-only peer">
+                                        <div class="w-11 h-6 bg-slate-300 peer-focus:outline-none rounded-full peer dark:bg-slate-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-500"></div>
+                                    </label>
+                                </div>
+                            </div>
+
+                            <!-- Modulo: Modelos CDE -->
+                            <div class="p-5 rounded-2xl border border-border-light dark:border-border-dark bg-slate-50/50 dark:bg-slate-900/40 flex flex-col justify-between gap-4">
+                                <div>
+                                    <div class="flex items-center justify-between mb-2">
+                                        <div class="flex items-center gap-2">
+                                            <span class="material-symbols-outlined text-purple-500 text-lg">view_in_ar</span>
+                                            <h3 class="text-sm font-bold tracking-wide">Modelos CDE</h3>
+                                        </div>
+                                        <span id="badge-mod-models" class="text-[9px] font-black uppercase tracking-widest px-2.5 py-1 rounded-lg bg-slate-200 dark:bg-slate-800 text-slate-500">DESACTIVADO</span>
+                                    </div>
+                                    <p class="text-xs text-gray-500 leading-relaxed">Entorno centralizado de visualización y coordinación de modelos BIM 3D/IFC.</p>
+                                </div>
+                                <div class="flex items-center justify-between pt-3 border-t border-slate-200/60 dark:border-slate-800/60">
+                                    <span class="text-xs font-semibold text-gray-600 dark:text-gray-400">Habilitar en este proyecto</span>
+                                    <label class="relative inline-flex items-center cursor-pointer">
+                                        <input type="checkbox" id="mod-models-cde" class="sr-only peer">
+                                        <div class="w-11 h-6 bg-slate-300 peer-focus:outline-none rounded-full peer dark:bg-slate-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-500"></div>
+                                    </label>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="mt-6 p-4 rounded-2xl bg-amber-50/60 dark:bg-amber-950/20 border border-amber-200/60 dark:border-amber-900/40 flex items-start gap-3">
+                            <span class="material-symbols-outlined text-amber-500 text-lg mt-0.5">info</span>
+                            <p class="text-xs text-amber-900 dark:text-amber-200 leading-relaxed">
+                                Los cambios se aplicarán inmediatamente tras presionar <strong>"Guardar en Drive"</strong> en la barra superior. Si un módulo está desactivado, no aparecerá en el menú de navegación del CDE ni en la app de Incidencias para los usuarios del proyecto.
+                            </p>
                         </div>
                     </div>
                 </div>

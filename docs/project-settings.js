@@ -164,7 +164,17 @@
         addTeamBtn: document.getElementById('add-team-btn'),
         teamsListContainer: document.getElementById('teams-list-container'),
         teamsMembersSearch: document.getElementById('teams-members-search'),
-        teamsMembersTableBody: document.getElementById('teams-members-table-body')
+        teamsMembersTableBody: document.getElementById('teams-members-table-body'),
+        // Tab Modules (Super Admin)
+        tabBtnModules: document.getElementById('tab-btn-modules'),
+        modSiteReports: document.getElementById('mod-site-reports'),
+        modQualityReports: document.getElementById('mod-quality-reports'),
+        modEnvReports: document.getElementById('mod-env-reports'),
+        modModelsCDE: document.getElementById('mod-models-cde'),
+        badgeModSite: document.getElementById('badge-mod-site'),
+        badgeModQuality: document.getElementById('badge-mod-quality'),
+        badgeModEnv: document.getElementById('badge-mod-env'),
+        badgeModModels: document.getElementById('badge-mod-models')
     };
 
     // --- BACK BUTTON: Register immediately (outside async init) ---
@@ -537,6 +547,19 @@
             return;
         }
         
+        // Modules Tab: Visible ONLY for Super Admins
+        if (el.tabBtnModules) {
+            if (isSuperAdmin) {
+                el.tabBtnModules.classList.remove('hidden');
+                el.tabBtnModules.classList.add('flex');
+                el.tabBtnModules.style.display = 'flex';
+            } else {
+                el.tabBtnModules.classList.add('hidden');
+                el.tabBtnModules.classList.remove('flex');
+                el.tabBtnModules.style.display = 'none';
+            }
+        }
+        
         // Inicializar arreglos si no existen
         if (!activeProject.members) activeProject.members = [];
         if (!activeProject.equiposDeTarea) activeProject.equiposDeTarea = [];
@@ -592,6 +615,48 @@
     // --- LLENAR INPUTS ---
     function fillInputs() {
         if (!activeProject) return;
+        if (!activeProject.modules) activeProject.modules = {};
+
+        function updateModulePill(checkboxEl, badgeEl) {
+            if (!checkboxEl || !badgeEl) return;
+            const active = Boolean(checkboxEl.checked);
+            badgeEl.textContent = active ? 'ACTIVADO' : 'DESACTIVADO';
+            badgeEl.className = active
+                ? 'text-[9px] font-black uppercase tracking-widest px-2.5 py-1 rounded-lg bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20'
+                : 'text-[9px] font-black uppercase tracking-widest px-2.5 py-1 rounded-lg bg-slate-200 dark:bg-slate-800 text-slate-500';
+        }
+
+        const pMods = activeProject.modules;
+        if (el.modSiteReports) {
+            el.modSiteReports.checked = Boolean(pMods.enableSiteReports);
+            updateModulePill(el.modSiteReports, el.badgeModSite);
+        }
+        if (el.modQualityReports) {
+            el.modQualityReports.checked = Boolean(pMods.enableQualityReports);
+            updateModulePill(el.modQualityReports, el.badgeModQuality);
+        }
+        if (el.modEnvReports) {
+            el.modEnvReports.checked = Boolean(pMods.enableEnvironmentalReports);
+            updateModulePill(el.modEnvReports, el.badgeModEnv);
+        }
+        if (el.modModelsCDE) {
+            el.modModelsCDE.checked = Boolean(pMods.enableModelsCDE);
+            updateModulePill(el.modModelsCDE, el.badgeModModels);
+        }
+
+        const bindModuleCheckbox = (chk, badge, key) => {
+            if (!chk || chk.__bound) return;
+            chk.__bound = true;
+            chk.addEventListener('change', () => {
+                if (!activeProject.modules) activeProject.modules = {};
+                activeProject.modules[key] = chk.checked;
+                updateModulePill(chk, badge);
+            });
+        };
+        bindModuleCheckbox(el.modSiteReports, el.badgeModSite, 'enableSiteReports');
+        bindModuleCheckbox(el.modQualityReports, el.badgeModQuality, 'enableQualityReports');
+        bindModuleCheckbox(el.modEnvReports, el.badgeModEnv, 'enableEnvironmentalReports');
+        bindModuleCheckbox(el.modModelsCDE, el.badgeModModels, 'enableModelsCDE');
 
         // General info
         if (el.projName) el.projName.value = activeProject.name || '';
@@ -1165,6 +1230,12 @@
 
     if (el.saveGithubBtn) {
         el.saveGithubBtn.addEventListener('click', async () => {
+            if (!activeProject.modules) activeProject.modules = {};
+            if (el.modSiteReports) activeProject.modules.enableSiteReports = el.modSiteReports.checked;
+            if (el.modQualityReports) activeProject.modules.enableQualityReports = el.modQualityReports.checked;
+            if (el.modEnvReports) activeProject.modules.enableEnvironmentalReports = el.modEnvReports.checked;
+            if (el.modModelsCDE) activeProject.modules.enableModelsCDE = el.modModelsCDE.checked;
+
             const companyName = (currentCompany && currentCompany.name) ? currentCompany.name : (companyId || 'General');
             const projectName = activeProject.name || activeProject.title || (projectSlug ? projectSlug.replace(/[-_]/g, ' ') : 'Proyecto');
 
@@ -1190,6 +1261,30 @@
                 if (window.NoraDriveStore) window.NoraDriveStore.invalidateCache();
                 if (resData && resData.status === 'success') {
                     window.showAlert('¡Configuración del proyecto guardada exitosamente en Google Drive!', 'success');
+                try {
+                    await fetch(ROLES_SCRIPT_URL, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+                        body: JSON.stringify({
+                            action: 'saveIncidentsProjectConfig',
+                            company: { id: companyId, name: companyName },
+                            companyId: companyId,
+                            companyName: companyName,
+                            project: { id: activeProject.slug || projectSlug, slug: activeProject.slug || projectSlug, name: projectName },
+                            projectId: activeProject.slug || projectSlug,
+                            projectSlug: activeProject.slug || projectSlug,
+                            projectName: projectName,
+                            config: {
+                                enableSiteReports: Boolean(activeProject.modules.enableSiteReports),
+                                enableQualityReports: Boolean(activeProject.modules.enableQualityReports),
+                                enableEnvironmentalReports: Boolean(activeProject.modules.enableEnvironmentalReports),
+                                enableModelsCDE: Boolean(activeProject.modules.enableModelsCDE)
+                            }
+                        })
+                    });
+                } catch (incCfgErr) {
+                    console.warn('Sync to config_incidencias.json in Drive warning:', incCfgErr);
+                }
                 } else {
                     window.showAlert('Cambios sincronizados en la nube.', 'success');
                 }

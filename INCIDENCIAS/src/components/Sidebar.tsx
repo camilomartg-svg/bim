@@ -10,6 +10,7 @@ interface SidebarProps {
   canViewSite?: boolean;
   canViewQuality?: boolean;
   canViewEnv?: boolean;
+  canViewModels?: boolean;
 }
 
 import { useState, useEffect } from 'react';
@@ -20,7 +21,8 @@ export default function Sidebar({
   setActiveTab,
   canViewSite = false,
   canViewQuality = false,
-  canViewEnv = false
+  canViewEnv = false,
+  canViewModels = false
 }: SidebarProps) {
   const { logout, user } = useAuth();
   const [isMobilePhone, setIsMobilePhone] = useState<boolean>(() => {
@@ -52,7 +54,7 @@ export default function Sidebar({
     ...(canViewSite ? [{ id: 'site-reports', icon: ClipboardList, label: 'Informes de Obra' }] : []),
     ...(canViewQuality ? [{ id: 'quality-reports', icon: ShieldCheck, label: 'Informes de Calidad' }] : []),
     ...(canViewEnv ? [{ id: 'environmental-reports', icon: Leaf, label: 'Informes Ambientales' }] : []),
-    { id: 'models', icon: Layers, label: 'Modelos CDE' },
+    ...(canViewModels ? [{ id: 'models', icon: Layers, label: 'Modelos CDE' }] : []),
     { id: 'reports', icon: FileText, label: 'Métricas' },
     { id: 'notifications', icon: Bell, label: 'Notificaciones' },
     ...(isAdmin ? [{ id: 'settings', icon: Settings, label: 'Configuración' }] : []),

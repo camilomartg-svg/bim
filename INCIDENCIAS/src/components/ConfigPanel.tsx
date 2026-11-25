@@ -604,6 +604,7 @@ export default function ConfigPanel() {
   const [enableSiteReports, setEnableSiteReports] = useState<boolean>(false);
   const [enableQualityReports, setEnableQualityReports] = useState<boolean>(false);
   const [enableEnvironmentalReports, setEnableEnvironmentalReports] = useState<boolean>(false);
+  const [enableModelsCDE, setEnableModelsCDE] = useState<boolean>(false);
   const [siteReportsAllowedTeams, setSiteReportsAllowedTeams] = useState<string[]>([]);
   const [qualityReportsAllowedTeams, setQualityReportsAllowedTeams] = useState<string[]>([]);
   const [environmentalReportsAllowedTeams, setEnvironmentalReportsAllowedTeams] = useState<string[]>([]);
@@ -723,6 +724,7 @@ export default function ConfigPanel() {
           setEnableSiteReports(Boolean(fbConfig.enableSiteReports));
           setEnableQualityReports(Boolean(fbConfig.enableQualityReports));
           setEnableEnvironmentalReports(Boolean(fbConfig.enableEnvironmentalReports));
+          setEnableModelsCDE(Boolean(fbConfig.enableModelsCDE));
 
           setSiteReportsAllowedTeams(fbConfig.siteReportsAllowedTeams || fbConfig.siteReportsAllowedProfiles || []);
           setQualityReportsAllowedTeams(fbConfig.qualityReportsAllowedTeams || fbConfig.qualityReportsAllowedProfiles || []);
@@ -958,6 +960,7 @@ export default function ConfigPanel() {
       enableSiteReports: enableSiteReports,
       enableQualityReports: enableQualityReports,
       enableEnvironmentalReports: enableEnvironmentalReports,
+      enableModelsCDE: enableModelsCDE,
       siteReportsAllowedTeams: siteReportsAllowedTeams,
       qualityReportsAllowedTeams: qualityReportsAllowedTeams,
       environmentalReportsAllowedTeams: environmentalReportsAllowedTeams,
@@ -2148,6 +2151,50 @@ const changeTypeScope = (id: string, scope: 'GLOBAL' | 'DELIVERY' | 'RECEIVER') 
                           </button>
                         );
                       })}
+                    </div>
+                  </div>
+                
+                  {/* Modelos CDE Master Switch */}
+                  <div className="bg-slate-50 dark:bg-slate-950/20 border border-slate-100 dark:border-slate-800 p-8 rounded-[2rem]">
+                    <div className="flex items-center justify-between p-4 bg-white dark:bg-[#0c0f1d] border border-slate-200 dark:border-slate-800 rounded-2xl shadow-sm">
+                      <div className="flex items-center gap-3">
+                        <div className={cn(
+                          "w-3.5 h-3.5 rounded-full transition-all shrink-0",
+                          enableModelsCDE ? "bg-emerald-500 shadow-md shadow-emerald-500/50" : "bg-slate-300 dark:bg-slate-700"
+                        )} />
+                        <div>
+                          <p className="text-xs font-black uppercase tracking-wider text-slate-800 dark:text-white">
+                            Estado del Módulo Modelos CDE
+                          </p>
+                          <p className="text-[10px] text-slate-500 font-medium mt-0.5">
+                            {enableModelsCDE 
+                              ? "Módulo activado por el Super Administrador para esta empresa/proyecto." 
+                              : "Módulo desactivado por defecto. No visible en la barra lateral."}
+                          </p>
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setEnableModelsCDE(!enableModelsCDE)}
+                        className={cn(
+                          "px-4 py-2 rounded-xl font-black text-[9px] uppercase tracking-widest transition-all shadow-md active:scale-95 flex items-center gap-1.5 shrink-0",
+                          enableModelsCDE 
+                            ? "bg-emerald-500 text-white hover:bg-emerald-600 shadow-emerald-500/20" 
+                            : "bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-300 dark:hover:bg-slate-700"
+                        )}
+                      >
+                        {enableModelsCDE ? (
+                          <>
+                            <Check className="w-3.5 h-3.5" />
+                            <span>ACTIVADO</span>
+                          </>
+                        ) : (
+                          <>
+                            <X className="w-3.5 h-3.5" />
+                            <span>DESACTIVADO</span>
+                          </>
+                        )}
+                      </button>
                     </div>
                   </div>
                 </div>

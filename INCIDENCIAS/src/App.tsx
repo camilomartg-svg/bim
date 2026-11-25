@@ -23,7 +23,7 @@ import DashboardChat from './components/DashboardChat';
 
 import { db } from './services/firebase';
 import { doc, getDoc, onSnapshot } from 'firebase/firestore';
-import { getProjectAndCompany } from './services/firebaseService';
+import { getProjectAndCompany, getProjectConfig } from './services/firebaseService';
 import { loadAndCacheProjectIso, isIncidentsAdmin } from './utils/userScope';
 import { UserHeaderBadge } from './components/UserHeaderBadge';
 import { checkIncidenciasLicense, ProjectLicenseStatus } from './utils/licenseGuard';
@@ -96,6 +96,9 @@ function Dashboard() {
     const { companyId, projectId } = getProjectAndCompany();
     loadAndCacheProjectIso(companyId, projectId).catch(() => {});
     checkIncidenciasLicense().then(setLicenseStatus);
+    getProjectConfig().then(cfg => {
+      if (cfg) setProjectConfig(cfg);
+    }).catch(() => {});
     const unsub = onSnapshot(doc(db, 'config', `${companyId}_${projectId}`), (snap) => {
       if (snap.exists()) {
         setProjectConfig(snap.data());
@@ -116,10 +119,12 @@ function Dashboard() {
   const isSiteModuleEnabled = Boolean(projectConfig?.enableSiteReports);
   const isQualityModuleEnabled = Boolean(projectConfig?.enableQualityReports);
   const isEnvModuleEnabled = Boolean(projectConfig?.enableEnvironmentalReports);
+  const isModelsModuleEnabled = Boolean(projectConfig?.enableModelsCDE);
 
   const canViewSite = isSiteModuleEnabled && (isAdmin || isBimTeam || siteAllowed.length === 0 || siteAllowed.includes(userTeam) || siteAllowed.includes(userPosition));
   const canViewQuality = isQualityModuleEnabled && (isAdmin || isBimTeam || qualityAllowed.length === 0 || qualityAllowed.includes(userTeam) || qualityAllowed.includes(userPosition));
   const canViewEnv = isEnvModuleEnabled && (isAdmin || isBimTeam || envAllowed.length === 0 || envAllowed.includes(userTeam) || envAllowed.includes(userPosition));
+  const canViewModels = isModelsModuleEnabled;
 
   const handleOpenIssue = async (issueId: string) => {
     if (isMobilePhone) return;
@@ -367,6 +372,19 @@ function Dashboard() {
           return <RestrictedView title="Informes Ambientales" onBack={() => setActiveTab('dashboard')} />;
         }
         return <EnvironmentalReportList />;
+      case 'models':
+        if (!canViewModels) {
+          return <RestrictedView title="Modelos CDE" onBack={() => setActiveTab('dashboard')} />;
+        }
+        return (
+          <div className="flex-1 flex items-center justify-center bg-slate-50 dark:bg-black/40">
+            <div className="text-center p-8">
+              <Layers className="w-16 h-16 text-slate-300 dark:text-slate-700 mx-auto mb-4" />
+              <h2 className="text-sm font-black text-slate-900 dark:text-white uppercase tracking-[0.2em] mb-2">Modelos CDE</h2>
+              <p className="text-xs text-slate-400 font-medium max-w-sm mx-auto">Visualización centralizada de modelos BIM del proyecto.</p>
+            </div>
+          </div>
+        );
       case 'settings':
         if (!isAdmin) {
           return <RestrictedView title="Configuración" onBack={() => setActiveTab('dashboard')} />;
@@ -401,6 +419,7 @@ function Dashboard() {
         canViewSite={canViewSite}
         canViewQuality={canViewQuality}
         canViewEnv={canViewEnv}
+        canViewModels={canViewModels}
       />
       <main className="flex-1 flex flex-col overflow-hidden relative">
         {/* Superior Navigation / Breadcrumbs */}

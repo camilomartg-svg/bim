@@ -1481,6 +1481,28 @@ let contentBase = '';
               </div>
             </section>
 
+              <div class="mt-4 pt-3 border-t border-slate-200">
+                <span class="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">Activación de Módulos CDE e Informes (Desactivados por defecto)</span>
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+                  <label class="flex items-center gap-2 p-2 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 cursor-pointer">
+                    <input type="checkbox" class="rounded text-indigo-600 focus:ring-indigo-500" ${p.modules?.enableSiteReports ? 'checked' : ''} onchange="updateProjectDeepMod('${p.slug}', 'enableSiteReports', this.checked)">
+                    <span class="text-xs font-bold text-slate-700">Informes de Obra</span>
+                  </label>
+                  <label class="flex items-center gap-2 p-2 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 cursor-pointer">
+                    <input type="checkbox" class="rounded text-indigo-600 focus:ring-indigo-500" ${p.modules?.enableQualityReports ? 'checked' : ''} onchange="updateProjectDeepMod('${p.slug}', 'enableQualityReports', this.checked)">
+                    <span class="text-xs font-bold text-slate-700">Informes de Calidad</span>
+                  </label>
+                  <label class="flex items-center gap-2 p-2 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 cursor-pointer">
+                    <input type="checkbox" class="rounded text-indigo-600 focus:ring-indigo-500" ${p.modules?.enableEnvironmentalReports ? 'checked' : ''} onchange="updateProjectDeepMod('${p.slug}', 'enableEnvironmentalReports', this.checked)">
+                    <span class="text-xs font-bold text-slate-700">Informes Ambientales</span>
+                  </label>
+                  <label class="flex items-center gap-2 p-2 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 cursor-pointer">
+                    <input type="checkbox" class="rounded text-indigo-600 focus:ring-indigo-500" ${p.modules?.enableModelsCDE ? 'checked' : ''} onchange="updateProjectDeepMod('${p.slug}', 'enableModelsCDE', this.checked)">
+                    <span class="text-xs font-bold text-slate-700">Modelos CDE</span>
+                  </label>
+                </div>
+              </div>
+
             <section>
               <h3 class="text-sm font-bold uppercase tracking-[0.2em] text-slate-500">Acciones del panel</h3>
               <div class="mt-4 grid gap-4 md:grid-cols-3">
@@ -4862,4 +4884,93 @@ window.clearAllTrafficLogs = function() {
         localStorage.removeItem('nora_traffic_logs');
         window.renderTrafficModule();
     }
+};
+
+
+// --- GESTIÓN GLOBAL DE MÓDULOS CDE E INFORMES ---
+window.openGlobalModulesModal = function() {
+    const modal = document.getElementById('global-modules-modal');
+    if (!modal) return;
+    
+    // Read from companyConfigs or portalConfig if available
+    const gMods = (window.companyConfigs && window.companyConfigs['global']?.modules) || {};
+    
+    const chkSite = document.getElementById('global-mod-site');
+    const chkQuality = document.getElementById('global-mod-quality');
+    const chkEnv = document.getElementById('global-mod-env');
+    const chkModels = document.getElementById('global-mod-models');
+    
+    if (chkSite) chkSite.checked = Boolean(gMods.enableSiteReports);
+    if (chkQuality) chkQuality.checked = Boolean(gMods.enableQualityReports);
+    if (chkEnv) chkEnv.checked = Boolean(gMods.enableEnvironmentalReports);
+    if (chkModels) chkModels.checked = Boolean(gMods.enableModelsCDE);
+    
+    modal.classList.remove('hidden');
+};
+
+window.closeGlobalModulesModal = function() {
+    const modal = document.getElementById('global-modules-modal');
+    if (modal) modal.classList.add('hidden');
+};
+
+window.disableAllModulesEverywhere = function() {
+    if (!confirm('¿Estás seguro de que deseas DESACTIVAR todos los módulos de informes y modelos CDE para TODOS los proyectos de TODAS las empresas en la plataforma?')) {
+        return;
+    }
+    
+    let count = 0;
+    if (window.companyConfigs) {
+        Object.keys(window.companyConfigs).forEach(compKey => {
+            const conf = window.companyConfigs[compKey];
+            if (conf && Array.isArray(conf.projects)) {
+                conf.projects.forEach(p => {
+                    if (!p.modules) p.modules = {};
+                    p.modules.enableSiteReports = false;
+                    p.modules.enableQualityReports = false;
+                    p.modules.enableEnvironmentalReports = false;
+                    p.modules.enableModelsCDE = false;
+                    count++;
+                });
+            }
+        });
+    }
+    
+    document.getElementById('global-mod-site').checked = false;
+    document.getElementById('global-mod-quality').checked = false;
+    document.getElementById('global-mod-env').checked = false;
+    document.getElementById('global-mod-models').checked = false;
+    
+    alert(`Se han desactivado todos los módulos en ${count} proyecto(s). Haz clic en 'Guardar Cambios' para persistir en la nube.`);
+    if (typeof window.renderEmpresas === 'function') window.renderEmpresas();
+};
+
+window.applyGlobalModulesToAllProjects = function() {
+    const siteVal = document.getElementById('global-mod-site').checked;
+    const qualityVal = document.getElementById('global-mod-quality').checked;
+    const envVal = document.getElementById('global-mod-env').checked;
+    const modelsVal = document.getElementById('global-mod-models').checked;
+    
+    if (!confirm(`¿Aplicar estos estados a TODOS los proyectos del CDE?\n- Informes de Obra: ${siteVal ? 'ON' : 'OFF'}\n- Informes de Calidad: ${qualityVal ? 'ON' : 'OFF'}\n- Informes Ambientales: ${envVal ? 'ON' : 'OFF'}\n- Modelos CDE: ${modelsVal ? 'ON' : 'OFF'}`)) {
+        return;
+    }
+    
+    let count = 0;
+    if (window.companyConfigs) {
+        Object.keys(window.companyConfigs).forEach(compKey => {
+            const conf = window.companyConfigs[compKey];
+            if (conf && Array.isArray(conf.projects)) {
+                conf.projects.forEach(p => {
+                    if (!p.modules) p.modules = {};
+                    p.modules.enableSiteReports = siteVal;
+                    p.modules.enableQualityReports = qualityVal;
+                    p.modules.enableEnvironmentalReports = envVal;
+                    p.modules.enableModelsCDE = modelsVal;
+                    count++;
+                });
+            }
+        });
+    }
+    
+    alert(`Configuración aplicada a ${count} proyecto(s). Haz clic en 'Guardar Cambios' para persistir en la nube.`);
+    if (typeof window.renderEmpresas === 'function') window.renderEmpresas();
 };
