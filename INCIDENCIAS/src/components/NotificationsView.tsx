@@ -2,23 +2,35 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { Issue, Comment } from '../types';
 import { useAuth } from '../context/AuthContext';
 import { subscribeToIssues } from '../services/firebaseService';
+import { db } from '../services/firebase';
+import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { isMedicionAlertActive, isEficaciaAlertActive } from '../utils/followUpUtils';
 import { isIncidentsAdmin } from '../utils/userScope';
 import { 
   Bell, User, Briefcase, ClipboardCheck, ArrowRight, CheckCircle2, 
   XCircle, AlertTriangle, Clock, RotateCcw, ShieldAlert, MessageSquare, 
-  Search, CheckCheck, Filter, AlertCircle
+  Search, CheckCheck, Filter, AlertCircle, Settings, Zap, Calendar, 
+  Paperclip, Sliders, BellOff, Sparkles, ChevronRight
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { cn } from '../lib/utils';
 import { format, differenceInDays, isPast } from 'date-fns';
 import { es } from 'date-fns/locale';
 
+import NotificationSettingsModal, {
+  UserNotificationPreferences,
+  DEFAULT_NOTIFICATION_PREFERENCES,
+  NotificationFrequency,
+  NotificationCategory
+} from './NotificationSettingsModal';
+
 interface NotificationItem {
   id: string;
   issue: Issue;
   role: 'author' | 'responsible' | 'reviewer';
+  category: NotificationCategory;
   type: 
+    | 'NUEVA_INCIDENCIA'
     | 'DEVUELTA_A_FUENTE'
     | 'REDIRECCION_RECHAZADA'
     | 'RESPUESTA_LISTA'
@@ -30,7 +42,8 @@ interface NotificationItem {
     | 'AUDITORIA_PENDIENTE'
     | 'SEGUIMIENTO_MEDICION'
     | 'SEGUIMIENTO_EFICACIA'
-    | 'NUEVO_COMENTARIO';
+    | 'NUEVO_COMENTARIO'
+    | 'ARCHIVO_ADJUNTO';
   title: string;
   description: string;
   timestamp: string;
@@ -44,11 +57,82 @@ interface NotificationsViewProps {
   canAccessBim?: boolean;
 }
 
+function getWeekRangeString(d: Date = new Date()): string {
+  const date = new Date(d);
+  const day = date.getDay();
+  const diffToMonday = date.getDate() - day + (day === 0 ? -6 : 1);
+  const monday = new Date(date.setDate(diffToMonday));
+  const sunday = new Date(monday);
+  sunday.setDate(monday.getDate() + 6);
+  
+  return `${format(monday, "d 'de' MMMM", { locale: es })} al ${format(sunday, "d 'de' MMMM, yyyy", { locale: es })}`;
+}
+
 export default function NotificationsView({ onSelectIssue, canAccessBim }: NotificationsViewProps) {
   const { user } = useAuth();
   const [issues, setIssues] = useState<Issue[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
+  
+  // Settings modal state
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [settingsRole, setSettingsRole] = useState<'author' | 'responsible' | 'reviewer'>('author');
+
+  // Frequency view per column: 'INSTANT' (real-time) or 'WEEKLY' (resumen semanal)
+  const [columnViews, setColumnViews] = useState<Record<'author' | 'responsible' | 'reviewer', 'INSTANT' | 'WEEKLY'>>({
+    author: 'INSTANT',
+    responsible: 'INSTANT',
+    reviewer: 'INSTANT'
+  });
+
+  const userIdentifier = user?.id || user?.email || 'default_user';
+  const storageKey = `nora_notif_prefs_${userIdentifier.toLowerCase().replace(/[^a-z0-9]/g, '_')}`;
+
+  // Individual user notification preferences
+  const [preferences, setPreferences] = useState<UserNotificationPreferences>(() => {
+    try {
+      const cached = localStorage.getItem(storageKey);
+      if (cached) return JSON.parse(cached);
+    } catch (_) {}
+    return DEFAULT_NOTIFICATION_PREFERENCES;
+  });
+
+  // Sync preferences with Firestore user document for multi-device persistence
+  useEffect(() => {
+    if (!userIdentifier || userIdentifier === 'default_user') return;
+    const cleanId = userIdentifier.toLowerCase().replace(/[^a-z0-9]/g, '_');
+    getDoc(doc(db, 'user_notification_preferences', cleanId)).then((snap) => {
+      if (snap.exists()) {
+        const firestorePrefs = snap.data() as UserNotificationPreferences;
+        setPreferences(firestorePrefs);
+        try {
+          localStorage.setItem(storageKey, JSON.stringify(firestorePrefs));
+        } catch (_) {}
+      }
+    }).catch(console.error);
+  }, [userIdentifier, storageKey]);
+
+  const savePreferences = async (newPrefs: UserNotificationPreferences) => {
+    setPreferences(newPrefs);
+    try {
+      localStorage.setItem(storageKey, JSON.stringify(newPrefs));
+    } catch (_) {}
+
+    if (userIdentifier && userIdentifier !== 'default_user') {
+      const cleanId = userIdentifier.toLowerCase().replace(/[^a-z0-9]/g, '_');
+      try {
+        await setDoc(doc(db, 'user_notification_preferences', cleanId), {
+          ...newPrefs,
+          userId: user?.id || '',
+          userEmail: user?.email || '',
+          updatedAt: new Date().toISOString()
+        }, { merge: true });
+      } catch (err) {
+        console.error("Error guardando preferencias en Firestore:", err);
+      }
+    }
+  };
+
   const [readIds, setReadIds] = useState<string[]>(() => {
     try {
       return JSON.parse(localStorage.getItem('nora_read_notifications') || '[]');
@@ -135,11 +219,12 @@ export default function NotificationsView({ onSelectIssue, canAccessBim }: Notif
             id: `notif_auth_returned_${issue.id}_${issue.returnedAt || 'ret'}`,
             issue,
             role: 'author',
+            category: 'DEVOLUCIONES_RECHAZOS',
             type: 'DEVUELTA_A_FUENTE',
             title: `Devuelta a la fuente: ${issue.code}`,
             description: issue.returnToSourceReason 
               ? `Motivo: ${issue.returnToSourceReason}` 
-              : `La incidencia te fue devuelta por el responsable para su reasignación.`,
+              : `La incidencia te fue devuelta por el responsable para su reasignación o ajuste.`,
             timestamp: issue.returnedAt || issue.updatedAt || issue.createdAt,
             priority: 'URGENTE',
             badgeLabel: 'Devuelta al Autor',
@@ -153,6 +238,7 @@ export default function NotificationsView({ onSelectIssue, canAccessBim }: Notif
             id: `notif_auth_reject_redir_${issue.id}`,
             issue,
             role: 'author',
+            category: 'DEVOLUCIONES_RECHAZOS',
             type: 'REDIRECCION_RECHAZADA',
             title: `Redirección rechazada en ${issue.code}`,
             description: issue.redirectionRejectionReason
@@ -171,6 +257,7 @@ export default function NotificationsView({ onSelectIssue, canAccessBim }: Notif
             id: `notif_auth_resp_${issue.id}`,
             issue,
             role: 'author',
+            category: 'CAMBIOS_ESTADO',
             type: 'RESPUESTA_LISTA',
             title: `Respuesta técnica lista: ${issue.code}`,
             description: `El responsable ha completado la respuesta. Revisa el sustento y valida o rechaza la resolución.`,
@@ -187,6 +274,7 @@ export default function NotificationsView({ onSelectIssue, canAccessBim }: Notif
             id: `notif_auth_acuerdo_${issue.id}`,
             issue,
             role: 'author',
+            category: 'CAMBIOS_ESTADO',
             type: 'ACUERDO',
             title: `Acuerdo establecido en ${issue.code}`,
             description: `Nueva fecha compromiso acordada: ${issue.agreementDate || 'Fecha pactada'}.`,
@@ -203,6 +291,7 @@ export default function NotificationsView({ onSelectIssue, canAccessBim }: Notif
             id: `notif_auth_overdue_${issue.id}`,
             issue,
             role: 'author',
+            category: 'VENCIMIENTOS',
             type: 'VENCIDA',
             title: `Plazo vencido: ${issue.code}`,
             description: `La incidencia superó la fecha límite sin haber sido respondida.`,
@@ -218,7 +307,7 @@ export default function NotificationsView({ onSelectIssue, canAccessBim }: Notif
       // 2. COLUMNA: RESPONSABLE
       // ==========================================
       if (isResponsible) {
-        // A. Redirección pendiente de aceptación
+        // A. Redirección o asignación pendiente de aceptación
         const isPendingRedir = Boolean(
           issue.pendingRedirection || 
           issue.redirectionStatus === 'PENDIENTE' ||
@@ -230,6 +319,7 @@ export default function NotificationsView({ onSelectIssue, canAccessBim }: Notif
             id: `notif_resp_pending_${issue.id}`,
             issue,
             role: 'responsible',
+            category: 'REDIRECCIONES',
             type: 'REDIRECCION_PENDIENTE',
             title: `Asignación pendiente de aceptación: ${issue.code}`,
             description: `Te han redirigido esta incidencia. Ingresa para aceptarla o rechazarla con justificación obligatoria.`,
@@ -246,6 +336,7 @@ export default function NotificationsView({ onSelectIssue, canAccessBim }: Notif
             id: `notif_resp_rechazada_${issue.id}`,
             issue,
             role: 'responsible',
+            category: 'CAMBIOS_ESTADO',
             type: 'RESPUESTA_RECHAZADA',
             title: `Respuesta rechazada: ${issue.code}`,
             description: issue.rejectionReason 
@@ -258,12 +349,13 @@ export default function NotificationsView({ onSelectIssue, canAccessBim }: Notif
           });
         }
 
-        // B2. Devolución rechazada por el autor (ratificada)
+        // B2. Devolución no aceptada por el autor (ratificada)
         if (issue.redirectionStatus === 'DEVOLUCION_RECHAZADA') {
           list.push({
             id: `notif_resp_dev_rechazada_${issue.id}`,
             issue,
             role: 'responsible',
+            category: 'DEVOLUCIONES_RECHAZOS',
             type: 'RESPUESTA_RECHAZADA',
             title: `Devolución no aceptada por autor: ${issue.code}`,
             description: `El autor rechazó la devolución y ratificó la responsabilidad. Revisa el chat para ver la aclaración técnica.`,
@@ -281,6 +373,7 @@ export default function NotificationsView({ onSelectIssue, canAccessBim }: Notif
               id: `notif_resp_overdue_${issue.id}`,
               issue,
               role: 'responsible',
+              category: 'VENCIMIENTOS',
               type: 'VENCIDA',
               title: `Incidencia vencida: ${issue.code}`,
               description: `Venció hace ${Math.abs(daysLeft)} día(s). Requiere atención inmediata.`,
@@ -294,6 +387,7 @@ export default function NotificationsView({ onSelectIssue, canAccessBim }: Notif
               id: `notif_resp_expiring_${issue.id}`,
               issue,
               role: 'responsible',
+              category: 'VENCIMIENTOS',
               type: 'POR_VENCER',
               title: `Próxima a vencer: ${issue.code}`,
               description: daysLeft === 0 ? `Vence hoy.` : `Vence en ${daysLeft} día(s).`,
@@ -316,6 +410,7 @@ export default function NotificationsView({ onSelectIssue, canAccessBim }: Notif
             id: `notif_rev_auditoria_${issue.id}`,
             issue,
             role: 'reviewer',
+            category: 'AUDITORIA_CALIDAD',
             type: 'AUDITORIA_PENDIENTE',
             title: `Pendiente de auditoría y cierre: ${issue.code}`,
             description: `Respuesta técnica finalizada. Disponible para validación, rechazo o establecimiento de acuerdo.`,
@@ -332,6 +427,7 @@ export default function NotificationsView({ onSelectIssue, canAccessBim }: Notif
             id: `notif_rev_medicion_${issue.id}`,
             issue,
             role: 'reviewer',
+            category: 'AUDITORIA_CALIDAD',
             type: 'SEGUIMIENTO_MEDICION',
             title: `Seguimiento de medición inicial: ${issue.code}`,
             description: `Se requiere registrar el seguimiento y valoración de la acción correctiva (1er control).`,
@@ -348,6 +444,7 @@ export default function NotificationsView({ onSelectIssue, canAccessBim }: Notif
             id: `notif_rev_eficacia_${issue.id}`,
             issue,
             role: 'reviewer',
+            category: 'AUDITORIA_CALIDAD',
             type: 'SEGUIMIENTO_EFICACIA',
             title: `Seguimiento de eficacia: ${issue.code}`,
             description: `Cumplimiento de plazo para evaluar la eficacia técnica de la medida correctiva (2do control).`,
@@ -358,12 +455,13 @@ export default function NotificationsView({ onSelectIssue, canAccessBim }: Notif
           });
         }
 
-        // D. En revisión por parte de colaboradores
+        // D. En revisión interna por colaboradores
         if (issue.status === 'REVISION_RESPONSABLE') {
           list.push({
             id: `notif_rev_revision_${issue.id}`,
             issue,
             role: 'reviewer',
+            category: 'CAMBIOS_ESTADO',
             type: 'AUDITORIA_PENDIENTE',
             title: `En revisión interna: ${issue.code}`,
             description: `Colaborador o ejecutor ha emitido respuesta parcial para visto bueno.`,
@@ -374,62 +472,145 @@ export default function NotificationsView({ onSelectIssue, canAccessBim }: Notif
           });
         }
       }
+
+      // ==========================================
+      // 4. EVENTOS DE CHAT Y ARCHIVOS / EVIDENCIAS
+      // ==========================================
+      if (issue.comments && issue.comments.length > 0) {
+        // Take the latest 5 comments to keep notifications active & fresh
+        const recentComments = issue.comments.slice(-5);
+        recentComments.forEach((comment) => {
+          const isMyComment = (userEmail && (comment as any).userEmail && (comment as any).userEmail.toLowerCase() === userEmail) ||
+                              (userNameClean && cleanStr(comment.userName) === userNameClean);
+          if (isMyComment) return; // Do not notify yourself of your own comments
+
+          const commentText = comment.text || '';
+          const isFile = commentText.includes('Ha adjuntado un archivo:') || 
+                        commentText.toLowerCase().includes('.jpg') || 
+                        commentText.toLowerCase().includes('.png') || 
+                        commentText.toLowerCase().includes('.pdf') ||
+                        commentText.toLowerCase().includes('.dwg');
+
+          const isSystemStateComment = commentText.startsWith('🔄 INCIDENCIA DEVUELTA') ||
+                                       commentText.startsWith('⛔ DEVOLUCIÓN RECHAZADA') ||
+                                       commentText.startsWith('RESPUESTA FINALIZADA') ||
+                                       commentText.startsWith('Incidencia redirigida');
+
+          if (isSystemStateComment) return; // Already represented in state alerts
+
+          const targetRoles: ('author' | 'responsible' | 'reviewer')[] = [];
+          if (isAuthor) targetRoles.push('author');
+          if (isResponsible) targetRoles.push('responsible');
+          if (isReviewer) targetRoles.push('reviewer');
+
+          targetRoles.forEach((role) => {
+            if (isFile) {
+              list.push({
+                id: `notif_file_${issue.id}_${comment.id || comment.createdAt}`,
+                issue,
+                role,
+                category: 'ARCHIVOS_EVIDENCIAS',
+                type: 'ARCHIVO_ADJUNTO',
+                title: `Evidencia adjunta en ${issue.code}`,
+                description: `${comment.userName || 'Usuario'} adjuntó archivos o fotos a Google Drive.`,
+                timestamp: comment.createdAt || issue.updatedAt,
+                priority: 'MEDIA',
+                badgeLabel: 'Evidencia Drive',
+                badgeColor: 'bg-cyan-500/15 text-cyan-600 dark:text-cyan-400 border-cyan-500/30'
+              });
+            } else {
+              list.push({
+                id: `notif_chat_${issue.id}_${comment.id || comment.createdAt}`,
+                issue,
+                role,
+                category: 'MENSAJES_CHAT',
+                type: 'NUEVO_COMENTARIO',
+                title: `Nuevo mensaje en ${issue.code}`,
+                description: `${comment.userName || 'Usuario'}: "${commentText.slice(0, 85)}${commentText.length > 85 ? '...' : ''}"`,
+                timestamp: comment.createdAt || issue.updatedAt,
+                priority: 'NORMAL',
+                badgeLabel: 'Mensaje Chat',
+                badgeColor: 'bg-blue-500/15 text-blue-600 dark:text-blue-400 border-blue-500/30'
+              });
+            }
+          });
+        });
+      }
     });
 
     // Sort by timestamp desc
     return list.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
   }, [issues, userEmail, userNameClean, userId, isAdmin]);
 
-  // Split into 3 columns
-  const authorNotifications = useMemo(() => {
-    return allNotifications.filter(n => {
-      const matchRole = n.role === 'author';
-      if (!searchTerm.trim()) return matchRole;
-      const term = searchTerm.toLowerCase();
-      return matchRole && (n.title.toLowerCase().includes(term) || n.description.toLowerCase().includes(term) || n.issue.code.toLowerCase().includes(term));
-    });
-  }, [allNotifications, searchTerm]);
+  // Filtering by search term and role settings (instant vs weekly vs muted)
+  const filterByRoleAndConfig = (role: 'author' | 'responsible' | 'reviewer') => {
+    const rolePrefs = preferences[role] || DEFAULT_NOTIFICATION_PREFERENCES[role];
+    const roleItems = allNotifications.filter(n => n.role === role);
 
-  const responsibleNotifications = useMemo(() => {
-    return allNotifications.filter(n => {
-      const matchRole = n.role === 'responsible';
-      if (!searchTerm.trim()) return matchRole;
-      const term = searchTerm.toLowerCase();
-      return matchRole && (n.title.toLowerCase().includes(term) || n.description.toLowerCase().includes(term) || n.issue.code.toLowerCase().includes(term));
+    // 1. Remove muted items
+    const unmutedItems = roleItems.filter(n => {
+      const freq = rolePrefs[n.category] || 'INSTANT';
+      return freq !== 'MUTED';
     });
-  }, [allNotifications, searchTerm]);
 
-  const reviewerNotifications = useMemo(() => {
-    return allNotifications.filter(n => {
-      const matchRole = n.role === 'reviewer';
-      if (!searchTerm.trim()) return matchRole;
+    // 2. Separate into Instant and Weekly
+    const instantItems = unmutedItems.filter(n => (rolePrefs[n.category] || 'INSTANT') === 'INSTANT');
+    const weeklyItems = unmutedItems.filter(n => rolePrefs[n.category] === 'WEEKLY');
+
+    // 3. Apply search term
+    const applySearch = (items: NotificationItem[]) => {
+      if (!searchTerm.trim()) return items;
       const term = searchTerm.toLowerCase();
-      return matchRole && (n.title.toLowerCase().includes(term) || n.description.toLowerCase().includes(term) || n.issue.code.toLowerCase().includes(term));
-    });
-  }, [allNotifications, searchTerm]);
+      return items.filter(n => 
+        n.title.toLowerCase().includes(term) || 
+        n.description.toLowerCase().includes(term) || 
+        n.issue.code.toLowerCase().includes(term)
+      );
+    };
 
-  const unreadAuthor = authorNotifications.filter(n => !readIds.includes(n.id)).length;
-  const unreadResponsible = responsibleNotifications.filter(n => !readIds.includes(n.id)).length;
-  const unreadReviewer = reviewerNotifications.filter(n => !readIds.includes(n.id)).length;
-  const totalUnread = unreadAuthor + unreadResponsible + unreadReviewer;
+    return {
+      instant: applySearch(instantItems),
+      weekly: applySearch(weeklyItems),
+      allUnmuted: applySearch(unmutedItems)
+    };
+  };
+
+  const authorGroup = useMemo(() => filterByRoleAndConfig('author'), [allNotifications, preferences, searchTerm]);
+  const responsibleGroup = useMemo(() => filterByRoleAndConfig('responsible'), [allNotifications, preferences, searchTerm]);
+  const reviewerGroup = useMemo(() => filterByRoleAndConfig('reviewer'), [allNotifications, preferences, searchTerm]);
+
+  // Unread counts based on active view mode
+  const getUnreadCount = (items: NotificationItem[]) => items.filter(n => !readIds.includes(n.id)).length;
+
+  const totalUnread = getUnreadCount(authorGroup.allUnmuted) + 
+                      getUnreadCount(responsibleGroup.allUnmuted) + 
+                      getUnreadCount(reviewerGroup.allUnmuted);
+
+  const openSettingsForRole = (role: 'author' | 'responsible' | 'reviewer') => {
+    setSettingsRole(role);
+    setIsSettingsOpen(true);
+  };
 
   const renderColumn = (
     title: string,
     role: 'author' | 'responsible' | 'reviewer',
     subtitle: string,
-    items: NotificationItem[],
-    unreadCount: number,
+    data: { instant: NotificationItem[]; weekly: NotificationItem[] },
     icon: React.ReactNode,
     accentBorder: string
   ) => {
+    const currentView = columnViews[role];
+    const items = currentView === 'INSTANT' ? data.instant : data.weekly;
+    const unreadCount = getUnreadCount(items);
+
     return (
       <div className={cn(
-        "flex-1 flex flex-col min-w-[320px] bg-slate-50/70 dark:bg-[#070d18] rounded-[2rem] border border-slate-200/80 dark:border-slate-800/80 shadow-xl overflow-hidden transition-all duration-300",
+        "flex-1 flex flex-col min-w-[340px] bg-slate-50/70 dark:bg-[#070d18] rounded-[2.5rem] border border-slate-200/80 dark:border-slate-800/80 shadow-xl overflow-hidden transition-all duration-300",
         accentBorder
       )}>
         {/* Column Header */}
         <div className="p-6 pb-4 border-b border-slate-200/70 dark:border-slate-800/70 bg-white/70 dark:bg-[#0a1324]/80 backdrop-blur-md">
-          <div className="flex items-center justify-between mb-2">
+          <div className="flex items-center justify-between mb-3">
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 rounded-2xl bg-slate-100 dark:bg-slate-800/90 border border-slate-200 dark:border-slate-700/60 flex items-center justify-center text-slate-800 dark:text-slate-200 shadow-sm">
                 {icon}
@@ -451,17 +632,94 @@ export default function NotificationsView({ onSelectIssue, canAccessBim }: Notif
               </span>
             </div>
           </div>
+
+          {/* OVAL CONTROLS: Frequency Toggle + Role Settings */}
+          <div className="flex items-center justify-between pt-2.5 border-t border-slate-100 dark:border-slate-800/60 gap-2">
+            <div className="flex items-center p-1 bg-slate-100 dark:bg-slate-900 rounded-xl border border-slate-200/80 dark:border-slate-800 shadow-inner">
+              <button
+                onClick={() => setColumnViews(prev => ({ ...prev, [role]: 'INSTANT' }))}
+                className={cn(
+                  "px-2.5 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-wider transition-all flex items-center gap-1.5 cursor-pointer",
+                  currentView === 'INSTANT'
+                    ? "bg-slate-900 dark:bg-white text-white dark:text-slate-900 shadow-sm"
+                    : "text-slate-400 hover:text-slate-700 dark:hover:text-slate-300"
+                )}
+              >
+                <Zap className="w-3 h-3 text-amber-400" />
+                <span>Al Instante ({data.instant.length})</span>
+              </button>
+
+              <button
+                onClick={() => setColumnViews(prev => ({ ...prev, [role]: 'WEEKLY' }))}
+                className={cn(
+                  "px-2.5 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-wider transition-all flex items-center gap-1.5 cursor-pointer",
+                  currentView === 'WEEKLY'
+                    ? "bg-slate-900 dark:bg-white text-white dark:text-slate-900 shadow-sm"
+                    : "text-slate-400 hover:text-slate-700 dark:hover:text-slate-300"
+                )}
+              >
+                <Calendar className="w-3 h-3 text-slate-400" />
+                <span>Resumen Semanal ({data.weekly.length})</span>
+              </button>
+            </div>
+
+            <button
+              onClick={() => openSettingsForRole(role)}
+              className="py-1.5 px-3 bg-white dark:bg-slate-900 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-800 text-[9px] font-black uppercase tracking-wider text-slate-700 dark:text-slate-200 transition-all flex items-center gap-1.5 cursor-pointer active:scale-95 shadow-sm"
+              title={`Configurar qué notificaciones recibes como ${title}`}
+            >
+              <Settings className="w-3.5 h-3.5 text-amber-500" />
+              <span>Configurar</span>
+            </button>
+          </div>
         </div>
 
         {/* Notification Cards List */}
         <div className="flex-1 overflow-y-auto p-4 space-y-3.5 custom-scrollbar">
+          {/* WEEKLY DIGEST BANNER (if in weekly mode) */}
+          {currentView === 'WEEKLY' && (
+            <div className="p-4 bg-indigo-500/[0.04] dark:bg-indigo-950/20 border border-indigo-500/20 rounded-2xl mb-2">
+              <div className="flex items-center gap-2 mb-1.5">
+                <Calendar className="w-4 h-4 text-indigo-500 shrink-0" />
+                <span className="text-[10px] font-black text-indigo-600 dark:text-indigo-400 uppercase tracking-widest">
+                  Resumen Semanal Consolidado
+                </span>
+              </div>
+              <p className="text-[10px] font-semibold text-slate-500 dark:text-slate-400 mb-2.5">
+                {getWeekRangeString()}
+              </p>
+
+              <div className="flex flex-wrap gap-1.5 text-[8px] font-black uppercase tracking-wider">
+                <span className="px-2 py-0.5 rounded-md bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300">
+                  {items.length} Eventos agrupados
+                </span>
+                <span className="px-2 py-0.5 rounded-md bg-indigo-500/10 border border-indigo-500/20 text-indigo-600 dark:text-indigo-400">
+                  Frecuencia Semanal Activa
+                </span>
+              </div>
+            </div>
+          )}
+
           {items.length === 0 ? (
             <div className="h-64 flex flex-col items-center justify-center text-center p-6 text-slate-400 dark:text-slate-600">
               <div className="w-12 h-12 rounded-2xl bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 flex items-center justify-center mb-3 text-slate-400">
                 <CheckCircle2 className="w-6 h-6 stroke-1" />
               </div>
-              <p className="text-xs font-black uppercase tracking-wider text-slate-500 dark:text-slate-400">Sin notificaciones</p>
-              <p className="text-[10px] mt-1 text-slate-400 dark:text-slate-600">No hay alertas o acciones pendientes en esta categoría.</p>
+              <p className="text-xs font-black uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                {currentView === 'INSTANT' ? 'Sin notificaciones inmediatas' : 'Sin resumen semanal pendiente'}
+              </p>
+              <p className="text-[10px] mt-1 text-slate-400 dark:text-slate-600 max-w-[220px]">
+                {currentView === 'INSTANT' 
+                  ? 'No hay alertas en tiempo real activas. Las notificaciones configuradas como semanales se agrupan en su pestaña correspondiente.' 
+                  : 'No hay eventos acumulados en el resumen de esta semana.'}
+              </p>
+              <button
+                onClick={() => openSettingsForRole(role)}
+                className="mt-4 px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 text-[8.5px] font-black uppercase tracking-wider hover:bg-slate-200 dark:hover:bg-slate-700 transition-all flex items-center gap-1.5"
+              >
+                <Sliders className="w-3 h-3 text-amber-500" />
+                <span>Modificar qué recibes aquí</span>
+              </button>
             </div>
           ) : (
             items.map(item => {
@@ -512,11 +770,11 @@ export default function NotificationsView({ onSelectIssue, canAccessBim }: Notif
                   </p>
 
                   <div className="mt-3.5 pt-3 border-t border-slate-100 dark:border-slate-800/60 flex items-center justify-between">
-                    <div className="flex items-center gap-2 text-[9px] text-slate-400 dark:text-slate-500 font-bold uppercase tracking-wider">
+                    <div className="flex items-center gap-2 text-[9px] text-slate-400 dark:text-slate-500 font-bold uppercase tracking-wider truncate max-w-[180px]">
                       <span>{item.issue.title}</span>
                     </div>
 
-                    <div className="flex items-center gap-1.5 text-[9.5px] font-black uppercase tracking-wider text-slate-800 dark:text-slate-200 group-hover:translate-x-1 transition-transform">
+                    <div className="flex items-center gap-1.5 text-[9.5px] font-black uppercase tracking-wider text-slate-800 dark:text-slate-200 group-hover:translate-x-1 transition-transform shrink-0">
                       <span>Ver incidencia</span>
                       <ArrowRight className="w-3.5 h-3.5 text-amber-500" />
                     </div>
@@ -546,7 +804,7 @@ export default function NotificationsView({ onSelectIssue, canAccessBim }: Notif
           </div>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3">
           <div className="relative flex-1 md:w-72">
             <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
             <input 
@@ -559,9 +817,21 @@ export default function NotificationsView({ onSelectIssue, canAccessBim }: Notif
           </div>
 
           <button
+            onClick={() => {
+              setSettingsRole('author');
+              setIsSettingsOpen(true);
+            }}
+            className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-900 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 rounded-xl text-[10px] font-black uppercase tracking-wider flex items-center gap-2 transition-all active:scale-95 cursor-pointer shadow-sm"
+            title="Configurar qué notificaciones recibir y su frecuencia"
+          >
+            <Sliders className="w-4 h-4 text-amber-500" />
+            <span className="hidden sm:inline">Configurar Notificaciones</span>
+          </button>
+
+          <button
             onClick={markAllAsRead}
             disabled={totalUnread === 0}
-            className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-900 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 rounded-xl text-[10px] font-black uppercase tracking-wider flex items-center gap-2 transition-all active:scale-95 disabled:opacity-40 cursor-pointer"
+            className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-900 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 rounded-xl text-[10px] font-black uppercase tracking-wider flex items-center gap-2 transition-all active:scale-95 disabled:opacity-40 cursor-pointer shadow-sm"
             title="Marcar todas como leídas"
           >
             <CheckCheck className="w-4 h-4 text-emerald-500" />
@@ -576,8 +846,7 @@ export default function NotificationsView({ onSelectIssue, canAccessBim }: Notif
           "Autor",
           "author",
           "Incidencias que tú creaste",
-          authorNotifications,
-          unreadAuthor,
+          authorGroup,
           <User className="w-5 h-5" />,
           "hover:border-slate-400/50 dark:hover:border-slate-700"
         )}
@@ -586,8 +855,7 @@ export default function NotificationsView({ onSelectIssue, canAccessBim }: Notif
           "Responsable",
           "responsible",
           "Incidencias asignadas a ti",
-          responsibleNotifications,
-          unreadResponsible,
+          responsibleGroup,
           <Briefcase className="w-5 h-5" />,
           "hover:border-slate-400/50 dark:hover:border-slate-700"
         )}
@@ -596,12 +864,20 @@ export default function NotificationsView({ onSelectIssue, canAccessBim }: Notif
           "Revisor",
           "reviewer",
           "Auditoría y comités técnicos",
-          reviewerNotifications,
-          unreadReviewer,
+          reviewerGroup,
           <ClipboardCheck className="w-5 h-5" />,
           "hover:border-slate-400/50 dark:hover:border-slate-700"
         )}
       </div>
+
+      {/* Settings Modal */}
+      <NotificationSettingsModal
+        isOpen={isSettingsOpen}
+        onClose={() => setIsSettingsOpen(false)}
+        preferences={preferences}
+        onSave={savePreferences}
+        initialRole={settingsRole}
+      />
     </div>
   );
 }
