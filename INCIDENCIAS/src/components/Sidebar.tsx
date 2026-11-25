@@ -65,23 +65,23 @@ export default function Sidebar({
 
   return (
     <div className="hidden md:flex w-20 lg:w-[240px] bg-white dark:bg-[#050505] border-r border-slate-200 dark:border-[#1a1a1a] flex-col h-screen overflow-hidden transition-all duration-500 z-[60]">
-      <div className="p-4 lg:p-6 flex flex-col items-center justify-center gap-4">
-        <div className="flex items-center justify-center w-full group cursor-pointer">
+      <div className="p-3 lg:p-4 flex flex-col items-center justify-center">
+        <div className="flex items-center justify-center w-full group cursor-pointer py-1">
           <img 
             src="https://i.postimg.cc/SsS0K3Yn/LOGO-NORA-NEGRO.png" 
             alt="nora CDE" 
-            className="h-9 lg:h-11 w-auto max-w-[170px] object-contain mx-auto dark:hidden transition-all duration-300 hover:scale-105"
+            className="h-16 lg:h-28 w-auto max-w-[70px] lg:max-w-[210px] object-contain mx-auto dark:hidden transition-all duration-300 hover:scale-105"
             referrerPolicy="no-referrer"
           />
           <img 
             src="https://i.postimg.cc/W3NR4Cqh/LOGO-NORA-BLANCO.png" 
             alt="nora CDE" 
-            className="h-9 lg:h-11 w-auto max-w-[170px] object-contain mx-auto hidden dark:block transition-all duration-300 hover:scale-105"
+            className="h-16 lg:h-28 w-auto max-w-[70px] lg:max-w-[210px] object-contain mx-auto hidden dark:block transition-all duration-300 hover:scale-105"
             referrerPolicy="no-referrer"
           />
         </div>
 
-        <div className="w-full h-[0.5px] bg-slate-100 dark:bg-[#1a1a1a]" />
+        <div className="w-full h-[0.5px] bg-slate-100 dark:bg-[#1a1a1a] mt-3" />
       </div>
 
       <nav className="flex-1 px-3 space-y-1 overflow-y-auto custom-scrollbar pt-1">
