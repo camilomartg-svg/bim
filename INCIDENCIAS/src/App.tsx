@@ -223,7 +223,7 @@ function Dashboard() {
                     className={cn("w-full transition-all shadow-md flex items-center justify-center gap-2 group", licenseStatus.isSuspended ? "bg-red-500/20 text-red-700 dark:text-red-400 border border-red-500/30 cursor-not-allowed px-4 py-2.5 rounded-lg font-black text-[8.5px] uppercase tracking-[0.15em]" : "bg-[#FFC000] text-slate-900 px-4 md:px-5 py-2.5 rounded-lg font-black text-[8.5px] uppercase tracking-[0.15em] hover:bg-amber-400 active:scale-[0.98]")}
                   >
                     <Plus className="w-3.5 h-3.5 group-hover:rotate-90 transition-transform duration-500" />
-                    Registrar Hallazgo en Obra
+                    Registrar Hallazgo
                   </button>
                   
                   <div className="flex gap-4 md:gap-6 mt-3 md:mt-4 border-b border-slate-200 dark:border-[#1a1a1a] overflow-x-auto custom-scrollbar">

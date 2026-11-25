@@ -65,18 +65,18 @@ export default function Sidebar({
 
   return (
     <div className="hidden md:flex w-20 lg:w-[240px] bg-white dark:bg-[#050505] border-r border-slate-200 dark:border-[#1a1a1a] flex-col h-screen overflow-hidden transition-all duration-500 z-[60]">
-      <div className="p-5 lg:p-6 flex flex-col items-center lg:items-start gap-5">
-        <div className="flex items-center group cursor-pointer">
+      <div className="p-4 lg:p-6 flex flex-col items-center justify-center gap-4">
+        <div className="flex items-center justify-center w-full group cursor-pointer">
           <img 
-            src="https://i.postimg.cc/L4r0gSvV/LOGO-TEXTO-NORA-NEGRO.png" 
+            src="https://i.postimg.cc/SsS0K3Yn/LOGO-NORA-NEGRO.png" 
             alt="nora CDE" 
-            className="h-12 lg:h-16 w-auto max-w-full object-contain dark:hidden transition-all duration-300"
+            className="h-9 lg:h-11 w-auto max-w-[170px] object-contain mx-auto dark:hidden transition-all duration-300 hover:scale-105"
             referrerPolicy="no-referrer"
           />
           <img 
-            src="https://i.postimg.cc/FFfBKzb8/LOGO-TEXTO-NORA-BLANCO.png" 
+            src="https://i.postimg.cc/W3NR4Cqh/LOGO-NORA-BLANCO.png" 
             alt="nora CDE" 
-            className="h-12 lg:h-16 w-auto max-w-full object-contain hidden dark:block transition-all duration-300"
+            className="h-9 lg:h-11 w-auto max-w-[170px] object-contain mx-auto hidden dark:block transition-all duration-300 hover:scale-105"
             referrerPolicy="no-referrer"
           />
         </div>
@@ -109,16 +109,7 @@ export default function Sidebar({
         ))}
       </nav>
 
-      <div className="p-5 space-y-5">
-
-
-        <button 
-          onClick={logout}
-          className="w-full flex items-center gap-4 p-4 rounded-xl text-slate-400 dark:text-slate-500 font-bold text-[10px] uppercase tracking-widest hover:bg-red-50 dark:hover:bg-red-500/10 hover:text-red-500 transition-all group"
-        >
-          <LogOut className="w-4.5 h-4.5 group-hover:-translate-x-1 transition-transform" />
-          <span className="hidden lg:block text-slate-400 dark:text-slate-500 group-hover:text-red-500">Cerrar Sesión</span>
-        </button>
+      <div className="p-3">
       </div>
     </div>
   );
