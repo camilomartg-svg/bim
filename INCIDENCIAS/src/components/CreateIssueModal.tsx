@@ -1,6 +1,6 @@
 import { getCachedIncidents } from '../services/driveIncidentsService';
 import { isIncidentsAdmin } from '../utils/userScope';
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { collection, addDoc, getDocs, query, where, orderBy, updateDoc, doc } from 'firebase/firestore';
 import { db } from '../services/firebase';
 import { handleFirestoreError, OperationType } from '../services/firestore-errors';
@@ -43,6 +43,7 @@ import { X, Paperclip, Send, AlertCircle, Box, Map as MapIcon, Image as ImageIco
 import { motion, AnimatePresence } from 'motion/react';
 import { cn } from '../lib/utils';
 import { uploadFileToDrive } from '../utils/googleDriveUtils';
+import { enqueueOfflineIssue } from '../services/offlineSyncService';
 
 interface CreateIssueModalProps {
   onClose: () => void;
@@ -199,6 +200,7 @@ export default function CreateIssueModal({ onClose, onSuccess }: CreateIssueModa
   const [isCDEOpen, setIsCDEOpen] = useState(false);
   
   const [attachments, setAttachments] = useState<Partial<Attachment>[]>([]);
+  const pendingFilesRef = useRef<Map<string, Blob | File>>(new Map());
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isListening, setIsListening] = useState(false);
   const [activeCreatorTeam, setActiveCreatorTeam] = useState<string>(() => {
@@ -619,30 +621,26 @@ export default function CreateIssueModal({ onClose, onSuccess }: CreateIssueModa
       addReportBlock();
     }
   }, [activeMode]);
-  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (files) {
-      try {
-        const { companyId, projectId } = getProjectAndCompany();
-        const uploaded = await Promise.all(Array.from(files).map(async file => {
-          const driveFile = await uploadFileToDrive(file, file.name, file.type || 'application/octet-stream', undefined, undefined, { companyId, projectId });
-          const isImage = file.type.startsWith('image/');
-          const isVideo = file.type.startsWith('video/');
-          return {
-           id: Math.random().toString(36).substr(2, 9),
-           name: file.name,
-           url: driveFile.webViewLink || driveFile.url,
-           driveFileId: driveFile.id,
-           webViewLink: driveFile.webViewLink,
-           type: file.type || 'application/octet-stream',
-           category: isImage ? 'image' : (isVideo ? 'video' : 'file')
-          } as Partial<Attachment>;
-        }));
-        setAttachments(prev => [...prev, ...uploaded]);
-      } catch (error: any) {
-        console.error('Error uploading issue attachment to Drive:', error);
-        alert(`No fue posible guardar el archivo en Google Drive. La incidencia no se creó para evitar adjuntos locales.\n\n${error?.message || String(error)}`);
-      }
+      const newAtts: Partial<Attachment>[] = [];
+      Array.from(files).forEach(file => {
+        const attId = Math.random().toString(36).substr(2, 9);
+        const url = URL.createObjectURL(file);
+        pendingFilesRef.current.set(attId, file);
+        const isImage = file.type.startsWith('image/');
+        const isVideo = file.type.startsWith('video/');
+        newAtts.push({
+          id: attId,
+          name: file.name,
+          url: url,
+          type: file.type || 'application/octet-stream',
+          category: isImage ? 'image' : (isVideo ? 'video' : 'file'),
+          isLocalPending: true
+        });
+      });
+      setAttachments(prev => [...prev, ...newAtts]);
     }
     e.target.value = '';
   };

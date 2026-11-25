@@ -7,6 +7,9 @@ export interface Attachment {
   type: string;
   url: string;
   category: "file" | "image" | "video" | "bim_model" | "bim_view" | "plan_pdf" | "plan_dwg";
+  driveFileId?: string;
+  webViewLink?: string;
+  isLocalPending?: boolean;
 }
 
 export interface Comment {
@@ -43,6 +46,7 @@ export interface Issue {
   authorEmail?: string;
   createdAt: string;
   updatedAt: string;
+  isLocalPending?: boolean;
   attachments: Attachment[];
   dueDate?: string;
   agreementDate?: string;

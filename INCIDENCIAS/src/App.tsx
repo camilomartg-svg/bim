@@ -27,6 +27,7 @@ import { getProjectAndCompany } from './services/firebaseService';
 import { loadAndCacheProjectIso, isIncidentsAdmin } from './utils/userScope';
 import { UserHeaderBadge } from './components/UserHeaderBadge';
 import { checkIncidenciasLicense, ProjectLicenseStatus } from './utils/licenseGuard';
+import SyncStatusBar from './components/SyncStatusBar';
 
 // Component for displaying standard restricted access view to matching style
 function RestrictedView({ title, onBack }: { title: string; onBack: () => void }) {
@@ -388,6 +389,7 @@ function Dashboard() {
 
   return (
     <div className="flex h-screen bg-white dark:bg-black text-slate-900 dark:text-white font-sans selection:bg-amber-500/30 selection:text-white transition-colors duration-200">
+      <SyncStatusBar />
       <Sidebar 
         activeTab={activeTab} 
         setActiveTab={setActiveTab} 

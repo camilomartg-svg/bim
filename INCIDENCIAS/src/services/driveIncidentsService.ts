@@ -61,7 +61,7 @@ export function getCachedIncidents(companyId?: string, projectId?: string): Issu
 /**
  * Updates localStorage and notifies subscribers in current and other tabs
  */
-function updateLocalIncidentsCache(incidents: Issue[], companyId: string, projectId: string) {
+export function updateLocalIncidentsCache(incidents: Issue[], companyId: string, projectId: string) {
   const key = `nora_incidents_${companyId}_${projectId}`;
   try {
     localStorage.setItem(key, JSON.stringify(incidents));

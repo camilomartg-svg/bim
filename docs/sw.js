@@ -1,4 +1,4 @@
-const CACHE_NAME = 'portal-bim-nora-v104';
+const CACHE_NAME = 'portal-bim-nora-v105';
 // Lista de archivos que queremos guardar en caché para que la app funcione offline.
 const urlsToCache = [
   'home.html', // Ruta relativa a la ubicación del Service Worker
@@ -98,4 +98,17 @@ self.addEventListener('fetch', event => {
         return caches.match(event.request);
       })
   );
+});
+
+// Evento sync: Sincronización en segundo plano al recuperar señal
+self.addEventListener('sync', event => {
+  if (event.tag === 'nora-sync-issues') {
+    event.waitUntil(
+      self.clients.matchAll({ includeUncontrolled: true, type: 'window' }).then(clients => {
+        clients.forEach(client => {
+          client.postMessage({ type: 'TRIGGER_BACKGROUND_SYNC' });
+        });
+      })
+    );
+  }
 });

@@ -764,6 +764,12 @@ export default function DashboardSummary({ onSelectIssue, onOpenReport, selected
                     )}>
                       {getEffectiveStatus(issue)}
                     </div>
+                    {issue.isLocalPending && (
+                      <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-[8px] font-black uppercase tracking-[0.15em] bg-blue-500/15 text-blue-600 dark:text-blue-400 border border-blue-500/30 shadow-sm animate-pulse">
+                        <RefreshCw className="w-2.5 h-2.5 animate-spin" />
+                        <span>Sincronizando en Nube</span>
+                      </div>
+                    )}
                     {(issue.returnedToSource || issue.redirectionStatus === 'DEVUELTA_A_FUENTE') && (
                       <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-[8px] font-black uppercase tracking-[0.15em] bg-amber-500/20 text-amber-600 dark:text-amber-400 border border-amber-500/40 shadow-sm animate-pulse">
                         <RotateCcw className="w-2.5 h-2.5 text-amber-500 shrink-0" />
