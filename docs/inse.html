@@ -456,17 +456,28 @@
         const NEW_REGISTRATION_SCRIPT = 'https://script.google.com/macros/s/AKfycbx2RAQx_8K4o22xE0Mw-ETc7K_58vIoi6-PgVi64u80inuiw144ks3cgWSdCtXqIgB02g/exec';
         // --- ROTACIÓN DE IMAGEN DE FONDO ---
         const bgImages = [
-            'https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?q=80&w=1600&auto=format&fit=crop',
-            'https://images.unsplash.com/photo-1541888946425-d0fbb18615f8?q=80&w=1600&auto=format&fit=crop',
-            'https://images.unsplash.com/photo-1503387762-592deb58ef4e?q=80&w=1600&auto=format&fit=crop',
-            'https://images.unsplash.com/photo-1600585154340-be6161a56a0c?q=80&w=1600&auto=format&fit=crop'
+            'https://i.postimg.cc/BZc6rxGv/133c5fddeee1ba4f41dd37988c766968.jpg',
+            'https://i.postimg.cc/PJ451kMc/1cd18a559894359e55edc5e2ee5c8b69.jpg',
+            'https://i.postimg.cc/J7cnfbWt/3247cc16929f2cdc170aa77349030019.jpg',
+            'https://i.postimg.cc/SRrxcpGB/55f1a3ff2e75a529e63820bb0bd280d4.jpg',
+            'https://i.postimg.cc/fyKRYhK4/6e8adcf3c470a06b59dec07b663c9f25.jpg',
+            'https://i.postimg.cc/Xq8Y908S/83e3c55bd07a1eb40f75fa9b496e8df5.jpg',
+            'https://i.postimg.cc/Y03CQwxT/8c37273aa8a4a6185f6edfd232ce3e53.jpg',
+            'https://i.postimg.cc/qBXRP8dz/a8b46e4c4dd0ab0ec9f20168ffbea376.jpg',
+            'https://i.postimg.cc/ryCmBSLd/c5549ea27d6db09bb1b3599b672c0df8.jpg',
+            'https://i.postimg.cc/SQ7sBWpY/Gemini-Generated-Image-8jmc9q8jmc9q8jmc.jpg'
         ];
 
         document.addEventListener('DOMContentLoaded', () => {
             const leftPanel = document.getElementById('left-panel-bg');
             if (leftPanel) {
-                const randomImg = bgImages[Math.floor(Math.random() * bgImages.length)];
-                leftPanel.style.backgroundImage = `url('${randomImg}')`;
+                let currentIdx = Math.floor(Math.random() * bgImages.length);
+                leftPanel.style.backgroundImage = `url('${bgImages[currentIdx]}')`;
+                // Rotar automáticamente cada 9 segundos
+                setInterval(() => {
+                    currentIdx = (currentIdx + 1) % bgImages.length;
+                    leftPanel.style.backgroundImage = `url('${bgImages[currentIdx]}')`;
+                }, 9000);
             }
 
             // Limpiar posibles valores autocompletados por el navegador
@@ -1305,6 +1316,8 @@
             signInWithEmailAndPassword, 
             createUserWithEmailAndPassword,
             signInWithPopup,
+            signInWithRedirect,
+            getRedirectResult,
             GoogleAuthProvider,
             OAuthProvider,
             sendPasswordResetEmail
@@ -1328,6 +1341,19 @@
         window.createUserWithEmailAndPassword = createUserWithEmailAndPassword;
         window.sendPasswordResetEmail = sendPasswordResetEmail;
         window.signInWithPopup = signInWithPopup;
+        window.signInWithRedirect = signInWithRedirect;
+
+        // Comprobar si volvemos de un redirect de autenticación
+        getRedirectResult(auth).then(async (result) => {
+            if (result && result.user) {
+                await window.handleUnifiedAuthSuccess(result.user);
+            }
+        }).catch((error) => {
+            console.error("Redirect auth error:", error);
+            if (error && error.code) {
+                document.getElementById('error-message').textContent = "Error al autenticar: " + (error.message || error);
+            }
+        });
 
         const googleProvider = new GoogleAuthProvider();
         const microsoftProvider = new OAuthProvider('microsoft.com');
@@ -1335,6 +1361,37 @@
         const appleProvider = new OAuthProvider('apple.com');
         appleProvider.addScope('email');
         appleProvider.addScope('name');
+
+        // Helper para signIn con fallback a Redirect si popup es bloqueado
+        async function signInWithPopupOrRedirect(provider, providerName) {
+            try {
+                const result = await signInWithPopup(auth, provider);
+                await window.handleUnifiedAuthSuccess(result.user);
+            } catch (error) {
+                console.error(`${providerName} Auth Error:`, error);
+                if (error.code === 'auth/popup-blocked') {
+                    document.getElementById('error-message').textContent = "Ventana emergente bloqueada por el navegador. Redirigiendo...";
+                    try {
+                        await signInWithRedirect(auth, provider);
+                    } catch (redErr) {
+                        console.error("Redirect Error:", redErr);
+                        document.getElementById('error-message').textContent = "Por favor permite las ventanas emergentes en tu navegador para continuar.";
+                    }
+                    return;
+                }
+                if (error.code === 'auth/operation-not-allowed' || error.code === 'auth/configuration-not-found') {
+                    if (providerName === 'Microsoft' && typeof handleLogin === 'function') {
+                        handleLogin(false);
+                        return;
+                    }
+                    document.getElementById('error-message').textContent = `El proveedor ${providerName} debe estar habilitado en la consola de Firebase.`;
+                    return;
+                }
+                if (error.code !== 'auth/popup-closed-by-user') {
+                    document.getElementById('error-message').textContent = `Error al autenticar con ${providerName}: ` + (error.message || error);
+                }
+            }
+        }
 
         // 1. Formulario tradicional (Correo / Contraseña)
         const loginForm = document.getElementById('traditional-login-form');
@@ -1378,15 +1435,7 @@
         if (googleLoginBtn) {
             googleLoginBtn.addEventListener('click', async () => {
                 document.getElementById('error-message').textContent = "";
-                try {
-                    const result = await signInWithPopup(auth, googleProvider);
-                    await window.handleUnifiedAuthSuccess(result.user);
-                } catch (error) {
-                    console.error("Google Auth Error:", error);
-                    if (error.code !== 'auth/popup-closed-by-user') {
-                        document.getElementById('error-message').textContent = "Error al autenticar con Google: " + (error.message || error);
-                    }
-                }
+                await signInWithPopupOrRedirect(googleProvider, 'Google');
             });
         }
 
@@ -1395,22 +1444,7 @@
         if (msftLoginBtn) {
             msftLoginBtn.addEventListener('click', async () => {
                 document.getElementById('error-message').textContent = "";
-                try {
-                    const result = await signInWithPopup(auth, microsoftProvider);
-                    await window.handleUnifiedAuthSuccess(result.user);
-                } catch (error) {
-                    console.error("Microsoft Auth Error (Firebase):", error);
-                    if (error.code === 'auth/operation-not-allowed' || error.code === 'auth/configuration-not-found') {
-                        // Fallback a MSAL si el proveedor Microsoft aún requiere secret en Firebase Console
-                        if (typeof handleLogin === 'function') {
-                            handleLogin(false);
-                            return;
-                        }
-                    }
-                    if (error.code !== 'auth/popup-closed-by-user') {
-                        document.getElementById('error-message').textContent = "Error al autenticar con Microsoft: " + (error.message || error);
-                    }
-                }
+                await signInWithPopupOrRedirect(microsoftProvider, 'Microsoft');
             });
         }
 
@@ -1419,19 +1453,7 @@
         if (appleLoginBtn) {
             appleLoginBtn.addEventListener('click', async () => {
                 document.getElementById('error-message').textContent = "";
-                try {
-                    const result = await signInWithPopup(auth, appleProvider);
-                    await window.handleUnifiedAuthSuccess(result.user);
-                } catch (error) {
-                    console.error("Apple Auth Error:", error);
-                    if (error.code === 'auth/operation-not-allowed' || error.code === 'auth/configuration-not-found') {
-                        document.getElementById('error-message').textContent = "El proveedor de Apple debe estar habilitado en la consola de Firebase.";
-                        return;
-                    }
-                    if (error.code !== 'auth/popup-closed-by-user') {
-                        document.getElementById('error-message').textContent = "Error al autenticar con Apple: " + (error.message || error);
-                    }
-                }
+                await signInWithPopupOrRedirect(appleProvider, 'Apple');
             });
         }
     </script>
