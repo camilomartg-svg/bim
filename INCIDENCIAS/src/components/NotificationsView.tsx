@@ -9,7 +9,7 @@ import { isIncidentsAdmin } from '../utils/userScope';
 import { 
   Bell, User, Briefcase, ClipboardCheck, ArrowRight, CheckCircle2, 
   XCircle, AlertTriangle, Clock, RotateCcw, ShieldAlert, MessageSquare, 
-  Search, CheckCheck, Filter, AlertCircle, Settings, Zap, Calendar, 
+  Search, CheckCheck, Check, Filter, AlertCircle, Settings, Zap, Calendar, 
   Paperclip, Sliders, BellOff, Sparkles, ChevronRight
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
@@ -146,6 +146,17 @@ export default function NotificationsView({ onSelectIssue, canAccessBim }: Notif
     setReadIds(prev => {
       if (prev.includes(id)) return prev;
       const updated = [...prev, id];
+      try {
+        localStorage.setItem('nora_read_notifications', JSON.stringify(updated));
+      } catch (_) {}
+      return updated;
+    });
+  };
+
+  const unmarkAsRead = (id: string, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    setReadIds(prev => {
+      const updated = prev.filter(item => item !== id);
       try {
         localStorage.setItem('nora_read_notifications', JSON.stringify(updated));
       } catch (_) {}
@@ -553,9 +564,10 @@ export default function NotificationsView({ onSelectIssue, canAccessBim }: Notif
       return freq !== 'MUTED';
     });
 
-    // 2. Separate into Instant and Weekly
-    const instantItems = unmutedItems.filter(n => (rolePrefs[n.category] || 'INSTANT') === 'INSTANT');
-    const weeklyItems = unmutedItems.filter(n => rolePrefs[n.category] === 'WEEKLY');
+    // 2. Separate into Instant (Unread), Weekly (Unread), and Read Items
+    const instantUnread = unmutedItems.filter(n => !readIds.includes(n.id) && (rolePrefs[n.category] || 'INSTANT') === 'INSTANT');
+    const weeklyUnread = unmutedItems.filter(n => !readIds.includes(n.id) && rolePrefs[n.category] === 'WEEKLY');
+    const readItems = unmutedItems.filter(n => readIds.includes(n.id));
 
     // 3. Apply search term
     const applySearch = (items: NotificationItem[]) => {
@@ -569,8 +581,9 @@ export default function NotificationsView({ onSelectIssue, canAccessBim }: Notif
     };
 
     return {
-      instant: applySearch(instantItems),
-      weekly: applySearch(weeklyItems),
+      instantUnread: applySearch(instantUnread),
+      weeklyUnread: applySearch(weeklyUnread),
+      readItems: applySearch(readItems),
       allUnmuted: applySearch(unmutedItems)
     };
   };
@@ -595,13 +608,17 @@ export default function NotificationsView({ onSelectIssue, canAccessBim }: Notif
     title: string,
     role: 'author' | 'responsible' | 'reviewer',
     subtitle: string,
-    data: { instant: NotificationItem[]; weekly: NotificationItem[] },
+    data: { instantUnread: NotificationItem[]; weeklyUnread: NotificationItem[]; readItems: NotificationItem[] },
     icon: React.ReactNode,
     accentBorder: string
   ) => {
     const currentView = columnViews[role];
-    const items = currentView === 'INSTANT' ? data.instant : data.weekly;
-    const unreadCount = getUnreadCount(items);
+    const items = currentView === 'INSTANT' 
+      ? data.instantUnread 
+      : currentView === 'WEEKLY' 
+      ? data.weeklyUnread 
+      : data.readItems;
+    const unreadCount = data.instantUnread.length + data.weeklyUnread.length;
 
     return (
       <div className={cn(
@@ -633,33 +650,49 @@ export default function NotificationsView({ onSelectIssue, canAccessBim }: Notif
             </div>
           </div>
 
-          {/* OVAL CONTROLS: Frequency Toggle + Role Settings */}
+          {/* OVAL CONTROLS: Frequency Toggle (Al Instante / Semanal / Leídas) + Role Settings */}
           <div className="flex items-center justify-between pt-2.5 border-t border-slate-100 dark:border-slate-800/60 gap-2">
-            <div className="flex items-center p-1 bg-slate-100 dark:bg-slate-900 rounded-xl border border-slate-200/80 dark:border-slate-800 shadow-inner">
+            <div className="flex items-center p-1 bg-slate-100 dark:bg-slate-900 rounded-xl border border-slate-200/80 dark:border-slate-800 shadow-inner overflow-x-auto">
               <button
                 onClick={() => setColumnViews(prev => ({ ...prev, [role]: 'INSTANT' }))}
                 className={cn(
-                  "px-2.5 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-wider transition-all flex items-center gap-1.5 cursor-pointer",
+                  "px-2.5 py-1.5 rounded-lg text-[8.5px] font-black uppercase tracking-wider transition-all flex items-center gap-1.5 cursor-pointer whitespace-nowrap",
                   currentView === 'INSTANT'
                     ? "bg-slate-900 dark:bg-white text-white dark:text-slate-900 shadow-sm"
                     : "text-slate-400 hover:text-slate-700 dark:hover:text-slate-300"
                 )}
+                title="Notificaciones inmediatas pendientes de leer"
               >
                 <Zap className="w-3 h-3 text-amber-400" />
-                <span>Al Instante ({data.instant.length})</span>
+                <span>Al Instante ({data.instantUnread.length})</span>
               </button>
 
               <button
                 onClick={() => setColumnViews(prev => ({ ...prev, [role]: 'WEEKLY' }))}
                 className={cn(
-                  "px-2.5 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-wider transition-all flex items-center gap-1.5 cursor-pointer",
+                  "px-2.5 py-1.5 rounded-lg text-[8.5px] font-black uppercase tracking-wider transition-all flex items-center gap-1.5 cursor-pointer whitespace-nowrap",
                   currentView === 'WEEKLY'
                     ? "bg-slate-900 dark:bg-white text-white dark:text-slate-900 shadow-sm"
                     : "text-slate-400 hover:text-slate-700 dark:hover:text-slate-300"
                 )}
+                title="Resumen semanal pendiente de leer"
               >
                 <Calendar className="w-3 h-3 text-slate-400" />
-                <span>Resumen Semanal ({data.weekly.length})</span>
+                <span>Semanal ({data.weeklyUnread.length})</span>
+              </button>
+
+              <button
+                onClick={() => setColumnViews(prev => ({ ...prev, [role]: 'READ' }))}
+                className={cn(
+                  "px-2.5 py-1.5 rounded-lg text-[8.5px] font-black uppercase tracking-wider transition-all flex items-center gap-1.5 cursor-pointer whitespace-nowrap",
+                  currentView === 'READ'
+                    ? "bg-slate-900 dark:bg-white text-white dark:text-slate-900 shadow-sm"
+                    : "text-slate-400 hover:text-slate-700 dark:hover:text-slate-300"
+                )}
+                title="Notificaciones que ya leíste"
+              >
+                <CheckCheck className="w-3 h-3 text-emerald-400" />
+                <span>Leídas ({data.readItems.length})</span>
               </button>
             </div>
 
@@ -706,12 +739,18 @@ export default function NotificationsView({ onSelectIssue, canAccessBim }: Notif
                 <CheckCircle2 className="w-6 h-6 stroke-1" />
               </div>
               <p className="text-xs font-black uppercase tracking-wider text-slate-500 dark:text-slate-400">
-                {currentView === 'INSTANT' ? 'Sin notificaciones inmediatas' : 'Sin resumen semanal pendiente'}
+                {currentView === 'READ' 
+                  ? 'Sin notificaciones leídas' 
+                  : currentView === 'INSTANT' 
+                  ? 'Sin notificaciones pendientes' 
+                  : 'Sin resumen semanal pendiente'}
               </p>
-              <p className="text-[10px] mt-1 text-slate-400 dark:text-slate-600 max-w-[220px]">
-                {currentView === 'INSTANT' 
-                  ? 'No hay alertas en tiempo real activas. Las notificaciones configuradas como semanales se agrupan en su pestaña correspondiente.' 
-                  : 'No hay eventos acumulados en el resumen de esta semana.'}
+              <p className="text-[10px] mt-1 text-slate-400 dark:text-slate-600 max-w-[240px]">
+                {currentView === 'READ'
+                  ? 'Las notificaciones que leas en el tablero principal se archivarán aquí automáticamente.'
+                  : currentView === 'INSTANT' 
+                  ? 'No tienes notificaciones pendientes. Todo lo que ya leíste se encuentra en la pestaña "Leídas".' 
+                  : 'No hay eventos pendientes en el resumen de esta semana.'}
               </p>
               <button
                 onClick={() => openSettingsForRole(role)}
@@ -774,9 +813,32 @@ export default function NotificationsView({ onSelectIssue, canAccessBim }: Notif
                       <span>{item.issue.title}</span>
                     </div>
 
-                    <div className="flex items-center gap-1.5 text-[9.5px] font-black uppercase tracking-wider text-slate-800 dark:text-slate-200 group-hover:translate-x-1 transition-transform shrink-0">
-                      <span>Ver incidencia</span>
-                      <ArrowRight className="w-3.5 h-3.5 text-amber-500" />
+                    <div className="flex items-center gap-2">
+                      {currentView === 'READ' ? (
+                        <button
+                          type="button"
+                          onClick={(e) => unmarkAsRead(item.id, e)}
+                          className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-[8px] font-black uppercase tracking-wider text-slate-600 dark:text-slate-300 hover:text-amber-500 transition-all cursor-pointer"
+                          title="Devolver al tablero principal como no leída"
+                        >
+                          <RotateCcw className="w-3 h-3 text-amber-500" />
+                          <span>Restaurar</span>
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={(e) => markAsRead(item.id, e)}
+                          className="flex items-center gap-1 px-2 py-1 rounded-lg hover:bg-emerald-500/10 text-slate-400 hover:text-emerald-500 text-[8px] font-black uppercase tracking-wider transition-all cursor-pointer"
+                          title="Marcar como leída y mover a pestaña de leídas"
+                        >
+                          <Check className="w-3 h-3 text-emerald-500" />
+                          <span className="hidden sm:inline">Marcar leída</span>
+                        </button>
+                      )}
+                      <div className="flex items-center gap-1.5 text-[9.5px] font-black uppercase tracking-wider text-slate-800 dark:text-slate-200 group-hover:translate-x-1 transition-transform shrink-0">
+                        <span>Ver</span>
+                        <ArrowRight className="w-3.5 h-3.5 text-amber-500" />
+                      </div>
                     </div>
                   </div>
                 </motion.div>
