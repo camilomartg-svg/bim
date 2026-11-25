@@ -64,6 +64,26 @@ export interface Issue {
     approved?: boolean;
     approvedAt?: string;
   };
+  previousResponsible?: {
+    name: string;
+    position?: string;
+    email?: string;
+    team?: string;
+  };
+  pendingRedirection?: boolean;
+  pendingRedirectionType?: 'COLABORADOR' | 'EJECUTOR' | 'RESPONSABLE';
+  pendingRedirectionTo?: {
+    name: string;
+    position?: string;
+    email?: string;
+    team?: string;
+  };
+  redirectionStatus?: 'PENDIENTE' | 'ACEPTADA' | 'RECHAZADA' | 'DEVUELTA_A_FUENTE';
+  redirectionRejectionReason?: string;
+  returnedToSource?: boolean;
+  returnToSourceReason?: string;
+  returnedAt?: string;
+  returnedBy?: string;
   collaboratorApproved?: boolean;
   collaboratorApprovedAt?: string;
   principalApproved?: boolean;

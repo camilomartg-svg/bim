@@ -9,7 +9,7 @@ import { useAuth } from '../context/AuthContext';
 import { 
   X, Paperclip, Send, Clock, User as UserIcon, CheckCircle2, XCircle, Calendar, AlertTriangle, Trash2,
   ExternalLink, FileText, Image as ImageIcon, Video, Box, Map as MapIcon, ChevronRight, MessageSquare, MapPin, Tag, ShieldCheck, Zap, Eye, ClipboardList, ArrowRight, AlertCircle,
-  TrendingUp, Maximize2, Layers, Save, Camera
+  TrendingUp, Maximize2, Layers, Save, Camera, RotateCcw
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { cn } from '../lib/utils';
@@ -38,6 +38,10 @@ export default function IssueDetail({ issue: initialIssue, onClose, onOpenReport
   const [showRejectionPicker, setShowRejectionPicker] = useState(false);
   const [agreementDate, setAgreementDate] = useState('');
   const [rejectionReason, setRejectionReason] = useState('');
+  const [showRejectRedirectionModal, setShowRejectRedirectionModal] = useState(false);
+  const [redirectionRejectReason, setRedirectionRejectReason] = useState('');
+  const [showReturnToSourceModal, setShowReturnToSourceModal] = useState(false);
+  const [returnToSourceReason, setReturnToSourceReason] = useState('');
   const [fieldSettings, setFieldSettings] = useState<any[]>([]);
   const [teamMemberMap, setTeamMemberMap] = useState<Record<string, string>>({});
   const [teamMembers, setTeamMembers] = useState<any[]>([]);
@@ -550,6 +554,73 @@ export default function IssueDetail({ issue: initialIssue, onClose, onOpenReport
     }
   };
 
+  const cleanStr = (s?: string) => (s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+
+  const findPreviousResponsibleFromComments = () => {
+    if (!issue.comments) return null;
+    const commentsRev = [...issue.comments].reverse();
+    const redirectComment = commentsRev.find(c => c.text && c.text.includes('Incidencia redirigida a'));
+    if (!redirectComment) return null;
+    const prevMember = teamMembers.find(m => cleanStr(m.name) === cleanStr(redirectComment.userName) || ((redirectComment as any).userEmail && m.email?.toLowerCase() === (redirectComment as any).userEmail.toLowerCase()));
+    return {
+      name: prevMember?.name || redirectComment.userName || 'Responsable original',
+      email: prevMember?.email || (redirectComment as any).userEmail || '',
+      position: prevMember?.position || '',
+      team: prevMember?.team || ''
+    };
+  };
+
+  const getPendingRedirectionInfo = () => {
+    const userEmail = (user?.email || '').toLowerCase().trim();
+    const userNameClean = cleanStr(user?.name);
+
+    if (issue.pendingRedirection || issue.redirectionStatus === 'PENDIENTE') {
+      const toEmail = (issue.pendingRedirectionTo?.email || issue.assignedEmail || '').toLowerCase().trim();
+      const toNameClean = cleanStr(issue.pendingRedirectionTo?.name || issue.assignedName);
+      const isTarget = (userEmail && toEmail && userEmail === toEmail) || (userNameClean && toNameClean && userNameClean === toNameClean);
+      if (isTarget) {
+        return {
+          isPending: true,
+          type: (issue.pendingRedirectionType || 'RESPONSABLE') as 'COLABORADOR' | 'EJECUTOR' | 'RESPONSABLE',
+          prevResponsible: issue.previousResponsible || findPreviousResponsibleFromComments()
+        };
+      }
+    }
+
+    if (issue.comments && issue.comments.length > 0) {
+      const commentsRev = [...issue.comments].reverse();
+      const lastRedirectIdx = commentsRev.findIndex(c => c.text && c.text.includes('Incidencia redirigida a'));
+      if (lastRedirectIdx !== -1) {
+        const subsequent = commentsRev.slice(0, lastRedirectIdx);
+        const resolved = subsequent.some(c => 
+          c.text && (c.text.includes('REDIRECCIÓN ACEPTADA') || c.text.includes('REDIRECCIÓN RECHAZADA') || c.text.includes('DEVUELTA A LA FUENTE'))
+        );
+        if (!resolved) {
+          const redirectComment = commentsRev[lastRedirectIdx];
+          const commentText = redirectComment.text.toLowerCase();
+          const isTarget = (userEmail && commentText.includes(userEmail)) ||
+                           (userNameClean && cleanStr(commentText).includes(userNameClean)) ||
+                           (userEmail && issue.assignedEmail && issue.assignedEmail.toLowerCase() === userEmail) ||
+                           (userNameClean && cleanStr(issue.assignedName) === userNameClean);
+          if (isTarget) {
+            const prevResponsible = issue.previousResponsible || findPreviousResponsibleFromComments();
+            const type = (commentText.includes('ejecutor') ? 'EJECUTOR' : commentText.includes('colaborador') ? 'COLABORADOR' : 'RESPONSABLE') as 'COLABORADOR' | 'EJECUTOR' | 'RESPONSABLE';
+            return {
+              isPending: true,
+              type,
+              prevResponsible
+            };
+          }
+        }
+      }
+    }
+
+    return { isPending: false, type: null, prevResponsible: null };
+  };
+
+  const pendingRedirInfo = getPendingRedirectionInfo();
+  const isPendingRedirectionToMe = pendingRedirInfo.isPending;
+
   const [redirectionType, setRedirectionType] = useState<'COLABORADOR' | 'EJECUTOR' | 'RESPONSABLE'>('COLABORADOR');
 
   const handleRedirection = async (member: any) => {
@@ -564,8 +635,20 @@ export default function IssueDetail({ issue: initialIssue, onClose, onOpenReport
         at: new Date().toISOString()
       };
 
+      const prevResponsible = {
+        name: issue.assignedName || user?.name || '',
+        position: issue.assignedPosition || user?.position || '',
+        email: issue.assignedEmail || user?.email || '',
+        team: issue.assignedTeam || ''
+      };
+
       const updateData: any = {
-        updatedAt: new Date().toISOString()
+        updatedAt: new Date().toISOString(),
+        pendingRedirection: true,
+        pendingRedirectionType: redirectionType,
+        pendingRedirectionTo: redirectedData,
+        redirectionStatus: 'PENDIENTE',
+        previousResponsible
       };
 
       let roleText = 'responsable';
@@ -595,6 +678,8 @@ export default function IssueDetail({ issue: initialIssue, onClose, onOpenReport
       }
 
       await persistIssueAndComment(updateData, {
+        userId: user?.id || 'SYSTEM',
+        userName: user?.name || 'SISTEMA',
         text: `Incidencia redirigida a ${member.name} (${member.position}) como ${roleText}.`
       });
 
@@ -603,6 +688,122 @@ export default function IssueDetail({ issue: initialIssue, onClose, onOpenReport
     } catch (err) {
       console.error('[IssueDetail] Error in handleRedirection:', err);
       alert("Error al redirigir la incidencia. Verifique sus permisos de red y base de datos.");
+    } finally {
+      setIsUpdating(false);
+    }
+  };
+
+  const handleAcceptRedirection = async () => {
+    setIsUpdating(true);
+    try {
+      const updateData: any = {
+        updatedAt: new Date().toISOString(),
+        pendingRedirection: false,
+        redirectionStatus: 'ACEPTADA'
+      };
+      await persistIssueAndComment(updateData, {
+        userId: user?.id || 'SYSTEM',
+        userName: user?.name || 'SISTEMA',
+        text: `✅ REDIRECCIÓN ACEPTADA por ${user?.name || 'el responsable'} (${user?.position || 'Responsable'}). Se asume formalmente la gestión técnica de la incidencia.`
+      });
+    } catch (err) {
+      console.error("Error al aceptar redirección:", err);
+      alert("Error al confirmar la aceptación de la redirección.");
+    } finally {
+      setIsUpdating(false);
+    }
+  };
+
+  const handleRejectRedirection = async () => {
+    if (!redirectionRejectReason.trim()) {
+      alert("Debe ingresar obligatoriamente el motivo del rechazo de la redirección.");
+      return;
+    }
+    setIsUpdating(true);
+    try {
+      const info = pendingRedirInfo;
+      const prev = info.prevResponsible || issue.previousResponsible;
+      const prevName = prev?.name || issue.creatorName || 'Responsable original';
+      const prevEmail = prev?.email || issue.authorEmail || '';
+      const prevPos = prev?.position || '';
+      const prevTeam = prev?.team || '';
+
+      const updateData: any = {
+        updatedAt: new Date().toISOString(),
+        pendingRedirection: false,
+        redirectionStatus: 'RECHAZADA',
+        redirectionRejectionReason: redirectionRejectReason.trim()
+      };
+
+      if (info.type === 'COLABORADOR') {
+        updateData.redirectedTo = null;
+        updateData.collaboratorApproved = false;
+      } else if (info.type === 'EJECUTOR') {
+        updateData.executor = null;
+      } else {
+        updateData.assignedName = prevName;
+        updateData.assignedEmail = prevEmail;
+        updateData.assignedPosition = prevPos;
+        updateData.assignedTeam = prevTeam;
+      }
+
+      await persistIssueAndComment(updateData, {
+        userId: user?.id || 'SYSTEM',
+        userName: user?.name || 'SISTEMA',
+        text: `❌ REDIRECCIÓN RECHAZADA por ${user?.name || 'el usuario'} (${user?.position || 'Responsable'}).\n• Motivo del rechazo: ${redirectionRejectReason.trim()}\n• La incidencia regresa al responsable anterior: ${prevName}${prevPos ? ` (${prevPos})` : ''}.`
+      });
+
+      setShowRejectRedirectionModal(false);
+      setRedirectionRejectReason('');
+    } catch (err) {
+      console.error("Error al rechazar redirección:", err);
+      alert("Error al procesar el rechazo de la redirección.");
+    } finally {
+      setIsUpdating(false);
+    }
+  };
+
+  const handleReturnToSource = async () => {
+    if (!returnToSourceReason.trim()) {
+      alert("Debe ingresar obligatoriamente las razones para devolver la incidencia a la fuente.");
+      return;
+    }
+    setIsUpdating(true);
+    try {
+      const authorName = issue.creatorName || 'Autor original';
+      const authorEmail = issue.authorEmail || '';
+      const authorPos = issue.creatorPosition || 'Autor';
+      const authorTeam = issue.creatorTeam || '';
+
+      const updateData: any = {
+        updatedAt: new Date().toISOString(),
+        assignedName: authorName,
+        assignedEmail: authorEmail,
+        assignedPosition: authorPos,
+        assignedTeam: authorTeam,
+        redirectedTo: null,
+        executor: null,
+        collaboratorApproved: false,
+        status: 'ACTIVO',
+        returnedToSource: true,
+        returnToSourceReason: returnToSourceReason.trim(),
+        returnedAt: new Date().toISOString(),
+        returnedBy: user?.name || '',
+        pendingRedirection: false,
+        redirectionStatus: 'DEVUELTA_A_FUENTE'
+      };
+
+      await persistIssueAndComment(updateData, {
+        userId: user?.id || 'SYSTEM',
+        userName: user?.name || 'SISTEMA',
+        text: `🔄 INCIDENCIA DEVUELTA A LA FUENTE por ${user?.name || 'el responsable'} (${user?.position || 'Responsable'}).\n• Motivo de devolución: ${returnToSourceReason.trim()}\n• Devuelta al autor original: ${authorName}${authorPos ? ` (${authorPos})` : ''}. El autor debe reasignar la incidencia al responsable correspondiente.`
+      });
+
+      setShowReturnToSourceModal(false);
+      setReturnToSourceReason('');
+    } catch (err) {
+      console.error("Error al devolver incidencia a la fuente:", err);
+      alert("Error al procesar la devolución a la fuente.");
     } finally {
       setIsUpdating(false);
     }
@@ -1466,26 +1667,60 @@ export default function IssueDetail({ issue: initialIssue, onClose, onOpenReport
 
                        {/* MANAGEMENT BUTTONS (Redirection, Anulation, etc.) */}
                        <div className="flex flex-wrap gap-3 pt-4 border-t border-slate-800">
-                          {canRedirect && !isExecutor && (
+                          {isPendingRedirectionToMe ? (
                             <>
                               <button 
-                                onClick={() => { setRedirectionType('COLABORADOR'); setShowRedirectionPicker(true); }}
-                                className="px-5 py-3.5 bg-slate-900 border border-slate-800 text-slate-300 rounded-2xl text-[10px] font-black uppercase tracking-[0.15em] hover:bg-slate-800 hover:text-white transition-all flex items-center gap-2.5 active:scale-95 shadow-sm"
+                                onClick={handleAcceptRedirection}
+                                className="px-6 py-3.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-2xl text-[10px] font-black uppercase tracking-[0.15em] transition-all flex items-center gap-2.5 active:scale-95 shadow-lg shadow-emerald-600/20"
                               >
-                                <ArrowRight className="w-4 h-4 text-amber-500" /> Delegar a Colaborador
+                                <CheckCircle2 className="w-4 h-4" /> Aceptar Redirección
                               </button>
                               <button 
-                                onClick={() => { setRedirectionType('EJECUTOR'); setShowRedirectionPicker(true); }}
-                                className="px-5 py-3.5 bg-slate-900 border border-slate-800 text-slate-300 rounded-2xl text-[10px] font-black uppercase tracking-[0.15em] hover:bg-slate-800 hover:text-white transition-all flex items-center gap-2.5 active:scale-95 shadow-sm"
+                                onClick={() => setShowRejectRedirectionModal(true)}
+                                className="px-6 py-3.5 bg-rose-600 hover:bg-rose-500 text-white rounded-2xl text-[10px] font-black uppercase tracking-[0.15em] transition-all flex items-center gap-2.5 active:scale-95 shadow-lg shadow-rose-600/20"
                               >
-                                <ArrowRight className="w-4 h-4 text-indigo-500" /> Redirigir a Ejecutor
+                                <XCircle className="w-4 h-4" /> Rechazar Redirección
                               </button>
                               <button 
-                                onClick={() => { setRedirectionType('RESPONSABLE'); setShowRedirectionPicker(true); }}
-                                className="px-5 py-3.5 bg-indigo-950/60 border border-indigo-800/80 text-indigo-300 rounded-2xl text-[10px] font-black uppercase tracking-[0.15em] hover:bg-indigo-900 hover:text-white transition-all flex items-center gap-2.5 active:scale-95 shadow-sm"
+                                onClick={() => setShowReturnToSourceModal(true)}
+                                className="px-6 py-3.5 bg-amber-600 hover:bg-amber-500 text-white rounded-2xl text-[10px] font-black uppercase tracking-[0.15em] transition-all flex items-center gap-2.5 active:scale-95 shadow-lg shadow-amber-600/20"
                               >
-                                <ArrowRight className="w-4 h-4 text-emerald-400" /> Reasignar Responsable
+                                <RotateCcw className="w-4 h-4" /> Devolver a la Fuente
                               </button>
+                            </>
+                          ) : (
+                            <>
+                              {canRedirect && !isExecutor && (
+                                <>
+                                  <button 
+                                    onClick={() => { setRedirectionType('COLABORADOR'); setShowRedirectionPicker(true); }}
+                                    className="px-5 py-3.5 bg-slate-900 border border-slate-800 text-slate-300 rounded-2xl text-[10px] font-black uppercase tracking-[0.15em] hover:bg-slate-800 hover:text-white transition-all flex items-center gap-2.5 active:scale-95 shadow-sm"
+                                  >
+                                    <ArrowRight className="w-4 h-4 text-amber-500" /> Delegar a Colaborador
+                                  </button>
+                                  <button 
+                                    onClick={() => { setRedirectionType('EJECUTOR'); setShowRedirectionPicker(true); }}
+                                    className="px-5 py-3.5 bg-slate-900 border border-slate-800 text-slate-300 rounded-2xl text-[10px] font-black uppercase tracking-[0.15em] hover:bg-slate-800 hover:text-white transition-all flex items-center gap-2.5 active:scale-95 shadow-sm"
+                                  >
+                                    <ArrowRight className="w-4 h-4 text-indigo-500" /> Redirigir a Ejecutor
+                                  </button>
+                                  <button 
+                                    onClick={() => { setRedirectionType('RESPONSABLE'); setShowRedirectionPicker(true); }}
+                                    className="px-5 py-3.5 bg-indigo-950/60 border border-indigo-800/80 text-indigo-300 rounded-2xl text-[10px] font-black uppercase tracking-[0.15em] hover:bg-indigo-900 hover:text-white transition-all flex items-center gap-2.5 active:scale-95 shadow-sm"
+                                  >
+                                    <ArrowRight className="w-4 h-4 text-emerald-400" /> Reasignar Responsable
+                                  </button>
+                                </>
+                              )}
+
+                              {isResponsible && issue.status !== 'RESPONDIDA' && issue.status !== 'RESUELTA' && issue.status !== 'ANULADA' && (
+                                <button 
+                                  onClick={() => setShowReturnToSourceModal(true)}
+                                  className="px-5 py-3.5 bg-amber-600 hover:bg-amber-500 text-white rounded-2xl text-[10px] font-black uppercase tracking-[0.15em] transition-all flex items-center gap-2.5 active:scale-95 shadow-sm shadow-amber-600/10"
+                                >
+                                  <RotateCcw className="w-4 h-4" /> Devolver a la Fuente
+                                </button>
+                              )}
                             </>
                           )}
 
@@ -1573,6 +1808,76 @@ export default function IssueDetail({ issue: initialIssue, onClose, onOpenReport
                        className="w-full bg-slate-100 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl p-6 text-xs text-white font-bold h-32 focus:border-red-500 outline-none resize-none transition-all shadow-sm"
                      />
                      <button onClick={() => updateStatus('RECHAZADA', { rejectionReason })} className="w-full bg-red-600 py-4 rounded-xl text-[10px] font-black uppercase tracking-[0.15em] text-white shadow-xl shadow-red-600/30 active:scale-95 transition-all">Registrar Informe</button>
+                    </motion.div>
+                  )}
+
+                  {showRejectRedirectionModal && (
+                    <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} className="mt-4 p-8 bg-rose-500/5 border border-rose-500/20 rounded-[2rem] space-y-6 overflow-hidden shadow-inner">
+                      <div className="flex items-center gap-3">
+                         <div className="w-10 h-10 bg-rose-600 rounded-xl flex items-center justify-center text-white shadow-lg">
+                           <XCircle className="w-5 h-5" />
+                         </div>
+                         <div>
+                           <h5 className="text-base font-display font-black text-rose-500 tracking-tight">Rechazar Redirección de Incidencia</h5>
+                           <p className="text-[9px] font-bold text-slate-500 uppercase tracking-widest mt-0.5">Explique obligatoriamente por qué rechaza la asignación. La incidencia volverá al responsable original.</p>
+                         </div>
+                      </div>
+                      <textarea 
+                        value={redirectionRejectReason}
+                        onChange={(e) => setRedirectionRejectReason(e.target.value)}
+                        placeholder="Escriba obligatoriamente las razones y sustento del rechazo..."
+                        className="w-full bg-slate-100 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl p-6 text-xs text-slate-900 dark:text-white font-bold h-32 focus:border-rose-500 outline-none resize-none transition-all shadow-sm"
+                      />
+                      <div className="flex gap-3">
+                        <button 
+                          disabled={!redirectionRejectReason.trim() || isUpdating}
+                          onClick={handleRejectRedirection} 
+                          className="flex-1 bg-rose-600 py-4 rounded-xl text-[10px] font-black uppercase tracking-[0.15em] text-white shadow-xl shadow-rose-600/30 active:scale-95 disabled:opacity-30 transition-all cursor-pointer"
+                        >
+                          Confirmar Rechazo y Regresar
+                        </button>
+                        <button 
+                          onClick={() => setShowRejectRedirectionModal(false)}
+                          className="px-6 py-4 bg-slate-200 dark:bg-slate-900 text-slate-700 dark:text-slate-400 rounded-xl text-[10px] font-black uppercase tracking-[0.15em] hover:bg-slate-300 dark:hover:bg-slate-800 transition-all"
+                        >
+                          Cancelar
+                        </button>
+                      </div>
+                    </motion.div>
+                  )}
+
+                  {showReturnToSourceModal && (
+                    <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} className="mt-4 p-8 bg-amber-500/5 border border-amber-500/20 rounded-[2rem] space-y-6 overflow-hidden shadow-inner">
+                      <div className="flex items-center gap-3">
+                         <div className="w-10 h-10 bg-amber-600 rounded-xl flex items-center justify-center text-white shadow-lg">
+                           <RotateCcw className="w-5 h-5" />
+                         </div>
+                         <div>
+                           <h5 className="text-base font-display font-black text-amber-500 tracking-tight">Devolver Incidencia a la Fuente</h5>
+                           <p className="text-[9px] font-bold text-slate-500 uppercase tracking-widest mt-0.5">Se devolverá al autor original ({issue.creatorName || issue.authorEmail}) para que la asigne al responsable correcto. Las razones se publicarán en el chat.</p>
+                         </div>
+                      </div>
+                      <textarea 
+                        value={returnToSourceReason}
+                        onChange={(e) => setReturnToSourceReason(e.target.value)}
+                        placeholder="Escriba obligatoriamente las razones por las cuales devuelve la incidencia al autor original..."
+                        className="w-full bg-slate-100 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl p-6 text-xs text-slate-900 dark:text-white font-bold h-32 focus:border-amber-500 outline-none resize-none transition-all shadow-sm"
+                      />
+                      <div className="flex gap-3">
+                        <button 
+                          disabled={!returnToSourceReason.trim() || isUpdating}
+                          onClick={handleReturnToSource} 
+                          className="flex-1 bg-amber-600 py-4 rounded-xl text-[10px] font-black uppercase tracking-[0.15em] text-white shadow-xl shadow-amber-600/30 active:scale-95 disabled:opacity-30 transition-all cursor-pointer"
+                        >
+                          Confirmar y Devolver al Autor
+                        </button>
+                        <button 
+                          onClick={() => setShowReturnToSourceModal(false)}
+                          className="px-6 py-4 bg-slate-200 dark:bg-slate-900 text-slate-700 dark:text-slate-400 rounded-xl text-[10px] font-black uppercase tracking-[0.15em] hover:bg-slate-300 dark:hover:bg-slate-800 transition-all"
+                        >
+                          Cancelar
+                        </button>
+                      </div>
                     </motion.div>
                   )}
 
