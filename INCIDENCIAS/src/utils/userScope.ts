@@ -583,6 +583,18 @@ export function getUserProjectStatus(
     }
   }
 
+  // 4. Determinar estado:
+  // Si el usuario ESTÁ en el proyecto activo (en activeProject.members o equipos ISO),
+  // es un miembro ACTIVO y plenamente autorizado del proyecto (incluyendo invitados y externos)
+  if (inProject) {
+    return {
+      isSuspendedFromCompany: false,
+      isRemovedFromProject: false,
+      isActiveInProject: true,
+      badgeType: 'active'
+    };
+  }
+
   if (!foundInAnyCompany) {
     return {
       isSuspendedFromCompany: true,
@@ -593,20 +605,11 @@ export function getUserProjectStatus(
     };
   }
 
-  if (!inProject) {
-    return {
-      isSuspendedFromCompany: false,
-      isRemovedFromProject: true,
-      isActiveInProject: false,
-      label: 'Ya no hace parte del proyecto',
-      badgeType: 'removed_from_project'
-    };
-  }
-
   return {
     isSuspendedFromCompany: false,
-    isRemovedFromProject: false,
-    isActiveInProject: true,
-    badgeType: 'active'
+    isRemovedFromProject: true,
+    isActiveInProject: false,
+    label: 'Ya no hace parte del proyecto',
+    badgeType: 'removed_from_project'
   };
 }
