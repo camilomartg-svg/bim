@@ -69,9 +69,42 @@ export default function AssigneeSelectorModal({
   const scopedMembers = useMemo(() => {
     const byScope = filterMembersByScope(members, scope);
 
+    // REGLA FUNDAMENTAL: Un usuario no puede ponerse incidencias a sí mismo
+    const selfEmails = new Set<string>();
+    const selfNames = new Set<string>();
+    const addSelf = (val?: string) => {
+      if (!val) return;
+      const clean = String(val).toLowerCase().trim();
+      if (!clean) return;
+      selfEmails.add(clean);
+      selfNames.add(clean);
+      const norm = clean.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+      selfNames.add(norm);
+    };
+
+    addSelf(user?.email);
+    addSelf(user?.name);
+    try {
+      const rawAcc = sessionStorage.getItem('userAccount') || localStorage.getItem('userAccount');
+      if (rawAcc) {
+        const acc = JSON.parse(rawAcc);
+        addSelf(acc?.email);
+        addSelf(acc?.username);
+        addSelf(acc?.name);
+      }
+    } catch (_) {}
+
     return byScope.filter((m) => {
       const mEmail = String(m.email || '').toLowerCase().trim();
       const mName = String(m.name || '').toLowerCase().trim();
+      const normName = mName.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+
+      // Si es asignación de responsable individual, ocultar al usuario logueado para que no se auto-asigne
+      if (mode === 'single' || !mode) {
+        if (mEmail && selfEmails.has(mEmail)) return false;
+        if (mName && selfNames.has(mName)) return false;
+        if (normName && selfNames.has(normName)) return false;
+      }
 
       // Excluir terminantemente usuarios suspendidos o que ya no hacen parte del proyecto
       const status = getUserProjectStatus(mEmail || mName);
@@ -79,7 +112,7 @@ export default function AssigneeSelectorModal({
 
       return true;
     });
-  }, [members, scope, user?.email, user?.name]);
+  }, [members, scope, mode, user?.email, user?.name]);
 
   // 2. Filtrado en tiempo real con teclado
   const filteredMembers = useMemo(() => {
