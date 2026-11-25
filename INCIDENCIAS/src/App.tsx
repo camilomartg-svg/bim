@@ -10,6 +10,7 @@ import SiteReportList from './components/SiteReportList';
 import QualityReportList from './components/QualityReportList';
 import EnvironmentalReportList from './components/EnvironmentalReportList';
 import ConfigPanel from './components/ConfigPanel';
+import NotificationsView from './components/NotificationsView';
 import { Issue } from './types';
 import { LogIn, Box, Layers, Workflow, Package, Plus, Bell, Calendar, ChevronRight, Moon, Sun, AlertCircle, ClipboardList, MessageSquare, ArrowLeft } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
@@ -125,6 +126,12 @@ function Dashboard() {
     } catch (err) {
       console.error("Error fetching issue for navigation:", err);
     }
+  };
+
+  const handleSelectNotificationIssue = (issue: Issue, role: 'author' | 'responsible' | 'reviewer') => {
+    setSelectedIssue(issue);
+    setSummaryFilter(role);
+    setActiveTab('dashboard');
   };
 
   useEffect(() => {
@@ -359,6 +366,13 @@ function Dashboard() {
           return <RestrictedView title="Configuración" onBack={() => setActiveTab('dashboard')} />;
         }
         return <ConfigPanel />;
+      case 'notifications':
+        return (
+          <NotificationsView 
+            onSelectIssue={handleSelectNotificationIssue}
+            canAccessBim={isAdmin || isBimTeam}
+          />
+        );
       default:
         return (
           <div className="flex-1 flex items-center justify-center bg-slate-50">
