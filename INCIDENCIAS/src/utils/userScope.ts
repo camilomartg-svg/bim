@@ -361,7 +361,6 @@ export function isIncidentsAdmin(user?: any): boolean {
     if (
       combinedRoles.includes('ADMINISTRADOR_EMPRESA') ||
       combinedRoles.includes('ADMIN_EMPRESA') ||
-      combinedRoles.includes('EMPRESA') ||
       uRole === 'ADMINISTRADOR' ||
       userRole === 'ADMINISTRADOR' ||
       cargo.includes('ADMINISTRADOR DE EMPRESA') ||
@@ -379,7 +378,7 @@ export function isIncidentsAdmin(user?: any): boolean {
         if (Array.isArray(c.members) && c.members.some((m: any) => {
           const mEmail = String(m.email || m.username || '').toLowerCase().trim();
           const mRole = String(m.role || '').toUpperCase().trim();
-          return mEmail === email && (mRole.includes('ADMIN') || mRole.includes('EMPRESA'));
+          return mEmail === email && (mRole.includes('ADMINISTRADOR') || mRole.includes('ADMIN'));
         })) return true;
       }
     } catch (_) {}
@@ -389,11 +388,8 @@ export function isIncidentsAdmin(user?: any): boolean {
       combinedRoles.includes('ADMINISTRADOR_PROYECTO') ||
       combinedRoles.includes('ADMIN_PROYECTO') ||
       combinedRoles.includes('ROL_A') ||
-      combinedRoles.includes('PROYECTO') ||
       cargo.includes('ADMINISTRADOR DE PROYECTO') ||
-      cargo.includes('ADMIN PROYECTO') ||
-      cargo.includes('LIDER') ||
-      cargo.includes('LÍDER')
+      cargo.includes('ADMIN PROYECTO')
     ) {
       return true;
     }

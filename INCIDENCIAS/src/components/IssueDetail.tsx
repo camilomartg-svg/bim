@@ -638,7 +638,8 @@ export default function IssueDetail({ issue: initialIssue, onClose, onOpenReport
   };
 
   const userEmail = user?.email?.toLowerCase();
-  const isAuthor = issue.creatorId === user?.id || issue.authorEmail?.toLowerCase() === userEmail;
+  const isAuthor = Boolean(userEmail && issue.authorEmail && issue.authorEmail.toLowerCase().trim() === userEmail.trim()) ||
+                   Boolean(user?.id && issue.creatorId && issue.creatorId === user.id);
   const isInitialResponsible = issue.assignedEmail?.toLowerCase() === userEmail || (issue.assignedPosition?.toUpperCase() === user?.position?.toUpperCase() && !!user?.position);
   const isCollaborator = issue.redirectedTo?.email?.toLowerCase() === userEmail;
   const isExecutor = issue.executor?.email?.toLowerCase() === userEmail;

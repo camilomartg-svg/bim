@@ -77,7 +77,9 @@ export default function IssueList({ onSelectIssue, view = 'active', onOpenReport
     
     if (view === 'anuladas') {
       if (!isAnulada) return false;
-      if (issue.creatorId !== user?.id && !isIncidentsAdmin(user) && !user?.position?.toUpperCase().includes('BIM')) return false;
+      const isAuthor = Boolean(user?.email && issue.authorEmail && issue.authorEmail.toLowerCase().trim() === user.email.toLowerCase().trim()) ||
+                       Boolean(user?.id && issue.creatorId && issue.creatorId === user.id);
+      if (!isAuthor && !isIncidentsAdmin(user) && !user?.position?.toUpperCase().includes('BIM')) return false;
     } else {
       if (isAnulada) return false;
     }

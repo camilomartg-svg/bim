@@ -265,7 +265,8 @@ export default function DashboardSummary({ onSelectIssue, onOpenReport, selected
     const userEmail = user?.email?.toLowerCase();
     
     if (filterRole === 'author') {
-       isRoleMatch = issue.creatorId === user?.id || issue.authorEmail?.toLowerCase() === userEmail;
+       isRoleMatch = Boolean(userEmail && issue.authorEmail && issue.authorEmail.toLowerCase().trim() === userEmail.trim()) ||
+                     Boolean(user?.id && issue.creatorId && issue.creatorId === user.id);
     } else if (filterRole === 'responsible') {
        const userPosUpper = user?.position?.trim().toUpperCase() || '';
        const issuePosUpper = issue.assignedPosition?.trim().toUpperCase() || '';
@@ -293,7 +294,9 @@ export default function DashboardSummary({ onSelectIssue, onOpenReport, selected
     if (showAnuladas) {
       if (!isAnulada) return false;
       // Only author or admin can see anuladas
-      if (issue.creatorId !== user?.id && !isAdminUser) return false;
+      const isIssueAuthor = Boolean(userEmail && issue.authorEmail && issue.authorEmail.toLowerCase().trim() === userEmail.trim()) ||
+                            Boolean(user?.id && issue.creatorId && issue.creatorId === user.id);
+      if (!isIssueAuthor && !isAdminUser) return false;
     } else {
       if (isAnulada) return false;
     }
@@ -1366,7 +1369,8 @@ function StatusManager({ issue, isBimPanel, isSuspended, isPaymentAdmin }: { iss
   const [rejectionReason, setRejectionReason] = useState('');
 
   const userEmail_lower = user?.email?.toLowerCase();
-  const isAuthor = issue.creatorId === user?.id || issue.authorEmail?.toLowerCase() === userEmail_lower;
+  const isAuthor = Boolean(userEmail_lower && issue.authorEmail && issue.authorEmail.toLowerCase().trim() === userEmail_lower.trim()) ||
+                   Boolean(user?.id && issue.creatorId && issue.creatorId === user.id);
   const isInitialResponsible = issue.assignedEmail?.toLowerCase() === userEmail_lower || (issue.assignedPosition?.toUpperCase() === user?.position?.toUpperCase() && !!user?.position);
   const isCollaborator = issue.redirectedTo?.email?.toLowerCase() === userEmail_lower;
   const isExecutor = issue.executor?.email?.toLowerCase() === userEmail_lower;

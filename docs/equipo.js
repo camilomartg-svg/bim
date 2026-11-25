@@ -534,6 +534,9 @@
               if (Array.isArray(dt.members)) {
                 dt.members = dt.members.filter(m => compValidEmails.has(String(m).toLowerCase().trim()));
               }
+              if (dt.leadEmail && !compValidEmails.has(dt.leadEmail.toLowerCase().trim())) {
+                dt.leadEmail = '';
+              }
             });
           }
           if (Array.isArray(activeProject.iso19650.receiverTeams)) {
@@ -541,7 +544,19 @@
               if (Array.isArray(rt.members)) {
                 rt.members = rt.members.filter(m => compValidEmails.has(String(m).toLowerCase().trim()));
               }
+              if (rt.leadEmail && !compValidEmails.has(rt.leadEmail.toLowerCase().trim())) {
+                rt.leadEmail = '';
+              }
             });
+          }
+          if (activeProject.iso19650.liderEquipoEntrega && !compValidEmails.has(activeProject.iso19650.liderEquipoEntrega.toLowerCase().trim())) {
+            activeProject.iso19650.liderEquipoEntrega = '';
+          }
+          if (activeProject.iso19650.directorDeObra && !compValidEmails.has(activeProject.iso19650.directorDeObra.toLowerCase().trim())) {
+            activeProject.iso19650.directorDeObra = '';
+          }
+          if (Array.isArray(activeProject.iso19650.projectAdmins)) {
+            activeProject.iso19650.projectAdmins = activeProject.iso19650.projectAdmins.filter(a => compValidEmails.has(String(a).toLowerCase().trim()));
           }
         }
 
@@ -584,6 +599,27 @@
 
     if (!Array.isArray(activeProject.iso19650.receiverTeams)) {
       activeProject.iso19650.receiverTeams = [];
+    }
+
+    // Garantizar que la gobernanza no mantenga usuarios que ya no son miembros del proyecto
+    const currentMemberSet = new Set(activeProject.members.map(m => (typeof m === 'string' ? m : m?.email || '').toLowerCase().trim()));
+    if (activeProject.iso19650.liderEquipoEntrega && !currentMemberSet.has(activeProject.iso19650.liderEquipoEntrega.toLowerCase().trim())) {
+      console.log('[ISO-19650] Limpiando liderEquipoEntrega que no está en miembros:', activeProject.iso19650.liderEquipoEntrega);
+      activeProject.iso19650.liderEquipoEntrega = '';
+    }
+    if (activeProject.iso19650.directorDeObra && !currentMemberSet.has(activeProject.iso19650.directorDeObra.toLowerCase().trim())) {
+      console.log('[ISO-19650] Limpiando directorDeObra que no está en miembros:', activeProject.iso19650.directorDeObra);
+      activeProject.iso19650.directorDeObra = '';
+    }
+    if (Array.isArray(activeProject.iso19650.projectAdmins)) {
+      activeProject.iso19650.projectAdmins = activeProject.iso19650.projectAdmins.filter(a => currentMemberSet.has(String(a).toLowerCase().trim()));
+    }
+    if (activeProject.iso19650.memberBranches) {
+      for (const k of Object.keys(activeProject.iso19650.memberBranches)) {
+        if (!currentMemberSet.has(k.toLowerCase().trim())) {
+          delete activeProject.iso19650.memberBranches[k];
+        }
+      }
     }
 
     activeProject.iso19650.deliveryTeams.forEach(dt => {
@@ -5766,8 +5802,19 @@ window.openAddMemberToReceiverTeamModal = function (receiverId) {
       }
     });
 
+    if (activeProject.iso19650?.liderEquipoEntrega && activeProject.iso19650.liderEquipoEntrega.toLowerCase().trim() === clean) {
+      activeProject.iso19650.liderEquipoEntrega = '';
+    }
+
     if (activeProject.iso19650?.directorDeObra && activeProject.iso19650.directorDeObra.toLowerCase().trim() === clean) {
       activeProject.iso19650.directorDeObra = '';
+    }
+
+    if (activeProject.iso19650?.memberBranches && activeProject.iso19650.memberBranches[clean]) {
+      delete activeProject.iso19650.memberBranches[clean];
+    }
+    if (activeProject.iso19650?.memberCompanies && activeProject.iso19650.memberCompanies[clean]) {
+      delete activeProject.iso19650.memberCompanies[clean];
     }
 
     evaluatePermissions();
