@@ -4,7 +4,7 @@ import { addDoc, serverTimestamp, updateDoc, doc } from 'firebase/firestore';
 import { db } from '../services/firebase';
 import { Issue, IssueStatus, DEGREE_OF_ACTION } from '../types';
 import { useAuth } from '../context/AuthContext';
-import { Plus, Search, Filter, MoreVertical, Paperclip, MessageSquare, Clock, AlertCircle, ClipboardList, Zap, FileText } from 'lucide-react';
+import { Plus, Search, Filter, MoreVertical, Paperclip, MessageSquare, Clock, AlertCircle, ClipboardList, Zap, FileText, RotateCcw } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { cn } from '../lib/utils';
 import { format } from 'date-fns';
@@ -221,7 +221,7 @@ export default function IssueList({ onSelectIssue, view = 'active', onOpenReport
                   )}
                     </div>
                     <div className={cn("text-[7.5px] font-black uppercase tracking-widest px-2 py-0.5 rounded-md border shadow-sm transition-all duration-300", 
-                      issue.status === 'ACTIVO' ? "border-cyan-500/20 bg-cyan-500/10 text-cyan-600" :
+                      (issue.returnedToSource || issue.redirectionStatus === 'DEVUELTA_A_FUENTE') ? "border-amber-500/40 bg-amber-500/15 text-amber-500 animate-pulse" :
                       issue.status === 'RESPONDIDA' ? "border-amber-500/20 bg-amber-500/10 text-amber-600" :
                       issue.status === 'RESUELTA' ? "border-emerald-500/20 bg-emerald-500/10 text-emerald-600" :
                       issue.status === 'VENCIDA' ? "border-rose-500/20 bg-rose-500/10 text-rose-600" :
@@ -230,7 +230,7 @@ export default function IssueList({ onSelectIssue, view = 'active', onOpenReport
                       issue.status === 'ANULADA' ? "border-slate-500/20 bg-slate-500/10 text-slate-400" :
                       "border-slate-200 dark:border-[#1a1a1a] bg-slate-100 dark:bg-[#050505] text-slate-400"
                     )}>
-                    {issue.status.replace('_', ' ')}
+                    {(issue.returnedToSource || issue.redirectionStatus === 'DEVUELTA_A_FUENTE') ? 'DEVUELTA A LA FUENTE' : issue.status.replace('_', ' ')}
                   </div>
                 </div>
                 

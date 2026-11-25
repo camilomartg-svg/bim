@@ -258,6 +258,22 @@ export default function NotificationsView({ onSelectIssue, canAccessBim }: Notif
           });
         }
 
+        // B2. Devolución rechazada por el autor (ratificada)
+        if (issue.redirectionStatus === 'DEVOLUCION_RECHAZADA') {
+          list.push({
+            id: `notif_resp_dev_rechazada_${issue.id}`,
+            issue,
+            role: 'responsible',
+            type: 'RESPUESTA_RECHAZADA',
+            title: `Devolución no aceptada por autor: ${issue.code}`,
+            description: `El autor rechazó la devolución y ratificó la responsabilidad. Revisa el chat para ver la aclaración técnica.`,
+            timestamp: issue.updatedAt || issue.createdAt,
+            priority: 'URGENTE',
+            badgeLabel: 'Ratificada por Autor',
+            badgeColor: 'bg-rose-500/15 text-rose-600 dark:text-rose-400 border-rose-500/30'
+          });
+        }
+
         // C. Vencida o por vencer
         if (issue.status === 'ACTIVO' && daysLeft !== null) {
           if (daysLeft < 0) {

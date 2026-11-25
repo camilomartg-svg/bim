@@ -78,12 +78,15 @@ export interface Issue {
     email?: string;
     team?: string;
   };
-  redirectionStatus?: 'PENDIENTE' | 'ACEPTADA' | 'RECHAZADA' | 'DEVUELTA_A_FUENTE';
+  redirectionStatus?: 'PENDIENTE' | 'ACEPTADA' | 'RECHAZADA' | 'DEVUELTA_A_FUENTE' | 'DEVOLUCION_RECHAZADA';
   redirectionRejectionReason?: string;
   returnedToSource?: boolean;
   returnToSourceReason?: string;
   returnedAt?: string;
   returnedBy?: string;
+  returnedByEmail?: string;
+  returnedByPosition?: string;
+  returnedByTeam?: string;
   collaboratorApproved?: boolean;
   collaboratorApprovedAt?: string;
   principalApproved?: boolean;

@@ -42,6 +42,8 @@ export default function IssueDetail({ issue: initialIssue, onClose, onOpenReport
   const [redirectionRejectReason, setRedirectionRejectReason] = useState('');
   const [showReturnToSourceModal, setShowReturnToSourceModal] = useState(false);
   const [returnToSourceReason, setReturnToSourceReason] = useState('');
+  const [showRejectReturnModal, setShowRejectReturnModal] = useState(false);
+  const [rejectReturnReason, setRejectReturnReason] = useState('');
   const [fieldSettings, setFieldSettings] = useState<any[]>([]);
   const [teamMemberMap, setTeamMemberMap] = useState<Record<string, string>>({});
   const [teamMembers, setTeamMembers] = useState<any[]>([]);
@@ -774,6 +776,10 @@ export default function IssueDetail({ issue: initialIssue, onClose, onOpenReport
       const authorEmail = issue.authorEmail || '';
       const authorPos = issue.creatorPosition || 'Autor';
       const authorTeam = issue.creatorTeam || '';
+      const returningUserEmail = (user as any)?.email || '';
+      const returningUserName = user?.name || '';
+      const returningUserPos = user?.position || '';
+      const returningUserTeam = user?.team || '';
 
       const updateData: any = {
         updatedAt: new Date().toISOString(),
@@ -788,7 +794,16 @@ export default function IssueDetail({ issue: initialIssue, onClose, onOpenReport
         returnedToSource: true,
         returnToSourceReason: returnToSourceReason.trim(),
         returnedAt: new Date().toISOString(),
-        returnedBy: user?.name || '',
+        returnedBy: returningUserName,
+        returnedByEmail: returningUserEmail,
+        returnedByPosition: returningUserPos,
+        returnedByTeam: returningUserTeam,
+        previousResponsible: {
+          name: issue.assignedName || returningUserName,
+          email: issue.assignedEmail || returningUserEmail,
+          position: issue.assignedPosition || returningUserPos,
+          team: issue.assignedTeam || returningUserTeam
+        },
         pendingRedirection: false,
         redirectionStatus: 'DEVUELTA_A_FUENTE'
       };
@@ -804,6 +819,57 @@ export default function IssueDetail({ issue: initialIssue, onClose, onOpenReport
     } catch (err) {
       console.error("Error al devolver incidencia a la fuente:", err);
       alert("Error al procesar la devolución a la fuente.");
+    } finally {
+      setIsUpdating(false);
+    }
+  };
+
+  const handleRejectReturn = async () => {
+    if (!rejectReturnReason.trim()) {
+      alert("Debe ingresar obligatoriamente las razones y justificación técnica para rechazar la devolución.");
+      return;
+    }
+    setIsUpdating(true);
+    try {
+      const returner = issue.previousResponsible || {
+        name: issue.returnedBy || 'el responsable',
+        email: (issue as any).returnedByEmail || '',
+        position: (issue as any).returnedByPosition || '',
+        team: (issue as any).returnedByTeam || ''
+      };
+
+      const targetName = returner.name || 'el responsable';
+      const targetEmail = returner.email || '';
+      const targetPos = returner.position || '';
+      const targetTeam = returner.team || '';
+
+      const updateData: any = {
+        updatedAt: new Date().toISOString(),
+        status: 'ACTIVO',
+        returnedToSource: false,
+        returnToSourceReason: null,
+        redirectionStatus: 'DEVOLUCION_RECHAZADA',
+        pendingRedirection: false,
+      };
+
+      if (targetEmail || targetName) {
+        updateData.assignedName = targetName;
+        updateData.assignedEmail = targetEmail;
+        updateData.assignedPosition = targetPos;
+        updateData.assignedTeam = targetTeam;
+      }
+
+      await persistIssueAndComment(updateData, {
+        userId: user?.id || 'SYSTEM',
+        userName: user?.name || 'AUTOR',
+        text: `⛔ DEVOLUCIÓN RECHAZADA POR EL AUTOR (${user?.name || 'Autor'}):\n• Aclaración técnica: ${rejectReturnReason.trim()}\n• La incidencia ha sido ratificada y devuelta al responsable (${targetName}) para su debida atención y cumplimiento obligatorio.`
+      });
+
+      setShowRejectReturnModal(false);
+      setRejectReturnReason('');
+    } catch (err) {
+      console.error("Error al rechazar devolución:", err);
+      alert("Error al procesar el rechazo de la devolución.");
     } finally {
       setIsUpdating(false);
     }
@@ -1572,6 +1638,32 @@ export default function IssueDetail({ issue: initialIssue, onClose, onOpenReport
               </div>
             )}
 
+            {/* BANNER ESPECIAL DE DEVOLUCIÓN A LA FUENTE */}
+            {(issue.returnedToSource || issue.redirectionStatus === 'DEVUELTA_A_FUENTE') && (
+              <div className="mb-10 p-8 bg-amber-500/10 border-l-4 border-amber-500 border-y border-r border-amber-500/20 rounded-r-[2rem] shadow-sm">
+                <div className="flex items-center gap-3 mb-3">
+                  <RotateCcw className="w-5 h-5 text-amber-500 shrink-0" />
+                  <span className="text-xs font-black text-amber-600 dark:text-amber-400 uppercase tracking-widest">
+                    INCIDENCIA DEVUELTA A LA FUENTE {issue.returnedBy ? `POR ${issue.returnedBy.toUpperCase()}` : ''}
+                  </span>
+                  {issue.returnedAt && (
+                    <span className="text-[9px] text-slate-400 font-bold ml-auto">
+                      {format(new Date(issue.returnedAt), "d 'de' MMMM, HH:mm", { locale: es })}
+                    </span>
+                  )}
+                </div>
+                {issue.returnToSourceReason && (
+                  <div className="text-[12px] font-medium text-slate-800 dark:text-slate-200 bg-white/70 dark:bg-black/40 p-4 rounded-2xl border border-amber-500/20 mb-3">
+                    <span className="font-bold text-amber-600 dark:text-amber-400 uppercase text-[9px] block mb-1">Motivo de devolución:</span>
+                    <p className="italic">{issue.returnToSourceReason}</p>
+                  </div>
+                )}
+                <p className="text-[10px] font-bold text-amber-700 dark:text-amber-300">
+                  ⚠️ Esta incidencia regresó a ti para su reevaluación. Como autor, puedes rechazar la devolución (aclarando la justificación en el chat), reasignarla a otro responsable, delegar a ejecutor o colaborador, o finalizar la respuesta técnica.
+                </p>
+              </div>
+            )}
+
             {/* Status Management Bar */}
             <div className="flex flex-col gap-6 pt-10 border-t border-slate-200 dark:border-slate-800">
                 <div className="flex items-center justify-between px-2">
@@ -1667,7 +1759,40 @@ export default function IssueDetail({ issue: initialIssue, onClose, onOpenReport
 
                        {/* MANAGEMENT BUTTONS (Redirection, Anulation, etc.) */}
                        <div className="flex flex-wrap gap-3 pt-4 border-t border-slate-800">
-                          {isPendingRedirectionToMe ? (
+                          {(issue.returnedToSource || issue.redirectionStatus === 'DEVUELTA_A_FUENTE') && canManage ? (
+                            <>
+                              <button 
+                                onClick={() => setShowRejectReturnModal(true)}
+                                className="px-6 py-3.5 bg-rose-600 hover:bg-rose-500 text-white rounded-2xl text-[10px] font-black uppercase tracking-[0.15em] transition-all flex items-center gap-2.5 active:scale-95 shadow-lg shadow-rose-600/20"
+                              >
+                                <XCircle className="w-4 h-4" /> Rechazar Devolución y Ratificar
+                              </button>
+                              <button 
+                                onClick={() => { setRedirectionType('RESPONSABLE'); setShowRedirectionPicker(true); }}
+                                className="px-5 py-3.5 bg-indigo-950/60 border border-indigo-800/80 text-indigo-300 rounded-2xl text-[10px] font-black uppercase tracking-[0.15em] hover:bg-indigo-900 hover:text-white transition-all flex items-center gap-2.5 active:scale-95 shadow-sm"
+                              >
+                                <ArrowRight className="w-4 h-4 text-emerald-400" /> Reasignar Responsable
+                              </button>
+                              <button 
+                                onClick={() => { setRedirectionType('EJECUTOR'); setShowRedirectionPicker(true); }}
+                                className="px-5 py-3.5 bg-slate-900 border border-slate-800 text-slate-300 rounded-2xl text-[10px] font-black uppercase tracking-[0.15em] hover:bg-slate-800 hover:text-white transition-all flex items-center gap-2.5 active:scale-95 shadow-sm"
+                              >
+                                <ArrowRight className="w-4 h-4 text-indigo-500" /> Redirigir a Ejecutor
+                              </button>
+                              <button 
+                                onClick={() => { setRedirectionType('COLABORADOR'); setShowRedirectionPicker(true); }}
+                                className="px-5 py-3.5 bg-slate-900 border border-slate-800 text-slate-300 rounded-2xl text-[10px] font-black uppercase tracking-[0.15em] hover:bg-slate-800 hover:text-white transition-all flex items-center gap-2.5 active:scale-95 shadow-sm"
+                              >
+                                <ArrowRight className="w-4 h-4 text-amber-500" /> Delegar a Colaborador
+                              </button>
+                              <button 
+                                onClick={handleFinalApproval}
+                                className="px-6 py-3.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-2xl text-[10px] font-black uppercase tracking-[0.15em] transition-all flex items-center gap-2.5 active:scale-95 shadow-lg shadow-emerald-600/20"
+                              >
+                                <CheckCircle2 className="w-4 h-4" /> Finalizar Respuesta Técnica
+                              </button>
+                            </>
+                          ) : isPendingRedirectionToMe ? (
                             <>
                               <button 
                                 onClick={handleAcceptRedirection}
@@ -1681,12 +1806,14 @@ export default function IssueDetail({ issue: initialIssue, onClose, onOpenReport
                               >
                                 <XCircle className="w-4 h-4" /> Rechazar Redirección
                               </button>
-                              <button 
-                                onClick={() => setShowReturnToSourceModal(true)}
-                                className="px-6 py-3.5 bg-amber-600 hover:bg-amber-500 text-white rounded-2xl text-[10px] font-black uppercase tracking-[0.15em] transition-all flex items-center gap-2.5 active:scale-95 shadow-lg shadow-amber-600/20"
-                              >
-                                <RotateCcw className="w-4 h-4" /> Devolver a la Fuente
-                              </button>
+                              {!isAuthor && !issue.returnedToSource && (
+                                <button 
+                                  onClick={() => setShowReturnToSourceModal(true)}
+                                  className="px-6 py-3.5 bg-amber-600 hover:bg-amber-500 text-white rounded-2xl text-[10px] font-black uppercase tracking-[0.15em] transition-all flex items-center gap-2.5 active:scale-95 shadow-lg shadow-amber-600/20"
+                                >
+                                  <RotateCcw className="w-4 h-4" /> Devolver a la Fuente
+                                </button>
+                              )}
                             </>
                           ) : (
                             <>
@@ -1713,7 +1840,7 @@ export default function IssueDetail({ issue: initialIssue, onClose, onOpenReport
                                 </>
                               )}
 
-                              {isResponsible && issue.status !== 'RESPONDIDA' && issue.status !== 'RESUELTA' && issue.status !== 'ANULADA' && (
+                              {!isAuthor && !issue.returnedToSource && isResponsible && issue.status !== 'RESPONDIDA' && issue.status !== 'RESUELTA' && issue.status !== 'ANULADA' && (
                                 <button 
                                   onClick={() => setShowReturnToSourceModal(true)}
                                   className="px-5 py-3.5 bg-amber-600 hover:bg-amber-500 text-white rounded-2xl text-[10px] font-black uppercase tracking-[0.15em] transition-all flex items-center gap-2.5 active:scale-95 shadow-sm shadow-amber-600/10"
@@ -1838,6 +1965,41 @@ export default function IssueDetail({ issue: initialIssue, onClose, onOpenReport
                         </button>
                         <button 
                           onClick={() => setShowRejectRedirectionModal(false)}
+                          className="px-6 py-4 bg-slate-200 dark:bg-slate-900 text-slate-700 dark:text-slate-400 rounded-xl text-[10px] font-black uppercase tracking-[0.15em] hover:bg-slate-300 dark:hover:bg-slate-800 transition-all"
+                        >
+                          Cancelar
+                        </button>
+                      </div>
+                    </motion.div>
+                  )}
+
+                  {showRejectReturnModal && (
+                    <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} className="mt-4 p-8 bg-rose-500/5 border border-rose-500/20 rounded-[2rem] space-y-6 overflow-hidden shadow-inner">
+                      <div className="flex items-center gap-3">
+                         <div className="w-10 h-10 bg-rose-600 rounded-xl flex items-center justify-center text-white shadow-lg">
+                           <XCircle className="w-5 h-5" />
+                         </div>
+                         <div>
+                           <h5 className="text-base font-display font-black text-rose-500 tracking-tight">Rechazar Devolución y Ratificar Responsable</h5>
+                           <p className="text-[9px] font-bold text-slate-500 uppercase tracking-widest mt-0.5">La incidencia regresará al responsable ({issue.previousResponsible?.name || issue.returnedBy || 'el responsable'}) para su atención obligatoria. Es obligatorio indicar la aclaración técnica en el chat.</p>
+                         </div>
+                      </div>
+                      <textarea 
+                        value={rejectReturnReason}
+                        onChange={(e) => setRejectReturnReason(e.target.value)}
+                        placeholder="Escriba obligatoriamente la justificación y aclaración técnica de por qué sí le corresponde a este responsable..."
+                        className="w-full bg-slate-100 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl p-6 text-xs text-slate-900 dark:text-white font-bold h-32 focus:border-rose-500 outline-none resize-none transition-all shadow-sm"
+                      />
+                      <div className="flex gap-3">
+                        <button 
+                          disabled={!rejectReturnReason.trim() || isUpdating}
+                          onClick={handleRejectReturn} 
+                          className="flex-1 bg-rose-600 py-4 rounded-xl text-[10px] font-black uppercase tracking-[0.15em] text-white shadow-xl shadow-rose-600/30 active:scale-95 disabled:opacity-30 transition-all cursor-pointer"
+                        >
+                          Confirmar Rechazo y Regresar al Responsable
+                        </button>
+                        <button 
+                          onClick={() => setShowRejectReturnModal(false)}
                           className="px-6 py-4 bg-slate-200 dark:bg-slate-900 text-slate-700 dark:text-slate-400 rounded-xl text-[10px] font-black uppercase tracking-[0.15em] hover:bg-slate-300 dark:hover:bg-slate-800 transition-all"
                         >
                           Cancelar

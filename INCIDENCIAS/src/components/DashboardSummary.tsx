@@ -764,6 +764,12 @@ export default function DashboardSummary({ onSelectIssue, onOpenReport, selected
                     )}>
                       {getEffectiveStatus(issue)}
                     </div>
+                    {(issue.returnedToSource || issue.redirectionStatus === 'DEVUELTA_A_FUENTE') && (
+                      <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-[8px] font-black uppercase tracking-[0.15em] bg-amber-500/20 text-amber-600 dark:text-amber-400 border border-amber-500/40 shadow-sm animate-pulse">
+                        <RotateCcw className="w-2.5 h-2.5 text-amber-500 shrink-0" />
+                        <span>DEVUELTA A LA FUENTE</span>
+                      </div>
+                    )}
                     {issue.fromReport && (
                       <button 
                         onClick={(e) => {
@@ -1096,6 +1102,32 @@ export default function DashboardSummary({ onSelectIssue, onOpenReport, selected
                               </div>
                             )}
 
+                            {/* BANNER ESPECIAL DE DEVOLUCIÓN A LA FUENTE */}
+                            {(issue.returnedToSource || issue.redirectionStatus === 'DEVUELTA_A_FUENTE') && (
+                              <div className="mb-6 p-5 bg-amber-500/10 border-l-4 border-amber-500 rounded-r-2xl border-y border-r border-amber-500/20 shadow-sm">
+                                <div className="flex items-center gap-2.5 mb-2">
+                                  <RotateCcw className="w-4 h-4 text-amber-500 shrink-0" />
+                                  <span className="text-[10px] font-black text-amber-600 dark:text-amber-400 uppercase tracking-widest">
+                                    INCIDENCIA DEVUELTA A LA FUENTE {issue.returnedBy ? `POR ${issue.returnedBy.toUpperCase()}` : ''}
+                                  </span>
+                                  {issue.returnedAt && (
+                                    <span className="text-[8px] text-slate-400 font-bold ml-auto">
+                                      {format(new Date(issue.returnedAt), "d 'de' MMMM, HH:mm", { locale: es })}
+                                    </span>
+                                  )}
+                                </div>
+                                {issue.returnToSourceReason && (
+                                  <div className="mt-2 text-[12px] font-medium text-slate-800 dark:text-slate-200 bg-white/70 dark:bg-black/40 p-3 rounded-xl border border-amber-500/20">
+                                    <span className="font-bold text-amber-600 dark:text-amber-400 uppercase text-[8.5px] block mb-1">Motivo de devolución:</span>
+                                    <p className="italic">{issue.returnToSourceReason}</p>
+                                  </div>
+                                )}
+                                <p className="mt-3 text-[10px] font-bold text-amber-700 dark:text-amber-300">
+                                  ⚠️ Esta incidencia regresó a ti para su reevaluación. Como autor, puedes rechazar la devolución (aclarando la justificación en el chat), reasignarla a otro responsable, delegar a ejecutor o colaborador, o finalizar la respuesta técnica.
+                                </p>
+                              </div>
+                            )}
+
                             <h4 className="text-[9px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-[0.2em] mb-4 px-1">Descripción Técnica Detallada</h4>
                             <p className="text-[13px] text-slate-700 dark:text-slate-300 leading-relaxed font-medium">
                               {issue.description || 'Sin descripción detallada.'}
@@ -1398,6 +1430,8 @@ function StatusManager({ issue, isBimPanel, isSuspended, isPaymentAdmin }: { iss
   const isNextPrincipal = (isInitialResponsible || isAdminUser) && (!hasExecutor || executorApproved) && (!hasCollaborator || collaboratorApproved) && issue.status !== 'RESPONDIDA' && issue.status !== 'RESUELTA';
 
   const [showRedirectionPicker, setShowRedirectionPicker] = useState(false);
+  const [showRejectReturnModal, setShowRejectReturnModal] = useState(false);
+  const [rejectReturnReason, setRejectReturnReason] = useState('');
   const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
 
   useEffect(() => {
@@ -1408,6 +1442,23 @@ function StatusManager({ issue, isBimPanel, isSuspended, isPaymentAdmin }: { iss
   }, []);
 
   const [redirectionType, setRedirectionType] = useState<'COLABORADOR' | 'EJECUTOR' | 'RESPONSABLE'>('COLABORADOR');
+
+  const findPreviousReturnerFromComments = () => {
+    if (!issue.comments) return null;
+    const commentsRev = [...issue.comments].reverse();
+    const returnComment = commentsRev.find(c => c.text && c.text.includes('INCIDENCIA DEVUELTA A LA FUENTE'));
+    if (!returnComment) return null;
+    const returner = teamMembers.find(m => 
+      (m.email && (returnComment as any).userEmail && m.email.toLowerCase() === (returnComment as any).userEmail.toLowerCase()) ||
+      cleanStr(m.name) === cleanStr(returnComment.userName)
+    );
+    return {
+      name: returner?.name || returnComment.userName || issue.returnedBy || 'el responsable',
+      email: returner?.email || (returnComment as any).userEmail || (issue as any).returnedByEmail || '',
+      position: returner?.position || (issue as any).returnedByPosition || '',
+      team: returner?.team || (issue as any).returnedByTeam || ''
+    };
+  };
 
   const findPreviousResponsibleFromComments = () => {
     if (!issue.comments) return null;
@@ -1501,6 +1552,8 @@ function StatusManager({ issue, isBimPanel, isSuspended, isPaymentAdmin }: { iss
         pendingRedirectionType: redirectionType,
         pendingRedirectionTo: redirectedData,
         redirectionStatus: 'PENDIENTE',
+        returnedToSource: false,
+        returnToSourceReason: null,
         previousResponsible
       };
 
@@ -1668,6 +1721,10 @@ function StatusManager({ issue, isBimPanel, isSuspended, isPaymentAdmin }: { iss
       const authorEmail = issue.authorEmail || '';
       const authorPos = issue.creatorPosition || 'Autor';
       const authorTeam = issue.creatorTeam || '';
+      const returningUserEmail = (user as any)?.email || '';
+      const returningUserName = user?.name || '';
+      const returningUserPos = user?.position || '';
+      const returningUserTeam = user?.team || '';
 
       const updateData: any = {
         updatedAt: new Date().toISOString(),
@@ -1682,7 +1739,16 @@ function StatusManager({ issue, isBimPanel, isSuspended, isPaymentAdmin }: { iss
         returnedToSource: true,
         returnToSourceReason: returnToSourceReason.trim(),
         returnedAt: new Date().toISOString(),
-        returnedBy: user?.name || '',
+        returnedBy: returningUserName,
+        returnedByEmail: returningUserEmail,
+        returnedByPosition: returningUserPos,
+        returnedByTeam: returningUserTeam,
+        previousResponsible: {
+          name: issue.assignedName || returningUserName,
+          email: issue.assignedEmail || returningUserEmail,
+          position: issue.assignedPosition || returningUserPos,
+          team: issue.assignedTeam || returningUserTeam
+        },
         pendingRedirection: false,
         redirectionStatus: 'DEVUELTA_A_FUENTE'
       };
@@ -1711,6 +1777,70 @@ function StatusManager({ issue, isBimPanel, isSuspended, isPaymentAdmin }: { iss
     } catch (err) {
       console.error("Error al devolver incidencia a la fuente:", err);
       alert("Error al procesar la devolución a la fuente.");
+    } finally {
+      setIsUpdating(false);
+    }
+  };
+
+  const handleRejectReturn = async () => {
+    if (!rejectReturnReason.trim()) {
+      alert("Debe ingresar obligatoriamente las razones y justificación técnica para rechazar la devolución.");
+      return;
+    }
+    setIsUpdating(true);
+    try {
+      const returner = issue.previousResponsible || findPreviousReturnerFromComments() || {
+        name: issue.returnedBy || 'el responsable',
+        email: (issue as any).returnedByEmail || '',
+        position: (issue as any).returnedByPosition || '',
+        team: (issue as any).returnedByTeam || ''
+      };
+
+      const targetName = returner.name || 'el responsable';
+      const targetEmail = returner.email || '';
+      const targetPos = returner.position || '';
+      const targetTeam = returner.team || '';
+
+      const updateData: any = {
+        updatedAt: new Date().toISOString(),
+        status: 'ACTIVO',
+        returnedToSource: false,
+        returnToSourceReason: null,
+        redirectionStatus: 'DEVOLUCION_RECHAZADA',
+        pendingRedirection: false,
+      };
+
+      if (targetEmail || targetName) {
+        updateData.assignedName = targetName;
+        updateData.assignedEmail = targetEmail;
+        updateData.assignedPosition = targetPos;
+        updateData.assignedTeam = targetTeam;
+      }
+
+      const commentText = `⛔ DEVOLUCIÓN RECHAZADA POR EL AUTOR (${user?.name || 'Autor'}):\n• Aclaración técnica: ${rejectReturnReason.trim()}\n• La incidencia ha sido ratificada y devuelta al responsable (${targetName}) para su debida atención y cumplimiento obligatorio.`;
+      const newComment: Comment = {
+        id: 'cm_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5),
+        userId: user?.id || 'SYSTEM',
+        userEmail: (user as any)?.email || '',
+        userName: user?.name || 'AUTOR',
+        text: commentText,
+        createdAt: new Date().toISOString()
+      } as any;
+
+      const updatedComments = [...(issue.comments || []), newComment];
+      const updatedIssue: Issue = {
+        ...issue,
+        ...updateData,
+        comments: updatedComments
+      };
+
+      await saveIssue(updatedIssue);
+      window.dispatchEvent(new CustomEvent('local_comments_updated', { detail: [updatedIssue] }));
+      setShowRejectReturnModal(false);
+      setRejectReturnReason('');
+    } catch (err) {
+      console.error("Error al rechazar devolución:", err);
+      alert("Error al procesar el rechazo de la devolución.");
     } finally {
       setIsUpdating(false);
     }
@@ -1892,7 +2022,44 @@ function StatusManager({ issue, isBimPanel, isSuspended, isPaymentAdmin }: { iss
   } else {
     const canManage = (isAuthor || isAdminUser);
 
-    if (isResponsible) {
+    // 1. INCIDENCIA DEVUELTA A LA FUENTE: Requiere reevaluación del Autor
+    if (issue.returnedToSource || issue.redirectionStatus === 'DEVUELTA_A_FUENTE') {
+      if (canManage) {
+        actions.push({
+          id: 'REJECT_RETURN',
+          label: 'RECHAZAR DEVOLUCIÓN Y RATIFICAR',
+          color: 'bg-rose-600 hover:bg-rose-500 shadow-rose-600/10 font-black',
+          onClick: () => setShowRejectReturnModal(true)
+        });
+        actions.push({ 
+          id: 'REASIGNAR_RESP', 
+          label: 'REASIGNAR RESPONSABLE', 
+          color: 'bg-indigo-700 hover:bg-indigo-600 font-black', 
+          onClick: () => { setRedirectionType('RESPONSABLE'); setShowRedirectionPicker(true); }
+        });
+        actions.push({ 
+          id: 'REDIRIGIR_EXEC', 
+          label: 'REDIRIGIR A EJECUTOR', 
+          color: 'bg-slate-800 hover:bg-slate-700 font-black', 
+          onClick: () => { setRedirectionType('EJECUTOR'); setShowRedirectionPicker(true); }
+        });
+        actions.push({ 
+          id: 'AGREGAR_COLAB', 
+          label: 'AGREGAR COLABORADOR', 
+          color: 'bg-slate-800 hover:bg-slate-700 font-black', 
+          onClick: () => { setRedirectionType('COLABORADOR'); setShowRedirectionPicker(true); }
+        });
+        actions.push({ 
+          id: 'RESPONDIDA', 
+          label: 'FINALIZAR RESPUESTA TÉCNICA', 
+          color: 'bg-emerald-600 hover:bg-emerald-500 shadow-emerald-600/10 font-black', 
+          onClick: handleFinalApproval 
+        });
+        actions.push({ id: 'RESUELTA', label: 'RESUELTA Y CERRADA', color: 'bg-slate-900 hover:bg-black shadow-slate-900/10' });
+        actions.push({ id: 'ACUERDO', label: 'ESTABLECER ACUERDO', color: 'bg-amber-500 hover:bg-amber-600 shadow-amber-500/10', needsDate: true });
+        actions.push({ id: 'ANULADA', label: 'ANULAR INCIDENCIA', color: 'bg-slate-400 hover:bg-slate-500' });
+      }
+    } else if (isResponsible && !isAuthor) {
       if (isPendingRedirectionToMe) {
         actions.push({
           id: 'ACCEPT_REDIR',
@@ -1962,7 +2129,7 @@ function StatusManager({ issue, isBimPanel, isSuspended, isPaymentAdmin }: { iss
           });
         }
 
-        // Devolver a la fuente button: Available for responsible whenever issue is not completed/closed
+        // Devolver a la fuente button: Available for responsible whenever issue is not completed/closed AND user is not the author
         if (issue.status !== 'RESPONDIDA' && issue.status !== 'RESUELTA' && issue.status !== 'ANULADA') {
           actions.push({
             id: 'RETURN_SOURCE',
@@ -1973,6 +2140,34 @@ function StatusManager({ issue, isBimPanel, isSuspended, isPaymentAdmin }: { iss
         }
       }
     } else if (canManage) {
+      if (canRedirect && issue.status !== 'RESPONDIDA' && issue.status !== 'RESUELTA') {
+        actions.push({ 
+          id: 'AGREGAR_COLAB', 
+          label: 'AGREGAR COLABORADOR', 
+          color: 'bg-slate-800 hover:bg-slate-700 font-black', 
+          onClick: () => { setRedirectionType('COLABORADOR'); setShowRedirectionPicker(true); }
+        });
+        actions.push({ 
+          id: 'REDIRIGIR_EXEC', 
+          label: 'REDIRIGIR A EJECUTOR', 
+          color: 'bg-slate-800 hover:bg-slate-700 font-black', 
+          onClick: () => { setRedirectionType('EJECUTOR'); setShowRedirectionPicker(true); }
+        });
+        actions.push({ 
+          id: 'REASIGNAR_RESP', 
+          label: 'REASIGNAR RESPONSABLE', 
+          color: 'bg-indigo-700 hover:bg-indigo-600 font-black', 
+          onClick: () => { setRedirectionType('RESPONSABLE'); setShowRedirectionPicker(true); }
+        });
+      }
+      if (issue.status !== 'RESPONDIDA' && issue.status !== 'RESUELTA') {
+        actions.push({ 
+          id: 'RESPONDIDA', 
+          label: 'FINALIZAR RESPUESTA TÉCNICA', 
+          color: 'bg-emerald-600 hover:bg-emerald-500 shadow-emerald-600/10 font-black', 
+          onClick: handleFinalApproval 
+        });
+      }
       if (!isExecutor) {
         actions.push({ id: 'RESUELTA', label: 'RESUELTA Y CERRADA', color: 'bg-slate-900 hover:bg-black shadow-slate-900/10' });
         actions.push({ id: 'RECHAZADA', label: 'RECHAZAR RESPUESTA', color: 'bg-red-500 hover:bg-red-600 shadow-red-500/10', needsJustification: true });
@@ -2126,6 +2321,33 @@ function StatusManager({ issue, isBimPanel, isSuspended, isPaymentAdmin }: { iss
             className="w-full bg-rose-600 text-white py-4 rounded-2xl text-[11px] font-black uppercase tracking-[0.2em] hover:bg-rose-700 disabled:opacity-30 shadow-xl shadow-rose-600/20 transition-all cursor-pointer"
           >
             Confirmar Rechazo y Regresar Incidencia
+          </button>
+        </motion.div>
+      )}
+
+      {showRejectReturnModal && (
+        <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="p-8 bg-white dark:bg-slate-950 border border-rose-500/20 rounded-[2rem] space-y-6 shadow-2xl relative overflow-hidden transition-colors">
+          <div className="absolute top-0 right-0 p-4">
+             <button onClick={() => setShowRejectReturnModal(false)} className="text-slate-400 dark:text-slate-700 hover:text-slate-900 dark:hover:text-white"><X className="w-4 h-4" /></button>
+          </div>
+          <div>
+            <h5 className="text-lg font-display font-black text-rose-500 mb-2 tracking-tight">Rechazar Devolución y Ratificar Responsable</h5>
+            <p className="text-[11px] text-slate-500 font-medium leading-relaxed">
+              La incidencia regresará al responsable (<span className="text-slate-900 dark:text-white font-bold">{issue.previousResponsible?.name || issue.returnedBy || 'el responsable'}</span>) para su atención obligatoria. Es obligatorio indicar la aclaración técnica de por qué sí le corresponde en el chat.
+            </p>
+          </div>
+          <textarea 
+            value={rejectReturnReason}
+            onChange={(e) => setRejectReturnReason(e.target.value)}
+            placeholder="Escriba obligatoriamente la aclaración técnica y justificación de por qué sí le corresponde a este responsable..."
+            className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 text-[12px] text-slate-900 dark:text-white h-32 focus:border-rose-500/50 outline-none resize-none transition-all font-medium"
+          />
+          <button 
+            disabled={!rejectReturnReason.trim() || isUpdating}
+            onClick={handleRejectReturn}
+            className="w-full bg-rose-600 text-white py-4 rounded-2xl text-[11px] font-black uppercase tracking-[0.2em] hover:bg-rose-700 disabled:opacity-30 shadow-xl shadow-rose-600/20 transition-all cursor-pointer"
+          >
+            Confirmar Rechazo y Regresar al Responsable
           </button>
         </motion.div>
       )}
