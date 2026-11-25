@@ -787,8 +787,14 @@
                                     adminEmpresaId: window.adminEmpresaId || null,
                                     picture: profile.picture
                                 };
-                                const cacheLocation = document.getElementById('keep-signed-in').checked ? "localStorage" : "sessionStorage";
-                                window[cacheLocation].setItem('userAccount', JSON.stringify(userProfile));
+                                const keepSignedIn = Boolean(document.getElementById('keep-signed-in')?.checked);
+                                if (keepSignedIn) {
+                                    localStorage.setItem('userAccount', JSON.stringify(userProfile));
+                                    sessionStorage.removeItem('userAccount');
+                                } else {
+                                    sessionStorage.setItem('userAccount', JSON.stringify(userProfile));
+                                    localStorage.removeItem('userAccount');
+                                }
                                 sessionStorage.removeItem('cachedCompanies_v2');
                                 localStorage.removeItem('cachedCompanies_v2');
                     if (window.NoraDriveStore) window.NoraDriveStore.invalidateCache();
@@ -1190,8 +1196,14 @@
                     adminEmpresaId: null,
                     picture: window.tempGoogleUser?.picture || ''
                 };
-                const cacheLocation = document.getElementById('keep-signed-in').checked ? "localStorage" : "sessionStorage";
-                window[cacheLocation].setItem('userAccount', JSON.stringify(userProfile));
+                const keepSignedIn = Boolean(document.getElementById('keep-signed-in')?.checked);
+                if (keepSignedIn) {
+                    localStorage.setItem('userAccount', JSON.stringify(userProfile));
+                    sessionStorage.removeItem('userAccount');
+                } else {
+                    sessionStorage.setItem('userAccount', JSON.stringify(userProfile));
+                    localStorage.removeItem('userAccount');
+                }
                 sessionStorage.removeItem('cachedCompanies_v2');
                 localStorage.removeItem('cachedCompanies_v2');
                 window.location.href = getPostLoginRedirect();
@@ -1339,6 +1351,9 @@
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
         import { 
             getAuth, 
+            setPersistence,
+            browserLocalPersistence,
+            browserSessionPersistence,
             signInWithEmailAndPassword, 
             createUserWithEmailAndPassword,
             signInWithPopup,
@@ -1369,6 +1384,15 @@
         window.signInWithPopup = signInWithPopup;
         window.signInWithRedirect = signInWithRedirect;
 
+        async function syncAuthPersistence() {
+            const keepSignedIn = Boolean(document.getElementById('keep-signed-in')?.checked);
+            try {
+                await setPersistence(auth, keepSignedIn ? browserLocalPersistence : browserSessionPersistence);
+            } catch (err) {
+                console.warn("setPersistence error:", err);
+            }
+        }
+
         // Comprobar si volvemos de un redirect de autenticación
         getRedirectResult(auth).then(async (result) => {
             if (result && result.user) {
@@ -1391,6 +1415,7 @@
         // Helper para signIn con fallback a Redirect si popup es bloqueado
         async function signInWithPopupOrRedirect(provider, providerName) {
             try {
+                await syncAuthPersistence();
                 const result = await signInWithPopup(auth, provider);
                 await window.handleUnifiedAuthSuccess(result.user);
             } catch (error) {
@@ -1439,6 +1464,7 @@
                 document.getElementById('error-message').textContent = "";
 
                 try {
+                    await syncAuthPersistence();
                     const cred = await signInWithEmailAndPassword(auth, email, password);
                     await window.handleUnifiedAuthSuccess(cred.user);
                 } catch (error) {

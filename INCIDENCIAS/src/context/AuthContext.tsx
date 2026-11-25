@@ -40,6 +40,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
         // Check if there is a noraUser we can extract info from
         const noraUserStr = sessionStorage.getItem('userAccount') || localStorage.getItem('userAccount');
+        if (!noraUserStr) {
+          // Si el usuario no tiene sesión activa en sessionStorage ni localStorage (no marcó mantener sesión),
+          // desloguear Firebase para evitar resurrección automática
+          signOut(auth).catch(() => {});
+          setUser(null);
+          setLoading(false);
+          return;
+        }
+
         if (noraUserStr) {
           try {
             const noraUser = JSON.parse(noraUserStr);

@@ -60,6 +60,32 @@ export default function DashboardChat({ selectedIssue, isSuspended, isPaymentAdm
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [localIssue, setLocalIssue] = useState<Issue | null>(selectedIssue);
+  const [showScrollBottomBtn, setShowScrollBottomBtn] = useState(false);
+  const isAtBottomRef = useRef(true);
+
+  const handleScroll = () => {
+    if (!scrollRef.current) return;
+    const { scrollTop, scrollHeight, clientHeight } = scrollRef.current;
+    const distanceFromBottom = scrollHeight - scrollTop - clientHeight;
+    const atBottom = distanceFromBottom < 90;
+    isAtBottomRef.current = atBottom;
+    setShowScrollBottomBtn(!atBottom);
+  };
+
+  const scrollToBottom = (smooth = true) => {
+    if (scrollRef.current) {
+      if (smooth) {
+        scrollRef.current.scrollTo({
+          top: scrollRef.current.scrollHeight,
+          behavior: 'smooth'
+        });
+      } else {
+        scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+      }
+      isAtBottomRef.current = true;
+      setShowScrollBottomBtn(false);
+    }
+  };
 
   useEffect(() => {
     setLocalIssue(selectedIssue);
@@ -1525,7 +1551,8 @@ ${textTrimmed ? `\n• **Sustento / Observaciones**: ${textTrimmed}` : ''}`;
       {/* Messages */}
       <div 
         ref={scrollRef}
-        className="flex-1 overflow-y-auto p-6 lg:p-10 space-y-10 custom-scrollbar"
+        onScroll={handleScroll}
+        className="flex-1 overflow-y-auto p-6 lg:p-10 space-y-8 custom-scrollbar relative"
       >
         <div className="flex flex-col items-center justify-center mb-12 relative">
           <div className="absolute inset-x-0 top-1/2 h-px bg-slate-100 dark:bg-slate-800/30 -z-10" />
@@ -1536,38 +1563,63 @@ ${textTrimmed ? `\n• **Sustento / Observaciones**: ${textTrimmed}` : ''}`;
         
         <AnimatePresence mode="popLayout">
           {messages.map((msg, idx) => {
-            const isMe = msg.userId === user?.id;
+            const currentUserId = (user?.id || '').toLowerCase().trim();
+            const currentUserEmail = (user?.email || '').toLowerCase().trim();
+            const currentUserName = (user?.name || '').toLowerCase().trim();
+
+            const msgUserId = (msg.userId || '').toLowerCase().trim();
+            const msgUserEmail = ((msg as any).userEmail || '').toLowerCase().trim();
+            const msgUserName = (msg.userName || '').toLowerCase().trim();
+
+            const isMe = Boolean(
+              (currentUserEmail && (msgUserEmail === currentUserEmail || msgUserId === currentUserEmail)) ||
+              (currentUserId && (msgUserId === currentUserId || msgUserEmail === currentUserId)) ||
+              (currentUserName && (msgUserName === currentUserName || (currentUserEmail && currentUserEmail.split('@')[0] === msgUserName)))
+            );
+
             return (
               <motion.div
                 key={msg.id}
-                initial={{ opacity: 0, y: 20, scale: 0.95 }}
+                initial={{ opacity: 0, y: 16, scale: 0.98 }}
                 animate={{ opacity: 1, y: 0, scale: 1 }}
                 className={cn(
-                  "flex gap-4 max-w-[90%]",
-                  isMe ? "ml-auto flex-row-reverse" : ""
+                  "w-full flex items-end gap-3",
+                  isMe ? "justify-end" : "justify-start"
                 )}
               >
-                <div className="w-10 h-10 rounded-xl bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 flex items-center justify-center text-[10px] font-black text-slate-400 dark:text-slate-500 shrink-0 shadow-sm self-end mb-1 transition-colors duration-300">
-                  {msg.userName?.charAt(0)}
-                </div>
-                <div className="space-y-3 flex-1 lg:max-w-[80%]">
+                {!isMe && (
+                  <div className="w-9 h-9 rounded-xl bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 flex items-center justify-center text-[10px] font-black text-slate-500 dark:text-slate-400 shrink-0 shadow-sm mb-1 transition-colors">
+                    {msg.userName?.charAt(0) || 'U'}
+                  </div>
+                )}
+
+                <div className={cn(
+                  "flex flex-col space-y-1.5 max-w-[85%] sm:max-w-[75%]",
+                  isMe ? "items-end" : "items-start"
+                )}>
                    <div className={cn(
-                     "p-6 rounded-[2rem] relative shadow-xl transition-all group",
+                     "p-5 sm:p-6 rounded-[2rem] relative shadow-xl transition-all group",
                      isMe 
-                       ? "bg-slate-900 dark:bg-[#1e293b] text-white rounded-br-none shadow-black/5 dark:shadow-black/20" 
-                       : "bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-200 rounded-bl-none border border-slate-200 dark:border-slate-800 shadow-slate-200/5 dark:shadow-black/10"
+                       ? "bg-blue-600 dark:bg-blue-600 text-white rounded-br-none shadow-blue-600/25 border border-blue-500/40" 
+                       : "bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-200 rounded-bl-none border border-slate-200 dark:border-slate-800 shadow-slate-200/5 dark:shadow-black/20"
                    )}>
-                      <div className={cn("flex justify-between items-center mb-4 gap-4", isMe ? "flex-row-reverse" : "")}>
+                      <div className={cn("flex items-center mb-3 gap-4", isMe ? "justify-end flex-row-reverse" : "justify-between")}>
                          <div className={cn("flex flex-col", isMe ? "text-right" : "text-left")}>
-                           <span className={cn("text-[9px] font-black uppercase tracking-[0.1em]", isMe ? "text-blue-400 dark:text-blue-400" : "text-slate-900 dark:text-white")}>{msg.userName}</span>
-                           <span className="text-[7px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest mt-1 opacity-60">Cargo Auditado</span>
+                           <span className={cn("text-[9px] font-black uppercase tracking-[0.1em]", isMe ? "text-blue-100" : "text-slate-900 dark:text-white")}>
+                             {msg.userName} {isMe ? '(Tú)' : ''}
+                           </span>
+                           <span className={cn("text-[7px] font-bold uppercase tracking-widest mt-0.5", isMe ? "text-blue-200/70" : "text-slate-400 dark:text-slate-500")}>
+                             Cargo Auditado
+                           </span>
                          </div>
-                         <span className={cn("text-[8px] font-black uppercase tracking-widest opacity-40", isMe ? "text-slate-400" : "text-slate-500")}>{format(new Date(msg.createdAt), 'HH:mm')}</span>
+                         <span className={cn("text-[8px] font-black uppercase tracking-widest", isMe ? "text-blue-200/70" : "text-slate-400 dark:text-slate-500")}>
+                           {format(new Date(msg.createdAt), 'HH:mm')}
+                         </span>
                       </div>
                       <p className="text-[13px] leading-relaxed font-medium tracking-tight whitespace-pre-wrap">{msg.text}</p>
                       
                       {msg.attachments && msg.attachments.length > 0 && (
-                        <div className="mt-6 grid grid-cols-1 gap-3">
+                        <div className="mt-4 grid grid-cols-1 gap-2.5">
                            {msg.attachments.map((att) => (
                               <a 
                                 key={att.id} 
@@ -1575,43 +1627,66 @@ ${textTrimmed ? `\n• **Sustento / Observaciones**: ${textTrimmed}` : ''}`;
                                 target="_blank" 
                                 rel="noreferrer"
                                 className={cn(
-                                  "flex items-center gap-4 p-4 rounded-2xl border transition-all duration-300 group/att",
-                                  isMe ? "bg-white/5 border-white/10 hover:bg-white/10" : "bg-[#020617]/50 border-slate-800 hover:bg-slate-800/50"
+                                  "flex items-center gap-3 p-3.5 rounded-2xl border transition-all duration-300 group/att",
+                                  isMe ? "bg-white/10 border-white/20 hover:bg-white/20 text-white" : "bg-[#020617]/50 border-slate-800 hover:bg-slate-800/50"
                                 )}
                               >
-                                 <div className={cn("w-10 h-10 rounded-xl flex items-center justify-center shadow-lg transition-transform group-hover/att:scale-110", isMe ? "bg-white/10 text-white" : "bg-slate-900 text-slate-400")}>
+                                 <div className={cn("w-9 h-9 rounded-xl flex items-center justify-center shadow-lg transition-transform group-hover/att:scale-105", isMe ? "bg-white/20 text-white" : "bg-slate-900 text-slate-400")}>
                                    {att.category === 'image' ? <ImageIcon className="w-4 h-4" /> : 
                                     att.category === 'video' ? <Video className="w-4 h-4" /> : <Paperclip className="w-4 h-4" />}
                                  </div>
                                  <div className="flex flex-col overflow-hidden text-left flex-1">
                                    <span className={cn("text-[11px] font-black truncate tracking-tight", isMe ? "text-white" : "text-slate-100")}>{att.name}</span>
-                                   <span className={cn("text-[8px] font-bold uppercase tracking-widest mt-0.5", isMe ? "text-white/20" : "text-slate-600")}>Evidencia Técnica Sincronizada</span>
+                                   <span className={cn("text-[8px] font-bold uppercase tracking-widest mt-0.5", isMe ? "text-blue-200/70" : "text-slate-500")}>Evidencia Técnica Sincronizada</span>
                                  </div>
                                  <div className="opacity-0 group-hover/att:opacity-100 transition-opacity pr-1">
-                                    <Clock className={cn("w-3.5 h-3.5", isMe ? "text-white/40" : "text-slate-600")} />
+                                    <Clock className={cn("w-3.5 h-3.5", isMe ? "text-white/60" : "text-slate-600")} />
                                  </div>
                               </a>
                            ))}
                         </div>
                       )}
 
-                      <div className={cn("flex items-center gap-4 mt-6 border-t pt-4", isMe ? "border-white/5" : "border-slate-800/50")}>
+                      <div className={cn("flex items-center gap-4 mt-4 border-t pt-3", isMe ? "border-white/15" : "border-slate-100 dark:border-slate-800/50")}>
                          <div className="flex items-center gap-2">
-                            <button className={cn("p-1.5 rounded-lg transition-all hover:scale-110", isMe ? "hover:bg-white/10 text-white" : "hover:bg-slate-800 text-slate-500")}><ThumbsUp className="w-3.5 h-3.5" /></button>
-                            <button className={cn("p-1.5 rounded-lg transition-all hover:scale-110", isMe ? "hover:bg-white/10 text-white" : "hover:bg-slate-800 text-slate-500")}><ThumbsDown className="w-3.5 h-3.5" /></button>
+                            <button className={cn("p-1.5 rounded-lg transition-all hover:scale-110", isMe ? "hover:bg-white/10 text-white/80" : "hover:bg-slate-800 text-slate-500")}><ThumbsUp className="w-3.5 h-3.5" /></button>
+                            <button className={cn("p-1.5 rounded-lg transition-all hover:scale-110", isMe ? "hover:bg-white/10 text-white/80" : "hover:bg-slate-800 text-slate-500")}><ThumbsDown className="w-3.5 h-3.5" /></button>
                          </div>
-                         <div className={cn("ml-auto flex items-center gap-6 text-[8px] font-black uppercase tracking-[0.2em]", isMe ? "text-slate-500" : "text-slate-600")}>
-                            <span className="hover:text-blue-400 cursor-pointer transition-colors">Protocolar</span>
-                            <span className="hover:text-amber-400 cursor-pointer transition-colors">Exportar</span>
+                         <div className={cn("ml-auto flex items-center gap-4 text-[8px] font-black uppercase tracking-[0.2em]", isMe ? "text-blue-100" : "text-slate-500 dark:text-slate-500")}>
+                            <span className="hover:underline cursor-pointer transition-colors">Protocolar</span>
+                            <span className="hover:underline cursor-pointer transition-colors">Exportar</span>
                          </div>
                       </div>
                    </div>
                  </div>
+
+                {isMe && (
+                  <div className="w-9 h-9 rounded-xl bg-blue-600 text-white border border-blue-500 flex items-center justify-center text-[10px] font-black shrink-0 shadow-sm mb-1 transition-colors">
+                    {msg.userName?.charAt(0) || user?.name?.charAt(0) || 'YO'}
+                  </div>
+                )}
               </motion.div>
             );
           })}
         </AnimatePresence>
       </div>
+
+      {/* Floating Button: Ir al chat más reciente */}
+      <AnimatePresence>
+        {showScrollBottomBtn && (
+          <motion.button
+            initial={{ opacity: 0, y: 12, scale: 0.9 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 12, scale: 0.9 }}
+            onClick={() => scrollToBottom(true)}
+            className="absolute bottom-28 right-6 lg:right-10 z-30 flex items-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-full shadow-2xl shadow-blue-600/40 text-[9.5px] font-black uppercase tracking-wider transition-all hover:scale-105 active:scale-95 border border-white/20 cursor-pointer"
+            title="Ir al mensaje más reciente"
+          >
+            <ChevronDown className="w-4 h-4 animate-bounce" />
+            <span>Mensajes recientes</span>
+          </motion.button>
+        )}
+      </AnimatePresence>
 
        {/* Input Bar */}
       <div className="p-6 lg:p-10 pt-0">
