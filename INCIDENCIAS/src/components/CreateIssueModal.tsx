@@ -44,6 +44,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { cn } from '../lib/utils';
 import { uploadFileToDrive } from '../utils/googleDriveUtils';
 import { enqueueOfflineIssue } from '../services/offlineSyncService';
+import { VoiceRecorder } from '../utils/audioRecorderUtils';
 
 interface CreateIssueModalProps {
   onClose: () => void;
@@ -204,6 +205,9 @@ export default function CreateIssueModal({ onClose, onSuccess }: CreateIssueModa
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submittingStatus, setSubmittingStatus] = useState<string>('');
   const [isListening, setIsListening] = useState(false);
+  const [isRecordingAudio, setIsRecordingAudio] = useState(false);
+  const [audioRecordingSeconds, setAudioRecordingSeconds] = useState(0);
+  const voiceRecorderRef = useRef<VoiceRecorder | null>(null);
   const [activeCreatorTeam, setActiveCreatorTeam] = useState<string>(() => {
     const assigned = getUserAssignedTeam((user as any)?.email);
     return assigned || (user as any)?.team || 'ARQUITECTURA';
@@ -632,12 +636,13 @@ export default function CreateIssueModal({ onClose, onSuccess }: CreateIssueModa
         pendingFilesRef.current.set(attId, file);
         const isImage = file.type.startsWith('image/');
         const isVideo = file.type.startsWith('video/');
+        const isAudio = file.type.startsWith('audio/');
         newAtts.push({
           id: attId,
           name: file.name,
           url: url,
           type: file.type || 'application/octet-stream',
-          category: isImage ? 'image' : (isVideo ? 'video' : 'file'),
+          category: isImage ? 'image' : (isVideo ? 'video' : isAudio ? 'audio' : 'file'),
           isLocalPending: true
         });
       });
@@ -668,6 +673,54 @@ export default function CreateIssueModal({ onClose, onSuccess }: CreateIssueModa
     }
     e.target.value = '';
   };
+
+  const handleToggleAudioRecording = async () => {
+    if (isRecordingAudio) {
+      // Detener grabación y agregar anexo
+      if (voiceRecorderRef.current) {
+        try {
+          const res = await voiceRecorderRef.current.stop();
+          const attId = 'att_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6);
+          pendingFilesRef.current.set(attId, res.file);
+          setAttachments(prev => [...prev, {
+            id: attId,
+            name: res.file.name,
+            url: res.url,
+            type: res.file.type || 'audio/webm',
+            category: 'audio',
+            isLocalPending: true
+          }]);
+        } catch (err) {
+          console.error("Error al finalizar audio:", err);
+        }
+      }
+      setIsRecordingAudio(false);
+      setAudioRecordingSeconds(0);
+    } else {
+      // Iniciar grabación de audio
+      try {
+        const recorder = new VoiceRecorder();
+        await recorder.start();
+        voiceRecorderRef.current = recorder;
+        setIsRecordingAudio(true);
+        setAudioRecordingSeconds(0);
+      } catch (err: any) {
+        alert(err?.message || "No se pudo acceder al micrófono del celular. Por favor concede el permiso en el navegador.");
+      }
+    }
+  };
+
+  useEffect(() => {
+    let interval: any = null;
+    if (isRecordingAudio) {
+      interval = setInterval(() => {
+        setAudioRecordingSeconds(prev => prev + 1);
+      }, 1000);
+    }
+    return () => {
+      if (interval) clearInterval(interval);
+    };
+  }, [isRecordingAudio]);
 
   const handleCDEFilePick = (file: any) => {
     const newAttachment: Partial<Attachment> = {
@@ -1628,8 +1681,22 @@ export default function CreateIssueModal({ onClose, onSuccess }: CreateIssueModa
                    </button>
                    <label className="flex items-center justify-center gap-1.5 px-3 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg text-[8.5px] font-black uppercase tracking-wider text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 transition-all shadow-sm cursor-pointer active:scale-95">
                      <Plus className="w-3.5 h-3.5 text-blue-400" /> Cargar Local
-                     <input type="file" multiple accept="image/*,video/*,application/pdf" className="hidden" onChange={handleFileUpload} />
+                     <input type="file" multiple accept="image/*,video/*,audio/*,application/pdf" className="hidden" onChange={handleFileUpload} />
                    </label>
+                   <button
+                     type="button"
+                     onClick={handleToggleAudioRecording}
+                     className={cn(
+                       "flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-[8.5px] font-black uppercase tracking-wider transition-all shadow-sm cursor-pointer active:scale-95 border",
+                       isRecordingAudio 
+                         ? "bg-red-500 text-white border-red-600 animate-pulse" 
+                         : "bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800"
+                     )}
+                     title={isRecordingAudio ? "Detener y guardar audio" : "Grabar audio con el micrófono"}
+                   >
+                     <Mic className={cn("w-3.5 h-3.5", isRecordingAudio ? "text-white" : "text-amber-500")} />
+                     <span>{isRecordingAudio ? `Grabando (${audioRecordingSeconds}s)` : 'Audio'}</span>
+                   </button>
                    <label className="flex items-center justify-center gap-1.5 px-3 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg text-[8.5px] font-black uppercase tracking-wider text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 transition-all shadow-sm cursor-pointer active:scale-95">
                      <Video className="w-3.5 h-3.5 text-blue-400" /> Video
                      <input 
@@ -1667,6 +1734,8 @@ export default function CreateIssueModal({ onClose, onSuccess }: CreateIssueModa
                           <img src={att.url} className="w-full h-full object-cover" />
                         ) : att.category === 'video' && att.url ? (
                           <video src={att.url} className="w-full h-full object-cover" muted playsInline />
+                        ) : att.category === 'audio' ? (
+                          <Mic className="w-4 h-4 text-amber-500" />
                         ) : att.category === 'image' ? (
                           <ImageIcon className="w-4 h-4" />
                         ) : (
@@ -1690,7 +1759,7 @@ export default function CreateIssueModal({ onClose, onSuccess }: CreateIssueModa
                         className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-lg text-xs text-white font-bold outline-none focus:border-slate-600 transition-all shadow-inner"
                       />
                       <div className="flex flex-wrap gap-1">
-                        {['file', 'image', 'video', 'bim_model', 'plan_pdf'].map((cat) => (
+                        {['file', 'image', 'video', 'audio', 'bim_model', 'plan_pdf'].map((cat) => (
                           <button
                             key={cat}
                             type="button"

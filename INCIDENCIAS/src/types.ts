@@ -6,7 +6,7 @@ export interface Attachment {
   name: string;
   type: string;
   url: string;
-  category: "file" | "image" | "video" | "bim_model" | "bim_view" | "plan_pdf" | "plan_dwg";
+  category: "file" | "image" | "video" | "audio" | "bim_model" | "bim_view" | "plan_pdf" | "plan_dwg";
   driveFileId?: string;
   webViewLink?: string;
   isLocalPending?: boolean;

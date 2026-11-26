@@ -24,7 +24,7 @@ export interface PendingFileRecord {
   attachmentId: string;
   fileName: string;
   fileType: string;
-  category: 'image' | 'video' | 'file';
+  category: 'image' | 'video' | 'audio' | 'file';
   fileBlob: Blob;
   status: 'QUEUED' | 'UPLOADING' | 'DONE' | 'FAILED';
   attempts: number;
@@ -190,11 +190,13 @@ export async function enqueueOfflineIssue(
       const fileType = att?.type || fileBlob.type || 'application/octet-stream';
       const isImg = fileType.startsWith('image/');
       const isVid = fileType.startsWith('video/');
-      const category = (att?.category as any) || (isImg ? 'image' : isVid ? 'video' : 'file');
+      const isAud = fileType.startsWith('audio/');
+      const category = (att?.category as any) || (isImg ? 'image' : isVid ? 'video' : isAud ? 'audio' : 'file');
 
       // Ensure proper extension
       if (isImg && !fileName.includes('.')) fileName += '.jpg';
       if (isVid && !fileName.includes('.')) fileName += '.mp4';
+      if (isAud && !fileName.includes('.')) fileName += '.webm';
 
       const finalBlob = await optimizeImageForUpload(fileBlob);
 

@@ -123,6 +123,113 @@ export default function DashboardChat({ selectedIssue, isSuspended, isPaymentAdm
   const [mediaDuring, setMediaDuring] = useState<any[]>([]);
   const [mediaFinal, setMediaFinal] = useState<any[]>([]);
   const [isUploadingDuring, setIsUploadingDuring] = useState(false);
+  const [isRecordingAudio, setIsRecordingAudio] = useState(false);
+  const [audioRecordingSeconds, setAudioRecordingSeconds] = useState(0);
+  const [isUploadingAudio, setIsUploadingAudio] = useState(false);
+  const voiceRecorderRef = useRef<VoiceRecorder | null>(null);
+
+  useEffect(() => {
+    let interval: any = null;
+    if (isRecordingAudio) {
+      interval = setInterval(() => {
+        setAudioRecordingSeconds((prev) => prev + 1);
+      }, 1000);
+    }
+    return () => {
+      if (interval) clearInterval(interval);
+    };
+  }, [isRecordingAudio]);
+
+  const handleToggleVoiceRecording = async () => {
+    if (isRecordingAudio) {
+      if (!voiceRecorderRef.current || !activeIssue) {
+        setIsRecordingAudio(false);
+        return;
+      }
+      try {
+        setIsUploadingAudio(true);
+        const res = await voiceRecorderRef.current.stop();
+        setIsRecordingAudio(false);
+        setAudioRecordingSeconds(0);
+
+        const file = res.file;
+        const base64UrlPromise = new Promise<string>((resolve) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(reader.result as string);
+          reader.readAsDataURL(file);
+        });
+
+        let url = res.url;
+        let driveFileId = "";
+        let webViewLink = "";
+        let uploadSuccess = false;
+
+        const { companyId, projectId } = getProjectAndCompany();
+        const { companyName, projectName } = getHumanCompanyAndProject(companyId, projectId);
+
+        try {
+          console.log("Subiendo nota de voz de chat a Google Drive:", file.name);
+          const driveResult = await uploadFileToDrive(file, file.name, file.type || 'audio/webm', undefined, undefined, {
+            companyId,
+            companyName,
+            project: projectId,
+            driveFolderName: projectName,
+            subfolder: 'ARCHIVOS_INCIDENCIAS'
+          });
+          url = driveResult.url;
+          driveFileId = driveResult.id;
+          webViewLink = driveResult.webViewLink;
+          uploadSuccess = true;
+        } catch (driveErr) {
+          console.warn("Drive upload nota de voz falló, usando respaldo Base64:", driveErr);
+        }
+
+        if (!uploadSuccess) {
+          url = await base64UrlPromise;
+        }
+
+        const attachment: Attachment = {
+          id: Date.now().toString(),
+          name: file.name,
+          type: file.type || 'audio/webm',
+          url,
+          category: 'audio',
+          ...(driveFileId ? { driveFileId } : {}),
+          ...(webViewLink ? { webViewLink } : {})
+        };
+
+        await postCommentAndSync({
+          text: `🎙️ Nota de voz (${res.durationSeconds}s)${driveFileId ? ' (Guardada en Google Drive)' : ''}`,
+          attachments: [attachment]
+        });
+      } catch (err) {
+        console.error("Error al finalizar o subir nota de voz:", err);
+        alert("Error al procesar la nota de voz. Por favor intenta de nuevo.");
+      } finally {
+        setIsUploadingAudio(false);
+        setIsRecordingAudio(false);
+        setAudioRecordingSeconds(0);
+      }
+    } else {
+      try {
+        const recorder = new VoiceRecorder();
+        await recorder.start();
+        voiceRecorderRef.current = recorder;
+        setIsRecordingAudio(true);
+        setAudioRecordingSeconds(0);
+      } catch (err: any) {
+        alert(err?.message || "No se pudo acceder al micrófono del celular. Por favor concede el permiso en el navegador.");
+      }
+    }
+  };
+
+  const handleCancelVoiceRecording = () => {
+    if (voiceRecorderRef.current) {
+      voiceRecorderRef.current.cancel();
+    }
+    setIsRecordingAudio(false);
+    setAudioRecordingSeconds(0);
+  };
   const [isUploadingFinal, setIsUploadingFinal] = useState(false);
   const [materialSelect, setMaterialSelect] = useState('Concreto simple');
   const [materialDensity, setMaterialDensity] = useState(2300);
@@ -474,7 +581,7 @@ Se ha registrado una nueva evidencia en tiempo real (Foto/Video) tomada durante 
     try {
       const file = files[0];
       const category = file.type.startsWith('image/') ? 'image' : 
-                       file.type.startsWith('video/') ? 'video' : 'file';
+                       file.type.startsWith('video/') ? 'video' : file.type.startsWith('audio/') ? 'audio' : 'file';
 
       // 1. Prepare Base64 as a quick and reliable fallback
       const base64UrlPromise = new Promise<string>((resolve) => {
@@ -1655,6 +1762,29 @@ ${textTrimmed ? `\n• **Sustento / Observaciones**: ${textTrimmed}` : ''}`;
                       {msg.attachments && msg.attachments.length > 0 && (
                         <div className="mt-4 grid grid-cols-1 gap-2.5">
                            {msg.attachments.map((att) => (
+                              att.category === 'audio' || att.type?.startsWith('audio/') ? (
+                                <div key={att.id} className="mt-2.5 p-3 rounded-2xl bg-slate-900/40 dark:bg-black/40 border border-slate-700/50 flex flex-col gap-2">
+                                  <div className="flex items-center justify-between text-xs font-bold">
+                                    <div className="flex items-center gap-2">
+                                      <Mic className="w-3.5 h-3.5 text-amber-500 animate-pulse" />
+                                      <span className={cn("text-[10px] font-black truncate max-w-[200px]", isMe ? "text-white" : "text-slate-200")}>
+                                        {att.name || 'Nota de voz'}
+                                      </span>
+                                    </div>
+                                    {(att.webViewLink || att.driveFileId) && (
+                                      <a 
+                                        href={att.webViewLink || `https://drive.google.com/file/d/${att.driveFileId}/view`} 
+                                        target="_blank" 
+                                        rel="noreferrer"
+                                        className="text-[8px] text-blue-400 hover:underline uppercase font-black"
+                                      >
+                                        Drive ↗
+                                      </a>
+                                    )}
+                                  </div>
+                                  <audio controls src={att.url} className="w-full h-8 rounded" />
+                                </div>
+                              ) : (
                               <a 
                                 key={att.id} 
                                 href={att.url} 
@@ -1677,6 +1807,7 @@ ${textTrimmed ? `\n• **Sustento / Observaciones**: ${textTrimmed}` : ''}`;
                                     <Clock className={cn("w-3.5 h-3.5", isMe ? "text-white/60" : "text-slate-600")} />
                                  </div>
                               </a>
+                            )
                            ))}
                         </div>
                       )}
@@ -1738,7 +1869,42 @@ ${textTrimmed ? `\n• **Sustento / Observaciones**: ${textTrimmed}` : ''}`;
          <div className="bg-white dark:bg-[#020617]/80 backdrop-blur-2xl border border-slate-200 dark:border-slate-800/50 rounded-[2.5rem] lg:rounded-[3.5rem] p-4 shadow-2xl relative transition-colors duration-300">
             <div className="flex items-center gap-3 mb-4 ml-6 lg:ml-10">
                <div className="flex items-center bg-slate-50 dark:bg-slate-900/50 p-1 rounded-xl border border-slate-200 dark:border-slate-800/50">
-                <button onClick={() => fileInputRef.current?.click()} className="p-2.5 text-slate-400 hover:text-slate-900 dark:text-slate-500 dark:hover:text-white hover:bg-slate-200 dark:hover:bg-slate-800 rounded-lg transition-all" title="Audio"><Mic className="w-3.5 h-3.5" /></button>
+                <button
+                  type="button"
+                  onClick={handleToggleVoiceRecording}
+                  disabled={isUploadingAudio}
+                  className={cn(
+                    "p-2.5 rounded-lg transition-all flex items-center gap-1.5 cursor-pointer",
+                    isRecordingAudio 
+                      ? "bg-red-500 text-white animate-pulse" 
+                      : isUploadingAudio
+                      ? "bg-amber-500/10 text-amber-500"
+                      : "text-slate-400 hover:text-slate-900 dark:text-slate-500 dark:hover:text-white hover:bg-slate-200 dark:hover:bg-slate-800"
+                  )}
+                  title={isRecordingAudio ? "Detener y enviar nota de voz" : "Grabar nota de voz con el micrófono"}
+                >
+                  <Mic className={cn("w-3.5 h-3.5", isRecordingAudio ? "text-white" : "")} />
+                  {isRecordingAudio && (
+                    <span className="text-[8.5px] font-black uppercase tracking-wider">
+                      {audioRecordingSeconds}s • Enviar
+                    </span>
+                  )}
+                  {isUploadingAudio && (
+                    <span className="text-[8.5px] font-black uppercase tracking-wider">
+                      Enviando...
+                    </span>
+                  )}
+                </button>
+                {isRecordingAudio && (
+                  <button
+                    type="button"
+                    onClick={handleCancelVoiceRecording}
+                    className="p-2 text-slate-400 hover:text-red-500 rounded-lg transition-all cursor-pointer"
+                    title="Cancelar grabación de audio"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                )}
                 <button onClick={() => fileInputRef.current?.click()} className="p-2.5 text-slate-400 hover:text-slate-900 dark:text-slate-500 dark:hover:text-white hover:bg-slate-200 dark:hover:bg-slate-800 rounded-lg transition-all" title="Video"><Video className="w-3.5 h-3.5" /></button>
                 <button onClick={() => fileInputRef.current?.click()} className="p-2.5 text-slate-400 hover:text-slate-900 dark:text-slate-500 dark:hover:text-white hover:bg-slate-200 dark:hover:bg-slate-800 rounded-lg transition-all" title="Imagen"><ImageIcon className="w-3.5 h-3.5" /></button>
                 <button onClick={() => fileInputRef.current?.click()} className="p-2.5 text-slate-400 hover:text-slate-900 dark:text-slate-500 dark:hover:text-white hover:bg-slate-200 dark:hover:bg-slate-800 rounded-lg transition-all" title="Archivo"><FilePlus className="w-3.5 h-3.5" /></button>
@@ -2096,6 +2262,7 @@ ${textTrimmed ? `\n• **Sustento / Observaciones**: ${textTrimmed}` : ''}`;
            onChange={handleFileUpload}
            className="hidden" 
            multiple
+           accept="image/*,video/*,audio/*,application/pdf"
          />
          <input 
            type="file" 

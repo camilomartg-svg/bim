@@ -599,12 +599,18 @@ export async function archiveIncidentsRecord(
 /**
  * Resolves any Google Drive proxy or file URL so it works both locally and on GitHub Pages (norabim.com).
  */
-export function getAuthenticatedDriveUrl(url: string | undefined, token: string | null): string {
+export function getAuthenticatedDriveUrl(url: string | undefined, token?: string | null): string {
   if (!url) return '';
   if (url.startsWith('/api/drive-image/')) {
     const fileId = url.replace('/api/drive-image/', '').split('?')[0].trim();
     if (fileId) {
       return `https://drive.google.com/thumbnail?id=${fileId}&sz=w1600`;
+    }
+  }
+  if (url.startsWith('/api/drive-download') || url.startsWith('/api/drive-file') || url.startsWith('/api/drive/')) {
+    const match = url.match(/[?&]id=([^&]+)/) || url.match(/\/api\/drive(?:\/|-file\/)([^/?&]+)/);
+    if (match && match[1]) {
+      return `https://drive.google.com/file/d/${match[1]}/view`;
     }
   }
   return url;
