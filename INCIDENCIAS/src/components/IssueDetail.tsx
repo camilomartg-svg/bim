@@ -2116,48 +2116,79 @@ export default function IssueDetail({ issue: initialIssue, onClose, onOpenReport
                 </div>
                 
                   {/* Image Previews Section */}
-                  {issue.attachments?.filter(a => a.type.startsWith('image/')).length > 0 && (
+                  {issue.attachments?.filter(a => a.type?.startsWith('image/')).length > 0 && (
                     <div className="col-span-full space-y-4 mb-6">
                       <div className="flex items-center gap-3">
                         <ImageIcon className="w-4 h-4 text-slate-500" />
                         <span className="text-[9px] font-black text-slate-500 uppercase tracking-widest">Evidencia Fotográfica</span>
                       </div>
                       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-                        {issue.attachments.filter(a => a.type.startsWith('image/')).map(att => (
-                          <a key={att.id} href={getAuthenticatedDriveUrl(att.url, googleAccessToken)} target="_blank" rel="noreferrer" className="aspect-video bg-slate-100 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-[1.5rem] overflow-hidden hover:border-indigo-500 group/img transition-all relative shadow-2xl">
-                             <img src={getAuthenticatedDriveUrl(att.url, googleAccessToken)} alt={att.name} referrerPolicy="no-referrer" className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700" />
-                             <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover/img:opacity-100 transition-opacity">
-                               <Eye className="w-6 h-6 text-white" />
-                             </div>
-                          </a>
-                        ))}
+                        {issue.attachments.filter(a => a.type?.startsWith('image/')).map(att => {
+                          const isBlob = att.url?.startsWith('blob:');
+                          const isPending = isBlob || !att.url || att.isLocalPending;
+                          if (isPending) {
+                            return (
+                              <div key={att.id} className="aspect-video bg-amber-500/10 border border-amber-500/20 rounded-[1.5rem] p-4 flex flex-col items-center justify-center text-center">
+                                <Clock className="w-5 h-5 text-amber-500 mb-1.5 animate-pulse" />
+                                <span className="text-[9px] font-black text-amber-600 dark:text-amber-400 uppercase tracking-wider">Sincronizando desde celular</span>
+                                <span className="text-[8px] text-slate-500 truncate max-w-[120px] mt-1">{att.name}</span>
+                              </div>
+                            );
+                          }
+                          return (
+                            <a key={att.id} href={getAuthenticatedDriveUrl(att.url, googleAccessToken)} target="_blank" rel="noreferrer" className="aspect-video bg-slate-100 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-[1.5rem] overflow-hidden hover:border-indigo-500 group/img transition-all relative shadow-2xl">
+                               <img src={getAuthenticatedDriveUrl(att.url, googleAccessToken)} alt={att.name} referrerPolicy="no-referrer" className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700" />
+                               <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover/img:opacity-100 transition-opacity">
+                                 <Eye className="w-6 h-6 text-white" />
+                               </div>
+                            </a>
+                          );
+                        })}
                       </div>
                     </div>
                   )}
 
                   <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                    {issue.attachments?.map((att) => (
-                      <a 
-                        key={att.id} 
-                        href={getAuthenticatedDriveUrl(att.url, googleAccessToken)} 
-                        target="_blank" 
-                        rel="noreferrer"
-                        className="flex items-center gap-6 p-6 bg-slate-100/50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-800 rounded-[1.75rem] hover:border-slate-350 dark:hover:border-slate-700 hover:bg-slate-150 dark:hover:bg-slate-900 transition-all group shadow-sm active:scale-[0.99]"
-                      >
-                        <div className="w-12 h-12 bg-slate-100 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl flex items-center justify-center text-slate-600 group-hover:bg-white group-hover:text-[#020617] transition-all shadow-sm">
-                          {att.type?.includes('image') ? <ImageIcon className="w-6 h-6" /> : (att.type?.includes('video') || att.category === 'video') ? <Video className="w-6 h-6 text-purple-500" /> : <FileText className="w-6 h-6" />}
-                        </div>
-                        <div className="overflow-hidden flex-1 text-left">
-                          <p className="text-[13px] font-black text-slate-800 dark:text-white truncate uppercase tracking-tight group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">{att.name}</p>
-                          <div className="flex items-center gap-2.5 mt-1.5">
-                             <p className="text-[8px] text-slate-600 font-bold uppercase tracking-widest leading-none">{(att.category || 'ADJUNTO').replace('_', ' ')}</p>
+                    {issue.attachments?.map((att) => {
+                      const isBlob = att.url?.startsWith('blob:');
+                      const isPending = isBlob || !att.url || att.isLocalPending;
+                      const hasValidUrl = !isPending && Boolean(att.url);
+                      return (
+                        <div 
+                          key={att.id} 
+                          className="flex items-center gap-6 p-6 bg-slate-100/50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-800 rounded-[1.75rem] hover:border-slate-350 dark:hover:border-slate-700 hover:bg-slate-150 dark:hover:bg-slate-900 transition-all group shadow-sm active:scale-[0.99]"
+                        >
+                          <div className="w-12 h-12 bg-slate-100 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl flex items-center justify-center text-slate-600 group-hover:bg-white group-hover:text-[#020617] transition-all shadow-sm">
+                            {att.type?.includes('image') ? <ImageIcon className="w-6 h-6" /> : (att.type?.includes('video') || att.category === 'video') ? <Video className="w-6 h-6 text-purple-500" /> : <FileText className="w-6 h-6" />}
                           </div>
+                          <div className="overflow-hidden flex-1 text-left">
+                            <p className="text-[13px] font-black text-slate-800 dark:text-white truncate uppercase tracking-tight group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">{att.name}</p>
+                            <div className="flex items-center gap-2.5 mt-1.5">
+                               <p className="text-[8px] text-slate-600 font-bold uppercase tracking-widest leading-none">{(att.category || 'ADJUNTO').replace('_', ' ')}</p>
+                               {isPending && (
+                                 <span className="px-2 py-0.5 rounded-full text-[7.5px] font-black bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20">
+                                   PENDIENTE DE DRIVE
+                                 </span>
+                               )}
+                            </div>
+                          </div>
+                          {hasValidUrl ? (
+                            <a 
+                              href={getAuthenticatedDriveUrl(att.url, googleAccessToken)} 
+                              target="_blank" 
+                              rel="noreferrer"
+                              className="p-2.5 bg-slate-100 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg group-hover:bg-slate-800 transition-colors"
+                            >
+                              <ExternalLink className="w-3.5 h-3.5 text-slate-600 group-hover:text-white transition-colors" />
+                            </a>
+                          ) : (
+                            <div className="p-2.5 bg-amber-500/10 border border-amber-500/20 rounded-lg text-amber-500" title="Sincronizando archivo desde el celular">
+                              <Clock className="w-3.5 h-3.5 animate-pulse" />
+                            </div>
+                          )}
                         </div>
-                        <div className="p-2.5 bg-slate-100 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg group-hover:bg-slate-800 transition-colors">
-                          <ExternalLink className="w-3.5 h-3.5 text-slate-600 group-hover:text-white transition-colors" />
-                        </div>
-                      </a>
-                    ))}
+                      );
+                    })}
                   </div>
                   {(!issue.attachments || issue.attachments.length === 0) && (
                     <div className="col-span-full py-16 text-center border border-dashed border-slate-250 dark:border-slate-800 rounded-[2.5rem] bg-slate-100/30 dark:bg-slate-950/30">

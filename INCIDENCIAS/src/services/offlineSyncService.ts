@@ -349,6 +349,13 @@ export async function triggerBackgroundSync(): Promise<void> {
           const currentList = getCachedIncidents(companyId, projectId);
           const updated = currentList.map(i => i.id === issueRec.id ? issueRec.issueData : i);
           updateLocalIncidentsCache(updated, companyId, projectId);
+
+          // Persist progress to Drive IMMEDIATELY so files show up on desktop without waiting!
+          try {
+            await saveIncidentToDrive(issueRec.issueData, companyId, projectId);
+          } catch (syncErr) {
+            console.warn('[offlineSyncService] Warning persisting partial upload to Drive:', syncErr);
+          }
         }
 
         notifyStatusChange();

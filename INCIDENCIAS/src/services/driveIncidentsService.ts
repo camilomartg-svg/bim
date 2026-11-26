@@ -210,7 +210,23 @@ export async function saveIncidentToDrive(
   // 2. Persist JSON file directly into 1-9SumRefiih81mc_eASsswy_W_U0-qe5 / [Empresa] / [Proyecto]
   try {
     const folderId = await resolveIncidentsProjectFolderId(cId, pId);
-    const jsonStr = JSON.stringify(fullIssue, null, 2);
+
+    // Sanitize issue to never persist private phone blob: URLs into Google Drive!
+    const sanitizedIssueForDrive: Issue = {
+      ...fullIssue,
+      attachments: (fullIssue.attachments || []).map(att => {
+        if (att.url && att.url.startsWith('blob:')) {
+          return {
+            ...att,
+            url: '',
+            isLocalPending: true
+          };
+        }
+        return att;
+      })
+    };
+
+    const jsonStr = JSON.stringify(sanitizedIssueForDrive, null, 2);
     const utf8Bytes = new TextEncoder().encode(jsonStr);
     let binary = '';
     const chunkSize = 0x8000;
