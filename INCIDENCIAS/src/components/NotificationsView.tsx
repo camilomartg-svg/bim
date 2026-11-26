@@ -306,6 +306,23 @@ export default function NotificationsView({ onSelectIssue, canAccessBim }: Notif
       // 2. COLUMNA: RESPONSABLE
       // ==========================================
       if (isResponsible) {
+        // A0. Nueva incidencia asignada activa
+        if (issue.status === 'ACTIVO') {
+          list.push({
+            id: `notif_resp_new_${issue.id}`,
+            issue,
+            role: 'responsible',
+            category: 'NUEVAS_INCIDENCIAS',
+            type: 'NUEVA_INCIDENCIA',
+            title: `Nuevo hallazgo asignado: ${issue.code}`,
+            description: `${issue.title || 'Se te ha asignado una nueva incidencia para respuesta técnica.'}`,
+            timestamp: issue.createdAt || issue.updatedAt,
+            priority: 'ALTA',
+            badgeLabel: 'Nuevo Hallazgo',
+            badgeColor: 'bg-blue-500/15 text-blue-600 dark:text-blue-400 border-blue-500/30'
+          });
+        }
+
         // A. Redirección o asignación pendiente de aceptación
         const isPendingRedir = Boolean(
           issue.pendingRedirection || 

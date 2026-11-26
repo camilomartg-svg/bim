@@ -28,6 +28,8 @@ import { loadAndCacheProjectIso, isIncidentsAdmin } from './utils/userScope';
 import { UserHeaderBadge } from './components/UserHeaderBadge';
 import { checkIncidenciasLicense, ProjectLicenseStatus } from './utils/licenseGuard';
 import SyncStatusBar from './components/SyncStatusBar';
+import NotificationPermissionBanner from './components/NotificationPermissionBanner';
+import { useGlobalNotificationsWatcher } from './hooks/useGlobalNotificationsWatcher';
 import ErrorBoundary from './components/ErrorBoundary';
 
 // Component for displaying standard restricted access view to matching style
@@ -59,6 +61,7 @@ function Dashboard() {
   const { user } = useAuth();
   const { theme, toggleTheme } = useTheme();
   const [currentTime, setCurrentTime] = useState(new Date());
+  useGlobalNotificationsWatcher(user);
   const [isMobilePhone, setIsMobilePhone] = useState<boolean>(() => {
     if (typeof window === 'undefined') return false;
     return window.innerWidth < 768;
@@ -411,6 +414,7 @@ function Dashboard() {
   return (
     <div className="flex h-screen bg-white dark:bg-black text-slate-900 dark:text-white font-sans selection:bg-amber-500/30 selection:text-white transition-colors duration-200">
       <SyncStatusBar />
+      <NotificationPermissionBanner />
       <Sidebar 
         activeTab={activeTab} 
         setActiveTab={setActiveTab} 
