@@ -247,21 +247,48 @@ export async function getPendingSyncCounts(): Promise<{ issuesCount: number; fil
     const db = await openOfflineDB();
     const issuesCount = await new Promise<number>((resolve) => {
       const tx = db.transaction([ISSUES_STORE], 'readonly');
-      const req = tx.objectStore(ISSUES_STORE).count();
-      req.onsuccess = () => resolve(req.result || 0);
+      const req = tx.objectStore(ISSUES_STORE).getAll();
+      req.onsuccess = () => {
+        const all = (req.result || []) as PendingIssueRecord[];
+        resolve(all.filter(i => i.status !== 'DONE').length);
+      };
       req.onerror = () => resolve(0);
     });
 
     const filesCount = await new Promise<number>((resolve) => {
       const tx = db.transaction([FILES_STORE], 'readonly');
-      const req = tx.objectStore(FILES_STORE).count();
-      req.onsuccess = () => resolve(req.result || 0);
+      const req = tx.objectStore(FILES_STORE).getAll();
+      req.onsuccess = () => {
+        const all = (req.result || []) as PendingFileRecord[];
+        // Solo contar los archivos que realmente están pendientes por subir (no DONE ni ERROR)
+        resolve(all.filter(f => f.status !== 'DONE' && (f.attempts || 0) < 4).length);
+      };
       req.onerror = () => resolve(0);
     });
 
     return { issuesCount, filesCount };
   } catch (_) {
     return { issuesCount: 0, filesCount: 0 };
+  }
+}
+
+/**
+ * Limpia forzosamente la cola offline en caso de que algún archivo quede atascado
+ */
+export async function clearOfflineQueue(): Promise<void> {
+  try {
+    const db = await openOfflineDB();
+    await new Promise<void>((res) => {
+      const tx = db.transaction([FILES_STORE, ISSUES_STORE], 'readwrite');
+      tx.objectStore(FILES_STORE).clear();
+      tx.objectStore(ISSUES_STORE).clear();
+      tx.oncomplete = () => res();
+      tx.onerror = () => res();
+    });
+    isSyncingInProgress = false;
+    await notifyStatusChange();
+  } catch (err) {
+    console.warn('[offlineSyncService] Error limpiando cola offline:', err);
   }
 }
 

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { subscribeSyncStatus, triggerBackgroundSync, SyncState } from '../services/offlineSyncService';
-import { Cloud, CloudOff, RefreshCw, CheckCircle2, AlertTriangle, ArrowUpCircle } from 'lucide-react';
+import { subscribeSyncStatus, triggerBackgroundSync, clearOfflineQueue, SyncState } from '../services/offlineSyncService';
+import { Cloud, CloudOff, RefreshCw, CheckCircle2, AlertTriangle, ArrowUpCircle, X } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { cn } from '../lib/utils';
 
@@ -14,6 +14,7 @@ export const SyncStatusBar: React.FC = () => {
 
   const [justFinished, setJustFinished] = useState(false);
   const [prevSyncing, setPrevSyncing] = useState(false);
+  const [isDismissed, setIsDismissed] = useState(false);
 
   useEffect(() => {
     const unsub = subscribeSyncStatus((state) => {
@@ -32,8 +33,8 @@ export const SyncStatusBar: React.FC = () => {
 
   const hasPending = syncState.pendingIssuesCount > 0 || syncState.pendingFilesCount > 0;
 
-  // If online, not syncing, no pending items and not just finished, keep UI clean and hidden
-  if (syncState.isOnline && !syncState.isSyncing && !hasPending && !justFinished) {
+  // Si el usuario lo cerró manualmente o todo está sincronizado, no mostrar
+  if (isDismissed || (syncState.isOnline && !syncState.isSyncing && !hasPending && !justFinished)) {
     return null;
   }
 
@@ -123,6 +124,19 @@ export const SyncStatusBar: React.FC = () => {
               Subir Ahora
             </button>
           )}
+
+          {/* Dismiss button */}
+          <button
+            onClick={() => {
+              setIsDismissed(true);
+              // Limpiar la cola si el usuario descarta para que no vuelva a molestar
+              clearOfflineQueue().catch(() => {});
+            }}
+            className="p-1 rounded-lg hover:bg-white/10 text-slate-400 hover:text-white transition-colors ml-1"
+            title="Cerrar aviso"
+          >
+            <X className="w-3.5 h-3.5" />
+          </button>
         </div>
       </motion.div>
     </AnimatePresence>
