@@ -49,13 +49,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           return;
         }
 
+        let noraRole = '';
         if (noraUserStr) {
           try {
             const noraUser = JSON.parse(noraUserStr);
             email = noraUser.username || noraUser.email || email;
             displayName = noraUser.name || displayName;
             
-            const noraRole = (noraUser.role || '').toUpperCase();
+            noraRole = (noraUser.role || '').toUpperCase();
             if (noraRole.includes('ADMIN') || noraRole.includes('SUPER')) {
               role = 'admin';
             } else if (noraRole.includes('GESTOR') || noraRole.includes('MANAGER')) {

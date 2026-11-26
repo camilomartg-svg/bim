@@ -1,4 +1,4 @@
-import { isIncidentsAdmin } from '../utils/userScope';
+import { isIncidentsAdmin, getUserProjectStatus } from '../utils/userScope';
 import React, { useEffect, useState, useMemo } from 'react';
 import { collection, query, orderBy, onSnapshot, addDoc, updateDoc, doc, deleteDoc, getDoc } from 'firebase/firestore';
 import { db, storage } from '../services/firebase';
@@ -16,7 +16,7 @@ import { cn } from '../lib/utils';
 import { format, differenceInDays, isPast } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { getMedicionDueDate, getEficaciaDueDate, isMedicionAlertActive, isEficaciaAlertActive, generateFollowUpCode } from '../utils/followUpUtils';
-import { getProjectConfig, subscribeToTeam, deleteIssue, syncIssueStatusToParentReport, saveIssue } from '../services/firebaseService';
+import { getProjectAndCompany, getProjectConfig, subscribeToTeam, deleteIssue, syncIssueStatusToParentReport, saveIssue } from '../services/firebaseService';
 import { uploadFileToDrive, getAuthenticatedDriveUrl } from '../utils/googleDriveUtils';
 import { IssueTypeScope } from '../utils/userScope';
 import AssigneeSelectorModal from './AssigneeSelectorModal';
@@ -29,7 +29,7 @@ interface IssueDetailProps {
   isPaymentAdmin?: boolean;
 }
 
-export default function IssueDetail({ issue: initialIssue, onClose, onOpenReport }: IssueDetailProps) {
+export default function IssueDetail({ issue: initialIssue, onClose, onOpenReport, isSuspended, isPaymentAdmin }: IssueDetailProps) {
   const [issue, setIssue] = useState<Issue>(initialIssue);
   const [comments, setComments] = useState<Comment[]>(initialIssue.comments || []);
   const [newComment, setNewComment] = useState('');
@@ -650,7 +650,7 @@ export default function IssueDetail({ issue: initialIssue, onClose, onOpenReport
         pendingRedirectionType: redirectionType,
         pendingRedirectionTo: redirectedData,
         redirectionStatus: 'PENDIENTE',
-        previousResponsible
+        previousResponsible: prevResponsible
       };
 
       let roleText = 'responsable';

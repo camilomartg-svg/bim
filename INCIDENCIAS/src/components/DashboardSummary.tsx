@@ -10,7 +10,7 @@ import {
   Search, Filter, ClipboardList, Clock, User, ArrowRight, AlertCircle, 
   ChevronDown, ChevronUp, MapPin, Tag, ShieldCheck, Zap, Paperclip, Layers, Box,
   ExternalLink, MessageSquare, Send, Calendar, SortDesc, FileText as FileIcon, Image as ImageIcon,
-  ArrowUpAZ, ArrowDownAZ, X, Trash2, CheckCircle2, Leaf, RotateCcw
+  ArrowUpAZ, ArrowDownAZ, X, Trash2, CheckCircle2, Leaf, RotateCcw, RefreshCw
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { cn } from '../lib/utils';
@@ -1561,7 +1561,7 @@ function StatusManager({ issue, isBimPanel, isSuspended, isPaymentAdmin }: { iss
         redirectionStatus: 'PENDIENTE',
         returnedToSource: false,
         returnToSourceReason: null,
-        previousResponsible
+        previousResponsible: prevResponsible
       };
 
       let roleText = 'responsable';

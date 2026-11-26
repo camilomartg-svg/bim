@@ -630,6 +630,7 @@ export const getPlatformTeam = async (companyId: string, projectId: string): Pro
         const cargo = dirU?.cargo || dirU?.especialidad || m?.cargo || m?.especialidad || m?.role || 'Colaborador';
         const position = `${cargo} (${displayName})`;
 
+        const hostCompany = allCompanies.find((c: any) => c && (c.id === companyId || c.slug === companyId));
         // Resolve Company
         let companyName = memberCompanies[email] || dirU?.empresa || m?.empresaUsuario || compU?.companyName || hostCompany?.name || 'Empresa';
         companyName = companyName.trim();
