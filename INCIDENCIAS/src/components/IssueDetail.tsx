@@ -2136,7 +2136,7 @@ export default function IssueDetail({ issue: initialIssue, onClose, onOpenReport
                             );
                           }
                           return (
-                            <a key={att.id} href={getAuthenticatedDriveUrl(att.url, googleAccessToken)} target="_blank" rel="noreferrer" className="aspect-video bg-slate-100 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-[1.5rem] overflow-hidden hover:border-indigo-500 group/img transition-all relative shadow-2xl">
+                            <a key={att.id} href={att.webViewLink || (att.driveFileId ? `https://drive.google.com/file/d/${att.driveFileId}/view` : getAuthenticatedDriveUrl(att.url, googleAccessToken))} target="_blank" rel="noreferrer" className="aspect-video bg-slate-100 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-[1.5rem] overflow-hidden hover:border-indigo-500 group/img transition-all relative shadow-2xl">
                                <img src={getAuthenticatedDriveUrl(att.url, googleAccessToken)} alt={att.name} referrerPolicy="no-referrer" className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700" />
                                <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover/img:opacity-100 transition-opacity">
                                  <Eye className="w-6 h-6 text-white" />
@@ -2174,7 +2174,7 @@ export default function IssueDetail({ issue: initialIssue, onClose, onOpenReport
                           </div>
                           {hasValidUrl ? (
                             <a 
-                              href={getAuthenticatedDriveUrl(att.url, googleAccessToken)} 
+                              href={att.webViewLink || (att.driveFileId ? `https://drive.google.com/file/d/${att.driveFileId}/view` : getAuthenticatedDriveUrl(att.url, googleAccessToken))} 
                               target="_blank" 
                               rel="noreferrer"
                               className="p-2.5 bg-slate-100 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg group-hover:bg-slate-800 transition-colors"

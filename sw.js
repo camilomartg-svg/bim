@@ -1,4 +1,4 @@
-const CACHE_NAME = 'portal-bim-nora-v120';
+const CACHE_NAME = 'portal-bim-nora-v121';
 // Lista de archivos que queremos guardar en caché para que la app funcione offline.
 const urlsToCache = [
   'home.html', // Ruta relativa a la ubicación del Service Worker
@@ -111,4 +111,25 @@ self.addEventListener('sync', event => {
       })
     );
   }
+});
+
+// Evento de clic en notificación push / del sistema
+self.addEventListener('notificationclick', event => {
+  event.notification.close();
+  const urlToOpen = (event.notification.data && event.notification.data.url) || self.location.origin;
+
+  event.waitUntil(
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then(windowClients => {
+      // Si la ventana ya está abierta, enfocarla
+      for (let client of windowClients) {
+        if ('focus' in client) {
+          return client.focus();
+        }
+      }
+      // Si no hay ventana abierta, abrir una nueva
+      if (self.clients.openWindow) {
+        return self.clients.openWindow(urlToOpen);
+      }
+    })
+  );
 });

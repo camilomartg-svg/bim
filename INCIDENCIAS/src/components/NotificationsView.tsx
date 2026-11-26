@@ -5,6 +5,7 @@ import { subscribeToIssues, getProjectAndCompany } from '../services/firebaseSer
 import { saveNotificationPreferencesToDrive, fetchNotificationPreferencesFromDrive } from '../services/driveIncidentsService';
 import { isMedicionAlertActive, isEficaciaAlertActive } from '../utils/followUpUtils';
 import { isIncidentsAdmin } from '../utils/userScope';
+import { sendInstantSystemNotification, requestNotificationPermission } from '../services/pushNotificationService';
 import { 
   Bell, User, Briefcase, ClipboardCheck, ArrowRight, CheckCircle2, 
   XCircle, AlertTriangle, Clock, RotateCcw, ShieldAlert, MessageSquare, 
@@ -578,6 +579,32 @@ export default function NotificationsView({ onSelectIssue, canAccessBim }: Notif
   const authorGroup = useMemo(() => filterByRoleAndConfig('author'), [allNotifications, preferences, searchTerm]);
   const responsibleGroup = useMemo(() => filterByRoleAndConfig('responsible'), [allNotifications, preferences, searchTerm]);
   const reviewerGroup = useMemo(() => filterByRoleAndConfig('reviewer'), [allNotifications, preferences, searchTerm]);
+
+  // Enviar notificaciones del sistema al celular / navegador para items configurados "Al Instante"
+  useEffect(() => {
+    if (!preferences || loading) return;
+
+    // Pedir permiso silenciosamente si el usuario interactuó
+    requestNotificationPermission().catch(() => {});
+
+    const allInstantUnread = [
+      ...authorGroup.instantUnread,
+      ...responsibleGroup.instantUnread,
+      ...reviewerGroup.instantUnread
+    ];
+
+    allInstantUnread.forEach((item) => {
+      sendInstantSystemNotification({
+        id: item.id,
+        category: item.category,
+        role: item.role,
+        title: item.title,
+        body: item.description,
+        issueId: item.issue.id,
+        preferences
+      });
+    });
+  }, [authorGroup.instantUnread, responsibleGroup.instantUnread, reviewerGroup.instantUnread, preferences, loading]);
 
   // Unread counts based on active view mode
   const getUnreadCount = (items: NotificationItem[]) => items.filter(n => !readIds.includes(n.id)).length;

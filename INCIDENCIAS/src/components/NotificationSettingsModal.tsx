@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { requestNotificationPermission } from '../services/pushNotificationService';
 import { 
   X, Check, Settings, Bell, Zap, Calendar, BellOff, RotateCcw, 
   MessageSquare, Paperclip, CheckCircle2, ArrowRight, Clock, AlertCircle, 
@@ -190,6 +191,9 @@ export default function NotificationSettingsModal({
 
   const handleSaveAndClose = async () => {
     setIsSaving(true);
+    try {
+      await requestNotificationPermission();
+    } catch (_) {}
     try {
       const savePromise = onSave(draftPrefs);
       await Promise.race([
