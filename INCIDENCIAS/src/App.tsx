@@ -28,6 +28,7 @@ import { loadAndCacheProjectIso, isIncidentsAdmin } from './utils/userScope';
 import { UserHeaderBadge } from './components/UserHeaderBadge';
 import { checkIncidenciasLicense, ProjectLicenseStatus } from './utils/licenseGuard';
 import SyncStatusBar from './components/SyncStatusBar';
+import ErrorBoundary from './components/ErrorBoundary';
 
 // Component for displaying standard restricted access view to matching style
 function RestrictedView({ title, onBack }: { title: string; onBack: () => void }) {
@@ -504,20 +505,24 @@ function Dashboard() {
         )}
 
         <div className="flex-1 overflow-hidden flex flex-col relative">
-          {renderContent()}
+          <ErrorBoundary>
+            {renderContent()}
+          </ErrorBoundary>
         </div>
       </main>
 
       <AnimatePresence>
         {isCreateModalOpen && (
-          <CreateIssueModal 
-            onClose={() => setIsCreateModalOpen(false)} 
-            onSuccess={() => {
-              // Siempre redireccionar al dashboard según requerimiento de usuario
-              setActiveTab('dashboard');
-              setIsCreateModalOpen(false);
-            }}
-          />
+          <ErrorBoundary>
+            <CreateIssueModal 
+              onClose={() => setIsCreateModalOpen(false)} 
+              onSuccess={() => {
+                // Siempre redireccionar al dashboard según requerimiento de usuario
+                setActiveTab('dashboard');
+                setIsCreateModalOpen(false);
+              }}
+            />
+          </ErrorBoundary>
         )}
       </AnimatePresence>
     </div>
