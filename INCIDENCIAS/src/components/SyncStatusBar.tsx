@@ -118,7 +118,7 @@ export const SyncStatusBar: React.FC = () => {
           {/* Manual sync action button */}
           {syncState.isOnline && !syncState.isSyncing && hasPending && (
             <button
-              onClick={() => triggerBackgroundSync()}
+              onClick={() => triggerBackgroundSync(true)}
               className="shrink-0 px-2.5 py-1 rounded-xl bg-blue-500/20 hover:bg-blue-500/30 border border-blue-500/40 text-[8.5px] font-black uppercase tracking-wider text-blue-300 active:scale-95 transition-all cursor-pointer"
             >
               Subir Ahora

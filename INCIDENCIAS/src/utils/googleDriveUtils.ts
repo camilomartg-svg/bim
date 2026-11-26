@@ -111,10 +111,10 @@ export function getHumanCompanyAndProject(companyId: string, projectId: string):
   return { companyName, projectName };
 }
 
-export async function postToAppsScript(payload: unknown): Promise<any> {
+export async function postToAppsScript(payload: unknown, timeoutMs = APPS_SCRIPT_TIMEOUT_MS): Promise<any> {
   const targetUrl = INCIDENCES_CONFIG_SCRIPT_URL || FILES_GATEWAY_URL;
   const controller = new AbortController();
-  const timeout = window.setTimeout(() => controller.abort(), APPS_SCRIPT_TIMEOUT_MS);
+  const timeout = window.setTimeout(() => controller.abort(), timeoutMs);
   try {
     const response = await fetch(targetUrl, {
       method: 'POST',
@@ -473,19 +473,21 @@ export async function uploadFileToDrive(
         filename: fileName,
         contentType: cleanContentType,
         totalBytes: fileBlob.size
-      });
+      }, 45_000);
 
       if (!initRes || !initRes.sessionUrl) {
         throw new Error(initRes?.message || 'No se pudo iniciar la carga reanudable en Google Drive.');
       }
 
-      const CHUNK_SIZE = 512 * 1024; // 512 KB chunks (multiple of 256KB)
+      // 1 MB chunks (multiple of 256KB: 4 * 256KB) to speed up video uploads and reduce HTTP roundtrips
+      const CHUNK_SIZE = 1024 * 1024;
       let offset = 0;
       let uploadedFileId = '';
 
       while (offset < fileBlob.size) {
         const slice = fileBlob.slice(offset, Math.min(offset + CHUNK_SIZE, fileBlob.size));
         const chunkBase64 = await blobToBase64(slice);
+        console.log(`[Drive Upload] Subiendo bloque ${(offset / 1024 / 1024).toFixed(1)} MB / ${(fileBlob.size / 1024 / 1024).toFixed(1)} MB...`);
         const chunkRes = await postToAppsScript({
           action: 'uploadResumableChunk',
           sessionUrl: initRes.sessionUrl,
@@ -496,7 +498,7 @@ export async function uploadFileToDrive(
           filename: fileName,
           folderId: targetFolderId,
           skipStatusRegister: true
-        });
+        }, 60_000);
 
         if (chunkRes?.status === 'error') {
           throw new Error(chunkRes.message || 'Error en bloque de subida a Drive.');

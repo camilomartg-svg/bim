@@ -297,7 +297,7 @@ export async function clearOfflineQueue(): Promise<void> {
 /**
  * Processes the queue: uploads files to Drive, updates issue URLs, saves to Drive
  */
-export async function triggerBackgroundSync(): Promise<void> {
+export async function triggerBackgroundSync(forceRetry = false): Promise<void> {
   if (isSyncingInProgress) return;
   if (typeof navigator !== 'undefined' && !navigator.onLine) {
     notifyStatusChange();
@@ -326,6 +326,18 @@ export async function triggerBackgroundSync(): Promise<void> {
       req.onerror = () => resolve([]);
     });
 
+    // Auto-recuperar archivos trabados (ej. por timeouts antiguos o errores de red pasados)
+    for (const f of pendingFiles) {
+      if (f.status === 'ERROR' || (forceRetry && f.status !== 'DONE')) {
+        f.status = 'QUEUED';
+        f.attempts = 0;
+        try {
+          const tx = db.transaction([FILES_STORE], 'readwrite');
+          tx.objectStore(FILES_STORE).put(f);
+        } catch (_) {}
+      }
+    }
+
     if (pendingFiles.length === 0 && pendingIssues.length === 0) {
       isSyncingInProgress = false;
       notifyStatusChange();
@@ -342,7 +354,7 @@ export async function triggerBackgroundSync(): Promise<void> {
         const projectId = issueRec?.projectId || 'default';
 
         // Si ya superó 4 intentos fallidos, marcarlo como ERROR para no trabar el resto de fotos
-        if ((fileRecord.attempts || 0) >= 4) {
+        if ((fileRecord.attempts || 0) >= 8) {
           fileRecord.status = 'ERROR';
           await new Promise<void>((res) => {
             const tx = db.transaction([FILES_STORE], 'readwrite');
@@ -353,7 +365,11 @@ export async function triggerBackgroundSync(): Promise<void> {
           continue;
         }
 
-        // Subir con timeout máximo de 45 segundos por archivo para evitar que quede cargando eternamente
+        // Timeout dinámico adecuado: mínimo 3 minutos (180s) y más tiempo proporcional para videos grandes
+        const fileSize = fileRecord.fileBlob?.size || 0;
+        const dynamicTimeoutMs = Math.max(180_000, Math.ceil(fileSize / (40 * 1024)) * 1000);
+        console.log(`[offlineSyncService] Subiendo ${fileRecord.fileName} (${(fileSize / 1024 / 1024).toFixed(1)}MB), timeout asignado: ${Math.round(dynamicTimeoutMs / 1000)}s`);
+
         const uploadPromise = uploadFileToDrive(
           fileRecord.fileBlob,
           fileRecord.fileName,
@@ -364,7 +380,7 @@ export async function triggerBackgroundSync(): Promise<void> {
         );
 
         const timeoutPromise = new Promise<never>((_, reject) =>
-          setTimeout(() => reject(new Error('Timeout de red subiendo a Drive (45s)')), 45000)
+          setTimeout(() => reject(new Error(`Timeout de red subiendo a Drive (${Math.round(dynamicTimeoutMs / 1000)}s)`)), dynamicTimeoutMs)
         );
 
         const driveResult = await Promise.race([uploadPromise, timeoutPromise]);
