@@ -268,9 +268,6 @@ function Dashboard() {
                   <DashboardSummary 
                     onSelectIssue={(issue) => {
                       setSelectedIssue(issue);
-                      if (isMobilePhone) {
-                        setMobileTab('chat');
-                      }
                     }} 
                     onOpenReport={(reportId) => {
                       if (!isMobilePhone) {
