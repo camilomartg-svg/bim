@@ -227,6 +227,11 @@ export async function enqueueOfflineIssue(
 
   // 4. Trigger background sync immediately if online
   if (navigator.onLine) {
+    // Persist initial issue record to Google Drive immediately in background
+    saveIncidentToDrive(enrichedIssue, companyId, projectId).catch((err) => {
+      console.warn('[enqueueOfflineIssue] Background initial save to Drive deferred:', err);
+    });
+
     setTimeout(() => {
       triggerBackgroundSync().catch(console.error);
     }, 100);

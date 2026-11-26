@@ -910,48 +910,9 @@ export default function CreateIssueModal({ onClose, onSuccess }: CreateIssueModa
 
       console.log("Saving issue data:", fullIssue);
       
-      // Try direct upload to Google Drive if online
-      if (pendingFilesRef.current.size > 0 && navigator.onLine) {
-        let count = 0;
-        const total = pendingFilesRef.current.size;
-        let allUploaded = true;
-        for (const [attId, fileBlob] of Array.from(pendingFilesRef.current.entries())) {
-          count++;
-          setSubmittingStatus(`Subiendo a Drive (${count}/${total})...`);
-          try {
-            const att = cleanedAttachments.find(a => a.id === attId);
-            const fileName = att?.name || `Adjunto_${Date.now()}`;
-            const fileType = att?.type || fileBlob.type || 'application/octet-stream';
-            const driveRes = await uploadFileToDrive(fileBlob, fileName, fileType, undefined, undefined, { companyId, projectId });
-            if (att) {
-              att.url = driveRes.url || driveRes.webViewLink;
-              att.webViewLink = driveRes.webViewLink;
-              att.driveFileId = driveRes.id;
-              att.isLocalPending = false;
-            }
-            pendingFilesRef.current.delete(attId);
-          } catch (uploadErr) {
-            console.warn('[CreateIssueModal] Subida directa falló, encolando para offlineSync:', uploadErr);
-            allUploaded = false;
-            break;
-          }
-        }
-
-        if (allUploaded) {
-          setSubmittingStatus('Guardando en Google Drive...');
-          fullIssue.isLocalPending = false;
-          fullIssue.attachments = cleanedAttachments;
-          await saveIssue(fullIssue);
-          if (onSuccess) onSuccess('issue');
-          onClose();
-          return;
-        }
-      }
-
-      // If offline or if any file couldn't upload directly:
+      // Guardado inmediato y subida 100% en segundo plano sin bloquear al usuario
       if (pendingFilesRef.current.size > 0 || !navigator.onLine) {
-        setSubmittingStatus('Sincronizando...');
-        console.log(`[CreateIssueModal] Encolando ${pendingFilesRef.current.size} adjuntos locales con offlineSyncService...`);
+        console.log(`[CreateIssueModal] Guardando incidencia con ${pendingFilesRef.current.size} adjuntos en segundo plano...`);
         await enqueueOfflineIssue(fullIssue, pendingFilesRef.current, companyId, projectId);
       } else {
         await saveIssue(fullIssue);
