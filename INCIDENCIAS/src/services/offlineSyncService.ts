@@ -78,8 +78,9 @@ function openOfflineDB(): Promise<IDBDatabase> {
 /**
  * Compress images larger than 3MB to ~1920px max dimension for fast mobile site uploads
  */
-export async function optimizeImageForUpload(fileBlob: Blob, maxWidth = 1920, quality = 0.85): Promise<Blob> {
-  if (!fileBlob.type.startsWith('image/') || fileBlob.size < 2.5 * 1024 * 1024) {
+export async function optimizeImageForUpload(fileBlob: Blob, maxWidth = 1600, quality = 0.80): Promise<Blob> {
+  // Comprimir toda imagen mayor a 400KB para que suba en 1-2 segundos en 4G/3G móvil
+  if (!fileBlob.type.startsWith('image/') || fileBlob.size < 400 * 1024) {
     return fileBlob;
   }
 
@@ -311,7 +312,20 @@ export async function triggerBackgroundSync(): Promise<void> {
         const companyId = issueRec?.companyId || 'default';
         const projectId = issueRec?.projectId || 'default';
 
-        const driveResult = await uploadFileToDrive(
+        // Si ya superó 4 intentos fallidos, marcarlo como ERROR para no trabar el resto de fotos
+        if ((fileRecord.attempts || 0) >= 4) {
+          fileRecord.status = 'ERROR';
+          await new Promise<void>((res) => {
+            const tx = db.transaction([FILES_STORE], 'readwrite');
+            const req = tx.objectStore(FILES_STORE).put(fileRecord);
+            req.onsuccess = () => res();
+            req.onerror = () => res();
+          });
+          continue;
+        }
+
+        // Subir con timeout máximo de 45 segundos por archivo para evitar que quede cargando eternamente
+        const uploadPromise = uploadFileToDrive(
           fileRecord.fileBlob,
           fileRecord.fileName,
           fileRecord.fileType,
@@ -319,6 +333,12 @@ export async function triggerBackgroundSync(): Promise<void> {
           undefined,
           { companyId, projectId }
         );
+
+        const timeoutPromise = new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error('Timeout de red subiendo a Drive (45s)')), 45000)
+        );
+
+        const driveResult = await Promise.race([uploadPromise, timeoutPromise]);
 
         // Update file record as DONE
         await new Promise<void>((res, rej) => {
@@ -368,6 +388,10 @@ export async function triggerBackgroundSync(): Promise<void> {
         console.warn(`[offlineSyncService] Error subiendo archivo ${fileRecord.fileName}:`, fileErr);
         fileRecord.attempts = (fileRecord.attempts || 0) + 1;
         fileRecord.lastError = fileErr?.message || String(fileErr);
+        try {
+          const tx = db.transaction([FILES_STORE], 'readwrite');
+          tx.objectStore(FILES_STORE).put(fileRecord);
+        } catch (_) {}
         // If offline or network dropped, abort and wait for next online event
         if (!navigator.onLine) break;
       }
