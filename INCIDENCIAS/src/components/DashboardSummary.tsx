@@ -10,13 +10,14 @@ import {
   Search, Filter, ClipboardList, Clock, User, ArrowRight, AlertCircle, 
   ChevronDown, ChevronUp, MapPin, Tag, ShieldCheck, Zap, Paperclip, Layers, Box,
   ExternalLink, MessageSquare, Send, Calendar, SortDesc, FileText as FileIcon, Image as ImageIcon,
-  ArrowUpAZ, ArrowDownAZ, X, Trash2, CheckCircle2, Leaf, RotateCcw, RefreshCw
+  ArrowUpAZ, ArrowDownAZ, X, Trash2, CheckCircle2, Leaf, RotateCcw, RefreshCw, Video, Mic
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { cn } from '../lib/utils';
 import { format, differenceInDays, isPast } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { isMedicionAlertActive, isEficaciaAlertActive } from '../utils/followUpUtils';
+import { getAuthenticatedDriveUrl } from '../utils/googleDriveUtils';
 
 interface DashboardSummaryProps {
   onSelectIssue: (issue: Issue) => void;
@@ -765,7 +766,7 @@ export default function DashboardSummary({ onSelectIssue, onOpenReport, selected
                     )}>
                       {getEffectiveStatus(issue)}
                     </div>
-                    {issue.isLocalPending && (
+                    {issue.isLocalPending && (Date.now() - new Date(issue.updatedAt || issue.createdAt || 0).getTime() < 10 * 60 * 1000) && (
                       <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-[8px] font-black uppercase tracking-[0.15em] bg-blue-500/15 text-blue-600 dark:text-blue-400 border border-blue-500/30 shadow-sm animate-pulse">
                         <RefreshCw className="w-2.5 h-2.5 animate-spin" />
                         <span>Sincronizando en Nube</span>
@@ -1215,17 +1216,48 @@ export default function DashboardSummary({ onSelectIssue, onOpenReport, selected
                                     <Paperclip className="w-3 h-3 text-slate-300 dark:text-slate-700" /> Documentación
                                   </h4>
                                   <div className="space-y-2.5">
-                                    {issue.attachments?.map((att, idx) => (
-                                      <a key={`${att.id || att.name || idx}-${idx}`} href={att.url} target="_blank" rel="noreferrer" className="flex items-center justify-between p-3.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl hover:border-slate-400 dark:hover:border-slate-700 group transition-all shadow-sm">
-                                        <div className="flex items-center gap-3 overflow-hidden">
-                                          <div className="w-8 h-8 rounded-lg bg-slate-100 dark:bg-slate-950 flex items-center justify-center text-slate-400 dark:text-slate-600 shrink-0">
-                                            {att.type.includes('image') ? <ImageIcon className="w-3.5 h-3.5" /> : <FileIcon className="w-3.5 h-3.5" />}
+                                    {issue.attachments?.map((att, idx) => {
+                                      const isVid = att.category === 'video' || att.type?.includes('video') || att.name?.toLowerCase().endsWith('.mp4') || att.name?.toLowerCase().endsWith('.mov');
+                                      const isAud = att.category === 'audio' || att.type?.includes('audio') || att.name?.toLowerCase().endsWith('.webm') || att.name?.toLowerCase().endsWith('.m4a') || att.name?.toLowerCase().endsWith('.mp3');
+                                      const isBlob = att.url?.startsWith('blob:');
+                                      const driveUrl = att.webViewLink || (att.driveFileId ? `https://drive.google.com/file/d/${att.driveFileId}/view` : '') || (att.url && !isBlob ? getAuthenticatedDriveUrl(att.url, null) : '');
+                                      const effectiveUrl = driveUrl || (isBlob ? att.url : '');
+                                      const canOpen = Boolean(effectiveUrl);
+
+                                      return (
+                                        <div key={`${att.id || att.name || idx}-${idx}`} className="p-3.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl hover:border-slate-400 dark:hover:border-slate-700 group transition-all shadow-sm flex flex-col gap-2">
+                                          <div className="flex items-center justify-between gap-2">
+                                            <div className="flex items-center gap-3 overflow-hidden flex-1">
+                                              <div className="w-8 h-8 rounded-lg bg-slate-100 dark:bg-slate-950 flex items-center justify-center text-slate-400 dark:text-slate-600 shrink-0">
+                                                {att.type?.includes('image') ? <ImageIcon className="w-3.5 h-3.5 text-emerald-500" /> : isVid ? <Video className="w-3.5 h-3.5 text-purple-500" /> : isAud ? <Mic className="w-3.5 h-3.5 text-amber-500" /> : <FileIcon className="w-3.5 h-3.5" />}
+                                              </div>
+                                              {canOpen ? (
+                                                <a href={effectiveUrl} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()} className="text-[11px] text-slate-600 dark:text-slate-300 truncate font-semibold hover:text-blue-600 dark:hover:text-blue-400 transition-colors uppercase tracking-tight">
+                                                  {att.name}
+                                                </a>
+                                              ) : (
+                                                <div className="flex flex-col overflow-hidden">
+                                                  <span className="text-[11px] text-slate-400 dark:text-slate-500 truncate font-semibold uppercase tracking-tight">{att.name}</span>
+                                                  <span className="text-[8px] font-black text-amber-500 uppercase tracking-wider">⏳ Subiendo a Drive...</span>
+                                                </div>
+                                              )}
+                                            </div>
+                                            {canOpen ? (
+                                              <a href={effectiveUrl} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()} className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-400 hover:text-slate-900 dark:hover:text-white transition-colors" title="Abrir archivo en pestaña nueva">
+                                                <ExternalLink className="w-3.5 h-3.5" />
+                                              </a>
+                                            ) : (
+                                              <Clock className="w-3.5 h-3.5 text-amber-500 animate-pulse shrink-0" />
+                                            )}
                                           </div>
-                                          <span className="text-[11px] text-slate-500 dark:text-slate-400 truncate font-semibold group-hover:text-slate-900 dark:group-hover:text-white transition-colors uppercase tracking-tight">{att.name}</span>
+                                          {isAud && canOpen && (
+                                            <div onClick={(e) => e.stopPropagation()} className="w-full pt-1">
+                                              <audio controls src={effectiveUrl} className="w-full h-7 rounded" />
+                                            </div>
+                                          )}
                                         </div>
-                                        <ExternalLink className="w-3 h-3 text-slate-300 dark:text-slate-700 group-hover:text-slate-900 dark:group-hover:text-white" />
-                                      </a>
-                                    ))}
+                                      );
+                                    })}
                                     {(!issue.attachments || issue.attachments.length === 0) && <p className="text-[9px] text-slate-400 dark:text-slate-600 italic px-1">Sin archivos vinculados</p>}
                                   </div>
                                </div>

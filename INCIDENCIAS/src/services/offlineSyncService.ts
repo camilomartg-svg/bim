@@ -39,12 +39,21 @@ export interface SyncState {
   isSyncing: boolean;
   pendingIssuesCount: number;
   pendingFilesCount: number;
+  currentFileName?: string;
   lastSyncedAt?: string;
   error?: string;
 }
 
 // In-memory state tracking
 let isSyncingInProgress = false;
+let currentUploadingFileLabel: string | undefined = undefined;
+let syncRecheckRequested = false;
+
+function formatFileSizeShort(bytes: number): string {
+  if (!bytes || bytes <= 0) return '0 KB';
+  if (bytes < 1024 * 1024) return `${Math.max(1, Math.round(bytes / 1024))} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
 const listeners = new Set<(state: SyncState) => void>();
 
 /**
@@ -180,9 +189,9 @@ export async function enqueueOfflineIssue(
     req.onerror = () => reject(req.error);
   });
 
-  // 3. Save raw file blobs in IndexedDB
+  // 3. Save raw file blobs in IndexedDB (sorted from lightest to heaviest!)
   if (filesMap.size > 0) {
-    // A. Prepare and optimize all file records in memory FIRST (outside IDB transaction)
+    // A. Prepare, optimize, and materialize all file records in RAM first (prevents Android camera temp file expiration)
     const fileRecords: PendingFileRecord[] = [];
     for (const [attachmentId, fileBlob] of filesMap.entries()) {
       const att = issue.attachments?.find(a => a.id === attachmentId);
@@ -198,7 +207,12 @@ export async function enqueueOfflineIssue(
       if (isVid && !fileName.includes('.')) fileName += '.mp4';
       if (isAud && !fileName.includes('.')) fileName += '.webm';
 
-      const finalBlob = await optimizeImageForUpload(fileBlob);
+      const optimized = await optimizeImageForUpload(fileBlob);
+      let persistentBlob = optimized;
+      try {
+        const arrayBuf = await optimized.arrayBuffer();
+        persistentBlob = new Blob([arrayBuf], { type: fileType });
+      } catch (_) {}
 
       fileRecords.push({
         id: `${issue.id}_${attachmentId}`,
@@ -207,12 +221,15 @@ export async function enqueueOfflineIssue(
         fileName,
         fileType,
         category,
-        fileBlob: finalBlob,
+        fileBlob: persistentBlob,
         status: 'QUEUED',
         attempts: 0,
         createdAt: new Date().toISOString()
       });
     }
+
+    // Sort from lightest to heaviest so audios/photos upload first and heavy videos last
+    fileRecords.sort((a, b) => (a.fileBlob?.size || 0) - (b.fileBlob?.size || 0));
 
     // B. Open IndexedDB transaction and synchronously store records without yielding
     await new Promise<void>((resolve, reject) => {
@@ -230,14 +247,12 @@ export async function enqueueOfflineIssue(
 
   // 4. Trigger background sync immediately if online
   if (navigator.onLine) {
-    // Persist initial issue record to Google Drive immediately in background
-    saveIncidentToDrive(enrichedIssue, companyId, projectId).catch((err) => {
-      console.warn('[enqueueOfflineIssue] Background initial save to Drive deferred:', err);
-    });
-
+    if (isSyncingInProgress) {
+      syncRecheckRequested = true;
+    }
     setTimeout(() => {
       triggerBackgroundSync().catch(console.error);
-    }, 100);
+    }, 50);
   }
 }
 
@@ -263,7 +278,7 @@ export async function getPendingSyncCounts(): Promise<{ issuesCount: number; fil
       req.onsuccess = () => {
         const all = (req.result || []) as PendingFileRecord[];
         // Solo contar los archivos que realmente están pendientes por subir (no DONE ni ERROR)
-        resolve(all.filter(f => f.status !== 'DONE' && (f.attempts || 0) < 4).length);
+        resolve(all.filter(f => f.status !== 'DONE' && (f.status as string) !== 'ERROR' && f.status !== 'FAILED' && (f.attempts || 0) < 3).length);
       };
       req.onerror = () => resolve(0);
     });
@@ -298,77 +313,122 @@ export async function clearOfflineQueue(): Promise<void> {
  * Processes the queue: uploads files to Drive, updates issue URLs, saves to Drive
  */
 export async function triggerBackgroundSync(forceRetry = false): Promise<void> {
-  if (isSyncingInProgress) return;
+  if (isSyncingInProgress) {
+    if (forceRetry) syncRecheckRequested = true;
+    return;
+  }
   if (typeof navigator !== 'undefined' && !navigator.onLine) {
     notifyStatusChange();
     return;
   }
 
   isSyncingInProgress = true;
+  syncRecheckRequested = false;
   notifyStatusChange();
 
   try {
     const db = await openOfflineDB();
 
-    // 1. Fetch pending files
-    const pendingFiles = await new Promise<PendingFileRecord[]>((resolve) => {
-      const tx = db.transaction([FILES_STORE], 'readonly');
-      const req = tx.objectStore(FILES_STORE).getAll();
-      req.onsuccess = () => resolve(req.result || []);
-      req.onerror = () => resolve([]);
-    });
-
-    // 2. Fetch pending issues
-    const pendingIssues = await new Promise<PendingIssueRecord[]>((resolve) => {
-      const tx = db.transaction([ISSUES_STORE], 'readonly');
-      const req = tx.objectStore(ISSUES_STORE).getAll();
-      req.onsuccess = () => resolve(req.result || []);
-      req.onerror = () => resolve([]);
-    });
-
-    // Auto-recuperar archivos trabados (ej. por timeouts antiguos o errores de red pasados)
-    for (const f of pendingFiles) {
-      if (f.status === 'ERROR' || (forceRetry && f.status !== 'DONE')) {
-        f.status = 'QUEUED';
-        f.attempts = 0;
-        try {
-          const tx = db.transaction([FILES_STORE], 'readwrite');
-          tx.objectStore(FILES_STORE).put(f);
-        } catch (_) {}
+    // Si el usuario pulsó "Subir Ahora" (forceRetry), reactivar cualquier archivo previo fallido
+    if (forceRetry) {
+      const allFiles = await new Promise<PendingFileRecord[]>((resolve) => {
+        const tx = db.transaction([FILES_STORE], 'readonly');
+        const req = tx.objectStore(FILES_STORE).getAll();
+        req.onsuccess = () => resolve(req.result || []);
+        req.onerror = () => resolve([]);
+      });
+      for (const f of allFiles) {
+        if (f.status !== 'DONE') {
+          f.status = 'QUEUED';
+          f.attempts = 0;
+          try {
+            const tx = db.transaction([FILES_STORE], 'readwrite');
+            tx.objectStore(FILES_STORE).put(f);
+          } catch (_) {}
+        }
       }
     }
 
-    if (pendingFiles.length === 0 && pendingIssues.length === 0) {
-      isSyncingInProgress = false;
-      notifyStatusChange();
-      return;
-    }
+    // Bucle de prioridad dinámica: en cada iteración toma siempre el archivo MÁS LIVIANO disponible
+    // (audios -> fotos -> documentos -> videos al final)
+    let safetyIterations = 0;
+    while (safetyIterations < 100) {
+      safetyIterations++;
+      if (typeof navigator !== 'undefined' && !navigator.onLine) break;
 
-    // 3. Upload pending files one by one to avoid network saturation
-    for (const fileRecord of pendingFiles) {
-      if (fileRecord.status === 'DONE') continue;
+      const allFiles = await new Promise<PendingFileRecord[]>((resolve) => {
+        const tx = db.transaction([FILES_STORE], 'readonly');
+        const req = tx.objectStore(FILES_STORE).getAll();
+        req.onsuccess = () => resolve(req.result || []);
+        req.onerror = () => resolve([]);
+      });
+
+      const pendingIssues = await new Promise<PendingIssueRecord[]>((resolve) => {
+        const tx = db.transaction([ISSUES_STORE], 'readonly');
+        const req = tx.objectStore(ISSUES_STORE).getAll();
+        req.onsuccess = () => resolve(req.result || []);
+        req.onerror = () => resolve([]);
+      });
+
+      // Persistir inmediatamente en Drive cualquier incidencia recién creada que aún esté en estado QUEUED
+      for (const issRec of pendingIssues) {
+        if (issRec.status === 'QUEUED') {
+          issRec.status = 'UPLOADING';
+          await new Promise<void>((res) => {
+            const tx = db.transaction([ISSUES_STORE], 'readwrite');
+            const req = tx.objectStore(ISSUES_STORE).put(issRec);
+            req.onsuccess = () => res();
+            req.onerror = () => res();
+          });
+          try {
+            await saveIncidentToDrive(issRec.issueData, issRec.companyId, issRec.projectId);
+          } catch (initSaveErr) {
+            console.warn('[offlineSyncService] Guardado inicial de incidencia diferido:', initSaveErr);
+          }
+        }
+      }
+
+      // Filtrar archivos pendientes válidos
+      const runnableFiles: PendingFileRecord[] = [];
+      for (const f of allFiles) {
+        if (f.status === 'DONE' || (f.status as string) === 'ERROR' || f.status === 'FAILED') continue;
+        // Descartar blobs vacíos o corruptos o que superaron 3 intentos
+        if (!f.fileBlob || f.fileBlob.size === 0 || (f.attempts || 0) >= 3) {
+          f.status = 'FAILED';
+          await new Promise<void>((res) => {
+            const tx = db.transaction([FILES_STORE], 'readwrite');
+            const req = tx.objectStore(FILES_STORE).put(f);
+            req.onsuccess = () => res();
+            req.onerror = () => res();
+          });
+          continue;
+        }
+        runnableFiles.push(f);
+      }
+
+      if (runnableFiles.length === 0) break;
+
+      // ORDENAR POR PRIORIDAD:
+      // 1. Archivos nuevos (0 intentos fallidos) van primero para que un archivo viejo nunca bloquee uno nuevo
+      // 2. Del MÁS LIVIANO al MÁS PESADO (audios -> fotos -> PDFs -> videos)
+      runnableFiles.sort((a, b) => {
+        const attDiff = (a.attempts || 0) - (b.attempts || 0);
+        if (attDiff !== 0) return attDiff;
+        return (a.fileBlob?.size || 0) - (b.fileBlob?.size || 0);
+      });
+
+      const fileRecord = runnableFiles[0];
+      const fileSize = fileRecord.fileBlob?.size || 0;
+      currentUploadingFileLabel = `${fileRecord.fileName} (${formatFileSizeShort(fileSize)})`;
+      notifyStatusChange();
 
       try {
         const issueRec = pendingIssues.find(i => i.id === fileRecord.issueId);
         const companyId = issueRec?.companyId || 'default';
         const projectId = issueRec?.projectId || 'default';
 
-        // Si ya superó 4 intentos fallidos, marcarlo como ERROR para no trabar el resto de fotos
-        if ((fileRecord.attempts || 0) >= 8) {
-          fileRecord.status = 'ERROR';
-          await new Promise<void>((res) => {
-            const tx = db.transaction([FILES_STORE], 'readwrite');
-            const req = tx.objectStore(FILES_STORE).put(fileRecord);
-            req.onsuccess = () => res();
-            req.onerror = () => res();
-          });
-          continue;
-        }
-
-        // Timeout dinámico adecuado: mínimo 3 minutos (180s) y más tiempo proporcional para videos grandes
-        const fileSize = fileRecord.fileBlob?.size || 0;
-        const dynamicTimeoutMs = Math.max(180_000, Math.ceil(fileSize / (40 * 1024)) * 1000);
-        console.log(`[offlineSyncService] Subiendo ${fileRecord.fileName} (${(fileSize / 1024 / 1024).toFixed(1)}MB), timeout asignado: ${Math.round(dynamicTimeoutMs / 1000)}s`);
+        const dynamicTimeoutMs = Math.max(90_000, Math.ceil(fileSize / (60 * 1024)) * 1000);
+        console.log(`[offlineSyncService] Subiendo por prioridad (livianos primero): ${currentUploadingFileLabel}`);
 
         const uploadPromise = uploadFileToDrive(
           fileRecord.fileBlob,
@@ -380,12 +440,12 @@ export async function triggerBackgroundSync(forceRetry = false): Promise<void> {
         );
 
         const timeoutPromise = new Promise<never>((_, reject) =>
-          setTimeout(() => reject(new Error(`Timeout de red subiendo a Drive (${Math.round(dynamicTimeoutMs / 1000)}s)`)), dynamicTimeoutMs)
+          setTimeout(() => reject(new Error(`Timeout subiendo ${fileRecord.fileName}`)), dynamicTimeoutMs)
         );
 
         const driveResult = await Promise.race([uploadPromise, timeoutPromise]);
 
-        // Update file record as DONE
+        // Marcar archivo como DONE
         await new Promise<void>((res, rej) => {
           const tx = db.transaction([FILES_STORE], 'readwrite');
           fileRecord.status = 'DONE';
@@ -396,9 +456,10 @@ export async function triggerBackgroundSync(forceRetry = false): Promise<void> {
           req.onerror = () => rej(tx.error);
         });
 
-        // Update the issue attachment with real Drive URL in the pending issue record
-        if (issueRec) {
-          const atts = issueRec.issueData.attachments || [];
+        // Actualizar anexo en la incidencia (tanto en IndexedDB como en caché local y Drive)
+        const targetIssue: Issue | undefined = issueRec?.issueData || getCachedIncidents(companyId, projectId).find(i => i.id === fileRecord.issueId);
+        if (targetIssue) {
+          const atts = targetIssue.attachments || [];
           const matchedAtt = atts.find(a => a.id === fileRecord.attachmentId);
           if (matchedAtt) {
             matchedAtt.url = driveResult.url || driveResult.webViewLink;
@@ -407,22 +468,23 @@ export async function triggerBackgroundSync(forceRetry = false): Promise<void> {
             matchedAtt.isLocalPending = false;
           }
 
-          // Update in IndexedDB
-          await new Promise<void>((res, rej) => {
-            const tx = db.transaction([ISSUES_STORE], 'readwrite');
-            const req = tx.objectStore(ISSUES_STORE).put(issueRec);
-            req.onsuccess = () => res();
-            req.onerror = () => rej(tx.error);
-          });
+          if (issueRec) {
+            issueRec.issueData = targetIssue;
+            await new Promise<void>((res) => {
+              const tx = db.transaction([ISSUES_STORE], 'readwrite');
+              const req = tx.objectStore(ISSUES_STORE).put(issueRec);
+              req.onsuccess = () => res();
+              req.onerror = () => res();
+            });
+          }
 
-          // Also update local cache so user can view uploaded Drive file
           const currentList = getCachedIncidents(companyId, projectId);
-          const updated = currentList.map(i => i.id === issueRec.id ? issueRec.issueData : i);
+          const updated = currentList.map(i => i.id === targetIssue.id ? targetIssue : i);
           updateLocalIncidentsCache(updated, companyId, projectId);
 
-          // Persist progress to Drive IMMEDIATELY so files show up on desktop without waiting!
+          // Persistir avance en Drive inmediatamente para que las fotos/audios ya se vean mientras sube el video
           try {
-            await saveIncidentToDrive(issueRec.issueData, companyId, projectId);
+            await saveIncidentToDrive(targetIssue, companyId, projectId);
           } catch (syncErr) {
             console.warn('[offlineSyncService] Warning persisting partial upload to Drive:', syncErr);
           }
@@ -433,30 +495,46 @@ export async function triggerBackgroundSync(forceRetry = false): Promise<void> {
         console.warn(`[offlineSyncService] Error subiendo archivo ${fileRecord.fileName}:`, fileErr);
         fileRecord.attempts = (fileRecord.attempts || 0) + 1;
         fileRecord.lastError = fileErr?.message || String(fileErr);
+        if ((fileRecord.attempts || 0) >= 3) {
+          fileRecord.status = 'FAILED';
+        }
         try {
           const tx = db.transaction([FILES_STORE], 'readwrite');
           tx.objectStore(FILES_STORE).put(fileRecord);
         } catch (_) {}
-        // If offline or network dropped, abort and wait for next online event
         if (!navigator.onLine) break;
       }
     }
 
-    // 4. Check issues whose files are all uploaded (or had no files)
-    for (const issueRec of pendingIssues) {
-      const remainingFilesForIssue = await new Promise<PendingFileRecord[]>((resolve) => {
+    currentUploadingFileLabel = undefined;
+
+    // 4. Finalizar incidencias que ya no tienen archivos pendientes activos
+    const finalIssues = await new Promise<PendingIssueRecord[]>((resolve) => {
+      const tx = db.transaction([ISSUES_STORE], 'readonly');
+      const req = tx.objectStore(ISSUES_STORE).getAll();
+      req.onsuccess = () => resolve(req.result || []);
+      req.onerror = () => resolve([]);
+    });
+
+    for (const issueRec of finalIssues) {
+      const remainingActiveFiles = await new Promise<PendingFileRecord[]>((resolve) => {
         const tx = db.transaction([FILES_STORE], 'readonly');
         const req = tx.objectStore(FILES_STORE).getAll();
         req.onsuccess = () => {
           const files = (req.result || []) as PendingFileRecord[];
-          resolve(files.filter(f => f.issueId === issueRec.id && f.status !== 'DONE'));
+          resolve(files.filter(f =>
+            f.issueId === issueRec.id &&
+            f.status !== 'DONE' &&
+            f.status !== 'FAILED' &&
+            (f.status as string) !== 'ERROR' &&
+            (f.attempts || 0) < 3
+          ));
         };
         req.onerror = () => resolve([]);
       });
 
-      if (remainingFilesForIssue.length === 0) {
+      if (remainingActiveFiles.length === 0) {
         try {
-          // All files for this issue are in Drive. Save the issue JSON to Google Drive
           const cleanIssueToSave: Issue = {
             ...issueRec.issueData,
             isLocalPending: false,
@@ -465,7 +543,7 @@ export async function triggerBackgroundSync(forceRetry = false): Promise<void> {
 
           await saveIncidentToDrive(cleanIssueToSave, issueRec.companyId, issueRec.projectId);
 
-          // Clean up completed files from IndexedDB
+          // Limpiar archivos terminados de IndexedDB
           await new Promise<void>((res) => {
             const tx = db.transaction([FILES_STORE], 'readwrite');
             const store = tx.objectStore(FILES_STORE);
@@ -478,7 +556,7 @@ export async function triggerBackgroundSync(forceRetry = false): Promise<void> {
             req.onerror = () => res();
           });
 
-          // Clean up completed issue from IndexedDB
+          // Limpiar incidencia terminada de IndexedDB
           await new Promise<void>((res) => {
             const tx = db.transaction([ISSUES_STORE], 'readwrite');
             const req = tx.objectStore(ISSUES_STORE).delete(issueRec.id);
@@ -486,14 +564,13 @@ export async function triggerBackgroundSync(forceRetry = false): Promise<void> {
             req.onerror = () => res();
           });
 
-          // Update local cache to remove isLocalPending badge
           const cached = getCachedIncidents(issueRec.companyId, issueRec.projectId);
           const finalUpdated = cached.map(i => i.id === issueRec.id ? cleanIssueToSave : i);
           updateLocalIncidentsCache(finalUpdated, issueRec.companyId, issueRec.projectId);
 
           notifyStatusChange();
         } catch (saveErr: any) {
-          console.warn(`[offlineSyncService] Error guardando JSON de incidencia ${issueRec.id} en Drive:`, saveErr);
+          console.warn(`[offlineSyncService] Error guardando JSON final de incidencia ${issueRec.id}:`, saveErr);
           issueRec.attempts = (issueRec.attempts || 0) + 1;
           issueRec.lastError = saveErr?.message || String(saveErr);
           if (!navigator.onLine) break;
@@ -503,8 +580,15 @@ export async function triggerBackgroundSync(forceRetry = false): Promise<void> {
   } catch (err) {
     console.error('[offlineSyncService] Error durante sincronización en segundo plano:', err);
   } finally {
+    currentUploadingFileLabel = undefined;
     isSyncingInProgress = false;
     notifyStatusChange();
+    if (syncRecheckRequested && (typeof navigator === 'undefined' || navigator.onLine)) {
+      syncRecheckRequested = false;
+      setTimeout(() => {
+        triggerBackgroundSync().catch(console.error);
+      }, 100);
+    }
   }
 }
 
@@ -525,7 +609,8 @@ async function notifyStatusChange() {
     isOnline,
     isSyncing: isSyncingInProgress,
     pendingIssuesCount: counts.issuesCount,
-    pendingFilesCount: counts.filesCount
+    pendingFilesCount: counts.filesCount,
+    currentFileName: currentUploadingFileLabel
   };
 
   listeners.forEach(cb => {

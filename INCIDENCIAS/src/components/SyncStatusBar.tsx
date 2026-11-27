@@ -89,8 +89,10 @@ export const SyncStatusBar: React.FC = () => {
                   Subiendo en segundo plano a Drive...
                 </p>
                 <p className="text-[8.5px] font-medium text-slate-300 truncate">
-                  {syncState.pendingFilesCount > 0 
-                    ? `Cargando fotos/videos pendientes (${syncState.pendingFilesCount} archivo(s)).`
+                  {syncState.currentFileName
+                    ? `Subiendo (livianos primero): ${syncState.currentFileName} • Restan ${syncState.pendingFilesCount}`
+                    : syncState.pendingFilesCount > 0 
+                    ? `Cargando archivos pendientes (${syncState.pendingFilesCount} archivo(s)).`
                     : `Sincronizando incidencias pendientes (${syncState.pendingIssuesCount}).`}
                 </p>
               </div>

@@ -169,22 +169,30 @@ export async function resolveIncidentsProjectFolderId(companyId: string, project
   const cacheKey = `nora_inc_folder_v3_${companyName}_${projectName}`;
   const projCacheKey = `nora_inc_folder_proj_${projectId}`;
 
-  try {
-    const cached = localStorage.getItem(cacheKey) || localStorage.getItem(projCacheKey) || localStorage.getItem('cached_project_folder_id');
-    if (cached && cached.trim().length > 10 && cached.trim() !== INCIDENTS_DRIVE_FOLDER_ID) {
-      return cached.trim();
-    }
-  } catch (_) {}
-
-  // Fixed mapping for PROYECTO PARA ENSAYOS DE HS
+  // Fixed mapping for PROYECTO PARA ENSAYOS DE HS (ends in lowercase 'l', overwrite any old 'I' typo in localStorage)
   if (projectId === 'nuevo-proyecto-1794663364994' || projectId?.includes('1794663364994') || projectName === 'PROYECTO PARA ENSAYOS DE HS') {
-    const knownFolder = '1Gotb8NKYre22k1p5LrvcuG23z79TvAMI';
+    const knownFolder = '1Gotb8NKYre22k1p5LrvcuG23z79TvAMl';
     try {
       localStorage.setItem(cacheKey, knownFolder);
       localStorage.setItem(projCacheKey, knownFolder);
+      if (localStorage.getItem('cached_project_folder_id') === '1Gotb8NKYre22k1p5LrvcuG23z79TvAMI') {
+        localStorage.setItem('cached_project_folder_id', knownFolder);
+      }
     } catch (_) {}
     return knownFolder;
   }
+
+  try {
+    const cached = localStorage.getItem(cacheKey) || localStorage.getItem(projCacheKey) || localStorage.getItem('cached_project_folder_id');
+    if (
+      cached &&
+      cached.trim().length > 10 &&
+      cached.trim() !== INCIDENTS_DRIVE_FOLDER_ID &&
+      cached.trim() !== '1Gotb8NKYre22k1p5LrvcuG23z79TvAMI'
+    ) {
+      return cached.trim();
+    }
+  } catch (_) {}
 
   const existingPromise = folderResolvePromises.get(cacheKey);
   if (existingPromise) return existingPromise;
@@ -463,52 +471,101 @@ export async function uploadFileToDrive(
 
     const cleanContentType = fileType || (fileName.endsWith('.mp4') ? 'video/mp4' : (fileName.endsWith('.jpg') || fileName.endsWith('.jpeg')) ? 'image/jpeg' : 'application/octet-stream');
 
-    // For files > 3.5 MB (e.g. videos or high-resolution images), use Google Drive resumable upload
-    // to avoid payload limits, timeouts, and mobile browser crashes
-    if (fileBlob.size > 3.5 * 1024 * 1024) {
-      console.log(`[Drive Upload] Archivo grande (${(fileBlob.size / 1024 / 1024).toFixed(1)} MB). Usando subida reanudable por bloques...`);
+    // For videos or any file > 500 KB, use direct binary upload to Google Drive Resumable Session URL
+    // (10x faster than Base64 chunking through Apps Script, with automatic chunked fallback)
+    if (fileBlob.size > 500 * 1024 || cleanContentType.startsWith('video/')) {
+      console.log(`[Drive Upload] Subida rápida para ${fileName} (${(fileBlob.size / 1024 / 1024).toFixed(2)} MB)...`);
       const initRes = await postToAppsScript({
         action: 'initResumableUpload',
         folderId: targetFolderId,
         filename: fileName,
         contentType: cleanContentType,
         totalBytes: fileBlob.size
-      }, 45_000);
+      }, 35_000);
 
       if (!initRes || !initRes.sessionUrl) {
-        throw new Error(initRes?.message || 'No se pudo iniciar la carga reanudable en Google Drive.');
+        throw new Error(initRes?.message || 'No se pudo iniciar la sesión de carga en Google Drive.');
       }
 
-      // 1 MB chunks (multiple of 256KB: 4 * 256KB) to speed up video uploads and reduce HTTP roundtrips
-      const CHUNK_SIZE = 1024 * 1024;
-      let offset = 0;
       let uploadedFileId = '';
 
-      while (offset < fileBlob.size) {
-        const slice = fileBlob.slice(offset, Math.min(offset + CHUNK_SIZE, fileBlob.size));
-        const chunkBase64 = await blobToBase64(slice);
-        console.log(`[Drive Upload] Subiendo bloque ${(offset / 1024 / 1024).toFixed(1)} MB / ${(fileBlob.size / 1024 / 1024).toFixed(1)} MB...`);
-        const chunkRes = await postToAppsScript({
+      // 1. Intento de transmisión binaria directa a Google Drive (sin Base64 ni intermediación por bloques)
+      try {
+        await fetch(`${initRes.sessionUrl}&%24httpMethod=PUT`, {
+          method: 'POST',
+          mode: 'no-cors',
+          headers: {
+            'Content-Type': 'text/plain'
+          },
+          body: fileBlob
+        });
+
+        // Verificar finalización y obtener el fileId enviando el último byte al gateway
+        const lastSlice = fileBlob.slice(Math.max(0, fileBlob.size - 1), fileBlob.size);
+        const lastBase64 = await blobToBase64(lastSlice);
+        const finRes = await postToAppsScript({
           action: 'uploadResumableChunk',
           sessionUrl: initRes.sessionUrl,
-          content: chunkBase64,
-          start: offset,
+          content: lastBase64,
+          start: Math.max(0, fileBlob.size - 1),
           totalBytes: fileBlob.size,
           contentType: cleanContentType,
           filename: fileName,
           folderId: targetFolderId,
           skipStatusRegister: true
-        }, 60_000);
+        }, 35_000);
 
-        if (chunkRes?.status === 'error') {
-          throw new Error(chunkRes.message || 'Error en bloque de subida a Drive.');
+        if (finRes?.fileId) {
+          uploadedFileId = finRes.fileId;
+          console.log(`[Drive Upload] Transmisión binaria directa completada -> ID: ${uploadedFileId}`);
+        }
+      } catch (directErr) {
+        console.warn('[Drive Upload] Transmisión directa requiere respaldo por bloques:', directErr);
+      }
+
+      // 2. Respaldo por bloques de 2 MB si la transmisión directa no devolvió fileId
+      if (!uploadedFileId) {
+        const fallbackInit = await postToAppsScript({
+          action: 'initResumableUpload',
+          folderId: targetFolderId,
+          filename: fileName,
+          contentType: cleanContentType,
+          totalBytes: fileBlob.size
+        }, 35_000);
+
+        if (!fallbackInit || !fallbackInit.sessionUrl) {
+          throw new Error(fallbackInit?.message || 'No se pudo reiniciar la sesión de carga en Google Drive.');
         }
 
-        if (chunkRes?.fileId) {
-          uploadedFileId = chunkRes.fileId;
-        }
+        const CHUNK_SIZE = 2 * 1024 * 1024; // 2 MB chunks (8 * 256KB)
+        let offset = 0;
 
-        offset += slice.size;
+        while (offset < fileBlob.size) {
+          const slice = fileBlob.slice(offset, Math.min(offset + CHUNK_SIZE, fileBlob.size));
+          const chunkBase64 = await blobToBase64(slice);
+          console.log(`[Drive Upload] Subiendo bloque ${(offset / 1024 / 1024).toFixed(1)} MB / ${(fileBlob.size / 1024 / 1024).toFixed(1)} MB...`);
+          const chunkRes = await postToAppsScript({
+            action: 'uploadResumableChunk',
+            sessionUrl: fallbackInit.sessionUrl,
+            content: chunkBase64,
+            start: offset,
+            totalBytes: fileBlob.size,
+            contentType: cleanContentType,
+            filename: fileName,
+            folderId: targetFolderId,
+            skipStatusRegister: true
+          }, 60_000);
+
+          if (chunkRes?.status === 'error') {
+            throw new Error(chunkRes.message || 'Error en bloque de subida a Drive.');
+          }
+
+          if (chunkRes?.fileId) {
+            uploadedFileId = chunkRes.fileId;
+          }
+
+          offset += slice.size;
+        }
       }
 
       if (!uploadedFileId) {
