@@ -85,6 +85,100 @@ export function updateLocalIncidentsCache(incidents: Issue[], companyId: string,
 
 // In-memory deduplication for concurrent fetchIncidentsFromDrive calls
 const activeFetchPromises = new Map<string, Promise<Issue[]>>();
+const inFlightSaveCounts = new Map<string, number>();
+const perIssueSaveQueue = new Map<string, Promise<any>>();
+
+/**
+ * Merges two attachment arrays by id/name, always preferring entries that have driveFileId or webViewLink populated
+ */
+export function mergeAttachmentsList(localAtts: any[] = [], remoteAtts: any[] = []): any[] {
+  if (!localAtts.length) return remoteAtts;
+  if (!remoteAtts.length) return localAtts;
+
+  const map = new Map<string, any>();
+  for (const r of remoteAtts) {
+    if (!r) continue;
+    const key = r.id || r.name;
+    map.set(key, { ...r });
+  }
+  for (const l of localAtts) {
+    if (!l) continue;
+    const key = l.id || l.name;
+    const existing = map.get(key);
+    if (!existing) {
+      map.set(key, { ...l });
+    } else {
+      // Keep driveFileId and webViewLink from whichever has them
+      const merged = {
+        ...existing,
+        ...l,
+        driveFileId: l.driveFileId || existing.driveFileId,
+        webViewLink: l.webViewLink || existing.webViewLink,
+        url: (l.driveFileId && l.url && !l.url.startsWith('blob:'))
+          ? l.url
+          : (existing.url && !existing.url.startsWith('blob:'))
+          ? existing.url
+          : (l.url || existing.url),
+        isLocalPending: (l.driveFileId || existing.driveFileId) ? false : Boolean(l.isLocalPending && existing.isLocalPending)
+      };
+      map.set(key, merged);
+    }
+  }
+  return Array.from(map.values());
+}
+
+/**
+ * Merges two comment arrays by comment.id so chat messages and photos are NEVER lost during polling or background sync
+ */
+export function mergeCommentsList(localComments: any[] = [], remoteComments: any[] = []): any[] {
+  if (!localComments.length) return remoteComments;
+  if (!remoteComments.length) return localComments;
+
+  const map = new Map<string, any>();
+  for (const r of remoteComments) {
+    if (!r || !r.id) continue;
+    map.set(r.id, { ...r });
+  }
+  for (const l of localComments) {
+    if (!l || !l.id) continue;
+    const existing = map.get(l.id);
+    if (!existing) {
+      map.set(l.id, { ...l });
+    } else {
+      map.set(l.id, {
+        ...existing,
+        ...l,
+        attachments: mergeAttachmentsList(l.attachments || [], existing.attachments || [])
+      });
+    }
+  }
+
+  return Array.from(map.values()).sort(
+    (a, b) => new Date(a.createdAt || 0).getTime() - new Date(b.createdAt || 0).getTime()
+  );
+}
+
+function mergeIssueWithLocalCache(localIssue: Issue | undefined, remoteIssue: Issue): Issue {
+  if (!localIssue) return remoteIssue;
+
+  const isSaving = (inFlightSaveCounts.get(remoteIssue.id) || 0) > 0;
+  const localTime = new Date(localIssue.updatedAt || localIssue.createdAt || 0).getTime();
+  const remoteTime = new Date(remoteIssue.updatedAt || remoteIssue.createdAt || 0).getTime();
+  const preferLocalBase = isSaving || localTime > remoteTime;
+
+  const base = preferLocalBase ? { ...remoteIssue, ...localIssue } : { ...localIssue, ...remoteIssue };
+  const mergedComments = mergeCommentsList(localIssue.comments || [], remoteIssue.comments || []);
+  const mergedAttachments = mergeAttachmentsList(localIssue.attachments || [], remoteIssue.attachments || []);
+  const lastCmt = mergedComments.length > 0 ? mergedComments[mergedComments.length - 1] : null;
+
+  return {
+    ...base,
+    comments: mergedComments,
+    attachments: mergedAttachments,
+    lastComment: lastCmt ? lastCmt.text : base.lastComment,
+    lastCommentAt: lastCmt ? lastCmt.createdAt : base.lastCommentAt
+  };
+}
 
 /**
  * Fetches all incidents directly from the Google Drive project folder:
@@ -153,8 +247,28 @@ export async function fetchIncidentsFromDrive(companyId?: string, projectId?: st
         }
       }));
 
-      // Merge any very recently created local incidents that might still be uploading
-      const sorted = incidents.sort((a, b) => 
+      // Merge fetched incidents with local cache so in-flight or newly posted chat messages/photos are never erased
+      const currentLocalList = getCachedIncidents(cId, pId);
+      const localById = new Map<string, Issue>();
+      currentLocalList.forEach(item => {
+        if (item && item.id) localById.set(item.id, item);
+      });
+
+      const mergedIncidents: Issue[] = incidents.map(remoteInc => {
+        const localMatch = localById.get(remoteInc.id);
+        localById.delete(remoteInc.id);
+        return mergeIssueWithLocalCache(localMatch, remoteInc);
+      });
+
+      // Keep any very recently created local incidents (< 2 min old or currently saving) not yet listed in Drive
+      for (const [remId, localOnly] of localById.entries()) {
+        const ageMs = Date.now() - new Date(localOnly.createdAt || 0).getTime();
+        if (localOnly.isLocalPending || (inFlightSaveCounts.get(remId) || 0) > 0 || ageMs < 120_000) {
+          mergedIncidents.push(localOnly);
+        }
+      }
+
+      const sorted = mergedIncidents.sort((a, b) => 
         new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime()
       );
       updateLocalIncidentsCache(sorted, cId, pId);
@@ -183,21 +297,30 @@ export async function saveIncidentToDrive(
   const { companyId: cId, projectId: pId } = getContext(companyId, projectId);
 
   const issueId = issue.id || ('iss_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6));
+  const existing = getCachedIncidents(cId, pId);
+  const index = existing.findIndex(i => i.id === issueId);
+  const prevIssue = index >= 0 ? existing[index] : undefined;
+
+  const mergedComments = mergeCommentsList(prevIssue?.comments || [], issue.comments || []);
+  const mergedAttachments = mergeAttachmentsList(prevIssue?.attachments || [], issue.attachments || []);
+  const lastCmt = mergedComments.length > 0 ? mergedComments[mergedComments.length - 1] : null;
+
   const fullIssue: Issue = {
+    ...(prevIssue || {}),
     ...issue,
     id: issueId,
     companyId: cId,
     projectId: pId,
-    createdAt: issue.createdAt || new Date().toISOString(),
+    createdAt: issue.createdAt || prevIssue?.createdAt || new Date().toISOString(),
     updatedAt: new Date().toISOString(),
-    comments: issue.comments || [],
-    attachments: issue.attachments || [],
-    locations: issue.locations || { units: [], levels: [], spaces: [] }
+    comments: mergedComments,
+    attachments: mergedAttachments,
+    lastComment: lastCmt ? lastCmt.text : (issue.lastComment || prevIssue?.lastComment),
+    lastCommentAt: lastCmt ? lastCmt.createdAt : (issue.lastCommentAt || prevIssue?.lastCommentAt),
+    locations: issue.locations || prevIssue?.locations || { units: [], levels: [], spaces: [] }
   } as Issue;
 
   // 1. Optimistically update local cache & broadcast immediately (0ms UI latency)
-  const existing = getCachedIncidents(cId, pId);
-  const index = existing.findIndex(i => i.id === issueId);
   let updatedList: Issue[];
   if (index >= 0) {
     updatedList = [...existing];
@@ -207,59 +330,89 @@ export async function saveIncidentToDrive(
   }
   updateLocalIncidentsCache(updatedList, cId, pId);
 
-  // 2. Persist JSON file directly into 1-9SumRefiih81mc_eASsswy_W_U0-qe5 / [Empresa] / [Proyecto]
-  try {
-    const folderId = await resolveIncidentsProjectFolderId(cId, pId);
+  // 2. Serialize saves per issueId so rapid consecutive chat messages never race or overwrite each other in Drive
+  inFlightSaveCounts.set(issueId, (inFlightSaveCounts.get(issueId) || 0) + 1);
+  const prevPromise = perIssueSaveQueue.get(issueId) || Promise.resolve();
 
-    // Sanitize issue to never persist private phone blob: URLs into Google Drive!
-    const sanitizedIssueForDrive: Issue = {
-      ...fullIssue,
-      attachments: (fullIssue.attachments || []).map(att => {
-        if (att.url && att.url.startsWith('blob:')) {
-          return {
-            ...att,
-            url: '',
-            isLocalPending: true
-          };
-        }
-        return att;
-      })
-    };
+  const currentSavePromise = prevPromise.then(async () => {
+    try {
+      const folderId = await resolveIncidentsProjectFolderId(cId, pId);
 
-    const jsonStr = JSON.stringify(sanitizedIssueForDrive, null, 2);
-    const utf8Bytes = new TextEncoder().encode(jsonStr);
-    let binary = '';
-    const chunkSize = 0x8000;
-    for (let i = 0; i < utf8Bytes.length; i += chunkSize) {
-      binary += String.fromCharCode.apply(null, Array.from(utf8Bytes.subarray(i, i + chunkSize)));
+      // Re-read the freshest local state for this issueId in case more comments were added while waiting in queue
+      const latestCached = getCachedIncidents(cId, pId).find(i => i.id === issueId) || fullIssue;
+
+      // Sanitize issue to never persist private device blob: URLs into Google Drive
+      const sanitizedIssueForDrive: Issue = {
+        ...latestCached,
+        attachments: (latestCached.attachments || []).map(att => {
+          if (att.url && att.url.startsWith('blob:')) {
+            return {
+              ...att,
+              url: att.webViewLink || (att.driveFileId ? `https://drive.google.com/file/d/${att.driveFileId}/view` : ''),
+              isLocalPending: !att.driveFileId
+            };
+          }
+          return att;
+        }),
+        comments: (latestCached.comments || []).map(cmt => ({
+          ...cmt,
+          attachments: (cmt.attachments || []).map((att: any) => {
+            if (att.url && att.url.startsWith('blob:')) {
+              return {
+                ...att,
+                url: att.webViewLink || (att.driveFileId ? `https://drive.google.com/file/d/${att.driveFileId}/view` : '')
+              };
+            }
+            return att;
+          })
+        }))
+      };
+
+      const jsonStr = JSON.stringify(sanitizedIssueForDrive, null, 2);
+      const utf8Bytes = new TextEncoder().encode(jsonStr);
+      let binary = '';
+      const chunkSize = 0x8000;
+      for (let i = 0; i < utf8Bytes.length; i += chunkSize) {
+        binary += String.fromCharCode.apply(null, Array.from(utf8Bytes.subarray(i, i + chunkSize)));
+      }
+      const base64 = btoa(binary);
+
+      const filename = `incidencia_${issueId}.json`;
+      const res = await postToAppsScript({
+        action: 'uploadFile',
+        folderId: folderId,
+        filename: filename,
+        name: filename,
+        contentType: 'application/json',
+        mimeType: 'application/json',
+        content: base64,
+        base64: base64
+      });
+
+      if (res?.fileId) {
+        try {
+          localStorage.setItem(`nora_inc_file_${res.fileId}`, JSON.stringify({
+            lastUpdated: new Date().toISOString(),
+            data: latestCached
+          }));
+        } catch (_) {}
+      }
+
+      invalidateIncidentsFolderListCache(cId, pId);
+    } catch (uploadErr) {
+      console.error('[driveIncidentsService] Error persisting incident JSON to Drive:', uploadErr);
+    } finally {
+      const remaining = (inFlightSaveCounts.get(issueId) || 1) - 1;
+      if (remaining <= 0) {
+        inFlightSaveCounts.delete(issueId);
+      } else {
+        inFlightSaveCounts.set(issueId, remaining);
+      }
     }
-    const base64 = btoa(binary);
+  });
 
-    const filename = `incidencia_${issueId}.json`;
-    const res = await postToAppsScript({
-      action: 'uploadFile',
-      folderId: folderId,
-      filename: filename,
-      name: filename,
-      contentType: 'application/json',
-      mimeType: 'application/json',
-      content: base64,
-      base64: base64
-    });
-
-    if (res?.fileId) {
-      try {
-        localStorage.setItem(`nora_inc_file_${res.fileId}`, JSON.stringify({
-          lastUpdated: new Date().toISOString(),
-          data: fullIssue
-        }));
-      } catch (_) {}
-    }
-
-    invalidateIncidentsFolderListCache(cId, pId);
-  } catch (uploadErr) {
-    console.error('[driveIncidentsService] Error persisting incident JSON to Drive:', uploadErr);
-  }
+  perIssueSaveQueue.set(issueId, currentSavePromise);
+  await currentSavePromise;
 
   return issueId;
 }

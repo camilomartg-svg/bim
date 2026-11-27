@@ -18,6 +18,7 @@ import { format, differenceInDays, isPast } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { isMedicionAlertActive, isEficaciaAlertActive } from '../utils/followUpUtils';
 import { getAuthenticatedDriveUrl } from '../utils/googleDriveUtils';
+import { DriveAudioPlayer } from './DriveMediaPreview';
 
 interface DashboardSummaryProps {
   onSelectIssue: (issue: Issue) => void;
@@ -1252,7 +1253,7 @@ export default function DashboardSummary({ onSelectIssue, onOpenReport, selected
                                           </div>
                                           {isAud && canOpen && (
                                             <div onClick={(e) => e.stopPropagation()} className="w-full pt-1">
-                                              <audio controls src={effectiveUrl} className="w-full h-7 rounded" />
+                                              <DriveAudioPlayer attachment={att} />
                                             </div>
                                           )}
                                         </div>

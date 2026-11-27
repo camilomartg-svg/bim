@@ -18,6 +18,7 @@ import { es } from 'date-fns/locale';
 import { getMedicionDueDate, getEficaciaDueDate, isMedicionAlertActive, isEficaciaAlertActive, generateFollowUpCode } from '../utils/followUpUtils';
 import { getProjectAndCompany, getProjectConfig, subscribeToTeam, deleteIssue, syncIssueStatusToParentReport, saveIssue } from '../services/firebaseService';
 import { uploadFileToDrive, getAuthenticatedDriveUrl } from '../utils/googleDriveUtils';
+import { DriveAudioPlayer, DriveVideoPlayer } from './DriveMediaPreview';
 import { IssueTypeScope } from '../utils/userScope';
 import AssigneeSelectorModal from './AssigneeSelectorModal';
 
@@ -2150,8 +2151,9 @@ export default function IssueDetail({ issue: initialIssue, onClose, onOpenReport
 
                   <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                     {issue.attachments?.map((att) => {
-                      const isVid = att.category === 'video' || att.type?.includes('video') || att.name.toLowerCase().endsWith('.mp4') || att.name.toLowerCase().endsWith('.webm') || att.name.toLowerCase().endsWith('.mov');
-                      const isAud = att.category === 'audio' || att.type?.includes('audio') || att.name.toLowerCase().endsWith('.m4a') || att.name.toLowerCase().endsWith('.mp3');
+                      const lowerName = (att.name || '').toLowerCase();
+                      const isAud = att.category === 'audio' || att.type?.includes('audio') || lowerName.endsWith('.m4a') || lowerName.endsWith('.mp3') || lowerName.endsWith('.wav') || (lowerName.endsWith('.webm') && att.category !== 'video');
+                      const isVid = !isAud && (att.category === 'video' || att.type?.includes('video') || lowerName.endsWith('.mp4') || lowerName.endsWith('.webm') || lowerName.endsWith('.mov'));
                       const isBlob = att.url?.startsWith('blob:');
                       const isPending = isBlob || !att.url || att.isLocalPending;
                       const driveUrl = att.webViewLink || (att.driveFileId ? `https://drive.google.com/file/d/${att.driveFileId}/view` : '') || (att.url && !att.url.startsWith('blob:') ? getAuthenticatedDriveUrl(att.url, googleAccessToken) : '');
@@ -2204,47 +2206,17 @@ export default function IssueDetail({ issue: initialIssue, onClose, onOpenReport
                             )}
                           </div>
 
-                          {/* Video player: local blob preview OR Drive preview */}
-                          {isVid && (
-                            <div className="mt-4 w-full">
-                              {att.driveFileId ? (
-                                <div className="space-y-2">
-                                  <iframe 
-                                    src={`https://drive.google.com/file/d/${att.driveFileId}/preview`} 
-                                    className="w-full h-52 rounded-xl border border-slate-300 dark:border-slate-800 bg-black shadow-md"
-                                    allow="autoplay"
-                                    title={att.name}
-                                  />
-                                  <a 
-                                    href={effectiveUrl} 
-                                    target="_blank" 
-                                    rel="noreferrer"
-                                    className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-purple-500/10 hover:bg-purple-500/20 text-purple-600 dark:text-purple-400 border border-purple-500/20 rounded-lg text-[9px] font-black uppercase tracking-wider transition-all"
-                                  >
-                                    <ExternalLink className="w-3 h-3" />
-                                    Ver video completo en Google Drive ↗
-                                  </a>
-                                </div>
-                              ) : isBlob && att.url ? (
-                                <div className="space-y-1.5">
-                                  <video 
-                                    controls 
-                                    playsInline 
-                                    src={att.url} 
-                                    className="w-full max-h-52 rounded-xl bg-black shadow-md object-contain"
-                                  />
-                                  <span className="text-[8px] text-amber-500 font-bold block">
-                                    ▶ Vista previa local del video mientras se sincroniza con Drive.
-                                  </span>
-                                </div>
-                              ) : null}
+                          {/* Video player */}
+                          {isVid && canOpen && (
+                            <div className="mt-3 w-full">
+                              <DriveVideoPlayer attachment={att} />
                             </div>
                           )}
 
                           {/* Audio player */}
-                          {isAud && effectiveUrl && (
+                          {isAud && canOpen && (
                             <div className="mt-3 w-full">
-                              <audio controls src={effectiveUrl} className="w-full h-8 rounded" />
+                              <DriveAudioPlayer attachment={att} />
                             </div>
                           )}
                         </div>

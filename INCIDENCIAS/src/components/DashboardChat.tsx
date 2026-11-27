@@ -24,6 +24,9 @@ import {
 } from '../utils/followUpUtils';
 import { uploadFileToDrive, archiveIncidentsRecord, getHumanCompanyAndProject, INCIDENTS_DRIVE_FOLDER_ID } from '../utils/googleDriveUtils';
 import { saveIssue, getProjectAndCompany } from '../services/firebaseService';
+import { VoiceRecorder } from '../utils/audioRecorderUtils';
+import { DriveAudioPlayer, DriveImagePreview, DriveVideoPlayer, registerLocalMediaBlob } from './DriveMediaPreview';
+import { mergeCommentsList, getCachedIncidents } from '../services/driveIncidentsService';
 
 const RCD_MATERIALS = [
   { material: "Acero", density: 7800 },
@@ -53,6 +56,11 @@ interface DashboardChatProps {
 
 export default function DashboardChat({ selectedIssue, isSuspended, isPaymentAdmin }: DashboardChatProps) {
   const [messages, setMessages] = useState<Comment[]>([]);
+  const messagesRef = useRef<Comment[]>([]);
+  const updateMessages = (next: Comment[]) => {
+    messagesRef.current = next;
+    setMessages(next);
+  };
   const [newMessage, setNewMessage] = useState('');
   const [loading, setLoading] = useState(false);
   const { user, googleAccessToken } = useAuth();
@@ -96,8 +104,9 @@ export default function DashboardChat({ selectedIssue, isSuspended, isPaymentAdm
       if (Array.isArray(incs)) {
         const found = incs.find((i: any) => i.id === selectedIssue.id);
         if (found) {
-          setLocalIssue(found);
-          if (found.comments) setMessages(found.comments);
+          const mergedCmts = mergeCommentsList(messagesRef.current, found.comments || []);
+          setLocalIssue({ ...found, comments: mergedCmts });
+          updateMessages(mergedCmts);
         }
       }
     };
@@ -153,16 +162,28 @@ export default function DashboardChat({ selectedIssue, isSuspended, isPaymentAdm
         setAudioRecordingSeconds(0);
 
         const file = res.file;
-        const base64UrlPromise = new Promise<string>((resolve) => {
-          const reader = new FileReader();
-          reader.onload = () => resolve(reader.result as string);
-          reader.readAsDataURL(file);
+        const attId = 'att_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5);
+        const commentId = 'cm_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6);
+        registerLocalMediaBlob(attId, res.url);
+
+        // 1. Mostrar inmediatamente la nota de voz en el chat (0ms) con reproducción local
+        const optimisticAttachment: Attachment = {
+          id: attId,
+          name: file.name,
+          type: file.type || 'audio/webm',
+          url: res.url,
+          category: 'audio'
+        };
+
+        await postCommentAndSync({
+          id: commentId,
+          text: `🎙️ Nota de voz (${res.durationSeconds}s)`,
+          attachments: [optimisticAttachment]
         });
 
         let url = res.url;
         let driveFileId = "";
         let webViewLink = "";
-        let uploadSuccess = false;
 
         const { companyId, projectId } = getProjectAndCompany();
         const { companyName, projectName } = getHumanCompanyAndProject(companyId, projectId);
@@ -179,29 +200,28 @@ export default function DashboardChat({ selectedIssue, isSuspended, isPaymentAdm
           url = driveResult.url;
           driveFileId = driveResult.id;
           webViewLink = driveResult.webViewLink;
-          uploadSuccess = true;
+          registerLocalMediaBlob(driveFileId, res.url);
         } catch (driveErr) {
-          console.warn("Drive upload nota de voz falló, usando respaldo Base64:", driveErr);
+          console.warn("Drive upload nota de voz falló, manteniendo reproducción local:", driveErr);
         }
 
-        if (!uploadSuccess) {
-          url = await base64UrlPromise;
+        if (driveFileId) {
+          const syncedAttachment: Attachment = {
+            id: attId,
+            name: file.name,
+            type: file.type || 'audio/webm',
+            url,
+            category: 'audio',
+            driveFileId,
+            webViewLink
+          };
+
+          await postCommentAndSync({
+            id: commentId,
+            text: `🎙️ Nota de voz (${res.durationSeconds}s)`,
+            attachments: [syncedAttachment]
+          });
         }
-
-        const attachment: Attachment = {
-          id: Date.now().toString(),
-          name: file.name,
-          type: file.type || 'audio/webm',
-          url,
-          category: 'audio',
-          ...(driveFileId ? { driveFileId } : {}),
-          ...(webViewLink ? { webViewLink } : {})
-        };
-
-        await postCommentAndSync({
-          text: `🎙️ Nota de voz (${res.durationSeconds}s)${driveFileId ? ' (Guardada en Google Drive)' : ''}`,
-          attachments: [attachment]
-        });
       } catch (err) {
         console.error("Error al finalizar o subir nota de voz:", err);
         alert("Error al procesar la nota de voz. Por favor intenta de nuevo.");
@@ -218,7 +238,7 @@ export default function DashboardChat({ selectedIssue, isSuspended, isPaymentAdm
         setIsRecordingAudio(true);
         setAudioRecordingSeconds(0);
       } catch (err: any) {
-        alert(err?.message || "No se pudo acceder al micrófono del celular. Por favor concede el permiso en el navegador.");
+        alert(err?.message || "No se pudo acceder al micrófono. Por favor concede el permiso en el navegador.");
       }
     }
   };
@@ -333,6 +353,7 @@ export default function DashboardChat({ selectedIssue, isSuspended, isPaymentAdm
 
   const postCommentAndSync = async (
     commentPayload: {
+      id?: string;
       text: string;
       attachments?: any[];
       userAvatar?: string;
@@ -344,21 +365,25 @@ export default function DashboardChat({ selectedIssue, isSuspended, isPaymentAdm
   ) => {
     if (!activeIssue) return;
     const authorUser = user || { id: 'SYSTEM', name: 'SISTEMA' };
+    const commentId = commentPayload.id || ('cm_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6));
+    const existingComment = messagesRef.current.find(c => c.id === commentId);
+
     const newComment: Comment = {
-      id: 'cm_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6),
+      id: commentId,
       userId: commentPayload.userId || authorUser.id,
       userEmail: commentPayload.userEmail || (authorUser as any).email || (user as any)?.email || '',
       userName: commentPayload.userName || authorUser.name,
       text: commentPayload.text,
-      createdAt: new Date().toISOString(),
+      createdAt: existingComment?.createdAt || new Date().toISOString(),
       attachments: commentPayload.attachments || [],
       userAvatar: commentPayload.userAvatar || authorUser.name.charAt(0)
     } as any;
 
-    const currentComments = activeIssue.comments || [];
-    const updatedComments = [...currentComments, newComment];
+    // Siempre fusionar los mensajes en memoria + comentarios de la incidencia para que nunca se pierdan mensajes previos
+    const baseComments = mergeCommentsList(messagesRef.current, activeIssue.comments || []);
+    const updatedComments = mergeCommentsList(baseComments, [newComment]);
 
-    setMessages(updatedComments);
+    updateMessages(updatedComments);
     setTimeout(() => {
       if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }, 100);
@@ -379,29 +404,26 @@ export default function DashboardChat({ selectedIssue, isSuspended, isPaymentAdm
       console.error("[DashboardChat] Error guardando incidencia:", saveErr);
     }
 
-    try {
-      const { companyId, projectId } = getProjectAndCompany();
-      await archiveIncidentsRecord(
-        'chat',
-        {
-          issueId: activeIssue.id,
-          issueCode: activeIssue.code,
-          issueTitle: activeIssue.title,
-          totalComments: updatedComments.length,
-          lastComment: newComment,
-          comments: updatedComments
-        },
-        activeIssue.id,
-        companyId,
-        projectId
-      );
-    } catch (chatArchiveErr) {
-      console.warn("[DashboardChat] No se pudo archivar chat en Drive:", chatArchiveErr);
-    }
-
     window.dispatchEvent(new CustomEvent('local_comments_updated', { detail: [updatedIssue] }));
 
-    // Guardado directamente en el JSON de la incidencia en Google Drive vía saveIssue(updatedIssue)
+    // Archivar registro de chat en segundo plano sin bloquear la UI
+    const { companyId, projectId } = getProjectAndCompany();
+    archiveIncidentsRecord(
+      'chat',
+      {
+        issueId: activeIssue.id,
+        issueCode: activeIssue.code,
+        issueTitle: activeIssue.title,
+        totalComments: updatedComments.length,
+        lastComment: newComment,
+        comments: updatedComments
+      },
+      activeIssue.id,
+      companyId,
+      projectId
+    ).catch((chatArchiveErr) => {
+      console.warn("[DashboardChat] No se pudo archivar chat en Drive:", chatArchiveErr);
+    });
 
     return newComment;
   };
@@ -820,14 +842,15 @@ Se ha registrado una nueva evidencia tomada durante el proceso de aprovechamient
   useEffect(() => {
     if (!selectedIssue) return;
 
-    // 1. Cargar comentarios existentes inmediatamente
-    if (selectedIssue.comments && Array.isArray(selectedIssue.comments)) {
-      setMessages(selectedIssue.comments);
-      setLoading(false);
-    } else {
-      setMessages([]);
-      setLoading(false);
+    // 1. Cargar comentarios existentes inmediatamente fusionando con el caché local más reciente
+    const { companyId, projectId } = getProjectAndCompany();
+    const cachedMatch = getCachedIncidents(companyId, projectId).find(i => i.id === selectedIssue.id);
+    const initialComments = mergeCommentsList(selectedIssue.comments || [], cachedMatch?.comments || []);
+    updateMessages(initialComments);
+    if (cachedMatch) {
+      setLocalIssue({ ...selectedIssue, ...cachedMatch, comments: initialComments });
     }
+    setLoading(false);
 
     setTimeout(() => {
       if (scrollRef.current) {
@@ -835,18 +858,14 @@ Se ha registrado una nueva evidencia tomada durante el proceso de aprovechamient
       }
     }, 100);
 
-    // 2. Escuchar actualizaciones reactivas locales
+    // 2. Escuchar actualizaciones reactivas locales fusionando siempre los comentarios para nunca borrar mensajes recientes
     const handleIssuesUpdated = (e: any) => {
       const issues: Issue[] = e.detail || [];
       const updated = issues.find(i => i.id === selectedIssue.id);
       if (updated) {
-        setLocalIssue(updated);
-        if (updated.comments && Array.isArray(updated.comments)) {
-          setMessages(updated.comments);
-          setTimeout(() => {
-            if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-          }, 100);
-        }
+        const mergedCmts = mergeCommentsList(messagesRef.current, updated.comments || []);
+        setLocalIssue({ ...updated, comments: mergedCmts });
+        updateMessages(mergedCmts);
       }
     };
 
@@ -1196,106 +1215,113 @@ ${textTrimmed ? `\n• **Sustento / Observaciones**: ${textTrimmed}` : ''}`;
   };
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = e.target.files;
-    if (!files || files.length === 0 || !user || !activeIssue) return;
+    const fileList = e.target.files;
+    if (!fileList || fileList.length === 0 || !user || !activeIssue) return;
+    const files = Array.from(fileList);
+    e.target.value = '';
 
-    const file = files[0];
-    const category = file.type.startsWith('image/') ? 'image' : 
-                     file.type.startsWith('video/') ? 'video' : 'file';
+    // Ordenar del más liviano al más pesado si seleccionó varios archivos
+    files.sort((a, b) => a.size - b.size);
 
-    try {
-      // 1. Prepare Base64 as a quick and reliable fallback
-      const base64UrlPromise = new Promise<string>((resolve) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve(reader.result as string);
-        reader.readAsDataURL(file);
-      });
-
-      let url = "";
-      let driveFileId = "";
-      let webViewLink = "";
-      let uploadSuccess = false;
-
-      const { companyId, projectId } = getProjectAndCompany();
-      const { companyName, projectName } = getHumanCompanyAndProject(companyId, projectId);
+    for (const file of files) {
+      const isImg = file.type.startsWith('image/') || /\.(jpg|jpeg|png|gif|webp|bmp|svg)$/i.test(file.name);
+      const isVid = file.type.startsWith('video/') || /\.(mp4|mov|avi|mkv)$/i.test(file.name);
+      const isAud = file.type.startsWith('audio/') || (!isVid && /\.(webm|m4a|mp3|wav|ogg)$/i.test(file.name));
+      const category = isImg ? 'image' : isVid ? 'video' : isAud ? 'audio' : 'file';
 
       try {
-        console.log("Subiendo archivo adjunto en chat a Google Drive:", file.name);
-        const driveResult = await uploadFileToDrive(file, file.name, file.type || 'application/octet-stream', undefined, 
-          undefined,
-          {
-            companyId,
-            companyName,
-            project: projectId,
-            driveFolderName: projectName,
-            subfolder: 'ARCHIVOS_INCIDENCIAS'
-          }
-        );
-        url = driveResult.url;
-        driveFileId = driveResult.id;
-        webViewLink = driveResult.webViewLink;
-        uploadSuccess = true;
-        console.log("Google Drive upload exitoso:", driveResult);
-      } catch (driveErr) {
-        console.warn("Google Drive upload falló en chat, usando Base64 como respaldo:", driveErr);
-      }
+        const attId = 'att_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5);
+        const commentId = 'cm_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6);
+        const localBlobUrl = URL.createObjectURL(file);
+        registerLocalMediaBlob(attId, localBlobUrl);
 
-      if (!uploadSuccess) {
+        // 1. Mostrar inmediatamente en el chat la foto/video/audio con previsualización instantánea (0ms)
+        const optimisticAttachment: Attachment = {
+          id: attId,
+          name: file.name,
+          type: file.type || (isImg ? 'image/jpeg' : isVid ? 'video/mp4' : isAud ? 'audio/webm' : 'application/octet-stream'),
+          url: localBlobUrl,
+          category: category as any
+        };
+
+        const labelPrefix = isImg ? '📷 Foto adjunta' : isVid ? '🎬 Video adjunto' : isAud ? '🎙️ Audio adjunto' : '📎 Archivo adjunto';
+        await postCommentAndSync({
+          id: commentId,
+          text: `${labelPrefix}: ${file.name}`,
+          attachments: [optimisticAttachment]
+        });
+
+        let url = localBlobUrl;
+        let driveFileId = "";
+        let webViewLink = "";
+
+        const { companyId, projectId } = getProjectAndCompany();
+        const { companyName, projectName } = getHumanCompanyAndProject(companyId, projectId);
+
         try {
-          // Try uploading to Firebase Storage with a 4 second timeout fallback
-          const uploadPromise = async () => {
-            const storageRef = ref(storage, `issues/${activeIssue.id}/${Date.now()}_${file.name}`);
-            const uploadResult = await uploadBytes(storageRef, file);
-            return await getDownloadURL(uploadResult.ref);
-          };
-
-          const timeoutPromise = new Promise<string>((_, reject) => 
-            setTimeout(() => reject(new Error("Firebase Storage took too long.")), 4000)
+          console.log("Subiendo archivo adjunto en chat a Google Drive:", file.name);
+          const driveResult = await uploadFileToDrive(
+            file,
+            file.name,
+            file.type || optimisticAttachment.type,
+            undefined,
+            undefined,
+            {
+              companyId,
+              companyName,
+              project: projectId,
+              driveFolderName: projectName,
+              subfolder: 'ARCHIVOS_INCIDENCIAS'
+            }
           );
-
-          url = await Promise.race([uploadPromise(), timeoutPromise]);
-        } catch (uploadErr) {
-          console.warn("Storage upload took fallback route to Base64 in chat:", uploadErr);
-          url = await base64UrlPromise;
+          url = driveResult.url;
+          driveFileId = driveResult.id;
+          webViewLink = driveResult.webViewLink;
+          registerLocalMediaBlob(driveFileId, localBlobUrl);
+          console.log("Google Drive upload exitoso en chat:", driveResult);
+        } catch (driveErr) {
+          console.warn("Google Drive upload falló en chat, conservando previsualización:", driveErr);
         }
-      }
 
-      const attachment: Attachment = {
-        id: Date.now().toString(),
-        name: file.name,
-        type: file.type,
-        url,
-        category: category as any,
-        ...(driveFileId ? { driveFileId } : {}),
-        ...(webViewLink ? { webViewLink } : {})
-      };
+        const finalAttachment: Attachment = {
+          id: attId,
+          name: file.name,
+          type: file.type || optimisticAttachment.type,
+          url,
+          category: category as any,
+          ...(driveFileId ? { driveFileId } : {}),
+          ...(webViewLink ? { webViewLink } : {})
+        };
 
-      await postCommentAndSync({
-        text: `Ha adjuntado un archivo: ${file.name}${driveFileId ? ' (Guardado directamente en Google Drive)' : ''}`,
-        attachments: [attachment]
-      });
+        if (driveFileId) {
+          await postCommentAndSync({
+            id: commentId,
+            text: `${labelPrefix}: ${file.name}`,
+            attachments: [finalAttachment]
+          });
+        }
 
-      // Synchronize directly into parent environmental report's mediaDuring array
-      const reportId = activeIssue.sourceReportId || (activeIssue.id.startsWith('issue_e_apr_') ? activeIssue.id.replace('issue_e_apr_', '') : null);
-      if (reportId && (activeIssue.reportType === 'ENVIRONMENTAL' || activeIssue.id.startsWith('issue_e_apr_'))) {
-        try {
-          const reportRef = doc(db, 'reports', reportId);
-          const reportSnap = await getDoc(reportRef);
-          if (reportSnap.exists()) {
-            const reportData = reportSnap.data();
-            const existingMediaDuring = reportData.mediaDuring || [];
-            await updateDoc(reportRef, {
-              mediaDuring: [...existingMediaDuring, attachment],
-              updatedAt: new Date().toISOString()
-            });
-            console.log("Chat file upload successfully synchronized to parent environmental report:", reportId);
+        // Synchronize directly into parent environmental report's mediaDuring array if applicable
+        const reportId = activeIssue.sourceReportId || (activeIssue.id.startsWith('issue_e_apr_') ? activeIssue.id.replace('issue_e_apr_', '') : null);
+        if (reportId && (activeIssue.reportType === 'ENVIRONMENTAL' || activeIssue.id.startsWith('issue_e_apr_'))) {
+          try {
+            const reportRef = doc(db, 'reports', reportId);
+            const reportSnap = await getDoc(reportRef);
+            if (reportSnap.exists()) {
+              const reportData = reportSnap.data();
+              const existingMediaDuring = reportData.mediaDuring || [];
+              await updateDoc(reportRef, {
+                mediaDuring: [...existingMediaDuring, finalAttachment],
+                updatedAt: new Date().toISOString()
+              });
+            }
+          } catch (syncErr) {
+            console.error("Error syncing general chat upload to parent report:", syncErr);
           }
-        } catch (syncErr) {
-          console.error("Error syncing general chat upload to parent report:", syncErr);
         }
+      } catch (error) {
+        console.error("Error uploading file in chat:", error);
       }
-    } catch (error) {
-      console.error("Error uploading file:", error);
     }
   };
 
@@ -1761,54 +1787,71 @@ ${textTrimmed ? `\n• **Sustento / Observaciones**: ${textTrimmed}` : ''}`;
                       
                       {msg.attachments && msg.attachments.length > 0 && (
                         <div className="mt-4 grid grid-cols-1 gap-2.5">
-                           {msg.attachments.map((att) => (
-                              att.category === 'audio' || att.type?.startsWith('audio/') ? (
-                                <div key={att.id} className="mt-2.5 p-3 rounded-2xl bg-slate-900/40 dark:bg-black/40 border border-slate-700/50 flex flex-col gap-2">
-                                  <div className="flex items-center justify-between text-xs font-bold">
-                                    <div className="flex items-center gap-2">
-                                      <Mic className="w-3.5 h-3.5 text-amber-500 animate-pulse" />
-                                      <span className={cn("text-[10px] font-black truncate max-w-[200px]", isMe ? "text-white" : "text-slate-200")}>
-                                        {att.name || 'Nota de voz'}
-                                      </span>
+                           {msg.attachments.map((att) => {
+                              const lowerName = (att.name || '').toLowerCase();
+                              const isImg = att.category === 'image' || att.type?.startsWith('image/') || /\.(jpg|jpeg|png|gif|webp|bmp|svg)$/i.test(lowerName);
+                              const isVid = att.category === 'video' || att.type?.startsWith('video/') || /\.(mp4|mov|avi|mkv)$/i.test(lowerName);
+                              const isAud = att.category === 'audio' || att.type?.startsWith('audio/') || (!isVid && /\.(webm|m4a|mp3|wav|ogg)$/i.test(lowerName));
+
+                              if (isAud) {
+                                return (
+                                  <div key={att.id} className="mt-2 p-3 rounded-2xl bg-slate-900/40 dark:bg-black/40 border border-slate-700/50 flex flex-col gap-2 max-w-sm">
+                                    <div className="flex items-center justify-between text-xs font-bold">
+                                      <div className="flex items-center gap-2">
+                                        <Mic className="w-3.5 h-3.5 text-amber-500 animate-pulse" />
+                                        <span className={cn("text-[10px] font-black truncate max-w-[200px]", isMe ? "text-white" : "text-slate-200")}>
+                                          {att.name || 'Nota de voz'}
+                                        </span>
+                                      </div>
+                                      {(att.webViewLink || att.driveFileId) && (
+                                        <a 
+                                          href={att.webViewLink || `https://drive.google.com/file/d/${att.driveFileId}/view`} 
+                                          target="_blank" 
+                                          rel="noreferrer"
+                                          className="text-[8px] text-blue-400 hover:underline uppercase font-black"
+                                        >
+                                          Drive ↗
+                                        </a>
+                                      )}
                                     </div>
-                                    {(att.webViewLink || att.driveFileId) && (
-                                      <a 
-                                        href={att.webViewLink || `https://drive.google.com/file/d/${att.driveFileId}/view`} 
-                                        target="_blank" 
-                                        rel="noreferrer"
-                                        className="text-[8px] text-blue-400 hover:underline uppercase font-black"
-                                      >
-                                        Drive ↗
-                                      </a>
-                                    )}
+                                    <DriveAudioPlayer attachment={att} />
                                   </div>
-                                  <audio controls src={att.url} className="w-full h-8 rounded" />
-                                </div>
-                              ) : (
-                              <a 
-                                key={att.id} 
-                                href={att.url} 
-                                target="_blank" 
-                                rel="noreferrer"
-                                className={cn(
-                                  "flex items-center gap-3 p-3.5 rounded-2xl border transition-all duration-300 group/att",
-                                  isMe ? "bg-white/5 border-white/10 hover:bg-white/10 text-white" : "bg-[#020617]/50 border-slate-800 hover:bg-slate-800/50"
-                                )}
-                              >
-                                 <div className={cn("w-9 h-9 rounded-xl flex items-center justify-center shadow-lg transition-transform group-hover/att:scale-105", isMe ? "bg-white/10 text-white" : "bg-slate-900 text-slate-400")}>
-                                   {att.category === 'image' ? <ImageIcon className="w-4 h-4" /> : 
-                                    att.category === 'video' ? <Video className="w-4 h-4" /> : <Paperclip className="w-4 h-4" />}
-                                 </div>
-                                 <div className="flex flex-col overflow-hidden text-left flex-1">
-                                   <span className={cn("text-[11px] font-black truncate tracking-tight", isMe ? "text-white" : "text-slate-100")}>{att.name}</span>
-                                   <span className="text-[8px] font-bold uppercase tracking-widest mt-0.5 text-slate-400 dark:text-slate-500">Evidencia Técnica Sincronizada</span>
-                                 </div>
-                                 <div className="opacity-0 group-hover/att:opacity-100 transition-opacity pr-1">
-                                    <Clock className={cn("w-3.5 h-3.5", isMe ? "text-white/60" : "text-slate-600")} />
-                                 </div>
-                              </a>
-                            )
-                           ))}
+                                );
+                              }
+
+                              if (isImg) {
+                                return <DriveImagePreview key={att.id} attachment={att} isMe={isMe} />;
+                              }
+
+                              if (isVid) {
+                                return <DriveVideoPlayer key={att.id} attachment={att} isMe={isMe} />;
+                              }
+
+                              const openUrl = att.webViewLink || (att.driveFileId ? `https://drive.google.com/file/d/${att.driveFileId}/view` : att.url);
+                              return (
+                                <a 
+                                  key={att.id} 
+                                  href={openUrl} 
+                                  target="_blank" 
+                                  rel="noreferrer"
+                                  className={cn(
+                                    "flex items-center gap-3 p-3.5 rounded-2xl border transition-all duration-300 group/att",
+                                    isMe ? "bg-white/5 border-white/10 hover:bg-white/10 text-white" : "bg-[#020617]/50 border-slate-800 hover:bg-slate-800/50"
+                                  )}
+                                >
+                                   <div className={cn("w-9 h-9 rounded-xl flex items-center justify-center shadow-lg transition-transform group-hover/att:scale-105", isMe ? "bg-white/10 text-white" : "bg-slate-900 text-slate-400")}>
+                                     <Paperclip className="w-4 h-4" />
+                                   </div>
+                                   <div className="flex flex-col overflow-hidden text-left flex-1">
+                                     <span className={cn("text-[11px] font-black truncate tracking-tight", isMe ? "text-white" : "text-slate-100")}>{att.name}</span>
+                                     <span className="text-[8px] font-bold uppercase tracking-widest mt-0.5 text-slate-400 dark:text-slate-500">Evidencia Técnica Sincronizada</span>
+                                   </div>
+                                   <div className="opacity-0 group-hover/att:opacity-100 transition-opacity pr-1">
+                                      <Clock className={cn("w-3.5 h-3.5", isMe ? "text-white/60" : "text-slate-600")} />
+                                   </div>
+                                </a>
+                              );
+                           })}
                         </div>
                       )}
 
