@@ -14836,6 +14836,7 @@ function setupNoraAI() {
                 if (rightPanel) {
                     rightPanel.classList.remove('closed');
                     rightPanel.classList.remove('incidencias-mode');
+                    rightPanel.classList.remove('incidencias-expanded');
                 }
                 tabProp.classList.add('active');
                 tabNora.classList.remove('active');
@@ -14853,6 +14854,7 @@ function setupNoraAI() {
                 if (rightPanel) {
                     rightPanel.classList.remove('closed');
                     rightPanel.classList.remove('incidencias-mode');
+                    rightPanel.classList.remove('incidencias-expanded');
                 }
                 tabNora.classList.add('active');
                 tabProp.classList.remove('active');
@@ -14896,7 +14898,8 @@ function setupIncidenciasPanel() {
             companyId,
             projectId,
             driveFolderName: folderName,
-            currentUser: user
+            currentUser: user,
+            getCompanyMembers: () => activeSecurityContext?.currentCompany?.members || []
         });
 
         const tabInc = document.getElementById('right-tab-incidencias');

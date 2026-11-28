@@ -1,7 +1,8 @@
 /**
  * IncidenciasPanel - Panel lateral derecho de incidencias para visores 3D de nora
- * Replica la lógica de roles (AUTOR, RESPONSABLE, REVISOR), estados, prioridades
- * y sincronización con Google Drive / LocalStorage del módulo principal de Incidencias.
+ * Incluye vista compacta de tarjetas y vista expandida con panel deslizable de dos pestañas:
+ *  1. Detalles y Gestión (Acciones, datos completos, documentación y evidencia)
+ *  2. Chat y Trazabilidad (Mensajes, notas de voz con micrófono, fotos y trazabilidad)
  */
 
 export interface Attachment {
@@ -34,6 +35,8 @@ export interface Issue {
   description: string;
   status: "ACTIVO" | "RESPONDIDA" | "RESUELTA" | "VENCIDA" | "RECHAZADA" | "ACUERDO" | "ANULADA" | "REVISION_RESPONSABLE";
   specialty?: string;
+  suggestedAction?: string;
+  projectImpact?: string;
   assignedPosition?: string;
   assignedName?: string;
   assignedEmail?: string;
@@ -68,9 +71,16 @@ export interface Issue {
     approved?: boolean;
     approvedAt?: string;
   };
+  collaborators?: Array<{
+    name: string;
+    position?: string;
+    email: string;
+    at?: string;
+  }>;
 }
 
 export type RoleFilter = 'responsible' | 'author' | 'reviewer' | 'all';
+export type DrawerTab = 'details' | 'chat';
 
 export interface IncidenciasPanelOptions {
   container: HTMLElement;
@@ -78,6 +88,7 @@ export interface IncidenciasPanelOptions {
   projectId?: string;
   driveFolderName?: string;
   currentUser?: any;
+  getCompanyMembers?: () => any[];
   onLocateElement?: (issue: Issue) => void;
   onRestoreViewpoint?: (viewpointData: any) => void;
 }
@@ -94,11 +105,20 @@ export class IncidenciasPanel {
   private activeRole: RoleFilter = 'responsible';
   private searchTerm: string = '';
   private statusFilter: string = 'all';
-  private isLoading: boolean = false;
+  private selectedIssue: Issue | null = null;
+  private activeDrawerTab: DrawerTab = 'details';
+  private isExpanded: boolean = false;
   private isSyncing: boolean = false;
   private syncChannel: BroadcastChannel | null = null;
-  private onLocateElement?: (issue: Issue) => void;
-  private onRestoreViewpoint?: (viewpointData: any) => void;
+  private getCompanyMembers?: () => any[];
+
+  // Voice recording state
+  private mediaRecorder: MediaRecorder | null = null;
+  private audioChunks: Blob[] = [];
+  private audioStream: MediaStream | null = null;
+  private recordingTimer: number | null = null;
+  private recordingSeconds: number = 0;
+  private isRecording: boolean = false;
 
   constructor(options: IncidenciasPanelOptions) {
     this.container = options.container;
@@ -106,8 +126,7 @@ export class IncidenciasPanel {
     this.projectId = options.projectId || '';
     this.driveFolderName = options.driveFolderName || '';
     this.currentUser = options.currentUser || this.resolveCurrentUser();
-    this.onLocateElement = options.onLocateElement;
-    this.onRestoreViewpoint = options.onRestoreViewpoint;
+    this.getCompanyMembers = options.getCompanyMembers;
 
     this.resolveUrlContext();
     this.initBroadcastSync();
@@ -121,6 +140,10 @@ export class IncidenciasPanel {
     if (driveFolderName) this.driveFolderName = driveFolderName;
     if (user) this.currentUser = user;
     this.loadFromLocalStorage();
+    if (this.selectedIssue) {
+      const refreshed = this.issues.find(i => i.id === this.selectedIssue!.id);
+      if (refreshed) this.selectedIssue = refreshed;
+    }
     this.render();
   }
 
@@ -136,9 +159,7 @@ export class IncidenciasPanel {
   private resolveCurrentUser(): any {
     try {
       const raw = sessionStorage.getItem('userAccount') || localStorage.getItem('userAccount');
-      if (raw) {
-        return JSON.parse(raw);
-      }
+      if (raw) return JSON.parse(raw);
     } catch (_) {}
     return null;
   }
@@ -151,6 +172,10 @@ export class IncidenciasPanel {
           if (event.data && (!event.data.companyId || event.data.companyId === this.companyId)) {
             if (Array.isArray(event.data.incidents)) {
               this.issues = event.data.incidents;
+              if (this.selectedIssue) {
+                const refreshed = this.issues.find(i => i.id === this.selectedIssue!.id);
+                if (refreshed) this.selectedIssue = refreshed;
+              }
               this.render();
             }
           }
@@ -160,6 +185,10 @@ export class IncidenciasPanel {
       window.addEventListener('nora_incidents_updated', (e: any) => {
         if (e.detail && Array.isArray(e.detail.incidents)) {
           this.issues = e.detail.incidents;
+          if (this.selectedIssue) {
+            const refreshed = this.issues.find(i => i.id === this.selectedIssue!.id);
+            if (refreshed) this.selectedIssue = refreshed;
+          }
           this.render();
         } else {
           this.loadFromLocalStorage();
@@ -172,9 +201,7 @@ export class IncidenciasPanel {
   }
 
   public loadFromLocalStorage() {
-    if (!this.companyId || !this.projectId) {
-      this.resolveUrlContext();
-    }
+    if (!this.companyId || !this.projectId) this.resolveUrlContext();
     const key = `nora_incidents_${this.companyId}_${this.projectId}`;
     try {
       const raw = localStorage.getItem(key);
@@ -205,6 +232,71 @@ export class IncidenciasPanel {
     } catch (_) {}
   }
 
+  private persistAndBroadcast(updatedIssues: Issue[], currentIssue?: Issue) {
+    this.issues = updatedIssues;
+    if (currentIssue) this.selectedIssue = currentIssue;
+
+    const key = `nora_incidents_${this.companyId}_${this.projectId}`;
+    try {
+      localStorage.setItem(key, JSON.stringify(this.issues));
+    } catch (_) {}
+
+    try {
+      if (this.syncChannel) {
+        this.syncChannel.postMessage({
+          companyId: this.companyId,
+          projectId: this.projectId,
+          incidents: this.issues
+        });
+      }
+      window.dispatchEvent(new CustomEvent('nora_incidents_updated', {
+        detail: { incidents: this.issues, companyId: this.companyId, projectId: this.projectId }
+      }));
+    } catch (_) {}
+
+    // Sync in background to Drive if issue updated
+    if (currentIssue) {
+      this.syncIncidentToDrive(currentIssue);
+    }
+  }
+
+  private async syncIncidentToDrive(issue: Issue) {
+    try {
+      const sanitized = {
+        ...issue,
+        updatedAt: new Date().toISOString()
+      };
+      const jsonStr = JSON.stringify(sanitized, null, 2);
+      const utf8Bytes = new TextEncoder().encode(jsonStr);
+      let binary = '';
+      const chunkSize = 0x8000;
+      for (let i = 0; i < utf8Bytes.length; i += chunkSize) {
+        binary += String.fromCharCode.apply(null, Array.from(utf8Bytes.subarray(i, i + chunkSize)));
+      }
+      const base64 = btoa(binary);
+      const filename = `incidencia_${issue.id}.json`;
+
+      await fetch(DRIVE_GATEWAY_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({
+          action: 'uploadFile',
+          companyId: this.companyId,
+          projectId: this.projectId,
+          driveFolderName: this.driveFolderName,
+          filename: filename,
+          name: filename,
+          contentType: 'application/json',
+          mimeType: 'application/json',
+          content: base64,
+          base64: base64
+        })
+      });
+    } catch (err) {
+      console.warn('[IncidenciasPanel] Remote background sync error:', err);
+    }
+  }
+
   public async syncWithDrive() {
     if (this.isSyncing) return;
     this.isSyncing = true;
@@ -227,6 +319,10 @@ export class IncidenciasPanel {
           try {
             localStorage.setItem(key, JSON.stringify(this.issues));
           } catch (_) {}
+          if (this.selectedIssue) {
+            const refreshed = this.issues.find(i => i.id === this.selectedIssue!.id);
+            if (refreshed) this.selectedIssue = refreshed;
+          }
         }
       }
     } catch (err) {
@@ -283,13 +379,7 @@ export class IncidenciasPanel {
   }
 
   private getCounts(): Record<RoleFilter, number> {
-    const counts: Record<RoleFilter, number> = {
-      responsible: 0,
-      author: 0,
-      reviewer: 0,
-      all: 0
-    };
-
+    const counts: Record<RoleFilter, number> = { responsible: 0, author: 0, reviewer: 0, all: 0 };
     for (const issue of this.issues) {
       if (issue.status === 'ANULADA') continue;
       counts.all++;
@@ -297,7 +387,6 @@ export class IncidenciasPanel {
       if (this.filterByRole(issue, 'author')) counts.author++;
       if (this.filterByRole(issue, 'reviewer')) counts.reviewer++;
     }
-
     return counts;
   }
 
@@ -305,7 +394,6 @@ export class IncidenciasPanel {
     const q = this.searchTerm.toLowerCase().trim();
     return this.issues.filter(issue => {
       if (issue.status === 'ANULADA' && this.statusFilter !== 'ANULADA') return false;
-
       if (!this.filterByRole(issue, this.activeRole)) return false;
 
       if (this.statusFilter !== 'all') {
@@ -323,11 +411,8 @@ export class IncidenciasPanel {
         const specMatch = (issue.specialty || '').toLowerCase().includes(q);
         const posMatch = (issue.assignedPosition || '').toLowerCase().includes(q);
         const nameMatch = (issue.assignedName || '').toLowerCase().includes(q);
-        if (!codeMatch && !titleMatch && !descMatch && !specMatch && !posMatch && !nameMatch) {
-          return false;
-        }
+        if (!codeMatch && !titleMatch && !descMatch && !specMatch && !posMatch && !nameMatch) return false;
       }
-
       return true;
     });
   }
@@ -416,73 +501,94 @@ export class IncidenciasPanel {
 
     const counts = this.getCounts();
     const filtered = this.getFilteredIssues();
+    const hasSelection = Boolean(this.selectedIssue);
+
+    // Synchronize container and properties-panel class for expanded width
+    const rightPanel = document.getElementById('properties-panel');
+    if (rightPanel) {
+      if (hasSelection || this.isExpanded) {
+        rightPanel.classList.add('incidencias-expanded');
+      } else {
+        rightPanel.classList.remove('incidencias-expanded');
+      }
+    }
 
     this.container.innerHTML = `
-      <div class="nora-inc-panel">
-        <!-- Header -->
-        <div class="nora-inc-header">
-          <div class="nora-inc-title-row">
-            <div class="nora-inc-title">
-              <span class="material-symbols-outlined" style="color: #f59e0b; font-size: 20px;">assignment_late</span>
-              <span>Incidencias</span>
+      <div class="nora-inc-split-container ${hasSelection ? 'has-drawer' : ''}">
+        <!-- Left Pane: Cards List -->
+        <div class="nora-inc-list-pane">
+          <div class="nora-inc-header">
+            <div class="nora-inc-title-row">
+              <div class="nora-inc-title">
+                <span class="material-symbols-outlined" style="color: #f59e0b; font-size: 20px;">assignment_late</span>
+                <span>Incidencias</span>
+              </div>
+              <div class="nora-inc-actions">
+                <button class="nora-inc-btn-icon ${this.isSyncing ? 'spinning' : ''}" id="btn-inc-sync" title="Sincronizar con Drive">
+                  <span class="material-symbols-outlined" style="font-size: 17px;">sync</span>
+                </button>
+                <button class="nora-inc-btn-icon" id="btn-inc-toggle-expand" title="${this.isExpanded ? 'Contraer panel' : 'Expandir panel'}">
+                  <span class="material-symbols-outlined" style="font-size: 17px;">${this.isExpanded ? 'close_fullscreen' : 'open_in_full'}</span>
+                </button>
+                <a href="../INCIDENCIAS/?empresa=${encodeURIComponent(this.companyId)}&project=${encodeURIComponent(this.projectId)}&driveFolderName=${encodeURIComponent(this.driveFolderName)}&action=new" 
+                   target="_blank" 
+                   class="nora-inc-new-btn" 
+                   title="Registrar nuevo hallazgo en Incidencias">
+                  <span class="material-symbols-outlined" style="font-size: 16px;">add</span>
+                  <span>Hallazgo</span>
+                </a>
+              </div>
             </div>
-            <div class="nora-inc-actions">
-              <button class="nora-inc-btn-icon ${this.isSyncing ? 'spinning' : ''}" id="btn-inc-sync" title="Sincronizar con Drive">
-                <span class="material-symbols-outlined" style="font-size: 17px;">sync</span>
+
+            <!-- Role Subtabs (AUTOR | RESPONSABLE | REVISOR | TODAS) -->
+            <div class="nora-inc-role-tabs">
+              <button class="nora-inc-role-tab ${this.activeRole === 'responsible' ? 'active' : ''}" data-role="responsible">
+                <span>RESPONSABLE</span>
+                <span class="nora-inc-tab-badge">${counts.responsible}</span>
               </button>
-              <a href="../INCIDENCIAS/?empresa=${encodeURIComponent(this.companyId)}&project=${encodeURIComponent(this.projectId)}&driveFolderName=${encodeURIComponent(this.driveFolderName)}&action=new" 
-                 target="_blank" 
-                 class="nora-inc-new-btn" 
-                 title="Registrar nuevo hallazgo en Incidencias">
-                <span class="material-symbols-outlined" style="font-size: 16px;">add</span>
-                <span>Hallazgo</span>
-              </a>
+              <button class="nora-inc-role-tab ${this.activeRole === 'author' ? 'active' : ''}" data-role="author">
+                <span>AUTOR</span>
+                <span class="nora-inc-tab-badge">${counts.author}</span>
+              </button>
+              <button class="nora-inc-role-tab ${this.activeRole === 'reviewer' ? 'active' : ''}" data-role="reviewer">
+                <span>REVISOR</span>
+                <span class="nora-inc-tab-badge">${counts.reviewer}</span>
+              </button>
+              <button class="nora-inc-role-tab ${this.activeRole === 'all' ? 'active' : ''}" data-role="all" title="Ver todas las incidencias">
+                <span>TODAS</span>
+                <span class="nora-inc-tab-badge">${counts.all}</span>
+              </button>
+            </div>
+
+            <!-- Search and Filter bar -->
+            <div class="nora-inc-search-bar">
+              <div class="nora-inc-input-wrapper">
+                <span class="material-symbols-outlined" style="font-size: 17px; color: #94a3b8;">search</span>
+                <input type="text" id="nora-inc-search" placeholder="Buscar código, título, especialidad..." value="${escapeHtml(this.searchTerm)}" />
+                ${this.searchTerm ? `<button type="button" id="nora-inc-clear-search" class="nora-inc-clear-btn">✕</button>` : ''}
+              </div>
+              <select id="nora-inc-status-select" class="nora-inc-select">
+                <option value="all" ${this.statusFilter === 'all' ? 'selected' : ''}>Todos</option>
+                <option value="ACTIVAS" ${this.statusFilter === 'ACTIVAS' ? 'selected' : ''}>Activas</option>
+                <option value="ACTIVO" ${this.statusFilter === 'ACTIVO' ? 'selected' : ''}>Activo</option>
+                <option value="RESPONDIDA" ${this.statusFilter === 'RESPONDIDA' ? 'selected' : ''}>Respondida</option>
+                <option value="RESUELTA" ${this.statusFilter === 'RESUELTA' ? 'selected' : ''}>Resuelta</option>
+                <option value="VENCIDA" ${this.statusFilter === 'VENCIDA' ? 'selected' : ''}>Vencida</option>
+                <option value="RECHAZADA" ${this.statusFilter === 'RECHAZADA' ? 'selected' : ''}>Rechazada</option>
+                <option value="ACUERDO" ${this.statusFilter === 'ACUERDO' ? 'selected' : ''}>Acuerdo</option>
+              </select>
             </div>
           </div>
 
-          <!-- Role Subtabs (AUTOR | RESPONSABLE | REVISOR | TODAS) -->
-          <div class="nora-inc-role-tabs">
-            <button class="nora-inc-role-tab ${this.activeRole === 'responsible' ? 'active' : ''}" data-role="responsible">
-              <span>RESPONSABLE</span>
-              <span class="nora-inc-tab-badge">${counts.responsible}</span>
-            </button>
-            <button class="nora-inc-role-tab ${this.activeRole === 'author' ? 'active' : ''}" data-role="author">
-              <span>AUTOR</span>
-              <span class="nora-inc-tab-badge">${counts.author}</span>
-            </button>
-            <button class="nora-inc-role-tab ${this.activeRole === 'reviewer' ? 'active' : ''}" data-role="reviewer">
-              <span>REVISOR</span>
-              <span class="nora-inc-tab-badge">${counts.reviewer}</span>
-            </button>
-            <button class="nora-inc-role-tab ${this.activeRole === 'all' ? 'active' : ''}" data-role="all" title="Ver todas las incidencias">
-              <span>TODAS</span>
-              <span class="nora-inc-tab-badge">${counts.all}</span>
-            </button>
-          </div>
-
-          <!-- Search and Filter bar -->
-          <div class="nora-inc-search-bar">
-            <div class="nora-inc-input-wrapper">
-              <span class="material-symbols-outlined" style="font-size: 17px; color: #94a3b8;">search</span>
-              <input type="text" id="nora-inc-search" placeholder="Buscar código, título, especialidad..." value="${escapeHtml(this.searchTerm)}" />
-              ${this.searchTerm ? `<button type="button" id="nora-inc-clear-search" class="nora-inc-clear-btn">✕</button>` : ''}
-            </div>
-            <select id="nora-inc-status-select" class="nora-inc-select">
-              <option value="all" ${this.statusFilter === 'all' ? 'selected' : ''}>Todos los estados</option>
-              <option value="ACTIVAS" ${this.statusFilter === 'ACTIVAS' ? 'selected' : ''}>Solo Activas</option>
-              <option value="ACTIVO" ${this.statusFilter === 'ACTIVO' ? 'selected' : ''}>Activo</option>
-              <option value="RESPONDIDA" ${this.statusFilter === 'RESPONDIDA' ? 'selected' : ''}>Respondida</option>
-              <option value="RESUELTA" ${this.statusFilter === 'RESUELTA' ? 'selected' : ''}>Resuelta</option>
-              <option value="VENCIDA" ${this.statusFilter === 'VENCIDA' ? 'selected' : ''}>Vencida</option>
-              <option value="RECHAZADA" ${this.statusFilter === 'RECHAZADA' ? 'selected' : ''}>Rechazada</option>
-              <option value="ACUERDO" ${this.statusFilter === 'ACUERDO' ? 'selected' : ''}>Acuerdo</option>
-            </select>
+          <!-- Cards List -->
+          <div class="nora-inc-list" id="nora-inc-list-container">
+            ${filtered.length === 0 ? this.renderEmptyState() : filtered.map(issue => this.renderIssueCard(issue)).join('')}
           </div>
         </div>
 
-        <!-- Issue Cards List -->
-        <div class="nora-inc-list" id="nora-inc-list-container">
-          ${filtered.length === 0 ? this.renderEmptyState() : filtered.map(issue => this.renderIssueCard(issue)).join('')}
+        <!-- Right Sliding Drawer: Details & Chat -->
+        <div class="nora-inc-detail-drawer ${hasSelection ? 'open' : ''}" id="nora-inc-detail-drawer">
+          ${this.selectedIssue ? this.renderDetailDrawer(this.selectedIssue) : this.renderDrawerPlaceholder()}
         </div>
       </div>
     `;
@@ -501,7 +607,7 @@ export class IncidenciasPanel {
     return `
       <div class="nora-inc-empty">
         <div class="nora-inc-empty-icon">
-          <span class="material-symbols-outlined" style="font-size: 40px; color: #94a3b8;">assignment_turned_in</span>
+          <span class="material-symbols-outlined" style="font-size: 38px; color: #94a3b8;">assignment_turned_in</span>
         </div>
         <div class="nora-inc-empty-title">Sin incidencias ${roleNames[this.activeRole]}</div>
         <div class="nora-inc-empty-desc">
@@ -517,6 +623,18 @@ export class IncidenciasPanel {
     `;
   }
 
+  private renderDrawerPlaceholder(): string {
+    return `
+      <div class="nora-inc-drawer-empty">
+        <span class="material-symbols-outlined" style="font-size: 48px; color: #cbd5e1;">chrome_reader_mode</span>
+        <div style="font-size: 14px; font-weight: 700; color: #475569;">Selecciona una Incidencia</div>
+        <div style="font-size: 12px; color: #94a3b8; max-width: 240px; text-align: center;">
+          Haz clic en cualquier tarjeta de la izquierda para ver sus detalles, gestionar acciones o abrir el chat.
+        </div>
+      </div>
+    `;
+  }
+
   private renderIssueCard(issue: Issue): string {
     const statusB = this.getStatusBadge(issue.status);
     const degreeB = this.getDegreeBadge(issue.degreeOfAction);
@@ -524,15 +642,11 @@ export class IncidenciasPanel {
     const createdStr = this.formatDate(issue.createdAt);
     const attCount = issue.attachments?.length || 0;
     const cmtCount = issue.comments?.length || 0;
-
-    // Specialty / process name
+    const isSelected = this.selectedIssue?.id === issue.id;
     const processOrSpec = issue.specialty || issue.assignedTeam || 'PROCESO AUDITADO';
 
-    // Direct link to the incident
-    const openUrl = `../INCIDENCIAS/?empresa=${encodeURIComponent(this.companyId)}&project=${encodeURIComponent(this.projectId)}&driveFolderName=${encodeURIComponent(this.driveFolderName)}&issueId=${encodeURIComponent(issue.id)}`;
-
     return `
-      <div class="nora-inc-card" data-issue-id="${escapeHtml(issue.id)}">
+      <div class="nora-inc-card ${isSelected ? 'selected' : ''}" data-issue-id="${escapeHtml(issue.id)}">
         <!-- Top Tags Row -->
         <div class="nora-inc-card-tags">
           <div class="nora-inc-code-badge" title="Código de incidencia">${escapeHtml(issue.code || 'GEN')}</div>
@@ -602,18 +716,353 @@ export class IncidenciasPanel {
           </div>
 
           <div class="nora-inc-card-btns">
-            <a href="${openUrl}" target="_blank" class="nora-inc-open-btn" title="Abrir y gestionar en módulo de Incidencias">
-              <span>Abrir en Incidencias</span>
-              <span class="material-symbols-outlined" style="font-size: 14px;">open_in_new</span>
-            </a>
+            <button type="button" class="nora-inc-manage-btn" data-issue-id="${escapeHtml(issue.id)}" title="Gestionar incidencia en panel deslizable">
+              <span>Gestionar</span>
+              <span class="material-symbols-outlined" style="font-size: 14px;">arrow_forward</span>
+            </button>
           </div>
         </div>
       </div>
     `;
   }
 
+  private renderDetailDrawer(issue: Issue): string {
+    const statusB = this.getStatusBadge(issue.status);
+    const degreeB = this.getDegreeBadge(issue.degreeOfAction);
+    const openUrl = `../INCIDENCIAS/?empresa=${encodeURIComponent(this.companyId)}&project=${encodeURIComponent(this.projectId)}&driveFolderName=${encodeURIComponent(this.driveFolderName)}&issueId=${encodeURIComponent(issue.id)}`;
+    const comments = issue.comments || [];
+
+    return `
+      <div class="nora-inc-drawer-inner">
+        <!-- Drawer Header -->
+        <div class="nora-inc-drawer-header">
+          <div class="nora-inc-drawer-top-bar">
+            <button type="button" class="nora-inc-drawer-back-btn" id="btn-drawer-close" title="Cerrar detalle">
+              <span class="material-symbols-outlined" style="font-size: 18px;">arrow_back</span>
+              <span class="drawer-back-text">Volver</span>
+            </button>
+            <div class="nora-inc-drawer-badges">
+              <div class="nora-inc-code-badge">${escapeHtml(issue.code || 'GEN')}</div>
+              <div class="nora-inc-status-badge" style="background: ${statusB.bg}; color: ${statusB.text}; border-color: ${statusB.border};">
+                ${escapeHtml(statusB.label)}
+              </div>
+              <div class="nora-inc-degree-badge" style="color: ${degreeB.textColor};">
+                <span class="nora-inc-dot" style="background: ${degreeB.dotColor};"></span>
+                <span>${escapeHtml(degreeB.label)}</span>
+              </div>
+            </div>
+            <a href="${openUrl}" target="_blank" class="nora-inc-btn-icon" title="Abrir en pestaña completa de Incidencias">
+              <span class="material-symbols-outlined" style="font-size: 16px;">open_in_new</span>
+            </a>
+          </div>
+
+          <div class="nora-inc-drawer-title">${escapeHtml(issue.title || 'Incidencia')}</div>
+
+          <!-- Drawer Two Main Tabs: DETALLES Y GESTIÓN vs CHAT Y TRAZABILIDAD -->
+          <div class="nora-inc-drawer-tabs">
+            <button class="nora-inc-drawer-tab ${this.activeDrawerTab === 'details' ? 'active' : ''}" data-dtab="details">
+              <span class="material-symbols-outlined" style="font-size: 16px;">tune</span>
+              <span>DETALLES Y GESTIÓN</span>
+            </button>
+            <button class="nora-inc-drawer-tab ${this.activeDrawerTab === 'chat' ? 'active' : ''}" data-dtab="chat">
+              <span class="material-symbols-outlined" style="font-size: 16px;">forum</span>
+              <span>CHAT Y TRAZABILIDAD</span>
+              ${comments.length > 0 ? `<span class="nora-inc-tab-badge">${comments.length}</span>` : ''}
+            </button>
+          </div>
+        </div>
+
+        <!-- Drawer Body -->
+        <div class="nora-inc-drawer-body">
+          ${this.activeDrawerTab === 'details' ? this.renderDetailsTab(issue) : this.renderChatTab(issue)}
+        </div>
+      </div>
+    `;
+  }
+
+  private renderDetailsTab(issue: Issue): string {
+    const dueInfo = this.formatDueDate(issue.dueDate);
+    const createdStr = this.formatDate(issue.createdAt);
+    const attachments = issue.attachments || [];
+
+    return `
+      <div class="nora-inc-tab-content">
+        <!-- 1. GESTIÓN DE ACCIONES (Botones idénticos a los de afuera) -->
+        <div class="nora-inc-section">
+          <div class="nora-inc-section-title">
+            <span class="material-symbols-outlined" style="font-size: 15px; color: #2563eb;">flash_on</span>
+            <span>GESTIÓN DE ACCIONES</span>
+          </div>
+
+          <div class="nora-inc-actions-grid">
+            <button type="button" class="nora-act-btn act-colab" data-act="colab" title="Agregar colaborador a la incidencia">
+              <span class="material-symbols-outlined" style="font-size: 14px;">group_add</span>
+              <span>AGREGAR COLABORADOR</span>
+            </button>
+
+            <button type="button" class="nora-act-btn act-exec" data-act="exec" title="Redirigir incidencia a ejecutor">
+              <span class="material-symbols-outlined" style="font-size: 14px;">swap_horiz</span>
+              <span>REDIRIGIR A EJECUTOR</span>
+            </button>
+
+            <button type="button" class="nora-act-btn act-resp" data-act="resp" title="Reasignar responsable de la incidencia">
+              <span class="material-symbols-outlined" style="font-size: 14px;">person_outline</span>
+              <span>REASIGNAR RESPONSABLE</span>
+            </button>
+
+            <button type="button" class="nora-act-btn act-finish" data-act="finish" title="Finalizar respuesta técnica">
+              <span class="material-symbols-outlined" style="font-size: 14px;">verified</span>
+              <span>FINALIZAR RESPUESTA TÉCNICA</span>
+            </button>
+
+            <button type="button" class="nora-act-btn act-resolve" data-act="resolve" title="Cerrar y marcar como resuelta">
+              <span class="material-symbols-outlined" style="font-size: 14px;">check_circle</span>
+              <span>RESUELTA Y CERRADA</span>
+            </button>
+
+            <button type="button" class="nora-act-btn act-reject" data-act="reject" title="Rechazar respuesta de la incidencia">
+              <span class="material-symbols-outlined" style="font-size: 14px;">cancel</span>
+              <span>RECHAZAR RESPUESTA</span>
+            </button>
+
+            <button type="button" class="nora-act-btn act-agreement" data-act="agreement" title="Establecer fecha de acuerdo">
+              <span class="material-symbols-outlined" style="font-size: 14px;">handshake</span>
+              <span>ESTABLECER ACUERDO</span>
+            </button>
+
+            <button type="button" class="nora-act-btn act-cancel" data-act="cancel" title="Anular incidencia">
+              <span class="material-symbols-outlined" style="font-size: 14px;">block</span>
+              <span>ANULAR INCIDENCIA</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- 2. DATOS COMPLETOS -->
+        <div class="nora-inc-section">
+          <div class="nora-inc-section-title">
+            <span class="material-symbols-outlined" style="font-size: 15px; color: #475569;">info</span>
+            <span>INFORMACIÓN COMPLETA</span>
+          </div>
+
+          <div class="nora-inc-info-card">
+            <div class="nora-inc-info-row">
+              <span class="nora-inc-info-lbl">Descripción:</span>
+              <span class="nora-inc-info-val">${escapeHtml(issue.description || 'Sin descripción')}</span>
+            </div>
+
+            ${issue.suggestedAction ? `
+              <div class="nora-inc-info-row">
+                <span class="nora-inc-info-lbl">Acción Correctiva Sugerida:</span>
+                <span class="nora-inc-info-val">${escapeHtml(issue.suggestedAction)}</span>
+              </div>
+            ` : ''}
+
+            ${issue.projectImpact ? `
+              <div class="nora-inc-info-row">
+                <span class="nora-inc-info-lbl">Afectación del Proyecto:</span>
+                <span class="nora-inc-info-val">${escapeHtml(issue.projectImpact)}</span>
+              </div>
+            ` : ''}
+
+            <div class="nora-inc-info-row">
+              <span class="nora-inc-info-lbl">Proceso Auditado / Especialidad:</span>
+              <span class="nora-inc-info-val">${escapeHtml(issue.specialty || issue.assignedTeam || 'General')}</span>
+            </div>
+
+            <div class="nora-inc-info-row">
+              <span class="nora-inc-info-lbl">Responsable Asignado:</span>
+              <span class="nora-inc-info-val">${escapeHtml(issue.assignedName || issue.assignedPosition || 'Sin asignar')} (${escapeHtml(issue.assignedEmail || 'Sin correo')})</span>
+            </div>
+
+            <div class="nora-inc-info-row">
+              <span class="nora-inc-info-lbl">Autor / Creador:</span>
+              <span class="nora-inc-info-val">${escapeHtml(issue.creatorName || issue.authorEmail || 'Autor')}</span>
+            </div>
+
+            <div class="nora-inc-info-row">
+              <span class="nora-inc-info-lbl">Fecha de Creación:</span>
+              <span class="nora-inc-info-val">${createdStr}</span>
+            </div>
+
+            <div class="nora-inc-info-row">
+              <span class="nora-inc-info-lbl">Vencimiento:</span>
+              <span class="nora-inc-info-val ${dueInfo.colorClass}">${dueInfo.text}</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- 3. DOCUMENTACIÓN Y EVIDENCIA (Soporte Técnico y Anexos) -->
+        <div class="nora-inc-section">
+          <div class="nora-inc-section-title-row">
+            <div class="nora-inc-section-title">
+              <span class="material-symbols-outlined" style="font-size: 15px; color: #059669;">attachment</span>
+              <span>DOCUMENTACIÓN Y EVIDENCIA (${attachments.length})</span>
+            </div>
+            <label class="nora-inc-upload-btn" title="Cargar foto, video o documento local">
+              <span class="material-symbols-outlined" style="font-size: 14px;">upload_file</span>
+              <span>+ Cargar Local</span>
+              <input type="file" id="nora-doc-file-input" style="display: none;" multiple accept="image/*,video/*,audio/*,application/pdf" />
+            </label>
+          </div>
+
+          <div class="nora-inc-docs-grid">
+            ${attachments.length === 0 ? `
+              <div class="nora-inc-no-docs">
+                <span class="material-symbols-outlined" style="font-size: 26px; color: #cbd5e1;">folder_open</span>
+                <span>Sin documentación vinculada actualmente</span>
+              </div>
+            ` : attachments.map(att => this.renderAttachmentItem(att)).join('')}
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+  private renderAttachmentItem(att: Attachment): string {
+    const isImage = att.category === 'image' || att.type?.includes('image');
+    const isVideo = att.category === 'video' || att.type?.includes('video');
+    const isAudio = att.category === 'audio' || att.type?.includes('audio');
+    const url = att.url || att.webViewLink || (att.driveFileId ? `https://drive.google.com/file/d/${att.driveFileId}/view` : '#');
+
+    let previewContent = '';
+    if (isImage) {
+      previewContent = `<img src="${escapeHtml(url)}" alt="${escapeHtml(att.name)}" class="nora-att-img" />`;
+    } else if (isVideo) {
+      previewContent = `
+        <video controls class="nora-att-video" preload="metadata">
+          <source src="${escapeHtml(url)}" type="${escapeHtml(att.type || 'video/mp4')}">
+        </video>
+      `;
+    } else if (isAudio) {
+      previewContent = `
+        <audio controls class="nora-att-audio" preload="metadata">
+          <source src="${escapeHtml(url)}" type="${escapeHtml(att.type || 'audio/webm')}">
+        </audio>
+      `;
+    } else {
+      previewContent = `
+        <div class="nora-att-doc-placeholder">
+          <span class="material-symbols-outlined" style="font-size: 24px; color: #3b82f6;">description</span>
+          <span class="nora-att-doc-name">${escapeHtml(att.name)}</span>
+        </div>
+      `;
+    }
+
+    return `
+      <div class="nora-att-card">
+        <div class="nora-att-preview">${previewContent}</div>
+        <div class="nora-att-meta">
+          <span class="nora-att-name" title="${escapeHtml(att.name)}">${escapeHtml(att.name)}</span>
+          <a href="${escapeHtml(url)}" target="_blank" class="nora-att-link" title="Abrir archivo">
+            <span class="material-symbols-outlined" style="font-size: 14px;">open_in_new</span>
+          </a>
+        </div>
+      </div>
+    `;
+  }
+
+  private renderChatTab(issue: Issue): string {
+    const comments = issue.comments || [];
+
+    return `
+      <div class="nora-inc-chat-wrapper">
+        <!-- Messages Feed -->
+        <div class="nora-inc-chat-feed" id="nora-inc-chat-feed">
+          ${comments.length === 0 ? `
+            <div class="nora-inc-chat-empty">
+              <span class="material-symbols-outlined" style="font-size: 36px; color: #cbd5e1;">chat_bubble_outline</span>
+              <span>No hay comentarios ni trazabilidad aún. Escribe el primer mensaje abajo.</span>
+            </div>
+          ` : comments.map(c => this.renderCommentMessage(c)).join('')}
+        </div>
+
+        <!-- Recording Banner (when microphone active) -->
+        ${this.isRecording ? `
+          <div class="nora-inc-recording-banner">
+            <span class="nora-recording-dot"></span>
+            <span>Grabando audio: ${this.formatRecordingTime(this.recordingSeconds)}</span>
+            <button type="button" id="btn-cancel-voice" class="nora-rec-cancel-btn">Cancelar</button>
+          </div>
+        ` : ''}
+
+        <!-- Chat Input Bar -->
+        <div class="nora-inc-chat-input-bar">
+          <input type="file" id="nora-chat-file-input" style="display: none;" accept="image/*,video/*,audio/*,application/pdf" />
+
+          <button type="button" class="nora-chat-btn-icon" id="btn-chat-attach" title="Adjuntar archivo o imagen">
+            <span class="material-symbols-outlined" style="font-size: 18px;">attach_file</span>
+          </button>
+
+          <button type="button" class="nora-chat-btn-icon ${this.isRecording ? 'recording' : ''}" id="btn-chat-mic" title="${this.isRecording ? 'Detener y enviar audio' : 'Grabar nota de voz con micrófono'}">
+            <span class="material-symbols-outlined" style="font-size: 18px;">${this.isRecording ? 'stop_circle' : 'mic'}</span>
+          </button>
+
+          <textarea id="nora-chat-textarea" placeholder="Escribe un mensaje de trazabilidad..." rows="1"></textarea>
+
+          <button type="button" class="nora-chat-send-btn" id="btn-chat-send" title="Enviar mensaje">
+            <span class="material-symbols-outlined" style="font-size: 16px;">send</span>
+          </button>
+        </div>
+      </div>
+    `;
+  }
+
+  private renderCommentMessage(c: Comment): string {
+    const timeStr = this.formatDate(c.createdAt);
+    const hasAttachments = c.attachments && c.attachments.length > 0;
+    const isMe = this.currentUser?.email && c.userId && (c.userId.toLowerCase() === this.currentUser.email.toLowerCase() || c.userName === this.currentUser.name);
+
+    return `
+      <div class="nora-comment-row ${isMe ? 'me' : 'other'}">
+        <div class="nora-comment-avatar" title="${escapeHtml(c.userName)}">
+          ${escapeHtml((c.userName || 'U').slice(0, 2).toUpperCase())}
+        </div>
+        <div class="nora-comment-bubble">
+          <div class="nora-comment-header">
+            <span class="nora-comment-author">${escapeHtml(c.userName || 'Usuario')}</span>
+            <span class="nora-comment-time">${timeStr}</span>
+          </div>
+          ${c.text ? `<div class="nora-comment-text">${escapeHtml(c.text)}</div>` : ''}
+
+          ${hasAttachments ? `
+            <div class="nora-comment-attachments">
+              ${c.attachments!.map(att => {
+                if (att.category === 'audio' || att.type?.includes('audio')) {
+                  return `
+                    <div class="nora-audio-msg">
+                      <audio controls preload="metadata" src="${escapeHtml(att.url)}"></audio>
+                    </div>
+                  `;
+                }
+                if (att.category === 'image' || att.type?.includes('image')) {
+                  return `
+                    <a href="${escapeHtml(att.url)}" target="_blank" class="nora-img-msg">
+                      <img src="${escapeHtml(att.url)}" alt="${escapeHtml(att.name)}" />
+                    </a>
+                  `;
+                }
+                return `
+                  <a href="${escapeHtml(att.url)}" target="_blank" class="nora-file-msg">
+                    <span class="material-symbols-outlined" style="font-size: 15px;">description</span>
+                    <span>${escapeHtml(att.name)}</span>
+                  </a>
+                `;
+              }).join('')}
+            </div>
+          ` : ''}
+        </div>
+      </div>
+    `;
+  }
+
+  private formatRecordingTime(seconds: number): string {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+  }
+
   private bindEvents() {
-    // Role tabs
+    // Role filter tabs
     const roleTabs = this.container.querySelectorAll<HTMLButtonElement>('.nora-inc-role-tab');
     roleTabs.forEach(tab => {
       tab.addEventListener('click', (e) => {
@@ -626,6 +1075,15 @@ export class IncidenciasPanel {
       });
     });
 
+    // Expand/Collapse panel toggle
+    const toggleExpandBtn = this.container.querySelector<HTMLButtonElement>('#btn-inc-toggle-expand');
+    if (toggleExpandBtn) {
+      toggleExpandBtn.addEventListener('click', () => {
+        this.isExpanded = !this.isExpanded;
+        this.render();
+      });
+    }
+
     // Search input
     const searchInput = this.container.querySelector<HTMLInputElement>('#nora-inc-search');
     if (searchInput) {
@@ -635,7 +1093,7 @@ export class IncidenciasPanel {
         if (list) {
           const filtered = this.getFilteredIssues();
           list.innerHTML = filtered.length === 0 ? this.renderEmptyState() : filtered.map(i => this.renderIssueCard(i)).join('');
-          this.bindCardEvents();
+          this.bindCardClicks();
         }
       });
     }
@@ -670,16 +1128,413 @@ export class IncidenciasPanel {
     // Refresh button in empty state
     const emptyRefresh = this.container.querySelector<HTMLButtonElement>('#btn-inc-empty-refresh');
     if (emptyRefresh) {
-      emptyRefresh.addEventListener('click', () => {
-        this.syncWithDrive();
+      emptyRefresh.addEventListener('click', () => this.syncWithDrive());
+    }
+
+    this.bindCardClicks();
+    this.bindDrawerEvents();
+  }
+
+  private bindCardClicks() {
+    const cards = this.container.querySelectorAll<HTMLElement>('.nora-inc-card');
+    cards.forEach(card => {
+      card.addEventListener('click', (e) => {
+        const target = e.target as HTMLElement;
+        if (target.closest('a')) return; // ignore native link clicks
+        const issueId = card.getAttribute('data-issue-id');
+        if (issueId) {
+          const match = this.issues.find(i => i.id === issueId);
+          if (match) {
+            this.selectedIssue = match;
+            this.isExpanded = true;
+            this.render();
+          }
+        }
+      });
+    });
+  }
+
+  private bindDrawerEvents() {
+    // Close drawer / Back button
+    const backBtn = this.container.querySelector<HTMLButtonElement>('#btn-drawer-close');
+    if (backBtn) {
+      backBtn.addEventListener('click', () => {
+        this.selectedIssue = null;
+        this.isExpanded = false;
+        this.render();
       });
     }
 
-    this.bindCardEvents();
+    // Drawer Tabs: details vs chat
+    const drawerTabs = this.container.querySelectorAll<HTMLButtonElement>('.nora-inc-drawer-tab');
+    drawerTabs.forEach(tab => {
+      tab.addEventListener('click', () => {
+        const dtab = tab.getAttribute('data-dtab') as DrawerTab;
+        if (dtab && this.activeDrawerTab !== dtab) {
+          this.activeDrawerTab = dtab;
+          this.render();
+        }
+      });
+    });
+
+    // Action buttons in Details tab
+    const actionBtns = this.container.querySelectorAll<HTMLButtonElement>('.nora-act-btn');
+    actionBtns.forEach(btn => {
+      btn.addEventListener('click', () => {
+        const act = btn.getAttribute('data-act');
+        if (act && this.selectedIssue) {
+          this.handleIssueAction(act, this.selectedIssue);
+        }
+      });
+    });
+
+    // Upload local file in Documentation section
+    const docInput = this.container.querySelector<HTMLInputElement>('#nora-doc-file-input');
+    if (docInput) {
+      docInput.addEventListener('change', (e) => {
+        const files = (e.target as HTMLInputElement).files;
+        if (files && files.length > 0 && this.selectedIssue) {
+          this.handleUploadFiles(files, this.selectedIssue, false);
+        }
+      });
+    }
+
+    // Chat actions
+    const sendBtn = this.container.querySelector<HTMLButtonElement>('#btn-chat-send');
+    const textarea = this.container.querySelector<HTMLTextAreaElement>('#nora-chat-textarea');
+    if (sendBtn && textarea) {
+      sendBtn.addEventListener('click', () => {
+        const text = textarea.value.trim();
+        if (text && this.selectedIssue) {
+          this.sendChatMessage(text, this.selectedIssue);
+          textarea.value = '';
+        }
+      });
+      textarea.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' && !e.shiftKey) {
+          e.preventDefault();
+          const text = textarea.value.trim();
+          if (text && this.selectedIssue) {
+            this.sendChatMessage(text, this.selectedIssue);
+            textarea.value = '';
+          }
+        }
+      });
+    }
+
+    // Chat attach button
+    const attachBtn = this.container.querySelector<HTMLButtonElement>('#btn-chat-attach');
+    const chatFileInput = this.container.querySelector<HTMLInputElement>('#nora-chat-file-input');
+    if (attachBtn && chatFileInput) {
+      attachBtn.addEventListener('click', () => chatFileInput.click());
+      chatFileInput.addEventListener('change', (e) => {
+        const files = (e.target as HTMLInputElement).files;
+        if (files && files.length > 0 && this.selectedIssue) {
+          this.handleUploadFiles(files, this.selectedIssue, true);
+        }
+      });
+    }
+
+    // Voice recording with microphone
+    const micBtn = this.container.querySelector<HTMLButtonElement>('#btn-chat-mic');
+    if (micBtn) {
+      micBtn.addEventListener('click', () => {
+        if (!this.isRecording) {
+          this.startVoiceRecording();
+        } else {
+          this.stopVoiceRecording(true);
+        }
+      });
+    }
+
+    const cancelVoiceBtn = this.container.querySelector<HTMLButtonElement>('#btn-cancel-voice');
+    if (cancelVoiceBtn) {
+      cancelVoiceBtn.addEventListener('click', () => {
+        this.stopVoiceRecording(false);
+      });
+    }
+
+    // Scroll chat to bottom
+    const chatFeed = this.container.querySelector('#nora-inc-chat-feed');
+    if (chatFeed) {
+      chatFeed.scrollTop = chatFeed.scrollHeight;
+    }
   }
 
-  private bindCardEvents() {
-    // Card clicks or action handlers
+  // --- Voice Recording Logic ---
+  private async startVoiceRecording() {
+    if (!navigator.mediaDevices?.getUserMedia) {
+      alert('Tu navegador no permite acceso al micrófono.');
+      return;
+    }
+    try {
+      this.audioChunks = [];
+      this.audioStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      let mimeType = 'audio/webm';
+      if (MediaRecorder.isTypeSupported('audio/webm;codecs=opus')) mimeType = 'audio/webm;codecs=opus';
+      else if (MediaRecorder.isTypeSupported('audio/mp4')) mimeType = 'audio/mp4';
+
+      try {
+        this.mediaRecorder = new MediaRecorder(this.audioStream, { mimeType });
+      } catch (_) {
+        this.mediaRecorder = new MediaRecorder(this.audioStream);
+      }
+
+      this.mediaRecorder.ondataavailable = (e) => {
+        if (e.data && e.data.size > 0) this.audioChunks.push(e.data);
+      };
+
+      this.recordingSeconds = 0;
+      this.isRecording = true;
+      this.render();
+
+      this.recordingTimer = window.setInterval(() => {
+        this.recordingSeconds++;
+        const banner = this.container.querySelector('.nora-inc-recording-banner span:nth-child(2)');
+        if (banner) banner.textContent = `Grabando audio: ${this.formatRecordingTime(this.recordingSeconds)}`;
+      }, 1000);
+
+      this.mediaRecorder.start(250);
+    } catch (err) {
+      console.error('Error starting voice recording:', err);
+      alert('No se pudo acceder al micrófono. Por favor verifica los permisos.');
+    }
+  }
+
+  private async stopVoiceRecording(save: boolean) {
+    if (this.recordingTimer) {
+      clearInterval(this.recordingTimer);
+      this.recordingTimer = null;
+    }
+
+    if (!this.mediaRecorder) {
+      this.isRecording = false;
+      this.render();
+      return;
+    }
+
+    this.mediaRecorder.onstop = async () => {
+      if (this.audioStream) {
+        this.audioStream.getTracks().forEach(t => t.stop());
+        this.audioStream = null;
+      }
+      this.isRecording = false;
+
+      if (save && this.audioChunks.length > 0 && this.selectedIssue) {
+        const mimeType = this.mediaRecorder?.mimeType || 'audio/webm';
+        const isMp4 = mimeType.includes('mp4');
+        const ext = isMp4 ? '.m4a' : '.webm';
+        const blob = new Blob(this.audioChunks, { type: mimeType });
+        const name = `Nota_Voz_${Date.now()}${ext}`;
+
+        // Convert blob to base64 DataURL for offline/instant playback
+        const reader = new FileReader();
+        reader.onloadend = () => {
+          const dataUrl = reader.result as string;
+          const newAtt: Attachment = {
+            id: 'att_audio_' + Date.now(),
+            name,
+            type: mimeType,
+            url: dataUrl,
+            category: 'audio'
+          };
+
+          const newComment: Comment = {
+            id: 'cmt_' + Date.now(),
+            userId: this.currentUser?.email || 'user',
+            userName: this.currentUser?.name || this.currentUser?.email || 'Usuario',
+            text: '🎤 Nota de voz grabada',
+            createdAt: new Date().toISOString(),
+            attachments: [newAtt]
+          };
+
+          const updatedIssue: Issue = {
+            ...this.selectedIssue!,
+            attachments: [...(this.selectedIssue!.attachments || []), newAtt],
+            comments: [...(this.selectedIssue!.comments || []), newComment],
+            updatedAt: new Date().toISOString()
+          };
+
+          const updatedIssues = this.issues.map(i => i.id === updatedIssue.id ? updatedIssue : i);
+          this.persistAndBroadcast(updatedIssues, updatedIssue);
+          this.render();
+        };
+        reader.readAsDataURL(blob);
+      } else {
+        this.render();
+      }
+      this.mediaRecorder = null;
+      this.audioChunks = [];
+    };
+
+    if (this.mediaRecorder.state !== 'inactive') {
+      this.mediaRecorder.stop();
+    }
+  }
+
+  // --- File Upload Logic ---
+  private async handleUploadFiles(files: FileList, issue: Issue, isForChat: boolean) {
+    const newAttachments: Attachment[] = [];
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
+      const dataUrl = await this.readFileAsDataURL(file);
+      let cat: Attachment['category'] = 'file';
+      if (file.type.startsWith('image/')) cat = 'image';
+      else if (file.type.startsWith('video/')) cat = 'video';
+      else if (file.type.startsWith('audio/')) cat = 'audio';
+
+      newAttachments.push({
+        id: 'att_' + Date.now() + '_' + i,
+        name: file.name,
+        type: file.type,
+        url: dataUrl,
+        category: cat
+      });
+    }
+
+    let updatedIssue: Issue;
+    if (isForChat) {
+      const newComment: Comment = {
+        id: 'cmt_' + Date.now(),
+        userId: this.currentUser?.email || 'user',
+        userName: this.currentUser?.name || this.currentUser?.email || 'Usuario',
+        text: `📎 Archivos adjuntos (${newAttachments.length})`,
+        createdAt: new Date().toISOString(),
+        attachments: newAttachments
+      };
+      updatedIssue = {
+        ...issue,
+        attachments: [...(issue.attachments || []), ...newAttachments],
+        comments: [...(issue.comments || []), newComment],
+        updatedAt: new Date().toISOString()
+      };
+    } else {
+      updatedIssue = {
+        ...issue,
+        attachments: [...(issue.attachments || []), ...newAttachments],
+        updatedAt: new Date().toISOString()
+      };
+    }
+
+    const updatedIssues = this.issues.map(i => i.id === updatedIssue.id ? updatedIssue : i);
+    this.persistAndBroadcast(updatedIssues, updatedIssue);
+    this.render();
+  }
+
+  private readFileAsDataURL(file: File): Promise<string> {
+    return new Promise((resolve, reject) => {
+      const r = new FileReader();
+      r.onload = () => resolve(r.result as string);
+      r.onerror = reject;
+      r.readAsDataURL(file);
+    });
+  }
+
+  // --- Send Chat Message ---
+  private sendChatMessage(text: string, issue: Issue) {
+    const newComment: Comment = {
+      id: 'cmt_' + Date.now(),
+      userId: this.currentUser?.email || 'user',
+      userName: this.currentUser?.name || this.currentUser?.email || 'Usuario',
+      text,
+      createdAt: new Date().toISOString()
+    };
+
+    const updatedIssue: Issue = {
+      ...issue,
+      comments: [...(issue.comments || []), newComment],
+      updatedAt: new Date().toISOString()
+    };
+
+    const updatedIssues = this.issues.map(i => i.id === updatedIssue.id ? updatedIssue : i);
+    this.persistAndBroadcast(updatedIssues, updatedIssue);
+    this.render();
+  }
+
+  // --- Issue Action Handlers ---
+  private handleIssueAction(action: string, issue: Issue) {
+    const user = this.currentUser;
+    const authorName = user?.name || user?.email || 'Usuario';
+
+    switch (action) {
+      case 'colab': {
+        const email = prompt('Ingresa el correo del colaborador a agregar:');
+        if (!email || !email.trim()) return;
+        const newColab = { name: email.split('@')[0], email: email.trim(), at: new Date().toISOString() };
+        const updatedColabs = [...(issue.collaborators || []), newColab];
+        this.applyActionUpdate(issue, {
+          collaborators: updatedColabs
+        }, `👤 Colaborador agregado: ${email.trim()}`);
+        break;
+      }
+      case 'exec': {
+        const email = prompt('Ingresa el correo del nuevo ejecutor:');
+        if (!email || !email.trim()) return;
+        this.applyActionUpdate(issue, {
+          executor: { name: email.split('@')[0], position: 'Ejecutor', email: email.trim(), at: new Date().toISOString() }
+        }, `➡️ Redirigida a ejecutor: ${email.trim()}`);
+        break;
+      }
+      case 'resp': {
+        const email = prompt('Ingresa el correo del nuevo responsable principal:');
+        if (!email || !email.trim()) return;
+        this.applyActionUpdate(issue, {
+          assignedName: email.split('@')[0],
+          assignedEmail: email.trim()
+        }, `🔄 Responsable principal reasignado a: ${email.trim()}`);
+        break;
+      }
+      case 'finish': {
+        if (!confirm('¿Deseas finalizar la respuesta técnica de esta incidencia?')) return;
+        this.applyActionUpdate(issue, { status: 'RESPONDIDA' }, `✅ Respuesta técnica finalizada por ${authorName}`);
+        break;
+      }
+      case 'resolve': {
+        if (!confirm('¿Marcar la incidencia como RESUELTA Y CERRADA?')) return;
+        this.applyActionUpdate(issue, { status: 'RESUELTA' }, `🏁 Incidencia resuelta y cerrada por ${authorName}`);
+        break;
+      }
+      case 'reject': {
+        const reason = prompt('Motivo de rechazo de la respuesta:');
+        if (reason === null) return;
+        this.applyActionUpdate(issue, { status: 'RECHAZADA', rejectionReason: reason }, `❌ Respuesta rechazada: ${reason}`);
+        break;
+      }
+      case 'agreement': {
+        const dateStr = prompt('Establecer fecha de acuerdo (AAAA-MM-DD):', new Date().toISOString().slice(0, 10));
+        if (!dateStr) return;
+        this.applyActionUpdate(issue, { status: 'ACUERDO', agreementDate: dateStr }, `🤝 Acuerdo establecido hasta el ${dateStr}`);
+        break;
+      }
+      case 'cancel': {
+        const reason = prompt('Motivo de anulación de la incidencia:');
+        if (reason === null) return;
+        this.applyActionUpdate(issue, { status: 'ANULADA', rejectionReason: reason }, `🚫 Incidencia anulada: ${reason}`);
+        break;
+      }
+    }
+  }
+
+  private applyActionUpdate(issue: Issue, changes: Partial<Issue>, logMessage: string) {
+    const authorName = this.currentUser?.name || this.currentUser?.email || 'Sistema';
+    const systemComment: Comment = {
+      id: 'cmt_' + Date.now(),
+      userId: this.currentUser?.email || 'system',
+      userName: authorName,
+      text: logMessage,
+      createdAt: new Date().toISOString()
+    };
+
+    const updatedIssue: Issue = {
+      ...issue,
+      ...changes,
+      comments: [...(issue.comments || []), systemComment],
+      updatedAt: new Date().toISOString()
+    };
+
+    const updatedIssues = this.issues.map(i => i.id === updatedIssue.id ? updatedIssue : i);
+    this.persistAndBroadcast(updatedIssues, updatedIssue);
+    this.render();
   }
 }
 

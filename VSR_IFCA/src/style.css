@@ -3186,21 +3186,50 @@ body.dark-mode .right-tab-btn#right-tab-incidencias.active {
 
 #properties-panel.incidencias-mode {
   width: min(440px, 92vw) !important;
+  transition: width 0.28s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-.nora-inc-panel {
+#properties-panel.incidencias-expanded {
+  width: min(940px, 94vw) !important;
+  transition: width 0.28s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.nora-inc-split-container {
   display: flex;
-  flex-direction: column;
-  height: 100%;
   width: 100%;
-  background: #f8fafc;
-  color: #0f172a;
+  height: 100%;
+  position: relative;
   overflow: hidden;
   font-family: inherit;
 }
-body.dark-mode .nora-inc-panel {
+
+.nora-inc-list-pane {
+  flex: 0 0 380px;
+  max-width: 440px;
+  min-width: 320px;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  border-right: 1px solid #e2e8f0;
+  background: #f8fafc;
+  overflow: hidden;
+}
+body.dark-mode .nora-inc-list-pane {
+  border-color: #1e293b;
   background: #0b0f19;
-  color: #f1f5f9;
+}
+
+@media (max-width: 768px) {
+  #properties-panel.incidencias-expanded {
+    width: 100vw !important;
+  }
+  .nora-inc-split-container.has-drawer .nora-inc-list-pane {
+    display: none;
+  }
+  .nora-inc-split-container.has-drawer .nora-inc-detail-drawer {
+    width: 100% !important;
+    flex: 1 1 100% !important;
+  }
 }
 
 .nora-inc-header {
@@ -3308,7 +3337,7 @@ body.dark-mode .nora-inc-role-tabs {
   background: transparent;
   border: none;
   border-radius: 6px;
-  font-size: 10.5px;
+  font-size: 10px;
   font-weight: 700;
   color: #64748b;
   cursor: pointer;
@@ -3383,7 +3412,7 @@ body.dark-mode .nora-inc-input-wrapper {
   border: none;
   background: transparent;
   outline: none;
-  font-size: 11.5px;
+  font-size: 11px;
   padding: 6px 4px;
   color: inherit;
 }
@@ -3434,6 +3463,7 @@ body.dark-mode .nora-inc-select {
   box-shadow: 0 1px 3px rgba(0,0,0,0.04);
   transition: all 0.18s ease;
   gap: 8px;
+  cursor: pointer;
 }
 body.dark-mode .nora-inc-card {
   background: #111827;
@@ -3441,13 +3471,17 @@ body.dark-mode .nora-inc-card {
   box-shadow: 0 2px 8px rgba(0,0,0,0.25);
 }
 .nora-inc-card:hover {
-  border-color: #cbd5e1;
+  border-color: #94a3b8;
   box-shadow: 0 4px 12px rgba(0,0,0,0.07);
   transform: translateY(-1px);
 }
-body.dark-mode .nora-inc-card:hover {
-  border-color: #374151;
-  box-shadow: 0 6px 16px rgba(0,0,0,0.4);
+.nora-inc-card.selected {
+  border-color: #2563eb !important;
+  box-shadow: 0 0 0 2px rgba(37,99,235,0.15);
+}
+body.dark-mode .nora-inc-card.selected {
+  border-color: #3b82f6 !important;
+  box-shadow: 0 0 0 2px rgba(59,130,246,0.3);
 }
 
 .nora-inc-card-tags {
@@ -3625,33 +3659,641 @@ body.dark-mode .nora-inc-count-pill {
   color: #cbd5e1;
 }
 
-.nora-inc-open-btn {
+.nora-inc-manage-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  border-radius: 6px;
+  background: #2563eb;
+  color: #ffffff;
+  font-size: 11px;
+  font-weight: 700;
+  border: none;
+  cursor: pointer;
+  transition: all 0.18s ease;
+}
+.nora-inc-manage-btn:hover {
+  background: #1d4ed8;
+  transform: translateY(-1px);
+}
+
+/* ========================================================================== */
+/* SLIDING DETAIL DRAWER (TWO TABS: DETALLES Y GESTIÓN vs CHAT) */
+/* ========================================================================== */
+.nora-inc-detail-drawer {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background: #ffffff;
+  overflow: hidden;
+  position: relative;
+  transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+body.dark-mode .nora-inc-detail-drawer {
+  background: #0f172a;
+}
+
+.nora-inc-drawer-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  padding: 30px;
+  gap: 12px;
+}
+
+.nora-inc-drawer-inner {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  width: 100%;
+  overflow: hidden;
+}
+
+.nora-inc-drawer-header {
+  padding: 12px 16px 10px;
+  background: #ffffff;
+  border-bottom: 1px solid #e2e8f0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  flex-shrink: 0;
+}
+body.dark-mode .nora-inc-drawer-header {
+  background: #111827;
+  border-color: #1e293b;
+}
+
+.nora-inc-drawer-top-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.nora-inc-drawer-back-btn {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  background: #f1f5f9;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 700;
+  color: #475569;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.nora-inc-drawer-back-btn:hover {
+  background: #e2e8f0;
+  color: #0f172a;
+}
+body.dark-mode .nora-inc-drawer-back-btn {
+  background: #1e293b;
+  border-color: #334155;
+  color: #cbd5e1;
+}
+body.dark-mode .nora-inc-drawer-back-btn:hover {
+  background: #334155;
+  color: #f8fafc;
+}
+
+.nora-inc-drawer-badges {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.nora-inc-drawer-title {
+  font-size: 15px;
+  font-weight: 800;
+  color: #0f172a;
+  line-height: 1.3;
+}
+body.dark-mode .nora-inc-drawer-title {
+  color: #f8fafc;
+}
+
+.nora-inc-drawer-tabs {
+  display: flex;
+  gap: 4px;
+  background: #f1f5f9;
+  padding: 3px;
+  border-radius: 8px;
+  margin-top: 4px;
+}
+body.dark-mode .nora-inc-drawer-tabs {
+  background: #1e293b;
+}
+
+.nora-inc-drawer-tab {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 7px 6px;
+  border: none;
+  background: transparent;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 800;
+  color: #64748b;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+body.dark-mode .nora-inc-drawer-tab {
+  color: #94a3b8;
+}
+.nora-inc-drawer-tab:hover {
+  color: #0f172a;
+}
+body.dark-mode .nora-inc-drawer-tab:hover {
+  color: #f8fafc;
+}
+.nora-inc-drawer-tab.active {
+  background: #ffffff;
+  color: #2563eb;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+  border-bottom: 2px solid #2563eb;
+}
+body.dark-mode .nora-inc-drawer-tab.active {
+  background: #0f172a;
+  color: #60a5fa;
+  border-color: #60a5fa;
+}
+
+.nora-inc-drawer-body {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+}
+
+.nora-inc-tab-content {
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.nora-inc-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.nora-inc-section-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.nora-inc-section-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 800;
+  color: #475569;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+}
+body.dark-mode .nora-inc-section-title {
+  color: #94a3b8;
+}
+
+/* Actions Grid matching outside */
+.nora-inc-actions-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 6px;
+}
+.nora-act-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: none;
+  color: #ffffff;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.3px;
+  cursor: pointer;
+  transition: all 0.18s ease;
+  text-align: left;
+}
+.nora-act-btn:hover {
+  transform: translateY(-1px);
+  filter: brightness(1.1);
+}
+.nora-act-btn.act-colab { background: #0f172a; }
+.nora-act-btn.act-exec { background: #334155; }
+.nora-act-btn.act-resp { background: #4338ca; }
+.nora-act-btn.act-finish { background: #059669; }
+.nora-act-btn.act-resolve { background: #0f172a; }
+.nora-act-btn.act-reject { background: #dc2626; }
+.nora-act-btn.act-agreement { background: #d97706; }
+.nora-act-btn.act-cancel { background: #64748b; }
+
+/* Info Card */
+.nora-inc-info-card {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-size: 12px;
+}
+body.dark-mode .nora-inc-info-card {
+  background: #111827;
+  border-color: #1f2937;
+}
+.nora-inc-info-row {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.nora-inc-info-lbl {
+  font-size: 10px;
+  font-weight: 800;
+  color: #64748b;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+body.dark-mode .nora-inc-info-lbl {
+  color: #94a3b8;
+}
+.nora-inc-info-val {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: #0f172a;
+  line-height: 1.4;
+}
+body.dark-mode .nora-inc-info-val {
+  color: #f8fafc;
+}
+
+/* Documentation and Evidence */
+.nora-inc-upload-btn {
   display: inline-flex;
   align-items: center;
   gap: 4px;
   padding: 4px 9px;
   border-radius: 6px;
-  background: #eff6ff;
-  color: #1d4ed8;
+  background: #059669;
+  color: #ffffff;
   font-size: 11px;
   font-weight: 700;
-  text-decoration: none;
-  transition: all 0.18s ease;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.nora-inc-upload-btn:hover {
+  background: #047857;
+}
+.nora-inc-docs-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+  gap: 8px;
+  margin-top: 4px;
+}
+.nora-inc-no-docs {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 20px;
+  background: #f8fafc;
+  border: 1px dashed #cbd5e1;
+  border-radius: 8px;
+  color: #94a3b8;
+  font-size: 11.5px;
+  font-weight: 600;
+}
+body.dark-mode .nora-inc-no-docs {
+  background: #111827;
+  border-color: #334155;
+}
+.nora-att-card {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+body.dark-mode .nora-att-card {
+  background: #111827;
+  border-color: #1f2937;
+}
+.nora-att-img {
+  width: 100%;
+  height: 85px;
+  object-fit: cover;
+}
+.nora-att-video {
+  width: 100%;
+  height: 85px;
+  object-fit: cover;
+  background: #000;
+}
+.nora-att-audio {
+  width: 100%;
+  height: 36px;
+}
+.nora-att-doc-placeholder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 85px;
+  background: #eff6ff;
+  padding: 6px;
+  text-align: center;
+}
+body.dark-mode .nora-att-doc-placeholder {
+  background: #1e293b;
+}
+.nora-att-doc-name {
+  font-size: 10px;
+  font-weight: 700;
+  color: #1e293b;
+  max-width: 110px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-top: 4px;
+}
+body.dark-mode .nora-att-doc-name {
+  color: #e2e8f0;
+}
+.nora-att-meta {
+  padding: 5px 8px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 10px;
+  font-weight: 700;
+  border-top: 1px solid #e2e8f0;
+}
+body.dark-mode .nora-att-meta {
+  border-color: #1f2937;
+}
+.nora-att-name {
+  max-width: 90px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.nora-att-link {
+  color: #2563eb;
+  display: inline-flex;
+}
+
+/* ========================================================================== */
+/* CHAT AND TRACEABILITY TAB */
+/* ========================================================================== */
+.nora-inc-chat-wrapper {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+  background: #ffffff;
+}
+body.dark-mode .nora-inc-chat-wrapper {
+  background: #0f172a;
+}
+.nora-inc-chat-feed {
+  flex: 1;
+  overflow-y: auto;
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.nora-inc-chat-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  padding: 30px;
+  text-align: center;
+  gap: 8px;
+  color: #94a3b8;
+  font-size: 12px;
+}
+.nora-comment-row {
+  display: flex;
+  gap: 8px;
+  max-width: 88%;
+}
+.nora-comment-row.me {
+  align-self: flex-end;
+  flex-direction: row-reverse;
+}
+.nora-comment-avatar {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: #3b82f6;
+  color: #ffffff;
+  font-size: 10px;
+  font-weight: 800;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.nora-comment-row.me .nora-comment-avatar {
+  background: #10b981;
+}
+.nora-comment-bubble {
+  background: #f1f5f9;
+  padding: 8px 12px;
+  border-radius: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+  color: #0f172a;
+}
+body.dark-mode .nora-comment-bubble {
+  background: #1e293b;
+  color: #f1f5f9;
+}
+.nora-comment-row.me .nora-comment-bubble {
+  background: #eff6ff;
   border: 1px solid #bfdbfe;
 }
-.nora-inc-open-btn:hover {
-  background: #1d4ed8;
-  color: #ffffff;
-  border-color: #1d4ed8;
-}
-body.dark-mode .nora-inc-open-btn {
+body.dark-mode .nora-comment-row.me .nora-comment-bubble {
   background: #1e3a5f;
-  color: #93c5fd;
   border-color: #2563eb;
 }
-body.dark-mode .nora-inc-open-btn:hover {
+.nora-comment-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.nora-comment-author {
+  font-size: 10.5px;
+  font-weight: 800;
+  color: #334155;
+}
+body.dark-mode .nora-comment-author {
+  color: #cbd5e1;
+}
+.nora-comment-time {
+  font-size: 9.5px;
+  color: #94a3b8;
+}
+.nora-comment-text {
+  line-height: 1.4;
+  word-break: break-word;
+}
+.nora-comment-attachments {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 4px;
+}
+.nora-audio-msg audio {
+  width: 100%;
+  height: 34px;
+}
+.nora-img-msg img {
+  max-width: 220px;
+  max-height: 140px;
+  border-radius: 6px;
+  object-fit: cover;
+}
+.nora-file-msg {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  font-weight: 700;
+  color: #2563eb;
+  text-decoration: underline;
+}
+
+/* Recording Banner */
+.nora-inc-recording-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: #fef2f2;
+  border-top: 1px solid #fecaca;
+  padding: 6px 14px;
+  font-size: 11px;
+  font-weight: 700;
+  color: #dc2626;
+  flex-shrink: 0;
+}
+body.dark-mode .nora-inc-recording-banner {
+  background: #450a0a;
+  border-color: #7f1d1d;
+  color: #f87171;
+}
+.nora-recording-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #ef4444;
+  animation: pulse 1s infinite;
+  display: inline-block;
+  margin-right: 6px;
+}
+.nora-rec-cancel-btn {
+  background: none;
+  border: 1px solid #fca5a5;
+  border-radius: 4px;
+  padding: 2px 6px;
+  font-size: 10px;
+  font-weight: 700;
+  color: #dc2626;
+  cursor: pointer;
+}
+
+/* Chat Input Bar */
+.nora-inc-chat-input-bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 12px;
+  border-top: 1px solid #e2e8f0;
+  background: #ffffff;
+  flex-shrink: 0;
+}
+body.dark-mode .nora-inc-chat-input-bar {
+  background: #111827;
+  border-color: #1e293b;
+}
+.nora-inc-chat-input-bar textarea {
+  flex: 1;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  padding: 8px 10px;
+  font-size: 12px;
+  outline: none;
+  resize: none;
+  background: #f8fafc;
+  color: inherit;
+  font-family: inherit;
+  min-height: 36px;
+  max-height: 80px;
+}
+body.dark-mode .nora-inc-chat-input-bar textarea {
+  background: #0f172a;
+  border-color: #334155;
+  color: #f8fafc;
+}
+.nora-chat-btn-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 8px;
+  border: 1px solid #cbd5e1;
+  background: #f8fafc;
+  color: #475569;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  flex-shrink: 0;
+}
+body.dark-mode .nora-chat-btn-icon {
+  background: #1e293b;
+  border-color: #334155;
+  color: #cbd5e1;
+}
+.nora-chat-btn-icon.recording {
+  background: #fee2e2;
+  border-color: #ef4444;
+  color: #dc2626;
+}
+.nora-chat-send-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  border: none;
   background: #2563eb;
   color: #ffffff;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  flex-shrink: 0;
+}
+.nora-chat-send-btn:hover {
+  background: #1d4ed8;
+  transform: translateY(-1px);
 }
 
 .text-danger { color: #ef4444 !important; font-weight: 700 !important; }
