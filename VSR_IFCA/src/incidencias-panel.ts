@@ -95,6 +95,122 @@ export interface IncidenciasPanelOptions {
 
 const DRIVE_GATEWAY_URL = 'https://script.google.com/macros/s/AKfycbx2RAQx_8K4o22xE0Mw-ETc7K_58vIoi6-PgVi64u80inuiw144ks3cgWSdCtXqIgB02g/exec';
 
+// Global cache of resolved audio blob: URLs by driveFileId or attachmentId
+const driveAudioBlobCache = new Map<string, string>();
+const inFlightAudioDownloads = new Map<string, Promise<string>>();
+
+export function extractDriveFileId(att: any): string {
+  if (!att) return '';
+  if (att.driveFileId && typeof att.driveFileId === 'string' && att.driveFileId.trim().length > 10) {
+    return att.driveFileId.trim();
+  }
+  const candidates = [att.webViewLink, att.url, att.id].filter(Boolean) as string[];
+  for (const raw of candidates) {
+    if (typeof raw !== 'string') continue;
+    const dMatch = raw.match(/\/file\/d\/([a-zA-Z0-9_-]{15,})/);
+    if (dMatch && dMatch[1]) return dMatch[1];
+    const idMatch = raw.match(/[?&]id=([a-zA-Z0-9_-]{15,})/);
+    if (idMatch && idMatch[1]) return idMatch[1];
+    if (raw.startsWith('/api/drive-image/')) {
+      const part = raw.replace('/api/drive-image/', '').split('?')[0].trim();
+      if (part.length > 10) return part;
+    }
+  }
+  return '';
+}
+
+function base64ToUint8Array(base64: string): Uint8Array {
+  const clean = base64.replace(/[\s\r\n]/g, '');
+  const binary = atob(clean);
+  const len = binary.length;
+  const bytes = new Uint8Array(len);
+  for (let i = 0; i < len; i++) {
+    bytes[i] = binary.charCodeAt(i);
+  }
+  return bytes;
+}
+
+function isPlayableDirectly(url?: string): boolean {
+  if (!url) return false;
+  if (url.startsWith('data:audio/')) return true;
+  if (url.startsWith('blob:')) {
+    for (const cached of driveAudioBlobCache.values()) {
+      if (cached === url) return true;
+    }
+    return false;
+  }
+  if (url.includes('drive.google.com')) return false;
+  if (/\.(mp3|wav|webm|m4a|ogg)(\?|$)/i.test(url)) return true;
+  return false;
+}
+
+async function postToAppsScript(payload: any, timeoutMs = 45000): Promise<any> {
+  const controller = new AbortController();
+  const timer = window.setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const res = await fetch(DRIVE_GATEWAY_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify(payload),
+      signal: controller.signal
+    });
+    if (!res.ok) throw new Error(`Drive Gateway HTTP ${res.status}`);
+    return await res.json();
+  } finally {
+    window.clearTimeout(timer);
+  }
+}
+
+async function fetchDriveAudioAsBlobUrl(fileId: string, mimeType: string): Promise<string> {
+  const cached = driveAudioBlobCache.get(fileId);
+  if (cached) return cached;
+
+  const existing = inFlightAudioDownloads.get(fileId);
+  if (existing) return existing;
+
+  const promise = (async () => {
+    try {
+      const CHUNK_LIMIT = 3 * 1024 * 1024;
+      let offset = 0;
+      let total = 0;
+      const parts: Uint8Array[] = [];
+
+      while (true) {
+        const res = await postToAppsScript({
+          action: 'chunk',
+          id: fileId,
+          offset,
+          limit: CHUNK_LIMIT
+        }, 45000);
+
+        if (!res || res.error || res.status === 'error' || !res.data) {
+          throw new Error(res?.error || res?.message || 'No se pudo descargar el audio desde Drive.');
+        }
+
+        const chunkBytes = base64ToUint8Array(res.data);
+        parts.push(chunkBytes);
+        total = Number(res.total) || offset + chunkBytes.length;
+        offset = Number(res.nextOffset) || offset + chunkBytes.length;
+
+        if (res.done || offset >= total || chunkBytes.length === 0) {
+          break;
+        }
+      }
+
+      const cleanMime = (mimeType || 'audio/webm').split(';')[0].trim();
+      const blob = new Blob(parts, { type: cleanMime });
+      const blobUrl = URL.createObjectURL(blob);
+      driveAudioBlobCache.set(fileId, blobUrl);
+      return blobUrl;
+    } finally {
+      inFlightAudioDownloads.delete(fileId);
+    }
+  })();
+
+  inFlightAudioDownloads.set(fileId, promise);
+  return promise;
+}
+
 export class IncidenciasPanel {
   private container: HTMLElement;
   private companyId: string;
@@ -111,6 +227,7 @@ export class IncidenciasPanel {
   private isSyncing: boolean = false;
   private syncChannel: BroadcastChannel | null = null;
   private getCompanyMembers?: () => any[];
+  private lastListScrollTop: number = 0;
 
   // Voice recording state
   private mediaRecorder: MediaRecorder | null = null;
@@ -498,6 +615,12 @@ export class IncidenciasPanel {
 
   public render() {
     if (!this.container) return;
+
+    // Preserve scroll position before wiping innerHTML
+    const currentList = this.container.querySelector<HTMLElement>('#nora-inc-list-container');
+    if (currentList) {
+      this.lastListScrollTop = currentList.scrollTop;
+    }
 
     const counts = this.getCounts();
     const filtered = this.getFilteredIssues();
@@ -921,8 +1044,11 @@ export class IncidenciasPanel {
   private renderAttachmentItem(att: Attachment): string {
     const isImage = att.category === 'image' || att.type?.includes('image');
     const isVideo = att.category === 'video' || att.type?.includes('video');
-    const isAudio = att.category === 'audio' || att.type?.includes('audio');
+    const isAudio = att.category === 'audio' || att.type?.includes('audio') || (att.name && /\.(mp3|wav|webm|m4a|ogg)$/i.test(att.name));
     const url = att.url || att.webViewLink || (att.driveFileId ? `https://drive.google.com/file/d/${att.driveFileId}/view` : '#');
+    const fileId = extractDriveFileId(att);
+    const cachedBlob = (fileId && driveAudioBlobCache.get(fileId)) || (att.id && driveAudioBlobCache.get(att.id));
+    const directPlayable = cachedBlob || (isPlayableDirectly(att.url) ? att.url : '');
 
     let previewContent = '';
     if (isImage) {
@@ -935,9 +1061,18 @@ export class IncidenciasPanel {
       `;
     } else if (isAudio) {
       previewContent = `
-        <audio controls class="nora-att-audio" preload="metadata">
-          <source src="${escapeHtml(url)}" type="${escapeHtml(att.type || 'audio/webm')}">
-        </audio>
+        <div class="nora-att-audio-wrap" data-att-id="${escapeHtml(att.id)}">
+          <audio controls class="nora-att-audio" preload="none" 
+                 data-att-id="${escapeHtml(att.id)}" 
+                 data-file-id="${escapeHtml(fileId)}" 
+                 data-mime="${escapeHtml(att.type || 'audio/webm')}"
+                 ${directPlayable ? `src="${escapeHtml(directPlayable)}"` : ''}>
+          </audio>
+          <div class="nora-audio-status" id="status-${escapeHtml(att.id)}" style="${directPlayable ? 'display: none;' : ''}">
+            <span class="material-symbols-outlined" style="font-size: 13px; color: #f59e0b;">graphic_eq</span>
+            <span>${fileId ? 'Cargando audio...' : 'Audio local'}</span>
+          </div>
+        </div>
       `;
     } else {
       previewContent = `
@@ -949,13 +1084,20 @@ export class IncidenciasPanel {
     }
 
     return `
-      <div class="nora-att-card">
+      <div class="nora-att-card ${isAudio ? 'nora-att-card-audio' : ''}">
         <div class="nora-att-preview">${previewContent}</div>
         <div class="nora-att-meta">
           <span class="nora-att-name" title="${escapeHtml(att.name)}">${escapeHtml(att.name)}</span>
-          <a href="${escapeHtml(url)}" target="_blank" class="nora-att-link" title="Abrir archivo">
-            <span class="material-symbols-outlined" style="font-size: 14px;">open_in_new</span>
-          </a>
+          ${isAudio ? `
+            <span class="nora-att-audio-chip" title="Reproducción directa en visor">
+              <span class="material-symbols-outlined" style="font-size: 13px;">mic</span>
+              <span>Audio</span>
+            </span>
+          ` : `
+            <a href="${escapeHtml(url)}" target="_blank" class="nora-att-link" title="Abrir archivo">
+              <span class="material-symbols-outlined" style="font-size: 14px;">open_in_new</span>
+            </a>
+          `}
         </div>
       </div>
     `;
@@ -1027,10 +1169,23 @@ export class IncidenciasPanel {
           ${hasAttachments ? `
             <div class="nora-comment-attachments">
               ${c.attachments!.map(att => {
-                if (att.category === 'audio' || att.type?.includes('audio')) {
+                if (att.category === 'audio' || att.type?.includes('audio') || (att.name && /\.(mp3|wav|webm|m4a|ogg)$/i.test(att.name))) {
+                  const fileId = extractDriveFileId(att);
+                  const cachedBlob = (fileId && driveAudioBlobCache.get(fileId)) || (att.id && driveAudioBlobCache.get(att.id));
+                  const directPlayable = cachedBlob || (isPlayableDirectly(att.url) ? att.url : '');
+
                   return `
-                    <div class="nora-audio-msg">
-                      <audio controls preload="metadata" src="${escapeHtml(att.url)}"></audio>
+                    <div class="nora-audio-msg" data-att-id="${escapeHtml(att.id)}">
+                      <audio controls preload="none" 
+                             data-att-id="${escapeHtml(att.id)}" 
+                             data-file-id="${escapeHtml(fileId)}" 
+                             data-mime="${escapeHtml(att.type || 'audio/webm')}"
+                             ${directPlayable ? `src="${escapeHtml(directPlayable)}"` : ''}>
+                      </audio>
+                      <div class="nora-audio-status" id="status-${escapeHtml(att.id)}" style="${directPlayable ? 'display: none;' : ''}">
+                        <span class="material-symbols-outlined" style="font-size: 13px; color: #f59e0b;">graphic_eq</span>
+                        <span>${fileId ? 'Cargando nota de voz...' : 'Nota de voz'}</span>
+                      </div>
                     </div>
                   `;
                 }
@@ -1131,17 +1286,51 @@ export class IncidenciasPanel {
       emptyRefresh.addEventListener('click', () => this.syncWithDrive());
     }
 
+    // Restore and track scroll position of the list container
+    const listContainer = this.container.querySelector<HTMLElement>('#nora-inc-list-container');
+    if (listContainer) {
+      if (this.lastListScrollTop > 0) {
+        listContainer.scrollTop = this.lastListScrollTop;
+      }
+      listContainer.addEventListener('scroll', () => {
+        this.lastListScrollTop = listContainer.scrollTop;
+      }, { passive: true });
+    }
+
     this.bindCardClicks();
     this.bindDrawerEvents();
   }
 
   private bindCardClicks() {
+    const saveScroll = () => {
+      const list = this.container.querySelector<HTMLElement>('#nora-inc-list-container');
+      if (list) this.lastListScrollTop = list.scrollTop;
+    };
+
     const cards = this.container.querySelectorAll<HTMLElement>('.nora-inc-card');
     cards.forEach(card => {
       card.addEventListener('click', (e) => {
         const target = e.target as HTMLElement;
-        if (target.closest('a')) return; // ignore native link clicks
+        if (target.closest('a') || target.closest('button')) return; // ignore native link clicks
+        saveScroll();
         const issueId = card.getAttribute('data-issue-id');
+        if (issueId) {
+          const match = this.issues.find(i => i.id === issueId);
+          if (match) {
+            this.selectedIssue = match;
+            this.isExpanded = true;
+            this.render();
+          }
+        }
+      });
+    });
+
+    const manageBtns = this.container.querySelectorAll<HTMLButtonElement>('.nora-inc-manage-btn');
+    manageBtns.forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        saveScroll();
+        const issueId = btn.getAttribute('data-issue-id');
         if (issueId) {
           const match = this.issues.find(i => i.id === issueId);
           if (match) {
@@ -1254,11 +1443,77 @@ export class IncidenciasPanel {
       });
     }
 
+    // Wire up inline audio players for direct playback
+    this.bindAudioPlayers();
+
     // Scroll chat to bottom
     const chatFeed = this.container.querySelector('#nora-inc-chat-feed');
     if (chatFeed) {
       chatFeed.scrollTop = chatFeed.scrollHeight;
     }
+  }
+
+  private bindAudioPlayers() {
+    const audioEls = this.container.querySelectorAll<HTMLAudioElement>('audio[data-file-id]');
+    audioEls.forEach(audio => {
+      const fileId = audio.getAttribute('data-file-id') || '';
+      const attId = audio.getAttribute('data-att-id') || '';
+      const mime = audio.getAttribute('data-mime') || 'audio/webm';
+      const statusEl = this.container.querySelector<HTMLElement>(`#status-${attId}`);
+
+      const ensureAudioSource = async (): Promise<boolean> => {
+        if (audio.src && isPlayableDirectly(audio.src)) {
+          if (statusEl) statusEl.style.display = 'none';
+          return true;
+        }
+        if (!fileId) {
+          if (statusEl) {
+            statusEl.style.display = 'flex';
+            statusEl.textContent = 'Audio local';
+          }
+          return false;
+        }
+        try {
+          if (statusEl) {
+            statusEl.style.display = 'flex';
+            statusEl.innerHTML = `<span class="material-symbols-outlined spinning" style="font-size:13px; color:#f59e0b;">sync</span><span>Descargando audio...</span>`;
+          }
+          const blobUrl = await fetchDriveAudioAsBlobUrl(fileId, mime);
+          if (attId) driveAudioBlobCache.set(attId, blobUrl);
+          audio.src = blobUrl;
+          if (statusEl) {
+            statusEl.style.display = 'none';
+          }
+          return true;
+        } catch (err) {
+          console.warn('[IncidenciasPanel] Error al obtener audio de Drive:', err);
+          if (statusEl) {
+            statusEl.style.display = 'flex';
+            statusEl.innerHTML = `<span class="material-symbols-outlined" style="font-size:13px; color:#ef4444;">error</span><span style="color:#ef4444;">No disponible</span>`;
+          }
+          return false;
+        }
+      };
+
+      // Auto-resolve audio in background if not already playable
+      if (fileId && (!audio.src || !isPlayableDirectly(audio.src))) {
+        ensureAudioSource();
+      }
+
+      // Intercept play event if clicked before background download completes
+      audio.addEventListener('play', async (e) => {
+        if (!audio.src || !isPlayableDirectly(audio.src)) {
+          e.preventDefault();
+          audio.pause();
+          const ok = await ensureAudioSource();
+          if (ok) {
+            try {
+              await audio.play();
+            } catch (_) {}
+          }
+        }
+      });
+    });
   }
 
   // --- Voice Recording Logic ---
@@ -1338,6 +1593,7 @@ export class IncidenciasPanel {
             url: dataUrl,
             category: 'audio'
           };
+          driveAudioBlobCache.set(newAtt.id, dataUrl);
 
           const newComment: Comment = {
             id: 'cmt_' + Date.now(),

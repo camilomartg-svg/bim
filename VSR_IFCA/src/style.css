@@ -4004,6 +4004,54 @@ body.dark-mode .nora-att-card {
 .nora-att-audio {
   width: 100%;
   height: 36px;
+  outline: none;
+}
+.nora-att-audio-wrap {
+  width: 100%;
+  padding: 8px 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  align-items: center;
+  justify-content: center;
+  background: #f8fafc;
+  min-height: 85px;
+  box-sizing: border-box;
+}
+body.dark-mode .nora-att-audio-wrap {
+  background: #0f172a;
+}
+.nora-audio-status {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #d97706;
+}
+body.dark-mode .nora-audio-status {
+  color: #fbbf24;
+}
+.nora-att-audio-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 10px;
+  font-weight: 700;
+  color: #d97706;
+  background: #fef3c7;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+body.dark-mode .nora-att-audio-chip {
+  background: #78350f;
+  color: #fde68a;
+}
+.nora-att-card-audio {
+  border-color: #fed7aa;
+}
+body.dark-mode .nora-att-card-audio {
+  border-color: #9a3412;
 }
 .nora-att-doc-placeholder {
   display: flex;
@@ -4162,9 +4210,18 @@ body.dark-mode .nora-comment-author {
   gap: 6px;
   margin-top: 4px;
 }
+.nora-audio-msg {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 100%;
+  min-width: 220px;
+  max-width: 280px;
+}
 .nora-audio-msg audio {
   width: 100%;
-  height: 34px;
+  height: 36px;
+  outline: none;
 }
 .nora-img-msg img {
   max-width: 220px;
