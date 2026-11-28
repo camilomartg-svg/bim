@@ -4646,165 +4646,67 @@ body.dark-mode .nora-inc-refresh-btn:hover {
 /* ==========================================================================
    Nora Video Players & Lightbox Styles
    ========================================================================== */
-.nora-video-interactive-wrap {
-  position: relative;
-}
-
-.nora-att-video-wrap {
-  width: 100%;
-  height: 95px;
-  background: #000000;
-  position: relative;
-  overflow: hidden;
+.nora-video-msg {
   display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.nora-att-video {
+  flex-direction: column;
+  gap: 5px;
   width: 100%;
-  height: 100%;
-  object-fit: cover;
-  background: #000000;
-  outline: none;
+  max-width: 440px;
 }
 
 .nora-chat-video-wrap {
   width: 100%;
-  max-width: 380px;
-  min-height: 200px;
-  max-height: 250px;
+  height: 270px;
+  min-height: 270px;
   background: #000000;
   border-radius: 8px;
-  position: relative;
   overflow: hidden;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  position: relative;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+}
+
+.nora-chat-video-iframe {
+  width: 100%;
+  height: 100%;
+  border: none;
+  background: #000000;
+  display: block;
 }
 
 .nora-chat-video {
   width: 100%;
   height: 100%;
-  max-height: 250px;
   object-fit: contain;
   background: #000000;
-  border-radius: 8px;
   outline: none;
 }
 
-.nora-video-status-overlay {
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  background: rgba(0, 0, 0, 0.65);
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  color: #ffffff;
-  z-index: 5;
-  cursor: pointer;
-  transition: background 0.2s ease;
-  user-select: none;
-}
-
-.nora-video-status-overlay:hover {
-  background: rgba(0, 0, 0, 0.45);
-}
-
-.nora-video-play-icon {
-  font-size: 38px;
-  color: #f59e0b;
-  filter: drop-shadow(0 2px 8px rgba(0,0,0,0.6));
-  transition: transform 0.15s ease;
-}
-
-.nora-video-status-overlay:hover .nora-video-play-icon {
-  transform: scale(1.15);
-  color: #fbbf24;
-}
-
-.nora-video-play-text {
-  font-size: 11px;
-  font-weight: 700;
-  color: #ffffff;
-  text-shadow: 0 1px 4px rgba(0,0,0,0.9);
-  letter-spacing: 0.3px;
-}
-
-.nora-video-loading-box,
-.nora-video-error-box {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  text-align: center;
-  padding: 6px;
-}
-
-.nora-video-progress-text {
-  font-size: 11px;
-  font-weight: 700;
-  color: #fbbf24;
-}
-
-.nora-video-retry-btn {
-  padding: 3px 8px;
-  border-radius: 4px;
-  background: #ef4444;
-  color: #ffffff;
-  border: none;
-  font-size: 10px;
-  font-weight: 700;
-  cursor: pointer;
-  margin-top: 4px;
-}
-
-.nora-video-card-expand-btn {
-  position: absolute;
-  top: 5px;
-  right: 5px;
-  width: 26px;
-  height: 26px;
-  border-radius: 4px;
-  background: rgba(0, 0, 0, 0.7);
-  color: #ffffff;
-  border: 1px solid rgba(255, 255, 255, 0.3);
+.nora-video-msg-footer {
   display: flex;
   align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  z-index: 6;
-  transition: all 0.15s ease;
-}
-
-.nora-video-card-expand-btn:hover {
-  background: #f59e0b;
-  border-color: #f59e0b;
-  transform: scale(1.1);
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 2px;
 }
 
 .nora-video-actions {
   display: flex;
   align-items: center;
   gap: 6px;
+  flex-shrink: 0;
 }
 
 .nora-video-expand-btn {
   display: inline-flex;
   align-items: center;
-  justify-content: center;
-  width: 24px;
-  height: 24px;
-  border-radius: 4px;
+  gap: 4px;
+  padding: 3px 8px;
+  border-radius: 5px;
   border: 1px solid #cbd5e1;
   background: #ffffff;
   color: #334155;
+  font-size: 11px;
+  font-weight: 600;
   cursor: pointer;
   transition: all 0.15s ease;
 }
@@ -4821,6 +4723,81 @@ body.dark-mode .nora-video-expand-btn {
   border-color: #f59e0b;
 }
 
+/* Documentation Video Cards */
+.nora-att-video-wrap {
+  width: 100%;
+  height: 85px;
+  background: #0f172a;
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  border-radius: 6px 6px 0 0;
+}
+
+.nora-att-video-thumb {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
+  color: #ffffff;
+  transition: all 0.2s ease;
+  user-select: none;
+}
+
+.nora-att-video-wrap:hover .nora-att-video-thumb {
+  background: linear-gradient(135deg, #334155 0%, #1e293b 100%);
+}
+
+.nora-att-video-play-icon {
+  font-size: 32px;
+  color: #f59e0b;
+  filter: drop-shadow(0 2px 6px rgba(0,0,0,0.5));
+  transition: transform 0.15s ease;
+}
+
+.nora-att-video-wrap:hover .nora-att-video-play-icon {
+  transform: scale(1.15);
+  color: #fbbf24;
+}
+
+.nora-att-video-label {
+  font-size: 10.5px;
+  font-weight: 700;
+  color: #f8fafc;
+  letter-spacing: 0.3px;
+}
+
+.nora-video-card-expand-btn {
+  position: absolute;
+  top: 5px;
+  right: 5px;
+  width: 24px;
+  height: 24px;
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.75);
+  color: #ffffff;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  z-index: 6;
+  transition: all 0.15s ease;
+}
+
+.nora-video-card-expand-btn:hover {
+  background: #f59e0b;
+  border-color: #f59e0b;
+  transform: scale(1.1);
+}
+
 /* Lightbox Modal */
 .nora-video-lightbox-overlay {
   position: fixed !important;
@@ -4832,8 +4809,9 @@ body.dark-mode .nora-video-expand-btn {
   display: flex !important;
   align-items: center !important;
   justify-content: center !important;
-  background: rgba(0, 0, 0, 0.85) !important;
+  background: rgba(0, 0, 0, 0.8) !important;
   backdrop-filter: blur(8px) !important;
+  -webkit-backdrop-filter: blur(8px) !important;
 }
 
 .nora-video-lightbox-backdrop {
@@ -4842,18 +4820,18 @@ body.dark-mode .nora-video-expand-btn {
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 24px;
+  padding: 20px;
   box-sizing: border-box;
 }
 
 .nora-video-lightbox-container {
-  width: min(960px, 92vw);
-  max-height: 90vh;
+  width: min(920px, 94vw);
+  height: min(600px, 85vh);
   background: #0f172a;
-  border: 1px solid rgba(255, 255, 255, 0.15);
+  border: 1px solid rgba(255, 255, 255, 0.2);
   border-radius: 12px;
   overflow: hidden;
-  box-shadow: 0 25px 60px rgba(0, 0, 0, 0.7);
+  box-shadow: 0 25px 60px rgba(0, 0, 0, 0.8);
   display: flex;
   flex-direction: column;
 }
@@ -4866,6 +4844,7 @@ body.dark-mode .nora-video-expand-btn {
   background: #1e293b;
   border-bottom: 1px solid rgba(255, 255, 255, 0.1);
   color: #ffffff;
+  flex-shrink: 0;
 }
 
 .nora-video-lightbox-title {
@@ -4877,6 +4856,13 @@ body.dark-mode .nora-video-expand-btn {
   max-width: 80%;
 }
 
+.nora-video-lightbox-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.nora-video-lightbox-drive-btn,
 .nora-video-lightbox-close {
   width: 32px;
   height: 32px;
@@ -4889,6 +4875,12 @@ body.dark-mode .nora-video-expand-btn {
   justify-content: center;
   cursor: pointer;
   transition: all 0.15s ease;
+  text-decoration: none;
+}
+
+.nora-video-lightbox-drive-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: #3b82f6;
 }
 
 .nora-video-lightbox-close:hover {
@@ -4898,14 +4890,24 @@ body.dark-mode .nora-video-expand-btn {
 
 .nora-video-lightbox-body {
   width: 100%;
+  flex: 1;
   background: #000000;
   display: flex;
   align-items: center;
   justify-content: center;
+  overflow: hidden;
+}
+
+.nora-video-lightbox-iframe {
+  width: 100%;
+  height: 100%;
+  border: none;
+  background: #000000;
+  display: block;
 }
 
 .nora-video-lightbox-player {
   width: 100%;
-  max-height: calc(90vh - 54px);
+  height: 100%;
   outline: none;
 }
