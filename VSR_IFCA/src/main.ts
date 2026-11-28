@@ -16492,25 +16492,76 @@ function setupViewpoints() {
 
     const provider: ViewpointStateProvider = {
         getMeasurements: () => {
-            return completedMeasurements;
+            const list: any[] = [...completedMeasurements];
+            if (measurer && measurer.list) {
+                try {
+                    for (const line of measurer.list) {
+                        if (line && line.start && line.end) {
+                            list.push({
+                                type: 'length_obf',
+                                start: { x: line.start.x, y: line.start.y, z: line.start.z },
+                                end: { x: line.end.x, y: line.end.y, z: line.end.z },
+                                units: line.units || 'm',
+                                rounding: line.rounding !== undefined ? line.rounding : 2
+                            });
+                        }
+                    }
+                } catch (e) {
+                    console.warn('[Viewpoints] Error serializando cotas de measurer:', e);
+                }
+            }
+            return list;
         },
         restoreMeasurements: (data: any[]) => {
             clearMeasurements();
+            if (measurer && measurer.list) {
+                try {
+                    measurer.list.clear();
+                } catch (e) {
+                    console.warn('[Viewpoints] Error limpiando measurer.list:', e);
+                }
+            }
             if (!data || !Array.isArray(data)) return;
 
             data.forEach(m => {
-                if (m.type === 'point' && m.points && m.points.length > 0) {
+                if (m.type === 'length_obf' || (m.type === 'length' && m.start && m.end && !m.label)) {
+                    if (measurer && measurer.list) {
+                        try {
+                            const p1 = new THREE.Vector3(m.start.x, m.start.y, m.start.z);
+                            const p2 = new THREE.Vector3(m.end.x, m.end.y, m.end.z);
+                            const line = new OBF.Line(p1, p2);
+                            if (m.units) line.units = m.units;
+                            if (m.rounding !== undefined) line.rounding = m.rounding;
+                            measurer.list.add(line);
+                        } catch (e) {
+                            console.warn('[Viewpoints] Error restaurando OBF.Line:', e);
+                        }
+                    }
+                } else if (m.type === 'point' && m.points && m.points.length > 0) {
                     const p = new THREE.Vector3(m.points[0].x, m.points[0].y, m.points[0].z);
                     createMarker(p, 0x00ff00);
                     createLabel(m.label, p, m);
                 } else if (m.type === 'length' && m.points && m.points.length === 2) {
                     const p1 = new THREE.Vector3(m.points[0].x, m.points[0].y, m.points[0].z);
                     const p2 = new THREE.Vector3(m.points[1].x, m.points[1].y, m.points[1].z);
-                    createMarker(p1, 0xffff00);
-                    createMarker(p2, 0xffff00);
-                    createLine(p1, p2);
-                    const mid = new THREE.Vector3(m.labelPosition.x, m.labelPosition.y, m.labelPosition.z);
-                    createLabel(m.label, mid, m);
+                    if (measurer && measurer.list) {
+                        try {
+                            const line = new OBF.Line(p1, p2);
+                            measurer.list.add(line);
+                        } catch {
+                            createMarker(p1, 0xffff00);
+                            createMarker(p2, 0xffff00);
+                            createLine(p1, p2);
+                            const mid = new THREE.Vector3(m.labelPosition.x, m.labelPosition.y, m.labelPosition.z);
+                            createLabel(m.label, mid, m);
+                        }
+                    } else {
+                        createMarker(p1, 0xffff00);
+                        createMarker(p2, 0xffff00);
+                        createLine(p1, p2);
+                        const mid = new THREE.Vector3(m.labelPosition.x, m.labelPosition.y, m.labelPosition.z);
+                        createLabel(m.label, mid, m);
+                    }
                 } else if (m.type === 'angle' && m.points && m.points.length === 3) {
                     const p1 = new THREE.Vector3(m.points[0].x, m.points[0].y, m.points[0].z);
                     const vertex = new THREE.Vector3(m.points[1].x, m.points[1].y, m.points[1].z);
@@ -16889,6 +16940,121 @@ function setupViewpoints() {
                 }
             }
             updateProjectLinksBarVisibility();
+        },
+        getCurrentStatus: () => {
+            if (activeSecurityContext?.statusMap) {
+                for (const [_, model] of loadedModels) {
+                    const fname = (model.name || '').toLowerCase();
+                    const match = activeSecurityContext.statusMap[fname];
+                    if (match?.status === 'EN_PROGRESO') return 'EN_PROGRESO';
+                }
+            }
+            return currentModelStatusTab || 'PUBLICADO';
+        },
+        getProjectUsers: async () => {
+            if (!activeSecurityContext) {
+                const params = new URLSearchParams(window.location.search);
+                const project = params.get('project') || '';
+                const companyId = params.get('empresa') || '';
+                try {
+                    activeSecurityContext = await loadSecurityContext(project, companyId);
+                } catch (e) {
+                    console.warn('[Viewpoints] Error cargando contexto de seguridad para usuarios:', e);
+                }
+            }
+            const list: { id: string; name: string; email?: string }[] = [];
+            if (!activeSecurityContext) return list;
+
+            const emails = new Set<string>();
+            if (Array.isArray(activeSecurityContext.activeProject?.members)) {
+                activeSecurityContext.activeProject.members.forEach((m: any) => {
+                    const em = typeof m === 'string' ? m : m?.email;
+                    if (em) emails.add(em.toLowerCase().trim());
+                });
+            }
+            if (Array.isArray(activeSecurityContext.activeProject?.iso19650?.projectAdmins)) {
+                activeSecurityContext.activeProject.iso19650.projectAdmins.forEach((em: string) => {
+                    if (em) emails.add(em.toLowerCase().trim());
+                });
+            }
+            const allTeams = [
+                ...(activeSecurityContext.activeProject?.iso19650?.deliveryTeams || []),
+                ...(activeSecurityContext.activeProject?.iso19650?.receiverTeams || [])
+            ];
+            allTeams.forEach((t: any) => {
+                if (Array.isArray(t?.members)) {
+                    t.members.forEach((em: string) => {
+                        if (em) emails.add(em.toLowerCase().trim());
+                    });
+                }
+                if (t?.leadEmail) emails.add(t.leadEmail.toLowerCase().trim());
+            });
+
+            const companyMembers: any[] = Array.isArray(activeSecurityContext.currentCompany?.members)
+                ? activeSecurityContext.currentCompany.members
+                : [];
+            const memberMap = new Map<string, any>();
+            companyMembers.forEach(cm => {
+                if (cm?.email) memberMap.set(cm.email.toLowerCase().trim(), cm);
+            });
+
+            emails.forEach(em => {
+                const info = memberMap.get(em);
+                const name = info?.name || info?.nombre || em.split('@')[0];
+                list.push({
+                    id: em,
+                    name: `${name} (${em})`,
+                    email: em
+                });
+            });
+
+            return list;
+        },
+        canUserAccessStatus: async (userIdOrEmail: string, status: string): Promise<boolean> => {
+            if (!activeSecurityContext) {
+                const params = new URLSearchParams(window.location.search);
+                const project = params.get('project') || '';
+                const companyId = params.get('empresa') || '';
+                try {
+                    activeSecurityContext = await loadSecurityContext(project, companyId);
+                } catch (e) {
+                    console.warn('[Viewpoints] Error al cargar contexto de seguridad en canUserAccessStatus:', e);
+                }
+            }
+            if (!activeSecurityContext) return true;
+
+            const email = String(userIdOrEmail || '').toLowerCase().trim();
+            if (!email) return false;
+
+            const companyMembers: any[] = Array.isArray(activeSecurityContext.currentCompany?.members)
+                ? activeSecurityContext.currentCompany.members
+                : [];
+            const memberObj = companyMembers.find(m => (m?.email || '').toLowerCase().trim() === email) || {
+                email,
+                username: email,
+                userAccount: email,
+                role: 'MEMBER'
+            };
+
+            const params = new URLSearchParams(window.location.search);
+            const companyId = params.get('empresa') || '';
+
+            const perms = getUserEffectivePermissions(
+                memberObj,
+                activeSecurityContext.activeProject,
+                activeSecurityContext.currentCompany,
+                companyId
+            );
+
+            const normStatus = String(status || '').toUpperCase();
+            if (normStatus.includes('PROGRESO')) {
+                return !!perms.canViewProgreso;
+            } else if (normStatus.includes('COMPARTIDO')) {
+                return !!perms.canViewCompartido;
+            } else if (normStatus.includes('PUBLICADO')) {
+                return !!perms.canViewPublicado;
+            }
+            return !!perms.canViewProgreso;
         }
     };
 

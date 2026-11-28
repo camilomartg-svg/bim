@@ -34,6 +34,7 @@ export interface ViewpointData {
     sharedWith?: string[]; // Emails/userIds that can access this viewpoint
     sharedAccess?: ViewpointShareEntry[];
     previewImage?: string;
+    status?: string; // ISO 19650 Status: EN_PROGRESO | COMPARTIDO | PUBLICADO
 }
 
 export interface ViewpointStateProvider {
@@ -45,6 +46,9 @@ export interface ViewpointStateProvider {
     restoreClippingPlanes(planes: { normal: number[], constant: number }[]): void;
     getLoadedModels(): { uuid: string, url: string }[];
     restoreLoadedModels(models: { uuid: string, url: string }[]): Promise<void> | void;
+    getCurrentStatus?(): string;
+    getProjectUsers?(): Promise<ActiveUser[]> | ActiveUser[];
+    canUserAccessStatus?(userIdOrEmail: string, status: string): Promise<boolean> | boolean;
 }
 
 export class ViewpointsManager extends OBC.Component implements OBC.Disposable {
@@ -555,7 +559,8 @@ export class ViewpointsManager extends OBC.Component implements OBC.Disposable {
             loadedModels,
             sharedWith: [...(base?.sharedWith || [])],
             sharedAccess: [...(base?.sharedAccess || [])],
-            previewImage: this.capturePreviewImage() || base?.previewImage
+            previewImage: this.capturePreviewImage() || base?.previewImage,
+            status: base?.status || (this._stateProvider?.getCurrentStatus ? this._stateProvider.getCurrentStatus() : undefined)
         };
     }
 
@@ -1298,14 +1303,27 @@ export class ViewpointsManager extends OBC.Component implements OBC.Disposable {
             return;
         }
 
-        let users: ActiveUser[] = [];
-        let usersLoadError = '';
-        try {
-            users = await this._repository.loadActiveUsers();
-        } catch (e) {
-            console.warn('[Viewpoints] No se pudo cargar la lista de usuarios activos:', e);
-            usersLoadError = e instanceof Error ? e.message : 'No se pudo cargar la lista de usuarios activos.';
+        let platformUsers: ActiveUser[] = [];
+        if (this._stateProvider?.getProjectUsers) {
+            try {
+                platformUsers = await this._stateProvider.getProjectUsers();
+            } catch (puErr) {
+                console.warn('[Viewpoints] Error cargando usuarios del proyecto:', puErr);
+            }
         }
+
+        let users: ActiveUser[] = [...platformUsers];
+        let usersLoadError = '';
+        if (users.length === 0) {
+            try {
+                users = await this._repository.loadActiveUsers();
+            } catch (e) {
+                console.warn('[Viewpoints] No se pudo cargar la lista de usuarios activos:', e);
+                usersLoadError = e instanceof Error ? e.message : 'No se pudo cargar la lista de usuarios activos.';
+            }
+        }
+
+        const vpStatus = (view.status || (this._stateProvider?.getCurrentStatus ? this._stateProvider.getCurrentStatus() : 'PUBLICADO')).toUpperCase();
 
         const currentEntries = this.getSharedEntries(view);
         const currentList = currentEntries.map(entry => entry.userId);
@@ -1315,10 +1333,26 @@ export class ViewpointsManager extends OBC.Component implements OBC.Disposable {
             if (!user?.id) continue;
             const key = String(user.id).trim().toLowerCase();
             if (!key || this.isCurrentUser(key)) continue;
+
+            // Strict ISO 19650 Permission Filter:
+            // If the view is EN_PROGRESO (or other status), only users with permission for that status can appear!
+            if (this._stateProvider?.canUserAccessStatus) {
+                try {
+                    const canAccess = await this._stateProvider.canUserAccessStatus(user.email || user.id, vpStatus);
+                    if (!canAccess) {
+                        // User does not have permission to view models/views in this lifecycle status
+                        continue;
+                    }
+                } catch (e) {
+                    console.warn('[Viewpoints] Error checking access status for user:', user.id, e);
+                }
+            }
+
             if (!userMap.has(key)) userMap.set(key, { ...user, id: String(user.id).trim() });
         }
         const selectableUsers = Array.from(userMap.values()).sort((a, b) => (a.name || a.id).localeCompare(b.name || b.id, 'es'));
-        const selection = await this.openShareUsersModal(view.title, selectableUsers, currentEntries, usersLoadError);
+        const checkAccessFn = (email: string) => this._stateProvider?.canUserAccessStatus ? this._stateProvider.canUserAccessStatus(email, vpStatus) : true;
+        const selection = await this.openShareUsersModal(view.title, selectableUsers, currentEntries, usersLoadError, vpStatus, checkAccessFn);
         if (selection === null) return;
         this.syncShareFields(view, selection);
 
@@ -1345,7 +1379,14 @@ export class ViewpointsManager extends OBC.Component implements OBC.Disposable {
         }
     }
 
-    private openShareUsersModal(title: string, users: ActiveUser[], preselected: ViewpointShareEntry[], loadError: string = ''): Promise<ViewpointShareEntry[] | null> {
+    private openShareUsersModal(
+        title: string,
+        users: ActiveUser[],
+        preselected: ViewpointShareEntry[],
+        loadError: string = '',
+        vpStatus: string = 'PUBLICADO',
+        canAccessCheck?: (email: string) => Promise<boolean> | boolean
+    ): Promise<ViewpointShareEntry[] | null> {
         return new Promise((resolve) => {
             const overlay = document.createElement('div');
             overlay.style.position = 'fixed';
@@ -1380,11 +1421,37 @@ export class ViewpointsManager extends OBC.Component implements OBC.Disposable {
             sub.style.color = '#aaa';
             sub.textContent = 'Selecciona usuarios o agrega correos manualmente (no se envía correo).';
 
+            const statusBadge = document.createElement('div');
+            statusBadge.style.fontSize = '11px';
+            statusBadge.style.display = 'inline-flex';
+            statusBadge.style.alignItems = 'center';
+            statusBadge.style.gap = '6px';
+            statusBadge.style.padding = '4px 8px';
+            statusBadge.style.borderRadius = '6px';
+            statusBadge.style.fontWeight = '600';
+            statusBadge.style.width = 'fit-content';
+            if (vpStatus.includes('PROGRESO')) {
+                statusBadge.style.background = 'rgba(234, 179, 8, 0.15)';
+                statusBadge.style.color = '#fde047';
+                statusBadge.style.border = '1px solid rgba(234, 179, 8, 0.3)';
+                statusBadge.textContent = '🔒 Estado: EN PROGRESO (filtrando por ISO 19650)';
+            } else if (vpStatus.includes('COMPARTIDO')) {
+                statusBadge.style.background = 'rgba(59, 130, 246, 0.15)';
+                statusBadge.style.color = '#93c5fd';
+                statusBadge.style.border = '1px solid rgba(59, 130, 246, 0.3)';
+                statusBadge.textContent = '👥 Estado: COMPARTIDO';
+            } else {
+                statusBadge.style.background = 'rgba(34, 197, 94, 0.15)';
+                statusBadge.style.color = '#86efac';
+                statusBadge.style.border = '1px solid rgba(34, 197, 94, 0.3)';
+                statusBadge.textContent = '🌐 Estado: PUBLICADO';
+            }
+
             const warning = document.createElement('div');
             warning.style.fontSize = '11px';
             warning.style.color = '#fca5a5';
             warning.style.display = loadError ? 'block' : 'none';
-            warning.textContent = loadError ? `No se pudo cargar la hoja de usuarios: ${loadError}` : '';
+            warning.textContent = loadError ? `Aviso de carga de usuarios: ${loadError}` : '';
 
             const search = document.createElement('input');
             search.type = 'text';
@@ -1397,8 +1464,9 @@ export class ViewpointsManager extends OBC.Component implements OBC.Disposable {
             search.style.borderRadius = '6px';
 
             header.appendChild(h);
+            header.appendChild(statusBadge);
             header.appendChild(sub);
-            header.appendChild(warning);
+            if (loadError) header.appendChild(warning);
             header.appendChild(search);
 
             const manualRow = document.createElement('div');
@@ -1557,13 +1625,24 @@ export class ViewpointsManager extends OBC.Component implements OBC.Disposable {
             render('');
             search.addEventListener('input', () => render(search.value));
 
-            const addManual = () => {
+            const addManual = async () => {
                 const raw = manualInput.value || '';
                 if (!isValidEmail(raw)) {
                     alert('Correo inválido. Ejemplo: usuario@empresa.com');
                     return;
                 }
                 const email = normalizeEmail(raw);
+                if (canAccessCheck) {
+                    try {
+                        const allowed = await canAccessCheck(email);
+                        if (!allowed) {
+                            alert(`El usuario (${email}) no tiene permisos para ver vistas en estado "${vpStatus}" según las reglas ISO 19650 del proyecto.`);
+                            return;
+                        }
+                    } catch (e) {
+                        console.warn(e);
+                    }
+                }
                 ensureUser(email);
                 selected.set(email, selected.get(email) || 'view');
                 manualInput.value = '';
