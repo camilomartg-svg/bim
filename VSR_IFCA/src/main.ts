@@ -1506,6 +1506,96 @@ world.camera.controls.addEventListener('rest', () => {
 });
 
 // --- Helper Functions ---
+// Master list of specialties, search patterns and 3-letter classification codes
+interface NoraSpecialtyRule {
+    name: string;
+    code: string;
+    aliases?: string[];
+    patterns: string[];
+}
+
+const NORA_SPECIALTIES_CATALOG: NoraSpecialtyRule[] = [
+    // 01. Arquitectura y Espacio
+    { name: 'Arquitectura', code: 'ARQ', patterns: ['ARQUITECTURA', 'ARQUITECTONICO', 'ARQUITECTONICA', 'ARCHITECTURE'] },
+    { name: 'Interiorismo', code: 'INT', patterns: ['INTERIORISMO', 'INTERIORES', 'DISENO DE INTERIORES', 'ARQUITECTURA DE INTERIORES'] },
+    { name: 'Paisajismo', code: 'PAI', patterns: ['PAISAJISMO', 'PAISAJISTICO', 'PAISAJISTICA', 'ARQUITECTURA DEL PAISAJE', 'LANDSCAPE'] },
+    { name: 'Urbanismo', code: 'URB', patterns: ['URBANISMO', 'URBANISTICO', 'URBANISTICA', 'DISENO URBANO', 'PLANEAMIENTO URBANO'] },
+    { name: 'Bioclimática', code: 'BIO', patterns: ['BIOCLIMATICA', 'BIOCLIMATICO', 'ARQUITECTURA BIOCLIMATICA', 'EFICIENCIA ENERGETICA', 'DISENO SOSTENIBLE'] },
+    { name: 'Señalética', code: 'SEN', patterns: ['SENALETICA', 'SENALIZACION', 'WAYFINDING'] },
+    { name: 'Luminotecnia', code: 'ILU', patterns: ['LUMINOTECNIA', 'ILUMINACION', 'DISENO DE ILUMINACION'] },
+
+    // 02. Estructura y Geotecnia
+    { name: 'Estructura', code: 'EST', aliases: ['ESTR'], patterns: ['ESTRUCTURA', 'ESTRUCTURAL', 'STRUCTURE', 'STRUCTURAL'] },
+    { name: 'Geotecnia', code: 'GEO', patterns: ['GEOTECNIA', 'GEOTECNICO', 'GEOTECNICA', 'ESTUDIO DE SUELOS', 'SUELOS'] },
+    { name: 'Fundaciones', code: 'CIM', patterns: ['FUNDACIONES', 'CIMENTACIONES', 'CIMENTACION', 'PILOTES', 'ZAPATAS'] },
+    { name: 'Elementos No Estructurales', code: 'ENE', patterns: ['ELEMENTOS NO ESTRUCTURALES', 'NO ESTRUCTURALES', 'NO ESTRUCTURAL', 'A.9', 'A9'] },
+    { name: 'Seguridad Humana', code: 'SHU', patterns: ['SEGURIDAD HUMANA', 'EVACUACION', 'PROTECCION A LA VIDA', 'TITULO K'] },
+    { name: 'Patología Estructural', code: 'PAT', patterns: ['PATOLOGIA', 'PATOLOGIA ESTRUCTURAL', 'VULNERABILIDAD', 'REFORZAMIENTO', 'REFORZAMIENTO ESTRUCTURAL'] },
+    { name: 'Sismorresistencia', code: 'SIS', patterns: ['SISMORRESISTENCIA', 'SISMORRESISTENTE', 'INGENIERIA SISMICA', 'ANALISIS SISMICO'] },
+
+    // 03. Redes Hidrosanitarias y Gas (MEP)
+    { name: 'Hidrosanitario', code: 'HDS', aliases: ['HS'], patterns: ['HIDROSANITARIO', 'HIDROSANITARIA', 'HIDRAULICO Y SANITARIO', 'HIDRAULICO-SANITARIO'] },
+    { name: 'Hidráulico', code: 'HID', patterns: ['HIDRAULICO', 'HIDRAULICA', 'INSTALACIONES HIDRAULICAS', 'AGUA POTABLE', 'AGUA FRIA', 'AGUA CALIENTE', 'PLOMERIA', 'PLUMBING'] },
+    { name: 'Sanitario', code: 'SAN', patterns: ['SANITARIO', 'SANITARIA', 'INSTALACIONES SANITARIAS', 'DESAGUES', 'DESAGUE', 'AGUAS SERVIDAS'] },
+    { name: 'Pluvial', code: 'PLU', patterns: ['PLUVIAL', 'REDES PLUVIALES', 'DRENAJE PLUVIAL', 'AGUAS LLUVIAS'] },
+    { name: 'Gas Combustible', code: 'GAS', patterns: ['GAS COMBUSTIBLE', 'GAS NATURAL', 'GLP', 'INSTALACIONES DE GAS'] },
+    { name: 'Tratamiento de Agua', code: 'PTAR', aliases: ['PTAP'], patterns: ['PTAR', 'PTAP', 'TRATAMIENTO DE AGUA', 'PLANTA DE TRATAMIENTO'] },
+
+    // 04. Protección Contra Incendios
+    { name: 'Red Contra Incendio', code: 'RCI', patterns: ['RED CONTRA INCENDIO', 'PROTECCION CONTRA INCENDIO', 'PCI', 'EXTINCION DE INCENDIO', 'ROCIADORES', 'GABINETES', 'FIRE'] },
+    { name: 'Protección Pasiva', code: 'PPC', patterns: ['PROTECCION PASIVA', 'SELLADO CORTAFUEGO', 'COMPARTIMENTACION', 'RETARDANTE'] },
+
+    // 05. Instalaciones Eléctricas
+    { name: 'Eléctrico', code: 'ELE', aliases: ['ELEC'], patterns: ['ELECTRICO', 'ELECTRICA', 'ELECTRIFICACION', 'INSTALACIONES ELECTRICAS', 'ELECTRIC'] },
+    { name: 'Subestación Eléctrica', code: 'SUB', patterns: ['SUBESTACION', 'SUBESTACION ELECTRICA', 'TRANSFORMACION'] },
+    { name: 'Puesta a Tierra', code: 'SPT', patterns: ['PUESTA A TIERRA', 'APANTALLAMIENTO', 'PARARRAYOS', 'PROTECCION ATMOSFERICA'] },
+    { name: 'Respaldo Eléctrico', code: 'GEN', patterns: ['PLANTA ELECTRICA', 'PLANTAS ELECTRICAS', 'UPS', 'GENERADOR'] },
+    { name: 'Media Tensión', code: 'MT', patterns: ['MEDIA TENSION'] },
+    { name: 'Baja Tensión', code: 'BT', patterns: ['BAJA TENSION'] },
+
+    // 06. Climatización y Ventilación (HVAC)
+    { name: 'HVAC / Climatización', code: 'MEC', patterns: ['HVAC', 'CLIMATIZACION', 'AIRE ACONDICIONADO', 'CALEFACCION', 'MECANICO', 'MECANICA', 'MECHANICAL'] },
+    { name: 'Ventilación Mecánica', code: 'VMC', patterns: ['VENTILACION', 'VENTILACION MECANICA', 'EXTRACCION', 'INYECCION DE AIRE'] },
+    { name: 'Refrigeración', code: 'REF', patterns: ['REFRIGERACION', 'REFRIGERACION COMERCIAL', 'REFRIGERACION INDUSTRIAL'] },
+    { name: 'Control Calidad de Aire', code: 'CCA', patterns: ['CALIDAD DE AIRE', 'MONITOREO CO', 'EXTRACCION CO'] },
+
+    // 07. Telecomunicaciones y Control (BMS)
+    { name: 'Telecomunicaciones', code: 'TEL', patterns: ['TELECOMUNICACIONES', 'TELECOMUNICATIVO', 'CABLEADO ESTRUCTURADO', 'REDES DE DATOS', 'DATOS'] },
+    { name: 'Detección de Incendio', code: 'DET', patterns: ['DETECCION', 'DETECCION DE INCENDIO', 'ALARMA DE INCENDIO', 'DETECCION Y ALARMA'] },
+    { name: 'CCTV / Videovigilancia', code: 'VIG', aliases: ['CCTV'], patterns: ['CCTV', 'VIDEOVIGILANCIA', 'CIRCUITO CERRADO'] },
+    { name: 'Control de Acceso', code: 'CAC', patterns: ['CONTROL DE ACCESO', 'CITOFONIA', 'INTERCOMUNICACION'] },
+    { name: 'BMS / Inmótica', code: 'BMS', patterns: ['BMS', 'INMOTICA', 'DOMOTICA', 'AUTOMATIZACION Y CONTROL', 'AUTOMATIZACION'] },
+    { name: 'Audio y Megafonía', code: 'AUD', patterns: ['AUDIO', 'MEGAFONIA', 'SONIDO', 'SONIDO EVACUACION', 'AUDIOVISUAL', 'AV'] },
+
+    // 08. Especialidades Complementarias
+    { name: 'Acústica', code: 'ACU', patterns: ['ACUSTICA', 'ACUSTICO', 'CONTROL DE RUIDO', 'AISLAMIENTO ACUSTICO'] },
+    { name: 'Transporte Vertical', code: 'TVE', patterns: ['TRANSPORTE VERTICAL', 'ELEVACION', 'ASCENSORES', 'ESCALERAS MECANICAS'] },
+    { name: 'Fachadas', code: 'FAC', patterns: ['FACHADAS', 'FACHADA', 'FACHADISMO', 'ENVOLVENTE', 'ENVOLVENTE TERMICA'] },
+    { name: 'Impermeabilización', code: 'IMP', patterns: ['IMPERMEABILIZACION', 'CUBIERTAS', 'AISLAMIENTO HIDROFUGO'] },
+    { name: 'Manejo de Residuos', code: 'BAS', patterns: ['BASURAS', 'RESIDUOS', 'RESIDUOS SOLIDOS', 'CHUTE', 'CUARTO DE ACOPIO'] },
+    { name: 'Tránsito y Vías', code: 'VIA', patterns: ['VIAL', 'VIALIDAD', 'TRANSITO', 'MOVILIDAD', 'PMT', 'PLAN DE MANEJO DE TRANSITO'] },
+    { name: 'Accesibilidad', code: 'ACC', patterns: ['ACCESIBILIDAD', 'ACCESIBILIDAD UNIVERSAL', 'DISENO INCLUSIVO'] },
+
+    // 09. Legal, Licencias y Curaduría
+    { name: 'Propiedad Horizontal', code: 'PH', patterns: ['PROPIEDAD HORIZONTAL', 'REGLAMENTO PH', 'PLANOS PH', 'LEY 675'] },
+    { name: 'Licencia de Construcción', code: 'CUR', patterns: ['LICENCIA', 'CURADURIA', 'LICENCIA DE CONSTRUCCION', 'PLANO MARCO'] },
+    { name: 'Subdivisión', code: 'SBD', aliases: ['SUB'], patterns: ['SUBDIVISION', 'URBANIZACION', 'ENGLOBE', 'DESENGLOBE', 'RELOTEO'] },
+    { name: 'Reconocimiento', code: 'REC', patterns: ['RECONOCIMIENTO', 'LEGALIZACION'] },
+
+    // 10. Ambiental, Silvicultura y SST
+    { name: 'Gestión Ambiental', code: 'PMA', patterns: ['GESTION AMBIENTAL', 'IMPACTO AMBIENTAL', 'EIA', 'PMA', 'PLAN DE MANEJO AMBIENTAL'] },
+    { name: 'Gestión RCD', code: 'RCD', patterns: ['RCD', 'RESIDUOS DE CONSTRUCCION', 'ESCOMBROS'] },
+    { name: 'Silvicultura', code: 'SIL', patterns: ['SILVICULTURA', 'INVENTARIO FORESTAL', 'ARBOLADO', 'TALA', 'TRASPLANTE'] },
+    { name: 'Seguridad y Salud en Trabajo', code: 'SST', aliases: ['SGSST'], patterns: ['SST', 'SGSST', 'SEGURIDAD Y SALUD EN EL TRABAJO'] },
+
+    // 11. Usos Especiales e Industriales
+    { name: 'Gases Medicinales', code: 'GMD', patterns: ['GASES MEDICINALES', 'GAS MEDICINAL'] },
+    { name: 'Equipamiento Hospitalario', code: 'HOS', patterns: ['HOSPITALARIO', 'EQUIPAMIENTO MEDICO', 'ARQUITECTURA HOSPITALARIA'] },
+    { name: 'Cocinas Industriales', code: 'COC', patterns: ['COCINA INDUSTRIAL', 'COCINAS INDUSTRIALES', 'GASTRONOMIA'] },
+    { name: 'Piscinería', code: 'PIS', patterns: ['PISCINERIA', 'PISCINAS', 'FILTRACION PISCINA'] },
+    { name: 'Aire Comprimido Industrial', code: 'ACI', patterns: ['AIRE COMPRIMIDO', 'VAPOR INDUSTRIAL'] }
+];
+
 function getSpecialtyFromIfcPath(path: string): string {
     if (!path) return 'General';
     const filename = path.split('/').pop() ?? path;
@@ -1517,35 +1607,47 @@ function getSpecialtyFromIfcPath(path: string): string {
         .replace(/[\u0300-\u036f]/g, '')
         .toUpperCase();
 
-    // 1. Keyword-based detection by model filename
-    if (norm.includes('ARQUITECTURA') || norm.includes('ARCHITECTURE') || /(?:^|[\s_\.\-])ARQ(?:[\s_\.\-]|$)/i.test(norm)) {
-        return 'Arquitectura';
-    }
-    if (norm.includes('ESTRUCTURAL') || norm.includes('ESTRUCTURA') || norm.includes('STRUCTURAL') || norm.includes('STRUCTURE') || /(?:^|[\s_\.\-])(?:EST|ESTR)(?:[\s_\.\-]|$)/i.test(norm)) {
-        return 'Estructura';
-    }
-    if (norm.includes('HIDROSANITARIO') || norm.includes('HIDRAULICO') || norm.includes('PLOMERIA') || norm.includes('PLUMBING') || norm.includes('SANITARIO') || norm.includes('DESAGUE') || norm.includes('AGUA') || /(?:^|[\s_\.\-])(?:HID|SAN|HS)(?:[\s_\.\-]|$)/i.test(norm)) {
-        return 'Hidrosanitario';
-    }
-    if (norm.includes('ELECTRICO') || norm.includes('ELECTRICA') || norm.includes('ELECTRIC') || norm.includes('ILUMINACION') || norm.includes('LIGHTING') || /(?:^|[\s_\.\-])(?:ELE|ELEC)(?:[\s_\.\-]|$)/i.test(norm)) {
-        return 'Eléctrico';
-    }
-    if (norm.includes('MECANICO') || norm.includes('MECANICA') || norm.includes('MECHANICAL') || norm.includes('HVAC') || norm.includes('CLIMATIZACION') || norm.includes('AIRE') || /(?:^|[\s_\.\-])MEC(?:[\s_\.\-]|$)/i.test(norm)) {
-        return 'Mecánico';
-    }
-    if (norm.includes('GAS') || /(?:^|[\s_\.\-])GAS(?:[\s_\.\-]|$)/i.test(norm)) {
-        return 'Gas';
-    }
-    if (norm.includes('INCENDIO') || norm.includes('RCI') || norm.includes('FIRE') || /(?:^|[\s_\.\-])RCI(?:[\s_\.\-]|$)/i.test(norm)) {
-        return 'Red Contra Incendio';
+    // 1. Exact 3-letter classification code matching (boundaries: start/end, _, -, ., space)
+    for (const spec of NORA_SPECIALTIES_CATALOG) {
+        const codes = [spec.code, ...(spec.aliases || [])];
+        for (const c of codes) {
+            const escaped = c.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            const codeRegex = new RegExp(`(?:^|[\\s_\\.\\-])${escaped}(?:[\\s_\\.\\-]|$)`, 'i');
+            if (codeRegex.test(norm)) {
+                return spec.name;
+            }
+        }
     }
 
-    // 2. ISO 19650 standard naming fallback: parts[3]
+    // 2. Keyword/phrase pattern matching
+    for (const spec of NORA_SPECIALTIES_CATALOG) {
+        for (const p of spec.patterns) {
+            const pNorm = p.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase();
+            if (pNorm.length <= 4) {
+                // Short tokens require word boundary matching
+                const escaped = pNorm.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                const pRegex = new RegExp(`(?:^|[\\s_\\.\\-])${escaped}(?:[\\s_\\.\\-]|$)`, 'i');
+                if (pRegex.test(norm)) {
+                    return spec.name;
+                }
+            } else if (norm.includes(pNorm)) {
+                return spec.name;
+            }
+        }
+    }
+
+    // 3. ISO 19650 standard naming fallback: parts[3]
     const parts = baseName.split('_');
     const raw = (parts[3] ?? '').trim();
     if (raw) {
-        const rawNorm = raw.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
-        if (rawNorm === 'desagues') return 'Desagües';
+        const rawUpper = raw.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase();
+        for (const spec of NORA_SPECIALTIES_CATALOG) {
+            const codes = [spec.code, ...(spec.aliases || [])];
+            if (codes.includes(rawUpper)) {
+                return spec.name;
+            }
+        }
+        if (rawUpper === 'DESAGUES' || rawUpper === 'DESAGUE') return 'Sanitario';
         return raw;
     }
 
