@@ -553,7 +553,7 @@ export class IncidenciasPanel {
   private activeDrawerTab: DrawerTab = 'details';
   private isExpanded: boolean = true;
   private isMaximized: boolean = false;
-  private customWidth: number = 960;
+  private customWidth: number = 720;
   private isSyncing: boolean = false;
   private syncChannel: BroadcastChannel | null = null;
   private getCompanyMembers?: () => any[];
@@ -578,7 +578,8 @@ export class IncidenciasPanel {
 
     const savedW = localStorage.getItem('nora_incidencias_panel_width');
     if (savedW) {
-      this.customWidth = parseInt(savedW, 10) || 960;
+      this.customWidth = parseInt(savedW, 10) || 720;
+      if (this.customWidth >= 960) this.customWidth = 720;
     }
     this.resolveUrlContext();
     this.initBroadcastSync();
@@ -1087,17 +1088,28 @@ export class IncidenciasPanel {
     const filtered = this.getFilteredIssues();
     const hasSelection = Boolean(this.selectedIssue);
 
-    // Synchronize container and properties-panel class for expanded width
+    // Synchronize container and properties-panel class for expanded width ONLY when Incidencias is active
     const rightPanel = document.getElementById('properties-panel');
+    const tabInc = document.getElementById('right-tab-incidencias');
+    const isIncActive = Boolean(tabInc?.classList.contains('active') || rightPanel?.classList.contains('incidencias-mode'));
+
     if (rightPanel) {
-      rightPanel.classList.add('incidencias-expanded');
-      if (this.isMaximized) {
-        rightPanel.classList.add('incidencias-maximized');
-        rightPanel.style.width = '100vw';
+      if (isIncActive) {
+        rightPanel.classList.add('incidencias-mode');
+        rightPanel.classList.add('incidencias-expanded');
+        if (this.isMaximized) {
+          rightPanel.classList.add('incidencias-maximized');
+          rightPanel.style.width = '100vw';
+        } else {
+          rightPanel.classList.remove('incidencias-maximized');
+          const appliedWidth = Math.min(Math.max(this.customWidth, 420), window.innerWidth);
+          rightPanel.style.width = `${appliedWidth}px`;
+        }
       } else {
+        rightPanel.classList.remove('incidencias-mode');
+        rightPanel.classList.remove('incidencias-expanded');
         rightPanel.classList.remove('incidencias-maximized');
-        const appliedWidth = Math.min(Math.max(this.customWidth, 420), window.innerWidth);
-        rightPanel.style.width = `${appliedWidth}px`;
+        rightPanel.style.width = '';
       }
     }
 

@@ -8139,12 +8139,24 @@ async function renderPropertiesTable(modelIdMap: Record<string, Set<number>>) {
         ? Array.from(modelIdMap.entries())
         : Object.entries(modelIdMap);
 
+    const tabInc = document.getElementById('right-tab-incidencias');
+    if (panel && (!tabInc || !tabInc.classList.contains('active'))) {
+        panel.classList.remove('incidencias-mode');
+        panel.classList.remove('incidencias-expanded');
+        panel.classList.remove('incidencias-maximized');
+        panel.style.width = '';
+    }
+
     if (entries.length > 0 && panel) {
         panel.classList.remove('closed');
         if (tabProp && tabNora && contentNora) {
             const tabInc = document.getElementById('right-tab-incidencias');
             const contentInc = document.getElementById('incidencias-container');
             if (!tabNora.classList.contains('active') && !tabInc?.classList.contains('active')) {
+                panel.classList.remove('incidencias-mode');
+                panel.classList.remove('incidencias-expanded');
+                panel.classList.remove('incidencias-maximized');
+                panel.style.width = '';
                 tabProp.classList.add('active');
                 tabNora.classList.remove('active');
                 if (tabInc) tabInc.classList.remove('active');
@@ -14939,6 +14951,8 @@ function setupNoraAI() {
                     rightPanel.classList.remove('closed');
                     rightPanel.classList.remove('incidencias-mode');
                     rightPanel.classList.remove('incidencias-expanded');
+                    rightPanel.classList.remove('incidencias-maximized');
+                    rightPanel.style.width = '';
                 }
                 tabProp.classList.add('active');
                 tabNora.classList.remove('active');
@@ -14957,6 +14971,8 @@ function setupNoraAI() {
                     rightPanel.classList.remove('closed');
                     rightPanel.classList.remove('incidencias-mode');
                     rightPanel.classList.remove('incidencias-expanded');
+                    rightPanel.classList.remove('incidencias-maximized');
+                    rightPanel.style.width = '';
                 }
                 tabNora.classList.add('active');
                 tabProp.classList.remove('active');
