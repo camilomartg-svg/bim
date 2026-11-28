@@ -120,6 +120,9 @@ export function extractDriveFileId(att: any): string {
       const part = raw.replace('/api/drive-image/', '').split('?')[0].trim();
       if (part.length > 10) return part;
     }
+    if (!raw.startsWith('att_') && !raw.startsWith('iss_') && !raw.startsWith('cm_') && !raw.startsWith('blob:') && !raw.startsWith('data:') && /^[a-zA-Z0-9_-]{20,}$/.test(raw)) {
+      return raw;
+    }
   }
   return '';
 }
@@ -159,6 +162,109 @@ async function postToAppsScript(payload: any, timeoutMs = 45000): Promise<any> {
   } finally {
     window.clearTimeout(timer);
   }
+}
+
+const inFlightVideoDownloads = new Map<string, Promise<string>>();
+
+async function fetchDriveVideoAsBlobUrl(fileId: string, mimeType: string, onProgress?: (pct: number) => void): Promise<string> {
+  const cached = driveVideoBlobCache.get(fileId);
+  if (cached) return cached;
+
+  const existing = inFlightVideoDownloads.get(fileId);
+  if (existing) return existing;
+
+  const promise = (async () => {
+    try {
+      const CHUNK_LIMIT = 4 * 1024 * 1024;
+      let offset = 0;
+      let total = 0;
+      const parts: Uint8Array[] = [];
+
+      while (true) {
+        const res = await postToAppsScript({
+          action: 'chunk',
+          id: fileId,
+          offset,
+          limit: CHUNK_LIMIT
+        }, 60000);
+
+        if (!res || res.error || res.status === 'error' || !res.data) {
+          throw new Error(res?.error || res?.message || 'No se pudo descargar el video desde Drive.');
+        }
+
+        const chunkBytes = base64ToUint8Array(res.data);
+        parts.push(chunkBytes);
+        total = Number(res.total) || offset + chunkBytes.length;
+        offset = Number(res.nextOffset) || offset + chunkBytes.length;
+
+        if (total > 0 && onProgress) {
+          const pct = Math.min(99, Math.round((offset / total) * 100));
+          onProgress(pct);
+        }
+
+        if (res.done || offset >= total || chunkBytes.length === 0) {
+          break;
+        }
+      }
+
+      const cleanMime = (mimeType || 'video/mp4').split(';')[0].trim();
+      const blob = new Blob(parts, { type: cleanMime });
+      const blobUrl = URL.createObjectURL(blob);
+      driveVideoBlobCache.set(fileId, blobUrl);
+      return blobUrl;
+    } finally {
+      inFlightVideoDownloads.delete(fileId);
+    }
+  })();
+
+  inFlightVideoDownloads.set(fileId, promise);
+  return promise;
+}
+
+function openVideoLightboxModal(videoSrc: string, videoTitle: string) {
+  let modal = document.getElementById('nora-video-lightbox-modal');
+  if (modal) modal.remove();
+
+  modal = document.createElement('div');
+  modal.id = 'nora-video-lightbox-modal';
+  modal.className = 'nora-video-lightbox-overlay';
+  modal.innerHTML = `
+    <div class="nora-video-lightbox-backdrop">
+      <div class="nora-video-lightbox-container">
+        <div class="nora-video-lightbox-header">
+          <div class="nora-video-lightbox-title truncate">
+            <span class="material-symbols-outlined" style="font-size: 20px; color: #f59e0b;">smart_display</span>
+            <span>${escapeHtml(videoTitle || 'Video')}</span>
+          </div>
+          <button type="button" id="btn-close-video-lightbox" class="nora-video-lightbox-close" title="Cerrar (Esc)">
+            <span class="material-symbols-outlined" style="font-size: 20px;">close</span>
+          </button>
+        </div>
+        <div class="nora-video-lightbox-body">
+          <video controls autoplay playsinline class="nora-video-lightbox-player" src="${escapeHtml(videoSrc)}"></video>
+        </div>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(modal);
+
+  const close = () => {
+    const p = modal?.querySelector('video') as HTMLVideoElement;
+    if (p) p.pause();
+    modal?.remove();
+  };
+
+  modal.querySelector('#btn-close-video-lightbox')?.addEventListener('click', close);
+  modal.querySelector('.nora-video-lightbox-backdrop')?.addEventListener('click', (e) => {
+    if (e.target === e.currentTarget) close();
+  });
+  const onKey = (e: KeyboardEvent) => {
+    if (e.key === 'Escape') {
+      window.removeEventListener('keydown', onKey);
+      close();
+    }
+  };
+  window.addEventListener('keydown', onKey);
 }
 
 async function fetchDriveAudioAsBlobUrl(fileId: string, mimeType: string): Promise<string> {
@@ -1469,30 +1575,28 @@ export class IncidenciasPanel {
     } else if (isVideo) {
       const cachedVideo = (fileId && driveVideoBlobCache.get(fileId)) || (att.id && driveVideoBlobCache.get(att.id));
       const directVideo = cachedVideo || (isPlayableDirectly(att.url) ? att.url : '');
-      const embedUrl = fileId ? `https://drive.google.com/file/d/${fileId}/preview` : '';
 
-      if (directVideo) {
-        previewContent = `
-          <div class="nora-att-video-wrap">
-            <video controls class="nora-att-video" preload="auto" playsinline>
-              <source src="${escapeHtml(directVideo)}" type="${escapeHtml(att.type || 'video/mp4')}">
-            </video>
+      previewContent = `
+        <div class="nora-att-video-wrap nora-video-interactive-wrap" 
+             data-file-id="${escapeHtml(fileId)}" 
+             data-att-id="${escapeHtml(att.id)}" 
+             data-mime="${escapeHtml(att.type || 'video/mp4')}" 
+             data-title="${escapeHtml(att.name)}">
+          <video controls playsinline preload="metadata" 
+                 class="nora-att-video" 
+                 data-file-id="${escapeHtml(fileId)}" 
+                 data-att-id="${escapeHtml(att.id)}" 
+                 ${directVideo ? `src="${escapeHtml(directVideo)}"` : ''}>
+          </video>
+          <div class="nora-video-status-overlay" style="${directVideo ? 'display: none;' : ''}">
+            <span class="material-symbols-outlined nora-video-play-icon" style="font-size: 32px;">play_circle</span>
+            <span class="nora-video-play-text" style="font-size: 10px;">${fileId ? 'Reproducir' : 'Video Local'}</span>
           </div>
-        `;
-      } else if (embedUrl) {
-        previewContent = `
-          <div class="nora-att-video-wrap">
-            <iframe src="${escapeHtml(embedUrl)}" class="nora-att-video-iframe" allow="autoplay; fullscreen" loading="lazy"></iframe>
-          </div>
-        `;
-      } else {
-        previewContent = `
-          <div class="nora-att-doc-placeholder">
-            <span class="material-symbols-outlined" style="font-size: 24px; color: #f59e0b;">movie</span>
-            <span class="nora-att-doc-name">${escapeHtml(att.name)}</span>
-          </div>
-        `;
-      }
+          <button type="button" class="nora-video-card-expand-btn" title="Maximizar video en pantalla grande">
+            <span class="material-symbols-outlined" style="font-size: 16px;">fullscreen</span>
+          </button>
+        </div>
+      `;
     } else if (isAudio) {
       previewContent = `
         <div class="nora-att-audio-wrap" data-att-id="${escapeHtml(att.id)}">
@@ -1655,24 +1759,37 @@ export class IncidenciasPanel {
                   const fileId = extractDriveFileId(att);
                   const cachedVideo = (fileId && driveVideoBlobCache.get(fileId)) || (att.id && driveVideoBlobCache.get(att.id));
                   const directVideo = cachedVideo || (isPlayableDirectly(att.url) ? att.url : '');
-                  const embedUrl = fileId ? `https://drive.google.com/file/d/${fileId}/preview` : '';
 
                   return `
-                    <div class="nora-video-msg">
-                      ${directVideo ? `
-                        <video controls preload="auto" playsinline src="${escapeHtml(directVideo)}" class="nora-chat-video"></video>
-                      ` : embedUrl ? `
-                        <iframe src="${escapeHtml(embedUrl)}" class="nora-chat-video-iframe" allow="autoplay; fullscreen" loading="lazy"></iframe>
-                      ` : `
-                        <div class="nora-video-error">Video no disponible</div>
-                      `}
+                    <div class="nora-video-msg nora-video-interactive-wrap" 
+                         data-file-id="${escapeHtml(fileId)}" 
+                         data-att-id="${escapeHtml(att.id)}" 
+                         data-mime="${escapeHtml(att.type || 'video/mp4')}" 
+                         data-title="${escapeHtml(att.name)}">
+                      <div class="nora-chat-video-wrap">
+                        <video controls playsinline preload="metadata" 
+                               class="nora-chat-video" 
+                               data-file-id="${escapeHtml(fileId)}" 
+                               data-att-id="${escapeHtml(att.id)}"
+                               ${directVideo ? `src="${escapeHtml(directVideo)}"` : ''}>
+                        </video>
+                        <div class="nora-video-status-overlay" style="${directVideo ? 'display: none;' : ''}">
+                          <span class="material-symbols-outlined nora-video-play-icon">play_circle</span>
+                          <span class="nora-video-play-text">${fileId ? 'Reproducir Video' : 'Video Local'}</span>
+                        </div>
+                      </div>
                       <div class="nora-video-msg-footer">
                         <span class="nora-video-name truncate" title="${escapeHtml(att.name)}">${escapeHtml(att.name)}</span>
-                        ${embedUrl ? `
-                          <a href="${escapeHtml(att.webViewLink || `https://drive.google.com/file/d/${fileId}/view`)}" target="_blank" class="nora-video-open-btn" title="Abrir video en Google Drive">
-                            <span class="material-symbols-outlined" style="font-size: 13px;">open_in_new</span>
-                          </a>
-                        ` : ''}
+                        <div class="nora-video-actions">
+                          <button type="button" class="nora-video-expand-btn" title="Maximizar video en pantalla grande">
+                            <span class="material-symbols-outlined" style="font-size: 16px;">fullscreen</span>
+                          </button>
+                          ${fileId ? `
+                            <a href="https://drive.google.com/file/d/${escapeHtml(fileId)}/view" target="_blank" class="nora-video-open-btn" title="Abrir video en Google Drive">
+                              <span class="material-symbols-outlined" style="font-size: 14px;">open_in_new</span>
+                            </a>
+                          ` : ''}
+                        </div>
                       </div>
                       ${att.isLocalPending ? `<span class="nora-chat-pending"><span class="material-symbols-outlined spinning" style="font-size:11px;">sync</span> Subiendo video a Drive...</span>` : ''}
                     </div>
@@ -2042,12 +2159,121 @@ export class IncidenciasPanel {
 
     // Wire up inline audio players for direct playback
     this.bindAudioPlayers();
+    // Wire up inline video players for direct playback with controls and maximize
+    this.bindVideoPlayers();
 
     // Scroll chat to bottom
     const chatFeed = this.container.querySelector('#nora-inc-chat-feed');
     if (chatFeed) {
       chatFeed.scrollTop = chatFeed.scrollHeight;
     }
+  }
+
+  private bindVideoPlayers() {
+    const videoWraps = this.container.querySelectorAll<HTMLElement>('.nora-video-interactive-wrap');
+    videoWraps.forEach(wrap => {
+      const video = wrap.querySelector<HTMLVideoElement>('video');
+      const statusOverlay = wrap.querySelector<HTMLElement>('.nora-video-status-overlay');
+      const fileId = wrap.getAttribute('data-file-id') || video?.getAttribute('data-file-id') || '';
+      const attId = wrap.getAttribute('data-att-id') || video?.getAttribute('data-att-id') || '';
+      const mime = wrap.getAttribute('data-mime') || video?.getAttribute('data-mime') || 'video/mp4';
+      const title = wrap.getAttribute('data-title') || 'Video';
+
+      if (!video) return;
+
+      const ensureVideoSource = async (): Promise<boolean> => {
+        if (video.src && isPlayableDirectly(video.src)) {
+          if (statusOverlay) statusOverlay.style.display = 'none';
+          return true;
+        }
+
+        const cached = (fileId && driveVideoBlobCache.get(fileId)) || (attId && driveVideoBlobCache.get(attId));
+        if (cached) {
+          video.src = cached;
+          if (statusOverlay) statusOverlay.style.display = 'none';
+          return true;
+        }
+
+        if (!fileId) {
+          if (statusOverlay) {
+            statusOverlay.style.display = 'flex';
+            statusOverlay.innerHTML = `<span style="font-size:11px;">Video local</span>`;
+          }
+          return false;
+        }
+
+        try {
+          if (statusOverlay) {
+            statusOverlay.style.display = 'flex';
+            statusOverlay.innerHTML = `
+              <div class="nora-video-loading-box">
+                <span class="material-symbols-outlined spinning" style="font-size:24px; color:#f59e0b;">sync</span>
+                <span class="nora-video-progress-text">Cargando video (0%)...</span>
+              </div>
+            `;
+          }
+
+          const blobUrl = await fetchDriveVideoAsBlobUrl(fileId, mime, (pct) => {
+            const progressText = statusOverlay?.querySelector('.nora-video-progress-text');
+            if (progressText) progressText.textContent = `Cargando video (${pct}%)...`;
+          });
+
+          if (attId) driveVideoBlobCache.set(attId, blobUrl);
+          video.src = blobUrl;
+          if (statusOverlay) statusOverlay.style.display = 'none';
+          return true;
+        } catch (err) {
+          console.warn('[IncidenciasPanel] Error al obtener video de Drive:', err);
+          if (statusOverlay) {
+            statusOverlay.style.display = 'flex';
+            statusOverlay.innerHTML = `
+              <div class="nora-video-error-box">
+                <span class="material-symbols-outlined" style="font-size:20px; color:#ef4444;">error</span>
+                <span style="font-size:10px; color:#ef4444;">Error al cargar</span>
+                <button type="button" class="nora-video-retry-btn">Reintentar</button>
+              </div>
+            `;
+            statusOverlay.querySelector('.nora-video-retry-btn')?.addEventListener('click', (e) => {
+              e.stopPropagation();
+              ensureVideoSource();
+            });
+          }
+          return false;
+        }
+      };
+
+      if (statusOverlay) {
+        statusOverlay.addEventListener('click', async (e) => {
+          e.stopPropagation();
+          const ok = await ensureVideoSource();
+          if (ok) {
+            try { await video.play(); } catch (_) {}
+          }
+        });
+      }
+
+      video.addEventListener('play', async () => {
+        if (!video.src || !isPlayableDirectly(video.src)) {
+          video.pause();
+          const ok = await ensureVideoSource();
+          if (ok) {
+            try { await video.play(); } catch (_) {}
+          }
+        }
+      });
+
+      const expandBtns = wrap.querySelectorAll('.nora-video-expand-btn, .nora-video-card-expand-btn');
+      expandBtns.forEach(btn => {
+        btn.addEventListener('click', async (e) => {
+          e.stopPropagation();
+          e.preventDefault();
+          const ok = await ensureVideoSource();
+          if (ok && video.src) {
+            openVideoLightboxModal(video.src, title);
+          }
+        });
+      });
+    });
   }
 
   private bindAudioPlayers() {
