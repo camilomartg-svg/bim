@@ -454,30 +454,34 @@
 
     <script>
         const NEW_REGISTRATION_SCRIPT = 'https://script.google.com/macros/s/AKfycbx2RAQx_8K4o22xE0Mw-ETc7K_58vIoi6-PgVi64u80inuiw144ks3cgWSdCtXqIgB02g/exec';
-        // --- ROTACIÓN DE IMAGEN DE FONDO ---
+        // --- IMAGEN DE PORTADA ALEATORIA POR RECARGA ---
         const bgImages = [
-            'https://i.postimg.cc/BZc6rxGv/133c5fddeee1ba4f41dd37988c766968.jpg',
-            'https://i.postimg.cc/PJ451kMc/1cd18a559894359e55edc5e2ee5c8b69.jpg',
-            'https://i.postimg.cc/J7cnfbWt/3247cc16929f2cdc170aa77349030019.jpg',
-            'https://i.postimg.cc/SRrxcpGB/55f1a3ff2e75a529e63820bb0bd280d4.jpg',
-            'https://i.postimg.cc/fyKRYhK4/6e8adcf3c470a06b59dec07b663c9f25.jpg',
-            'https://i.postimg.cc/Xq8Y908S/83e3c55bd07a1eb40f75fa9b496e8df5.jpg',
-            'https://i.postimg.cc/Y03CQwxT/8c37273aa8a4a6185f6edfd232ce3e53.jpg',
-            'https://i.postimg.cc/qBXRP8dz/a8b46e4c4dd0ab0ec9f20168ffbea376.jpg',
-            'https://i.postimg.cc/ryCmBSLd/c5549ea27d6db09bb1b3599b672c0df8.jpg',
-            'https://i.postimg.cc/SQ7sBWpY/Gemini-Generated-Image-8jmc9q8jmc9q8jmc.jpg'
+            'https://i.postimg.cc/gkG7jnXN/1cd18a559894359e55edc5e2ee5c8b69.jpg',
+            'https://i.postimg.cc/28CtyVbM/235bc5ee5d7ddc53cd859bdaa3b7ba8a.jpg',
+            'https://i.postimg.cc/pXPSrphs/2ef2d1a51da9dd516e1c54afc1789121.jpg',
+            'https://i.postimg.cc/c4dzCrgP/3424d5b19408f0030fc7a1dfd1eda79d.jpg',
+            'https://i.postimg.cc/kX7HGB6Y/4cc985f85161105079f3d9718e1b4ccd.jpg',
+            'https://i.postimg.cc/bNq5rsDF/6fe9d33bfb28fcbe8acc5d8450198ace.jpg',
+            'https://i.postimg.cc/rFqHsK0b/92db30235c3eb913465fe87ed270ab91.jpg',
+            'https://i.postimg.cc/4NX0ym7L/bb6055d2f24635f2ab1a29106236edd1.jpg',
+            'https://i.postimg.cc/tC9cJYZM/Gemini-Generated-Image-8jmc9q8jmc9q8jmc.jpg'
         ];
 
         document.addEventListener('DOMContentLoaded', () => {
             const leftPanel = document.getElementById('left-panel-bg');
             if (leftPanel) {
-                let currentIdx = Math.floor(Math.random() * bgImages.length);
+                // Selecciona una imagen aleatoria distinta a la última vista cada vez que se recarga
+                let lastIdx = parseInt(sessionStorage.getItem('nora_cover_idx') ?? '-1', 10);
+                let currentIdx;
+                if (bgImages.length > 1) {
+                    do {
+                        currentIdx = Math.floor(Math.random() * bgImages.length);
+                    } while (currentIdx === lastIdx);
+                } else {
+                    currentIdx = 0;
+                }
+                sessionStorage.setItem('nora_cover_idx', currentIdx.toString());
                 leftPanel.style.backgroundImage = `url('${bgImages[currentIdx]}')`;
-                // Rotar automáticamente cada 9 segundos
-                setInterval(() => {
-                    currentIdx = (currentIdx + 1) % bgImages.length;
-                    leftPanel.style.backgroundImage = `url('${bgImages[currentIdx]}')`;
-                }, 9000);
             }
 
             // Limpiar posibles valores autocompletados por el navegador
