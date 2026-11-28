@@ -101,6 +101,7 @@ const DRIVE_GATEWAY_URL = 'https://script.google.com/macros/s/AKfycbx2RAQx_8K4o2
 
 // Global cache of resolved audio blob: URLs by driveFileId or attachmentId
 const driveAudioBlobCache = new Map<string, string>();
+const driveVideoBlobCache = new Map<string, string>();
 const inFlightAudioDownloads = new Map<string, Promise<string>>();
 
 export function extractDriveFileId(att: any): string {
@@ -136,15 +137,10 @@ function base64ToUint8Array(base64: string): Uint8Array {
 
 function isPlayableDirectly(url?: string): boolean {
   if (!url) return false;
-  if (url.startsWith('data:audio/')) return true;
-  if (url.startsWith('blob:')) {
-    for (const cached of driveAudioBlobCache.values()) {
-      if (cached === url) return true;
-    }
-    return false;
-  }
+  if (url.startsWith('data:audio/') || url.startsWith('data:video/')) return true;
+  if (url.startsWith('blob:')) return true;
   if (url.includes('drive.google.com')) return false;
-  if (/\.(mp3|wav|webm|m4a|ogg)(\?|$)/i.test(url)) return true;
+  if (/\.(mp3|wav|webm|m4a|ogg|mp4|mov|mkv)(\?|$)/i.test(url)) return true;
   return false;
 }
 
@@ -492,7 +488,9 @@ export class IncidenciasPanel {
   private statusFilter: string = 'all';
   private selectedIssue: Issue | null = null;
   private activeDrawerTab: DrawerTab = 'details';
-  private isExpanded: boolean = false;
+  private isExpanded: boolean = true;
+  private isMaximized: boolean = false;
+  private customWidth: number = 960;
   private isSyncing: boolean = false;
   private syncChannel: BroadcastChannel | null = null;
   private getCompanyMembers?: () => any[];
@@ -515,6 +513,10 @@ export class IncidenciasPanel {
     this.currentUser = options.currentUser || this.resolveCurrentUser();
     this.getCompanyMembers = options.getCompanyMembers;
 
+    const savedW = localStorage.getItem('nora_incidencias_panel_width');
+    if (savedW) {
+      this.customWidth = parseInt(savedW, 10) || 960;
+    }
     this.resolveUrlContext();
     this.initBroadcastSync();
     this.loadFromLocalStorage();
@@ -995,15 +997,20 @@ export class IncidenciasPanel {
     // Synchronize container and properties-panel class for expanded width
     const rightPanel = document.getElementById('properties-panel');
     if (rightPanel) {
-      if (hasSelection || this.isExpanded) {
-        rightPanel.classList.add('incidencias-expanded');
+      rightPanel.classList.add('incidencias-expanded');
+      if (this.isMaximized) {
+        rightPanel.classList.add('incidencias-maximized');
+        rightPanel.style.width = '100vw';
       } else {
-        rightPanel.classList.remove('incidencias-expanded');
+        rightPanel.classList.remove('incidencias-maximized');
+        const appliedWidth = Math.min(Math.max(this.customWidth, 420), window.innerWidth);
+        rightPanel.style.width = `${appliedWidth}px`;
       }
     }
 
     this.container.innerHTML = `
-      <div class="nora-inc-split-container ${hasSelection ? 'has-drawer' : ''}">
+      <div id="incidencias-resize-handle" class="incidencias-resize-handle" title="Arrastra a la izquierda o derecha para redimensionar el panel"></div>
+      <div class="nora-inc-split-container has-drawer">
         <!-- Left Pane: Cards List -->
         <div class="nora-inc-list-pane">
           <div class="nora-inc-header">
@@ -1016,8 +1023,8 @@ export class IncidenciasPanel {
                 <button class="nora-inc-btn-icon ${this.isSyncing ? 'spinning' : ''}" id="btn-inc-sync" title="Sincronizar con Drive">
                   <span class="material-symbols-outlined" style="font-size: 17px;">sync</span>
                 </button>
-                <button class="nora-inc-btn-icon" id="btn-inc-toggle-expand" title="${this.isExpanded ? 'Contraer panel' : 'Expandir panel'}">
-                  <span class="material-symbols-outlined" style="font-size: 17px;">${this.isExpanded ? 'close_fullscreen' : 'open_in_full'}</span>
+                <button class="nora-inc-btn-icon ${this.isMaximized ? 'active' : ''}" id="btn-inc-maximize" title="${this.isMaximized ? 'Restaurar tamaño del panel' : 'Maximizar a pantalla completa'}">
+                  <span class="material-symbols-outlined" style="font-size: 18px;">${this.isMaximized ? 'fullscreen_exit' : 'fullscreen'}</span>
                 </button>
                 <button type="button" 
                         class="nora-inc-new-btn" 
@@ -1430,11 +1437,32 @@ export class IncidenciasPanel {
     } else if (isImage) {
       previewContent = `<img src="${escapeHtml(url)}" alt="${escapeHtml(att.name)}" class="nora-att-img" />`;
     } else if (isVideo) {
-      previewContent = `
-        <video controls class="nora-att-video" preload="metadata">
-          <source src="${escapeHtml(url)}" type="${escapeHtml(att.type || 'video/mp4')}">
-        </video>
-      `;
+      const cachedVideo = (fileId && driveVideoBlobCache.get(fileId)) || (att.id && driveVideoBlobCache.get(att.id));
+      const directVideo = cachedVideo || (isPlayableDirectly(att.url) ? att.url : '');
+      const embedUrl = fileId ? `https://drive.google.com/file/d/${fileId}/preview` : '';
+
+      if (directVideo) {
+        previewContent = `
+          <div class="nora-att-video-wrap">
+            <video controls class="nora-att-video" preload="auto" playsinline>
+              <source src="${escapeHtml(directVideo)}" type="${escapeHtml(att.type || 'video/mp4')}">
+            </video>
+          </div>
+        `;
+      } else if (embedUrl) {
+        previewContent = `
+          <div class="nora-att-video-wrap">
+            <iframe src="${escapeHtml(embedUrl)}" class="nora-att-video-iframe" allow="autoplay; fullscreen" loading="lazy"></iframe>
+          </div>
+        `;
+      } else {
+        previewContent = `
+          <div class="nora-att-doc-placeholder">
+            <span class="material-symbols-outlined" style="font-size: 24px; color: #f59e0b;">movie</span>
+            <span class="nora-att-doc-name">${escapeHtml(att.name)}</span>
+          </div>
+        `;
+      }
     } else if (isAudio) {
       previewContent = `
         <div class="nora-att-audio-wrap" data-att-id="${escapeHtml(att.id)}">
@@ -1594,9 +1622,28 @@ export class IncidenciasPanel {
                   `;
                 }
                 if (att.category === 'video' || att.type?.includes('video') || (att.name && /\.(mp4|webm|mov|mkv)$/i.test(att.name))) {
+                  const fileId = extractDriveFileId(att);
+                  const cachedVideo = (fileId && driveVideoBlobCache.get(fileId)) || (att.id && driveVideoBlobCache.get(att.id));
+                  const directVideo = cachedVideo || (isPlayableDirectly(att.url) ? att.url : '');
+                  const embedUrl = fileId ? `https://drive.google.com/file/d/${fileId}/preview` : '';
+
                   return `
                     <div class="nora-video-msg">
-                      <video controls preload="metadata" src="${escapeHtml(att.url)}" class="nora-chat-video"></video>
+                      ${directVideo ? `
+                        <video controls preload="auto" playsinline src="${escapeHtml(directVideo)}" class="nora-chat-video"></video>
+                      ` : embedUrl ? `
+                        <iframe src="${escapeHtml(embedUrl)}" class="nora-chat-video-iframe" allow="autoplay; fullscreen" loading="lazy"></iframe>
+                      ` : `
+                        <div class="nora-video-error">Video no disponible</div>
+                      `}
+                      <div class="nora-video-msg-footer">
+                        <span class="nora-video-name truncate" title="${escapeHtml(att.name)}">${escapeHtml(att.name)}</span>
+                        ${embedUrl ? `
+                          <a href="${escapeHtml(att.webViewLink || `https://drive.google.com/file/d/${fileId}/view`)}" target="_blank" class="nora-video-open-btn" title="Abrir video en Google Drive">
+                            <span class="material-symbols-outlined" style="font-size: 13px;">open_in_new</span>
+                          </a>
+                        ` : ''}
+                      </div>
                       ${att.isLocalPending ? `<span class="nora-chat-pending"><span class="material-symbols-outlined spinning" style="font-size:11px;">sync</span> Subiendo video a Drive...</span>` : ''}
                     </div>
                   `;
@@ -1632,6 +1679,67 @@ export class IncidenciasPanel {
     const mins = Math.floor(seconds / 60);
     const secs = seconds % 60;
     return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+  }
+
+  private bindResizeHandle() {
+    const handle = this.container.querySelector<HTMLElement>('#incidencias-resize-handle');
+    const rightPanel = document.getElementById('properties-panel');
+    if (!handle || !rightPanel) return;
+
+    let isDragging = false;
+    let startX = 0;
+    let startWidth = 0;
+
+    const onMouseDown = (e: MouseEvent) => {
+      if (this.isMaximized) return;
+      isDragging = true;
+      startX = e.clientX;
+      startWidth = rightPanel.offsetWidth;
+      handle.classList.add('active');
+      document.body.style.cursor = 'ew-resize';
+      document.body.style.userSelect = 'none';
+
+      window.addEventListener('mousemove', onMouseMove);
+      window.addEventListener('mouseup', onMouseUp);
+    };
+
+    const onMouseMove = (e: MouseEvent) => {
+      if (!isDragging) return;
+      const dx = startX - e.clientX; // Dragging left increases width
+      const newWidth = Math.max(420, Math.min(window.innerWidth - 10, startWidth + dx));
+      this.customWidth = newWidth;
+      rightPanel.style.width = `${newWidth}px`;
+    };
+
+    const onMouseUp = () => {
+      if (!isDragging) return;
+      isDragging = false;
+      handle.classList.remove('active');
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+      localStorage.setItem('nora_incidencias_panel_width', String(this.customWidth));
+
+      window.removeEventListener('mousemove', onMouseMove);
+      window.removeEventListener('mouseup', onMouseUp);
+    };
+
+    handle.addEventListener('mousedown', onMouseDown);
+  }
+
+  private toggleMaximize() {
+    this.isMaximized = !this.isMaximized;
+    const rightPanel = document.getElementById('properties-panel');
+    if (rightPanel) {
+      if (this.isMaximized) {
+        rightPanel.classList.add('incidencias-maximized');
+        rightPanel.style.width = '100vw';
+      } else {
+        rightPanel.classList.remove('incidencias-maximized');
+        const appliedWidth = Math.min(Math.max(this.customWidth, 420), window.innerWidth);
+        rightPanel.style.width = `${appliedWidth}px`;
+      }
+    }
+    this.render();
   }
 
   private bindEvents() {
@@ -1688,6 +1796,17 @@ export class IncidenciasPanel {
         this.render();
       });
     }
+
+    // Maximize button
+    const maxBtn = this.container.querySelector<HTMLButtonElement>('#btn-inc-maximize');
+    if (maxBtn) {
+      maxBtn.addEventListener('click', (e) => {
+        e.preventDefault();
+        this.toggleMaximize();
+      });
+    }
+
+    this.bindResizeHandle();
 
     // New Hallazgo button
     const newHallazgoBtn = this.container.querySelector<HTMLButtonElement>('#btn-inc-new-hallazgo');
@@ -1776,7 +1895,6 @@ export class IncidenciasPanel {
     if (backBtn) {
       backBtn.addEventListener('click', () => {
         this.selectedIssue = null;
-        this.isExpanded = false;
         this.render();
       });
     }
@@ -2091,6 +2209,8 @@ export class IncidenciasPanel {
       const attId = 'att_' + Date.now() + '_' + i + '_' + Math.random().toString(36).substring(2, 6);
       if (cat === 'audio') {
         driveAudioBlobCache.set(attId, localBlobUrl);
+      } else if (cat === 'video') {
+        driveVideoBlobCache.set(attId, localBlobUrl);
       }
 
       newAttachments.push({
@@ -2145,6 +2265,8 @@ export class IncidenciasPanel {
       if (driveResult.id) {
         driveAudioBlobCache.set(driveResult.id, att.url);
         driveAudioBlobCache.set(att.id, att.url);
+        driveVideoBlobCache.set(driveResult.id, att.url);
+        driveVideoBlobCache.set(att.id, att.url);
       }
 
       const issue = this.issues.find(i => i.id === issueId);
@@ -2154,7 +2276,9 @@ export class IncidenciasPanel {
           if (found) {
             found.driveFileId = driveResult.id;
             found.webViewLink = driveResult.webViewLink;
-            found.url = driveResult.url;
+            if (!isPlayableDirectly(found.url)) {
+              found.url = driveResult.url;
+            }
             found.isLocalPending = false;
           }
         }
