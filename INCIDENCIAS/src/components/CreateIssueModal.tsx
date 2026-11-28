@@ -1043,11 +1043,18 @@ export default function CreateIssueModal({ onClose, onSuccess, isEmbed = false }
   };
 
   return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center sm:p-4 bg-slate-900/50 dark:bg-[#020617]/50 backdrop-blur-md">
+    <div className={cn(
+      isEmbed 
+        ? "w-full h-full flex flex-col bg-white dark:bg-[#020617] overflow-hidden" 
+        : "fixed inset-0 z-[60] flex items-center justify-center sm:p-4 bg-slate-900/50 dark:bg-[#020617]/50 backdrop-blur-md"
+    )}>
       <motion.div 
-        initial={{ opacity: 0, scale: 0.95, y: 20 }}
+        initial={{ opacity: 0, scale: isEmbed ? 1 : 0.95, y: isEmbed ? 0 : 20 }}
         animate={{ opacity: 1, scale: 1, y: 0 }}
-        className="bg-white dark:bg-[#020617] rounded-none sm:rounded-2xl w-full max-w-5xl overflow-hidden shadow-2xl flex flex-col h-full sm:h-auto max-h-[100vh] sm:max-h-[95vh] border-0 sm:border border-slate-200 dark:border-slate-800"
+        className={cn(
+          "bg-white dark:bg-[#020617] w-full overflow-hidden flex flex-col h-full",
+          !isEmbed ? "rounded-none sm:rounded-2xl max-w-5xl shadow-2xl sm:h-auto max-h-[100vh] sm:max-h-[95vh] border-0 sm:border border-slate-200 dark:border-slate-800" : "border-0"
+        )}
       >
         {/* Header */}
         <div className="p-3.5 sm:p-6 lg:p-8 border-b border-slate-200 dark:border-slate-800 flex justify-between items-center bg-white/90 dark:bg-[#020617]/90 backdrop-blur-xl sticky top-0 z-20 shrink-0">

@@ -553,6 +553,7 @@ export class IncidenciasPanel {
   private activeDrawerTab: DrawerTab = 'details';
   private isExpanded: boolean = true;
   private isMaximized: boolean = false;
+  private isCreatingIssue: boolean = false;
   private customWidth: number = 720;
   private isSyncing: boolean = false;
   private syncChannel: BroadcastChannel | null = null;
@@ -600,7 +601,12 @@ export class IncidenciasPanel {
     this.render();
   }
 
-  private openCreateIssueModal() {
+  public openCreateIssueModal() {
+    this.isCreatingIssue = true;
+    this.selectedIssue = null;
+    if (this.customWidth < 720) {
+      this.customWidth = 720;
+    }
     this.resolveUrlContext();
     try {
       const u = this.currentUser || this.options.currentUser;
@@ -610,97 +616,79 @@ export class IncidenciasPanel {
     } catch (e) {
       console.warn('[IncidenciasPanel] Could not sync userAccount to localStorage:', e);
     }
+    this.initIframeMessageListener();
+    this.render();
+  }
 
-    let overlay = document.getElementById('nora-create-issue-modal-overlay');
-    if (overlay) overlay.remove();
+  private initIframeMessageListener() {
+    if (this.iframeMessageBound) return;
+    this.iframeMessageBound = true;
+    window.addEventListener('message', (event: MessageEvent) => {
+      if (!event.data || typeof event.data !== 'object') return;
 
-    const origin = window.location.origin;
-    let basePath = window.location.pathname;
-    if (basePath.includes('/VSR_IFC')) {
-      basePath = basePath.replace(/\/VSR_IFC[AB]\/?.*$/i, '/INCIDENCIAS/');
-    } else {
-      basePath = '../INCIDENCIAS/';
-    }
-    const resolvedUrl = basePath.startsWith('http') ? basePath : (basePath.startsWith('/') ? `${origin}${basePath}` : basePath);
-    const iframeSrc = `${resolvedUrl}?empresa=${encodeURIComponent(this.companyId)}&project=${encodeURIComponent(this.projectId)}&driveFolderName=${encodeURIComponent(this.driveFolderName)}&embed=true&action=new&t=${Date.now()}`;
-
-    overlay = document.createElement('div');
-    overlay.id = 'nora-create-issue-modal-overlay';
-    overlay.className = 'nora-create-issue-overlay';
-    overlay.innerHTML = `
-      <div class="nora-create-issue-backdrop" id="nora-create-issue-backdrop">
-        <button type="button" class="nora-create-issue-quick-close" id="btn-quick-close-issue" title="Cerrar modal (Esc)">
-          <span class="material-symbols-outlined" style="font-size: 22px;">close</span>
-        </button>
-        <div class="nora-create-issue-container">
-          <iframe id="nora-create-issue-iframe" 
-                  src="${iframeSrc}"
-                  allow="microphone; camera; display-capture"
-                  class="nora-create-issue-iframe">
-          </iframe>
-        </div>
-      </div>
-    `;
-
-    document.body.appendChild(overlay);
-
-    const closeOverlay = () => {
-      const ov = document.getElementById('nora-create-issue-modal-overlay');
-      if (ov) {
-        ov.classList.add('closing');
-        setTimeout(() => ov.remove(), 200);
+      if (event.data.type === 'NORA_CLOSE_CREATE_ISSUE') {
+        this.isCreatingIssue = false;
+        this.render();
+      } else if (event.data.type === 'NORA_REQUEST_BIM_VIEW') {
+        const iframe = document.getElementById('nora-create-issue-iframe') as HTMLIFrameElement;
+        if (iframe && iframe.contentWindow) {
+          const currentView = this.options.captureCurrentView ? this.options.captureCurrentView() : null;
+          const savedViews = this.options.getSavedViews ? this.options.getSavedViews() : [];
+          iframe.contentWindow.postMessage({
+            type: 'NORA_RECEIVE_BIM_VIEW',
+            currentView,
+            savedViews
+          }, '*');
+        }
+      } else if (event.data.type === 'NORA_ISSUE_CREATED') {
+        this.isCreatingIssue = false;
+        this.syncWithDrive();
+        this.showToast('✅ Hallazgo emitido y registrado exitosamente');
+        if (event.data.issue?.id) {
+          setTimeout(() => {
+            const created = this.issues.find(i => i.id === event.data.issue.id) || event.data.issue;
+            this.selectedIssue = created;
+            this.isExpanded = true;
+            this.render();
+          }, 600);
+        } else {
+          this.render();
+        }
       }
-    };
+    });
+  }
 
-    const quickClose = overlay.querySelector('#btn-quick-close-issue');
-    if (quickClose) {
-      quickClose.addEventListener('click', (e) => {
+  private bindCreateIssueEvents() {
+    this.bindResizeHandle();
+
+    const maxBtn = this.container.querySelector('#btn-inc-maximize');
+    if (maxBtn) {
+      maxBtn.addEventListener('click', (e) => {
+        e.preventDefault();
         e.stopPropagation();
-        closeOverlay();
+        this.toggleMaximize();
       });
     }
 
+    const backBtn = this.container.querySelector('#btn-cancel-create-issue');
+    const closeBtn = this.container.querySelector('#btn-close-create-issue');
+    const onExit = (e: Event) => {
+      e.preventDefault();
+      e.stopPropagation();
+      this.isCreatingIssue = false;
+      this.render();
+    };
+    if (backBtn) backBtn.addEventListener('click', onExit);
+    if (closeBtn) closeBtn.addEventListener('click', onExit);
+
     const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
+      if (e.key === 'Escape' && this.isCreatingIssue) {
         window.removeEventListener('keydown', onKeyDown);
-        closeOverlay();
+        this.isCreatingIssue = false;
+        this.render();
       }
     };
     window.addEventListener('keydown', onKeyDown);
-
-    if (!this.iframeMessageBound) {
-      this.iframeMessageBound = true;
-      window.addEventListener('message', (event: MessageEvent) => {
-        if (!event.data || typeof event.data !== 'object') return;
-
-        if (event.data.type === 'NORA_CLOSE_CREATE_ISSUE') {
-          closeOverlay();
-        } else if (event.data.type === 'NORA_REQUEST_BIM_VIEW') {
-          const iframe = document.getElementById('nora-create-issue-iframe') as HTMLIFrameElement;
-          if (iframe && iframe.contentWindow) {
-            const currentView = this.options.captureCurrentView ? this.options.captureCurrentView() : null;
-            const savedViews = this.options.getSavedViews ? this.options.getSavedViews() : [];
-            iframe.contentWindow.postMessage({
-              type: 'NORA_RECEIVE_BIM_VIEW',
-              currentView,
-              savedViews
-            }, '*');
-          }
-        } else if (event.data.type === 'NORA_ISSUE_CREATED') {
-          closeOverlay();
-          this.syncWithDrive();
-          this.showToast('✅ Hallazgo emitido y registrado exitosamente');
-          if (event.data.issue?.id) {
-            setTimeout(() => {
-              const created = this.issues.find(i => i.id === event.data.issue.id) || event.data.issue;
-              this.selectedIssue = created;
-              this.isExpanded = true;
-              this.render();
-            }, 600);
-          }
-        }
-      });
-    }
   }
 
   private resolveUrlContext() {
@@ -1111,6 +1099,57 @@ export class IncidenciasPanel {
         rightPanel.classList.remove('incidencias-maximized');
         rightPanel.style.width = '';
       }
+    }
+
+    if (this.isCreatingIssue) {
+      this.resolveUrlContext();
+      this.initIframeMessageListener();
+
+      const origin = window.location.origin;
+      let basePath = window.location.pathname;
+      if (basePath.includes('/VSR_IFC')) {
+        basePath = basePath.replace(/\/VSR_IFC[AB]\/?.*$/i, '/INCIDENCIAS/');
+      } else {
+        basePath = '../INCIDENCIAS/';
+      }
+      const resolvedUrl = basePath.startsWith('http') ? basePath : (basePath.startsWith('/') ? `${origin}${basePath}` : basePath);
+      const iframeSrc = `${resolvedUrl}?empresa=${encodeURIComponent(this.companyId)}&project=${encodeURIComponent(this.projectId)}&driveFolderName=${encodeURIComponent(this.driveFolderName)}&embed=true&action=new&t=${Date.now()}`;
+
+      this.container.innerHTML = `
+        <div id="incidencias-resize-handle" class="incidencias-resize-handle" title="Arrastra para redimensionar el panel"></div>
+        <div class="nora-inc-create-view">
+          <div class="nora-inc-create-header">
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <button type="button" class="nora-inc-btn-back" id="btn-cancel-create-issue" title="Volver a la lista de incidencias">
+                <span class="material-symbols-outlined" style="font-size: 18px;">arrow_back</span>
+                <span>Volver</span>
+              </button>
+              <div class="nora-inc-create-title">
+                <span class="material-symbols-outlined" style="color: #f59e0b; font-size: 20px;">add_circle</span>
+                <span>Registrar Nuevo Hallazgo</span>
+              </div>
+            </div>
+            <div style="display: flex; align-items: center; gap: 6px;">
+              <button class="nora-inc-btn-icon ${this.isMaximized ? 'active' : ''}" id="btn-inc-maximize" title="${this.isMaximized ? 'Restaurar tamaño del panel' : 'Maximizar a pantalla completa'}">
+                <span class="material-symbols-outlined" style="font-size: 18px;">${this.isMaximized ? 'fullscreen_exit' : 'fullscreen'}</span>
+              </button>
+              <button type="button" class="nora-inc-btn-icon" id="btn-close-create-issue" title="Cancelar registro">
+                <span class="material-symbols-outlined" style="font-size: 18px;">close</span>
+              </button>
+            </div>
+          </div>
+          <div class="nora-inc-create-iframe-container">
+            <iframe id="nora-create-issue-iframe" 
+                    src="${iframeSrc}"
+                    allow="microphone; camera; display-capture"
+                    class="nora-create-issue-iframe">
+            </iframe>
+          </div>
+        </div>
+      `;
+
+      this.bindCreateIssueEvents();
+      return;
     }
 
     this.container.innerHTML = `

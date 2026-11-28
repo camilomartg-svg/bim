@@ -417,11 +417,12 @@ function Dashboard() {
 
   if (isEmbed) {
     return (
-      <div className="w-full h-full min-h-screen bg-transparent overflow-hidden flex items-center justify-center">
+      <div className="w-full h-screen bg-transparent overflow-hidden">
         <AnimatePresence>
           {isCreateModalOpen && (
             <ErrorBoundary>
               <CreateIssueModal 
+                isEmbed={true} 
                 onClose={() => {
                   setIsCreateModalOpen(false);
                   if (typeof window !== 'undefined' && window.parent && window.parent !== window) {
