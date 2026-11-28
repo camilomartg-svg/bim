@@ -14,6 +14,7 @@ import {
 import './style.css';
 import { loadSecurityContext, isUserAuthorizedForFile, getUserEffectivePermissions, getStatusMatchesForFile } from './securityUtils';
 import { NoraAIWidget, NoraAIAction } from './nora-ai-widget';
+import { IncidenciasPanel } from './incidencias-panel';
 import {
     COMMERCIAL_SHEET_PRESETS,
     extractModularWallPieces,
@@ -1402,6 +1403,12 @@ try {
     setupNoraAI();
 } catch (e) {
     console.error("Error setting up nora AI Copilot:", e);
+}
+
+try {
+    setupIncidenciasPanel();
+} catch (e) {
+    console.error("Error setting up Incidencias panel:", e);
 }
 
 try {
@@ -7217,6 +7224,14 @@ async function loadModelList(forceRefresh: boolean = false) {
                         viewpointsManager?.setProjectId(activeSecurityContext.activeProject.slug);
                     }
                     updateTopBarProjectBadge();
+                    try {
+                        incidenciasPanelInstance?.updateContext(
+                            companyId,
+                            project,
+                            currentParams.get('driveFolderName') || activeSecurityContext?.activeProject?.name,
+                            activeSecurityContext?.currentUser || getStoredUserAccount()
+                        );
+                    } catch (_) {}
                 } catch (se) {
                     console.warn('Error loading security context in loadModelList:', se);
                 }
@@ -8025,11 +8040,15 @@ async function renderPropertiesTable(modelIdMap: Record<string, Set<number>>) {
     if (entries.length > 0 && panel) {
         panel.classList.remove('closed');
         if (tabProp && tabNora && contentNora) {
-            if (!tabNora.classList.contains('active')) {
+            const tabInc = document.getElementById('right-tab-incidencias');
+            const contentInc = document.getElementById('incidencias-container');
+            if (!tabNora.classList.contains('active') && !tabInc?.classList.contains('active')) {
                 tabProp.classList.add('active');
                 tabNora.classList.remove('active');
+                if (tabInc) tabInc.classList.remove('active');
                 content.style.display = 'flex';
                 contentNora.style.display = 'none';
+                if (contentInc) contentInc.style.display = 'none';
             }
         }
     }
@@ -14805,18 +14824,25 @@ function setupNoraAI() {
 
         const tabProp = document.getElementById('right-tab-properties');
         const tabNora = document.getElementById('right-tab-nora');
+        const tabInc = document.getElementById('right-tab-incidencias');
         const contentProp = document.getElementById('properties-content');
         const contentNora = document.getElementById('nora-ai-container');
+        const contentInc = document.getElementById('incidencias-container');
         const rightPanel = document.getElementById('properties-panel');
 
         if (tabProp && tabNora && contentProp && contentNora) {
             tabProp.addEventListener('click', (e) => {
                 e.preventDefault();
-                if (rightPanel) rightPanel.classList.remove('closed');
+                if (rightPanel) {
+                    rightPanel.classList.remove('closed');
+                    rightPanel.classList.remove('incidencias-mode');
+                }
                 tabProp.classList.add('active');
                 tabNora.classList.remove('active');
+                if (tabInc) tabInc.classList.remove('active');
                 contentProp.style.display = 'flex';
                 contentNora.style.display = 'none';
+                if (contentInc) contentInc.style.display = 'none';
                 if (rightPanel && rightPanel.classList.contains('split-mode')) {
                     const contentGraf = document.getElementById('status-charts-container');
                     if (contentGraf) contentGraf.style.display = 'flex';
@@ -14824,11 +14850,16 @@ function setupNoraAI() {
             });
             tabNora.addEventListener('click', (e) => {
                 e.preventDefault();
-                if (rightPanel) rightPanel.classList.remove('closed');
+                if (rightPanel) {
+                    rightPanel.classList.remove('closed');
+                    rightPanel.classList.remove('incidencias-mode');
+                }
                 tabNora.classList.add('active');
                 tabProp.classList.remove('active');
+                if (tabInc) tabInc.classList.remove('active');
                 contentNora.style.display = 'flex';
                 contentProp.style.display = 'none';
+                if (contentInc) contentInc.style.display = 'none';
                 if (rightPanel && rightPanel.classList.contains('split-mode')) {
                     const contentGraf = document.getElementById('status-charts-container');
                     if (contentGraf) contentGraf.style.display = 'flex';
@@ -14845,6 +14876,62 @@ function setupNoraAI() {
     }
 }
 (window as any).setupNoraAI = setupNoraAI;
+
+let incidenciasPanelInstance: IncidenciasPanel | null = null;
+
+function setupIncidenciasPanel() {
+    if (incidenciasPanelInstance) return;
+    try {
+        const container = document.getElementById('incidencias-container');
+        if (!container) return;
+
+        const params = new URLSearchParams(window.location.search);
+        const companyId = params.get('empresa') || params.get('companyId') || '';
+        const projectId = params.get('project') || params.get('projectId') || '';
+        const folderName = params.get('driveFolderName') || params.get('projectName') || '';
+        const user = getStoredUserAccount() || activeSecurityContext?.currentUser;
+
+        incidenciasPanelInstance = new IncidenciasPanel({
+            container,
+            companyId,
+            projectId,
+            driveFolderName: folderName,
+            currentUser: user
+        });
+
+        const tabInc = document.getElementById('right-tab-incidencias');
+        const tabProp = document.getElementById('right-tab-properties');
+        const tabNora = document.getElementById('right-tab-nora');
+        const contentInc = document.getElementById('incidencias-container');
+        const contentProp = document.getElementById('properties-content');
+        const contentNora = document.getElementById('nora-ai-container');
+        const rightPanel = document.getElementById('properties-panel');
+
+        if (tabInc && contentInc && rightPanel) {
+            tabInc.addEventListener('click', (e) => {
+                e.preventDefault();
+                rightPanel.classList.remove('closed');
+                rightPanel.classList.add('incidencias-mode');
+                tabInc.classList.add('active');
+                if (tabProp) tabProp.classList.remove('active');
+                if (tabNora) tabNora.classList.remove('active');
+
+                contentInc.style.display = 'flex';
+                if (contentProp) contentProp.style.display = 'none';
+                if (contentNora) contentNora.style.display = 'none';
+
+                if (incidenciasPanelInstance) {
+                    const latestUser = getStoredUserAccount() || activeSecurityContext?.currentUser;
+                    incidenciasPanelInstance.updateContext(companyId, projectId, folderName, latestUser);
+                }
+            });
+        }
+        console.log('[IncidenciasPanel] Initialized successfully.');
+    } catch (e) {
+        console.error('[IncidenciasPanel] Initialization error:', e);
+    }
+}
+(window as any).setupIncidenciasPanel = setupIncidenciasPanel;
 
 function setupMeasurementTools_Deprecated() {
     const lengthBtn = document.getElementById('btn-measure-length');
@@ -17206,10 +17293,12 @@ function setupPowerBIIntegration() {
 if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', () => {
         try { setupNoraAI(); } catch(e) { console.warn('nora AI init error:', e); }
+        try { setupIncidenciasPanel(); } catch(e) { console.warn('Incidencias init error:', e); }
         setupPowerBIIntegration();
     });
 } else {
     try { setupNoraAI(); } catch(e) { console.warn('nora AI init error:', e); }
+    try { setupIncidenciasPanel(); } catch(e) { console.warn('Incidencias init error:', e); }
     setupPowerBIIntegration();
 }
 
