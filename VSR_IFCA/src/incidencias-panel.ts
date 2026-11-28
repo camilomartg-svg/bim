@@ -537,6 +537,7 @@ export class IncidenciasPanel {
   }
 
   private openCreateIssueModal() {
+    this.resolveUrlContext();
     try {
       const u = this.currentUser || this.options.currentUser;
       if (u) {
@@ -549,14 +550,27 @@ export class IncidenciasPanel {
     let overlay = document.getElementById('nora-create-issue-modal-overlay');
     if (overlay) overlay.remove();
 
+    const origin = window.location.origin;
+    let basePath = window.location.pathname;
+    if (basePath.includes('/VSR_IFC')) {
+      basePath = basePath.replace(/\/VSR_IFC[AB]\/?.*$/i, '/INCIDENCIAS/');
+    } else {
+      basePath = '../INCIDENCIAS/';
+    }
+    const resolvedUrl = basePath.startsWith('http') ? basePath : (basePath.startsWith('/') ? `${origin}${basePath}` : basePath);
+    const iframeSrc = `${resolvedUrl}?empresa=${encodeURIComponent(this.companyId)}&project=${encodeURIComponent(this.projectId)}&driveFolderName=${encodeURIComponent(this.driveFolderName)}&embed=true&action=new&t=${Date.now()}`;
+
     overlay = document.createElement('div');
     overlay.id = 'nora-create-issue-modal-overlay';
     overlay.className = 'nora-create-issue-overlay';
     overlay.innerHTML = `
-      <div class="nora-create-issue-backdrop">
+      <div class="nora-create-issue-backdrop" id="nora-create-issue-backdrop">
+        <button type="button" class="nora-create-issue-quick-close" id="btn-quick-close-issue" title="Cerrar modal (Esc)">
+          <span class="material-symbols-outlined" style="font-size: 22px;">close</span>
+        </button>
         <div class="nora-create-issue-container">
           <iframe id="nora-create-issue-iframe" 
-                  src="../INCIDENCIAS/?empresa=${encodeURIComponent(this.companyId)}&project=${encodeURIComponent(this.projectId)}&driveFolderName=${encodeURIComponent(this.driveFolderName)}&embed=true&action=new&t=${Date.now()}"
+                  src="${iframeSrc}"
                   allow="microphone; camera; display-capture"
                   class="nora-create-issue-iframe">
           </iframe>
@@ -566,17 +580,37 @@ export class IncidenciasPanel {
 
     document.body.appendChild(overlay);
 
+    const closeOverlay = () => {
+      const ov = document.getElementById('nora-create-issue-modal-overlay');
+      if (ov) {
+        ov.classList.add('closing');
+        setTimeout(() => ov.remove(), 200);
+      }
+    };
+
+    const quickClose = overlay.querySelector('#btn-quick-close-issue');
+    if (quickClose) {
+      quickClose.addEventListener('click', (e) => {
+        e.stopPropagation();
+        closeOverlay();
+      });
+    }
+
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        window.removeEventListener('keydown', onKeyDown);
+        closeOverlay();
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+
     if (!this.iframeMessageBound) {
       this.iframeMessageBound = true;
       window.addEventListener('message', (event: MessageEvent) => {
         if (!event.data || typeof event.data !== 'object') return;
 
         if (event.data.type === 'NORA_CLOSE_CREATE_ISSUE') {
-          const ov = document.getElementById('nora-create-issue-modal-overlay');
-          if (ov) {
-            ov.classList.add('closing');
-            setTimeout(() => ov.remove(), 200);
-          }
+          closeOverlay();
         } else if (event.data.type === 'NORA_REQUEST_BIM_VIEW') {
           const iframe = document.getElementById('nora-create-issue-iframe') as HTMLIFrameElement;
           if (iframe && iframe.contentWindow) {
@@ -589,11 +623,7 @@ export class IncidenciasPanel {
             }, '*');
           }
         } else if (event.data.type === 'NORA_ISSUE_CREATED') {
-          const ov = document.getElementById('nora-create-issue-modal-overlay');
-          if (ov) {
-            ov.classList.add('closing');
-            setTimeout(() => ov.remove(), 200);
-          }
+          closeOverlay();
           this.syncWithDrive();
           this.showToast('✅ Hallazgo emitido y registrado exitosamente');
           if (event.data.issue?.id) {
