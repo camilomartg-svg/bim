@@ -557,6 +557,37 @@ body {
     gap: 10px;
 }
 
+.viewer-project-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 10px;
+    background: rgba(0, 0, 0, 0.04);
+    border: 1px solid rgba(0, 0, 0, 0.08);
+    border-radius: 6px;
+    font-size: 11px;
+    font-weight: 700;
+    color: #1e293b;
+    max-width: 280px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    letter-spacing: 0.3px;
+    user-select: none;
+}
+
+body.dark-mode .viewer-project-badge,
+.dark .viewer-project-badge {
+    background: rgba(255, 255, 255, 0.06) !important;
+    border-color: rgba(255, 255, 255, 0.12) !important;
+    color: #f1f5f9 !important;
+}
+
+body.dark-mode .viewer-project-badge .material-symbols-outlined,
+.dark .viewer-project-badge .material-symbols-outlined {
+    color: #94a3b8 !important;
+}
+
 .classification-controls {
     display: flex;
     gap: 8px;

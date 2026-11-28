@@ -139,7 +139,7 @@ export const getUserEffectivePermissions = (
   if (userTaskTeams.length === 0 && userReceiverTeams.length === 0) {
     const isMember = (activeProject?.members || []).map((m: string) => m.toLowerCase().trim()).includes(email);
     if (isMember) {
-      return { canViewProgreso: false, canViewCompartido: true, canViewPublicado: true, isAdmin: false };
+      return { canViewProgreso: true, canViewCompartido: true, canViewPublicado: true, isAdmin: false };
     }
   }
 

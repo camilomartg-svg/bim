@@ -1755,11 +1755,12 @@ async function clearModelCache() {
         const tx = db.transaction(STORE_NAME, 'readwrite');
         tx.objectStore(STORE_NAME).clear();
         logToScreen('Búfer y caché local de modelos vaciada correctamente.');
-        setTimeout(() => {
-            window.location.reload();
-        }, 250);
     } catch (e) {
-        console.warn('Error clearing cache:', e);
+        console.warn('Error clearing IndexedDB cache:', e);
+    }
+    try {
+        await loadModelList(true);
+    } catch (e) {
         window.location.reload();
     }
 }
@@ -1896,7 +1897,29 @@ interface DriveModelItem {
     lastUpdated?: string;
 }
 
-const listDriveModels = async (overrideContext?: any): Promise<DriveModelItem[]> => {
+
+function updateTopBarProjectBadge(projectName?: string) {
+    const badge = document.getElementById('viewer-project-badge');
+    const label = document.getElementById('viewer-project-name');
+    if (!label) return;
+    
+    let resolvedName = projectName;
+    if (!resolvedName) {
+        resolvedName = activeSecurityContext?.activeProject?.name || 
+                       activeSecurityContext?.activeProject?.title || 
+                       currentParams.get('driveFolderName') || 
+                       currentParams.get('projectName') || 
+                       currentParams.get('project') || 
+                       '';
+    }
+    if (resolvedName) {
+        label.textContent = resolvedName;
+        label.setAttribute('title', resolvedName);
+        if (badge) badge.style.display = 'inline-flex';
+    }
+}
+
+const listDriveModels = async (overrideContext?: any, forceRefresh: boolean = false): Promise<DriveModelItem[]> => {
     const secCtx = overrideContext || activeSecurityContext;
     const targetFolderId = extractDriveFolderId(
         secCtx?.activeProject?.dataSources?.driveFolderId ||
@@ -1912,6 +1935,10 @@ const listDriveModels = async (overrideContext?: any): Promise<DriveModelItem[]>
     if (targetFolderId) url.searchParams.set('folderId', targetFolderId);
     if (prj) url.searchParams.set('project', prj);
     if (dfn) url.searchParams.set('driveFolderName', dfn);
+    if (forceRefresh) {
+        url.searchParams.set('_t', Date.now().toString());
+        url.searchParams.set('forceRefresh', 'true');
+    }
 
     let data: { models?: any[]; allModels?: any[] } | null = null;
 
@@ -1921,11 +1948,14 @@ const listDriveModels = async (overrideContext?: any): Promise<DriveModelItem[]>
             method: 'POST',
             mode: 'cors',
             headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+            cache: forceRefresh ? 'no-store' : 'default',
             body: JSON.stringify({
                 action: 'list',
                 folderId: targetFolderId,
                 driveFolderName: dfn,
-                project: prj
+                project: prj,
+                forceRefresh: forceRefresh,
+                _t: Date.now()
             })
         });
         if (resp.ok) {
@@ -6981,6 +7011,19 @@ function updateModelStatusTabsUI(
         }
     }
 
+    // Auto-select tab with models if current tab has 0 models and no explicit status query param
+    const currentTabCount = currentModelStatusTab === 'PUBLICADO' ? numPublicado : currentModelStatusTab === 'COMPARTIDO' ? numCompartido : numProgreso;
+    const hasExplicitStatusParam = Boolean(new URLSearchParams(window.location.search).get('status'));
+    if (!hasExplicitStatusParam && currentTabCount === 0) {
+        if (numPublicado > 0 && effectivePerms.canViewPublicado) {
+            currentModelStatusTab = 'PUBLICADO';
+        } else if (numCompartido > 0 && effectivePerms.canViewCompartido) {
+            currentModelStatusTab = 'COMPARTIDO';
+        } else if (numProgreso > 0 && effectivePerms.canViewProgreso) {
+            currentModelStatusTab = 'EN_PROGRESO';
+        }
+    }
+
     [
         { el: tabProgreso, status: 'EN_PROGRESO' },
         { el: tabCompartido, status: 'COMPARTIDO' },
@@ -7123,7 +7166,11 @@ function initModelStatusTabsListeners(baseUrl: string) {
     });
 }
 
-async function loadModelList() {
+async function loadModelList(forceRefresh: boolean = false) {
+    if (forceRefresh) {
+        loadModelListInFlight = null;
+        activeSecurityContext = null;
+    }
     if (loadModelListInFlight) {
         return await loadModelListInFlight;
     }
@@ -7169,6 +7216,7 @@ async function loadModelList() {
                     if (activeSecurityContext?.activeProject?.slug) {
                         viewpointsManager?.setProjectId(activeSecurityContext.activeProject.slug);
                     }
+                    updateTopBarProjectBadge();
                 } catch (se) {
                     console.warn('Error loading security context in loadModelList:', se);
                 }
@@ -7182,7 +7230,8 @@ async function loadModelList() {
             if (shouldUseDriveModels()) {
                 logToScreen('Loading models from Google Drive (Apps Script)...');
                 try {
-                    const driveModels = await listDriveModels(activeSecurityContext);
+                    updateTopBarProjectBadge();
+                    const driveModels = await listDriveModels(activeSecurityContext, forceRefresh);
                     const processed: RemoteModelItem[] = [];
 
                     driveModels
@@ -7401,10 +7450,18 @@ async function loadModelList() {
                 refreshBtn.addEventListener('click', (e) => {
                     e.preventDefault();
                     e.stopPropagation();
-                    const icon = refreshBtn.querySelector('.material-symbols-outlined');
-                    if (icon) icon.classList.add('fa-spin');
-                    loadModelList().finally(() => {
-                        if (icon) icon.classList.remove('fa-spin');
+                    const icon = refreshBtn.querySelector('.material-symbols-outlined') as HTMLElement | null;
+                    if (icon) {
+                        icon.style.transition = 'transform 0.8s ease-in-out';
+                        icon.style.transform = 'rotate(360deg)';
+                    }
+                    loadModelList(true).finally(() => {
+                        if (icon) {
+                            setTimeout(() => {
+                                icon.style.transition = 'none';
+                                icon.style.transform = 'rotate(0deg)';
+                            }, 800);
+                        }
                     });
                 });
             }

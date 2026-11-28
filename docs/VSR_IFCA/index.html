@@ -81,11 +81,11 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>VSR IFCA | nora</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet" />
-  <script src="../wompi-integration.js"></script>
-  <script type="module" crossorigin src="./assets/main-Br2hJjuQ.js"></script>
-  <link rel="modulepreload" crossorigin href="./assets/viewpoints-manager-DcOIyzzy.js">
-  <link rel="stylesheet" crossorigin href="./assets/main-CpqwKxs6.css">
+    <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet" />
+
+
+
+
 
     <style id="nora-status-charts-styles">
         #properties-panel {
@@ -222,6 +222,41 @@
         }
 
     </style>
+  <script type="module" crossorigin src="./assets/main-Br2yGN4L.js"></script>
+  <link rel="modulepreload" crossorigin href="./assets/viewpoints-manager-DcOIyzzy.js">
+  <link rel="stylesheet" crossorigin href="./assets/main-KAVyJ3q-.css">
+
+    <style id="viewer-project-badge-style">
+        .viewer-project-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 4px 10px;
+            margin-left: 10px;
+            background: rgba(0, 0, 0, 0.05);
+            border: 1px solid rgba(0, 0, 0, 0.1);
+            border-radius: 8px;
+            font-size: 11px;
+            font-weight: 700;
+            color: inherit;
+            max-width: 280px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            letter-spacing: 0.3px;
+        }
+        body.dark-mode .viewer-project-badge,
+        .dark .viewer-project-badge {
+            background: rgba(255, 255, 255, 0.08) !important;
+            border-color: rgba(255, 255, 255, 0.15) !important;
+            color: #f1f5f9 !important;
+        }
+        body.dark-mode .viewer-project-badge .material-symbols-outlined,
+        .dark .viewer-project-badge .material-symbols-outlined {
+            color: #94a3b8 !important;
+        }
+    </style>
+
 </head>
 
 <body>
@@ -406,6 +441,11 @@
                     <img id="logo-img" src="https://i.postimg.cc/L4r0gSvV/LOGO-TEXTO-NORA-NEGRO.png" alt="nora"
                         class="logo-img" style="height: 65px;">
                 </a>
+                <div id="viewer-project-badge" class="viewer-project-badge" style="display: none;">
+                    <span class="material-symbols-outlined" style="font-size: 15px; flex-shrink: 0;">apartment</span>
+                    <span id="viewer-project-name"></span>
+                </div>
+
             </div>
 
             <div class="top-controls">
@@ -682,7 +722,7 @@
         })();
     </script>
 
-            <!-- VIEWER LOGO INJECT START -->
+                <!-- VIEWER LOGO INJECT START -->
     <script>
         (async function() {
             try {
@@ -697,6 +737,37 @@
                         const currentUser = JSON.parse(sessionStorage.getItem('userAccount') || localStorage.getItem('userAccount') || 'null');
                         companyId = currentUser?.adminEmpresaId || sessionStorage.getItem('empresa') || '';
                     } catch (e) {}
+                }
+
+                let currentResolvedProjectName = params.get('driveFolderName') || params.get('projectName') || params.get('project') || '';
+                if (currentResolvedProjectName) currentResolvedProjectName = decodeURIComponent(currentResolvedProjectName);
+
+                function ensureProjectBadge(logoEl, pName) {
+                    const resolvedName = pName || currentResolvedProjectName;
+                    if (!resolvedName) return;
+                    let badge = document.getElementById('viewer-project-badge');
+                    if (!badge && logoEl) {
+                        badge = document.createElement('div');
+                        badge.id = 'viewer-project-badge';
+                        badge.className = 'viewer-project-badge';
+                        badge.innerHTML = '<span class="material-symbols-outlined" style="font-size: 15px; opacity: 0.7; flex-shrink: 0;">apartment</span><span id="viewer-project-name" style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;"></span>';
+                        const parentAnchor = logoEl.closest('a') || logoEl;
+                        if (parentAnchor.parentNode) {
+                            parentAnchor.parentNode.insertBefore(badge, parentAnchor.nextSibling);
+                        }
+                    }
+                    const nameEl = document.getElementById('viewer-project-name');
+                    if (nameEl && resolvedName) {
+                        nameEl.textContent = resolvedName;
+                        nameEl.setAttribute('title', resolvedName);
+                    }
+                    if (badge) badge.style.display = 'inline-flex';
+                }
+
+                // Initial try if logo-img already exists
+                const initialLogo = document.getElementById('logo-img');
+                if (initialLogo && currentResolvedProjectName) {
+                    ensureProjectBadge(initialLogo, currentResolvedProjectName);
                 }
 
                 let config = null;
@@ -737,6 +808,10 @@
                 if (projectSlug && config.projects) {
                     const proj = config.projects.find(p => p.slug === projectSlug || p.id === projectSlug || p.name === projectSlug);
                     if (proj) {
+                        currentResolvedProjectName = proj.name || proj.title || proj.slug;
+                        const targetLogo = document.getElementById('logo-img');
+                        ensureProjectBadge(targetLogo, currentResolvedProjectName);
+
                         try {
                             const userAccount = JSON.parse(sessionStorage.getItem('userAccount') || localStorage.getItem('userAccount') || '{}');
                             const isSuperAdmin = userAccount.role === 'SUPER_ADMINISTRADOR' || userAccount.username === 'imagina3ddesign@gmail.com';
@@ -744,20 +819,19 @@
                                 const lic = window.WompiModule.canAccessProject(proj, 3);
                                 if (!lic.canAccess) {
                                     window.WompiModule.renderSuspensionOverlay(document.body, {
-                                        moduleName: 'Visor IFC (Modelos 3D)',
-                                        moduleDescription: 'La consulta y visualización de modelos BIM 3D se encuentra suspendida por falta de pago (+5 días de mora).',
+                                        moduleName: 'Visores nora',
+                                        moduleDescription: 'El acceso se encuentra suspendido por falta de pago (+5 días de mora).',
                                         projectSlug: proj.slug || projectSlug,
                                         companyId: companyId
                                     });
-                                    const appEl = document.getElementById('viewer-container') || document.getElementById('app');
+                                    const appEl = document.getElementById('viewer-container') || document.getElementById('app') || document.getElementById('root');
                                     if (appEl) { appEl.style.filter = 'blur(8px)'; appEl.style.pointerEvents = 'none'; }
                                     return;
                                 }
                             }
-                        } catch (licErr) { console.warn('Error comprobando suspension en VSR_IFCA:', licErr); }
+                        } catch (licErr) { console.warn('Error comprobando suspension:', licErr); }
                     }
                     if (proj && proj.landing) {
-                        // Priorizar viewerLogo (el nuevo campo), sino usar portalLogo
                         if (proj.landing.viewerLogoLight) lightLogo = proj.landing.viewerLogoLight;
                         else if (proj.landing.portalLogoLight) lightLogo = proj.landing.portalLogoLight;
                         
@@ -773,6 +847,7 @@
                         if (logoImg.getAttribute('src') !== desiredSrc) {
                             logoImg.src = desiredSrc;
                         }
+                        ensureProjectBadge(logoImg, currentResolvedProjectName);
                     };
 
                     const observer = new MutationObserver(() => updateLogo());
@@ -813,7 +888,7 @@
                     });
                 }
             } catch (e) {
-                console.warn('Error loading dynamic logo', e);
+                console.warn('Error loading dynamic logo and project badge', e);
             }
         })();
     </script>
