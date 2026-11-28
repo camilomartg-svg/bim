@@ -52,10 +52,14 @@ function RestrictedView({ title, onBack }: { title: string; onBack: () => void }
 }
 
 function Dashboard() {
+  const urlParams = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : null;
+  const isEmbed = urlParams?.get('embed') === 'true';
+  const initialAction = urlParams?.get('action');
+
   const [activeTab, setActiveTab] = useState('dashboard');
   const [selectedIssue, setSelectedIssue] = useState<Issue | null>(null);
   const [selectedReportId, setSelectedReportId] = useState<string | null>(null);
-  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState(() => isEmbed || initialAction === 'new');
   const [summaryFilter, setSummaryFilter] = useState<'author' | 'responsible' | 'reviewer' | 'bim'>('author');
   const [mobileTab, setMobileTab] = useState<'summary' | 'chat'>('summary');
   const { user } = useAuth();
@@ -410,6 +414,33 @@ function Dashboard() {
         );
     }
   };
+
+  if (isEmbed) {
+    return (
+      <div className="w-full h-full min-h-screen bg-transparent overflow-hidden flex items-center justify-center">
+        <AnimatePresence>
+          {isCreateModalOpen && (
+            <ErrorBoundary>
+              <CreateIssueModal 
+                onClose={() => {
+                  setIsCreateModalOpen(false);
+                  if (typeof window !== 'undefined' && window.parent && window.parent !== window) {
+                    window.parent.postMessage({ type: 'NORA_CLOSE_CREATE_ISSUE' }, '*');
+                  }
+                }} 
+                onSuccess={(type, fullIssue) => {
+                  setIsCreateModalOpen(false);
+                  if (typeof window !== 'undefined' && window.parent && window.parent !== window) {
+                    window.parent.postMessage({ type: 'NORA_ISSUE_CREATED', issue: fullIssue }, '*');
+                  }
+                }} 
+              />
+            </ErrorBoundary>
+          )}
+        </AnimatePresence>
+      </div>
+    );
+  }
 
   return (
     <div className="flex h-screen bg-white dark:bg-black text-slate-900 dark:text-white font-sans selection:bg-amber-500/30 selection:text-white transition-colors duration-200">

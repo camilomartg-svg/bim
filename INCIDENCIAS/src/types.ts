@@ -10,6 +10,8 @@ export interface Attachment {
   driveFileId?: string;
   webViewLink?: string;
   isLocalPending?: boolean;
+  viewpointData?: any;
+  metadata?: any;
 }
 
 export interface Comment {

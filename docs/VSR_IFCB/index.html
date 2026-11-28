@@ -83,10 +83,7 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet" />
 
-
-  <script type="module" crossorigin src="./assets/main-DreYg5cE.js"></script>
-  <link rel="modulepreload" crossorigin href="./assets/viewpoints-manager-CYz8czCD.js">
-  <link rel="stylesheet" crossorigin href="./assets/main-CwzcKc6k.css">
+
 
     <style id="nora-status-charts-styles">
         #properties-panel {
@@ -223,38 +220,9 @@
         }
 
     </style>
-
-    <style id="viewer-project-badge-style">
-        .viewer-project-badge {
-            display: inline-flex;
-            align-items: center;
-            gap: 6px;
-            padding: 4px 10px;
-            margin-left: 10px;
-            background: rgba(0, 0, 0, 0.05);
-            border: 1px solid rgba(0, 0, 0, 0.1);
-            border-radius: 8px;
-            font-size: 11px;
-            font-weight: 700;
-            color: inherit;
-            max-width: 280px;
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-            letter-spacing: 0.3px;
-        }
-        body.dark-mode .viewer-project-badge,
-        .dark .viewer-project-badge {
-            background: rgba(255, 255, 255, 0.08) !important;
-            border-color: rgba(255, 255, 255, 0.15) !important;
-            color: #f1f5f9 !important;
-        }
-        body.dark-mode .viewer-project-badge .material-symbols-outlined,
-        .dark .viewer-project-badge .material-symbols-outlined {
-            color: #94a3b8 !important;
-        }
-    </style>
-
+  <script type="module" crossorigin src="./assets/main-pmCkjto1.js"></script>
+  <link rel="modulepreload" crossorigin href="./assets/viewpoints-manager-BDcHnI4W.js">
+  <link rel="stylesheet" crossorigin href="./assets/main-CwzcKc6k.css">
 </head>
 
 <body>
@@ -379,24 +347,23 @@
                 <button class="right-tab-btn active" id="right-tab-properties" data-tab="properties" title="Ver propiedades del elemento">
                     <span class="material-symbols-outlined" style="font-size: 16px;">info</span> <span>Propiedades</span>
                 </button>
+                <button class="right-tab-btn" id="right-tab-graficos" data-tab="status-charts" title="Gráficos de Avance y Estado" style="display: none; align-items: center; gap: 5px;">
+                    <i class="fa-solid fa-chart-pie" style="font-size: 13px; color: #3b82f6;"></i> <span>Gráficos</span>
+                </button>
+                <button class="right-tab-btn" id="right-tab-split-ia" data-tab="split-ia" title="Partir en 2: IA Arriba + Gráficos Abajo" style="display: none; align-items: center; gap: 4px; background: linear-gradient(135deg, rgba(139,92,246,0.12), rgba(59,130,246,0.12)); border: 1px dashed #8b5cf6; color: #7c3aed; font-weight: 700; border-radius: 6px; padding: 4px 8px;">
+                    <i class="fa-solid fa-table-columns fa-rotate-270" style="font-size: 11px;"></i> <span>IA + Gráficos</span>
+                </button>
                 <button class="right-tab-btn" id="right-tab-incidencias" data-tab="incidencias" title="Mis Incidencias">
                     <span class="material-symbols-outlined" style="font-size: 16px; color: #f59e0b;">assignment_late</span> <span>Incidencias</span>
                 </button>
                 <button class="right-tab-btn" id="right-tab-nora" data-tab="nora-ai" title="nora AI Copilot">
                     <i class="fa-solid fa-wand-magic-sparkles" style="font-size: 13px;"></i> <span>nora AI</span>
                 </button>
-                <button class="right-tab-btn" id="right-tab-split-ia" data-tab="split-ia" title="Partir en 2: IA Arriba + Gráficos Abajo" style="display: none; align-items: center; gap: 4px; background: linear-gradient(135deg, rgba(139,92,246,0.12), rgba(59,130,246,0.12)); border: 1px dashed #8b5cf6; color: #7c3aed; font-weight: 700; border-radius: 6px; padding: 4px 8px;">
-                    <i class="fa-solid fa-table-columns fa-rotate-270" style="font-size: 11px;"></i> <span>IA + Gráficos</span>
-                </button>
-                <button class="right-tab-btn" id="right-tab-graficos" data-tab="status-charts" title="Gráficos de Avance y Estado" style="display: none; align-items: center; gap: 5px;">
-                    <i class="fa-solid fa-chart-pie" style="font-size: 13px; color: #3b82f6;"></i> <span>Gráficos</span>
-                </button>
             </div>
             <div class="properties-content right-tab-content active" id="properties-content">
                 <div class="no-selection">Selecciona un elemento para ver sus propiedades</div>
             </div>
-            <div class="right-tab-content" id="nora-ai-container" style="display: none; flex: 1; flex-direction: column; overflow: hidden; height: calc(100% - 48px);">
-            </div>
+            <div class="right-tab-content" id="nora-ai-container" style="display: none; flex: 1; flex-direction: column; overflow: hidden; height: calc(100% - 48px);"></div>
             <div class="right-tab-content" id="incidencias-container" style="display: none; flex: 1; flex-direction: column; overflow: hidden; height: calc(100% - 48px);"></div>
             
             <div id="panel-split-divider" style="display: none;">
@@ -448,6 +415,7 @@
                     <span class="material-symbols-outlined" style="font-size: 15px; flex-shrink: 0;">apartment</span>
                     <span id="viewer-project-name"></span>
                 </div>
+
             </div>
 
             <div class="top-controls">
@@ -651,7 +619,6 @@
                     <button class="q-tab-btn" data-tab="estados">Estados</button>
                     <button class="q-tab-btn" data-tab="historial">Historial</button>
                     <button class="q-tab-btn" data-tab="despiece" id="q-tab-despiece">Despiece</button>
-                    <button class="q-tab-btn" data-tab="listones" id="q-tab-listones" style="display: none;">Despiece Listones</button>
                     <button class="q-tab-btn" data-tab="tuberias" id="q-tab-tuberias"
                         style="display: none;">Tuberías</button>
                     <button class="q-tab-btn" data-tab="uniones" id="q-tab-uniones"
@@ -725,12 +692,24 @@
         })();
     </script>
 
-                <!-- VIEWER LOGO INJECT START -->
+            <!-- VIEWER LOGO INJECT START -->
     <script>
         (async function() {
             try {
                 const metaVersion = document.querySelector('meta[name="x-app-version"]');
                 const currentVersion = metaVersion?.getAttribute('content') || Date.now().toString();
+
+                // Set project name badge immediately
+                const initialProjName = params.get('driveFolderName') || params.get('projectName') || params.get('project');
+                if (initialProjName) {
+                    const el = document.getElementById('viewer-project-name');
+                    const badge = document.getElementById('viewer-project-badge');
+                    if (el) {
+                        el.textContent = decodeURIComponent(initialProjName);
+                        el.setAttribute('title', decodeURIComponent(initialProjName));
+                        if (badge) badge.style.display = 'inline-flex';
+                    }
+                }
                 
                 const params = new URLSearchParams(window.location.search);
                 const projectSlug = params.get('project');
@@ -740,37 +719,6 @@
                         const currentUser = JSON.parse(sessionStorage.getItem('userAccount') || localStorage.getItem('userAccount') || 'null');
                         companyId = currentUser?.adminEmpresaId || sessionStorage.getItem('empresa') || '';
                     } catch (e) {}
-                }
-
-                let currentResolvedProjectName = params.get('driveFolderName') || params.get('projectName') || params.get('project') || '';
-                if (currentResolvedProjectName) currentResolvedProjectName = decodeURIComponent(currentResolvedProjectName);
-
-                function ensureProjectBadge(logoEl, pName) {
-                    const resolvedName = pName || currentResolvedProjectName;
-                    if (!resolvedName) return;
-                    let badge = document.getElementById('viewer-project-badge');
-                    if (!badge && logoEl) {
-                        badge = document.createElement('div');
-                        badge.id = 'viewer-project-badge';
-                        badge.className = 'viewer-project-badge';
-                        badge.innerHTML = '<span class="material-symbols-outlined" style="font-size: 15px; opacity: 0.7; flex-shrink: 0;">apartment</span><span id="viewer-project-name" style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;"></span>';
-                        const parentAnchor = logoEl.closest('a') || logoEl;
-                        if (parentAnchor.parentNode) {
-                            parentAnchor.parentNode.insertBefore(badge, parentAnchor.nextSibling);
-                        }
-                    }
-                    const nameEl = document.getElementById('viewer-project-name');
-                    if (nameEl && resolvedName) {
-                        nameEl.textContent = resolvedName;
-                        nameEl.setAttribute('title', resolvedName);
-                    }
-                    if (badge) badge.style.display = 'inline-flex';
-                }
-
-                // Initial try if logo-img already exists
-                const initialLogo = document.getElementById('logo-img');
-                if (initialLogo && currentResolvedProjectName) {
-                    ensureProjectBadge(initialLogo, currentResolvedProjectName);
                 }
 
                 let config = null;
@@ -811,10 +759,16 @@
                 if (projectSlug && config.projects) {
                     const proj = config.projects.find(p => p.slug === projectSlug || p.id === projectSlug || p.name === projectSlug);
                     if (proj) {
-                        currentResolvedProjectName = proj.name || proj.title || proj.slug;
-                        const targetLogo = document.getElementById('logo-img');
-                        ensureProjectBadge(targetLogo, currentResolvedProjectName);
-
+                        try {
+                            const pName = proj.name || proj.title || proj.slug;
+                            const el = document.getElementById('viewer-project-name');
+                            const badge = document.getElementById('viewer-project-badge');
+                            if (el && pName) {
+                                el.textContent = pName;
+                                el.setAttribute('title', pName);
+                                if (badge) badge.style.display = 'inline-flex';
+                            }
+                        } catch (e) {}
                         try {
                             const userAccount = JSON.parse(sessionStorage.getItem('userAccount') || localStorage.getItem('userAccount') || '{}');
                             const isSuperAdmin = userAccount.role === 'SUPER_ADMINISTRADOR' || userAccount.username === 'imagina3ddesign@gmail.com';
@@ -822,19 +776,20 @@
                                 const lic = window.WompiModule.canAccessProject(proj, 3);
                                 if (!lic.canAccess) {
                                     window.WompiModule.renderSuspensionOverlay(document.body, {
-                                        moduleName: 'Visores nora',
-                                        moduleDescription: 'El acceso se encuentra suspendido por falta de pago (+5 días de mora).',
+                                        moduleName: 'Visor IFC (Modelos 3D)',
+                                        moduleDescription: 'La consulta y visualización de modelos BIM 3D se encuentra suspendida por falta de pago (+5 días de mora).',
                                         projectSlug: proj.slug || projectSlug,
                                         companyId: companyId
                                     });
-                                    const appEl = document.getElementById('viewer-container') || document.getElementById('app') || document.getElementById('root');
+                                    const appEl = document.getElementById('viewer-container') || document.getElementById('app');
                                     if (appEl) { appEl.style.filter = 'blur(8px)'; appEl.style.pointerEvents = 'none'; }
                                     return;
                                 }
                             }
-                        } catch (licErr) { console.warn('Error comprobando suspension:', licErr); }
+                        } catch (licErr) { console.warn('Error comprobando suspension en VSR_IFCA:', licErr); }
                     }
                     if (proj && proj.landing) {
+                        // Priorizar viewerLogo (el nuevo campo), sino usar portalLogo
                         if (proj.landing.viewerLogoLight) lightLogo = proj.landing.viewerLogoLight;
                         else if (proj.landing.portalLogoLight) lightLogo = proj.landing.portalLogoLight;
                         
@@ -850,7 +805,6 @@
                         if (logoImg.getAttribute('src') !== desiredSrc) {
                             logoImg.src = desiredSrc;
                         }
-                        ensureProjectBadge(logoImg, currentResolvedProjectName);
                     };
 
                     const observer = new MutationObserver(() => updateLogo());
@@ -891,7 +845,7 @@
                     });
                 }
             } catch (e) {
-                console.warn('Error loading dynamic logo and project badge', e);
+                console.warn('Error loading dynamic logo', e);
             }
         })();
     </script>

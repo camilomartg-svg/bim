@@ -48,7 +48,8 @@ import { VoiceRecorder } from '../utils/audioRecorderUtils';
 
 interface CreateIssueModalProps {
   onClose: () => void;
-  onSuccess?: (type: 'issue' | 'report') => void;
+  onSuccess?: (type: 'issue' | 'report', createdData?: any) => void;
+  isEmbed?: boolean;
 }
 
 // Mock positions/professionals if not many users exist
@@ -60,7 +61,7 @@ const MOCK_POSITIONS = [
   { position: "Director de Obra", name: "Roberto Gómez" },
 ];
 
-export default function CreateIssueModal({ onClose, onSuccess }: CreateIssueModalProps) {
+export default function CreateIssueModal({ onClose, onSuccess, isEmbed = false }: CreateIssueModalProps) {
   const [activeMode, setActiveMode] = useState<'issue' | 'report'>('issue');
   
   // Issue Mode States
@@ -202,6 +203,51 @@ export default function CreateIssueModal({ onClose, onSuccess }: CreateIssueModa
   
   const [attachments, setAttachments] = useState<Partial<Attachment>[]>([]);
   const pendingFilesRef = useRef<Map<string, Blob | File>>(new Map());
+  const [isBimViewPickerOpen, setIsBimViewPickerOpen] = useState(false);
+  const [availableBimViews, setAvailableBimViews] = useState<{ currentView: any; savedViews: any[] } | null>(null);
+
+  useEffect(() => {
+    const handleMessage = (event: MessageEvent) => {
+      if (event.data && event.data.type === 'NORA_RECEIVE_BIM_VIEW') {
+        const { currentView, savedViews } = event.data;
+        if (currentView || (savedViews && savedViews.length > 0)) {
+          setAvailableBimViews({ currentView, savedViews: savedViews || [] });
+          setIsBimViewPickerOpen(true);
+        } else {
+          alert('No se detectó ninguna vista 3D activa o guardada en el visor.');
+        }
+      }
+    };
+    window.addEventListener('message', handleMessage);
+    return () => window.removeEventListener('message', handleMessage);
+  }, []);
+
+  const handleRequestBimView = () => {
+    if (typeof window !== 'undefined' && window.parent && window.parent !== window) {
+      window.parent.postMessage({ type: 'NORA_REQUEST_BIM_VIEW' }, '*');
+    } else {
+      alert('Esta función se utiliza cuando el formulario se abre dentro del Visor 3D de nora.');
+    }
+  };
+
+  const addBimViewAttachment = (viewObj: any, defaultName: string) => {
+    const attId = 'att_bim_' + Date.now();
+    const name = viewObj.title || viewObj.name || defaultName;
+    const thumb = viewObj.previewImage || viewObj.thumbnail || '';
+    const vpData = viewObj.viewpointData || viewObj;
+
+    const newAtt: Partial<Attachment> = {
+      id: attId,
+      name: name.startsWith('Vista 3D') ? name : `Vista 3D: ${name}`,
+      url: thumb,
+      type: 'application/json',
+      category: 'bim_view',
+      viewpointData: vpData,
+      isLocalPending: false
+    };
+
+    setAttachments(prev => [...prev, newAtt]);
+  };
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submittingStatus, setSubmittingStatus] = useState<string>('');
   const [isListening, setIsListening] = useState(false);
@@ -902,13 +948,15 @@ export default function CreateIssueModal({ onClose, onSuccess }: CreateIssueModa
       }).filter(Boolean);
 
       const cleanedAttachments = attachments
-        .filter(a => a.name && a.url)
+        .filter(a => a.name && (a.url || (a as any).viewpointData))
         .map(a => ({
           id: a.id || Math.random().toString(36).substr(2, 9),
           name: a.name || 'Sin nombre',
           url: a.url || '',
           type: a.type || 'application/octet-stream',
-          category: a.category || 'file'
+          category: a.category || 'file',
+          viewpointData: (a as any).viewpointData || null,
+          metadata: (a as any).metadata || null
         }));
 
       const issueData: Omit<Issue, 'id'> = {
@@ -971,7 +1019,10 @@ export default function CreateIssueModal({ onClose, onSuccess }: CreateIssueModa
         await saveIssue(fullIssue);
       }
       
-      if (onSuccess) onSuccess('issue');
+      if (onSuccess) onSuccess('issue', fullIssue);
+      if (typeof window !== 'undefined' && window.parent && window.parent !== window) {
+        window.parent.postMessage({ type: 'NORA_ISSUE_CREATED', issue: fullIssue }, '*');
+      }
       onClose();
     } catch (error: any) {
       console.error("Error creating issue:", error);
@@ -1717,6 +1768,15 @@ export default function CreateIssueModal({ onClose, onSuccess }: CreateIssueModa
                       onChange={(e) => handleMediaCapture(e, 'image')}
                      />
                    </label>
+                    <button
+                      type="button"
+                      onClick={handleRequestBimView}
+                      className="flex items-center justify-center gap-1.5 px-3 py-2 bg-amber-500/10 hover:bg-amber-500/20 text-amber-500 border border-amber-500/30 rounded-lg text-[8.5px] font-black uppercase tracking-wider transition-all shadow-sm cursor-pointer active:scale-95"
+                      title="Vincular vista 3D del modelo BIM"
+                    >
+                      <Box className="w-3.5 h-3.5 text-amber-500" />
+                      <span>Vista 3D</span>
+                    </button>
                  </div>
               </div>
               
@@ -1730,7 +1790,11 @@ export default function CreateIssueModal({ onClose, onSuccess }: CreateIssueModa
                   >
                     <div className="flex justify-between items-start">
                       <div className="w-9 h-9 bg-slate-900 border border-slate-800 rounded-lg flex items-center justify-center text-slate-700 shadow-sm overflow-hidden bg-center bg-cover">
-                        {att.category === 'image' && att.url ? (
+                        {att.category === 'bim_view' && att.url ? (
+                          <img src={att.url} className="w-full h-full object-cover" alt="Vista 3D" />
+                        ) : att.category === 'bim_view' ? (
+                          <Box className="w-4 h-4 text-amber-500" />
+                        ) : att.category === 'image' && att.url ? (
                           <img src={att.url} className="w-full h-full object-cover" />
                         ) : att.category === 'video' && att.url ? (
                           <video src={att.url} className="w-full h-full object-cover" muted playsInline />
@@ -1759,7 +1823,7 @@ export default function CreateIssueModal({ onClose, onSuccess }: CreateIssueModa
                         className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-lg text-xs text-white font-bold outline-none focus:border-slate-600 transition-all shadow-inner"
                       />
                       <div className="flex flex-wrap gap-1">
-                        {['file', 'image', 'video', 'audio', 'bim_model', 'plan_pdf'].map((cat) => (
+                        {['file', 'image', 'video', 'audio', 'bim_view', 'bim_model', 'plan_pdf'].map((cat) => (
                           <button
                             key={cat}
                             type="button"
@@ -2420,6 +2484,98 @@ export default function CreateIssueModal({ onClose, onSuccess }: CreateIssueModa
           }
         }}
       />
+
+      {/* Modal de Selección de Vista 3D BIM */}
+      {isBimViewPickerOpen && availableBimViews && (
+        <div className="fixed inset-0 z-[120] flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-white dark:bg-[#0b1329] border border-slate-200 dark:border-slate-800 rounded-2xl p-6 max-w-lg w-full shadow-2xl flex flex-col gap-4 text-slate-900 dark:text-white">
+            <div className="flex justify-between items-center border-b border-slate-100 dark:border-slate-800/80 pb-3">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-lg bg-amber-500/10 border border-amber-500/20 flex items-center justify-center">
+                  <Box className="w-4 h-4 text-amber-500" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-black uppercase tracking-wider text-slate-900 dark:text-white">Vincular Vista 3D BIM</h3>
+                  <p className="text-[10px] text-slate-500 font-medium">Adjunte la cámara o vista guardada actual del modelo</p>
+                </div>
+              </div>
+              <button 
+                type="button" 
+                onClick={() => setIsBimViewPickerOpen(false)} 
+                className="w-7 h-7 rounded-lg flex items-center justify-center text-slate-400 hover:text-slate-600 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="flex flex-col gap-2.5 max-h-72 overflow-y-auto custom-scrollbar py-1">
+              {availableBimViews.currentView && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    addBimViewAttachment(availableBimViews.currentView, 'Vista 3D Actual');
+                    setIsBimViewPickerOpen(false);
+                  }}
+                  className="group flex items-center gap-3 p-3 bg-amber-500/5 hover:bg-amber-500/15 border border-amber-500/30 rounded-xl transition-all text-left shadow-sm"
+                >
+                  {availableBimViews.currentView.thumbnail ? (
+                    <img src={availableBimViews.currentView.thumbnail} className="w-14 h-14 object-cover rounded-lg border border-amber-500/40 shrink-0 shadow-sm" alt="Thumbnail" />
+                  ) : (
+                    <div className="w-14 h-14 bg-amber-500/20 rounded-lg flex items-center justify-center shrink-0">
+                      <Camera className="w-6 h-6 text-amber-500" />
+                    </div>
+                  )}
+                  <div className="flex-1 min-w-0">
+                    <span className="text-xs font-black uppercase tracking-wider text-amber-600 dark:text-amber-400 block truncate">📸 Vista 3D Actual en Pantalla</span>
+                    <span className="text-[10px] text-slate-500 dark:text-slate-400 block truncate mt-0.5">Captura la posición de la cámara y visibilidad actual</span>
+                  </div>
+                </button>
+              )}
+
+              {availableBimViews.savedViews && availableBimViews.savedViews.length > 0 && (
+                <div className="mt-2">
+                  <span className="text-[9px] font-black uppercase tracking-widest text-slate-400 block mb-2">Vistas Guardadas en el Proyecto</span>
+                  <div className="flex flex-col gap-2">
+                    {availableBimViews.savedViews.map((sv) => (
+                      <button
+                        key={sv.id}
+                        type="button"
+                        onClick={() => {
+                          addBimViewAttachment(sv, sv.title);
+                          setIsBimViewPickerOpen(false);
+                        }}
+                        className="group flex items-center gap-3 p-2.5 bg-slate-50 dark:bg-slate-900/60 hover:bg-slate-100 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-800 rounded-xl transition-all text-left"
+                      >
+                        {sv.previewImage ? (
+                          <img src={sv.previewImage} className="w-12 h-12 object-cover rounded-lg border border-slate-300 dark:border-slate-700 shrink-0" alt={sv.title} />
+                        ) : (
+                          <div className="w-12 h-12 bg-slate-200 dark:bg-slate-800 rounded-lg flex items-center justify-center shrink-0">
+                            <Box className="w-5 h-5 text-blue-500" />
+                          </div>
+                        )}
+                        <div className="flex-1 min-w-0">
+                          <span className="text-xs font-bold text-slate-800 dark:text-slate-200 block truncate">{sv.title}</span>
+                          <span className="text-[10px] text-slate-400 block truncate">Vista guardada</span>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="flex justify-end pt-3 border-t border-slate-100 dark:border-slate-800">
+              <button
+                type="button"
+                onClick={() => setIsBimViewPickerOpen(false)}
+                className="px-4 py-2 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-xl text-xs font-black uppercase tracking-wider"
+              >
+                Cancelar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Modal de Asignación de Comité de Revisores */}
       <AssigneeSelectorModal

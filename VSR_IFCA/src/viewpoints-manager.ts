@@ -564,6 +564,21 @@ export class ViewpointsManager extends OBC.Component implements OBC.Disposable {
         };
     }
 
+    public captureCurrentState(title: string = 'Vista 3D'): ViewpointData | null {
+        return this.captureViewpointState({
+            userId: this._currentUserId || 'guest',
+            title,
+            description: '',
+            category: 'General',
+            sharedWith: [],
+            sharedAccess: []
+        });
+    }
+
+    public getSavedViewpoints(): ViewpointData[] {
+        return [...this._savedViewpoints];
+    }
+
     public async saveViewpoint(title: string, category: string = 'General', description: string = '') {
         console.log('[Viewpoints] Attempting to save view:', title);
 
@@ -737,24 +752,9 @@ export class ViewpointsManager extends OBC.Component implements OBC.Disposable {
         }
     }
 
-    public async restoreViewpoint(id: string) {
-        const view = this._savedViewpoints.find(v => v.id === id);
-        
-        // 403 Forbidden Simulation
-        if (!view) {
-             console.error('Viewpoint not found.');
-             return;
-        }
-        
-        if (!this.canAccess(view)) {
-             console.error('403 Forbidden: You do not have permission to access this view.');
-             alert('Error 403: No tiene permisos para acceder a esta vista.');
-             return;
-        }
-
-        this._activeViewpointId = view.id;
-
-        console.log(`Restoring viewpoint '${view.title}'...`);
+    public async applyViewpoint(view: ViewpointData) {
+        if (!view) return;
+        console.log(`[Viewpoints] Applying viewpoint '${view.title || 'Untitled'}'...`);
 
         // 0. Restore Loaded Models (Critical for scene composition)
         if (this._stateProvider && view.loadedModels) {
@@ -762,7 +762,7 @@ export class ViewpointsManager extends OBC.Component implements OBC.Disposable {
         }
 
         // 1. Restore Camera
-        if (this._world.camera.controls) {
+        if (this._world.camera.controls && view.camera) {
             const { position, target, projection } = view.camera;
             
             // Restore projection if needed
@@ -809,7 +809,26 @@ export class ViewpointsManager extends OBC.Component implements OBC.Disposable {
             }
         }
         
-        console.log(`Viewpoint '${view.title}' restored.`);
+        console.log(`[Viewpoints] Viewpoint '${view.title || 'Untitled'}' applied.`);
+    }
+
+    public async restoreViewpoint(id: string) {
+        const view = this._savedViewpoints.find(v => v.id === id);
+        
+        // 403 Forbidden Simulation
+        if (!view) {
+             console.error('Viewpoint not found.');
+             return;
+        }
+        
+        if (!this.canAccess(view)) {
+             console.error('403 Forbidden: You do not have permission to access this view.');
+             alert('Error 403: No tiene permisos para acceder a esta vista.');
+             return;
+        }
+
+        this._activeViewpointId = view.id;
+        await this.applyViewpoint(view);
     }
 
     public async deleteViewpoint(id: string) {

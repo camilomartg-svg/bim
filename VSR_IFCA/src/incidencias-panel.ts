@@ -14,6 +14,8 @@ export interface Attachment {
   driveFileId?: string;
   webViewLink?: string;
   isLocalPending?: boolean;
+  viewpointData?: any;
+  metadata?: any;
 }
 
 export interface Comment {
@@ -91,6 +93,8 @@ export interface IncidenciasPanelOptions {
   getCompanyMembers?: () => any[];
   onLocateElement?: (issue: Issue) => void;
   onRestoreViewpoint?: (viewpointData: any) => void;
+  captureCurrentView?: () => { name: string; thumbnail: string; viewpointData: any } | null;
+  getSavedViews?: () => Array<{ id: string; title: string; previewImage?: string; viewpointData: any }>;
 }
 
 const DRIVE_GATEWAY_URL = 'https://script.google.com/macros/s/AKfycbx2RAQx_8K4o22xE0Mw-ETc7K_58vIoi6-PgVi64u80inuiw144ks3cgWSdCtXqIgB02g/exec';
@@ -475,7 +479,9 @@ function mergeIssueWithLocalCache(localIssue: Issue | undefined, remoteIssue: Is
 }
 
 export class IncidenciasPanel {
+  private options: IncidenciasPanelOptions;
   private container: HTMLElement;
+  private iframeMessageBound: boolean = false;
   private companyId: string;
   private projectId: string;
   private driveFolderName: string;
@@ -501,6 +507,7 @@ export class IncidenciasPanel {
   private isRecording: boolean = false;
 
   constructor(options: IncidenciasPanelOptions) {
+    this.options = options;
     this.container = options.container;
     this.companyId = options.companyId || '';
     this.projectId = options.projectId || '';
@@ -939,13 +946,13 @@ export class IncidenciasPanel {
                 <button class="nora-inc-btn-icon" id="btn-inc-toggle-expand" title="${this.isExpanded ? 'Contraer panel' : 'Expandir panel'}">
                   <span class="material-symbols-outlined" style="font-size: 17px;">${this.isExpanded ? 'close_fullscreen' : 'open_in_full'}</span>
                 </button>
-                <a href="../INCIDENCIAS/?empresa=${encodeURIComponent(this.companyId)}&project=${encodeURIComponent(this.projectId)}&driveFolderName=${encodeURIComponent(this.driveFolderName)}&action=new" 
-                   target="_blank" 
-                   class="nora-inc-new-btn" 
-                   title="Registrar nuevo hallazgo en Incidencias">
+                <button type="button" 
+                        class="nora-inc-new-btn" 
+                        id="btn-inc-new-hallazgo" 
+                        title="Registrar nuevo hallazgo en el visor">
                   <span class="material-symbols-outlined" style="font-size: 16px;">add</span>
                   <span>Hallazgo</span>
-                </a>
+                </button>
               </div>
             </div>
 
@@ -1328,16 +1335,26 @@ export class IncidenciasPanel {
   }
 
   private renderAttachmentItem(att: Attachment): string {
-    const isImage = att.category === 'image' || att.type?.includes('image');
-    const isVideo = att.category === 'video' || att.type?.includes('video');
-    const isAudio = att.category === 'audio' || att.type?.includes('audio') || (att.name && /\.(mp3|wav|webm|m4a|ogg)$/i.test(att.name));
+    const isBimView = att.category === 'bim_view' || !!(att as any).viewpointData;
+    const isImage = !isBimView && (att.category === 'image' || att.type?.includes('image'));
+    const isVideo = !isBimView && (att.category === 'video' || att.type?.includes('video'));
+    const isAudio = !isBimView && (att.category === 'audio' || att.type?.includes('audio') || (att.name && /\.(mp3|wav|webm|m4a|ogg)$/i.test(att.name)));
     const url = att.url || att.webViewLink || (att.driveFileId ? `https://drive.google.com/file/d/${att.driveFileId}/view` : '#');
     const fileId = extractDriveFileId(att);
     const cachedBlob = (fileId && driveAudioBlobCache.get(fileId)) || (att.id && driveAudioBlobCache.get(att.id));
     const directPlayable = cachedBlob || (isPlayableDirectly(att.url) ? att.url : '');
 
     let previewContent = '';
-    if (isImage) {
+    if (isBimView) {
+      previewContent = `
+        <div class="nora-att-bim-thumb" data-att-id="${escapeHtml(att.id)}" title="Clic para restaurar vista en el modelo">
+          ${att.url ? `<img src="${escapeHtml(att.url)}" alt="${escapeHtml(att.name)}" class="nora-att-img" />` : `<span class="material-symbols-outlined" style="font-size: 32px; color: #f59e0b;">view_in_ar</span>`}
+          <div class="nora-att-bim-overlay">
+            <span class="nora-att-bim-tag">VISTA 3D BIM</span>
+          </div>
+        </div>
+      `;
+    } else if (isImage) {
       previewContent = `<img src="${escapeHtml(url)}" alt="${escapeHtml(att.name)}" class="nora-att-img" />`;
     } else if (isVideo) {
       previewContent = `
@@ -1379,6 +1396,11 @@ export class IncidenciasPanel {
               <span class="material-symbols-outlined spinning" style="font-size: 11px;">sync</span>
               <span>Subiendo</span>
             </span>
+          ` : isBimView ? `
+            <button type="button" class="nora-att-view-3d-btn" data-att-id="${escapeHtml(att.id)}" title="Aplicar vista en el modelo 3D">
+              <span class="material-symbols-outlined" style="font-size: 14px;">visibility</span>
+              <span>Ver 3D</span>
+            </button>
           ` : isAudio ? `
             <span class="nora-att-audio-chip" title="Reproducción directa en visor">
               <span class="material-symbols-outlined" style="font-size: 13px;">mic</span>
@@ -1481,6 +1503,23 @@ export class IncidenciasPanel {
                     </div>
                   `;
                 }
+                if (att.category === 'bim_view' || (att as any).viewpointData) {
+                  return `
+                    <div class="nora-bim-view-msg-wrap">
+                      <div class="nora-bim-view-card" data-att-id="${escapeHtml(att.id)}">
+                        ${att.url ? `<img src="${escapeHtml(att.url)}" alt="${escapeHtml(att.name)}" class="nora-bim-view-thumb" />` : `<span class="material-symbols-outlined" style="font-size: 28px; color: #f59e0b;">view_in_ar</span>`}
+                        <div class="nora-bim-view-info">
+                          <span class="nora-bim-view-tag">VISTA 3D BIM</span>
+                          <span class="nora-bim-view-title">${escapeHtml(att.name)}</span>
+                          <button type="button" class="nora-att-view-3d-btn" data-att-id="${escapeHtml(att.id)}" title="Ver en 3D">
+                            <span class="material-symbols-outlined" style="font-size: 13px;">visibility</span>
+                            <span>Ver 3D</span>
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  `;
+                }
                 if (att.category === 'video' || att.type?.includes('video') || (att.name && /\.(mp4|webm|mov|mkv)$/i.test(att.name))) {
                   return `
                     <div class="nora-video-msg">
@@ -1574,6 +1613,15 @@ export class IncidenciasPanel {
       statusSelect.addEventListener('change', (e) => {
         this.statusFilter = (e.target as HTMLSelectElement).value;
         this.render();
+      });
+    }
+
+    // New Hallazgo button
+    const newHallazgoBtn = this.container.querySelector<HTMLButtonElement>('#btn-inc-new-hallazgo');
+    if (newHallazgoBtn) {
+      newHallazgoBtn.addEventListener('click', (e) => {
+        e.preventDefault();
+        this.openCreateIssueModal();
       });
     }
 
@@ -1748,6 +1796,28 @@ export class IncidenciasPanel {
         this.stopVoiceRecording(false);
       });
     }
+
+    // 3D View restore buttons in drawer and chat
+    const view3dBtns = this.container.querySelectorAll<HTMLElement>('.nora-att-view-3d-btn, .nora-att-bim-thumb');
+    view3dBtns.forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        const attId = btn.getAttribute('data-att-id');
+        if (!attId || !this.selectedIssue) return;
+        const allAtts = [
+          ...(this.selectedIssue.attachments || []),
+          ...(this.selectedIssue.comments || []).flatMap(c => c.attachments || [])
+        ];
+        const att = allAtts.find(a => a.id === attId);
+        if (att && (att as any).viewpointData) {
+          this.options.onRestoreViewpoint?.((att as any).viewpointData);
+          this.showToast('👁️ Vista 3D restaurada en el modelo');
+        } else {
+          this.showToast('⚠️ No se encontraron datos de cámara para esta vista');
+        }
+      });
+    });
 
     // Wire up inline audio players for direct playback
     this.bindAudioPlayers();

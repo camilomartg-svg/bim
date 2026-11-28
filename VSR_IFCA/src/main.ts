@@ -15001,7 +15001,30 @@ function setupIncidenciasPanel() {
             projectId,
             driveFolderName: folderName,
             currentUser: user,
-            getCompanyMembers: () => activeSecurityContext?.currentCompany?.members || []
+            getCompanyMembers: () => activeSecurityContext?.currentCompany?.members || [],
+            captureCurrentView: () => {
+                if (!viewpointsManager) return null;
+                const state = viewpointsManager.captureCurrentState('Vista Hallazgo');
+                if (!state) return null;
+                return {
+                    name: state.title || 'Vista 3D',
+                    thumbnail: state.previewImage || '',
+                    viewpointData: state
+                };
+            },
+            getSavedViews: () => {
+                if (!viewpointsManager) return [];
+                return viewpointsManager.getSavedViewpoints().map(v => ({
+                    id: v.id,
+                    title: v.title,
+                    previewImage: v.previewImage,
+                    viewpointData: v
+                }));
+            },
+            onRestoreViewpoint: (viewpointData: any) => {
+                if (!viewpointsManager || !viewpointData) return;
+                viewpointsManager.applyViewpoint(viewpointData);
+            }
         });
 
         const tabInc = document.getElementById('right-tab-incidencias');
