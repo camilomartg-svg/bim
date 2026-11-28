@@ -211,6 +211,269 @@ async function fetchDriveAudioAsBlobUrl(fileId: string, mimeType: string): Promi
   return promise;
 }
 
+function blobToBase64(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      const res = reader.result as string;
+      resolve(res ? res.split(',')[1] : '');
+    };
+    reader.onerror = () => reject(new Error('Fallo al leer datos del archivo'));
+    reader.readAsDataURL(blob);
+  });
+}
+
+const folderResolvePromises = new Map<string, Promise<string>>();
+
+async function resolveProjectFolderId(companyId: string, projectId: string, driveFolderName?: string): Promise<string> {
+  if (projectId === 'nuevo-proyecto-1794663364994' || projectId?.includes('1794663364994') || (driveFolderName && driveFolderName.includes('ENSAYOS DE HS'))) {
+    return '1Gotb8NKYre22k1p5LrvcuG23z79TvAMl';
+  }
+
+  const cacheKey = `nora_inc_folder_v3_${companyId}_${projectId}`;
+  try {
+    const cached = localStorage.getItem(cacheKey);
+    if (cached && cached.trim().length > 10) return cached.trim();
+  } catch (_) {}
+
+  const existing = folderResolvePromises.get(cacheKey);
+  if (existing) return existing;
+
+  const promise = (async () => {
+    try {
+      const res = await postToAppsScript({
+        action: 'saveIncidentsProjectConfig',
+        company: { id: companyId, name: companyId },
+        companyName: companyId,
+        project: { id: projectId, slug: projectId, name: driveFolderName || projectId },
+        projectName: driveFolderName || projectId
+      });
+      const folderId = res?.storage?.projectFolderId || res?.projectFolderId;
+      if (folderId && String(folderId).trim().length > 10) {
+        const cleanId = String(folderId).trim();
+        try { localStorage.setItem(cacheKey, cleanId); } catch (_) {}
+        return cleanId;
+      }
+    } catch (err) {
+      console.warn('[IncidenciasPanel] Error resolviendo carpeta de Drive:', err);
+    }
+    return '1Gotb8NKYre22k1p5LrvcuG23z79TvAMl';
+  })();
+
+  folderResolvePromises.set(cacheKey, promise);
+  return promise;
+}
+
+async function uploadFileToDrive(
+  file: File | Blob,
+  fileName: string,
+  fileType: string,
+  folderId: string
+): Promise<{ id: string; url: string; webViewLink: string }> {
+  const cleanContentType = fileType || (fileName.endsWith('.mp4') ? 'video/mp4' : (fileName.endsWith('.jpg') || fileName.endsWith('.jpeg')) ? 'image/jpeg' : 'application/octet-stream');
+
+  // Large files (> 500 KB or videos): resumable upload session
+  if (file.size > 500 * 1024 || cleanContentType.startsWith('video/')) {
+    console.log(`[Drive Upload] Subiendo archivo grande ${fileName} (${(file.size / 1024 / 1024).toFixed(2)} MB)...`);
+    const initRes = await postToAppsScript({
+      action: 'initResumableUpload',
+      folderId,
+      filename: fileName,
+      contentType: cleanContentType,
+      totalBytes: file.size
+    }, 45000);
+
+    if (!initRes || !initRes.sessionUrl) {
+      throw new Error(initRes?.message || 'No se pudo iniciar sesión resumible en Drive.');
+    }
+
+    let uploadedFileId = '';
+
+    // Direct binary PUT attempt
+    try {
+      await fetch(`${initRes.sessionUrl}&%24httpMethod=PUT`, {
+        method: 'POST',
+        mode: 'no-cors',
+        headers: { 'Content-Type': 'text/plain' },
+        body: file
+      });
+
+      const lastSlice = file.slice(Math.max(0, file.size - 1), file.size);
+      const lastBase64 = await blobToBase64(lastSlice);
+      const finRes = await postToAppsScript({
+        action: 'uploadResumableChunk',
+        sessionUrl: initRes.sessionUrl,
+        content: lastBase64,
+        start: Math.max(0, file.size - 1),
+        totalBytes: file.size,
+        contentType: cleanContentType,
+        filename: fileName,
+        folderId,
+        skipStatusRegister: true
+      }, 45000);
+
+      if (finRes?.fileId) {
+        uploadedFileId = finRes.fileId;
+      }
+    } catch (e) {
+      console.warn('[Drive Upload] Fallback a bloques resumibles:', e);
+    }
+
+    // Chunked fallback if direct binary didn't return fileId
+    if (!uploadedFileId) {
+      const fallbackInit = await postToAppsScript({
+        action: 'initResumableUpload',
+        folderId,
+        filename: fileName,
+        contentType: cleanContentType,
+        totalBytes: file.size
+      }, 45000);
+
+      if (!fallbackInit || !fallbackInit.sessionUrl) {
+        throw new Error('No se pudo reiniciar sesión resumible en Drive.');
+      }
+
+      const CHUNK_SIZE = 2 * 1024 * 1024;
+      let offset = 0;
+      while (offset < file.size) {
+        const slice = file.slice(offset, Math.min(offset + CHUNK_SIZE, file.size));
+        const chunkBase64 = await blobToBase64(slice);
+        const chunkRes = await postToAppsScript({
+          action: 'uploadResumableChunk',
+          sessionUrl: fallbackInit.sessionUrl,
+          content: chunkBase64,
+          start: offset,
+          totalBytes: file.size,
+          contentType: cleanContentType,
+          filename: fileName,
+          folderId,
+          skipStatusRegister: true
+        }, 60000);
+
+        if (chunkRes?.status === 'error') {
+          throw new Error(chunkRes.message || 'Error en bloque de subida');
+        }
+        if (chunkRes?.fileId) {
+          uploadedFileId = chunkRes.fileId;
+        }
+        offset += slice.size;
+      }
+    }
+
+    if (!uploadedFileId) {
+      throw new Error('Carga finalizada sin fileId.');
+    }
+
+    const webViewLink = `https://drive.google.com/file/d/${uploadedFileId}/view`;
+    const isImage = cleanContentType.startsWith('image/');
+    const renderUrl = isImage ? `https://drive.google.com/thumbnail?id=${uploadedFileId}&sz=w1600` : webViewLink;
+    return { id: uploadedFileId, webViewLink, url: renderUrl };
+  }
+
+  // Small files <= 500 KB: direct base64 upload
+  const base64 = await blobToBase64(file);
+  const res = await postToAppsScript({
+    action: 'uploadFile',
+    content: base64,
+    base64: base64,
+    contentType: cleanContentType,
+    mimeType: cleanContentType,
+    filename: fileName,
+    name: fileName,
+    folderId
+  }, 45000);
+
+  if (!res || res.status === 'error' || res.error || !res.id) {
+    throw new Error(res?.message || res?.error || 'Error subiendo archivo a Drive');
+  }
+
+  const webViewLink = res.webViewLink || `https://drive.google.com/file/d/${res.id}/view`;
+  const isImage = cleanContentType.startsWith('image/');
+  const renderUrl = isImage ? `https://drive.google.com/thumbnail?id=${res.id}&sz=w1600` : webViewLink;
+  return { id: res.id, webViewLink, url: renderUrl };
+}
+
+function mergeAttachmentsList(localAtts: Attachment[] = [], remoteAtts: Attachment[] = []): Attachment[] {
+  if (!localAtts.length) return remoteAtts;
+  if (!remoteAtts.length) return localAtts;
+
+  const map = new Map<string, Attachment>();
+  for (const r of remoteAtts) {
+    if (!r) continue;
+    const key = r.id || r.name;
+    map.set(key, { ...r });
+  }
+  for (const l of localAtts) {
+    if (!l) continue;
+    const key = l.id || l.name;
+    const existing = map.get(key);
+    if (!existing) {
+      map.set(key, { ...l });
+    } else {
+      const merged: Attachment = {
+        ...existing,
+        ...l,
+        driveFileId: l.driveFileId || existing.driveFileId,
+        webViewLink: l.webViewLink || existing.webViewLink,
+        url: (l.driveFileId && l.url && !l.url.startsWith('blob:'))
+          ? l.url
+          : (existing.url && !existing.url.startsWith('blob:'))
+          ? existing.url
+          : (l.url || existing.url),
+        isLocalPending: (l.driveFileId || existing.driveFileId) ? false : Boolean(l.isLocalPending && existing.isLocalPending)
+      };
+      map.set(key, merged);
+    }
+  }
+  return Array.from(map.values());
+}
+
+function mergeCommentsList(localComments: Comment[] = [], remoteComments: Comment[] = []): Comment[] {
+  if (!localComments.length) return remoteComments;
+  if (!remoteComments.length) return localComments;
+
+  const map = new Map<string, Comment>();
+  for (const r of remoteComments) {
+    if (!r || !r.id) continue;
+    map.set(r.id, { ...r });
+  }
+  for (const l of localComments) {
+    if (!l || !l.id) continue;
+    const existing = map.get(l.id);
+    if (!existing) {
+      map.set(l.id, { ...l });
+    } else {
+      map.set(l.id, {
+        ...existing,
+        ...l,
+        attachments: mergeAttachmentsList(l.attachments || [], existing.attachments || [])
+      });
+    }
+  }
+
+  return Array.from(map.values()).sort(
+    (a, b) => new Date(a.createdAt || 0).getTime() - new Date(b.createdAt || 0).getTime()
+  );
+}
+
+function mergeIssueWithLocalCache(localIssue: Issue | undefined, remoteIssue: Issue): Issue {
+  if (!localIssue) return remoteIssue;
+
+  const localTime = new Date(localIssue.updatedAt || localIssue.createdAt || 0).getTime();
+  const remoteTime = new Date(remoteIssue.updatedAt || remoteIssue.createdAt || 0).getTime();
+  const preferLocalBase = localTime > remoteTime;
+
+  const base = preferLocalBase ? { ...remoteIssue, ...localIssue } : { ...localIssue, ...remoteIssue };
+  const mergedComments = mergeCommentsList(localIssue.comments || [], remoteIssue.comments || []);
+  const mergedAttachments = mergeAttachmentsList(localIssue.attachments || [], remoteIssue.attachments || []);
+
+  return {
+    ...base,
+    comments: mergedComments,
+    attachments: mergedAttachments
+  };
+}
+
 export class IncidenciasPanel {
   private container: HTMLElement;
   private companyId: string;
@@ -281,6 +544,27 @@ export class IncidenciasPanel {
     return null;
   }
 
+  private mergeIncomingIncidents(incomingList: Issue[]) {
+    const updated = incomingList.map(remote => {
+      const local = this.issues.find(i => i.id === remote.id);
+      if (!local) return remote;
+      return mergeIssueWithLocalCache(local, remote);
+    });
+
+    for (const local of this.issues) {
+      if (!updated.some(u => u.id === local.id)) {
+        updated.push(local);
+      }
+    }
+
+    this.issues = updated;
+    if (this.selectedIssue) {
+      const refreshed = this.issues.find(i => i.id === this.selectedIssue!.id);
+      if (refreshed) this.selectedIssue = refreshed;
+    }
+    this.render();
+  }
+
   private initBroadcastSync() {
     try {
       if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
@@ -288,12 +572,7 @@ export class IncidenciasPanel {
         this.syncChannel.onmessage = (event) => {
           if (event.data && (!event.data.companyId || event.data.companyId === this.companyId)) {
             if (Array.isArray(event.data.incidents)) {
-              this.issues = event.data.incidents;
-              if (this.selectedIssue) {
-                const refreshed = this.issues.find(i => i.id === this.selectedIssue!.id);
-                if (refreshed) this.selectedIssue = refreshed;
-              }
-              this.render();
+              this.mergeIncomingIncidents(event.data.incidents);
             }
           }
         };
@@ -301,12 +580,7 @@ export class IncidenciasPanel {
 
       window.addEventListener('nora_incidents_updated', (e: any) => {
         if (e.detail && Array.isArray(e.detail.incidents)) {
-          this.issues = e.detail.incidents;
-          if (this.selectedIssue) {
-            const refreshed = this.issues.find(i => i.id === this.selectedIssue!.id);
-            if (refreshed) this.selectedIssue = refreshed;
-          }
-          this.render();
+          this.mergeIncomingIncidents(e.detail.incidents);
         } else {
           this.loadFromLocalStorage();
           this.render();
@@ -379,10 +653,28 @@ export class IncidenciasPanel {
 
   private async syncIncidentToDrive(issue: Issue) {
     try {
+      const folderId = await resolveProjectFolderId(this.companyId, this.projectId, this.driveFolderName);
+      // Clean issue of any giant base64 data URLs in case one slipped in
       const sanitized = {
         ...issue,
-        updatedAt: new Date().toISOString()
+        updatedAt: new Date().toISOString(),
+        attachments: (issue.attachments || []).map(att => {
+          if (att.url && att.url.startsWith('data:') && att.url.length > 50000) {
+            return { ...att, url: att.webViewLink || (att.driveFileId ? `https://drive.google.com/file/d/${att.driveFileId}/view` : '') };
+          }
+          return att;
+        }),
+        comments: (issue.comments || []).map(cmt => ({
+          ...cmt,
+          attachments: (cmt.attachments || []).map(att => {
+            if (att.url && att.url.startsWith('data:') && att.url.length > 50000) {
+              return { ...att, url: att.webViewLink || (att.driveFileId ? `https://drive.google.com/file/d/${att.driveFileId}/view` : '') };
+            }
+            return att;
+          })
+        }))
       };
+
       const jsonStr = JSON.stringify(sanitized, null, 2);
       const utf8Bytes = new TextEncoder().encode(jsonStr);
       let binary = '';
@@ -393,22 +685,16 @@ export class IncidenciasPanel {
       const base64 = btoa(binary);
       const filename = `incidencia_${issue.id}.json`;
 
-      await fetch(DRIVE_GATEWAY_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: new URLSearchParams({
-          action: 'uploadFile',
-          companyId: this.companyId,
-          projectId: this.projectId,
-          driveFolderName: this.driveFolderName,
-          filename: filename,
-          name: filename,
-          contentType: 'application/json',
-          mimeType: 'application/json',
-          content: base64,
-          base64: base64
-        })
-      });
+      await postToAppsScript({
+        action: 'uploadFile',
+        folderId,
+        filename,
+        name: filename,
+        contentType: 'application/json',
+        mimeType: 'application/json',
+        content: base64,
+        base64: base64
+      }, 35000);
     } catch (err) {
       console.warn('[IncidenciasPanel] Remote background sync error:', err);
     }
@@ -1088,7 +1374,12 @@ export class IncidenciasPanel {
         <div class="nora-att-preview">${previewContent}</div>
         <div class="nora-att-meta">
           <span class="nora-att-name" title="${escapeHtml(att.name)}">${escapeHtml(att.name)}</span>
-          ${isAudio ? `
+          ${att.isLocalPending ? `
+            <span class="nora-att-uploading-badge" title="Subiendo a Google Drive">
+              <span class="material-symbols-outlined spinning" style="font-size: 11px;">sync</span>
+              <span>Subiendo</span>
+            </span>
+          ` : isAudio ? `
             <span class="nora-att-audio-chip" title="Reproducción directa en visor">
               <span class="material-symbols-outlined" style="font-size: 13px;">mic</span>
               <span>Audio</span>
@@ -1186,21 +1477,36 @@ export class IncidenciasPanel {
                         <span class="material-symbols-outlined" style="font-size: 13px; color: #f59e0b;">graphic_eq</span>
                         <span>${fileId ? 'Cargando nota de voz...' : 'Nota de voz'}</span>
                       </div>
+                      ${att.isLocalPending ? `<span class="nora-chat-pending"><span class="material-symbols-outlined spinning" style="font-size:11px;">sync</span> Subiendo nota de voz a Drive...</span>` : ''}
+                    </div>
+                  `;
+                }
+                if (att.category === 'video' || att.type?.includes('video') || (att.name && /\.(mp4|webm|mov|mkv)$/i.test(att.name))) {
+                  return `
+                    <div class="nora-video-msg">
+                      <video controls preload="metadata" src="${escapeHtml(att.url)}" class="nora-chat-video"></video>
+                      ${att.isLocalPending ? `<span class="nora-chat-pending"><span class="material-symbols-outlined spinning" style="font-size:11px;">sync</span> Subiendo video a Drive...</span>` : ''}
                     </div>
                   `;
                 }
                 if (att.category === 'image' || att.type?.includes('image')) {
                   return `
-                    <a href="${escapeHtml(att.url)}" target="_blank" class="nora-img-msg">
-                      <img src="${escapeHtml(att.url)}" alt="${escapeHtml(att.name)}" />
-                    </a>
+                    <div class="nora-img-msg-wrap">
+                      <a href="${escapeHtml(att.url)}" target="_blank" class="nora-img-msg">
+                        <img src="${escapeHtml(att.url)}" alt="${escapeHtml(att.name)}" />
+                      </a>
+                      ${att.isLocalPending ? `<span class="nora-chat-pending"><span class="material-symbols-outlined spinning" style="font-size:11px;">sync</span> Subiendo foto a Drive...</span>` : ''}
+                    </div>
                   `;
                 }
                 return `
-                  <a href="${escapeHtml(att.url)}" target="_blank" class="nora-file-msg">
-                    <span class="material-symbols-outlined" style="font-size: 15px;">description</span>
-                    <span>${escapeHtml(att.name)}</span>
-                  </a>
+                  <div class="nora-file-msg-wrap">
+                    <a href="${escapeHtml(att.url)}" target="_blank" class="nora-file-msg">
+                      <span class="material-symbols-outlined" style="font-size: 15px;">description</span>
+                      <span>${escapeHtml(att.name)}</span>
+                    </a>
+                    ${att.isLocalPending ? `<span class="nora-chat-pending"><span class="material-symbols-outlined spinning" style="font-size:11px;">sync</span> Subiendo archivo a Drive...</span>` : ''}
+                  </div>
                 `;
               }).join('')}
             </div>
@@ -1581,41 +1887,41 @@ export class IncidenciasPanel {
         const ext = isMp4 ? '.m4a' : '.webm';
         const blob = new Blob(this.audioChunks, { type: mimeType });
         const name = `Nota_Voz_${Date.now()}${ext}`;
+        const localBlobUrl = URL.createObjectURL(blob);
+        const attId = 'att_audio_' + Date.now();
+        driveAudioBlobCache.set(attId, localBlobUrl);
 
-        // Convert blob to base64 DataURL for offline/instant playback
-        const reader = new FileReader();
-        reader.onloadend = () => {
-          const dataUrl = reader.result as string;
-          const newAtt: Attachment = {
-            id: 'att_audio_' + Date.now(),
-            name,
-            type: mimeType,
-            url: dataUrl,
-            category: 'audio'
-          };
-          driveAudioBlobCache.set(newAtt.id, dataUrl);
-
-          const newComment: Comment = {
-            id: 'cmt_' + Date.now(),
-            userId: this.currentUser?.email || 'user',
-            userName: this.currentUser?.name || this.currentUser?.email || 'Usuario',
-            text: '🎤 Nota de voz grabada',
-            createdAt: new Date().toISOString(),
-            attachments: [newAtt]
-          };
-
-          const updatedIssue: Issue = {
-            ...this.selectedIssue!,
-            attachments: [...(this.selectedIssue!.attachments || []), newAtt],
-            comments: [...(this.selectedIssue!.comments || []), newComment],
-            updatedAt: new Date().toISOString()
-          };
-
-          const updatedIssues = this.issues.map(i => i.id === updatedIssue.id ? updatedIssue : i);
-          this.persistAndBroadcast(updatedIssues, updatedIssue);
-          this.render();
+        const newAtt: Attachment = {
+          id: attId,
+          name,
+          type: mimeType,
+          url: localBlobUrl,
+          category: 'audio',
+          isLocalPending: true
         };
-        reader.readAsDataURL(blob);
+
+        const newComment: Comment = {
+          id: 'cmt_' + Date.now(),
+          userId: this.currentUser?.email || 'user',
+          userName: this.currentUser?.name || this.currentUser?.email || 'Usuario',
+          text: '🎤 Nota de voz grabada',
+          createdAt: new Date().toISOString(),
+          attachments: [newAtt]
+        };
+
+        const updatedIssue: Issue = {
+          ...this.selectedIssue!,
+          attachments: [...(this.selectedIssue!.attachments || []), newAtt],
+          comments: [...(this.selectedIssue!.comments || []), newComment],
+          updatedAt: new Date().toISOString()
+        };
+
+        const updatedIssues = this.issues.map(i => i.id === updatedIssue.id ? updatedIssue : i);
+        this.persistAndBroadcast(updatedIssues, updatedIssue);
+        this.render();
+
+        // Background upload to Drive
+        this.uploadAttachmentToDrive(blob, newAtt, updatedIssue.id);
       } else {
         this.render();
       }
@@ -1633,25 +1939,31 @@ export class IncidenciasPanel {
     const newAttachments: Attachment[] = [];
     for (let i = 0; i < files.length; i++) {
       const file = files[i];
-      const dataUrl = await this.readFileAsDataURL(file);
+      const localBlobUrl = URL.createObjectURL(file);
       let cat: Attachment['category'] = 'file';
       if (file.type.startsWith('image/')) cat = 'image';
       else if (file.type.startsWith('video/')) cat = 'video';
       else if (file.type.startsWith('audio/')) cat = 'audio';
 
+      const attId = 'att_' + Date.now() + '_' + i + '_' + Math.random().toString(36).substring(2, 6);
+      if (cat === 'audio') {
+        driveAudioBlobCache.set(attId, localBlobUrl);
+      }
+
       newAttachments.push({
-        id: 'att_' + Date.now() + '_' + i,
+        id: attId,
         name: file.name,
-        type: file.type,
-        url: dataUrl,
-        category: cat
+        type: file.type || 'application/octet-stream',
+        url: localBlobUrl,
+        category: cat,
+        isLocalPending: true
       });
     }
 
     let updatedIssue: Issue;
     if (isForChat) {
       const newComment: Comment = {
-        id: 'cmt_' + Date.now(),
+        id: 'cmt_' + Date.now() + '_' + Math.random().toString(36).substring(2, 6),
         userId: this.currentUser?.email || 'user',
         userName: this.currentUser?.name || this.currentUser?.email || 'Usuario',
         text: `📎 Archivos adjuntos (${newAttachments.length})`,
@@ -1675,15 +1987,61 @@ export class IncidenciasPanel {
     const updatedIssues = this.issues.map(i => i.id === updatedIssue.id ? updatedIssue : i);
     this.persistAndBroadcast(updatedIssues, updatedIssue);
     this.render();
+
+    // Trigger background uploads to Drive for each file
+    for (let i = 0; i < files.length; i++) {
+      this.uploadAttachmentToDrive(files[i], newAttachments[i], issue.id);
+    }
   }
 
-  private readFileAsDataURL(file: File): Promise<string> {
-    return new Promise((resolve, reject) => {
-      const r = new FileReader();
-      r.onload = () => resolve(r.result as string);
-      r.onerror = reject;
-      r.readAsDataURL(file);
-    });
+  private async uploadAttachmentToDrive(file: File | Blob, att: Attachment, issueId: string) {
+    try {
+      const folderId = await resolveProjectFolderId(this.companyId, this.projectId, this.driveFolderName);
+      const driveResult = await uploadFileToDrive(file, att.name, att.type, folderId);
+
+      if (driveResult.id) {
+        driveAudioBlobCache.set(driveResult.id, att.url);
+        driveAudioBlobCache.set(att.id, att.url);
+      }
+
+      const issue = this.issues.find(i => i.id === issueId);
+      if (issue) {
+        if (issue.attachments) {
+          const found = issue.attachments.find(a => a.id === att.id || a.name === att.name);
+          if (found) {
+            found.driveFileId = driveResult.id;
+            found.webViewLink = driveResult.webViewLink;
+            found.url = driveResult.url;
+            found.isLocalPending = false;
+          }
+        }
+        if (issue.comments) {
+          for (const c of issue.comments) {
+            if (c.attachments) {
+              const found = c.attachments.find(a => a.id === att.id || a.name === att.name);
+              if (found) {
+                found.driveFileId = driveResult.id;
+                found.webViewLink = driveResult.webViewLink;
+                found.url = driveResult.url;
+                found.isLocalPending = false;
+              }
+            }
+          }
+        }
+
+        issue.updatedAt = new Date().toISOString();
+        if (this.selectedIssue?.id === issueId) {
+          this.selectedIssue = { ...issue };
+        }
+
+        this.persistAndBroadcast(this.issues, issue);
+        this.render();
+      }
+    } catch (err) {
+      console.error('[IncidenciasPanel] Error subiendo adjunto a Drive:', err);
+      att.isLocalPending = false;
+      this.render();
+    }
   }
 
   // --- Send Chat Message ---
