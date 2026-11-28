@@ -534,6 +534,79 @@ export class IncidenciasPanel {
     this.render();
   }
 
+  private openCreateIssueModal() {
+    try {
+      const u = this.currentUser || this.options.currentUser;
+      if (u) {
+        localStorage.setItem('userAccount', JSON.stringify(u));
+      }
+    } catch (e) {
+      console.warn('[IncidenciasPanel] Could not sync userAccount to localStorage:', e);
+    }
+
+    let overlay = document.getElementById('nora-create-issue-modal-overlay');
+    if (overlay) overlay.remove();
+
+    overlay = document.createElement('div');
+    overlay.id = 'nora-create-issue-modal-overlay';
+    overlay.className = 'nora-create-issue-overlay';
+    overlay.innerHTML = `
+      <div class="nora-create-issue-backdrop">
+        <div class="nora-create-issue-container">
+          <iframe id="nora-create-issue-iframe" 
+                  src="../INCIDENCIAS/?empresa=${encodeURIComponent(this.companyId)}&project=${encodeURIComponent(this.projectId)}&driveFolderName=${encodeURIComponent(this.driveFolderName)}&embed=true&action=new&t=${Date.now()}"
+                  allow="microphone; camera; display-capture"
+                  class="nora-create-issue-iframe">
+          </iframe>
+        </div>
+      </div>
+    `;
+
+    document.body.appendChild(overlay);
+
+    if (!this.iframeMessageBound) {
+      this.iframeMessageBound = true;
+      window.addEventListener('message', (event: MessageEvent) => {
+        if (!event.data || typeof event.data !== 'object') return;
+
+        if (event.data.type === 'NORA_CLOSE_CREATE_ISSUE') {
+          const ov = document.getElementById('nora-create-issue-modal-overlay');
+          if (ov) {
+            ov.classList.add('closing');
+            setTimeout(() => ov.remove(), 200);
+          }
+        } else if (event.data.type === 'NORA_REQUEST_BIM_VIEW') {
+          const iframe = document.getElementById('nora-create-issue-iframe') as HTMLIFrameElement;
+          if (iframe && iframe.contentWindow) {
+            const currentView = this.options.captureCurrentView ? this.options.captureCurrentView() : null;
+            const savedViews = this.options.getSavedViews ? this.options.getSavedViews() : [];
+            iframe.contentWindow.postMessage({
+              type: 'NORA_RECEIVE_BIM_VIEW',
+              currentView,
+              savedViews
+            }, '*');
+          }
+        } else if (event.data.type === 'NORA_ISSUE_CREATED') {
+          const ov = document.getElementById('nora-create-issue-modal-overlay');
+          if (ov) {
+            ov.classList.add('closing');
+            setTimeout(() => ov.remove(), 200);
+          }
+          this.syncWithDrive();
+          this.showToast('✅ Hallazgo emitido y registrado exitosamente');
+          if (event.data.issue?.id) {
+            setTimeout(() => {
+              const created = this.issues.find(i => i.id === event.data.issue.id) || event.data.issue;
+              this.selectedIssue = created;
+              this.isExpanded = true;
+              this.render();
+            }, 600);
+          }
+        }
+      });
+    }
+  }
+
   private resolveUrlContext() {
     try {
       const params = new URLSearchParams(window.location.search);
